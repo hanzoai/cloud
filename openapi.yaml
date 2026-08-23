@@ -78981,87 +78981,6 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/delete-mfa:
-    post:
-      description: |-
-        Turns a factor off, so sign-in stops asking for it. Naming no factor turns
-        off ALL of them — the reset path. People may do this for themselves; doing it for
-        somebody else takes an administrator, which is what makes it the way back in when a
-        phone is lost.
-
-        The recovery codes go with the last factor: they are the way past a challenge, so
-        keeping them alive for an account with nothing to challenge would leave a standing
-        credential behind.
-      operationId: post_iam_delete-mfa
-      summary: Turns a factor off, so sign-in stops asking for it.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-account:
-    get:
-      description: |-
-        Returns the signed-in person's own account and the organization
-        they belong to — what a console reads to draw the account menu.
-
-        Passwords, API secrets and MFA material are stripped. It answers for a session
-        cookie or a bearer token alike.
-      operationId: get_iam_get-account
-      summary: Returns the signed-in person's own account and the organization they
-        belong to — what a console reads to draw the account menu.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/get-app-login:
-    get:
-      description: |-
-        Returns everything a login screen needs to draw itself for one
-        application: its branding, and each sign-in method it offers with the provider
-        details that method needs.
-
-        The client secret is masked. Read before anyone has signed in, so it carries
-        only what is safe for a browser to see.
-      operationId: get_iam_get-app-login
-      parameters:
-      - description: |-
-          ClientId is the application's OAuth client id — the one field that selects
-          which login screen this is.
-        in: query
-        name: clientId
-        required: false
-        schema:
-          type: string
-      - description: |-
-          ResponseType is the OAuth response type the screen will ask for. Only "code"
-          is served; anything else is refused here rather than at the authorize leg,
-          where the person has already typed a password.
-        in: query
-        name: responseType
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Answer'
-          description: ok
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/iam.Answer'
-          description: bad request
-      summary: 'Returns everything a login screen needs to draw itself for one application:
-        its branding, and each sign-in method it offers with the provider details
-        that method needs.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-      x-tool: true
   /v1/iam/invitations:
     get:
       description: |-
@@ -79216,25 +79135,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/issue-user-token:
-    post:
-      description: |-
-        Mints an access token for the `?id=<owner>/<name>` target
-        user (optional `?aud=` resource, RFC 8707), issued by the authenticated +
-        allow-listed confidential client. The token's subject + owner are the TARGET
-        USER's, so a resource server scopes on the validated owner claim to the user's
-        tenant — indistinguishable from a token the user obtained directly. Response is
-        the camelCase `{accessToken, expiresIn}` body identity.ts consumes. Equivalent to
-        the RFC 8693 token-exchange grant, minus the subject_token proof (the console has
-        the user's id, not a token) — the reason this compat shim exists.
-      operationId: post_iam_issue-user-token
-      summary: Mints an access token for the `?id=<owner>/<name>` target user (optional
-        `?aud=` resource, RFC 8707), issued by the authenticated + allow-listed confidential
-        client.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/keys:
     get:
       description: |-
@@ -79590,24 +79490,6 @@ paths:
         as a QR code sms a code texted to the number on the account email a code mailed
         to the address on the account Nothing is switched on yet, so abandoning this
         step leaves the account exactly as it was.'
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/mint-user-keys:
-    post:
-      description: |-
-        (re)generates the target user's key of the requested TYPE and
-        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
-        (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
-        is safe to ship in client JS and resolves to an org, never a principal.
-
-        It writes the schema.Key row that the resolvers actually read. schema.User.AccessKey
-        is not a credential and nothing resolves it, so a key stamped there would
-        authenticate nobody.
-      operationId: post_iam_mint-user-keys
-      summary: (re)generates the target user's key of the requested TYPE and returns
-        it once, over the shared authorizeMinter + mintTarget seam.
       tags:
       - iam
       x-app: iam
@@ -80761,19 +80643,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/revoke-user-keys:
-    post:
-      description: |-
-        Clears the target user's key of the requested TYPE (immediate
-        revoke). Scoped by the same `?type` field mint takes, so revoking the browser key
-        leaves the server key working. A secret key's stored value is the sk- in its
-        schema.Key row.
-      operationId: post_iam_revoke-user-keys
-      summary: Clears the target user's key of the requested TYPE (immediate revoke).
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/roles:
     get:
       description: |-
@@ -81171,22 +81040,6 @@ paths:
       - iam
       x-app: iam
       x-public: true
-  /v1/iam/send-verification-code:
-    post:
-      description: |-
-        Validates the request and asks otp to get a code to the
-        person. The request fields are read via fiber's FormValue — the escape hatch zip
-        exposes for form bodies (multipart or urlencoded) — since the typed JSON Bind does
-        not apply here. v1 also accepts countryCode/method/checkUser/captchaType; iam
-        ignores them (the captcha/forget/MFA flows those drive are not ported), and
-        CAPTCHA verification is likewise not enforced — iam models no captcha provider —
-        so the code is issued once the destination and application validate.
-      operationId: post_iam_send-verification-code
-      summary: Validates the request and asks otp to get a code to the person.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/service-accounts:
     get:
       description: |-
@@ -81469,20 +81322,6 @@ paths:
       x-app: iam
       x-public: true
       x-tool: true
-  /v1/iam/set-preferred-mfa:
-    post:
-      description: |-
-        Picks which second factor an account is asked for first when it has
-        more than one. Only a factor the account actually holds: storing an unheld one told
-        the login gate "MFA is on" — factor.Enabled reads that column — while leaving it
-        nothing to ask for, so the sign-in required the password alone.
-      operationId: post_iam_set-preferred-mfa
-      summary: Picks which second factor an account is asked for first when it has
-        more than one.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
   /v1/iam/signin:
     post:
       description: |-
@@ -81710,18 +81549,6 @@ paths:
       operationId: post_iam_unlink
       summary: Disconnects one sign-in identity from an account, so that provider
         can no longer be used to sign in as that person.
-      tags:
-      - iam
-      x-app: iam
-      x-public: true
-  /v1/iam/update-preferences:
-    post:
-      description: |-
-        Saves the calling person's own settings and returns
-        the full set afterwards. Send only the settings you are changing — the rest
-        are kept, so two screens can save at once without one undoing the other.
-      operationId: post_iam_update-preferences
-      summary: Saves the calling person's own settings and returns the full set afterwards.
       tags:
       - iam
       x-app: iam

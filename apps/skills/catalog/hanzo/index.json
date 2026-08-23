@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 671,
+  "skill_count": 669,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -2336,20 +2336,6 @@
       "path": "iam_consent/SKILL.md",
       "service": "iam",
       "sha256": "573ac4e10beb01765cb9214cb3348b2073401c0d2899c24008493b79c8acf139"
-    },
-    {
-      "description": "Read iam get account: Returns the signed-in person's own account and the organization they belong to — what a console reads to draw the account menu..",
-      "name": "iam_get-account",
-      "path": "iam_get-account/SKILL.md",
-      "service": "iam",
-      "sha256": "69a44fcaba9e419ada52304268f054cc7ce91f2f339e80761ad82843fd65b43b"
-    },
-    {
-      "description": "Read iam get app login: Returns everything a login screen needs to draw itself for one application: its branding, and each sign-in method it offers with the provider details that method needs..",
-      "name": "iam_get-app-login",
-      "path": "iam_get-app-login/SKILL.md",
-      "service": "iam",
-      "sha256": "6512a16d48734b05a802f57e57c85256d00934ce23b037b9697b2f6d567c9af0"
     },
     {
       "description": "Read iam invitations: Returns your organization's invitations, newest first — who has been asked to join, on what terms, and how many seats each invitation still has left., Returns one invitation: who it is for, what it grants on acceptance, and when it expires..",
