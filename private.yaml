@@ -90067,7 +90067,7 @@ paths:
     post:
       description: |-
         (re)generates the target user's key of the requested TYPE and
-        returns it once, over the shared authorizeMinter + mintTarget client. `?type=secret`
+        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
         (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
         is safe to ship in client JS and resolves to an org, never a principal.
 
@@ -90076,7 +90076,7 @@ paths:
         authenticate nobody.
       operationId: post_iam_mint-user-keys
       summary: (re)generates the target user's key of the requested TYPE and returns
-        it once, over the shared authorizeMinter + mintTarget client.
+        it once, over the shared authorizeMinter + mintTarget seam.
       tags:
       - iam
       x-app: iam
@@ -92415,7 +92415,7 @@ paths:
     post:
       description: |-
         (re)generates the target user's key of the requested TYPE and
-        returns it once, over the shared authorizeMinter + mintTarget client. `?type=secret`
+        returns it once, over the shared authorizeMinter + mintTarget seam. `?type=secret`
         (the default) yields the confidential sk-; `?type=publishable` yields the pk- that
         is safe to ship in client JS and resolves to an org, never a principal.
 
@@ -92435,7 +92435,7 @@ paths:
         schema:
           type: string
       summary: (re)generates the target user's key of the requested TYPE and returns
-        it once, over the shared authorizeMinter + mintTarget client.
+        it once, over the shared authorizeMinter + mintTarget seam.
       tags:
       - iam
       x-app: iam
