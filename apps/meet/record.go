@@ -251,7 +251,7 @@ func (o ops) stop(ctx context.Context, in *recordIn) (*recording, error) {
 // only other place the location appears, and a client that lost it, or a colleague
 // who was not the one to press record, has nowhere else to look.
 //
-// It is behind the same door as starting one: where a recording of a private
+// It is behind the same check as starting one: where a recording of a private
 // conversation is kept is a fact about that conversation, so it is told to the
 // people the room admits and to nobody else.
 func (o ops) read(ctx context.Context, in *recordIn) (*recording, error) {
@@ -323,7 +323,7 @@ func latest(all []info) *info {
 
 // changes and reads say which kind of operation is asking, so no call site below
 // carries a bare boolean. The anti-CSRF gate is a control on a STATE CHANGE, and
-// the distinction cannot be taken from the HTTP method here: over the MCP door
+// the distinction cannot be taken from the HTTP method here: over the MCP server
 // every operation arrives as one POST, so the method says nothing about what the
 // operation does.
 const (
@@ -336,7 +336,7 @@ const (
 // credential for the media server minted for the person admits just named.
 //
 // All three operations open with it and none carries its own copy. Three copies
-// of a door is two chances to leave one open, and a door is this file's whole
+// of an endpoint is two chances to leave one open, and an endpoint is this file's whole
 // subject.
 //
 // The ORDER is the point and it is the opposite of getToken's. Admission first,
@@ -416,7 +416,7 @@ func (o ops) admitted(c *zip.Ctx, name string) (principal.Principal, joiner, err
 	}
 	// Present by construction — admits refuses without it — and read here rather
 	// than carried out of admits because the org scopes the OBJECT, which is this
-	// file's concern and not the door's.
+	// file's concern and not the endpoint's.
 	p, ok := principal.Minted(c)
 	if !ok || p.Org == "" {
 		return principal.Principal{}, joiner{}, refuse
