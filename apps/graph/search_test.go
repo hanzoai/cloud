@@ -2,15 +2,10 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/zap-proto/zip"
 )
 
 // searched runs a search against a store seeded with facts, returning the values
@@ -212,47 +207,13 @@ func TestNothingToSearchForIsNotAMatchForEverything(t *testing.T) {
 	}
 }
 
-// searchDoor is GET /v1/graph/search as a caller of one project sees it.
-func searchDoor(t *testing.T, app *zip.App, project, q string) ([]string, int) {
-	t.Helper()
-	req, _ := http.NewRequest("GET", "http://cloud/v1/graph/search?q="+url.QueryEscape(q), nil)
-	req.Header.Set(zip.HeaderOrg, "acme")
-	req.Header.Set(zip.HeaderUser, "acme/z@acme.test")
-	if project != "" {
-		req.Header.Set("X-Project-Id", project)
-	}
-	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
-	if err != nil {
-		t.Fatalf("search door: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 300 {
-		return nil, resp.StatusCode
-	}
-	var out struct {
-		Assertions []struct{ Value string } `json:"assertions"`
-	}
-	if err := json.Unmarshal(b, &out); err != nil {
-		t.Fatalf("search door answered something that is not the read shape: %v: %s", err, b)
-	}
-	got := make([]string, 0, len(out.Assertions))
-	for _, a := range out.Assertions {
-		got = append(got, a.Value)
-	}
-	return got, resp.StatusCode
-}
-
 // TestTheSearchDoorAnswers carries the term out to the wire.
 func TestTheSearchDoorAnswers(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/svc/api", "owner", "acme/team/core", true)
-	assertFact(t, app, "acme/svc/worker", "owner", "acme/team/platform", true)
+	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
+	assertFact(t, app, "", "acme/svc/worker", "owner", "acme/team/platform", true)
 
-	got, code := searchDoor(t, app, "", "platform")
-	if code != http.StatusOK {
-		t.Fatalf("search door status %d", code)
-	}
+	got := valuesOf(answered(t, app, "", "/v1/graph/search?q=platform"))
 	if len(got) != 1 || got[0] != "acme/team/platform" {
 		t.Errorf("the door found %v, want the one assertion naming platform", got)
 	}
@@ -262,9 +223,9 @@ func TestTheSearchDoorAnswers(t *testing.T) {
 // read when there is nothing to search for.
 func TestABlankSearchIsRefused(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/svc/api", "owner", "acme/team/core", true)
+	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
 
-	if _, code := searchDoor(t, app, "", "   "); code != http.StatusBadRequest {
+	if code, _ := call(t, app, http.MethodGet, "/v1/graph/search?q=+++", "", nil); code != http.StatusBadRequest {
 		t.Errorf("a blank search answered %d; it must be refused, not answered with everything", code)
 	}
 }
@@ -275,13 +236,13 @@ func TestABlankSearchIsRefused(t *testing.T) {
 // that says a change which moved it out would be wrong.
 func TestSearchCannotCrossAGraphDatabase(t *testing.T) {
 	app := mountGraph(t)
-	inProject(t, app, "alpha", "acme/svc/api", "owner", "acme/team/core")
-	inProject(t, app, "beta", "acme/svc/api", "owner", "acme/team/platform")
+	assertFact(t, app, "alpha", "acme/svc/api", "owner", "acme/team/core", true)
+	assertFact(t, app, "beta", "acme/svc/api", "owner", "acme/team/platform", true)
 
-	if got, _ := searchDoor(t, app, "alpha", "team"); len(got) != 1 || got[0] != "acme/team/core" {
+	if got := valuesOf(answered(t, app, "alpha", "/v1/graph/search?q=team")); len(got) != 1 || got[0] != "acme/team/core" {
 		t.Errorf("alpha searched into another database: %v", got)
 	}
-	if got, _ := searchDoor(t, app, "beta", "core"); len(got) != 0 {
+	if got := valuesOf(answered(t, app, "beta", "/v1/graph/search?q=core")); len(got) != 0 {
 		t.Errorf("beta found alpha's assertion by text: %v", got)
 	}
 }
@@ -290,8 +251,8 @@ func TestSearchCannotCrossAGraphDatabase(t *testing.T) {
 // one op, both addresses.
 func TestSearchIsOnTheGraphQLDoorToo(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/svc/api", "owner", "acme/team/core", true)
-	assertFact(t, app, "acme/svc/worker", "runtime", "rust", false)
+	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
+	assertFact(t, app, "", "acme/svc/worker", "runtime", "rust", false)
 
 	env := ask(t, app, `{ search(q: "rust") { entity relation value source } }`)
 	hits, _ := env["data"].(map[string]any)["search"].([]any)
