@@ -597,20 +597,42 @@ func download(c *zip.Ctx) error {
 	return c.Bytes(http.StatusOK, b.Data)
 }
 
-// files lists what a session holds. It is a zip.Ctx handler and not a typed op
-// because the client reads a BARE JSON ARRAY — `response.data.find(...)` over the
-// body itself — and an object wrapper would be a wire change on a contract this
-// repo does not own.
-func files(c *zip.Ctx) error {
-	sid := strings.TrimSpace(c.Param("sid"))
+// sessionRef addresses one session's file listing.
+type sessionRef struct {
+	// SID is the session identifier — the sandbox this listing is of. The URL is
+	// the addressing authority: a path segment binds after the body and after the
+	// query, so the address decides which session is read whatever else is sent.
+	SID string `json:"sid"`
+}
+
+// listings is what a session holds. It is a NAMED SLICE, not an envelope struct,
+// because the wire is a BARE JSON ARRAY — the client reads
+// `response.data.find(...)` over the body itself — and wrapping it in an object
+// would be a wire change on a contract this repo does not own.
+//
+// That distinction is the whole reason this route could be typed at all. The
+// obvious typed shape is `{files: [...]}` and it is wrong; apps/provisioning found
+// the same thing for its listing and took the same answer. A named slice publishes
+// an array and marshals to one.
+type listings []listing
+
+// Files lists what a session holds.
+//
+// One recursive `find`, the same traversal the artifact sweep makes. It used to be
+// `ls -1A` — top level only — while the sweep collected with `find`, so a run that
+// wrote a nested artifact reported it in its reply and then omitted it here, and
+// the client's prefix match read the file as expired. Two traversals of one
+// directory is two answers about what a session holds; there is one now.
+func listFiles(ctx context.Context, in *sessionRef) (*listings, error) {
+	sid := strings.TrimSpace(in.SID)
 	if sid == "" {
-		return zip.ErrBadRequest("session id required")
+		return nil, zip.ErrBadRequest("session id required")
 	}
-	org, err := tenantOf(c.Context())
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ctx, done := callCtx(c.Context(), org)
+	ctx, done := callCtx(ctx, org)
 	defer done()
 
 	// ONE `find`, RECURSIVE, and it is the same traversal the artifact sweep makes.
@@ -625,11 +647,11 @@ func files(c *zip.Ctx) error {
 		ID: sid, Argv: []string{"sh", "-c",
 			`find . -type f -exec date -u -r {} +%Y-%m-%dT%H:%M:%SZ \; -print`}})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// The rows come in pairs: the stamp, then the path it belongs to.
 	rows := strings.Split(ran.Stdout, "\n")
-	out := make([]listing, 0, len(rows)/2)
+	out := make(listings, 0, len(rows)/2)
 	for i := 0; i+1 < len(rows); i += 2 {
 		p := strings.TrimPrefix(strings.TrimSpace(rows[i+1]), "./")
 		if p == "" {
@@ -638,7 +660,7 @@ func files(c *zip.Ctx) error {
 		out = append(out, listing{Name: sid + "/" + p, LastModified: strings.TrimSpace(rows[i])})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // programmatic refuses, and names what it would take to stop refusing.
@@ -753,7 +775,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	app.Post(Path+"/programmatic", programmatic)
 	app.Post(Path+"/upload", upload)
 	app.Get(Path+"/download/*", download)
-	app.Get(Path+"/files/:sid", files)
+	zip.Get(reg, Path+"/files/:sid", listFiles)
 
 	luxlog.Default().New("subsystem", "exec").Info("code interpreter mounted over sandboxes",
 		"peer", peer, "brandOrg", brandOrg, "langs", len(langs))
