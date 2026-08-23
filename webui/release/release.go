@@ -73,7 +73,14 @@ type bundle struct {
 func Load(ctx context.Context, cfg Config, log luxlog.Logger) (*Source, error) {
 	s := &Source{cfg: cfg, admin: s3admin.New(), log: log.New("subsystem", "console")}
 	if _, err := s.refresh(ctx); err != nil {
-		return nil, err
+		// The SOURCE comes back beside the error, empty. A caller that wants to keep
+		// polling needs something to poll, and returning nil left it with nothing:
+		// the boot read failed, the composition root had no Source to Watch, and the
+		// console stayed down after the cause was repaired because nothing re-read
+		// it. An empty Source answers ErrNotExist for every name — which is what
+		// Open below already did — so a caller that mounts it serves 503 until a
+		// poll fills it, and one that does not mount it is no worse off than before.
+		return s, err
 	}
 	b := s.cur.Load()
 	s.log.Info("console release loaded",
@@ -84,7 +91,7 @@ func Load(ctx context.Context, cfg Config, log luxlog.Logger) (*Source, error) {
 // Open implements fs.FS against the currently mounted release.
 func (s *Source) Open(name string) (fs.File, error) {
 	b := s.cur.Load()
-	if b == nil { // unreachable: Load fails rather than returning an empty Source
+	if b == nil { // Load failed and handed the caller this Source anyway, to poll
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 	return b.fsys.Open(name)
@@ -231,6 +238,23 @@ func FS(s *Source) fs.FS {
 	}
 	return s
 }
+
+// Polled says this source re-reads its release on an interval, so an empty read
+// is a MOMENT and not a verdict.
+//
+// It exists for the one caller that has to tell those apart. webui refuses a
+// static bundle with no index.html, and it is right to: a baked bundle missing
+// its shell is broken and every deep link would 404. A release read from the
+// object store is a different thing — it can be empty at boot because S3 was
+// briefly unreachable, and it fills in on the next poll. Conflating the two cost
+// a console outage that outlived its own cause: one unreadable auxiliary object
+// failed the boot read, the process mounted nothing, and it stayed down after the
+// object was repaired because nothing re-read it.
+//
+// A constant, because this is a property of the TYPE rather than of an instance:
+// what makes a Source refillable is that Watch polls it, and a Source that is
+// never watched serves the release it already has.
+func (s *Source) Polled() bool { return true }
 
 // compile-time assertion: a Source is what webui.Mount takes.
 var _ fs.FS = (*Source)(nil)
