@@ -42,7 +42,7 @@ const (
 )
 
 // dispositions is the closed set, published by the vocabulary op. A disposition
-// outside it is refused at the door: an unknown claim has no meaning to the
+// outside it is refused on admission: an unknown claim has no meaning to the
 // model plane and no meaning in an adverse action.
 var dispositions = []Disposition{Productive, Unproductive, Unjudged}
 
@@ -106,7 +106,7 @@ var precedence = map[Source]int{
 }
 
 // rank returns a source's precedence and whether it is known. An unknown source
-// is refused at the door, so a false here off the write path means a row written
+// is refused on admission, so a false here off the write path means a row written
 // by an older binary under a source since retired — it sorts last rather than
 // first, which is the safe direction: an unrecognised claim must not win.
 func rank(s Source) (int, bool) {
@@ -274,7 +274,7 @@ const subjectMax = 512
 // record.
 const evidenceMax = 512
 
-// admitSubject is the ONE ceiling on a subject reference, and every door that
+// admitSubject is the ONE ceiling on a subject reference, and every endpoint that
 // carries one asks it: the write, the resolve, the read filter.
 //
 // A COUNT OVER CALLER-SIZED VALUES IS NOT A BOUND. maxResolve caps a resolve at
@@ -282,8 +282,8 @@ const evidenceMax = 512
 // bounds the BYTES, and the only thing that did was the edge's BodyLimit — a fact
 // about the deployment, not about this plane. Each subject is then amplified on
 // the way down: the dedupe key, the grouping key, and one bound parameter per
-// event in a statement against a single-writer file. With this ceiling asked at
-// the door, `count × subjectMax` IS the byte bound of everything below it, which
+// event in a statement against a single-writer file. With this ceiling asked on
+// admission, `count × subjectMax` IS the byte bound of everything below it, which
 // is the property the numbers were always claimed to have.
 //
 // The ceiling is also the only one that could be right, which is why there is one
@@ -339,13 +339,13 @@ func admitEvidence(s string) (string, error) {
 
 // admit validates one assertion and completes it. It is the ONE gate: every
 // write path goes through it, so a rule stated here cannot be bypassed by a
-// caller that found another door.
+// caller that found another path.
 //
 // FAIL CLOSED. Every branch refuses; none coerces. A coerced label is a label
 // somebody will later defend in front of a regulator as though a human meant it.
 //
-// The per-value ceilings are the same functions the read doors ask, so there is
-// one spelling of "how long may a subject be" and not one per door.
+// The per-value ceilings are the same functions the read endpoints ask, so there
+// is one spelling of "how long may a subject be" and not one per endpoint.
 func admit(f Fact, now time.Time) (Fact, error) {
 	subject, err := admitSubject(f.Subject)
 	if err != nil {

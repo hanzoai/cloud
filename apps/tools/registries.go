@@ -23,7 +23,7 @@ import (
 // because a server is a thing an org creates and deletes, not a tool the registry
 // enumerates. The tools those servers offer are reported by GET /v1/tools with
 // ?source=mcp — there is no second view of them, and /v1/mcp itself is the
-// FLEET's one agent door, served by the host.
+// FLEET's one agent MCP address, served by the host.
 //
 // /v1/tools/plugins is deliberately NOT a tool source. A plugin here is a mounted
 // subsystem (cloud.Plugin: Name, Mount, Price, Prefixes) — code that extends

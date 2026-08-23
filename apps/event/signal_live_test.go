@@ -7,14 +7,15 @@
 
 //go:build datastore_live
 
-// EVERY SIGNAL, ONE DOOR — the live proof that each kind of fact is reachable from
-// the one ingest contract and lands as exactly ONE row under its own signal.
+// EVERY SIGNAL, ONE ENDPOINT — the live proof that each kind of fact is reachable
+// from the one ingest contract and lands as exactly ONE row under its own signal.
 //
 // capture_live_test.go proves the act leg end-to-end (emit → fact → row → read
 // lens). This file closes the set: error, log and span driven through the SAME
-// door in one batch. The signal is `type` on the wire; routeOf (fact.go) is the
-// whole routing rule; the writers table (warehouse.go) is the whole storage rule.
-// Nothing in between gets an opinion, which is why one door serves every signal.
+// endpoint in one batch. The signal is `type` on the wire; routeOf (fact.go) is
+// the whole routing rule; the writers table (warehouse.go) is the whole storage
+// rule. Nothing in between gets an opinion, which is why one endpoint serves every
+// signal.
 //
 // It also pins what the per-signal reads depend on: a log is read by
 // (org, service, time) and a span assembled by trace, so the row carries service
@@ -40,7 +41,7 @@ import (
 )
 
 // TestLiveEverySignalLandsItsOwnRow drives one fact of EACH landable signal
-// through the one door and asserts each landed as one row under its own signal.
+// through the one endpoint and asserts each landed as one row under its own signal.
 func TestLiveEverySignalLandsItsOwnRow(t *testing.T) {
 	ready, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -149,5 +150,5 @@ func TestLiveEverySignalLandsItsOwnRow(t *testing.T) {
 	if n := aInt64(total[0]["n"]); n != 4 {
 		t.Fatalf("%s has %d rows for org %s, want exactly 4 — a signal landed twice or not at all", factTable, n, org)
 	}
-	t.Logf("LIVE OK: one door, four signals — act/error/log/span each landed exactly one row (org=%s)", org)
+	t.Logf("LIVE OK: one endpoint, four signals — act/error/log/span each landed exactly one row (org=%s)", org)
 }

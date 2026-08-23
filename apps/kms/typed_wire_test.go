@@ -105,7 +105,8 @@ func broker(t *testing.T) *zip.App {
 const testMasterKey = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 
 // ask drives one request through the live router. Identity is the pair
-// SanitizeIdentity mints; admin adds the org-admin claim the write door reads.
+// SanitizeIdentity mints; admin adds the org-admin claim the write endpoint
+// reads.
 func ask(t *testing.T, app *zip.App, method, path, org string, admin bool, body string) (int, []byte) {
 	t.Helper()
 	var rdr *strings.Reader
@@ -419,7 +420,7 @@ func TestTheDoorIsOneRule(t *testing.T) {
 	}
 }
 
-// TestTheWriteRefusesOffTheHTTPPath is the other half of that door. An
+// TestTheWriteRefusesOffTheHTTPPath is the other half of that endpoint. An
 // in-process CLI invoke runs the op with no request at all, so there is no
 // principal to be an admin of anything and the write must refuse rather than
 // act for whoever the context happens to name.
@@ -487,8 +488,8 @@ func TestListAcceptsBothSpellings(t *testing.T) {
 }
 
 // TestLoginKeepsItsBodyCap proves the cap survived the conversion. It is now a
-// door middleware rather than the first line of a handler, because a typed op is
-// handed a decoded value and cannot refuse a body it never sees — and this route
+// route middleware rather than the first line of a handler, because a typed op
+// is handed a decoded value and cannot refuse a body it never sees — and this route
 // is public and unauthenticated, which is exactly where an unbounded body
 // matters.
 func TestLoginKeepsItsBodyCap(t *testing.T) {

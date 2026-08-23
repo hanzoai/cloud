@@ -63,7 +63,7 @@ import (
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// ops binds the door to the typed ops. A TypedHandler is
+// ops binds the service to the typed ops. A TypedHandler is
 // func(context.Context, *In) (*Out, error) — no parameter for the service — so
 // it arrives as a RECEIVER and every op is a method value (o.get), the only
 // bound form cmd/zipdoc can lift prose from.
@@ -78,7 +78,7 @@ type state struct{}
 // only when the Out type has no name.
 type noContent = struct{}
 
-// Mount registers the door. There is nothing to start.
+// Mount registers the surface. There is nothing to start.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	// A typed op is a route PLUS a registry entry, and the registry lives on
 	// the App. A router that cannot reach it would serve every route with no
@@ -91,8 +91,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the tenant door. Registration order is match order, and the
-// three patterns nest strictly (bucket, key, history), which the router
+// routes registers the tenant endpoints. Registration order is match order, and
+// the three patterns nest strictly (bucket, key, history), which the router
 // resolves by specificity — so nothing can shadow anything.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}

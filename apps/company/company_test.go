@@ -380,7 +380,7 @@ func TestFounderKYCForgeIsClosed(t *testing.T) {
 	}
 }
 
-// TestHTTPIllegalAdvance proves the transition door refuses an illegal jump with 409.
+// TestHTTPIllegalAdvance proves the transition endpoint refuses an illegal jump with 409.
 func TestHTTPIllegalAdvance(t *testing.T) {
 	app, _, _ := mountFake(t)
 	const org = "jump"

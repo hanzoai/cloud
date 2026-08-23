@@ -97,7 +97,7 @@ var linkTarget = regexp.MustCompile(`<[^>]*>`)
 //  1. the frames carry ZAP's magic and the peer declares application/zap
 //  2. the VALUES are on the wire and the FIELD NAMES are not — under JSON every
 //     one of owner/name/displayName/description/createdTime would appear
-//  3. nothing is listening on TCP for this peer; the only door is the socket file
+//  3. nothing is listening on TCP for this peer; the only address is the socket file
 //
 // (2) is the load-bearing one. zapenc lays a struct out positionally — "a field
 // IS its offset" — so the absence of names is not a coincidence of this payload,
@@ -109,7 +109,7 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 	// 9653 is a FIXED port and a developer's machine is shared with whatever else
 	// is running on it — a cloud listening there is the ordinary case and says
 	// nothing about the peer this test starts. So ask BEFORE the peer exists:
-	// only an answer that appears afterwards can be its door. Without this the
+	// only an answer that appears afterwards can be its listener. Without this the
 	// check reads "port 9653 is free on this host", which is true in CI and false
 	// on any machine already running the thing under test.
 	heldBefore := false
@@ -205,13 +205,13 @@ func TestPlaneWireIsZAPNotJSON(t *testing.T) {
 		}
 	}
 
-	// 3. No TCP door. The peer's only address is a file.
+	// 3. No TCP listener. The peer's only address is a file.
 	if fi, serr := os.Stat(peerSock); serr != nil || fi.Mode()&os.ModeSocket == 0 {
 		t.Errorf("the peer's address is not a unix socket file: %v", serr)
 	}
 	if heldBefore {
 		t.Log("tcp/9653 already answered before this peer started, so it belongs to " +
-			"something else on this machine and the no-TCP-door claim is not testable here")
+			"something else on this machine and the no-TCP-listener claim is not testable here")
 	} else if c, derr := net.DialTimeout("tcp", "127.0.0.1:9653", 200*time.Millisecond); derr == nil {
 		_ = c.Close()
 		t.Errorf("something answered on tcp/9653; this peer must have no TCP listener")

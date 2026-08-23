@@ -282,16 +282,16 @@ func head(s string, n int) string {
 	return s[:n]
 }
 
-// TestEveryPublishedFieldCanBeSent is the invariant the whole door rests on, and
-// it was asserted only by construction: [GraphQL] and [Fields] read one document
-// at one moment, so a field in the schema is a field in the table.
+// TestEveryPublishedFieldCanBeSent is the invariant the whole endpoint rests on,
+// and it was asserted only by construction: [GraphQL] and [Fields] read one
+// document at one moment, so a field in the schema is a field in the table.
 //
 // "By construction" is a claim about code that both functions have to keep. They
 // derive their names through the same call today; the day one of them sanitizes
 // differently, the schema advertises a name the dispatch cannot resolve and the
 // caller gets `no field named` for something it read in the schema. That is the
-// exact failure this door was built to end, so it is worth a test rather than a
-// sentence.
+// exact failure this endpoint was built to end, so it is worth a test rather
+// than a sentence.
 func TestEveryPublishedFieldCanBeSent(t *testing.T) {
 	subsets, err := openapi.Subsets(manifest.Names(), fromTree, manifest.StageOf)
 	if err != nil {

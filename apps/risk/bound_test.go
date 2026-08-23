@@ -41,8 +41,9 @@ import (
 
 // ── the timestamp ────────────────────────────────────────────────────────────
 
-// TestEvent_RefusesAnUnbelievableTimestamp is the wire door's half of the bound:
-// a stamp outside the window is a 400 with a reason, never a silent adjustment.
+// TestEvent_RefusesAnUnbelievableTimestamp is the wire endpoint's half of the
+// bound: a stamp outside the window is a 400 with a reason, never a silent
+// adjustment.
 //
 // Mutation proof: delete the `within` call in riskEvent.observation and the future
 // and ancient rows below stop failing.
@@ -91,9 +92,9 @@ func TestLearn_RefusesAFutureStampOnTheWire(t *testing.T) {
 }
 
 // TestObservation_TruncatesToTheSecond: the aggregates are durable at one-second
-// resolution and the finest ring bucket is a minute, so truncating at the door is
-// what makes a rebuild from the record IDENTICAL to the live rings rather than
-// merely close.
+// resolution and the finest ring bucket is a minute, so truncating at the
+// endpoint is what makes a rebuild from the record IDENTICAL to the live rings
+// rather than merely close.
 func TestObservation_TruncatesToTheSecond(t *testing.T) {
 	now := time.Date(2026, 3, 1, 12, 0, 0, 123456789, time.UTC)
 	o, err := riskEvent{Kind: kindAccount, Subject: "u_1"}.observation(now)
@@ -560,9 +561,10 @@ func TestFold_IsBoundedAndRetriedRatherThanForgotten(t *testing.T) {
 // was: a caller picking 4 KiB identifiers made the "8 MiB" of rings and the
 // record's row cap understate reality by more than an order of magnitude.
 //
-// So this test builds the WORST CASE the door will actually accept and compares
-// what it really costs against what is published. Recomputing the formula would
-// prove nothing; the point is that the formula is true of a real value.
+// So this test builds the WORST CASE the endpoint will actually accept and
+// compares what it really costs against what is published. Recomputing the
+// formula would prove nothing; the point is that the formula is true of a real
+// value.
 //
 // Mutation proof: raise maxField (or delete the length check in observe) and the
 // key-text and row-byte measurements below exceed the published terms.
@@ -596,7 +598,7 @@ func TestBounds_ArePublishedInTheDimensionThatBinds(t *testing.T) {
 	batch := make([]observation, 0, sample)
 	at := time.Now().UTC().Add(-time.Hour)
 	for i := range sample {
-		// Distinct ids and subjects at the bound: the widest row the door admits.
+		// Distinct ids and subjects at the bound: the widest row the endpoint admits.
 		batch = append(batch, ob(t, pad(strconv.Itoa(i), big), kindAccount, pad("s"+strconv.Itoa(i), big), 9_999,
 			at.Add(time.Duration(i)*time.Second), pad("p"+strconv.Itoa(i), big), pad("d"+strconv.Itoa(i), big)))
 	}
@@ -672,7 +674,7 @@ func TestField_IsRefusedAtTheDoorAndNotTruncated(t *testing.T) {
 // TestObservation_HasOneConstructor is the STRUCTURAL half of the field bound:
 // the bound lives in [observe], so it is a bound only while observe is the only
 // way to make an observation. A second composite literal anywhere in the package
-// — production or test — is a second door with no lock on it.
+// — production or test — is a second way in with no bound on it.
 //
 // Mutation proof: write `observation{}` with any field set anywhere in this
 // package and this fails.
@@ -697,7 +699,7 @@ func TestObservation_HasOneConstructor(t *testing.T) {
 					return true // the one constructor lives there
 				}
 				t.Errorf("%s builds an observation directly — the field bound lives in observe(), "+
-					"so a second constructor is a second unbounded door",
+					"so a second constructor is a second unbounded way in",
 					fset.Position(lit.Pos()))
 				return true
 			})

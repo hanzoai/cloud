@@ -160,7 +160,7 @@ func TestEveryProductCloudAsksAboutCanBeGranted(t *testing.T) {
 // artifact entirely: apps/plan/licence.go stamps these ids into a SIGNED licence
 // ("licensing.product:"+id) that a customer's own engine deployment verifies
 // offline, and apps/commerce/client.go relays it. No console surface reads them and
-// none should — an engine licence is not a door in this product.
+// none should — an engine licence is not a check in this product.
 //
 // So an id here being absent from appProducts is the DESIGN, not a defect, and the
 // test below must not demand the console consult it. Anything NOT in this set is
@@ -168,8 +168,8 @@ func TestEveryProductCloudAsksAboutCanBeGranted(t *testing.T) {
 var engineLicence = map[string]bool{"engine": true, "engine-rocm": true}
 
 // TestEveryProductThePlansGrantIsAskedAbout is the paid-for-nothing direction: a tier
-// that licenses a product no gate consults bills the customer for a grant that opens
-// no door.
+// that licenses a product no gate consults bills the customer for a grant that has
+// no effect.
 //
 // Scoped to the console's own vocabulary: ids belonging to the engine-licence
 // authority above are excluded, because the consumer that reads them is a signed
@@ -194,7 +194,7 @@ func TestEveryProductThePlansGrantIsAskedAbout(t *testing.T) {
 	t.Fatalf("%d product(s) are licensed by a plan and consulted by NOTHING: %s\n\n"+
 		"  GRANTED @hanzo/plans entitlements[\"licensing.product_ids\"]:%s\n"+
 		"  ASKED   apps/entitlement/require.go appProducts = %v\n\n"+
-		"A grant no gate reads is a line the customer pays for that opens no door. Either the\n"+
+		"A grant no gate reads is a line the customer pays for that has no effect. Either the\n"+
 		"consumer that should read it is missing, or the grant belongs in a vocabulary this one\n"+
 		"is not — apps/plan/licence.go relays these ids verbatim into a signed engine licence\n"+
 		"(Tokens: \"licensing.product:\"+p), which is a different authority from the console\n"+

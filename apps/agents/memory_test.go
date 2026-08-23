@@ -86,9 +86,9 @@ func TestTheAssistantsOwnTurnsComeBackAsItsOwn(t *testing.T) {
 }
 
 // The whole conversation must reach the MODEL, not merely exist. It was assembled
-// by the bridge, put on the wire, and dropped on arrival — the run door took every
-// other field of the turn and never read the history, so the fix looked shipped
-// and changed nothing.
+// by the bridge, put on the wire, and dropped on arrival — the run handler took
+// every other field of the turn and never read the history, so the fix looked
+// shipped and changed nothing.
 func TestTheHistoryReachesTheModel(t *testing.T) {
 	plane := &fakePlane{} // no tools: the single-completion path
 	withPlane(t, plane)

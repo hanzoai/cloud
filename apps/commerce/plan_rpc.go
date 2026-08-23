@@ -9,7 +9,7 @@ package commerce
 // THE TIER OVERRIDE IS NOT HERE, and that is the point of the split. A caller
 // can NAME a tier rather than earn one, through an X-Tier header or an explicit
 // ?tier= — both request facts, and both a MINT, admitted only for a caller that
-// may mint. The door can see the credential and decides; this side derives from
+// may mint. The edge can see the credential and decides; this side derives from
 // the store and takes the answer as a value. A core that read those would be
 // honouring a claim nobody proved.
 
@@ -46,7 +46,7 @@ func exposePlan() {
 
 // Answers which tier a subject is on, what it allows, and what they can spend.
 //
-// The tier is DERIVED from their own active subscriptions unless the door
+// The tier is DERIVED from their own active subscriptions unless the edge
 // supplied one it was entitled to mint. A tier that cannot be read is an ERROR
 // rather than Free: the router in front of the models maps any non-2xx to Free,
 // so answering Free from a question nobody could answer would pin every paying

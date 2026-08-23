@@ -13,7 +13,7 @@ import (
 // `service` every log record ships under and the ZAP node identity the exporter
 // connects with. When this answered "cloud" for the ai process, console's Models
 // logs view (service `ai`) was empty while ai served every inference request, and
-// the records were refused outright for claiming the front door's identity.
+// the records were refused outright for claiming the host's identity.
 func TestProcNameIsTheRoutedApp(t *testing.T) {
 	// The test cannot mean anything if zen stopped being a passenger, so ask the
 	// manifest rather than assuming the arrangement this pins.

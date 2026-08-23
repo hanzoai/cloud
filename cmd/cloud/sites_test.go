@@ -53,7 +53,7 @@ func TestSitesEdgeIsMountedInTheRouter(t *testing.T) {
 	// at all.
 	console := strings.Index(run, "webui.Mount(app")
 	if console < 0 {
-		t.Fatal("run() does not mount the console — the front door owns \"/\" and nothing would serve it")
+		t.Fatal("run() does not mount the console — the host owns \"/\" and nothing would serve it")
 	}
 	if console < mount {
 		t.Fatal("the console is mounted before the site edge — it owns \"/\" and would answer first for every site host")
@@ -79,7 +79,7 @@ func TestTheConsoleReleaseIsLoadedAfterTheResolverIsInstalled(t *testing.T) {
 	mount := strings.Index(run, "mountSites(app)")
 	load := strings.Index(run, "release.Load(")
 	if load < 0 {
-		t.Fatal("run() does not load the console release — the front door would serve no console")
+		t.Fatal("run() does not load the console release — the host would serve no console")
 	}
 	if load < mount {
 		t.Fatal("the console release is loaded before mountSites installs the resolver — the load can only fail")
@@ -124,7 +124,7 @@ func TestSitesConfigIsNotResolvedHere(t *testing.T) {
 	}
 }
 
-// The front door serves the API even when it cannot read the console.
+// The host serves the API even when it cannot read the console.
 //
 // Pinned in run()'s source for the reason the tests above are: this is a fact
 // about the ENTRYPOINT's control flow, and there is no client that returns it.

@@ -54,15 +54,15 @@ import (
 //
 //	POST — bound, and it answers 200 with a decodable verdict.
 //	GET  — 405. The ROUTE exists and the VERB does not, and those are different
-//	       facts: 405 says "wrong verb, right door", 404 says "no door". Only one of
+//	       facts: 405 says "wrong verb, right route", 404 says "no route". Only one of
 //	       them is true here.
 //
 // AND THIS IS WHERE THE 404 IN THE REPORT COMES FROM, because production does not
 // answer 405. Measured on api.hanzo.ai: `GET /v1/risk/score` returns 404 with the
 // plain-text body `not found` — byte-identical to what `GET /v1/risk/zzz-nope`
 // returns, so at the deployed edge a wrong VERB on a real route is indistinguishable
-// from a route that was never registered. That is what makes a declared door read as
-// unanswered. This test pins the honest answer the app itself gives; the edge that
+// from a route that was never registered. That is what makes a declared route read
+// as unanswered. This test pins the honest answer the app itself gives; the edge that
 // flattens it to 404 is named in the report rather than papered over here, because
 // this suite mounts the app and cannot reach that layer.
 //
@@ -128,9 +128,9 @@ var pricedOps = []struct{ method, path, body string }{
 // table reports 503", and that stopped being true: the same refusal was fixed
 // FLEET-WIDE in [cloud.ResourceMeter.Gate], above both of its branches, as
 // [cloud.ErrNoLedger] — so deleting this app's copy left the status and the
-// sentence unchanged and only changed the envelope. The copy is gone and the fleet
-// door is the one answer; the envelope is asserted by the test below, which is the
-// half no status assertion can see.
+// sentence unchanged and only changed the envelope. The copy is gone and the
+// fleet's meter is the one answer; the envelope is asserted by the test below,
+// which is the half no status assertion can see.
 //
 // Mutation proof: remove the `if org == ""` refusal from [cloud.ResourceMeter.Gate]
 // and every op in this table reports 503 instead of 403.
@@ -164,7 +164,7 @@ func TestPricedOps_ResolveTheTenantBeforeTheyAskForMoney(t *testing.T) {
 // status and the same words in them. Measured, on this package's priced ops:
 //
 //	this app's own copy of the rule   403 {"status":403,"error":"no validated principal"}
-//	the fleet's money door            403 {"error":{"code":"forbidden","message":"no validated principal"}}
+//	the fleet's meter                 403 {"error":{"code":"forbidden","message":"no validated principal"}}
 //
 // The nested one is canonical because it is what the edge gate and every other
 // Hanzo surface emit, so a client that reads `error.code` reads it everywhere. The
@@ -211,11 +211,11 @@ func TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope(t *testing.T
 //
 // [cloud.ResourceMeter.Gate] returns EARLY when the cost is zero — before its own
 // empty-org refusal — and the price is an operator's row in the meter authority,
-// where 0 is a legal value that makes the surface free. So "the money door refuses an unidentified caller" is true only while
+// where 0 is a legal value that makes the surface free. So "the meter refuses an unidentified caller" is true only while
 // somebody is charged. The app's own copy of the rule used to cover that case by
 // accident, because it ran before the price was computed.
 //
-// The refusal therefore cannot live only at the money door: it lives at [tenantOf]
+// The refusal therefore cannot live only at the meter: it lives at [tenantOf]
 // too, which every op reaches whatever it costs. Both together are why the surface
 // cannot be made anonymous by setting a price to zero.
 //

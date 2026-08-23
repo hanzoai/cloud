@@ -19,7 +19,7 @@ import (
 // ops, each with the wire fact that keeps it raw. The address is written the way
 // the DOCUMENT writes it, which is the identity every projection keys on.
 var untypedByDesign = map[string]string{
-	// The translate door itself. Its refusal is a DOMAIN body, and a typed op
+	// The translate endpoint itself. Its refusal is a DOMAIN body, and a typed op
 	// cannot write one — the apps/ml and apps/company class, re-measured against
 	// the PINNED zip (v1.18.12) rather than inherited as prose.
 	//

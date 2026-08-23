@@ -2,9 +2,9 @@ package knowledge
 
 // A long-tail connector's sync executes a JS piece on the auto engine's pods —
 // the capacity plugin/auto owns and prices. Reaching it by in-cluster URL rather
-// than through auto's door must not make it free, so: a funded tenant pays, an
-// unfunded one never occupies a pod, and a deployment with no engine configured
-// buys nothing and charges nothing.
+// than through auto's endpoint must not make it free, so: a funded tenant pays,
+// an unfunded one never occupies a pod, and a deployment with no engine
+// configured buys nothing and charges nothing.
 
 import (
 	"encoding/json"

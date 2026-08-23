@@ -17,7 +17,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// THE SIX OPS ARE SERVED ON TWO DOORS AND THE TENANT RULE HOLDS ON BOTH.
+// THE SIX OPS ARE SERVED ON TWO SURFACES AND THE TENANT RULE HOLDS ON BOTH.
 //
 // Mount registers each plane handler a second time on the public app, through
 // cloud.ZipApp — which recovers the raw *zip.App behind the scope, and says in
@@ -25,7 +25,7 @@ import (
 // carry no route guard: what decides the tenant is whatever the handler reads.
 //
 // A handler written for the plane alone may read the caller directly, because
-// off a request zip returns the caller a door stated in-process and nothing
+// off a request zip returns the caller stated in-process and nothing
 // outside can write that. On a request the same call returns the headers, and
 // the identity boundary deliberately restores an unvalidated caller's own org
 // header for the data path. Those are different facts. cloud.Tenant is the
@@ -74,8 +74,8 @@ func TestTheTenantIsNeverJustAHeader(t *testing.T) {
 	}
 }
 
-// And the plane shape still works, because that is the door the ops were built
-// for: a caller stated in-process resolves, and nothing stated does not.
+// And the plane shape still works, because that is the surface the ops were
+// built for: a caller stated in-process resolves, and nothing stated does not.
 func TestTheStatedCallerIsStillATenant(t *testing.T) {
 	for _, tc := range []struct {
 		what     string

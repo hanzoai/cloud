@@ -61,8 +61,9 @@ func TestEmptyTenantIsNotStated(t *testing.T) {
 	}
 }
 
-// A run outlives the door that started it by minutes, so its deadline must come
-// from the run budget and not from a request that has already been answered.
+// A run outlives the handler that started it by minutes, so its deadline must
+// come from the run budget and not from a request that has already been
+// answered.
 func TestRunContextIsBoundedAndNotAlreadyDone(t *testing.T) {
 	ctx, cancel := runContext("acme", 60)
 	defer cancel()
@@ -80,9 +81,9 @@ func TestRunContextIsBoundedAndNotAlreadyDone(t *testing.T) {
 	}
 }
 
-// The dispatch door must not accept a tenant, a repo that is a path, or a run
-// with no human behind it. Each of these is refused BEFORE a slot is taken, so a
-// bad request cannot consume capacity.
+// The dispatch endpoint must not accept a tenant, a repo that is a path, or a
+// run with no human behind it. Each of these is refused BEFORE a slot is taken,
+// so a bad request cannot consume capacity.
 func TestStartRefusesWhatItMustRefuse(t *testing.T) {
 	for name, tc := range map[string]struct{ org, subject, repo, prompt string }{
 		"no tenant":                {"", "u", "api", "do a thing"},
@@ -155,9 +156,9 @@ func TestARunCannotInjectSlackMarkup(t *testing.T) {
 
 func q(s string) string { b, _ := json.Marshal(s); return string(b) }
 
-// startIn builds the door's request. NEITHER half of the identity is a field of
-// it — not the tenant and not the subject, which is the whole point of the
-// contract — so both are passed to Start separately, exactly as a real door
+// startIn builds the endpoint's request. NEITHER half of the identity is a field
+// of it — not the tenant and not the subject, which is the whole point of the
+// contract — so both are passed to Start separately, exactly as a real endpoint
 // passes what it read off the caller.
 func startIn(repo, prompt string) plane.CodingStartIn {
 	return plane.CodingStartIn{Repo: repo, Prompt: prompt}

@@ -6,7 +6,7 @@ import (
 )
 
 // ai's row is /v1 and it is LAST, so everything an earlier app claims is
-// elsewhere for it — which is what keeps its door from publishing the fifteen of
+// elsewhere for it — which is what keeps its surface from publishing the fifteen of
 // its own registrations the fleet delivers to a sibling.
 func TestElsewhereIsWhatAnEarlierAppClaimed(t *testing.T) {
 	got := Elsewhere("ai")

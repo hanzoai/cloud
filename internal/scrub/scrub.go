@@ -3,7 +3,7 @@
 //
 // It lived in package cloud, which is ~400 packages, so the only way to reach the
 // rule was to link the world. Two places wanted it and could not pay that: the
-// fleet's MCP door (fleet), whose whole point is that the host stays light, and
+// fleet's MCP server (fleet), whose whole point is that the host stays light, and
 // apps/admission, which kept its own copy of the key prefixes with a comment
 // asking whoever changes one to remember the other. A rule with two copies has
 // two answers; this is the one home.
@@ -330,7 +330,7 @@ func isFreeTextDelimiter(r rune) bool {
 // scrubCredentialSegments applies Token to every segment of a path, so the
 // recorded Path can never carry a credential even if a future route embeds one.
 
-// Prefixes is every opaque-key spelling the estate recognizes at the door, and
+// Prefixes is every opaque-key spelling the estate recognizes at the edge, and
 // this is the ONE authority for it. It used to live in package cloud with a note
 // asking apps/admission to keep its copy in step by hand; a leaf means neither
 // has to remember.

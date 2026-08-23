@@ -77,7 +77,7 @@ func (g *api) iamBasicAuth() string {
 // iamDo performs one authenticated IAM request and hands the body to iam.Answer,
 // which owns reading IAM's two wire shapes — the legacy verbs' {status,msg,data}
 // envelope and the typed nouns' bare resource. Assuming the envelope here parsed
-// a user row with Status "" and rejected it as `iam status 200`, so this door
+// a user row with Status "" and rejected it as `iam status 200`, so this path
 // could not read a successful answer at all. The body is size-bounded and never
 // logged (a user row carries an address). q is optional query params; body is an
 // optional JSON payload.

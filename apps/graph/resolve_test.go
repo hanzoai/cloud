@@ -233,7 +233,7 @@ func TestTheDoorAnswersWhatIsInForceAndWhatDisagreed(t *testing.T) {
 
 	all, _ := root["assertions"].([]any)
 	if len(all) != 2 {
-		t.Fatalf("the door returned %d assertions, want the 2 that were filed", len(all))
+		t.Fatalf("the endpoint returned %d assertions, want the 2 that were filed", len(all))
 	}
 	for _, a := range all {
 		f := a.(map[string]any)
@@ -281,7 +281,7 @@ func TestTheDoorAnswersWhatIsInForceAndWhatDisagreed(t *testing.T) {
 
 // TestTheVocabularyPublishesTheRuleItAdjudicatesBy is what makes the resolution
 // above auditable rather than magic: a caller can read the relations in use and the
-// exact order that settled the tie, from the same door that answered.
+// exact order that settled the tie, from the same endpoint that answered.
 func TestTheVocabularyPublishesTheRuleItAdjudicatesBy(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)

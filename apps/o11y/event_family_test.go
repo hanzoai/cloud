@@ -7,14 +7,14 @@ import (
 	module "github.com/hanzoai/o11y"
 )
 
-// TestEventFamilyCarriesIngestOnly pins what the ONE event door admits.
+// TestEventFamilyCarriesIngestOnly pins what the ONE event endpoint admits.
 //
-// There is nothing to translate: the runtime opens its ingest door at the same
-// /v1/event a caller knocks on, so the relay passes the path through and this is
-// the gate that decides whether it may. The cases below are the wire's shape —
+// There is nothing to translate: the runtime serves its ingest endpoint at the
+// same /v1/event a caller calls, so the relay passes the path through and this
+// is the gate that decides whether it may. The cases below are the wire's shape —
 // POST, an envelope or store suffix — and everything else on the same root is
-// refused, including /v1/event itself, which is the PRODUCT event door beside
-// this one and is not reachable through the error plane's exemption.
+// refused, including /v1/event itself, which is the PRODUCT event endpoint
+// beside this one and is not reachable through the error plane's exemption.
 func TestEventFamilyCarriesIngestOnly(t *testing.T) {
 	cases := []struct {
 		method, path string
@@ -27,8 +27,8 @@ func TestEventFamilyCarriesIngestOnly(t *testing.T) {
 		{http.MethodPost, "/v1/event/42/query_range", false},
 		{http.MethodPost, "/v1/event/issues", false},
 		{http.MethodPost, "/v1/event", false},
-		// The FACE is not a door. Its reads carry a session, not a DSN key, so
-		// no spelling of them is admitted here.
+		// The FACE is not an ingest endpoint. Its reads carry a session, not a DSN
+		// key, so no spelling of them is admitted here.
 		{http.MethodPost, "/v1/o11y/sentinel/42/envelope/", false},
 		{http.MethodPost, "/v1/o11y/sentinel/discover", false},
 		{http.MethodGet, "/v1/o11y/sentinel/issues", false},

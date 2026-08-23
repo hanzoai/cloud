@@ -282,7 +282,7 @@ func TestGetIsPureReadAndAdvancesNothing(t *testing.T) {
 	}
 
 	// And the capability is not lost — it moved to the gated write. One admin sweep
-	// qualifies it, which is the ONLY door.
+	// qualifies it, which is the ONLY endpoint.
 	if code, body := req(t, app, http.MethodPost, "/v1/admin/referral/sweep", "admin", true, nil); code != http.StatusOK {
 		t.Fatalf("sweep want 200, got %d (%s)", code, body)
 	}

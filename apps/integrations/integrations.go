@@ -734,7 +734,7 @@ func init() {
 			"native ref.\n\n"+
 			"The payload is verified by HMAC against the webhook secret before it is parsed."+
 			vendorCall)
-	// The one door here whose BODIES are declared as well as described. Both are
+	// The one endpoint here whose BODIES are declared as well as described. Both are
 	// free-form objects and their shape is in the prose, because neither is this
 	// package's to publish as a schema: the request is OpenTelemetry's OTLP/JSON, of
 	// which openrouter.go decodes the subset a usage row is built from, and a partial
@@ -744,7 +744,7 @@ func init() {
 		"Receive OpenRouter Broadcast traces as usage rows",
 		"OpenRouter's spend is invisible to every Hanzo money lens because those lenses read "+
 			"hanzo.cloud_usage and OpenRouter meters keys of its own. Point a Broadcast destination "+
-			"(Settings ▸ Observability ▸ Webhook) at this door and each generation span becomes ONE "+
+			"(Settings ▸ Observability ▸ Webhook) at this endpoint and each generation span becomes ONE "+
 			"row in that same ledger with provider `openrouter`, so one query answers what we spend "+
 			"everywhere. Enable the Cost and Identity field categories: cost is the money and identity "+
 			"carries `openrouter.api_key_name`, which is what says WHICH key spent it — it lands in "+
@@ -908,10 +908,10 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/slack/link/slack", cloud.Handle(s, slackLinkSlack))
 	app.Get("/v1/integrations/slack/link/callback", cloud.Handle(s, slackLinkCallback))
 	// GitHub App sync (github_app.go / github_webhook.go). The App POSTs push events
-	// here, at the address every other vendor's inbound door already uses:
+	// here, at the address every other vendor's inbound endpoint already uses:
 	// /v1/integrations/<vendor>/<the vendor's own noun>, GitHub's being "webhook".
 	// It answered at /v1/connector/github/webhook until this change — a namespace one
-	// door in the estate used and nothing else, so the fleet carried a second word for
+	// endpoint in the estate used and nothing else, so the fleet carried a second word for
 	// "an integration". It is PUBLIC at the JWT layer, HMAC-verified inside, and hands
 	// the push to the universal sync engine (cloud.Sync). cloud.Terminal writes the
 	// handler's reject status in-band so the commerce /v1 ErrorHandlerJSON (co-mounted
@@ -958,7 +958,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// Framework JWT, Telegram secret-token; the link legs use signed __Host- cookies +
 	// state. Telegram's /connect is org-authed via the principal (like the framework
 	// connect). They must NOT sit behind any principal/tenant gate.
-	// Every route here is raw on purpose: each event door speaks its platform's
+	// Every route here is raw on purpose: each event endpoint speaks its platform's
 	// own webhook protocol over the raw request (Discord's Ed25519 signs the raw
 	// bytes; Teams and Telegram answer in their platform's envelope), and every
 	// link leg drives a browser with a 302 or an HTML page, never JSON.
@@ -1602,7 +1602,7 @@ func kmsPut(s *cloud.Service[state], path, name string, value []byte) error {
 // yet" it is. The link prompt that teaches a user how to connect was
 // unreachable, so the feature could never be used at all.
 //
-// Repaired HERE rather than at each call site: this is the one door onto the
+// Repaired HERE rather than at each call site: this is the one entry point onto the
 // store, so the sentinel is whole for everyone above it and no future caller has
 // to know the wire eats error identity.
 func kmsGet(s *cloud.Service[state], path, name string) ([]byte, error) {

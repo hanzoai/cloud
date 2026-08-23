@@ -50,12 +50,12 @@ var allowedTokenPrimitives = map[string]string{
 		"deletion's real blocker (see its entry). Deleting the arm here is the LAST step, not the first: it " +
 		"waits on login minting IAM-only and on front/love/analytics-collector verifying IAM.\n\n" +
 		"IT GATES AUDIENCE, and the divergence is deliberate. THIS file's verification is the boundary's " +
-		"(cloud.NewTokenValidator), which does not gate `aud` — correctly, for an API door: a signature from " +
+		"(cloud.NewTokenValidator), which does not gate `aud` — correctly, for an API endpoint: a signature from " +
 		"a trusted issuer already proves IAM minted the token for one of its own apps, and the app-registry " +
-		"mirror that once checked which was deleted for drifting. A SESSION door is a different question. " +
+		"mirror that once checked which was deleted for drifting. A SESSION endpoint is a different question. " +
 		"This lane turns a bearer into a signed-in person, and a token the user obtained for another app is " +
 		"not consent to that, so team narrows to a NAMED audience set at the resource server rather than at " +
-		"the door (identity.forThisDeployment; shape pinned by TestSessionAudienceIsNamedNotPatterned, " +
+		"the edge (identity.forThisDeployment; shape pinned by TestSessionAudienceIsNamedNotPatterned, " +
 		"behaviour by TestIAMLaneRefusesAForeignAudience). A second session-issuing surface owes the same " +
 		"gate — verification says IAM minted it, never that it was minted for you.",
 	"apps/team/transactor.go": "THE SECOND READER, reached through the client rather than an import — it calls " +

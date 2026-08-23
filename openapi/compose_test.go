@@ -343,7 +343,7 @@ func TestComposeRefusesCollidingOperationIDs(t *testing.T) {
 // PROVENANCE: every operation names the registry that registered it, so a
 // misplaced one names a repo to file against instead of costing a bisect of 116
 // subsets. Written where it is known and never overwritten — an operation that
-// arrived through a door already knows better than the part it arrived in.
+// arrived through a relay already knows better than the part it arrived in.
 func TestComposeNamesTheRegistryBehindEachOperation(t *testing.T) {
 	doc, err := openapi.Compose([]openapi.Part{
 		{App: "ai", Doc: &openapi.Document{Paths: map[string]openapi.PathItem{
@@ -358,11 +358,11 @@ func TestComposeNamesTheRegistryBehindEachOperation(t *testing.T) {
 		t.Errorf("x-app = %q, want the app that contributed the part", got)
 	}
 	if got := doc.Paths["/v1/chat/completions"]["post"].App; got != "github.com/hanzoai/ai" {
-		t.Errorf("x-app = %q, want the module behind the door — the compose overwrote a registry that had already named itself", got)
+		t.Errorf("x-app = %q, want the module behind the relay — the compose overwrote a registry that had already named itself", got)
 	}
 }
 
-// A DOOR YIELDS TO A SPECIFIC ROUTE, because that is what the matcher does. This
+// A RELAY YIELDS TO A SPECIFIC ROUTE, because that is what the matcher does. This
 // is the one overlap Compose resolves, and it resolves it by reading the router's
 // rule off the data — a relayed operation names its own registry, a direct one
 // does not — rather than by preferring an app.
@@ -384,7 +384,7 @@ func TestComposeGivesTheSpecificRouteWhatTheMatcherGivesIt(t *testing.T) {
 		}
 	}
 
-	// Two DOORS at one address is still a refusal: two wildcards overlapping is a
+	// Two RELAYS at one address is still a refusal: two wildcards overlapping is a
 	// bug at the composition root and there is no rule that picks between them.
 	both := func(app, src string) openapi.Part {
 		return openapi.Part{App: app, Doc: &openapi.Document{Paths: map[string]openapi.PathItem{
@@ -394,7 +394,7 @@ func TestComposeGivesTheSpecificRouteWhatTheMatcherGivesIt(t *testing.T) {
 	_, err := openapi.Compose([]openapi.Part{both("ai", "github.com/hanzoai/ai"), both("iam", "github.com/hanzoai/iam")})
 	var c *openapi.Conflict
 	if !errors.As(err, &c) || c.Kind != "operation" {
-		t.Fatalf("Compose = %v, want an operation Conflict between two doors", err)
+		t.Fatalf("Compose = %v, want an operation Conflict between two relays", err)
 	}
 }
 
@@ -441,7 +441,7 @@ func committed(t *testing.T, path string) *openapi.Document {
 }
 
 // The public contract is the customer surface and nothing beside it: no
-// operator product, no relay door, no legacy spelling, nothing outside /v1.
+// operator product, no relay, no legacy spelling, nothing outside /v1.
 // Checked BY NAME on the committed artifact rather than by counting, so a
 // failure says what got out — and checked for the other direction too, because
 // a contract that quietly lost a customer product is the SDK that cannot reach
@@ -456,7 +456,7 @@ func TestThePublicContractIsTheCustomerSurface(t *testing.T) {
 			t.Errorf("%s is outside /v1 and published in the public contract", path)
 		}
 		if strings.Contains(path, "{wildcard") {
-			t.Errorf("%s is a relay door and published in the public contract", path)
+			t.Errorf("%s is a relay and published in the public contract", path)
 		}
 		for method, op := range item {
 			for _, tag := range op.Tags {
@@ -480,7 +480,7 @@ func TestThePublicContractIsTheCustomerSurface(t *testing.T) {
 }
 
 // What lies outside the customer surface by the rule: the host's non-/v1
-// furniture, the operator's address family, a relay door. Each is in the
+// furniture, the operator's address family, a relay. Each is in the
 // internal document and none reaches the published one.
 func TestThePublicContractDropsWhatIsOutsideTheRule(t *testing.T) {
 	d := committed(t, publicPath)

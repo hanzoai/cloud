@@ -50,16 +50,16 @@ func searched(t *testing.T, app *zip.App, body string, hdr map[string]string) (i
 // reads both, and a request carrying neither is anonymous.
 var signedIn = map[string]string{"X-Org-Id": "acme", "X-User-Id": "u-acme"}
 
-// TestWebSearchIsTheSameSearchAsTheCompatDoor is the claim the native door rests
-// on: it is not a second search stack, it is the SAME metaSearch reached at an
-// address a typed op can live at.
+// TestWebSearchIsTheSameSearchAsTheCompatDoor is the claim the native endpoint
+// rests on: it is not a second search stack, it is the SAME metaSearch reached at
+// an address a typed op can live at.
 //
-// The SearXNG door cannot be a typed op — it is registered with All, so it answers
-// every method in the router's set, and zip has no typed All. That is a fact about
-// the ADAPTER, and for a long time it was read as a fact about web search: this
-// subsystem served the fleet's only path to the live internet and projected no
-// tool at all, so an agent asked for today's weather had nothing to call. The
-// native door is that capability at an address the registry can hold.
+// The SearXNG endpoint cannot be a typed op — it is registered with All, so it
+// answers every method in the router's set, and zip has no typed All. That is a
+// fact about the ADAPTER, and for a long time it was read as a fact about web
+// search: this subsystem served the fleet's only path to the live internet and
+// projected no tool at all, so an agent asked for today's weather had nothing to
+// call. The native endpoint is that capability at an address the registry can hold.
 func TestWebSearchIsTheSameSearchAsTheCompatDoor(t *testing.T) {
 	mockBing(t, bingFixture)
 	t.Setenv("WEBSEARCH_API_KEY", "k")
@@ -70,7 +70,7 @@ func TestWebSearchIsTheSameSearchAsTheCompatDoor(t *testing.T) {
 		t.Fatalf("POST %s = %d %s, want 200", Path, code, native)
 	}
 
-	// The compat door, same query, same process.
+	// The compat endpoint, same query, same process.
 	rq := httptest.NewRequest(http.MethodGet, "/v1/websearch/search?q=example", nil)
 	rq.Header.Set("X-API-Key", "k")
 	resp, err := app.Test(rq)
@@ -82,7 +82,7 @@ func TestWebSearchIsTheSameSearchAsTheCompatDoor(t *testing.T) {
 	compat := strings.TrimSpace(string(raw))
 
 	if native != compat {
-		t.Errorf("the two doors disagree — one search, two addresses:\n native: %s\n compat: %s", native, compat)
+		t.Errorf("the two endpoints disagree — one search, two addresses:\n native: %s\n compat: %s", native, compat)
 	}
 	var out webSearchResults
 	if err := json.Unmarshal([]byte(native), &out); err != nil {
@@ -93,8 +93,8 @@ func TestWebSearchIsTheSameSearchAsTheCompatDoor(t *testing.T) {
 	}
 }
 
-// TestWebSearchIsClosedToAnAnonymousCaller measures the gate at the door a typed
-// op adds. A tools/call reaches the handler with NO route and therefore NO
+// TestWebSearchIsClosedToAnAnonymousCaller measures the gate at the endpoint a
+// typed op adds. A tools/call reaches the handler with NO route and therefore NO
 // middleware, so the decision is in the handler; here it is asked over HTTP.
 func TestWebSearchIsClosedToAnAnonymousCaller(t *testing.T) {
 	mockBing(t, bingFixture)
@@ -115,7 +115,7 @@ func TestWebSearchIsClosedToAnAnonymousCaller(t *testing.T) {
 // every projection reads — so a subsystem of raw routes is in no OpenAPI
 // operation, no SDK method, no CLI command and no MCP tool. Asserting the handler
 // answers correctly says nothing about any of that. This asks the subsystem's OWN
-// MCP door over JSON-RPC, exactly as the fleet's door asks it.
+// MCP server over JSON-RPC, exactly as the fleet's MCP server asks it.
 func TestWebSearchProjectsAsATool(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
@@ -167,12 +167,13 @@ func TestWebSearchProjectsAsATool(t *testing.T) {
 // own — which is a different kind of refusal from "zip cannot express this" and
 // does not expire when zip gains a capability:
 //
-//   - THE SEARXNG DOOR answers every method in the router's set (registered with
-//     All; zip has no typed All), and a client composes the address from its own
-//     base URL. Typing it means either publishing five typed ops over one handler
-//     or dropping the methods a SearXNG client actually sends. It ALSO carries the
-//     precedence fact: `searchGuard` wraps the handler only for an unvalidated
-//     caller, so an API-key refusal is decided before anything is parsed.
+//   - THE SEARXNG ENDPOINT answers every method in the router's set (registered
+//     with All; zip has no typed All), and a client composes the address from its
+//     own base URL. Typing it means either publishing five typed ops over one
+//     handler or dropping the methods a SearXNG client actually sends. It ALSO
+//     carries the precedence fact: `searchGuard` wraps the handler only for an
+//     unvalidated caller, so an API-key refusal is decided before anything is
+//     parsed.
 //   - THE FIRECRAWL SCRAPE keeps firecrawl's BODY and firecrawl's ANSWER verbatim
 //     (websearch.go says so at the registration). A typed In/Out would restate a
 //     third party's shape in Go and drift from it on their next release.
@@ -181,7 +182,7 @@ func TestWebSearchProjectsAsATool(t *testing.T) {
 // metaSearch at an address the registry can hold, and it is typed, described and
 // projected — which is what TestWebSearchIsTheSameSearchAsTheCompatDoor proves.
 var untypedByDesign = map[string]string{
-	"/v1/websearch/search": "the SearXNG-compatible door — one All registration answering every method, " +
+	"/v1/websearch/search": "the SearXNG-compatible endpoint — one All registration answering every method, " +
 		"whose request shape and answer belong to SearXNG's contract rather than to us.",
 	"/v1/websearch/scrape": "the firecrawl-compatible fetch — the body and the answer are firecrawl's, " +
 		"carried verbatim so a firecrawl client is re-pointed rather than rewritten.",

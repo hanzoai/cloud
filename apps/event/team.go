@@ -17,7 +17,7 @@
 //
 //	POST /v1/event   body: [TeamEvent]   -> {accepted, dropped}
 //
-// There is no /collect door: the ONE canonical decode dispatches this wire by
+// There is no /collect endpoint: the ONE canonical decode dispatches this wire by
 // shape (isTeamArray, event.go), so the SPA's collector URL points at /v1/event
 // and nothing else.
 //
@@ -27,7 +27,7 @@
 // closed 7-member enum, `timestamp` is epoch MILLIS as a NUMBER, and the person id
 // is snake_case `distinct_id`. Those two keys are exactly what lets the ONE
 // canonical decode dispatch it (isTeamArray, event.go) — the shape IS the wire
-// id, so the door needs no path of its own. Left alone, the canonical array
+// id, so this wire needs no path of its own. Left alone, the canonical array
 // decode would eat it wrong:
 //
 //	decodeIngest sees the leading '[' and decodes []Event, whose fields are
@@ -41,10 +41,10 @@
 // so that cannot happen — it names the kind, so the events survive admission.
 //
 // THE CREDENTIAL is separate and lives in eventTenant with the other three, NOT on
-// this door. Trust level is decided once, in handle, for every door (event.go); a
-// door that resolved its own tenant would be the drift that design exists to
+// this wire. Trust level is decided once, in handle, for every wire (event.go); a
+// wire that resolved its own tenant would be the drift that design exists to
 // prevent. A team session token is a platform credential, so it works on the
-// canonical door too — that is the point, not a side effect.
+// canonical wire too — that is the point, not a side effect.
 
 package event
 

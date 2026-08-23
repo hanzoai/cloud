@@ -162,7 +162,7 @@ func TestClientIP_AppliesTheRuleAtTheEdge(t *testing.T) {
 	// caller into the socket peer: one bucket behind the ingress, an empty
 	// address in every audit row. The rule lives here, reading the framework's
 	// raw facts, and every consumer (the edge limiter, the abuse sensor, the
-	// audit trail) shares this one answer through its own door.
+	// audit trail) shares this one answer through its own path.
 	check := func(t *testing.T, name, want string, mut func(*http.Request)) {
 		t.Helper()
 		var got string

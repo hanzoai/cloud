@@ -54,7 +54,7 @@ func TestScopeAdmits(t *testing.T) {
 
 // An org admin is NOT platform sudo. This is the pair the platform must never
 // collapse — a customer-org admin holding full authority inside its own org, at
-// a door that guards shared platform state.
+// an endpoint that guards shared platform state.
 func TestOrgAdminIsNotSudo(t *testing.T) {
 	orgAdm := cloud.Authority{Validated: true, OrgAdmin: true}
 	if cloud.Super.Admits(orgAdm) {
@@ -75,10 +75,10 @@ func TestGuardRefusesBeforeTheHandler(t *testing.T) {
 	}{
 		{"no principal", cloud.Member, nil, false, http.StatusForbidden},
 		{"validated member", cloud.Member, map[string]string{"X-User-Id": "u1"}, true, http.StatusOK},
-		{"member at an admin door", cloud.Admin, map[string]string{"X-User-Id": "u1"}, false, http.StatusForbidden},
-		{"org admin at an admin door", cloud.Admin, map[string]string{"X-User-Id": "u1", "X-User-IsOrgAdmin": "true"}, true, http.StatusOK},
-		{"org admin at a super door", cloud.Super, map[string]string{"X-User-Id": "u1", "X-User-IsOrgAdmin": "true"}, false, http.StatusForbidden},
-		{"superadmin at a super door", cloud.Super, map[string]string{"X-User-Id": "u1", "X-User-IsAdmin": "true"}, true, http.StatusOK},
+		{"member at an admin endpoint", cloud.Admin, map[string]string{"X-User-Id": "u1"}, false, http.StatusForbidden},
+		{"org admin at an admin endpoint", cloud.Admin, map[string]string{"X-User-Id": "u1", "X-User-IsOrgAdmin": "true"}, true, http.StatusOK},
+		{"org admin at a super endpoint", cloud.Super, map[string]string{"X-User-Id": "u1", "X-User-IsOrgAdmin": "true"}, false, http.StatusForbidden},
+		{"superadmin at a super endpoint", cloud.Super, map[string]string{"X-User-Id": "u1", "X-User-IsAdmin": "true"}, true, http.StatusOK},
 		// Admin bits with no validated principal — the forged-header shape.
 		{"forged admin bits, no principal", cloud.Super, map[string]string{"X-User-IsAdmin": "true"}, false, http.StatusForbidden},
 	} {

@@ -372,7 +372,7 @@ func siteResponse(p Project, d Deployment, st *site) *projectsSiteDeploy {
 //
 // It writes into the SAME org-scoped store as /v1/projects — it ensures a
 // project (framework `static`) for the resolved slug and records a deployment —
-// so this is a second door onto one publish pipeline, not a second copy of
+// so this is a second entry point to one publish pipeline, not a second copy of
 // project state. Ordering is the billing contract: the hosting gate runs BEFORE
 // any inference or upload, so a denied gate generates and uploads NOTHING, and
 // the debit lands once, only after the site is actually live. The tokens are

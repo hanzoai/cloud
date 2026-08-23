@@ -25,7 +25,7 @@ import (
 
 // Bounds on the three caller-sized values. Each is a store key or a sort term,
 // not free text, and a count over caller-sized values is not a bound: with these
-// asked at the door, `count × max` IS the byte bound of everything below.
+// asked at the entry point, `count × max` IS the byte bound of everything below.
 const (
 	entityMax   = 512
 	relationMax = 128
@@ -128,8 +128,8 @@ func Resolve(facts []Fact, asOf time.Time) (winner Fact, conflicts []Fact, conte
 	return w.Fact, conflicts, contested, true
 }
 
-// admit is the ONE door every caller-supplied assertion passes, and every bound
-// is asked here so no reader below has to ask again.
+// admit is the ONE entry point every caller-supplied assertion passes through, and
+// every bound is asked here so no reader below has to ask again.
 func admit(f Fact, now time.Time) (Fact, error) {
 	var err error
 	// An EDGE names another entity, so an empty value names nothing: the row

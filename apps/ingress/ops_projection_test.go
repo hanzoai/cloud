@@ -1,7 +1,7 @@
 package ingress
 
 // The point of a typed op is that ONE registration feeds every projection. The
-// wire tests next door (control_test.go) prove the REST half is unchanged; these
+// neighbouring wire tests (control_test.go) prove the REST half is unchanged; these
 // pin the other three, which nothing else would notice breaking: the ops are in
 // the registry the OpenAPI document, the MCP tool list and the CLI are read from;
 // they refuse an invocation that arrives off the HTTP path; and the prose the

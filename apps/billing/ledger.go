@@ -257,7 +257,7 @@ func financeTxns(s *cloud.Service[state], ctx context.Context, org, subject stri
 	// CLOUD_COMMERCE_HTTP_URL, which production points at commerce.hanzo.svc:8001,
 	// and that Service selects `app.kubernetes.io/name: cloud` on targetPort 8000 —
 	// this pod's own public edge. So the call left the process, came back through
-	// the front door, and re-entered the binary that had already said it has no
+	// the edge, and re-entered the binary that had already said it has no
 	// ledger. That re-entry is what the transport's maxDepth counter exists to
 	// survive, and what killed the billing gate once.
 	//

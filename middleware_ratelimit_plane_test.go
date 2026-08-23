@@ -44,7 +44,7 @@ func servePlaneRules(t *testing.T, rules map[string][]plane.ScopeRule, calls *at
 				calls.Add(1)
 			}
 			// The org rides the CALLER, never an argument — the same rule the real
-			// op enforces, so a test cannot pass through a door production closes.
+			// op enforces, so a test cannot pass through a path production closes.
 			org := Who(ctx).Org
 			if org == "" {
 				return nil, zip.ErrForbidden("scope rules: no org on the call")

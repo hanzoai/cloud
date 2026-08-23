@@ -30,7 +30,7 @@ func planClient(t *testing.T, body string) *Client {
 // production answers it, now that commerce is a plugin in this binary rather
 // than a deployment of its own.
 //
-// It replaces an httptest stub of /v1/billing/subscriptions. That door belonged
+// It replaces an httptest stub of /v1/billing/subscriptions. That endpoint belonged
 // to a standalone commerce there is no longer any of, and a test that keeps
 // stubbing it proves the reader can parse a shape nothing serves.
 func subsPeer(t *testing.T, rows []plane.Sub) {

@@ -253,7 +253,7 @@ func openKMS(brand string) *kms.Client {
 			threshold = n
 		}
 	}
-	// cloud.OrgNamespace is the one door a string becomes a tenant name at; the
+	// cloud.OrgNamespace is the one place a string becomes a tenant name; the
 	// MPC client takes the name so it never has to fold a slug itself.
 	ns, err := cloud.OrgNamespace(org, "")
 	if err != nil {

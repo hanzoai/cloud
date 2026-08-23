@@ -47,7 +47,7 @@ func mountWire(t *testing.T) *zip.App {
 var untypedByDesign = map[string]string{
 	// The three repository-lifecycle routes. A board IS a repository on the forge
 	// (source.go), so creating, renaming and deleting one is a FORGE operation
-	// under forge permissions; re-exposing it here would put a second, weaker door
+	// under forge permissions; re-exposing it here would put a second, weaker endpoint
 	// on the same object. They answer 405 naming the forge — which is a different
 	// fact from 404, and the reason they are routes at all rather than absent.
 	//
@@ -60,7 +60,7 @@ var untypedByDesign = map[string]string{
 }
 
 const repoLifecycleReason = "a board is a repository on the deployment's forge, so its lifecycle is a " +
-	"forge operation under forge permissions — offering it here would be a second door onto the same " +
+	"forge operation under forge permissions — offering it here would be a second endpoint onto the same " +
 	"object with this surface's guard instead of the forge's. Answers 405 naming the forge rather than " +
 	"404, because 'not this service's job' and 'no such thing' are different facts. A typed op would " +
 	"publish request and response schemas for work that is never done."

@@ -90,7 +90,7 @@ func caller(ctx context.Context) (org, user string, err error) {
 	return org, c.User(), nil
 }
 
-// ── the card doors and the sweep ─────────────────────────────────────────────
+// ── the card endpoints and the sweep ─────────────────────────────────────────
 //
 // FOUR of this package's nine own operations. The other five are BYTE RELAYS and
 // a two-status replay, named in untypedByDesign (typed_wire_test.go) with the
@@ -114,14 +114,14 @@ func requestOf(ctx context.Context) (*zip.Ctx, error) {
 	return c, nil
 }
 
-// topupIn is what both top-up doors take. They differ in WHICH card: one takes a
-// fresh single-use token, the other a card the subject already saved.
+// topupIn is what both top-up endpoints take. They differ in WHICH card: one
+// takes a fresh single-use token, the other a card the subject already saved.
 type topupIn struct {
 	// SourceID is a single-use card token from the payment form, for the token
-	// door. It is vaulted as part of the charge, so a caller never holds card
+	// endpoint. It is vaulted as part of the charge, so a caller never holds card
 	// numbers and this service never sees one.
 	SourceID string `json:"sourceId,omitempty" url:"-"`
-	// MethodID names a card the subject already saved, for the saved-card door.
+	// MethodID names a card the subject already saved, for the saved-card endpoint.
 	MethodID string `json:"paymentMethodId,omitempty" url:"-"`
 	// AmountCents is how much to charge, in cents of Currency. Required.
 	AmountCents int64 `json:"amountCents" url:"-"`
@@ -168,7 +168,7 @@ func (o ops) topupToken(ctx context.Context, in *topupIn) (*plane.Charged, error
 }
 
 // TopupWithSavedCard charges a card the caller already saved and credits the
-// balance. Same receipt and the same retry safety as the token door; the only
+// balance. Same receipt and the same retry safety as the token endpoint; the only
 // difference is which card, so a caller topping up from a saved method never
 // re-enters one.
 func (o ops) topupSaved(ctx context.Context, in *topupIn) (*plane.Charged, error) {

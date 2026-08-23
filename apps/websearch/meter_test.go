@@ -3,12 +3,12 @@ package websearch
 // The paid engines are the only thing here that costs money, so these are the
 // four facts worth pinning: a bought answer debits the CALLER's org, a keyless
 // one debits nobody, an org that cannot pay keeps its search and loses only the
-// engine it could not afford, and the SearXNG door bills the same caller the
-// typed door does.
+// engine it could not afford, and the SearXNG endpoint bills the same caller the
+// typed endpoint does.
 //
 // That last one is not a formality. The net/http adaptor hands its handler a
 // request whose Context is the transport's, not the one cloud.Bridge parked the
-// caller in, so a search arriving by that door used to reach metaSearch with no
+// caller in, so a search arriving by that endpoint used to reach metaSearch with no
 // principal at all. Nothing about a search LOOKS different when that happens —
 // the results are identical — and the only symptom is a debit that never lands.
 
@@ -151,7 +151,7 @@ func TestUnfundedOrgLosesThePaidEngineNotTheSearch(t *testing.T) {
 	}
 }
 
-// The shared-service-key door carries no principal, so there is no wallet to
+// The shared-service-key path carries no principal, so there is no wallet to
 // charge — and therefore no vendor query to buy. It gets the keyless tier: the
 // search still answers, and nothing is bought that nobody can be billed for.
 //
@@ -179,7 +179,7 @@ func TestServiceCallerGetsTheFreeTier(t *testing.T) {
 	}
 }
 
-// The SearXNG-compatible door bills the caller it admitted.
+// The SearXNG-compatible endpoint bills the caller it admitted.
 //
 // It goes through Mount's real route rather than calling the handler, because
 // what is being asserted is the wiring between them: the adaptor's request does
@@ -210,17 +210,17 @@ func TestSearXNGDoorBillsTheCaller(t *testing.T) {
 		t.Fatalf("status %d body %s, want 200", resp.StatusCode, body)
 	}
 	if !strings.Contains(string(body), "tokio.rs") {
-		t.Fatalf("the paid engine did not answer through the door: %s", body)
+		t.Fatalf("the paid engine did not answer through the endpoint: %s", body)
 	}
 	if !planetest.Wait(func() bool { return l.Count() == 1 }) {
-		t.Fatalf("debits = %d, want 1 — this door reaches the same paid engine as the typed one", l.Count())
+		t.Fatalf("debits = %d, want 1 — this endpoint reaches the same paid engine as the typed one", l.Count())
 	}
 	if org := l.Org(); org != "acme" {
 		t.Fatalf("debited org %q, want the caller %q", org, "acme")
 	}
 }
 
-// ── the detached doors ──────────────────────────────────────────────────────
+// ── the detached callers ────────────────────────────────────────────────────
 //
 // Two callers reach this package with no request behind them, and both used to
 // buy the paid tier for free. A STREAMED answer runs its loop from a callback

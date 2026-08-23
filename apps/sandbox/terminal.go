@@ -244,17 +244,17 @@ func (t *tickets) sweep(now time.Time) {
 // The routes
 // ─────────────────────────────────────────────────────────────────────────────
 
-// open mints the ticket for one DOOR. Gated exactly like its siblings — a
+// open mints the ticket for one ENDPOINT. Gated exactly like its siblings — a
 // validated principal, resolved to the org whose sandboxes may be addressed —
 // and it resolves the sandbox before minting, so a ticket never names a sandbox
 // the caller does not own or one that is not running.
 //
-// THE DOOR IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which
+// THE ENDPOINT IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which
 // sandbox, and the terminal and the screen are two views of that one machine —
 // a caller holding the authority to type in a sandbox holds the authority to
-// look at it. Binding the door into the token would be a second gate answering
+// look at it. Binding the endpoint into the token would be a second gate answering
 // a question the first one already closed, and a gate that decides nothing is
-// one somebody later has to reason about anyway. What the door decides is the
+// one somebody later has to reason about anyway. What the endpoint decides is the
 // URL a caller is handed back, which is the only part that differs.
 // pty serves one terminal: a shell on a pseudo-terminal, for as long as
 // somebody is typing.
@@ -614,7 +614,7 @@ func (w *window) Next() *remotecommand.TerminalSize {
 	}
 }
 
-// terminal registers the three doors, on the group that already owns the member
+// terminal registers the three endpoints, on the group that already owns the member
 // routes. One function and not three lines in Routes, so that what a terminal
 // needs — a credential, a page and a socket — cannot be half registered.
 //

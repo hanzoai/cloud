@@ -233,7 +233,7 @@ func TestSpanRowServiceFallsBackToTheSurface(t *testing.T) {
 }
 
 // TestLLMLensEnabled covers the default-ON flag semantics, the same posture as the
-// Sentry error lens next door.
+// Sentry error lens beside it.
 func TestLLMLensEnabled(t *testing.T) {
 	t.Setenv(llmLensEnv, "")
 	if !llmLensEnabled() {

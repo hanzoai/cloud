@@ -215,10 +215,10 @@ const idleAfter = 15 * time.Minute
 // reclaims a plugin quiet for its whole window, so in the minutes after a cold
 // start, when every prefix that gets a request starts a child and none is old
 // enough to be idle, it reclaims nothing. zip enforces this at the START path,
-// not on the reaper's ticker: the fleet's MCP door asks every subsystem at once
-// and starts children far faster than a sweep runs, and a bound restored a minute
-// later is not a bound — that is how this pod came to hold every child it had,
-// stop answering its own liveness probe, and get killed.
+// not on the reaper's ticker: the fleet's MCP server asks every subsystem at
+// once and starts children far faster than a sweep runs, and a bound restored a
+// minute later is not a bound — that is how this pod came to hold every child it
+// had, stop answering its own liveness probe, and get killed.
 //
 // It is a COUNT because the cost is the count. Measured in the running pod, the
 // per-child distribution is flat: 33 children, mean 167MiB, largest 251MiB. No

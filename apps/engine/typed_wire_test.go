@@ -58,7 +58,7 @@ var intentRefused = map[string]string{
 	// mutations are platform operations, not tenant ops.
 	"/v1/engine/models/unload": "load/unload/reload/tune/requantize mutate the one shared runtime — an org-scoped route would hand each tenant every other tenant's availability; mutations wait for per-org engine instances",
 	"/v1/engine/system/doctor": "the doctor runs load diagnostics on shared serving capacity; an org-triggered benchmark is a denial lever, not a read",
-	"/v1/engine/chat":          "inference is the fleet's ONE metered door — the OpenAI-compatible /v1 surface (apps/ai + the zen claim); a second completion door here would split billing",
+	"/v1/engine/chat":          "inference is the fleet's ONE metered endpoint — the OpenAI-compatible /v1 surface (apps/ai + the zen claim); a second completion endpoint here would split billing",
 }
 
 // ── fake upstream: the measured engine wire ─────────────────────────────────

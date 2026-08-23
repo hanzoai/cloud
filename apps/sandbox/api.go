@@ -76,7 +76,7 @@ type Cmd struct {
 	// sees the work happen instead of a blank pause with a verdict at the end.
 	// Empty means nothing is watching, and then nothing is sent — see work.go.
 	Session string
-	// Blind are the caller's secrets, hidden from BOTH doors this command's bytes
+	// Blind are the caller's secrets, hidden from BOTH paths this command's bytes
 	// leave by — the narration above and the result returned. Redaction has to
 	// happen here rather than at the caller because the narration never passes
 	// through the caller: see blind.go.
@@ -405,7 +405,7 @@ func Run(s *Service, ctx context.Context, org, id string, cmd Cmd) (ExecResult, 
 	defer stop()
 	forget := s.State.work.start(m.ID, stop)
 	defer forget()
-	// The secrets this command must never publish, applied at BOTH doors it
+	// The secrets this command must never publish, applied at BOTH paths it
 	// leaves by: the narration below as it is produced, and the result returned
 	// to the caller. See blind.go.
 	blind := newBlinder(cmd.Blind)

@@ -12,8 +12,8 @@ import (
 )
 
 // fourMiB is fasthttp's default request-body ceiling. It is the number this test
-// exists to keep the door away from: the door terminates public HTTP, so if it
-// falls back to the framework default it refuses a body BEFORE the program
+// exists to keep the listener away from: the listener terminates public HTTP, so
+// if it falls back to the framework default it refuses a body BEFORE the program
 // behind it can accept one, and no downstream setting can be reached past it.
 const fourMiB = 4 << 20
 
@@ -38,13 +38,13 @@ func TestTheDoorAcceptsABodyLargerThanTheFrameworkDefault(t *testing.T) {
 
 	resp, err := app.Test(req, deadline)
 	if err != nil {
-		t.Fatalf("door refused a %d-byte body at the transport: %v", len(body), err)
+		t.Fatalf("listener refused a %d-byte body at the transport: %v", len(body), err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusBadRequest {
-		t.Fatalf("the door answered 400 to a %d-byte body — that is fasthttp refusing it "+
-			"before any handler ran, which means doorConfig() is not carrying BodyLimit. "+
+		t.Fatalf("the listener answered 400 to a %d-byte body — that is fasthttp refusing "+
+			"it before any handler ran, which means doorConfig() is not carrying BodyLimit. "+
 			"This is the exact failure that made 1M-context models unreachable while "+
 			"GATEWAY_BODY_LIMIT read 100 MiB in the environment.", len(body))
 	}
@@ -54,22 +54,22 @@ func TestTheDoorAcceptsABodyLargerThanTheFrameworkDefault(t *testing.T) {
 }
 
 // TestTheDoorCarriesTheHeaderCeilingToo pins the sibling half. ReadBufferSize was
-// omitted from the same struct literal, so the door also sat on fiber's 4 KiB
+// omitted from the same struct literal, so the listener also sat on fiber's 4 KiB
 // header default — the ceiling a multi-domain SSO session (Domain=.hanzo.ai
 // cookies on every subdomain) overruns, answering 431 to a legitimate request.
 func TestTheDoorCarriesTheHeaderCeilingToo(t *testing.T) {
 	cfg := doorConfig()
 	if cfg.ReadBufferSize <= 4096 {
-		t.Fatalf("door ReadBufferSize=%d is at or below the 4 KiB framework default — "+
+		t.Fatalf("listener ReadBufferSize=%d is at or below the 4 KiB framework default — "+
 			"a multi-domain SSO session 431s here", cfg.ReadBufferSize)
 	}
 	if cfg.BodyLimit <= fourMiB {
-		t.Fatalf("door BodyLimit=%d is at or below the %d framework default", cfg.BodyLimit, fourMiB)
+		t.Fatalf("listener BodyLimit=%d is at or below the %d framework default", cfg.BodyLimit, fourMiB)
 	}
 }
 
-// TestTheDoorReportsTheCallerAndNotTheIngress holds the door to the one fact every
-// per-caller rule is keyed on.
+// TestTheDoorReportsTheCallerAndNotTheIngress holds the listener to the one fact
+// every per-caller rule is keyed on.
 //
 // zip resolves the caller ONCE at the client and believes a forwarded header only
 // where the app names its own hops. Unnamed, its answer is the socket peer — which
@@ -97,7 +97,7 @@ func TestTheDoorReportsTheCallerAndNotTheIngress(t *testing.T) {
 		t.Fatalf("probe did not reach the handler: %v", err)
 	}
 	if seen != visitor {
-		t.Fatalf("the door reported %q; the caller is %q. The door names no trusted "+
-			"proxies, so every visitor arrives as the same in-cluster address", seen, visitor)
+		t.Fatalf("the listener reported %q; the caller is %q. The listener names no "+
+			"trusted proxies, so every visitor arrives as the same in-cluster address", seen, visitor)
 	}
 }

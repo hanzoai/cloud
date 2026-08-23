@@ -10,7 +10,7 @@ import (
 //
 // It is a PARAMETER and not an import because the dependency runs one way only:
 // manifest is the routing table, and manifest's own tests read this package to pin
-// the spec door's address (manifest/openapi_test.go), so an openapi that imported
+// the spec endpoint's address (manifest/openapi_test.go), so an openapi that imported
 // manifest back would make manifest's test binary an import cycle — the compiler
 // says so. The fleet passes manifest.OwnerOf, at the one producer (describe.go).
 //
@@ -117,7 +117,7 @@ func Complete(doc *Document, owner Owner) error {
 	}
 	var orphan []string
 	for _, key := range describedRoutes() {
-		// The host's doors belong to NO APP, and owner cannot say so.
+		// The host's endpoints belong to NO APP, and owner cannot say so.
 		//
 		// cmd/cloud registers GET /v1/openapi.json as a static route that outranks
 		// ai's "/v1" remainder; manifest/openapi_test.go records the manifest's own
@@ -126,8 +126,8 @@ func Complete(doc *Document, owner Owner) error {
 		// [CommandPath] — because, in their words, they are the operations with no
 		// owning subsystem.
 		//
-		// So every app whose paths fall to that remainder would be charged with a
-		// door no app mounts. It is not going unjudged: they render in the fleet
+		// So every app whose paths fall to that remainder would be charged with
+		// an endpoint no app mounts. It is not going unjudged: they render in the fleet
 		// document the host serves, which is where the operations actually are.
 		// [Product] hid this by accident for the document, returning "" for any
 		// segment holding a dot; /v1/commands has no dot to hide behind, so it

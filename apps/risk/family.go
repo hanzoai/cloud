@@ -40,7 +40,7 @@ package risk
 // of number. So [address] is domain-separated by family, and a value fitted under
 // one family can never wear a name minted under another.
 //
-// The refusal is then free at the door as well. [plane.install] already decides
+// The refusal is then free at the entry point as well. [plane.install] already decides
 // between restoring in place and REPLANTING by asking whether the value's space is
 // the one already running; with the family inside the space, a cross-family adoption
 // takes the replant branch and is refused BEFORE a single mass is read — by the
@@ -129,8 +129,8 @@ type geometry interface {
 // It is COMPLETE by construction — see [halfspace.complete]. A parameter left at zero
 // used to mean "the deployment's own", resolved by the engine after construction and
 // read back out of the built store, which is why the residency had to record a config
-// it did not choose. Resolved at the door instead, there is one shape, it is the one
-// that runs, and nothing has to be read back to find out what it was.
+// it did not choose. Resolved at the entry point instead, there is one shape, it is
+// the one that runs, and nothing has to be read back to find out what it was.
 type halfspace struct {
 	// Trees is how many half-space trees partition the space.
 	Trees int `json:"trees"`
@@ -164,7 +164,7 @@ const (
 // complete resolves every parameter left at zero to the deployment's own, so a built
 // geometry never holds a zero standing in for a number somebody else will choose.
 //
-// It is EXACTLY the engine's own rule, applied at the door instead of after
+// It is EXACTLY the engine's own rule, applied at the entry point instead of after
 // construction: the engine fills a zero with the same value, so this changes no shape
 // and no digest — it only moves WHEN the shape is known from "after the store was
 // built" to "before".
@@ -386,8 +386,8 @@ func (s *shape) UnmarshalJSON(b []byte) error {
 //	          Assess answers a rule hit and whether it fired; BOTH returns are
 //	          discarded at all three call sites, because learning is a transformation
 //	          and a verdict is a query. So this answers nothing.
-//	score     the one door to a verdict ([plane.score]). Pure: it moves no counter and
-//	          touches no aggregate.
+//	score     the one entry point to a verdict ([plane.score]). Pure: it moves no
+//	          counter and touches no aggregate.
 //	digest    the identity of the space, over this family's geometry and the inventory
 //	          it reads. Qualified by the family ([family.qualify]) wherever it is
 //	          recorded or compared.

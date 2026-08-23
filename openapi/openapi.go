@@ -12,7 +12,7 @@
 // projections 116 app binaries wrote when they were BUILT (fleet.go). Between the
 // projection and the request sit two gaps no reading of any router closes: the
 // subset can be older than the code (mk/fleet.mk check regenerates it
-// from source and refuses the diff), and the deployed front door can hand the
+// from source and refuses the diff), and the deployed edge can hand the
 // path to somebody else entirely (only a probe of the live host sees that). See
 // fleetInfo for what the published document may therefore claim.
 //
@@ -329,7 +329,7 @@ type Parameter struct {
 // question a reader of a wrong operation has — who do I file this against — and
 // until it was recorded the answer took a bisect of 116 subsets. For an app's own
 // route it is the app name, so the code is apps/<name> in this repo; for an
-// operation reached through a door it is the module behind that door, so the code
+// operation reached through a relay it is the module behind that relay, so the code
 // is that repo. Either way it names a place to go.
 //
 // It is written exactly once per operation, by whichever producer knows: [Project]
@@ -385,10 +385,10 @@ type Operation struct {
 	// declared one through [Register]; both describe a shape the child's registry
 	// has never heard of, so both leave this false.
 	//
-	// It exists because the fleet's agent door reads a CATALOG built from these
+	// It exists because the fleet's agent MCP server reads a CATALOG built from these
 	// documents, and a document carries every ROUTE. Advertising the difference
 	// is not a cosmetic over-count: a caller that picks one of those names gets
-	// `unknown tool` from the child that published it — measured on the live door,
+	// `unknown tool` from the child that published it — measured on the live server,
 	// `storage`/`list_s3_buckets`, and 157 operations across ten apps behind it.
 	// Marking the dispatchable subset here lets the catalog carry what a child
 	// ANSWERS TO rather than what it describes, which is what Op's own doc comment
@@ -735,8 +735,8 @@ func Fold(doc *Document, reg Registry) error {
 //
 // Three readings, in the order each earns: the router gives the total set of
 // addresses, the typed registry gives detail for the ones that have any, and the
-// relays give what is BEHIND the addresses that are doors rather than endpoints.
-// Project runs last because a door is only a door once the router has been read,
+// relays give what is BEHIND the addresses that are relays rather than endpoints.
+// Project runs last because a relay is only a relay once the router has been read,
 // and because what it substitutes is already a finished document.
 func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
 	doc, err := From(Live(app), info, servers...)
@@ -756,7 +756,7 @@ func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
 	// Audience is stamped LAST, on the finished set of addresses, because it is
 	// the only point at which every operation this app publishes exists at its
 	// published address: Fold replaces structural operations with typed ones and
-	// Project replaces doors with what is behind them, so a mark written before
+	// Project replaces relays with what is behind them, so a mark written before
 	// either would be thrown away by it. See openapi/public.go.
 	stamp(doc)
 	// And the credential, on that same finished set, for that same reason. Two
@@ -835,8 +835,8 @@ func translate(pattern string) (string, []string) {
 // It is UNAUTHENTICATED, deliberately:
 //
 //   - It is an API description of a public API, and it grants no capability.
-//     Every route it names stays individually auth-gated; reading the map does
-//     not open a door. Withholding it would be obscurity, not access control.
+//     Every route it names stays individually auth-gated; reading the map admits
+//     nothing. Withholding it would be obscurity, not access control.
 //   - The `hanzo` CLI must build its command tree BEFORE a user logs in. Gating
 //     the spec would make `hanzo --help` require credentials.
 //   - It carries no schemas, no examples, no secrets — only addresses.
@@ -871,8 +871,8 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // ONCE covers the bytes, not just the value, and that is not an optimization —
 // it is the shape of what this is. The route table is fixed after boot, so the
 // document is immutable and re-encoding it per request is work whose answer
-// cannot change. It matters because the door is public and unauthenticated on
-// the front-door router: the fleet document is megabytes, and re-marshalling it
+// cannot change. It matters because the endpoint is public and unauthenticated on
+// the edge router: the fleet document is megabytes, and re-marshalling it
 // per request is an amplifier anyone can pull. Rendered, a repeat request is a
 // memcpy and the Document itself is collectable.
 //
@@ -894,16 +894,16 @@ func init() {
 		"Serves the OpenAPI document for the routes this process actually answers — "+
 			"generated from the live router at request time, not from a checked-in file that "+
 			"can disagree with it.\n\n"+
-			"On an app it is that app's own surface; on the fleet's front door it is the composed "+
+			"On an app it is that app's own surface; on the fleet's public endpoint it is the composed "+
 			"document for every mounted app. Unauthenticated by design: a client has to be able "+
 			"to read the contract before it holds a credential, and the document grants nothing.\n\n"+
 			"Rendered once and served as bytes thereafter, so the route table's immutability is "+
 			"what makes a repeat request a memcpy rather than a re-encode of a megabyte document.")
 	// And it says so in the contract, not only in the prose above. The reasoning
-	// on [Mount] is what makes this door unauthenticated; without the declaration
+	// on [Mount] is what makes this endpoint unauthenticated; without the declaration
 	// the document would inherit the fleet requirement and tell every generated
 	// client to hold a credential before it can read the description it needs in
-	// order to know what a credential is for. CommandPath is the same door under
+	// order to know what a credential is for. CommandPath is the same endpoint under
 	// [serve] and gets the same answer (command.go).
 	Open(Path, http.MethodGet)
 
@@ -954,11 +954,11 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 }
 
 // Door reports whether path is the host's — one [serve] registers (the document
-// and its command projection), the agent door (openapi/mcp.go), or the index a
-// client follows from the API root (openapi/index.go).
+// and its command projection), the agent MCP server (openapi/mcp.go), or the
+// index a client follows from the API root (openapi/index.go).
 //
-// The doors are the host's, and they are the only operations that belong to NO
-// app: they are declared in this package rather than beside any subsystem, no
+// The endpoints are the host's, and they are the only operations that belong to
+// NO app: they are declared in this package rather than beside any subsystem, no
 // manifest row names them, and EVERY deployment serves them whatever subset of
 // the fleet it runs. Four gates need exactly that fact and each had written it
 // as the one literal that was true when it was written:
@@ -968,12 +968,12 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 //	cmd/cloud/openapi_test.go    exempts them from a scoped deployment's surface
 //	manifest/openapi_test.go     refuses an app row that claims one — [Routed]
 //
-// So it is stated once, beside the code that makes it true. The second door
+// So it is stated once, beside the code that makes it true. The second endpoint
 // arrived and all three were wrong the same afternoon — the cost of a literal is
 // that it is right until it isn't and says nothing when it stops.
 //
-// Whether the host REGISTERS a route at a door is a narrower question, and the
-// last gate is the one that asks it: see [Routed].
+// Whether the host REGISTERS a route at one of them is a narrower question, and
+// the last gate is the one that asks it: see [Routed].
 func Door(path string) bool {
 	// Either spelling answers, because the callers hold different ones: a prose
 	// declaration is keyed by the ROUTER's pattern (/v1/:name) and the document by
@@ -987,11 +987,11 @@ func Door(path string) bool {
 	return false
 }
 
-// Routed reports whether the host registers a ROUTE at this door, rather than
-// answering it ahead of the router.
+// Routed reports whether the host registers a ROUTE at this endpoint, rather
+// than answering it ahead of the router.
 //
-// Both index doors sit inside a subtree a manifest row already claims — /v1 is
-// ai's REMAINDER and /v1/{name} is each capability's own root — so a route at
+// Both index endpoints sit inside a subtree a manifest row already claims — /v1
+// is ai's REMAINDER and /v1/{name} is each capability's own root — so a route at
 // either is two definitions claiming one address and zip refuses the composition
 // outright. [MountIndex] answers them from middleware composed before the mounts
 // instead, which no Load can sit in front of.

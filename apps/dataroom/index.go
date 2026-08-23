@@ -80,7 +80,7 @@ func (x *linkIndex) publish(slug, org string) error {
 var errSlugTaken = errors.New("that address is taken")
 
 // withdraw removes an org's public address. Its artifacts and grants are untouched
-// — only the anonymous door closes.
+// — only the anonymous address stops resolving.
 func (x *linkIndex) withdraw(org string) error {
 	_, err := x.db.Exec(`DELETE FROM trust_index WHERE org=?`, org)
 	return err

@@ -23,10 +23,10 @@ import (
 // In production the bytes are a PUBLISHED SITE RELEASE, loaded at boot and kept
 // current by a poll (webui/release), which is why webui takes them as an argument
 // rather than embedding them. These tests are about the ROUTER — what wins at "/"
-// against an app prefix, an absent subsystem, the agent door, the spec door — so
-// they need only that a console is mounted at all, and would say nothing useful
-// about the release loader. It is shared by every host-shaped test in this
-// package so all of them mount the same thing.
+// against an app prefix, an absent subsystem, the agent MCP server, the spec
+// endpoint — so they need only that a console is mounted at all, and would say
+// nothing useful about the release loader. It is shared by every host-shaped test
+// in this package so all of them mount the same thing.
 func consoleBundle() fstest.MapFS {
 	return fstest.MapFS{
 		"index.html": {Data: []byte("<!doctype html><html><head><title>Hanzo Cloud Console</title></head><body></body></html>")},
@@ -83,7 +83,7 @@ func dead(t *testing.T, name, prefix string) manifest.App {
 //
 // fiber's default is one second, which makes every request here an assertion
 // about latency that none of these tests meant to make. A host-shaped test mounts
-// the console, the spec door and several plugin subsystems, and under a
+// the console, the spec endpoint and several plugin subsystems, and under a
 // whole-repo `go test ./...` that shares a machine with everything else: three
 // reads of /v1/openapi.json failed as "i/o timeout" while the very next line of
 // the log shows the same path answering 200 in a millisecond.

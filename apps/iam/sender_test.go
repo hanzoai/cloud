@@ -107,13 +107,13 @@ func TestALiveNotifyLightsDelivery(t *testing.T) {
 //
 // The arrangement is a real production one: a process SPAWNED by a router (zip hands
 // every child the socket it must serve on, so a set ZIP_ADDR is proof of a parent
-// that owns an app list) whose start door is not there. Reach cannot ask what is
+// that owns an app list) whose start endpoint is not there. Reach cannot ask what is
 // deployed, and it says so with an error that is not ErrNoPeer — the exact
 // distinction the two branches turn on.
 func TestAnOutageKeepsDeliveryOn(t *testing.T) {
 	runIn(t)
 	t.Setenv("ZIP_ADDR", "the-router-that-spawned-us") // under a router…
-	// …whose start door is absent: nothing is listening on the host socket.
+	// …whose start endpoint is absent: nothing is listening on the host socket.
 
 	bindDelivery(luxlog.NewNoOpLogger())
 

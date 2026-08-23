@@ -1119,7 +1119,7 @@ func CtxShutdown(f func() error) ShutdownFunc {
 // eleven live routes and their store sat in a read-only repository. The code moved
 // to the successor (o11y v1.5.67) and the import followed it. The capability did
 // not move — metrics is still its own row, its own document and its own binary;
-// what changed is which module ships the door.
+// what changed is which module ships the surface.
 //
 // Org is the load-bearing one, and it points the other way: metrics used to
 // decide its own tenant by reading X-Org-Id, which is a header a caller sends,
@@ -1133,7 +1133,7 @@ func CtxShutdown(f func() error) ShutdownFunc {
 // plugin/<app>/main.go, so metrics fell back to the stub that links every subsystem.
 // The move is affordable because it is nearly free — the package imports only
 // zap-proto/zip and luxfi, which cloud's core already carries, so every binary
-// grows by the door itself and not by the o11y runtime beside it in that module.
+// grows by the surface itself and not by the o11y runtime beside it in that module.
 // It is the ONLY one of the four mount adapters that is: commerce would add 527
 // packages to the core, and zen (via hanzoai/ai/controllers) and ai import
 // hanzoai/cloud — a cycle, not a weight.
@@ -1199,7 +1199,7 @@ func describeMetrics() {
 		"Ingest a MetricBatch — the same payload the ZAP transport carries",
 		"Writes every sample in a luxfi/metric `MetricBatch` into the calling org's store and "+
 			"answers `{written}`: the number of SAMPLES stored, not families and not metrics. This "+
-			"is the exact wire shape the ZAP `MsgMetricBatch` transport carries, so the HTTP door "+
+			"is the exact wire shape the ZAP `MsgMetricBatch` transport carries, so the HTTP endpoint "+
 			"and the optional ZAP push receiver share one code path and one meaning — the transport "+
 			"is an optimisation, never a different contract.\n\n"+
 			"A counter or gauge lands as one sample. A histogram or summary contributes DERIVED "+
@@ -1371,14 +1371,15 @@ type Plugin struct {
 	// subsystem simply gets one whose Router IS the app.
 	Global bool
 
-	// Door is this subsystem's PER-CALLER contribution to the MCP door: the tools
+	// Door is this subsystem's PER-CALLER contribution to the MCP server: the tools
 	// that exist because of who is asking, which the build-time projection cannot
-	// hold. Nil — every subsystem but one — leaves the door exactly the typed ops.
+	// hold. Nil — every subsystem but one — leaves the MCP server exactly the typed
+	// ops.
 	//
 	// It is stated HERE, at the composition root, for the reason Price and
 	// Prefixes are: what a binary serves is a property of the binary, declared
 	// where the binary is assembled, not installed from inside a Mount that runs
-	// after the door is configured.
+	// after the MCP server is configured.
 	Door zip.Source
 }
 

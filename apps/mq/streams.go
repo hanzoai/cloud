@@ -168,7 +168,7 @@ func present(org string, info *jetstream.StreamInfo) Stream {
 	}
 }
 
-// resolve is the one door every by-name op goes through: the org's stream or
+// resolve is the one path every by-name op goes through: the org's stream or
 // the error the contract names (400 bad name, 404 not the org's).
 func (s streams) resolve(ctx context.Context, org, n string) (jetstream.Stream, error) {
 	id, err := streamID(org, n)

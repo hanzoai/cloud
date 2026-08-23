@@ -9,9 +9,9 @@
 // the tool registry (every source, activated flags); "install"/"uninstall" ARE the
 // registry's activation writes (marketplace install == tool activation — one store,
 // one truth); and a monetized listing's price is enforced per call by x402, which
-// this package hands both halves of the door — the price table and the charger (see
-// payments.go). Marketplace never dispatches a tool itself and never moves money
-// itself.
+// this package hands both halves of the payment client — the price table and the
+// charger (see payments.go). Marketplace never dispatches a tool itself and never
+// moves money itself.
 //
 // TWO TRANSPORTS, ONE POLICY — because the shipped topology has no co-residency.
 // The three clients this package binds are process-globals (x402.reg, tools.std, and
@@ -105,7 +105,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	tools.SetCharger(charger{})
 
 	// The same table, published for the processes that do NOT have it: the rail
-	// runs in its own binary and asks (rpc.go). Both doors read the one store, so
+	// runs in its own binary and asks (rpc.go). Both paths read the one store, so
 	// what a tool costs cannot differ by who is asking or over which transport.
 	exposePrice(store)
 

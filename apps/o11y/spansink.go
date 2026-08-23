@@ -26,8 +26,8 @@
 // lens filters on exactly the predicate the reader filters on. A span without it is
 // invisible to every LLM view by construction, so projecting one would be write
 // amplification that no read can ever return — and it would put a second copy of a
-// non-LLM span on the trace plane, which the ZAP door already owns. One marker, decided
-// once, on both sides.
+// non-LLM span on the trace plane, which the ZAP receiver already owns. One marker,
+// decided once, on both sides.
 //
 // TENANCY (fail-closed, no state): gen_ai.hanzo.org_id is the ONLY org discriminator the
 // span views have, and it is the tenant SLUG — the handler sets ViewQuery.OrgSlug from
@@ -38,7 +38,7 @@
 // the SENTRY module's contract (Ingest takes an org UUID and a project UUID); the span
 // views have neither concept, and a UUID in either place would be read by nobody — the
 // reader binds the slug, so a UUID-stamped row is a row every LLM view returns zero of.
-// TestSpanTenantIsTheSlugNotTheUUID pins that against the errorsink formula next door.
+// TestSpanTenantIsTheSlugNotTheUUID pins that against the errorsink formula beside it.
 //
 // ONE WRITE PATH: rows go through (*planeSink).insertSpans, never to the datastore
 // directly, because that function owes event.span AND the event.trace partial it
@@ -68,7 +68,7 @@ import (
 
 const (
 	// llmLensEnv turns the LLM span projection OFF when falsey. Default ON, the same
-	// posture as the Sentry error lens next door: a live plane sink projects every
+	// posture as the Sentry error lens beside it: a live plane sink projects every
 	// org's /v1/event gen_ai spans onto event.span.
 	llmLensEnv = "CLOUD_LLM_LENS"
 

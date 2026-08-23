@@ -504,12 +504,12 @@ func (st step) run(s *cloud.Service[state], ctx context.Context, org, slug, name
 
 // born gives a NEW project its source, on a name that STARTS OVER.
 //
-// It is the create path's door and differs from [share] in exactly one way: the
-// name is emptied before it is filled ([renew]). A project is created only when
-// no live project of that (org, slug) exists — the row is unique per org and had
-// to be written first — so anything the name still holds is a leftover from a
-// project that is gone, and ensuring past it would publish a deleted project's
-// commits under whoever holds the slug now.
+// It is the create path's entry point and differs from [share] in exactly one
+// way: the name is emptied before it is filled ([renew]). A project is created
+// only when no live project of that (org, slug) exists — the row is unique per
+// org and had to be written first — so anything the name still holds is a
+// leftover from a project that is gone, and ensuring past it would publish a
+// deleted project's commits under whoever holds the slug now.
 //
 // That is a create-only move. It is the moment a name changes hands, and the
 // only moment at which destroying what the name holds is right.
@@ -519,9 +519,9 @@ func born(s *cloud.Service[state], p Project) {
 
 // share brings a project's repository into step with its row, behind the write.
 //
-// It is the update path's door, and it fires on EVERY update rather than on a
-// transition, because the transition that gets missed is the one nobody noticed
-// happening, and a missed one leaves a private project's source readable — a
+// It is the update path's entry point, and it fires on EVERY update rather than
+// on a transition, because the transition that gets missed is the one nobody
+// noticed happening, and a missed one leaves a private project's source readable — a
 // moderation, a rename that changed nothing here, an update that only touched
 // the description. The work is idempotent twice over — the repository is ensured
 // rather than created, and the visibility is set rather than toggled — so a

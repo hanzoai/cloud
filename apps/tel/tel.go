@@ -10,7 +10,7 @@
 //
 // Assistants are OURS. A call handed to an agent is answered by a Hanzo assistant
 // on Hanzo inference (agent.go) — the carrier moves the audio and does not decide
-// what is said. Which model answers is the catalog's decision behind the AI door,
+// what is said. Which model answers is the catalog's decision behind the AI endpoint,
 // not a constant in a telecom package.
 //
 // Tenant isolation is enforced SERVER-SIDE on every request: the org is

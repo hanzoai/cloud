@@ -180,7 +180,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// fasthttp rejected the body before any handler ran, and its wire error is the
 	// opaque 400 "Error when parsing request", which reads like a malformed
 	// payload rather than a size cap. Env GATEWAY_BODY_LIMIT (see config.go).
-	// The per-caller half of this binary's MCP door, from the composition root
+	// The per-caller half of this binary's MCP server, from the composition root
 	// (Plugin.Door). Nil for every app but the tool plane, which is the only one
 	// whose tools are ROWS — an org's connectors, skills, agents and the servers
 	// it enabled — and therefore the only one that cannot be projected at build
@@ -309,9 +309,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	// however the operation inside them was declared. Toll asks DefaultPrice and
 	// Billable about op.Method and op.Path at zip's op-invoke client, which every
 	// projection of a typed handler funnels through, so an operation costs the same
-	// whichever door it came in by. It stands down for a request whose own path names
-	// a declared surface, because that is exactly when the two gates above have
-	// already answered — one operation, one answer. See toll.go.
+	// whichever transport it came in by. It stands down for a request whose own
+	// path names a declared surface, because that is exactly when the two gates
+	// above have already answered — one operation, one answer. See toll.go.
 	//
 	// The peer sibling is a SEPARATE zip.App with its own hook (peer.go), so it gets
 	// the gate explicitly. It binds no socket until something registers a peer op, so
@@ -409,7 +409,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// one is the query language over the ops.
 	//
 	// A field resolves through the op's own contract — validate, authorize, the
-	// handler — so it reaches nothing the MCP door does not already reach. Ops
+	// handler — so it reaches nothing the MCP server does not already reach. Ops
 	// whose routed path carries a gated group keep their own authority check for
 	// exactly that reason: the group orders the refusal, the op decides it.
 	//
@@ -441,11 +441,11 @@ func Listen(plugins []Plugin, enable []string) error {
 	// a precondition of its own boot would be waiting on an app that cannot exist
 	// yet. So the console loads when it can, and when it cannot this process serves
 	// none: the terminal handler still keeps the API namespaces honest and still
-	// answers the agent door, and a console path gets a 503 that says exactly this.
-	// Nothing is faked. In the fleet nothing is lost either — every path a child
-	// receives is under one of its own /v1 prefixes, so a child's catch-all never
-	// serves the console to a browser; the front door (cmd/cloud) owns "/", and
-	// THERE the release is required.
+	// answers the agent MCP endpoint, and a console path gets a 503 that says
+	// exactly this. Nothing is faked. In the fleet nothing is lost either — every
+	// path a child receives is under one of its own /v1 prefixes, so a child's
+	// catch-all never serves the console to a browser; the host (cmd/cloud) owns
+	// "/", and THERE the release is required.
 	consoleSrc, consoleErr := release.Load(context.Background(), release.ConfigFromEnv(), luxlog.Default())
 	if consoleErr != nil {
 		luxlog.Default().Warn("console: no release mounted — this process serves no console UI", "err", consoleErr)
@@ -455,16 +455,17 @@ func Listen(plugins []Plugin, enable []string) error {
 	// That keeps what the paragraph above describes — a process that cannot resolve
 	// a release serves no console rather than refusing to serve at all — while
 	// letting it start serving one later without a restart. It is still not a
-	// precondition of boot: an error here would take the API, the agent door and
+	// precondition of boot: an error here would take the API, the agent MCP endpoint and
 	// every /v1 route down with a browser bundle nothing headless asks for.
 	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
-	// This process's AGENT DOOR on that same plane, before the sockets bind, so a
-	// caller that resolves one is answered by a door that is already there. It is
-	// the same door the edge serves, at the address the fleet's own callers use:
-	// see Door, which is also where the reason it cannot be the edge's is written.
+	// This process's AGENT MCP SERVER on that same plane, before the sockets bind,
+	// so a caller that resolves one is answered by an endpoint that is already
+	// there. It is the same MCP server the edge serves, at the address the fleet's
+	// own callers use: see Door, which is also where the reason it cannot be the
+	// edge's is written.
 	Door(app)
 
 	// Internal plane: this app's typed ops over ZAP on its canonical unix socket
@@ -671,7 +672,7 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 //     request. `service='ai'` held 46 rows ever, all /health lines from a pod
 //     retired on 2026-08-09.
 //   - Worse, its exporter claimed node identity `o11y-cloud-logs`, which the
-//     front door already held. The wire admits ONE connection per identity, so
+//     host already held. The wire admits ONE connection per identity, so
 //     the second is refused: the records were dropped, not merely mislabelled.
 //
 // ai and zen were the only two of ~40 subsystems with zero log rows; every

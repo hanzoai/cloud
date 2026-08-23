@@ -6,10 +6,10 @@
 // (search|news|research|deep) selects web grounding. It is a clean-room Hanzo
 // implementation (NOT derived from any AGPL reference).
 //
-// ONE HOME, ONE DOOR. This package is the loop's only home; /v1/ask is its only
-// door. `mode` is a VALUE handed to that door — "deep research" is a mode, never a
-// second route. The package registers no routes of its own: clients/ask owns the
-// door and delegates web modes here.
+// ONE HOME, ONE ENDPOINT. This package is the loop's only home; /v1/ask is its
+// only endpoint. `mode` is a VALUE handed to that endpoint — "deep research" is a
+// mode, never a second route. The package registers no routes of its own:
+// clients/ask owns the endpoint and delegates web modes here.
 //
 // THE SIX VALUES, one home each:
 //
@@ -118,10 +118,10 @@ type Params struct {
 // Serve answers one web-mode /v1/ask: resolve the billing subject → GATE the
 // balance → run the bounded loop, streaming the SearchEvent envelope (SSE) or
 // returning it as one JSON object. The caller is already gated as a validated
-// principal by the door; here we additionally resolve the payer and gate spend
+// principal by the endpoint; here we additionally resolve the payer and gate spend
 // BEFORE any work, so an out-of-funds caller gets a clean 402, never a half stream.
 func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
-	dataOrg, _ := principal.Org(c) // gated non-empty by the door
+	dataOrg, _ := principal.Org(c) // gated non-empty by the endpoint
 	payer := principal.Ledger(c)
 	if payer == "" {
 		payer = dataOrg
@@ -235,12 +235,12 @@ type Report struct {
 // Answer runs the SAME bounded loop Serve runs and hands back its outcome as a
 // value instead of writing it to a response.
 //
-// It exists because the loop's only door was an HTTP handler, and a handler is
-// the one shape an agent cannot reach: a typed op — and so an MCP tool, a CLI
+// It exists because the loop's only entry point was an HTTP handler, and a handler
+// is the one shape an agent cannot reach: a typed op — and so an MCP tool, a CLI
 // command and an SDK method — is invoked with a context and no request at all.
 // So the engine that already separated Run (transport-free) from Serve (HTTP)
-// gains its second transport-free door rather than a second engine. Serve keeps
-// streaming; this returns one value; Run is still the only loop.
+// gains its second transport-free entry point rather than a second engine. Serve
+// keeps streaming; this returns one value; Run is still the only loop.
 //
 // The identity facts Serve reads off the request are read off the CONTEXT here,
 // which is where cloud.Bridge parks the server-minted ones. There is no ledger

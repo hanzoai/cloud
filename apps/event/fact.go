@@ -92,7 +92,7 @@ const (
 	// signalSpan is one span of a trace.
 	signalSpan signal = "span"
 	// signalSample is one measurement. Different grain, different table — see the
-	// header, and writers (warehouse.go) for why the door refuses it today.
+	// header, and writers (warehouse.go) for why the endpoint refuses it today.
 	signalSample signal = "sample"
 )
 
@@ -204,7 +204,7 @@ type frame struct {
 
 // sample is what event.sample carries. It is normalized and PUBLISHED like every other
 // signal, but it lands in the OTHER table — see writers (warehouse.go) for what the
-// door does with it today and what makes it landable.
+// endpoint does with it today and what makes it landable.
 type sample struct {
 	metric string
 	value  float64

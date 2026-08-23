@@ -3,7 +3,7 @@ package o11y
 // fleet_scope_test.go — the per-product o11y surface must cover the FLEET, not a
 // hand-kept subset of it.
 //
-// Before this gate, knownServices was the only door into resolveService, and it
+// Before this gate, knownServices was the only way into resolveService, and it
 // listed 26 k8s workloads. manifest.Apps lists 119 routed apps. The overlap was
 // TWELVE. The other 107 — ai, admin, base, platform, projects, team, usage,
 // tasks, deploy, exec, index, … — answered honest-empty on

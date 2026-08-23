@@ -47,7 +47,7 @@ func exposeGrants() {
 // The SUBJECT is required rather than optional-like-a-filter, and that is a
 // tenancy property rather than a validation nicety: dropping it does not narrow
 // the answer, it WIDENS it to every subject in the org, so one tenant's customers
-// would read each other's grants. The door resolves it from the validated
+// would read each other's grants. The endpoint resolves it from the validated
 // principal, so a query cannot supply one.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
@@ -102,7 +102,7 @@ func planeCreditBalance(ctx context.Context, in *plane.SubjectIn) (*plane.Credit
 //
 // The tags cross as a SLICE and are published as an object: a map has no fixed
 // layout, so it cannot cross this plane at all, and the rendering is done once in
-// the contract rather than once per door (plane.CreditBreakdown.MarshalJSON).
+// the contract rather than once per endpoint (plane.CreditBreakdown.MarshalJSON).
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCreditBreakdown(ctx context.Context, in *plane.SubjectIn) (*plane.CreditBreakdown, error) {

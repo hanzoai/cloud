@@ -15,15 +15,15 @@ import (
 
 // tagdoor.go — GET /v1/projects/tags, the PUBLIC per-site browser-tag config the
 // hosted tag (track.js / /v1/event/tag.js) fetches to know which client-side pixels to
-// inject. Under /v1/projects because the door follows the store it reads, which is
+// inject. Under /v1/projects because the endpoint follows the store it reads, which is
 // this app's (HIP-0139 §3.1).
 //
 // It lives HERE, in the projects app, because a project IS a site and carries its own
 // Project.Tags — and this is the process that OWNS the project store. (It first lived in
 // the destinations app and read empty in production: destinations runs in a different
 // process, so its cross-app reach for the store resolved to nil. The rule the key
-// resolver already follows: the door that reads the project store must be served by the
-// process that holds it.)
+// resolver already follows: the endpoint that reads the project store must be served by
+// the process that holds it.)
 //
 // Dual-resolved per site: by the publishable KEY when it is a per-site project key
 // (ResolveKey), else by the request HOST (ResolveHost) for an org-level key — so
@@ -129,7 +129,7 @@ func hostnameOf(raw string) string {
 
 // resolveSiteTags dual-resolves the site and returns its Project.Tags, reading THIS
 // process's store directly (in-process; no cross-process reach). nil,false when nothing
-// resolves — the door then answers an empty set.
+// resolves — the endpoint then answers an empty set.
 func resolveSiteTags(s *cloud.Service[state], c *zip.Ctx) (map[string]string, bool) {
 	ctx := c.Context()
 	if key := tagsKey(c); key != "" {

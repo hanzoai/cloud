@@ -98,8 +98,9 @@ CREATE INDEX IF NOT EXISTS ix_pv_link ON page_view(link_id);
 CREATE INDEX IF NOT EXISTS ix_pv_view ON page_view(view_id);
 
 -- === trust center ===========================================================
--- An org's trust center: what it publishes about its own security, and the door
--- through which an outsider asks for the part only an auditor can vouch for.
+-- An org's trust center: what it publishes about its own security, and the
+-- endpoint through which an outsider asks for the part only an auditor can vouch
+-- for.
 --
 -- It adds three tables and reuses everything else. A gated artifact's BYTES are a
 -- document row above; a grant is a link row above, time-boxed and addressed to one
@@ -166,7 +167,7 @@ CREATE TABLE IF NOT EXISTS trust_request (
 );
 CREATE INDEX IF NOT EXISTS ix_tr_state ON trust_request(state, created_at);
 -- One OPEN ask per party per target: asking twice is the same ask, and it is also
--- what keeps an anonymous door from filling a tenant's store.
+-- what keeps an anonymous caller from filling a tenant's store.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_tr_open
   ON trust_request(email, COALESCE(artifact_id,'')) WHERE state='open';
 `

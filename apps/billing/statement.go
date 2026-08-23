@@ -187,7 +187,7 @@ func atoiOr(s string, def int) int {
 	return def
 }
 
-// callerIn is the identity the door already validated, packed for the store.
+// callerIn is the identity the endpoint already validated, packed for the store.
 //
 // It is not a tenant claim: there is no org on it, and the subject names a
 // wallet inside the org the caller's own principal pinned. It travels because

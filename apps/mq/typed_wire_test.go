@@ -49,20 +49,20 @@ const (
 	// reasonPubsub: one broker, two orthogonal products. The subject side —
 	// publishing, subscribing, request/reply, subject introspection — is the
 	// pubsub product's surface (/v1/pubsub, apps/pubsub). Serving it at
-	// /v1/mq too would be the same broker op behind two doors, and cloud
+	// /v1/mq too would be the same broker op behind two endpoints, and cloud
 	// serves every capability through exactly one.
 	reasonPubsub = "the subject side of the broker is the pubsub product's surface (/v1/pubsub); " +
-		"a second door on /v1/mq would duplicate the op across products"
+		"a second endpoint on /v1/mq would duplicate the op across products"
 	// reasonKV: cloud already provisions keyed stores at /v1/kv and
 	// /v1/datastore (apps/provisioning, apps/datastore). NATS KV is an
-	// implementation, not a second product: a /v1/mq/kv door would be a
-	// duplicate capability door with its own diverging shape.
+	// implementation, not a second product: a /v1/mq/kv endpoint would be a
+	// duplicate capability endpoint with its own diverging shape.
 	reasonKV = "keyed storage is already a cloud product (/v1/kv, /v1/datastore); " +
-		"a broker-flavoured second door would duplicate the capability"
+		"a broker-flavoured second endpoint would duplicate the capability"
 	// reasonObjects: object storage is the storage product (/v1/s3/buckets,
-	// apps/s3). Same door rule as KV.
+	// apps/s3). Same endpoint rule as KV.
 	reasonObjects = "object storage is already a cloud product (/v1/s3); " +
-		"a broker-flavoured second door would duplicate the capability"
+		"a broker-flavoured second endpoint would duplicate the capability"
 	// reasonAccounts: the authored account/connection listings are broker
 	// MONITOR data (accountz/connz). The embedded plane exposes no monitor
 	// endpoint to a client connection and the wire protocol carries none, so

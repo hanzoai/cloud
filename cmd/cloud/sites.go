@@ -21,7 +21,7 @@ import (
 //
 // The router "deliberately links none of" the fleet's package graph (main.go),
 // and that still holds. apps/sites is a leaf (zip + s3, never the root package),
-// and the cross-app call is made HERE with zip.DialApp — the same door wake.go
+// and the cross-app call is made HERE with zip.DialApp — the same path wake.go
 // uses to publish one op without reaching for cloud.Plane().
 // The config is resolved by apps/sites itself (sites.ConfigFromEnv), not spelled
 // out again here. This binary and cloud.Listen both mount this middleware, and

@@ -18,7 +18,7 @@ import (
 //
 // Metered, not Free: a long-tail connector's sync executes a JavaScript piece on
 // the auto engine's sandbox pods — the same capacity plugin/auto owns and prices.
-// Reaching it by in-cluster URL instead of through its door does not make the pod
+// Reaching it by in-cluster URL instead of through its endpoint does not make the pod
 // cheaper. The meter is apps/knowledge/meter.go, and it fires only on a PIECE
 // run: the native-Go connectors beside it start no pod and stay free.
 func main() {

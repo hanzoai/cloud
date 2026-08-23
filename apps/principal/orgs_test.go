@@ -78,7 +78,7 @@ func TestOrgsRoundTripsThroughTheContext(t *testing.T) {
 		ctx := principal.WithOrgs(c.Context(), c)
 		seen = principal.OrgsFrom(ctx)
 		// The direct read and the parked one are the same value, or the two
-		// doors onto one fact have drifted.
+		// paths onto one fact have drifted.
 		if direct := principal.Orgs(c); len(direct) != len(seen) {
 			t.Errorf("Orgs=%v but OrgsFrom=%v", direct, seen)
 		}

@@ -9,7 +9,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The agent-PR door, published on the internal plane.
+// The agent-PR endpoint, published on the internal plane.
 //
 // A finished coding run files its PR work item with todo.CreateAgentPR, which
 // begins `if mounted == nil { return "todo: not mounted" }`. The run happens
@@ -19,7 +19,7 @@ import (
 //
 // Declared at this app's composition root for the reason plugin/git/clients.go
 // gives: the capability is todo's and already exported; what is being added
-// is the door.
+// is the endpoint.
 func init() {
 	zip.Post[plane.AgentPRIn, plane.AgentPROut](cloud.Plane(), "/todo/agent-pr", planeAgentPR,
 		zip.WithOperationID(plane.TodoAgentPR),

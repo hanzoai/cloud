@@ -118,8 +118,8 @@ func (f Floor) Raise(now Floor) (Floor, error) {
 			"API, which is how a surface loses products with every other gate green.\n\n"+
 			"If routes were DELETED on purpose, lower the numbers in openapi/floor.json in the same commit\n"+
 			"that deletes them, so the reduction is reviewed next to its reason. If they were not, something\n"+
-			"stopped registering: a subsystem that failed to mount, a door whose registry did not answer, a\n"+
-			"pin that moved. Find that before regenerating", strings.Join(lost, "\n"))
+			"stopped registering: a subsystem that failed to mount, an endpoint whose registry did not\n"+
+			"answer, a pin that moved. Find that before regenerating", strings.Join(lost, "\n"))
 	}
 	return out, nil
 }

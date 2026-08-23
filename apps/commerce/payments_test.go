@@ -39,7 +39,7 @@ func toolsFor(t *testing.T) map[string]map[string]any {
 	exposePayments(app, riskGate(luxlog.New("tooltest")))
 
 	// The invoice lifecycle publishes on the INTERNAL PLANE — it is reached by
-	// name from the money door rather than mounted on this app's edge — so its
+	// name from the money endpoint rather than mounted on this app's edge — so its
 	// projection is read off the plane's registry. Both are read here because the
 	// question is about the SURFACE an agent can call, and which listener carries
 	// an op is not something an agent can see.
@@ -170,9 +170,9 @@ func TestPaymentOpsRefuseAnonymousCallers(t *testing.T) {
 //
 // The names it pins are the PLANE's, because that is where the lifecycle is
 // published now: this app keeps the store and answers by name, and the money
-// door in apps/billing is what an agent calls. Both halves have to exist for the
+// endpoint in apps/billing is what an agent calls. Both halves have to exist for the
 // lifecycle to be reachable, and this is the half that would go missing without
-// anything else noticing — a door relaying an op nobody publishes is a 503 that
+// anything else noticing — an endpoint relaying an op nobody publishes is a 503 that
 // reads like an outage.
 func TestInvoiceLifecycleIsTools(t *testing.T) {
 	tools := toolsFor(t)

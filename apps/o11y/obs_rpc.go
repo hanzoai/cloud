@@ -2,19 +2,19 @@
 
 package o11y
 
-// obs_rpc.go — the observability plane's claim on the ONE event door, published
-// as a plane op.
+// obs_rpc.go — the observability plane's claim on the ONE event endpoint,
+// published as a plane op.
 //
 // analytics owns POST /v1/event and its subtree, but THIS process owns the
 // Sentry runtime. A plugin is a process, so the package global this used to ride
 // (cloud.SetObsErrorIngest) was written here and read as nil in analytics — the
-// Sentry alias answered 503 "error ingest not initialized". The door asks over
-// the socket instead, exactly as x402 asks commerce to move money.
+// Sentry alias answered 503 "error ingest not initialized". The endpoint asks
+// over the socket instead, exactly as x402 asks commerce to move money.
 //
 // There were TWO claims here. The other offered every authenticated /v1/event
 // body to an LLM-observability sink before the product wire saw it; it is gone
-// with the sink (see planesink.go's datastoreSink for why), so the door now runs
-// its own wire with no cross-process round-trip in front of it.
+// with the sink (see planesink.go's datastoreSink for why), so the endpoint now
+// runs its own wire with no cross-process round-trip in front of it.
 
 import (
 	"context"
@@ -41,11 +41,11 @@ func exposeObs() {
 // be reshaped into a plane error. The request is rebuilt here rather than
 // forwarded as bytes because the runtime is an http.Handler.
 func planeObsError(ctx context.Context, in *plane.ObsErrorIn) (*plane.ObsErrorOut, error) {
-	// THE ADDRESS DOES NOT MOVE. The runtime opens its ingest door at the same
-	// /v1/event the caller knocked on and a minted DSN spells, so there is
+	// THE ADDRESS DOES NOT MOVE. The runtime serves its ingest endpoint at the
+	// same /v1/event the caller called and a minted DSN spells, so there is
 	// nothing to translate — only to ADMIT. IngestWire is the module's own
-	// predicate, so the door that answers and the gate that lets a request reach
-	// it cannot come to disagree.
+	// predicate, so the endpoint that answers and the gate that lets a request
+	// reach it cannot come to disagree.
 	if !module.IngestWire(http.MethodPost, in.Path) {
 		return &plane.ObsErrorOut{Status: http.StatusNotFound}, nil
 	}

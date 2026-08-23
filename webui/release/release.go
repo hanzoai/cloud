@@ -61,14 +61,14 @@ type bundle struct {
 // Load reads the configured site's active release and returns it as an fs.FS.
 //
 // It FAILS rather than degrading. A console that came up empty, or on a
-// placeholder shell, would be a front door serving a page that looks like the
+// placeholder shell, would be an entry point serving a page that looks like the
 // product and is not — and it would do so silently, which is how a broken deploy
 // becomes a mystery instead of an alert. Every failure below names what could not
 // be reached, so the log line is the diagnosis.
 //
 // The resolver must already be installed: the site edge is mounted before the
 // console in both composition roots (cmd/cloud's TestSitesEdgeIsMountedInTheRouter
-// pins that order for the front door), so "no resolver" means a caller mounted
+// pins that order for the host), so "no resolver" means a caller mounted
 // them backwards.
 func Load(ctx context.Context, cfg Config, log luxlog.Logger) (*Source, error) {
 	s := &Source{cfg: cfg, admin: s3admin.New(), log: log.New("subsystem", "console")}

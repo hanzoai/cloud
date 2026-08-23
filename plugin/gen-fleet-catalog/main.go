@@ -1,5 +1,5 @@
 // Command gen-fleet-catalog writes what each subsystem serves, so the fleet's
-// agent door can answer tools/list without a process per subsystem.
+// agent MCP server can answer tools/list without a process per subsystem.
 //
 // THE SOURCE IS EACH APP'S OWN SPEC, plugin/<app>/openapi.json, which that app's
 // own binary emits from its own live router. That is the whole reason this can
@@ -9,7 +9,7 @@
 // `make -f mk/fleet.mk check` and held against the composed document by the compose, so a
 // catalogue derived from them is red in CI the moment it disagrees.
 //
-// It carries operation ids and prose, and no schemas. The door publishes one
+// It carries operation ids and prose, and no schemas. The MCP server publishes one
 // tool per subsystem whose `op` enum holds names, and a model fetches the schema
 // for the one it picked — that fetch reaches the owning subsystem, which is one
 // process rather than a hundred.
@@ -18,7 +18,7 @@
 // not the same answer. A subset's x-public is what the app's own binary could
 // derive about itself, and one term of that rule is a fleet fact the app cannot
 // see: its STAGE (HIP-0139 §8, stamped by the compose). Read off the subsets, a
-// beta capability's 355 operations stayed in the door — offered to every model
+// beta capability's 355 operations stayed in the MCP server — offered to every model
 // while the same operations were absent from every generated SDK, which is
 // exactly the split the paragraph below says does not exist. openapi.yaml IS the
 // public contract — the compose writes the customer projection there and everything
@@ -37,7 +37,7 @@ import (
 )
 
 // op is one operation as its own subsystem published it. Read says the
-// operation's method is GET — the one fact the door needs to mark a tool
+// operation's method is GET — the one fact the MCP server needs to mark a tool
 // read-only, and the only one it cannot derive from an id a child declared.
 type op struct {
 	ID   string `json:"id"`
@@ -93,9 +93,9 @@ func main() {
 					continue
 				}
 				// DESCRIBED IS NOT DISPATCHABLE, and this catalog is read by the
-				// door as the list of names a child ANSWERS TO. A document carries
-				// every route; only a typed op becomes a tool in the child, so an
-				// unmarked operation published here is a name the door offers and
+				// MCP server as the list of names a child ANSWERS TO. A document
+				// carries every route; only a typed op becomes a tool in the child, so
+				// an unmarked operation published here is a name the MCP server offers and
 				// the child rejects — measured live as `unknown tool` on ten apps'
 				// worth of operations. Op's doc comment already promised this
 				// ("the id its own registry answers to"); the generator is what
@@ -103,8 +103,8 @@ func main() {
 				if !o.Tool {
 					continue
 				}
-				// THE DOOR IS THE PUBLIC CONTRACT. An operation the public document
-				// leaves out — the operator's /v1/admin family, a relay door, a
+				// THE MCP SERVER IS THE PUBLIC CONTRACT. An operation the public document
+				// leaves out — the operator's /v1/admin family, a relay, a
 				// legacy spelling, a capability that is not yet ga — is not offered
 				// to a model either; the tool surface and the SDK surface are two
 				// projections of one audience, so this asks the document that IS
@@ -119,8 +119,8 @@ func main() {
 			}
 		}
 		// AN APP WITH NO OPERATIONS STILL GETS AN ENTRY, and the difference matters
-		// now that the door reads this and asks nothing. Skipping made "publishes no
-		// tools" and "was never generated" the same absence, and the door's fallback
+		// now that the MCP server reads this and asks nothing. Skipping made "publishes
+		// no tools" and "was never generated" the same absence, and the MCP server's fallback
 		// for absence used to be to ASK the subsystem — so a missing entry cost a
 		// cold start and was invisible. With no asking left, the same absence would
 		// silently publish less than the fleet routes.
@@ -161,7 +161,7 @@ func main() {
 // always describe one commit.
 //
 // A missing or empty openapi.yaml is a REFUSAL. Treating it as "nothing is public"
-// would silently write a catalog with no tools in it, and the door would answer
+// would silently write a catalog with no tools in it, and the MCP server would answer
 // tools/list with an empty fleet — 200 OK, and wrong in the way nobody files.
 func contract(root string) (map[string]bool, error) {
 	path := filepath.Join(root, "openapi.yaml")
@@ -187,7 +187,7 @@ func contract(root string) (map[string]bool, error) {
 		}
 	}
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("%s names no operation — the door would publish an empty fleet", path)
+		return nil, fmt.Errorf("%s names no operation — the MCP server would publish an empty fleet", path)
 	}
 	return ids, nil
 }

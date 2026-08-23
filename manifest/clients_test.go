@@ -131,7 +131,7 @@ var calls = []struct{ by, path string }{
 //
 //   - POST /v1/billing/payment. DELETED rather than served — see
 //     apps/account/account.go, where the caller was. It is not a rename and there
-//     was nothing to point it at: money-IN has one door (commerce's mint-gated
+//     was nothing to point it at: money-IN has one endpoint (commerce's mint-gated
 //     POST /v1/billing/deposit) and the fleet deliberately routes NO mint address
 //     at the edge, so serving this would have opened the mint surface to a
 //     client-supplied amount and a client-supplied subject — the exact shape the
@@ -236,7 +236,7 @@ func TestNoClientAsksForACompoundName(t *testing.T) {
 
 	// The manifest must not name a retired address either: a row that still
 	// claims one routes a dead name to a live app, which is how a client keeps
-	// getting a plausible-looking answer from the wrong door.
+	// getting a plausible-looking answer from the wrong endpoint.
 	for _, a := range Apps {
 		for _, p := range a.Prefixes {
 			if now, ok := retired[p]; ok {

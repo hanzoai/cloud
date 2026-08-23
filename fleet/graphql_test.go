@@ -19,7 +19,7 @@ import (
 
 // ── a child that reports what it was asked ───────────────────────────────────
 
-// heard is one request as the child received it. The door's whole job is to turn
+// heard is one request as the child received it. The endpoint's whole job is to turn
 // a field into exactly this, so this is what the tests assert against.
 type heard struct {
 	method string
@@ -39,7 +39,7 @@ type stub struct {
 
 // echo stands a child on its own socket, speaking the transport the fleet dials.
 // It is a bare zip app rather than a composed one because what these tests prove
-// is what the DOOR sent — a composed child answers its own identity gate first and
+// is what the ENDPOINT sent — a composed child answers its own identity gate first and
 // would report nothing about the request.
 func echo(t *testing.T, reply string) *stub {
 	t.Helper()
@@ -76,7 +76,7 @@ func (s *stub) once(t *testing.T) heard {
 	return s.calls[0]
 }
 
-// ── the door under test ──────────────────────────────────────────────────────
+// ── the endpoint under test ──────────────────────────────────────────────────
 
 // fromTree is the app's own committed document — the same bytes the host embeds
 // at build time, read here from the working tree so these tests fail when the
@@ -89,7 +89,7 @@ func fromTree(app string) []byte {
 	return raw
 }
 
-// doorTo builds the door over one app's real document, pointed at an address.
+// doorTo builds the endpoint over one app's real document, pointed at an address.
 func doorTo(t *testing.T, app, addr string) *fleet.Graph {
 	t.Helper()
 	subsets, err := openapi.Subsets([]string{app}, fromTree, func(string) string { return "" })
@@ -105,7 +105,7 @@ func doorTo(t *testing.T, app, addr string) *fleet.Graph {
 
 // caller is the request whose headers ride to the child — the identity the host
 // established, forwarded so the child scopes the caller exactly as it would over
-// REST. This door establishes none of its own.
+// REST. This endpoint establishes none of its own.
 func caller() *fasthttp.Request {
 	r := fasthttp.AcquireRequest()
 	r.Header.Set("X-Org-Id", "acme")
@@ -120,7 +120,7 @@ func run(t *testing.T, g *fleet.Graph, q string, vars map[string]any) fleet.Resp
 	return g.Run(fleet.Request{Query: q, Variables: vars}, from)
 }
 
-// ── what the door sends ──────────────────────────────────────────────────────
+// ── what the endpoint sends ──────────────────────────────────────────────────
 
 // TestAFieldBecomesTheOperationsOwnRequest is the core claim: a name in a query
 // arrives at the owning app as the REST call that name stands for.
@@ -129,7 +129,7 @@ func TestAFieldBecomesTheOperationsOwnRequest(t *testing.T) {
 	g := doorTo(t, "graph", c.addr)
 
 	if g.Fields() == 0 {
-		t.Fatal("the door published no fields at all")
+		t.Fatal("the endpoint published no fields at all")
 	}
 	if res := run(t, g, `{ graphRead(entity: "acme/svc/api", limit: 5) { assertions { value } } }`, nil); len(res.Errors) > 0 {
 		t.Fatalf("read: %v", res.Errors)
@@ -146,7 +146,7 @@ func TestAFieldBecomesTheOperationsOwnRequest(t *testing.T) {
 	}
 }
 
-// TestTheCallersIdentityRidesToTheChild is the security property. This door
+// TestTheCallersIdentityRidesToTheChild is the security property. This endpoint
 // establishes no principal and decides no authorization: it forwards the one the
 // host established, so a field reaches precisely what its REST route reaches for
 // whoever asked.
@@ -223,7 +223,7 @@ func TestAVariableWithNoValueIsRefused(t *testing.T) {
 	}
 }
 
-// ── what the door answers ────────────────────────────────────────────────────
+// ── what the endpoint answers ────────────────────────────────────────────────
 
 // TestASelectionNarrowsTheAnswer proves the selection set is honoured rather than
 // decorative: a caller that asked for one key gets one key.
@@ -287,7 +287,7 @@ func TestAliasesAnswerUnderTheNameTheCallerChose(t *testing.T) {
 	}
 }
 
-// TestTwoRootFieldsAreOneRequest is what a caller comes to this door for: what
+// TestTwoRootFieldsAreOneRequest is what a caller comes to this endpoint for: what
 // REST spends two round trips on, answered in one.
 func TestTwoRootFieldsAreOneRequest(t *testing.T) {
 	c := echo(t, `{"relations":["owner"]}`)
@@ -341,7 +341,7 @@ func TestAFragmentThatSpreadsItselfIsRefused(t *testing.T) {
 	}
 }
 
-// ── how the door fails ───────────────────────────────────────────────────────
+// ── how the endpoint fails ───────────────────────────────────────────────────
 
 // TestAnUnknownFieldIsAnErrorAndANull pins the wire a GraphQL client reads: the
 // answer still has a shape, and the reason names the field it belongs to.
@@ -384,10 +384,10 @@ func TestAQueryThatCannotBeParsedNeverBegins(t *testing.T) {
 //
 // The observable is the CHILD'S OWN VERDICT. A plugin sanitizes identity at its
 // own boundary — a header a client sent is not a principal — so this call is
-// refused there, and that proves the door carried the request to the app owning
+// refused there, and that proves the endpoint carried the request to the app owning
 // the field and reported what that app said rather than answering for it. What it
 // does not prove is a successful authenticated call: that needs a credential the
-// child validates, which is IAM's boundary and not this door's.
+// child validates, which is IAM's boundary and not this endpoint's.
 func TestTheDoorReachesARealPluginOverItsSocket(t *testing.T) {
 	kid := darkChild(t, "graph", graph.Mount)
 	g := doorTo(t, "graph", kid.addr)
@@ -412,7 +412,7 @@ func keys(m map[string]any) []string {
 	return out
 }
 
-// ── what the door refuses to spend ───────────────────────────────────────────
+// ── what the endpoint refuses to spend ───────────────────────────────────────
 
 // TestAQueryWiderThanTheCeilingIsRefused pins the fan-out bound. Each root field
 // is a hop that may START a lazy child, so the width of one query is how many apps
@@ -441,7 +441,7 @@ func TestAQueryWiderThanTheCeilingIsRefused(t *testing.T) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.calls) != 0 {
-		t.Errorf("the door dispatched %d hops for a request it refused", len(c.calls))
+		t.Errorf("the endpoint dispatched %d hops for a request it refused", len(c.calls))
 	}
 }
 

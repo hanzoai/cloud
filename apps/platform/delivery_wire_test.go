@@ -22,9 +22,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mcpCall invokes ONE op through the subsystem's own MCP door over JSON-RPC,
-// exactly as the fleet's door invokes it — which is the transport a route test
-// cannot reach, because tools/call dispatches straight into op.invoke with no
+// mcpCall invokes ONE op through the subsystem's own MCP server over JSON-RPC,
+// exactly as the fleet's MCP server invokes it — which is the transport a route
+// test cannot reach, because tools/call dispatches straight into op.invoke with no
 // route and therefore no middleware.
 func mcpCall(t *testing.T, app *zip.App, op string, args map[string]any) (int, string) {
 	t.Helper()
@@ -132,7 +132,7 @@ func TestEveryDeliveryRouteIsTypedOrNamed(t *testing.T) {
 // it was would have published an unguarded alias of an admin surface the moment
 // these four were typed. That is the apps/exec incident precisely: "a bespoke
 // credential checked in middleware covers exactly one of a typed op's three
-// doors." This drives the door a route test cannot see.
+// doors." This drives the transport a route test cannot see.
 func TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor(t *testing.T) {
 	app := mountDelivery(t)
 	for _, op := range []string{
@@ -143,11 +143,11 @@ func TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor(t *testing.T) {
 	} {
 		code, body := mcpCall(t, app, op, map[string]any{"app": "iam", "org": "acme"})
 		if code != 200 {
-			t.Fatalf("%s: the MCP door itself failed (%d): %s", op, code, body)
+			t.Fatalf("%s: the MCP server itself failed (%d): %s", op, code, body)
 		}
 		if !strings.Contains(body, "admin") && !strings.Contains(body, "orbidden") {
 			t.Errorf("%s answered a NON-ADMIN over MCP without naming the refusal — the gate did not "+
-				"reach this door: %s", op, body)
+				"reach this transport: %s", op, body)
 		}
 	}
 }

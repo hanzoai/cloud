@@ -1,17 +1,17 @@
-// The researched answer, as a typed op — the door an agent can actually reach.
+// The researched answer, as a typed op — the endpoint an agent can actually reach.
 //
 // The loop itself is not new and none of it lives here: apps/answer has run the
 // bounded plan → search → read → rank → synthesize → cite pass since it was
-// written, behind POST /v1/ask with a `mode`. What it did not have was a door a
-// MODEL could open. /v1/ask is untyped for three wire reasons that are all still
+// written, behind POST /v1/ask with a `mode`. What it did not have was an endpoint
+// a MODEL could call. /v1/ask is untyped for three wire reasons that are all still
 // true (see the init in ask.go), and an untyped route reaches REST and nothing
 // else — no MCP tool, no CLI command, no SDK method. So the fleet's deep-research
 // capability was complete, correct, metered, and invisible to every agent in it.
 //
 // This is the same engine offered at an address the agent can speak, which is
-// exactly what apps/websearch already did for search: a compat door the model
+// exactly what apps/websearch already did for search: a compat endpoint the model
 // cannot use, and beside it a native typed op running the SAME code. One engine,
-// two doors, no second implementation to drift.
+// two endpoints, no second implementation to drift.
 package ask
 
 import (
@@ -134,7 +134,7 @@ func mountWeb(app cloud.Router, s *state, b cloud.Base) error {
 	engine.Store(&answer.Engine{Base: b, AI: s.ai, Model: s.model})
 	reg := cloud.ZipApp(app)
 	if reg == nil {
-		return nil // single-binary hosts without a typed registry keep the REST door
+		return nil // single-binary hosts without a typed registry keep the REST endpoint
 	}
 	// Named, not derived. A POST to this path derives `create_ask_web`, which
 	// reads as "make an ask web" — a resource nothing here has. `research_web` is

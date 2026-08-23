@@ -40,7 +40,7 @@ const sourceTable = "hanzo.risk_feature"
 
 // Subject kinds — the closed set the source surface carries. A dataset over a
 // kind the surface does not have is a dataset of nothing, so the kind is checked
-// at the door rather than discovered as an empty result.
+// at the endpoint rather than discovered as an empty result.
 const (
 	kindPerson  = "person"
 	kindSession = "session"
@@ -369,7 +369,7 @@ func normalize(in riskDatasetSpec, now time.Time) (spec, error) {
 	}
 	s.Horizon = time.Duration(in.Horizon) * 24 * time.Hour
 
-	// The horizon is applied to the WINDOW at the door, not only at the read: a
+	// The horizon is applied to the WINDOW at the endpoint, not only at the read: a
 	// spec whose whole window is younger than its horizon admits nothing, and
 	// saying so now is better than a ready dataset with zero rows that looks like
 	// a tenant with no activity.

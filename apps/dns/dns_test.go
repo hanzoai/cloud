@@ -333,8 +333,8 @@ func TestAPIKeyCallerIsRefusedAndNeverReachesUpstream(t *testing.T) {
 	}
 }
 
-// A session bearer still relays unchanged — the refusal above must not have closed
-// the door on the console, which is what this head exists to serve.
+// A session bearer still relays unchanged — the refusal above must not have blocked
+// the console, which is what this head exists to serve.
 func TestSessionBearerStillRelays(t *testing.T) {
 	up := newStubDNS()
 	defer up.Close()

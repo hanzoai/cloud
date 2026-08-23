@@ -532,7 +532,7 @@ func (o ops) export(ctx context.Context, in *riskExportIn) (*riskDatasetRows, er
 	if err != nil {
 		return nil, err
 	}
-	// The split is resolved AT THE DOOR, so an unknown one is the caller's 400 and
+	// The split is resolved AT THE ENDPOINT, so an unknown one is the caller's 400 and
 	// everything the read can still fail with is the store's 503. Rebuilding a
 	// store failure as a bad request — which is what deriving one error from
 	// another's text does — would tell a caller to fix their request while the

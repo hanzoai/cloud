@@ -24,8 +24,8 @@
 // an artifact in this one with nothing in the diff to say so. No generator on a
 // hook in this repo could have seen that trigger.
 //
-// So the catalogue is not regenerated more often; it is gone, and the door asks
-// the child (package fleet). The subset below survives for the one reason the
+// So the catalogue is not regenerated more often; it is gone, and the MCP server
+// asks the child (package fleet). The subset below survives for the one reason the
 // catalogue could not: the fleet's document carries each subsystem's PROSE, and
 // that prose is lifted from the app's SOURCE at describe time
 // (openapi.Synopsis) — a running child has no comment to read and would answer

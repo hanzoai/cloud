@@ -55,9 +55,9 @@ import (
 //
 // [TestField_IsRefusedAtTheDoorAndNotTruncated] already covers that refusal at
 // the wire. This states it from the other end — the arithmetic the ceiling is
-// derived from — and at the CONSTRUCTOR rather than at a door, because the fold
-// from a tenant's own feature surface and the replay from its own record both
-// reach these rings without passing one.
+// derived from — and at the CONSTRUCTOR rather than at an endpoint, because the
+// fold from a tenant's own feature surface and the replay from its own record
+// both reach these rings without passing one.
 func TestObserve_RefusesAValueThePublishedCeilingCannotPrice(t *testing.T) {
 	long := strings.Repeat("x", maxField+1)
 	at := time.Now().UTC()

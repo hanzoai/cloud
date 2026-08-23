@@ -4,7 +4,7 @@ package dataroom
 // therefore the only dataroom routes that reach the published document, the MCP
 // tool list, the CLI and the generated SDKs. An untyped route contributes a path
 // and a method and nothing else, so before this file an agent asking the fleet
-// door what it could do was told about company, captable and esign, and never
+// MCP server what it could do was told about company, captable and esign, and never
 // that a data room could be opened at all.
 //
 // WHAT IS TYPED. Every JSON route on the ADMIN surface: the four collection and

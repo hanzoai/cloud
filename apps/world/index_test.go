@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// index_test.go holds the front door to the two properties that make it worth
+// index_test.go holds the index to the two properties that make it worth
 // serving: it answers WITHOUT a principal (discovery precedes credentials), and
 // every wire it names is a real address under this product's own prefix.
 
 // TestIndexIsPublic proves GET /v1/world answers the anonymous caller. Every other
-// read here except limits is org-scoped and 403s; the front door must not be, or a
+// read here except limits is org-scoped and 403s; the index must not be, or a
 // caller with no token still cannot find out what World is.
 func TestIndexIsPublic(t *testing.T) {
 	app, _ := mountWorld(t)
@@ -26,7 +26,7 @@ func TestIndexIsPublic(t *testing.T) {
 		t.Fatalf("decode: %v (%s)", err, raw)
 	}
 	if got.Product == "" || got.Summary == "" {
-		t.Fatalf("front door names nothing: product=%q summary=%q", got.Product, got.Summary)
+		t.Fatalf("the index names nothing: product=%q summary=%q", got.Product, got.Summary)
 	}
 }
 
@@ -35,7 +35,7 @@ func TestIndexIsPublic(t *testing.T) {
 // generated document cannot carry them, because cloud does not route them — so a
 // half-filled entry here is a dead end for the only consumer that could have
 // followed it. Every field except Spec is required, and every path must sit under
-// this product's own prefix: a front door that pointed somewhere else would be
+// this product's own prefix: an index that pointed somewhere else would be
 // re-inventing the routing table the manifest already owns.
 func TestIndexNamesEveryWireCompletely(t *testing.T) {
 	app, _ := mountWorld(t)
@@ -46,7 +46,7 @@ func TestIndexNamesEveryWireCompletely(t *testing.T) {
 		t.Fatalf("decode: %v (%s)", err, raw)
 	}
 	if len(got.Wires) == 0 {
-		t.Fatal("no wires at all — the front door exists to name them")
+		t.Fatal("no wires at all — the index exists to name them")
 	}
 
 	seen := map[string]bool{}

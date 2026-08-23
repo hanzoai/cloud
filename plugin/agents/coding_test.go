@@ -6,8 +6,9 @@ package main
 // chat turn can REACH a sandbox because the brain chose to, which is three
 // separate facts and only one of them is about the route:
 //
-//	OFFERED     the fleet's own door projects it, under a name a model calls
-//	LEGIBLE     what the door hands the model says what the thing does
+//	OFFERED     the fleet's own MCP server projects it, under a name a model
+//	            calls
+//	LEGIBLE     what the MCP server hands the model says what the thing does
 //	FAIL-CLOSED the run's tenant and its person are read off the caller, and
 //	            the input has no field either could arrive in
 //
@@ -37,10 +38,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// tool is the name the fleet's door publishes the coding op under. A model
-// never sees `post_agents_coding`: the door renames a derived operation id to the
-// verb phrase it already contains (fleet/verbs.go), and THIS is the string a
-// tools/call carries.
+// tool is the name the fleet's MCP server publishes the coding op under. A model
+// never sees `post_agents_coding`: the MCP server renames a derived operation id
+// to the verb phrase it already contains (fleet/verbs.go), and THIS is the
+// string a tools/call carries.
 //
 // It was `create_coding` while the run answered at /v1/coding. The address folded
 // under the app that runs it and the name followed, because the name IS the path:
@@ -49,7 +50,7 @@ import (
 const tool = "create_agent_coding"
 
 // agentsChild brings up the agents app's coding surface on its own socket, the
-// way cloud.Serve brings up a plugin binary — and it registers the door by
+// way cloud.Serve brings up a plugin binary — and it registers the route by
 // CALLING codingDoor, so there is one registration in the program and the test
 // is downstream of it rather than beside it.
 func agentsChild(t *testing.T) string {
@@ -78,8 +79,8 @@ func agentsChild(t *testing.T) string {
 	return ""
 }
 
-// door composes the real fleet door over that child — fleet.Mount, the same call
-// cmd/cloud makes, with the same MCP path.
+// door composes the real fleet MCP server over that child — fleet.Mount, the
+// same call cmd/cloud makes, with the same MCP path.
 func door(t *testing.T) *zip.App {
 	t.Helper()
 	sock := agentsChild(t)
@@ -93,7 +94,8 @@ func door(t *testing.T) *zip.App {
 	return h
 }
 
-// rpc puts one JSON-RPC message to the door and returns the decoded result.
+// rpc puts one JSON-RPC message to the MCP server and returns the decoded
+// result.
 func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 	t.Helper()
 	req, err := http.NewRequest("POST", "http://cloud"+manifest.MCPPath, strings.NewReader(body))
@@ -112,18 +114,18 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 		Error  *map[string]any `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &env); err != nil {
-		t.Fatalf("the door answered %d with %q, which is not a JSON-RPC envelope", resp.StatusCode, raw)
+		t.Fatalf("the MCP server answered %d with %q, which is not a JSON-RPC envelope", resp.StatusCode, raw)
 	}
 	if env.Error != nil {
-		t.Fatalf("the door refused: %v", *env.Error)
+		t.Fatalf("the MCP server refused: %v", *env.Error)
 	}
 	return env.Result
 }
 
 // ops reads the operation names out of one subsystem tool's schema — the `op`
-// enum, which is where the grouped door carries them (fleet/grouped.go). This is
-// the same read apps/agents/door.go does to build a run's offer, so what this
-// asserts about is exactly what an agent is handed.
+// enum, which is where the grouped MCP server carries them (fleet/grouped.go).
+// This is the same read apps/agents/door.go does to build a run's offer, so what
+// this asserts about is exactly what an agent is handed.
 func ops(t *testing.T, res map[string]any, subsystem string) []string {
 	t.Helper()
 	list, _ := res["tools"].([]any)
@@ -144,21 +146,22 @@ func ops(t *testing.T, res map[string]any, subsystem string) []string {
 		}
 		return out
 	}
-	t.Fatalf("the door published no %q tool at all; it listed %v", subsystem, list)
+	t.Fatalf("the MCP server published no %q tool at all; it listed %v", subsystem, list)
 	return nil
 }
 
 // TestTheCodingToolIsOfferedToAnAgent is the fact the whole change rests on: an
 // agent can reach a sandbox without anybody typing a magic word, because the
-// fleet's door offers the coding op as a tool and the default assistant declares
-// the whole door (apps/agents builtinAgent, ToolsAll).
+// fleet's MCP server offers the coding op as a tool and the default assistant
+// declares the whole MCP server (apps/agents builtinAgent, ToolsAll).
 //
-// It goes through the door rather than reading the registry directly because the
-// door is where the two things that could silently withhold it live: fleet's
-// curation rule refuses a tool whose name discloses a secret or mutates an
-// authority object, and the grouping projects one tool per subsystem with the
-// operations in an enum. A registration that survives neither is registered and
-// unreachable, which is indistinguishable from this test's absence.
+// It goes through the MCP server rather than reading the registry directly
+// because the MCP server is where the two things that could silently withhold it
+// live: fleet's curation rule refuses a tool whose name discloses a secret or
+// mutates an authority object, and the grouping projects one tool per subsystem
+// with the operations in an enum. A registration that survives neither is
+// registered and unreachable, which is indistinguishable from this test's
+// absence.
 func TestTheCodingToolIsOfferedToAnAgent(t *testing.T) {
 	res := rpc(t, door(t), `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	got := ops(t, res, "agents")
@@ -167,12 +170,12 @@ func TestTheCodingToolIsOfferedToAnAgent(t *testing.T) {
 			return
 		}
 	}
-	t.Fatalf("the fleet door offers no %q; a chat turn cannot reach a sandbox. It offered %v", tool, got)
+	t.Fatalf("the fleet MCP server offers no %q; a chat turn cannot reach a sandbox. It offered %v", tool, got)
 }
 
 // TestTheDescriptionTellsAModelWhatItDoes. The description IS the product
-// surface here — it is what the door hands back for this operation and the only
-// thing a model reads before deciding — so it is asserted, not assumed.
+// surface here — it is what the MCP server hands back for this operation and the
+// only thing a model reads before deciding — so it is asserted, not assumed.
 //
 // It is asserted for the second time, too. This op shipped for months describing
 // itself as "Is the app's door. It answers 202 with the run's handle…", because
@@ -209,7 +212,7 @@ func TestTheDescriptionTellsAModelWhatItDoes(t *testing.T) {
 		t.Errorf("the description opens by describing the handler, not the act: %q", d.Description)
 	}
 	// A schema is what the model fills in after it has chosen. An operation the
-	// door describes with no shape is one it cannot call.
+	// MCP server describes with no shape is one it cannot call.
 	if !strings.Contains(string(d.InputSchema), `"prompt"`) || !strings.Contains(string(d.InputSchema), `"repo"`) {
 		t.Errorf("the descriptor's schema names neither the repo nor the task: %s", d.InputSchema)
 	}
@@ -292,7 +295,7 @@ func TestARunTakesItsTenantAndItsPersonFromTheCaller(t *testing.T) {
 
 // caller states a full principal on a context with no request behind it, which
 // is the one place zip reads a stated caller — the same pairing the fleet's
-// agent door produces when it forwards a run's own (org, actor).
+// agent MCP server produces when it forwards a run's own (org, actor).
 func caller(t *testing.T, org, user string) context.Context {
 	t.Helper()
 	return zip.WithCaller(context.Background(), zip.Caller{Org: org, User: user})

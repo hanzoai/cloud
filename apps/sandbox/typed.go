@@ -4,13 +4,13 @@ package sandbox
 // which is what the OpenAPI schema, the MCP tool, the CLI command and every
 // generated SDK method are all projected from.
 //
-// The agent's door (POST /v1/sandbox/{lease,run,read,write,stop,end}) was typed
-// first and deliberately: it is the shape an agent leases a computer through.
-// This is the RESOURCE surface beside it — the one a console and a human use —
-// and it was raw, so seven addresses a caller can see in the document could not
-// be reached by any projection but REST.
+// The agent's surface (POST /v1/sandbox/{lease,run,read,write,stop,end}) was
+// typed first and deliberately: it is the shape an agent leases a computer
+// through. This is the RESOURCE surface beside it — the one a console and a human
+// use — and it was raw, so seven addresses a caller can see in the document could
+// not be reached by any projection but REST.
 //
-// The two surfaces are not duplicates and must not be folded. The door is
+// The two surfaces are not duplicates and must not be folded. The agent's is
 // verb-shaped and holds a LEASE (lease/run/stop/end); this is noun-shaped and
 // addresses a sandbox by id. Both call the same api.go core — Lease, List, Get,
 // Run, End — so neither can drift from the other about what a sandbox IS.
@@ -40,8 +40,8 @@ type ops struct{ s *Service }
 
 // ── the collection ──────────────────────────────────────────────────────────
 
-// leaseIn is what POST /v1/sandbox takes. It is the same shape the door's lease
-// takes, spelled for a caller addressing the collection.
+// leaseIn is what POST /v1/sandbox takes. It is the same shape the agent
+// surface's lease takes, spelled for a caller addressing the collection.
 type leaseIn struct {
 	// Class is what the sandbox is FOR: "exec" for a code-interpreter call,
 	// "dev" for a workspace bound to a project, "desktop" for one with a screen.
@@ -228,7 +228,7 @@ func (o ops) exec(ctx context.Context, in *execRequest) (*ExecResult, error) {
 
 // ── interactive tickets ─────────────────────────────────────────────────────
 
-// ticket is a short-lived grant to open one interactive door on one sandbox.
+// ticket is a short-lived grant to open one interactive endpoint on one sandbox.
 type ticketGrant struct {
 	// Ticket is the grant itself. It is single-purpose and short-lived, and it
 	// travels in a query string because a WebSocket handshake carries no
@@ -255,12 +255,12 @@ func (o ops) terminalTicket(ctx context.Context, in *sandboxRef) (*ticketGrant, 
 }
 
 // ScreenTicket mints a short-lived grant to open the screen of a desktop
-// sandbox. Same properties as the terminal ticket, for the other door.
+// sandbox. Same properties as the terminal ticket, for the other endpoint.
 func (o ops) screenTicket(ctx context.Context, in *sandboxRef) (*ticketGrant, error) {
 	return o.ticketFor(ctx, in, "screen")
 }
 
-// ticketFor is the one mint both doors share, so neither can drift from the
+// ticketFor is the one mint both endpoints share, so neither can drift from the
 // other about what a ticket is or how long it lasts.
 func (o ops) ticketFor(ctx context.Context, in *sandboxRef, door string) (*ticketGrant, error) {
 	org, err := principal.Acting(ctx)

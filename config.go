@@ -317,9 +317,9 @@ func LoadConfig() *Config {
 	cfg := &Config{
 		ListenAddr: environ.Or("CLOUD_LISTEN", ":8080"),
 		// LOOPBACK BY DEFAULT, and the reason is what sits behind these two ports.
-		// The ZAP door serves the IDENTICAL route surface as HTTP over plaintext TCP
-		// — including /v1/functions/{name}/invoke, which is arbitrary process
-		// execution. A bare ":9653" binds every interface, so on a laptop that door
+		// The ZAP listener serves the IDENTICAL route surface as HTTP over plaintext
+		// TCP — including /v1/functions/{name}/invoke, which is arbitrary process
+		// execution. A bare ":9653" binds every interface, so on a laptop that port
 		// is open to the LAN with no credential; it has been reached that way, from
 		// another host on the same subnet, unauthenticated.
 		//
@@ -331,7 +331,7 @@ func LoadConfig() *Config {
 		// the one the default has to be safe for.
 		//
 		// CLOUD_LISTEN was already honoured for HTTP while these two were not, which
-		// is how binding the front door to 127.0.0.1 still left two doors open.
+		// is how binding the HTTP listener to 127.0.0.1 still left two ports open.
 		ZAPListenAddr:           environ.Or("CLOUD_ZAP_LISTEN", "127.0.0.1:9653"),
 		HealthListenAddr:        environ.Or("CLOUD_HEALTH_LISTEN", "127.0.0.1:9090"),
 		AdminListenAddr:         environ.Or("CLOUD_ADMIN_LISTEN", ":8081"),

@@ -23,7 +23,7 @@ package admin
 // hanzo.subsystem onto the request span it already emits, resolved through
 // cloud.SubsystemOf against the boot-time mount index. Sixty packages stay
 // uninstrumented and NO second metrics path exists — this reads the SAME
-// event.span table, over the SAME datastore client, as the o11y board next door.
+// event.span table, over the SAME datastore client, as the o11y board beside it.
 //
 // Two halves, deliberately different in kind:
 //

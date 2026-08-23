@@ -5,14 +5,14 @@ package commerce
 // storecosts_rpc.go — the vendor COGS god-view and the org's storefront, over
 // the internal plane.
 //
-// Both were asked by re-entering commerce's own HTTP door: a request that leaves
+// Both were asked by re-entering commerce's own HTTP endpoint: a request that leaves
 // the process and comes back through the public edge, because commerce is a
 // plugin in this binary rather than a deployment of its own. That re-entry is
 // what apps/commerce/transport's maxDepth counter exists to survive. A call by
 // name cannot express it.
 //
 // Each op asks commerce's OWN exported core — costs.Report, store.Current,
-// store.SetListing — so the plane and the HTTP door answer the same function
+// store.SetListing — so the plane and the HTTP endpoint answer the same function
 // rather than two implementations that have to be kept in step.
 
 import (

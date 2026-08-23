@@ -749,7 +749,7 @@ func TestKnown_PrefersTheConfiguredPin(t *testing.T) {
 // A pin that verifies NOTHING is refused, and the degradation is visible.
 //
 // A wildcard host pattern matches every host, so ssh accepts whatever key it is
-// offered: it reads as configured and is an open door. Silently accepting it —
+// offered: it reads as configured and protects nothing. Silently accepting it —
 // or silently swallowing a KMS error — is the failure mode where a deployment
 // believes it has a pin right up until somebody uses the first handshake.
 func TestPin_RefusesAWildcardAndSaysWhenItDegrades(t *testing.T) {

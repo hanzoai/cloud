@@ -14,7 +14,7 @@ import (
 //
 //	cp ../../ui/pkgs/events/dist/catalog.json apps/event/catalog.json
 //
-// A copy is the honest cost of the door being Go and the catalog being an npm
+// A copy is the honest cost of the endpoint being Go and the catalog being an npm
 // package. What a copy must not become is a second DEFINITION: nothing here
 // adds a name, and TestCatalogIsTheShapeThePackagePublishes fails if the file
 // stops being the thing that package writes. The alternative — fetching it at

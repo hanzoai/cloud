@@ -370,7 +370,7 @@ func TestRouteShell_ServedForExportedRoutes(t *testing.T) {
 // here. What that one cannot reach is the router: it drives the handler directly,
 // so it says nothing about a real route mounted beside the catch-all.
 //
-// That is the property the front door leans on. A console it cannot read used to
+// That is the property the public endpoint leans on. A console it cannot read used to
 // abort the boot, so on 2026-08-15 one unreadable object answered every caller
 // 503 — including everyone who never opens a browser. Serving on is only the
 // better choice if the API genuinely survives, so the API is what this asserts.

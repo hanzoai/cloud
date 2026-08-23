@@ -88,7 +88,7 @@ func mountWithKeyFile(t *testing.T, path string) *zip.App {
 // Both are the fixture, and neither is optional. meet holds no key that verifies
 // a caller — IAM does — so an app mounted with no boundary can only ever refuse;
 // and the membership rows live in apps/team, so an app mounted with no authority
-// refuses everyone the boundary admits. A door test that omitted either would
+// refuses everyone the boundary admits. An endpoint test that omitted either would
 // pass on a 401 it never earned.
 func mountWith(t *testing.T, path string, rows roster) *zip.App {
 	t.Helper()
@@ -340,7 +340,7 @@ func TestMintRefusals(t *testing.T) {
 // from this package and so is the lane.
 //
 // The old suite asserted such a token was ADMITTED; these are the same tokens at
-// the same two doors with the opposite expectation, so restoring the lane fails
+// the same two endpoints with the opposite expectation, so restoring the lane fails
 // here instead of passing.
 func TestTheSecondBearerAuthorityIsClosed(t *testing.T) {
 	app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), anyone())

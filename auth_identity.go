@@ -300,8 +300,8 @@ func (c *idClaims) homeOrg() string {
 // neither admin scope — authz.Claims.OrgAdmin refuses every machine by
 // construction, because an app is issued for a purpose and is not handed an org's
 // self-service surface, and PlatformSudo requires a membership set no app has. What
-// it does carry is one org it cannot choose, which is what a door whose act IS a
-// purpose needs to bound that act.
+// it does carry is one org it cannot choose, which is what an endpoint whose act
+// IS a purpose needs to bound that act.
 //
 // An sk- API KEY is deliberately NOT one, even though authz reads it as a machine
 // for want of an `orgs` claim. A key resolves to a PERSON'S row — that is what
@@ -453,7 +453,7 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	return &idClaims{Claims: *claims}, nil
 }
 
-// APIKeyPrefixes is every opaque-key spelling cloud recognizes at the door, and
+// APIKeyPrefixes is every opaque-key spelling cloud recognizes at the edge, and
 // the value itself lives in internal/scrub — a leaf, so a caller that must not
 // link package cloud can still read the authority rather than keeping a copy in
 // step by hand. apps/admission used to keep such a copy, and this comment used to

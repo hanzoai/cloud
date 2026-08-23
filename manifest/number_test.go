@@ -151,11 +151,11 @@ func TestNormalizeIsAnchoredAtTheRoot(t *testing.T) {
 // BOTH SPELLINGS REACH THE SAME APP, asked of the REAL ROUTER.
 //
 // Not of Normalize, and not of OwnerOf — of the fasthttp router the host builds,
-// with the host's own rewrite at the door, answered by the app that received the
-// request. That is the only thing that proves the rewrite actually re-matches:
-// Fiber caches a route bucket per request, and a path override that did not
-// recompute it would leave every aliased request landing on the 404 while every
-// unit test above stayed green.
+// with the host's own rewrite at the entry point, answered by the app that
+// received the request. That is the only thing that proves the rewrite actually
+// re-matches: Fiber caches a route bucket per request, and a path override that
+// did not recompute it would leave every aliased request landing on the 404
+// while every unit test above stayed green.
 func TestBothSpellingsReachTheSameApp(t *testing.T) {
 	fleet := front(t)
 	probed := 0
@@ -193,7 +193,7 @@ func TestBothSpellingsReachTheSameApp(t *testing.T) {
 // two lines cmd/cloud composes, in the same order, so what this test asks is
 // what a request meets. It reuses router(t) (manifest/router_test.go) for the
 // mounts, so there is one description of the routing table and this adds only
-// the door.
+// the rewrite.
 func front(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "alias-door", DisableStartupMessage: true})

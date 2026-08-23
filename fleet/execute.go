@@ -24,7 +24,7 @@ import (
 // only narrows an answer already in hand — but it is still a caller-supplied
 // recursion, and expansion copies what a fragment spreads.
 //
-// Both REFUSE rather than truncate. A door that quietly answered the first
+// Both REFUSE rather than truncate. An endpoint that quietly answered the first
 // sixty-four of a hundred fields would report a complete-looking answer that is
 // missing a third of what was asked, and the caller has no way to tell. Refusing
 // says which ceiling bound and how far over, so the caller can split the request.
@@ -33,8 +33,8 @@ const (
 	depthMax = 32
 )
 
-// Graph is the door's dispatch table: the fields this deployment publishes, and
-// the way to reach the app behind each one.
+// Graph is the endpoint's dispatch table: the fields this deployment publishes,
+// and the way to reach the app behind each one.
 //
 // Built from the composed document, which is also what the schema is rendered
 // from — one value, two projections, so the schema cannot advertise a field the
@@ -49,12 +49,12 @@ func NewGraph(d *openapi.Document, at At) *Graph {
 	return &Graph{fields: openapi.Fields(d), at: at}
 }
 
-// Fields is how many operations this door can dispatch.
+// Fields is how many operations this endpoint can dispatch.
 func (g *Graph) Fields() int { return len(g.fields) }
 
 // Run answers one request. `from` is the caller's own request, whose headers ride
 // to every child so each one authenticates and scopes the caller exactly as it
-// would over REST — this door decides no authorization of its own.
+// would over REST — this endpoint decides no authorization of its own.
 func (g *Graph) Run(req Request, from *fasthttp.Request) Response {
 	ops, frags, err := parse(req.Query)
 	if err != nil {
@@ -146,7 +146,7 @@ func expand(sels []selection, frags map[string][]selection, seen map[string]bool
 			out = append(out, inner...)
 			continue
 		}
-		// An inline fragment contributes its selections here: this door has one
+		// An inline fragment contributes its selections here: this endpoint has one
 		// type per field, so there is no condition left to test.
 		if s.name == "..." {
 			inner, err := expand(s.sels, frags, seen, depth+1)
@@ -309,7 +309,7 @@ func literal(v any) string {
 	return string(b)
 }
 
-// send is [ask] with the OPERATION's address instead of the app's own door: the
+// send is [ask] with the OPERATION's address instead of the app's own path: the
 // same resolution, the same pooled transport, the same copied request. The
 // caller's headers ride along, so the child answers as itself for whoever asked.
 func (g *Graph) send(f openapi.Field, path string, body []byte, from *fasthttp.Request) Answer {

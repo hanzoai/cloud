@@ -8,7 +8,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// webhook.go is a TOMBSTONE. This door never built anything, and its 204 said
+// webhook.go is a TOMBSTONE. This endpoint never built anything, and its 204 said
 // otherwise.
 //
 // git.hanzo.ai used to POST every push here; we HMAC-verified it and handed the
@@ -28,8 +28,8 @@ import (
 // The route is KEPT and answers 410 rather than being deleted, because a
 // deleted route 404s and a 404 from this estate is the exact signal that has
 // already cost two investigations: Hanzo Git serves /v1, so /api/v1 404s and
-// reads as "the API is switched off". A retired door must SAY it is retired and
-// NAME its replacement — an unexplained silence is what made the 204 expensive.
+// reads as "the API is switched off". A retired endpoint must SAY it is retired
+// and NAME its replacement — an unexplained silence is what made the 204 expensive.
 //
 // It reads no body, holds no secret and verifies nothing: there is nothing left
 // here to authenticate. GIT_WEBHOOK_SECRET is no longer read by this binary.
@@ -52,7 +52,7 @@ const buildDoor = "https://platform.hanzo.ai/v1/git-webhook"
 //
 //   - the webhook reads NOTHING and answers 410 on every path, so it declares no
 //     request. It used to Register pushEvent, which was honest while it parsed a
-//     delivery; declaring a body a retired door never looks at would hand every
+//     delivery; declaring a body a retired endpoint never looks at would hand every
 //     generated SDK a payload parameter for a call that ignores it.
 //   - the two pack POSTs read an application/x-git-*-request pack stream:
 //     openapi.Binary, the same declaration a receipt upload gets. Their root-host
@@ -84,7 +84,7 @@ const buildDoor = "https://platform.hanzo.ai/v1/git-webhook"
 func init() {
 	openapi.Describe("/v1/git/webhook", "POST",
 		"Retired — forge pushes build via platform.hanzo.ai",
-		"GONE (410). This was the canonical forge's push-to-deploy door, and it never "+
+		"GONE (410). This was the canonical forge's push-to-deploy endpoint, and it never "+
 			"dispatched a build in its life.\n\n"+
 			"It handed each verified push to cloud.OnGitPush, a single-registrant client "+
 			"whose only registrant lives in apps/platform. cloud runs each app as its own "+
@@ -117,8 +117,8 @@ func init() {
 	openapi.Register("/:org/:project/:repo/git-receive-pack", "POST", openapi.Binary{}, nil)
 }
 
-// webhook answers every delivery 410 Gone, naming the door that builds. It reads
-// no body: there is nothing here to authenticate and nothing to parse.
+// webhook answers every delivery 410 Gone, naming the endpoint that builds. It
+// reads no body: there is nothing here to authenticate and nothing to parse.
 //
 // 410, not 404: the address was real and its meaning moved, which is exactly the
 // distinction 410 carries. 404 would say "no such route" about a route this
@@ -127,7 +127,7 @@ func init() {
 //
 // cloud.Terminal (git.go) writes this in-band so the co-mounted /v1
 // ErrorHandlerJSON cannot flatten it to a 500 — the same reject-parity the
-// bad-signature 401 needed when this door still verified one.
+// bad-signature 401 needed when this endpoint still verified one.
 func webhook(*cloud.Service[state], *zip.Ctx) error {
 	return zip.Errorf(http.StatusGone,
 		"POST /v1/git/webhook is retired and never dispatched a build: its trigger is "+

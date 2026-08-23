@@ -10,19 +10,20 @@ import (
 	"testing"
 )
 
-// NO DOOR HERE READS A SUBJECT FROM THE REQUEST.
+// NO ENDPOINT HERE READS A SUBJECT FROM THE REQUEST.
 //
-// This is the door end of the invariant the fold moved. Its other half lives in
-// apps/commerce (TestCommerceRegistersNoBillingRoute) and neither can see the
+// This is the endpoint end of the invariant the fold moved. Its other half lives
+// in apps/commerce (TestCommerceRegistersNoBillingRoute) and neither can see the
 // other, which is the point: one asserts the address did not come back, this
 // asserts the address is answered safely.
 //
-// The class already bit, on the surface these doors replaced. /v1/billing/tier
-// authenticated without pinning, so any signed-in customer could name another
-// subject with ?user= and read their wallet — and it was cross-CUSTOMER rather
-// than merely cross-subject, because every self-serve signup lands in one org
-// with a per-person subject, so the org namespace was closed while the subject
-// was not. Measured live before the fix: one caller, four wallets.
+// The class already bit, on the surface these endpoints replaced.
+// /v1/billing/tier authenticated without pinning, so any signed-in customer
+// could name another subject with ?user= and read their wallet — and it was
+// cross-CUSTOMER rather than merely cross-subject, because every self-serve
+// signup lands in one org with a per-person subject, so the org namespace was
+// closed while the subject was not. Measured live before the fix: one caller,
+// four wallets.
 //
 // The relay's answer is structural rather than procedural. Every plane input
 // that names a subject has that field filled from `payer` / `payerOf`, which
@@ -94,11 +95,11 @@ func TestNoDoorReadsItsSubjectFromTheRequest(t *testing.T) {
 		})
 	}
 
-	// The walk must be reaching the doors. An empty result and a parse that found
-	// nothing are the same green otherwise, which is how the first version of this
-	// class of guard shipped passing while the leak was open.
+	// The walk must be reaching the endpoints. An empty result and a parse that
+	// found nothing are the same green otherwise, which is how the first version of
+	// this class of guard shipped passing while the leak was open.
 	if assigned < 5 {
-		t.Fatalf("only %d Subject assignments inspected; the walk is not reaching the doors", assigned)
+		t.Fatalf("only %d Subject assignments inspected; the walk is not reaching the endpoints", assigned)
 	}
-	t.Logf("inspected %d Subject assignments across the relayed doors", assigned)
+	t.Logf("inspected %d Subject assignments across the relayed endpoints", assigned)
 }

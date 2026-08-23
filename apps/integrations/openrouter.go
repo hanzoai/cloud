@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// openrouter.go — the door OpenRouter writes its traces through, so what we spend
-// there lands in the SAME ledger as everything else we spend.
+// openrouter.go — the endpoint OpenRouter writes its traces through, so what we
+// spend there lands in the SAME ledger as everything else we spend.
 //
 // It is an INTEGRATION, and it lives with the others: a third party posts to us at
 // /v1/integrations/<vendor>/<what the vendor calls it>, which is why Slack's is
 // /events, Discord's is /interactions and this one is /webhook — OpenRouter's own
 // console calls it Observability ▸ New Webhook Destination. That the rows it writes
-// are usage rows is the DESTINATION and not the door.
+// are usage rows is the DESTINATION and not the endpoint.
 //
 // OpenRouter meters KEYS, not orgs, and hanzo.cloud_usage carried no `openrouter`
 // provider at all: every money lens over that table — /v1/usage, /v1/event, the
@@ -37,13 +37,13 @@
 //
 // AUTHENTICATION IS A HANZO KEY, because Broadcast signs nothing. Its only
 // authentication is a Headers map the destination sends verbatim (OpenRouter's
-// X-OpenRouter-Signature belongs to the per-job video callback, a different door,
-// and Broadcast does not emit it). So the credential is one cloud already mints, and
-// it is admitted by the ONE sequence every keyed door admits by — event.Admit,
-// which asks BOTH issuers: the project store a key minted with a project lives in,
-// then IAM. Either names the org every row is filed under, and a door that asks one
-// issuer refuses every key the other minted. No key, or a key naming no org, is 401
-// and nothing is read.
+// X-OpenRouter-Signature belongs to the per-job video callback, a different
+// endpoint, and Broadcast does not emit it). So the credential is one cloud already
+// mints, and it is admitted by the ONE sequence every keyed endpoint admits by —
+// event.Admit, which asks BOTH issuers: the project store a key minted with a
+// project lives in, then IAM. Either names the org every row is filed under, and an
+// endpoint that asks one issuer refuses every key the other minted. No key, or a
+// key naming no org, is 401 and nothing is read.
 //
 // Raw, not a typed op, and the reason is the BODY: a typed op publishes its In as THE
 // request schema, and this decodes the SUBSET of OpenTelemetry's OTLP/JSON a usage row
@@ -75,7 +75,7 @@ const (
 	openrouter = "openrouter"
 
 	// maxTrace bounds one delivery. Privacy Mode strips prompts and completions;
-	// with it off a batch carries them, so the cap is the forge door's 8 MiB.
+	// with it off a batch carries them, so the cap is the forge endpoint's 8 MiB.
 	maxTrace = 8 << 20
 
 	// otlpError is OTLP's STATUS_CODE_ERROR. Unset (0) and OK (1) both describe a
@@ -83,7 +83,7 @@ const (
 	otlpError = 2
 )
 
-// receipt is what the door answers.
+// receipt is what the endpoint answers.
 type receipt struct {
 	// Stored is how many usage rows this delivery wrote.
 	Stored int `json:"stored"`
@@ -209,8 +209,8 @@ func presented(c *zip.Ctx) string {
 	return strings.TrimSpace(parts[1])
 }
 
-// openrouterInsert is the ONE statement this door writes, and its column order is the
-// argument order usageRow binds. It names a SUBSET of hanzo.cloud_usage — the columns
+// openrouterInsert is the ONE statement this endpoint writes, and its column order is
+// the argument order usageRow binds. It names a SUBSET of hanzo.cloud_usage — the columns
 // an upstream trace can honestly fill — and leaves the rest at the table's own
 // defaults, the way the DO invoice rows are written.
 const openrouterInsert = `INSERT INTO hanzo.cloud_usage (

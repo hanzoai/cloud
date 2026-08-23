@@ -4,8 +4,8 @@ import "testing"
 
 // A KEY'S TYPE IS ITS SCOPE, BECAUSE ACCESSKEY IS NOT THE CREDENTIAL.
 //
-// This used to type a row from the AccessKey prefix, reasoning that the doors
-// dispatch on the prefix so the prefix is the fact. The doors do — on the
+// This used to type a row from the AccessKey prefix, reasoning that the endpoints
+// dispatch on the prefix so the prefix is the fact. The endpoints do — on the
 // credential a HOLDER PRESENTS. AccessKey is not that credential: IAM mints both
 // classes with a pk- AccessKey and puts the secret key's sk- in AccessSecret,
 // which the listing masks (iam keys.MintUserKey). The rows below are the shapes

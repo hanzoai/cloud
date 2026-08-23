@@ -14,7 +14,7 @@ import (
 )
 
 // send_test.go proves the egress fan-out through the real HTTP surface using
-// the ingest_test.go harness. Zero live network: all four doors are spies —
+// the ingest_test.go harness. Zero live network: all four transports are spies —
 // Discord's real HTTP path is proven in apps/integrations/ingress_test.go
 // (C2-4) — so what is under test here is the route surface, the C1-F1 target
 // bindings, and the idempotency ledger.
@@ -34,13 +34,13 @@ func TestSendSlack(t *testing.T) {
 		t.Fatalf("delivery = %+v, want a send timestamp", d)
 	}
 	if sl.count() != 1 {
-		t.Fatalf("door calls = %d, want 1", sl.count())
+		t.Fatalf("transport calls = %d, want 1", sl.count())
 	}
 	call := sl.call(t, 0)
-	// The caller's org rides to the door — SendSlack's per-org TokenFor IS the
-	// slack tenancy gate.
+	// The caller's org rides to the transport — SendSlack's per-org TokenFor IS
+	// the slack tenancy gate.
 	if call.org != "acme" || call.room != "C1" || call.replyTo != "171.2" || call.text != "hi" {
-		t.Fatalf("door call = %+v", call)
+		t.Fatalf("transport call = %+v", call)
 	}
 }
 
@@ -51,12 +51,12 @@ func TestSendDiscordRouteCapability(t *testing.T) {
 	st := e.store(t)
 	body := map[string]any{"room": map[string]any{"id": "999"}, "text": "x"}
 
-	// No inbound-learned route ⇒ 409, and the door is never consulted.
+	// No inbound-learned route ⇒ 409, and the transport is never consulted.
 	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusConflict {
 		t.Fatalf("routeless send: %d, want 409", r.Code)
 	}
 	if dc.count() != 0 {
-		t.Fatal("binding gate must precede the door")
+		t.Fatal("binding gate must precede the transport")
 	}
 
 	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix()); err != nil {
@@ -69,7 +69,7 @@ func TestSendDiscordRouteCapability(t *testing.T) {
 	var d Delivery
 	decodeJSON(t, res.Body, &d)
 	if d.MessageID != "m-1" || dc.count() != 1 {
-		t.Fatalf("delivery = %+v after %d door calls", d, dc.count())
+		t.Fatalf("delivery = %+v after %d transport calls", d, dc.count())
 	}
 
 	// C1-F1 tenancy: another org holds no route for the same room.
@@ -77,7 +77,7 @@ func TestSendDiscordRouteCapability(t *testing.T) {
 		t.Fatalf("cross-org send: %d, want 409", r.Code)
 	}
 	if dc.count() != 1 {
-		t.Fatal("a foreign org must never reach the door")
+		t.Fatal("a foreign org must never reach the transport")
 	}
 }
 
@@ -94,7 +94,7 @@ func TestSendTeamsRouteCapability(t *testing.T) {
 		t.Fatalf("routeless send: %d, want 409", r.Code)
 	}
 	if tm.count() != 0 {
-		t.Fatal("binding gate must precede the door")
+		t.Fatal("binding gate must precede the transport")
 	}
 
 	if err := st.upsertRoute(ctx, "acme", "teams", conv, root, time.Now().Unix()); err != nil {
@@ -105,14 +105,14 @@ func TestSendTeamsRouteCapability(t *testing.T) {
 	}
 	call := tm.call(t, 0)
 	if call.root != root || call.room != conv {
-		t.Fatalf("door call = %+v, want the learned serviceURL", call)
+		t.Fatalf("transport call = %+v, want the learned serviceURL", call)
 	}
 
 	if r := req(t, e, http.MethodPost, "/v1/channels/teams/send", "beta", body); r.Code != http.StatusConflict {
 		t.Fatalf("cross-org send: %d, want 409", r.Code)
 	}
 	if tm.count() != 1 {
-		t.Fatal("a foreign org must never reach the door")
+		t.Fatal("a foreign org must never reach the transport")
 	}
 }
 
@@ -122,14 +122,14 @@ func TestSendTelegramBinding(t *testing.T) {
 
 	// The telegram bind lives in integrations (OrgForExternalID) and cannot be
 	// seeded from this package — unbound is exactly what an org that never
-	// onboarded telegram looks like, and it must 403 with the door untouched.
+	// onboarded telegram looks like, and it must 403 with the transport untouched.
 	res := req(t, e, http.MethodPost, "/v1/channels/telegram/send", "acme",
 		map[string]any{"room": map[string]any{"id": "777"}, "text": "x"})
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("unbound send: %d, want 403", res.Code)
 	}
 	if tg.count() != 0 {
-		t.Fatal("binding gate must precede the door")
+		t.Fatal("binding gate must precede the transport")
 	}
 
 	// Unit-level: the typed refusal, and the gate ordering, are explicit.
@@ -142,7 +142,7 @@ func TestSendTelegramBinding(t *testing.T) {
 		t.Fatalf("err = %v, want errRoomNotBound", err)
 	}
 	if tg.count() != 0 {
-		t.Fatal("errRoomNotBound must fire before the door")
+		t.Fatal("errRoomNotBound must fire before the transport")
 	}
 }
 
@@ -174,7 +174,7 @@ func TestSendAuthValidation(t *testing.T) {
 		}
 	}
 	if sl.count() != 0 {
-		t.Fatalf("no rejected request may reach a door (%d calls)", sl.count())
+		t.Fatalf("no rejected request may reach a transport (%d calls)", sl.count())
 	}
 }
 
@@ -258,7 +258,7 @@ func TestSendIdempotency(t *testing.T) {
 		t.Fatalf("replay = %+v, want the stored receipt", replay)
 	}
 	if dc.count() != 1 {
-		t.Fatalf("door calls = %d; a replay must not re-send", dc.count())
+		t.Fatalf("transport calls = %d; a replay must not re-send", dc.count())
 	}
 
 	// A different key is a different send.
@@ -267,7 +267,7 @@ func TestSendIdempotency(t *testing.T) {
 		t.Fatalf("second key: %d", r.Code)
 	}
 	if dc.count() != 2 {
-		t.Fatalf("door calls = %d, want 2", dc.count())
+		t.Fatalf("transport calls = %d, want 2", dc.count())
 	}
 }
 
@@ -288,7 +288,7 @@ func TestSendRetryAfterFailure(t *testing.T) {
 		t.Fatalf("failed send: %d, want 502 (%s)", r.Code, r.Body)
 	}
 	if dc.count() != 1 {
-		t.Fatalf("door calls = %d", dc.count())
+		t.Fatalf("transport calls = %d", dc.count())
 	}
 	var n int
 	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM channel_send
@@ -302,20 +302,20 @@ func TestSendRetryAfterFailure(t *testing.T) {
 		t.Fatalf("retry: %d", r.Code)
 	}
 	if dc.count() != 2 {
-		t.Fatalf("door calls = %d, want the retry to re-send", dc.count())
+		t.Fatalf("transport calls = %d, want the retry to re-send", dc.count())
 	}
 	// …and only the COMPLETED send replays.
 	if r := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body); r.Code != http.StatusOK {
 		t.Fatalf("replay: %d", r.Code)
 	}
 	if dc.count() != 2 {
-		t.Fatalf("door calls = %d; the completed send must replay", dc.count())
+		t.Fatalf("transport calls = %d; the completed send must replay", dc.count())
 	}
 }
 
 func TestSendNoSecretsAtRest(t *testing.T) {
 	// Plant a token in the transport env: channels must never read, store, or
-	// log it — custody stays in integrations, spies own the doors here.
+	// log it — custody stays in integrations, spies own the transports here.
 	const planted = "tok-discord-secret"
 	t.Setenv("DISCORD_BOT_TOKEN", planted)
 	e := newApp(t)
@@ -344,9 +344,9 @@ func TestSendNoSecretsAtRest(t *testing.T) {
 			t.Fatalf("send: %d", r.Code)
 		}
 	}
-	// Discord door: the failed attempt plus the retry; the final POST replays.
+	// Discord transport: the failed attempt plus the retry; the final POST replays.
 	if sl.count() != 1 || dc.count() != 2 {
-		t.Fatalf("door calls slack=%d discord=%d, want 1/2", sl.count(), dc.count())
+		t.Fatalf("transport calls slack=%d discord=%d, want 1/2", sl.count(), dc.count())
 	}
 
 	// The token bytes appear nowhere: not in any store file (channels.db plus

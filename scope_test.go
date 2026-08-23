@@ -114,10 +114,10 @@ func TestScopeHonoursDeclaredPrefixes(t *testing.T) {
 	}
 }
 
-// TestScopeRefusesMiddlewareOutsideItsPrefixes covers the second door: Group carries
-// middleware too, and a group at someone else's prefix gates their routes. The mount
-// fails, so the binary never boots half-gated — and the middleware is not installed
-// even in the failed attempt.
+// TestScopeRefusesMiddlewareOutsideItsPrefixes covers the second entry point: Group
+// carries middleware too, and a group at someone else's prefix gates their routes.
+// The mount fails, so the binary never boots half-gated — and the middleware is not
+// installed even in the failed attempt.
 func TestScopeRefusesMiddlewareOutsideItsPrefixes(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{

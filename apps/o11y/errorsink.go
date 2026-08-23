@@ -6,7 +6,7 @@
 // errorsink.go is the Sentry projection of the canonical event plane: it consumes the
 // analytics error fan-out (event.AddErrorSink) and lands each error-signal fact on
 // the o11y Sentry plane, so /v1/event errors surface on sentry.hanzo.ai alongside the
-// errors a Sentry SDK posts to the ingest door directly.
+// errors a Sentry SDK posts to the ingest endpoint directly.
 //
 // WHY apps/o11y owns this (not apps/analytics): o11y is the ONE owner of the embedded
 // runtime (embed.go), which holds Modules.Sentry — the tested ingest that writes BOTH

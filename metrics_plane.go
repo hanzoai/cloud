@@ -62,7 +62,7 @@ import (
 // afterwards is discarded while the code looks perfectly instrumented.
 //
 // CARDINALITY. Every label value here comes from a finite, server-side set:
-// warehouse table names, ingest door names, egress names, the plane names this
+// warehouse table names, ingest endpoint names, egress names, the plane names this
 // process itself served. None is client-chosen.
 
 var (
@@ -93,9 +93,9 @@ var (
 // seeding exists to prevent, pointed the other way.
 var warehouseTables = []string{"event.act", "event.clip", "event.error", "event.log", "event.span"}
 
-// ingestDoors are the ingest doors whose admission outcome is counted. One
-// door today (POST /v1/event, the ONE event door); the list exists so seeding
-// stays honest when a second one is added.
+// ingestDoors are the ingest endpoints whose admission outcome is counted. One
+// endpoint today (POST /v1/event, the ONE event endpoint); the list exists so
+// seeding stays honest when a second one is added.
 var ingestDoors = []string{"event"}
 
 // planeInstruments resolves the data-plane instruments and seeds them. Lazy:
@@ -104,7 +104,7 @@ func planeInstruments() {
 	planeOnce.Do(func() {
 		m := otel.Meter(meterName)
 		ingestItems, _ = m.Int64Counter("hanzo_ingest_items_total",
-			metric.WithDescription("Items offered to an ingest door, by door and admission outcome (accepted/dropped)."))
+			metric.WithDescription("Items offered to an ingest endpoint, by door and admission outcome (accepted/dropped)."))
 		planeRows, _ = m.Int64Counter("hanzo_plane_rows_written_total",
 			metric.WithDescription("Rows written to an event-warehouse table."))
 		alertEgress, _ = m.Int64Counter("hanzo_alert_delivery_total",
@@ -148,7 +148,7 @@ func seedCounters() {
 	}
 }
 
-// ObserveIngest records one ingest door's admission outcome.
+// ObserveIngest records one ingest endpoint's admission outcome.
 //
 // accepted and dropped are reported TOGETHER because the useful question is a
 // ratio, not a count: "88% of what was offered was dropped" is an outage,

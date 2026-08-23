@@ -118,7 +118,7 @@ func (o outcome) reason() (string, bool) {
 // words in English.
 var nonFFRE = regexp.MustCompile(`(?i)\[rejected\]|non-fast-forward|would clobber existing tag`)
 
-// refRE bounds a ref this client will write. It is the retired push door's rule:
+// refRE bounds a ref this client will write. It is the retired push path's rule:
 // under refs/heads/ or refs/tags/, no traversal, no escape from the namespace.
 // A source ref that fails it is skipped rather than sanitized — a name we cannot
 // state exactly is a name we do not write.
@@ -453,7 +453,7 @@ func (w *work) push(ctx context.Context, r remote, src, ref string) (string, err
 // ref that has not moved costs nothing at all. The advertisement is bounded by
 // REF COUNT rather than by repository size, so it is safe to buffer.
 //
-// only narrows it to named refs, which is what the single-ref webhook door asks
+// only narrows it to named refs, which is what the single-ref webhook path asks
 // for: one full ref name, matched exactly by the server. It is the same function
 // either way, so there is one place that knows how an advertisement is read.
 func refs(ctx context.Context, r remote, only ...string) (map[string]string, string, error) {

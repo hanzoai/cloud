@@ -6,7 +6,7 @@
 // spend. That attribution record IS this package's product.
 //
 // IT MOVES NO MONEY. There is no bonus, no grant, no deposit and no ledger write
-// here. Credit enters an org by exactly two doors — a manual per-org admin grant
+// here. Credit enters an org by exactly two paths — a manual per-org admin grant
 // against the auditable ledger, and an invite that carries credit to a new org —
 // and this package is neither. A referral REWARD is an affiliate PAYABLE: it is
 // tracked in hanzoai/commerce and settled by wire or to a connected wallet, never

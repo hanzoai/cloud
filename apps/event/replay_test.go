@@ -5,7 +5,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// replay_test.go — the session-replay door's proofs.
+// replay_test.go — the session-replay endpoint's proofs.
 //
 // The load-bearing one is TestSnapshotRecordIsTheWireContract. Every other consumer
 // on this surface is in this repo and in this language, so a drift in what cloud
@@ -32,8 +32,8 @@ import (
 
 // ── the harness ─────────────────────────────────────────────────────────────
 
-// fakeProducer substitutes the door's ONE client onto the broker and records what it
-// was handed, so a test reads back the record a request actually produced. Restored
+// fakeProducer substitutes the endpoint's ONE client onto the broker and records what
+// it was handed, so a test reads back the record a request actually produced. Restored
 // via t.Cleanup, the same discipline fakeWarehouse keeps.
 //
 // err is what the substituted produce returns, so the failure path is driven from
@@ -280,8 +280,8 @@ func TestSessionIDLengthIsBytesNotRunes(t *testing.T) {
 	}
 }
 
-// TestReplayRefusesABadSessionID drives the same grammar through the DOOR, so the
-// refusal is a 400 on the wire and not merely a false from a pure function.
+// TestReplayRefusesABadSessionID drives the same grammar through the ENDPOINT, so
+// the refusal is a 400 on the wire and not merely a false from a pure function.
 func TestReplayRefusesABadSessionID(t *testing.T) {
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
@@ -301,8 +301,8 @@ func TestReplayRefusesABadSessionID(t *testing.T) {
 
 // TestReplayRefusesTheAnonymousCaller: no credential of any kind, on a recognized
 // brand host and on the API host, is 401 ingest_key_required — the SAME refusal
-// every ingest door answers, because this door shares their resolver. Nothing is
-// produced.
+// every ingest endpoint answers, because this endpoint shares their resolver.
+// Nothing is produced.
 func TestReplayRefusesTheAnonymousCaller(t *testing.T) {
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
@@ -359,9 +359,9 @@ func TestReplayAdmitsAResolvedKey(t *testing.T) {
 }
 
 // TestReplayTakesTheKeyOffTheQueryCarrier is the sendBeacon case, and it is the
-// reason this door cannot be a typed op: a recorder drains its buffer on page-unload
-// through navigator.sendBeacon, which cannot set a header, so the key arrives as
-// ?ingest_key= — a carrier a typed In never sees.
+// reason this endpoint cannot be a typed op: a recorder drains its buffer on
+// page-unload through navigator.sendBeacon, which cannot set a header, so the key
+// arrives as ?ingest_key= — a carrier a typed In never sees.
 func TestReplayTakesTheKeyOffTheQueryCarrier(t *testing.T) {
 	got := fakeProducer(t, nil)
 	app := mountApp(t)
@@ -506,7 +506,7 @@ func TestProduceFailureIsA503NeverA200(t *testing.T) {
 }
 
 // TestReplayAnswersTheSharedReceipt: the happy path answers the SAME CaptureResult
-// every other door on this surface answers, and one batch is one accepted unit.
+// every other endpoint on this surface answers, and one batch is one accepted unit.
 func TestReplayAnswersTheSharedReceipt(t *testing.T) {
 	fakeProducer(t, nil)
 	app := mountApp(t)
