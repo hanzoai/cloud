@@ -395,59 +395,11 @@ func refused(validated bool) error { return zip.ErrForbidden(sentence(validated)
 // handle — so it is excluded, exactly as it was when the loop lived here.
 func OrgHasUnsafeRune(s string) bool { return s != "" && namespace.Sanitize(s) == "" }
 
-// AN ORG REACHES AN OP TWO WAYS AND THEY ARE VOUCHED FOR DIFFERENTLY, which is
-// the third thing this collapses. From OUTSIDE it rode in as a header, and a
-// header is the client's own until something stands behind it — OrgFrom above is
-// that, and nothing else is admitted, because the boundary deliberately restores
-// an unvalidated caller's own org header for the data path.
-//
-// From INSIDE there is no header in play. cloud.For states the tenant a
-// background call acts for, and a peer on the internal plane's socket states one
-// too; both are in-process or in-cluster and neither is reachable from outside,
-// which is exactly what EdgeFrom asks. OrgFrom cannot admit them by construction
-// — it composes validated-ness AND an org, and a background job has no user to be
-// validated — so a plane op that asked it alone refused the caller a door had
-// just admitted, and one that read the caller alone trusted a header nobody
-// vouched for. Both were live. This is the one rule that is neither.
 func Acting(ctx context.Context) (string, error) {
 	if org, ok := OrgFrom(ctx); ok {
 		return org, nil
 	}
-	if !EdgeFrom(ctx) {
-		// Read exactly as the boundary reads a header: REFUSED for an unsafe rune,
-		// never trimmed. TrimSpace here would fold "acme " onto "acme" — the
-		// cross-org collapse OrgHasUnsafeRune exists to prevent — and this is the
-		// one path with no boundary in front of it to have caught it already.
-		if org := zip.CallerOf(ctx).Org; org != "" && !OrgHasUnsafeRune(org) && len(org) <= MaxOrgLen {
-			return org, nil
-		}
-	}
 	return "", RefusedFrom(ctx)
-}
-
-// edgeKey names the slot that says a CLIENT REQUEST is behind this context.
-// Unexported zero-size type, exactly like orgKey.
-type edgeKey struct{}
-
-// WithEdge marks a context as having come through the identity boundary — a
-// request from outside. cloud.Bridge parks it, unconditionally, because it is a
-// fact about the DOOR and not about the caller: an unvalidated request came
-// through the edge just as much as a validated one did.
-//
-// It exists so [Acting] can tell the two ways an org reaches an op apart. That is
-// not a distinction anything else here can make: zip.CallerOf answers with the
-// request's headers when a request is bound and with the stated caller when none
-// is, and returns the same plain string either way.
-func WithEdge(ctx context.Context) context.Context {
-	return context.WithValue(ctx, edgeKey{}, true)
-}
-
-// EdgeFrom reports whether this call came from outside. False for an in-process
-// caller, for a background job, and for a peer arriving on the internal plane's
-// own socket — none of which pass the edge.
-func EdgeFrom(ctx context.Context) bool {
-	ok, _ := ctx.Value(edgeKey{}).(bool)
-	return ok
 }
 
 // validatedKey names the slot the WEAKER fact crosses the same client in.

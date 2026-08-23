@@ -66,19 +66,6 @@ type noInput struct{}
 // "200 with a body" about a route that answers 204 with none.
 type noContent = struct{}
 
-// orgOf resolves the VALIDATED org — the tenant-isolation key — from the context
-// cloud.Bridge parked it on. It is never an In field: an In field is
-// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
-// asserted for itself. Fails closed off the HTTP path, where there is no attested
-// principal, with the same 403 the raw handlers answer.
-func orgOf(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid bearer required")
-	}
-	return org, nil
-}
-
 // requireBody replays, at the point in the sequence the raw handler reached it,
 // the refusal c.Bind has always answered: these writes take a JSON body, and a
 // request with none — or with a content type this service does not parse — is a
@@ -227,7 +214,7 @@ type campaignSummary struct {
 // missing from it is one a launch will record as "unavailable" rather than fail
 // on.
 func (o ops) summary(ctx context.Context, _ *noInput) (*campaignSummary, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +234,7 @@ func (o ops) summary(ctx context.Context, _ *noInput) (*campaignSummary, error) 
 //
 // Example: {"status": "live", "limit": 50}
 func (o ops) list(ctx context.Context, in *campaignFilter) (*campaignPage, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +271,7 @@ func clampLimit(n int) int {
 // Example: {"name": "Spring launch", "budget": 250000, "content": ["Ship faster"],
 // "channels": [{"kind": "paid", "platform": "meta"}]}
 func (o ops) create(ctx context.Context, in *campaignWrite) (*campaignRecord, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +309,7 @@ func record(c campaignRecord) *campaignRecord { return &c }
 // creatives, channels with their per-channel launch state, schedule, budget and
 // status. 404 when the org has no campaign with that id.
 func (o ops) get(ctx context.Context, in *campaignRef) (*campaignRecord, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +330,7 @@ func (o ops) get(ctx context.Context, in *campaignRef) (*campaignRecord, error) 
 //
 // Example: {"name": "Spring launch", "budget": 500000}
 func (o ops) update(ctx context.Context, in *campaignUpdate) (*campaignRecord, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +372,7 @@ func (o ops) update(ctx context.Context, in *campaignUpdate) (*campaignRecord, e
 // on a provider should be paused first, or those executions keep running with
 // nothing here to report them.
 func (o ops) del(ctx context.Context, in *campaignRef) (*noContent, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +400,7 @@ func (o ops) del(ctx context.Context, in *campaignRef) (*noContent, error) {
 //
 // Example: {"id": "cmp_1f…", "range": "7d"}
 func (o ops) metrics(ctx context.Context, in *metricsQuery) (*campaignResults, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -473,7 +460,7 @@ func (o ops) metrics(ctx context.Context, in *metricsQuery) (*campaignResults, e
 //
 // Example: {"id": "cmp_1f…", "kind": "email", "platform": "sendgrid", "account": "list_42"}
 func (o ops) addChannel(ctx context.Context, in *channelAdd) (*campaignRecord, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -518,7 +505,7 @@ func (o ops) addChannel(ctx context.Context, in *channelAdd) (*campaignRecord, e
 // should be paused first — dropping the row here leaves nothing to pause it with
 // afterwards.
 func (o ops) removeChannel(ctx context.Context, in *channelRef) (*campaignRecord, error) {
-	org, err := orgOf(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}

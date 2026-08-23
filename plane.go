@@ -280,6 +280,42 @@ func For(ctx context.Context, org string) context.Context { return plane.For(ctx
 // that tells those apart.
 func Who(ctx context.Context) zip.Caller { return zip.CallerOf(ctx) }
 
+// Tenant is the org a PLANE OP acts for.
+//
+// It is not a second copy of [principal.Acting] — it is Acting plus the one case
+// Acting cannot admit, and it is deliberately narrow. Acting composes
+// validated-ness AND an org, so it refuses a background call by construction: a
+// reconcile loop or a peer has no user to be validated. [For] states the tenant
+// such a call acts for, in-process, and zip reads a stated caller only on a
+// context with no request behind it.
+//
+// SO IT ASKS WHETHER A REQUEST IS BEHIND THIS CONTEXT, and that is the whole of
+// the distinction. With one, the org is a header and only Acting may decide it —
+// the identity boundary restores an unvalidated caller's own org header for the
+// data path, so a header alone is the client's own claim. Without one, there is
+// no header to have been restored.
+//
+// IT IS FOR OPS REGISTERED ON [Plane], AND ITS PRECONDITION IS [Bridge]. Bridge
+// is what makes "a request is behind this" answerable, and an app that serves
+// HTTP without installing it answers no to a question whose true answer is yes.
+// Identify installs it for every app cloud mounts, which is why the ops that use
+// this are safe; an app that stands one up itself and reaches for this without it
+// would be reading a header as though a peer had said it. Ops on the edge use
+// Acting, which needs no such precondition and refuses either way.
+func Tenant(ctx context.Context) (string, bool) {
+	if org, err := principal.Acting(ctx); err == nil {
+		return org, true
+	}
+	if _, onRequest := Request(ctx); onRequest {
+		return "", false
+	}
+	org := Who(ctx).Org
+	if org == "" || principal.OrgHasUnsafeRune(org) || len(org) > principal.MaxOrgLen {
+		return "", false
+	}
+	return org, true
+}
+
 // As delegates THIS request's principal to a call, pointed at a named tenant.
 //
 // It is for the operator acting on someone else's books: a SuperAdmin migrating
