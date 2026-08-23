@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 670,
+  "skill_count": 671,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -2210,6 +2210,13 @@
       "path": "graph_graph/SKILL.md",
       "service": "graph",
       "sha256": "7739c147a5ec12506a0fb4ba767825ad1d8829447c79a4a2492f058a41eaee9e"
+    },
+    {
+      "description": "Read graph search: Find assertions by their text rather than by an entity key.",
+      "name": "graph_search",
+      "path": "graph_search/SKILL.md",
+      "service": "graph",
+      "sha256": "a6c4c521a5e2b015576ced6618ad3e8cfe049a8b896d08f33ca8f9eae271e642"
     },
     {
       "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",
