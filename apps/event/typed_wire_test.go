@@ -34,10 +34,12 @@ import (
 // keys on.
 var untypedByDesign = map[string]string{
 	"GET /v1/event/tag.js": "the tag is an ASSET, not an operation: its body is JavaScript and zip renders " +
-		"a typed Out as JSON, so there is no Out that can carry it. It also answers 304 with an empty " +
-		"body on a matching If-None-Match — WithStatus refuses a non-2xx and a nil Out is stamped " +
-		"cmp.Or(op.Status, 204) — and the caller is a <script src>, which reads no schema, no MCP tool " +
-		"and no SDK method.",
+		"a typed Out as JSON, so there is no Out that can carry it. It also answers 304 with an EMPTY " +
+		"body on a matching If-None-Match, which a typed op cannot express either — not because 304 is " +
+		"non-2xx (WithStatus is variadic now and accepts any status; the clause that said otherwise was " +
+		"read against an older zip) but because 304 is DEFINED to carry no body while a typed op always " +
+		"writes one. And the caller is a <script src>, which reads no schema, no MCP tool and no SDK " +
+		"method, so typing it would buy nothing even if the body could be carried.",
 
 	"POST /v1/event": canonWireReason,
 	"POST /v1/event/{project}/envelope": "the Sentry error wire on the one event door: the body is a " +

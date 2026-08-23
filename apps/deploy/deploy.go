@@ -304,13 +304,19 @@ func init() {
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Use(zip.H(bounce))
 
-	// Liveness — public (probe-able without a JWT). It stays a RAW handler because
-	// it answers 503 carrying the SAME domain body as its 200 (status + the k8s and
-	// crd booleans), and a typed op's only non-2xx is a returned error, which zip
-	// renders as the flat HTTPError {status,code,error} — there is nowhere in that
-	// shape for the probe's facts. zip.WithStatus refuses a non-2xx by design
-	// (typed.go:112), so this is the multi-status gap, not an oversight.
-	app.Get(dashPrefix+"/health", cloud.Handle(s, health))
+	// Liveness — public, probe-able without a JWT, and a TYPED op.
+	//
+	// It answers 503 carrying the SAME domain body as its 200, which used to be the
+	// whole reason it could not be one: WithStatus took a single code and refused a
+	// non-2xx, so the probe's facts had nowhere to live on a failure. WithStatus is
+	// variadic now and the ANSWER states which of the declared statuses it is
+	// (StatusCoder), so the probe declares {200, 503} and keeps its wire.
+	//
+	// It is a typed op DESPITE being unauthenticated, which is the right way round:
+	// the route grants nothing and reports booleans only — never the raw client
+	// error, which can disclose the apiserver address or an RBAC detail — so the
+	// same answer is safe on every door a typed op opens.
+	zip.Get(cloud.ZipApp(app), dashPrefix+"/health", ops{s: s}.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 	// Sign-in — necessarily public: these three routes ARE how a browser gets an
 	// authenticated principal for this host. They grant nothing themselves; the
 	// session they mint is an IAM JWT the identity boundary re-verifies on every
@@ -377,24 +383,58 @@ func currentPath(c *zip.Ctx) string {
 // health is a REAL probe: the API server is reachable AND the App CRD is served.
 // 200 only when both hold; 503 + the real reason otherwise. Not admin-gated —
 // liveness must be probe-able without a JWT.
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	// This route is UNAUTHENTICATED (liveness must be probe-able without a JWT),
-	// so it reports booleans only — never the raw k8s error string, which can
-	// disclose the apiserver address / RBAC detail. The detail is logged
-	// server-side (RED INFO-1).
-	res := map[string]any{"service": "deploy", "status": "ok"}
-	if s.State.dyn == nil {
-		s.Log.Warn("deploy health: kubernetes client unavailable", "err", s.State.initErr)
-		res["status"], res["k8s"] = "degraded", false
-		return c.JSON(http.StatusServiceUnavailable, res)
+// deployHealth is what the probe answers, at either status.
+//
+// The two booleans are POINTERS because their ABSENCE is a fact: a probe that
+// could not reach the apiserver never learned whether the CRD is served, and
+// reporting `crd: false` there would state something it does not know. nil is
+// omitted, &false is present-and-false, and the map this replaced had exactly
+// that distinction by leaving the key unset.
+type deployHealth struct {
+	// Service names the subsystem answering, so a probe response is attributable
+	// when several are collected together.
+	Service string `json:"service"`
+	// Status is `ok` when this deployment can serve the delivery plane, and
+	// `degraded` otherwise. It agrees with the HTTP status by construction — see
+	// StatusCode.
+	Status string `json:"status"`
+	// K8s reports whether the Kubernetes API is reachable. Absent when the probe
+	// did not get far enough to find out.
+	K8s *bool `json:"k8s,omitempty"`
+	// CRD reports whether the App custom resource is served and listable. Absent
+	// when the apiserver was unreachable, because then it is unknown rather than
+	// false.
+	CRD *bool `json:"crd,omitempty"`
+}
+
+// StatusCode makes the ANSWER say which of the declared statuses it is, so an
+// orchestrator reading only the code is told the truth and one reading the body
+// gets the same fact.
+func (h *deployHealth) StatusCode() int {
+	if h.Status != "ok" {
+		return http.StatusServiceUnavailable
 	}
-	if _, err := s.State.dyn.Resource(k8s.Apps).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
-		s.Log.Warn("deploy health: App CRD list failed", "err", err)
-		res["status"], res["k8s"], res["crd"] = "degraded", true, false
-		return c.JSON(http.StatusServiceUnavailable, res)
+	return http.StatusOK
+}
+
+// Health reports whether this deployment can observe the delivery plane.
+//
+// 200 only when the Kubernetes API answers AND the App custom resource is served;
+// 503 with the same shape otherwise, naming which half failed. It reports BOOLEANS
+// and never the underlying error, because the route is unauthenticated — liveness
+// must be probe-able without a token — and a raw client error can disclose the
+// apiserver address or an RBAC detail. That detail is logged server-side instead.
+func (o ops) health(ctx context.Context, _ *noInput) (*deployHealth, error) {
+	yes, no := true, false
+	if o.s.State.dyn == nil {
+		o.s.Log.Warn("deploy health: kubernetes client unavailable", "err", o.s.State.initErr)
+		return &deployHealth{Service: "deploy", Status: "degraded", K8s: &no}, nil
 	}
-	res["k8s"], res["crd"] = true, true
-	return c.JSON(http.StatusOK, res)
+	if _, err := o.s.State.dyn.Resource(k8s.Apps).Namespace("hanzo").List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		o.s.Log.Warn("deploy health: App CRD list failed", "err", err)
+		return &deployHealth{Service: "deploy", Status: "degraded", K8s: &yes, CRD: &no}, nil
+	}
+	return &deployHealth{Service: "deploy", Status: "ok", K8s: &yes, CRD: &yes}, nil
 }
 
 // ready fails closed when no cluster client resolved (503 + the real reason).
