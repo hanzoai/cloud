@@ -1,8 +1,9 @@
 package billing
 
-// cards.go serves the three doors that charge a card, and the sweep that charges
-// them on a schedule: top up with a fresh token, top up with a card on file, buy
-// a plan, and recharge every org that has fallen below its own threshold.
+// cards.go serves the three endpoints that charge a card, and the sweep that
+// charges them on a schedule: top up with a fresh token, top up with a card on
+// file, buy a plan, and recharge every org that has fallen below its own
+// threshold.
 //
 // THE SUBJECT IS RESOLVED HERE, from the caller's own credential, and is never
 // read off the request. That is the whole isolation property of this file: a
@@ -39,7 +40,7 @@ type topupBody struct {
 	Currency    string `json:"currency,omitempty"`
 }
 
-// mountCards registers the card doors and the sweep. Called from routes.
+// mountCards registers the card endpoints and the sweep. Called from routes.
 func mountCards(app cloud.Router, o ops) {
 	zapp := cloud.ZipApp(app)
 	zip.Post(zapp, "/v1/billing/topup/token", o.topupToken)

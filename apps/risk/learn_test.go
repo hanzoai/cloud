@@ -359,7 +359,7 @@ func TestSearch_RefusesAnEmptyHistory(t *testing.T) {
 }
 
 // TestSearch_ReadsOnlyItsOwnHistory: the run's history comes from the tenant's
-// own feature surface through the one door, so the statements it issues carry the
+// own feature surface through the one reader, so the statements it issues carry the
 // tenant like every other read.
 func TestSearch_ReadsOnlyItsOwnHistory(t *testing.T) {
 	probe.reset(true)

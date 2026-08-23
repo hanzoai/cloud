@@ -53,7 +53,7 @@ func TestTraceListRefusesACallerWithNoTenant(t *testing.T) {
 	// No Bridge in front — o11y as its own binary, and MCP's tools/call, which
 	// invokes an op directly so no route middleware runs. The tenant reaches the
 	// handler anyway: principal.OrgFrom falls back to zip's caller, which crosses
-	// every door. So a caller the host already validated is SERVED, landing on the
+	// every path. So a caller the host already validated is SERVED, landing on the
 	// same missing warehouse as the control below rather than on the gate. This
 	// wanted 403, which was a total outage of the surface wherever the Bridge is
 	// not in front — not a tenant check doing its job.

@@ -141,8 +141,8 @@ func TestProjectFrom_BareContextIsNoNarrowing(t *testing.T) {
 // ValidatedProjectFrom composes ONE rule from two inputs, and the carve-out is the
 // whole reason it exists: a caller that read ProjectFrom and ValidatedFrom
 // separately reconstructed a different rule, dropped the default-project
-// exemption, and hard-enforced 402 on the agent door while the identical REST call
-// softened. The default project is never claim-backed, however validated the
+// exemption, and hard-enforced 402 on the agent MCP server while the identical REST
+// call softened. The default project is never claim-backed, however validated the
 // caller is.
 func TestValidatedProjectFrom_DefaultIsNeverClaimBacked(t *testing.T) {
 	t.Run("named project, validated", func(t *testing.T) {
@@ -168,7 +168,7 @@ func TestValidatedProjectFrom_DefaultIsNeverClaimBacked(t *testing.T) {
 			}
 			if ok {
 				t.Error("the DEFAULT project is never claim-backed — this is the #70 spoof defense, " +
-					"and dropping it is what made the agent door 402 where REST warned")
+					"and dropping it is what made the agent MCP server 402 where REST warned")
 			}
 			return c.NoContent(200)
 		})
@@ -371,7 +371,7 @@ func TestPayerFrom_NoCallerIsNoPayer(t *testing.T) {
 // TestProjectScopeFromIsProjectScopeAcrossTheClient is the reason that function
 // exists rather than each plane applying its own default test. The storage key a
 // typed op derives and the one a request-side caller derives must be the same
-// key, or the same org's data lands in two places depending on which door it
+// key, or the same org's data lands in two places depending on which endpoint it
 // came through.
 func TestProjectScopeFromIsProjectScopeAcrossTheClient(t *testing.T) {
 	for header, want := range map[string]string{

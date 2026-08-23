@@ -183,7 +183,7 @@ func TestWallet_UnvalidatedRefuses(t *testing.T) {
 }
 
 // A SUPERADMIN INSPECTING SOMEBODY ELSE'S ORG SPENDS ITS OWN BOOKS, and the
-// context shape has to agree with the request shape or the two doors bill
+// context shape has to agree with the request shape or the two entry points bill
 // different people.
 //
 // Ledger reads a request, LedgerFrom reads a context, and both exist because a

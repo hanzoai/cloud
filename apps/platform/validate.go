@@ -314,7 +314,7 @@ func validateGitRef(raw string) (string, error) {
 //
 // A BRANCH NAME IS NOT CAUGHT. A branch is a legitimate build context and its image
 // honestly reports no revision; only a value that looks like a commit and is not one
-// is a mistake. Both build doors call this, so the rule has one home.
+// is a mistake. Both build endpoints call this, so the rule has one home.
 func validateBuildRef(raw string) (string, error) {
 	s, err := validateGitRef(raw)
 	if err != nil {

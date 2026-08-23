@@ -1,7 +1,7 @@
 package dataroom
 
 // trust.go is the trust centre: what an org publishes about its own security, and
-// the door an outsider knocks on for the part only an auditor can vouch for.
+// the endpoint where an outsider asks for the part only an auditor can vouch for.
 //
 // ONE RULE SHAPES IT. Anything the org asserts itself — its controls, its posture,
 // its subprocessors, its policies, its CAIQ/SIG/VSA answers — is public, because a
@@ -453,7 +453,7 @@ func (o ops) deliver(ctx context.Context, org, at, email, link string, until int
 // ---- reads that need no transaction of the caller's ---------------------------
 
 // centerOf resolves a public address to the org that publishes there and that
-// org's centre, refusing anything that is not published. It is the one door every
+// org's centre, refusing anything that is not published. It is the one place every
 // anonymous read goes through, so "unpublished" and "no such address" are the same
 // answer and neither reports whether an org exists.
 func (o ops) centerOf(ctx context.Context, slug string) (string, center, error) {
@@ -496,7 +496,7 @@ func normal(tier, attester string) (string, string) {
 // sudoGate is the platform group's first refusal, so a caller who is not a
 // SuperAdmin is told about authority before the typed decoder has read a byte of
 // their body. The op asks the same question again — the group covers the routed
-// path, while the MCP door and the internal plane invoke an op with no route at
+// path, while the MCP server and the internal plane invoke an op with no route at
 // all — so this is the first of two answers, never the only one.
 func sudoGate(c *zip.Ctx) error {
 	if principal.IsSuperAdmin(c) {

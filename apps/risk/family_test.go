@@ -116,7 +116,7 @@ func TestFamily_AValueIsNotAdoptableIntoAnotherFamily(t *testing.T) {
 }
 
 // TestFamily_AStoredValueNamingAnUnknownFamilyIsRefusedAndNotDEFAULTED closes the
-// second door. The gate above is reached only by a value this binary can decode; a
+// second hole. The gate above is reached only by a value this binary can decode; a
 // stored body naming a family it does not run must be refused ON THE WAY IN rather than
 // read as the family it does run.
 //

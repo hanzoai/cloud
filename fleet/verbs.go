@@ -10,8 +10,8 @@ import (
 
 // AN OPERATION IS NAMED FOR WHAT IT DOES. It was named for where it lived.
 //
-// Measured on the deployed door: the `projects` tool offered 37 operations and
-// the enum read
+// Measured on the deployed MCP server: the `projects` tool offered 37 operations
+// and the enum read
 //
 //	delete_v1_projects_by_slug
 //	delete_v1_projects_by_slug_domains_by_host
@@ -55,13 +55,14 @@ import (
 //
 // # The presented name is a DECODING, exactly like the envelope
 //
-// A tools/call arrives carrying whatever the door published, so the mapping back
-// must be exact. [offer] guarantees it by REFUSING to rename rather than by
+// A tools/call arrives carrying whatever the MCP server published, so the mapping
+// back must be exact. [offer] guarantees it by REFUSING to rename rather than by
 // guessing: a phrase that two operations would share, or that collides with some
-// operation's own id, is not used and both keep their ids. The door then holds
-// published-name → id beside its tool → app routing (see [Door.alias]), which is
-// the same kind of fact with the same lifetime — written by every gather, read by
-// call and describe, remembered no longer than the routing table it rides with.
+// operation's own id, is not used and both keep their ids. The MCP server then
+// holds published-name → id beside its tool → app routing (see [Door.alias]),
+// which is the same kind of fact with the same lifetime — written by every
+// gather, read by call and describe, remembered no longer than the routing table
+// it rides with.
 //
 // An operation's own id keeps working, and that is not a compatibility shim: it
 // is forced. [Door.describe] hands back the OWNING subsystem's descriptor bytes
@@ -256,18 +257,18 @@ func singular(w string) string {
 	return w[:len(w)-1]
 }
 
-// offer gives every gathered operation the name the door will publish for it,
-// in place, and it is where the mapping is made EXACT.
+// offer gives every gathered operation the name the MCP server will publish for
+// it, in place, and it is where the mapping is made EXACT.
 //
 // A phrase is used only when it is unambiguous in both directions across the
 // whole gathered set: no second operation produces it, and no operation is
 // already called it. Otherwise the operation keeps its id — both of them do,
 // when two collide — because a tools/call arrives carrying whatever was
-// published and a door that guessed which of two operations was meant would be
-// dispatching on a coin toss. 7.3% of the fleet's operations keep their ids, and
-// they are overwhelmingly the fleet's own duplicates: `/tasks` and `/v1/tasks`
-// serving one handler at two addresses, `post_v1_agent` beside `post_v1_agents`
-// in a different subsystem.
+// published and an MCP server that guessed which of two operations was meant
+// would be dispatching on a coin toss. 7.3% of the fleet's operations keep their
+// ids, and they are overwhelmingly the fleet's own duplicates: `/tasks` and
+// `/v1/tasks` serving one handler at two addresses, `post_v1_agent` beside
+// `post_v1_agents` in a different subsystem.
 //
 // This runs over the SURVIVORS. Everything [refuse] withheld is already gone
 // (see [Door.gather]), so no phrase can name a refused operation and no refused

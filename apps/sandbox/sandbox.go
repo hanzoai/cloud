@@ -171,7 +171,7 @@ type state struct {
 }
 
 // storeFor is the ONE way this package reaches a store, through
-// cloud.OrgNamespace — the single door a VALIDATED org walks through. org must
+// cloud.OrgNamespace — the single path a VALIDATED org takes. org must
 // already come from principal.Org, never from a body field.
 func storeFor(s *cloud.Service[state], org string) (*Store, error) {
 	ns, err := cloud.OrgNamespace(org, "")
@@ -267,7 +267,7 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/:id/fs", cloud.Handle(s, fsWrite))
 
 	// The two interactive TICKETS are typed and registered HERE rather than beside
-	// their doors, because cmd/zipdoc resolves a router it can READ in the file: a
+	// their routes, because cmd/zipdoc resolves a router it can READ in the file: a
 	// group passed as a parameter is not one, and prose it cannot place is prose
 	// silently dropped from the document and the MCP tool. terminal() and screen()
 	// keep the three routes that stay raw.
@@ -277,18 +277,18 @@ func Routes(app cloud.Router, s *cloud.Service[state]) {
 	terminal(g, s)
 	screen(g, s)
 
-	// THE AGENT'S DOOR. Everything above is a RAW route, and a raw route is
+	// THE AGENT'S MCP SERVER. Everything above is a RAW route, and a raw route is
 	// invisible to every projection zip derives from its typed registry — REST is
-	// the only one it reaches. So an agent asking the fleet door what it can do
-	// was told nothing about sandboxes, while the child answered tools/list
+	// the only one it reaches. So an agent asking the fleet MCP server what it can
+	// do was told nothing about sandboxes, while the child answered tools/list
 	// happily with an empty array: absent from the tool list AND absent from the
 	// outage list. Silent absence, which is the shape that cost the most today.
 	//
 	// The typed ops are registered here rather than written fresh, because they
 	// already exist one file over — expose() puts these exact five on
 	// cloud.Plane() (apps/sandbox/plane.go), which is a DIFFERENT zip.App on a
-	// DIFFERENT socket that the door never asks. Same handlers, same types, now
-	// also on the server the door does ask. Nothing new is invented and there is
+	// DIFFERENT socket that the fleet never asks. Same handlers, same types, now
+	// also on the server the fleet does ask. Nothing new is invented and there is
 	// no second implementation to drift.
 	//
 	// This is what stands between "@hanzo can run code" and "@hanzo can lease a
@@ -574,10 +574,10 @@ func init() {
 		"Open a screen",
 		"Mints a SINGLE-USE ticket for this sandbox's DISPLAY and returns "+
 			"`{ticket, expiresIn, url}`, where url is the desktop PAGE with the ticket already "+
-			"on it. The same ticket as the terminal's, minted for a different door.\n\n"+
+			"on it. The same ticket as the terminal's, minted for a different endpoint.\n\n"+
 			"A ticket says which org and which sandbox, and the terminal and the screen are two "+
 			"views of one machine: a caller who may type in a sandbox may look at it. What the "+
-			"door decides is the URL handed back, which is the only part that differs.\n\n"+
+			"endpoint decides is the URL handed back, which is the only part that differs.\n\n"+
 			"Mint one per screen, and mint a fresh one to reconnect.")
 	openapi.Describe("/v1/sandbox/:id/screen", http.MethodGet,
 		"The screen, as a page",

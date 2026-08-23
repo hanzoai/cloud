@@ -1,6 +1,6 @@
 package commerce
 
-// risk_test.go — the credit door's screen, held to the one property that decides
+// risk_test.go — the credit endpoint's screen, held to the one property that decides
 // whether shipping it is safe: WHICH WAY IT FAILS.
 //
 // The two failures are not the same failure and must not have the same answer:
@@ -42,9 +42,9 @@ const (
 // charged is the handler the gate stands in front of. Reaching it IS the allow.
 //
 // It answers a SETTLED RECEIPT — commerce's own TakePaymentOut field names — because
-// reaching the handler is no longer the end of the door: an allow that clears a charge
-// then credits the spendable ledger off exactly this answer (settle.go), so a fixture
-// that answered anything else would be testing a door that refuses.
+// reaching the handler is no longer the end of the endpoint: an allow that clears a
+// charge then credits the spendable ledger off exactly this answer (settle.go), so a
+// fixture that answered anything else would be testing an endpoint that refuses.
 func charged(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"transactionId": settledReceipt,
@@ -54,7 +54,7 @@ func charged(c *zip.Ctx) error {
 	})
 }
 
-// gateApp is the credit door reduced to the two middlewares that decide the
+// gateApp is the credit endpoint reduced to the two middlewares that decide the
 // outcome: the screen, and the thing it guards.
 func gateApp(t *testing.T) *zip.App {
 	t.Helper()
@@ -66,15 +66,15 @@ func gateApp(t *testing.T) *zip.App {
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
-	// The screen WRAPPING THE HANDLER, exactly as mount.go registers the browser door.
+	// The screen WRAPPING THE HANDLER, exactly as mount.go registers the browser endpoint.
 	// settling supplies the ledger a settled top-up now deposits into and the receipt
 	// its amount is read off (settle_test.go) — the money half is not this file's
-	// subject, but a door that cannot finish a settlement cannot answer 200 either.
+	// subject, but an endpoint that cannot finish a settlement cannot answer 200 either.
 	app.Post("/v1/billing/topup/token", settling(t).route(charged))
 	return app
 }
 
-// topup posts the credit door's own body as a validated customer.
+// topup posts the credit endpoint's own body as a validated customer.
 func topup(t *testing.T, app *zip.App) (int, string) {
 	t.Helper()
 	return topupAs(t, app, map[string]string{"X-Org-Id": gateOrg, "X-User-Id": gateUser})
@@ -122,7 +122,7 @@ func TestRiskGate_ANotDeployedScorerDoesNotCloseTheCreditDoor(t *testing.T) {
 	}
 
 	// The producer this change installs, against a fleet with no risk app: the
-	// socket has no listener, so the answer is ABSENT and the door stays open.
+	// socket has no listener, so the answer is ABSENT and the endpoint stays open.
 	installRiskScorer(luxlog.New("gatetest"))
 	if code, body := topup(t, app); code != http.StatusOK {
 		t.Fatalf("scorer installed, peer not deployed: %d %s, want 200 — an unreachable model is absent, not a denial", code, body)
@@ -207,7 +207,7 @@ func unusableRuntimeDir(t *testing.T) {
 // the probe reports THREE: no listener, a listener, and a socket that is present
 // and unusable. The third one is an outage. Folding it into the first — which is
 // what `err == nil && up` does — hands the fail policy the one refusal it EXEMPTS,
-// so a privileged grant at the credit door is waved through by a scorer nobody
+// so a privileged grant at the credit endpoint is waved through by a scorer nobody
 // could reach. Reachable without touching the risk app at all: exhaust this
 // process's descriptors and every probe answers "no scorer here".
 //
@@ -257,7 +257,7 @@ func TestScoreOverPlane_AnUnusableSocketIsAnOutageRatherThanAnAbsence(t *testing
 }
 
 // TestRiskGate_AnUnusableScorerSocketMakesTheGrantWait is that same property at
-// the WIRE, where the money is: the door answers 503 and the charge does not
+// the WIRE, where the money is: the endpoint answers 503 and the charge does not
 // settle.
 //
 // Mutation proof: restore `return err == nil && up` in scorerUp and this answers
@@ -273,7 +273,7 @@ func TestRiskGate_AnUnusableScorerSocketMakesTheGrantWait(t *testing.T) {
 			"whenever this process runs out of descriptors", code, body)
 	}
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("%d %s, want 503 — the judge's door is there and unusable, so a privileged grant waits", code, body)
+		t.Fatalf("%d %s, want 503 — the judge's socket is there and unusable, so a privileged grant waits", code, body)
 	}
 	if !strings.Contains(body, cloud.RefusalError) {
 		t.Errorf("the refusal does not name the operational fact a customer can act on: %s", body)
@@ -297,7 +297,7 @@ func TestRiskGate_APresentScorerThatCannotAnswerMakesTheGrantWait(t *testing.T) 
 		t.Fatalf("%d %s, want 503 — a judge that is here and did not answer makes a privileged grant wait", code, body)
 	}
 	if code == http.StatusPaymentRequired {
-		t.Error("the refusal was a 402 — that means out of funds, which is the one thing this door exists to fix")
+		t.Error("the refusal was a 402 — that means out of funds, which is the one thing this endpoint exists to fix")
 	}
 	if !strings.Contains(body, cloud.RefusalError) {
 		t.Errorf("the refusal does not name the operational fact a customer can act on: %s", body)
@@ -305,7 +305,7 @@ func TestRiskGate_APresentScorerThatCannotAnswerMakesTheGrantWait(t *testing.T) 
 }
 
 // TestRiskGate_AVerdictDecidesTheOutcome — the whole action vocabulary at this
-// door, including the two it has no way to honour.
+// endpoint, including the two it has no way to honour.
 func TestRiskGate_AVerdictDecidesTheOutcome(t *testing.T) {
 	for _, tc := range []struct {
 		action string
@@ -315,7 +315,7 @@ func TestRiskGate_AVerdictDecidesTheOutcome(t *testing.T) {
 		// Review PROCEEDS. It summons a person; it does not stop traffic.
 		{cloud.ActionReview, http.StatusOK},
 		{cloud.ActionBlock, http.StatusForbidden},
-		// This door has no challenge to present and no reduced ceiling to fall
+		// This endpoint has no challenge to present and no reduced ceiling to fall
 		// back to, so anything short of "proceed" is a refusal — never a quiet
 		// proceed.
 		{cloud.ActionChallenge, http.StatusForbidden},
@@ -343,7 +343,7 @@ func TestRiskGate_AVerdictDecidesTheOutcome(t *testing.T) {
 // {restrict, "warming"} — a determination over stated facts, with the model merely
 // having had nothing to add.
 //
-// Read off the REFUSAL ALONE that is a 503 "try again in a moment": the door
+// Read off the REFUSAL ALONE that is a 503 "try again in a moment": the endpoint
 // invites the retry that settles the payment it just froze, and reports a control
 // working exactly as designed as an outage. The discriminator is the pair.
 //
@@ -462,7 +462,7 @@ func TestPaymentSignals_AnAmountThatIsNotUSDIsNotStated(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			app := zip.New(zip.Config{Logger: luxlog.New("gatetest"), DisableStartupMessage: true})
 			var got map[string]string
-			// The RAW door's whole read: the wire parse and the signal rule it feeds,
+			// The RAW endpoint's whole read: the wire parse and the signal rule it feeds,
 			// which is the pair mount.go's top-up runs through [screen.route].
 			app.Post("/probe", func(c *zip.Ctx) error {
 				cents, currency := bodyAmount(c)
@@ -502,7 +502,7 @@ func TestSignalsOf_CrossesAsASortedList(t *testing.T) {
 
 // TestPayerOrg_ResolvesOnlyTheTwoLanesThatReachThisGate. Everything else is "",
 // which the scorer refuses to mint a tenant for — so a request that reaches the
-// credit door naming no organisation is denied by the privileged branch rather
+// credit endpoint naming no organisation is denied by the privileged branch rather
 // than screened against nobody.
 func TestPayerOrg_ResolvesOnlyTheTwoLanesThatReachThisGate(t *testing.T) {
 	for _, tc := range []struct{ name, org, user, want string }{

@@ -19,15 +19,16 @@ import (
 )
 
 // These tests cover the project-API-key → org resolution on the deprecated PostHog
-// door, so keyed, bearer-less SDK traffic (posthog-js / insights-go batch) maps to a
-// tenant. They drive the REAL /v1/event handler (PostHog wire) through the injectable
-// resolveKeyOrg client, so no IAM is needed. The observable proxy for "resolved to a
-// tenant" is "passed the credential gate" — i.e. NOT 403; without a datastore the
-// handler then returns 503, so any non-403 status means the request was admitted.
+// endpoint, so keyed, bearer-less SDK traffic (posthog-js / insights-go batch) maps
+// to a tenant. They drive the REAL /v1/event handler (PostHog wire) through the
+// injectable resolveKeyOrg client, so no IAM is needed. The observable proxy for
+// "resolved to a tenant" is "passed the credential gate" — i.e. NOT 403; without a
+// datastore the handler then returns 503, so any non-403 status means the request
+// was admitted.
 //
-// The resolver used to live in a per-door copy (captureTenant) whose last resort was
-// the request Host; every door now shares ONE credential resolver (eventTenant) and
-// there is no host fallback anywhere.
+// The resolver used to live in a per-endpoint copy (captureTenant) whose last resort
+// was the request Host; every endpoint now shares ONE credential resolver
+// (eventTenant) and there is no host fallback anywhere.
 
 // stubResolver swaps resolveKeyOrg for the test and records the key it was handed,
 // so a test asserts BOTH that projectKey extracted the right key AND that the
@@ -110,9 +111,9 @@ func TestKeyOrg_UnresolvableKeyFailsClosed(t *testing.T) {
 // TestKeyOrg_KeylessRequestNeverConsultsResolver: with NO key presented the key
 // resolver is never consulted — the key path triggers only on a real key — and the
 // request is not refused at the GATE either: it takes the anonymous lane, where its
-// custom event kind is dropped, and the door says so (401 ingest_key_required, which is
-// the projection's refusal; the gate's is 403). It used to be admitted here at FULL
-// capability into the brand org named by the Host.
+// custom event kind is dropped, and the endpoint says so (401 ingest_key_required,
+// which is the projection's refusal; the gate's is 403). It used to be admitted here
+// at FULL capability into the brand org named by the Host.
 func TestKeyOrg_KeylessRequestNeverConsultsResolver(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)

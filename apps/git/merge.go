@@ -19,11 +19,11 @@ package git
 // # A merge is a push, and is judged as one
 //
 // Advancing base is a ref write, and a ref write that skipped the ref policy
-// would be a door around it — the hole push.go closed when the policy guarded
+// would be a way around it — the hole push.go closed when the policy guarded
 // only receive-pack. The move is therefore stated as the same refCommand the
-// wire door parses out of pkt-lines, judged by the same checkRefPolicy, and it
+// wire endpoint parses out of pkt-lines, judged by the same checkRefPolicy, and it
 // fires the same reactions, because a branch that moved is a branch that moved
-// whichever door moved it.
+// whichever endpoint moved it.
 
 import (
 	"context"
@@ -93,9 +93,9 @@ func fastForward(o ops, ctx context.Context, t tenant, repo string, p Pull) (str
 			p.Base, p.Head, p.Head, p.Base))
 	}
 
-	// THE REF POLICY, on the merge door. Its refusal answers 400, which is what
+	// THE REF POLICY, on the merge endpoint. Its refusal answers 400, which is what
 	// pushFiles answers for the identical refusal (push.go maps errBadInput).
-	// Two doors, one policy, one status.
+	// Two endpoints, one policy, one status.
 	cmd := refCommand{Old: base.Hash().String(), New: head.Hash().String(), Ref: baseName.String()}
 	if verr := checkRefPolicy([]refCommand{cmd},
 		defaultBranchOf(ctx, o.s.State.storage.absRepoPath(t.org, t.project, repo)), ""); verr != nil {

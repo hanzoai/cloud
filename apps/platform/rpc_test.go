@@ -239,11 +239,12 @@ func TestFleetPlane_ForgedOrgCannotWidenTheScan(t *testing.T) {
 	}
 }
 
-// TestFleetPlane_RoleGateIsFailClosed pins the door. The plane must refuse anyone the
-// HTTP board would refuse: an anonymous caller (no capability at all) and a validated
-// but NON-admin member of an org. A plain member holding an org is the escalation
-// apps/principal warns about — "has an org" is not "administers it" — and the
-// capability carries the two admin scopes apart precisely so the callee can tell.
+// TestFleetPlane_RoleGateIsFailClosed pins the refusal. The plane must refuse anyone
+// the HTTP board would refuse: an anonymous caller (no capability at all) and a
+// validated but NON-admin member of an org. A plain member holding an org is the
+// escalation apps/principal warns about — "has an org" is not "administers it" —
+// and the capability carries the two admin scopes apart precisely so the callee
+// can tell.
 func TestFleetPlane_RoleGateIsFailClosed(t *testing.T) {
 	app := planeProbe(t, twoTenantFleet()...)
 

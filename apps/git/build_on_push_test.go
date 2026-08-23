@@ -11,7 +11,7 @@ import (
 // hanzo.yml image parse, the deterministic enqueue body/tag (which must match the ci
 // mode:delegate shape byte-for-byte), and the brand→GitHub-owner map. The reactor's
 // IO (tree read + HTTP enqueue) is exercised end-to-end when armed; these lock the
-// contract that makes the two build front doors converge instead of fork.
+// contract that makes the two build entry points converge instead of fork.
 
 func TestPipelineParse(t *testing.T) {
 	const cfg = `

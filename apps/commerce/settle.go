@@ -12,35 +12,35 @@ package commerce
 // balanceReader is fin.Balance, apps/metering's fetchAvailable is fin.Balance,
 // GET /v1/billing/balance is fin.Balance — and the two are different files on
 // disk. So a customer's card was charged, commerce wrote a row, and the balance
-// that decides whether an inference request is served never moved. The one door
-// that reaches finance, POST /v1/billing/credit, is not mounted at all.
+// that decides whether an inference request is served never moved. The one
+// endpoint that reaches finance, POST /v1/billing/credit, is not mounted at all.
 //
-// This is the other half of the settlement: at the exact point the doors already
-// notice a charge cleared, the amount that cleared is deposited into the ONE
-// spendable ledger, at the address the spend gate will debit.
+// This is the other half of the settlement: at the exact point the endpoints
+// already notice a charge cleared, the amount that cleared is deposited into
+// the ONE spendable ledger, at the address the spend gate will debit.
 //
 // # Where it is issued, and why there
 //
-// Both credit doors compose one value onto their HANDLER (risk.go screen.route,
-// screen.op), and that is the only place in this process where all four
-// projections of the typed op AND the browser's raw route converge on "the charge
-// cleared". A credit issued anywhere else would be a credit one door could be
-// wired without.
+// Both credit endpoints compose one value onto their HANDLER (risk.go
+// screen.route, screen.op), and that is the only place in this process where all
+// four projections of the typed op AND the browser's raw route converge on "the
+// charge cleared". A credit issued anywhere else would be a credit one endpoint
+// could be wired without.
 //
 // It runs BEFORE the risk record and, unlike it, it is NOT detached and NOT
 // best-effort. Teaching the model is telemetry and a lost row costs nothing;
 // funding the balance IS the payment. So a credit that cannot be posted refuses
-// the door — a 500 in the customer's words and a RECONCILE line in ours — rather
-// than answering 200 to a customer whose money went nowhere. That is the same
-// posture commerce's own core takes when its ledger write fails, and it makes the
-// retry a RECOVERY: the caller replays the idempotency key, the money core replays
-// the receipt verbatim, and this deposit — keyed on the settlement — completes the
-// half that was missing.
+// the request — a 500 in the customer's words and a RECONCILE line in ours —
+// rather than answering 200 to a customer whose money went nowhere. That is the
+// same posture commerce's own core takes when its ledger write fails, and it
+// makes the retry a RECOVERY: the caller replays the idempotency key, the money
+// core replays the receipt verbatim, and this deposit — keyed on the settlement —
+// completes the half that was missing.
 //
 // # The address: the wallet the gate will debit, never the org pool by default
 //
 // (Ledger, Subject) IS the money's address. Both are taken from the [payment] the
-// door already resolved ONCE for the screen — payerOrg then principal.Subject —
+// endpoint already resolved ONCE for the screen — payerOrg then principal.Subject —
 // which is byte-for-byte the pair principal.WalletOf hands the spend gate and
 // apps/billing hands GET /v1/billing/balance. Credit and spend therefore name one
 // wallet by construction rather than by two call sites that happen to agree.
@@ -77,7 +77,7 @@ package commerce
 // costs a customer nothing.
 //
 // This is also what closes the divergence payments.go records at exposePayments:
-// commerce's typed door credits its store under the ORG POOL (org.Name), while for
+// commerce's typed op credits its store under the ORG POOL (org.Name), while for
 // a member of a shared signup org — or a credential carrying a signed `person:`
 // billing_account claim — account.Payer resolves a PERSON, and the person's wallet
 // is the one the gate reads. Money in the pool of such an org is neither lost nor
@@ -89,7 +89,7 @@ package commerce
 // here is [firstRef]'s answer — the PROCESSOR's reference for the charge, falling
 // back to the ledger receipt only where the processor stated none. That is the one
 // identifier that is the same across every path that can credit one payment, so
-// the browser door, the agent's typed op, any of its four projections and a
+// the browser route, the agent's typed op, any of its four projections and a
 // replayed webhook all converge on a single deposit. It is deliberately the SAME
 // key the risk record is filed under: one payment, one identity, everywhere.
 //
@@ -114,12 +114,12 @@ package commerce
 //
 // The credit is posted through finance's own Deposit rather than through commerce's
 // injected creditledger adapter (ledger.go) because of the ADDRESS, not the books:
-// the client carries the test bit now, but it is commerce's door onto its own credit,
-// and the address this file deposits at is (p.ledger, p.subject) — the payer the
-// SCREEN resolved from the request's principal, which is a value commerce cannot
-// compute for itself. Going through the adapter would mean handing it back the
-// answer it exists to ask for. Same ledger, same idempotency, one address resolved
-// where the identity is.
+// the client carries the test bit now, but it is commerce's entry point onto its
+// own credit, and the address this file deposits at is (p.ledger, p.subject) —
+// the payer the SCREEN resolved from the request's principal, which is a value
+// commerce cannot compute for itself. Going through the adapter would mean handing
+// it back the answer it exists to ask for. Same ledger, same idempotency, one
+// address resolved where the identity is.
 
 import (
 	"context"
@@ -140,7 +140,7 @@ import (
 // records it: the amount that moved, the currency it moved in, and which books it
 // credited. Every field is a fact about the PAST — none of them is read off the
 // request that asked for the charge, which is the whole reason this type exists
-// rather than the door reusing the values it was sent.
+// rather than the handler reusing the values it was sent.
 type settlement struct {
 	// cents is the amount that settled, in the currency's minor unit.
 	cents int64
@@ -161,14 +161,14 @@ type settlement struct {
 // its money core wrote — resolved through commerce's own org resolver, which is the
 // same binding the charge itself used. The org is [payment.org], the effective org the
 // handler charged through, so the read doubles as a check that the money core really
-// wrote this receipt in the namespace the door was acting in: a receipt that is not
-// there is not found, and a not-found receipt refuses rather than funding a wallet on
-// an unverified amount. It is NOT the payer's org — see the package note; those are
-// the same string for every caller but a masquerading SuperAdmin, and naming the payer
-// here is what made that caller's top-up permanently uncreditable.
+// wrote this receipt in the namespace the endpoint was acting in: a receipt that is
+// not there is not found, and a not-found receipt refuses rather than funding a
+// wallet on an unverified amount. It is NOT the payer's org — see the package note;
+// those are the same string for every caller but a masquerading SuperAdmin, and
+// naming the payer here is what made that caller's top-up permanently uncreditable.
 //
 // It is held on the screen rather than called directly for the one thing that
-// buys: a door test can state what settled without standing up a commerce
+// buys: an endpoint test can state what settled without standing up a commerce
 // datastore, exactly as the risk plane's [teach] client lets one assert what leaves
 // this process without a risk child to receive it. The production value is set
 // once, by [riskGate], and never varies.
@@ -200,7 +200,7 @@ func receiptOf(ctx context.Context, org, id string) (settlement, error) {
 // which is what the amount, the currency and the books are read back off.
 //
 // Every refusal below is the same fact — the card cleared and the balance did not
-// move — and every one of them answers the door rather than being swallowed,
+// move — and every one of them answers the caller rather than being swallowed,
 // because a top-up that quietly credits nothing is the defect this file exists to
 // end. There is no branch here that returns nil without a deposit.
 //
@@ -208,23 +208,23 @@ func receiptOf(ctx context.Context, org, id string) (settlement, error) {
 // operator can act on: some clear themselves the moment the customer retries, and some
 // refuse every retry there will ever be. Each branch names which it is by answering
 // through [screen.uncredited] or [screen.stranded] — the second states a terminal bit to
-// alert on and the doors that settle it.
+// alert on and the endpoints that settle it.
 func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	// The payment's three names, resolved once by [seen]. All are required: `org` says
 	// which books hold the receipt this credit is sized from, `ledger` names the ledger
 	// the deposit lands in and `subject` the wallet inside it — and a deposit that
 	// guessed any of them would fund an address no gate reads off an amount nobody
-	// wrote. None can be empty at a door that settled a charge (the screen ahead of
+	// wrote. None can be empty at an endpoint that settled a charge (the screen ahead of
 	// this refuses a payment it cannot resolve a payer for, and a resolved payer means
 	// a resolved namespace), so this is the boundary check saying so, not a fallback.
 	if p.org == "" || p.ledger == "" || p.subject == "" {
-		return s.stranded(p, ref, "the door settled a payment whose payer this process could not resolve")
+		return s.stranded(p, ref, "the endpoint settled a payment whose payer this process could not resolve")
 	}
 	// No settlement identity, no idempotent deposit. Depositing under an invented
 	// key credits the same money again on the very next retry, which is worse than
 	// the credit this refuses.
 	if ref == "" || id == "" {
-		return s.stranded(p, ref, "the door answered success and named no settlement to key the credit on")
+		return s.stranded(p, ref, "the endpoint answered success and named no settlement to key the credit on")
 	}
 
 	got, err := s.receipt(ctx, p.org, id)
@@ -241,7 +241,7 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	}
 	// ONE ASSET. finance holds USD and its balance read ignores the currency
 	// argument entirely, so a minor unit from another currency deposited here is
-	// simply spent as though it were cents — ¥500,000 becoming $5,000. The door
+	// simply spent as though it were cents — ¥500,000 becoming $5,000. The endpoint
 	// refuses instead, which is the same rule [paymentFacts] already applies to the
 	// value it states to the model: an amount this process cannot express in USD is
 	// not expressed at all.
@@ -261,22 +261,22 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 	// cleared — on the effective org's merchant account, against a receipt commerce wrote
 	// in [payment.org] — and turns it into spendable credit at (ledger, subject). While
 	// those two organisations are one string that is one movement; when they are two, the
-	// customer's card funded the SuperAdmin's own wallet and the door answered 200.
+	// customer's card funded the SuperAdmin's own wallet and the endpoint answered 200.
 	//
 	// THERE IS NO ADDRESS HERE THAT IS NOT SURPRISING, which is why this refuses instead of
 	// choosing. Crediting [payment.ledger] moves a customer's money into a platform admin's
 	// balance; crediting [payment.org] has a masqueraded session top up the very org it is
 	// only supposed to be inspecting. A platform operator who means to fund a customer has
-	// a door that SAYS SO — the admin grant, a credit whose whole subject is whose it is —
-	// and a card taken inside someone else's org is not it.
+	// an endpoint that SAYS SO — the admin grant, a credit whose whole subject is whose
+	// it is — and a card taken inside someone else's org is not it.
 	//
 	// THE SCREEN HAS ALREADY REFUSED THIS, and that is why the refusal here is TERMINAL
-	// rather than a door's answer. [screen.decide] asks the same [payment.diverged] before
-	// the handler charges the card, so no composed door can reach this line — anything that
-	// does is a mint standing outside the screen, and by the time it is here the money has
-	// moved. Retrying cannot help it: the same identity resolves the same two names every
-	// time. So it is refused, tagged terminal, and handed to an operator with the two doors
-	// that CAN settle it.
+	// rather than an endpoint's answer. [screen.decide] asks the same [payment.diverged]
+	// before the handler charges the card, so no composed endpoint can reach this line —
+	// anything that does is a mint standing outside the screen, and by the time it is here
+	// the money has moved. Retrying cannot help it: the same identity resolves the same two
+	// names every time. So it is refused, tagged terminal, and handed to an operator with
+	// the two endpoints that CAN settle it.
 	//
 	// It cannot fire for the callers that pay for themselves — see [payment.diverged].
 	if p.diverged() {
@@ -343,11 +343,11 @@ func (s screen) uncredited(p payment, ref, why string, args ...any) error {
 // fresh key takes the card again. Every one of them is a fact about the settlement
 // itself rather than about this process's luck — the two names that cannot be one
 // name, a receipt that settled in another currency or for nothing, a settlement the
-// door could not identify, a reference that is already another payment's. Nothing
+// endpoint could not identify, a reference that is already another payment's. Nothing
 // downstream changes any of those.
 //
 // So this states the terminal bit for an operator to ALERT on, and names the two
-// doors that actually settle it: the admin grant credits the balance and the
+// endpoints that actually settle it: the admin grant credits the balance and the
 // processor refunds the charge. It is loud rather than silent for the reason the
 // whole file is: a settled charge with no credit and nobody told is the defect.
 func (s screen) stranded(p payment, ref, why string, args ...any) error {

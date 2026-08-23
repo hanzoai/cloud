@@ -71,7 +71,7 @@ var (
 )
 
 // tokenFor is the connector-custody client. It defaults to integrations.TokenFor
-// (the ONE KMS-backed token door) and is a package var ONLY so a test can exercise
+// (the ONE KMS-backed token source) and is a package var ONLY so a test can exercise
 // the provider path — the same reason meta.go's endpoints are package vars. It is
 // never reassigned in production.
 var tokenFor = integrations.TokenFor

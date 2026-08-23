@@ -125,7 +125,7 @@ func TestEdgeCORS_PreflightShortCircuits(t *testing.T) {
 	req.Header.Set("Origin", "https://hanzo.ai")
 	// A preflight is DEFINED by this header (Fetch, CORS preflight request), and
 	// it is what tells the edge apart from a bare OPTIONS — the RFC 9110 §9.3.7
-	// question, which the contract's own door answers with Allow. Sending it is
+	// question, which the contract's own endpoint answers with Allow. Sending it is
 	// what makes this a model of a preflight rather than of something no browser
 	// emits.
 	req.Header.Set("Access-Control-Request-Method", "GET")
@@ -228,7 +228,7 @@ func TestEdgeCORS_UnknownOriginGetsNothing(t *testing.T) {
 // that answers one. It gets 204 without Access-Control-Allow-Origin — the browser
 // blocks on the missing header, which is the true reason and the one a developer
 // can read. Continuing instead hands the preflight to a router with no OPTIONS
-// route, and the answer becomes a 404 about a door that exists.
+// route, and the answer becomes a 404 about an endpoint that exists.
 //
 // The refusal is the ABSENT header, never the status, so nothing about admission
 // changes here: the negative half of that is TestEdgeCORS_UnknownOriginGetsNothing

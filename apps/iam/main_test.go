@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 	// BootMaster alone is not enough on a codec-linked build: its last resort is
 	// cek.EnsureDevKey, which DECLINES there by design (a build that can really
 	// encrypt must be handed a real key, not invent one). So supply a throwaway
-	// through the same door a deployment uses, and only when nothing else did —
+	// through the same path a deployment uses, and only when nothing else did —
 	// a keyed CI run keeps its own key and this cannot mask it.
 	if os.Getenv(masterKeyEnv) == "" {
 		_ = os.Setenv(masterKeyEnv, devMasterKey)

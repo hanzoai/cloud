@@ -1,7 +1,7 @@
 package agents
 
 // door.go — where a run's tools come from once the fleet is more than one
-// process: the fleet's OWN agent door, asked over the internal socket.
+// process: the fleet's OWN agent MCP server, asked over the internal socket.
 //
 // # Why this is not a new mechanism
 //
@@ -13,19 +13,20 @@ package agents
 // aggregation over the same children, with a second place for the curation rule
 // to be applied — or forgotten.
 //
-// So nothing here aggregates. The host publishes the door it already built on
-// the socket every child can already reach (cmd/cloud/wake.go), and an agent is
-// simply another MCP client of it. Same JSON-RPC, same union, same order, same
-// [fleet] denylist — which is enforced inside gather, where the routing table is
-// written, so a name the door will not project is not routable for anyone. An
-// agent therefore CANNOT see a surface an external client cannot; there is no
-// second surface to see.
+// So nothing here aggregates. The host publishes the MCP server it already
+// built on the socket every child can already reach (cmd/cloud/wake.go), and an
+// agent is simply another MCP client of it. Same JSON-RPC, same union, same
+// order, same [fleet] denylist — which is enforced inside gather, where the
+// routing table is written, so a name the MCP server will not project is not
+// routable for anyone. An agent therefore CANNOT see a surface an external
+// client cannot; there is no second surface to see.
 //
-// # The address, and what "no door" means
+// # The address, and what "no MCP server" means
 //
 // plane.HostApp is the router's own socket — the one plane.Reach dials to wake a
-// cold app — and the door rides it at manifest.MCPPath. Reaching for it answers
-// one of exactly three things, which is the rule plane/ask.go already states:
+// cold app — and the MCP server rides it at manifest.MCPPath. Reaching for it
+// answers one of exactly three things, which is the rule plane/ask.go already
+// states:
 //
 //	listening      ask it; this is production
 //	no listener    THIS PROCESS IS THE FLEET — a single-app binary, a test, a dev
@@ -68,28 +69,30 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// doorTools is the tool plane read from the FLEET's composed agent door.
+// doorTools is the tool plane read from the FLEET's composed agent MCP server.
 type doorTools struct{}
 
 // errNoDoor reports that this process is not part of a fleet: nothing is
-// listening on the router's socket, so there is no composed door to ask.
+// listening on the router's socket, so there is no composed MCP server to ask.
 //
 // It is the ONE error a caller may read as "fall back", exactly as plane.ErrNoPeer
 // is on the peer plane. Every other failure is an outage and is reported as one —
-// a door that is present and broken must never read as a fleet with no tools.
-var errNoDoor = errors.New("agents: no fleet door on this host")
+// an MCP server that is present and broken must never read as a fleet with no
+// tools.
+var errNoDoor = errors.New("agents: no fleet MCP server on this host")
 
 // catalog resolves the agent's declared names against the fleet's own surface.
 //
-// It asks the door WHAT IS OFFERED and then, for the handful of names this agent
-// declared, what each one takes. Those are two questions because the door's
-// tools/list answers only the first: it publishes one tool per subsystem, whose
-// `op` enum carries the operation names and no schemas, since the flat list of
-// this fleet's operations was 977 KB that no model can hold and every client
-// truncates (fleet/grouped.go). fleet.Describe answers the second, one operation
-// at a time, out of the same gathered set — so a declared name the door does not
-// offer is simply absent, which is the same rule registryTools follows: offering
-// a tool that would be refused at dispatch teaches the model a lie.
+// It asks the MCP server WHAT IS OFFERED and then, for the handful of names this
+// agent declared, what each one takes. Those are two questions because the MCP
+// server's tools/list answers only the first: it publishes one tool per
+// subsystem, whose `op` enum carries the operation names and no schemas, since
+// the flat list of this fleet's operations was 977 KB that no model can hold and
+// every client truncates (fleet/grouped.go). fleet.Describe answers the second,
+// one operation at a time, out of the same gathered set — so a declared name the
+// MCP server does not offer is simply absent, which is the same rule
+// registryTools follows: offering a tool that would be refused at dispatch
+// teaches the model a lie.
 func (doorTools) catalog(ctx context.Context, org, actor string, want []string) []types.ToolDef {
 	if org == "" || len(want) == 0 {
 		return nil
@@ -100,16 +103,16 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 	// An agent that declares nothing gets nothing — that default is correct and
 	// stays, because a user-defined agent's tool list is its authority and an
 	// empty one means it asked for none. But the DEFAULT ASSISTANT cannot enumerate
-	// its tools: the door's surface is discovered at runtime (88 grouped tools
-	// today, and the whole point of grouping was that the set changes without a
-	// code edit), so any list written here would be stale the next time a
-	// subsystem ships.
+	// its tools: the MCP server's surface is discovered at runtime (88 grouped
+	// tools today, and the whole point of grouping was that the set changes
+	// without a code edit), so any list written here would be stale the next time
+	// a subsystem ships.
 	//
 	// Not stating it cost a full turn of user-visible wrongness: the assistant was
 	// told in its instructions that it had tools and how to call them, then handed
 	// an empty offer by this function, so it correctly reported that it could not
-	// reach the cloud — while the door was serving 88 tools one socket away. The
-	// two halves have to agree, and this is the half that was missing.
+	// reach the cloud — while the MCP server was serving 88 tools one socket away.
+	// The two halves have to agree, and this is the half that was missing.
 	all := false
 	for _, n := range want {
 		if strings.TrimSpace(n) == ToolsAll {
@@ -144,14 +147,14 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 			Description string          `json:"description"`
 			InputSchema json.RawMessage `json:"inputSchema"`
 		} `json:"tools"`
-		// Meta is the door's own account of why its list may be SHORT: the
-		// subsystems it could not ask, and how many names policy withheld. The door
-		// went to the trouble of never shortening quietly, so throwing it away here
-		// would put the silence back one layer down.
+		// Meta is the MCP server's own account of why its list may be SHORT: the
+		// subsystems it could not ask, and how many names policy withheld. The MCP
+		// server went to the trouble of never shortening quietly, so throwing it
+		// away here would put the silence back one layer down.
 		Meta json.RawMessage `json:"_meta"`
 	}
 	if err := json.Unmarshal(res, &listed); err != nil {
-		trace.SpanFromContext(ctx).RecordError(fmt.Errorf("agents: the fleet door's tools/list is not a tool list: %w", err))
+		trace.SpanFromContext(ctx).RecordError(fmt.Errorf("agents: the fleet MCP server's tools/list is not a tool list: %w", err))
 		return nil
 	}
 	offered := map[string]bool{}
@@ -160,14 +163,14 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 			offered[op] = true
 		}
 	}
-	// ToolsAll offers the door's tools AS THE DOOR GROUPS THEM — one per subsystem,
-	// named for it, carrying an `op` enum, plus [fleet.Describe] — and not the ops
-	// flattened back out.
+	// ToolsAll offers the MCP server's tools AS THE MCP SERVER GROUPS THEM — one
+	// per subsystem, named for it, carrying an `op` enum, plus [fleet.Describe] —
+	// and not the ops flattened back out.
 	//
 	// The grouping is the whole reason the surface is affordable: 1,189 flat tools
 	// were 977 KB (~244k tokens) merely to LIST, and the same operations grouped
 	// are 88 tools in 63 KB. Expanding them here would hand back every byte the
-	// door just saved and blow the context before the question is read.
+	// MCP server just saved and blow the context before the question is read.
 	//
 	// It is also what the assistant's instructions describe — pick a subsystem,
 	// choose an op from its enum, call [fleet.Describe] for a shape you do not know.
@@ -205,8 +208,8 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 	}
 	// A declared name that resolved to nothing has two very different causes — a
 	// subsystem that is DOWN and a tool the fleet REFUSES to project — and the
-	// door already distinguishes them. Carrying its answer onto the span is what
-	// makes "declared 3, offered 1" diagnosable instead of a shrug.
+	// MCP server already distinguishes them. Carrying its answer onto the span is
+	// what makes "declared 3, offered 1" diagnosable instead of a shrug.
 	if len(out) < len(wanted) && len(listed.Meta) > 0 {
 		trace.SpanFromContext(ctx).SetAttributes(
 			attribute.String("hanzo.agent.tools_meta", clip(string(listed.Meta), maxDoorMeta)))
@@ -215,7 +218,7 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 }
 
 // opsOf reads the operation names out of one subsystem tool's schema — its `op`
-// enum, which is where the door carries them.
+// enum, which is where the MCP server carries them.
 func opsOf(schema json.RawMessage) []string {
 	var s struct {
 		Properties struct {
@@ -230,7 +233,7 @@ func opsOf(schema json.RawMessage) []string {
 	return s.Properties.Op.Enum
 }
 
-// describe fetches ONE operation's descriptor through the door's own
+// describe fetches ONE operation's descriptor through the MCP server's own
 // fleet.Describe, and reads the owning subsystem's bytes back out of it.
 //
 // What the client guarantees is that the model is offered exactly what it will
@@ -240,10 +243,10 @@ func opsOf(schema json.RawMessage) []string {
 // it.
 //
 // The descriptor's own `name` is NOT compared to op, and that is a change. The
-// door publishes an operation as a verb on an object — `deploy_project` for
-// `post_v1_projects_by_slug_deploy` (fleet/verbs.go) — while the descriptor it
-// hands back is the owning subsystem's, carried verbatim, so it still says the
-// id. Requiring the two to match would reject 1,730 of the fleet's 2,229
+// MCP server publishes an operation as a verb on an object — `deploy_project`
+// for `post_v1_projects_by_slug_deploy` (fleet/verbs.go) — while the descriptor
+// it hands back is the owning subsystem's, carried verbatim, so it still says
+// the id. Requiring the two to match would reject 1,730 of the fleet's 2,229
 // operations for being correctly named.
 func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error) {
 	args, err := json.Marshal(map[string]string{"op": op})
@@ -285,10 +288,10 @@ func clip(s string, n int) string {
 	return shorten.To(s, n) + "…"
 }
 
-// call runs one tool through the door's own dispatch: the door names the app
-// that listed it and forwards this message verbatim to that app's registry, so
-// the host can only ever ROUTE a call and never invoke something the owner did
-// not declare.
+// call runs one tool through the MCP server's own dispatch: the MCP server names
+// the app that listed it and forwards this message verbatim to that app's
+// registry, so the host can only ever ROUTE a call and never invoke something
+// the owner did not declare.
 func (doorTools) call(ctx context.Context, org, actor, name, args string) (string, error) {
 	body, err := toolCallBody(name, args)
 	if err != nil {
@@ -342,7 +345,7 @@ func toolCallBody(name, args string) ([]byte, error) {
 //
 // isError is a FAILURE and comes back as one, so dispatchOne renders it as a
 // tool result the model can react to rather than as a success it would believe.
-// That is the same distinction the door itself draws when a hop fails.
+// That is the same distinction the MCP server itself draws when a hop fails.
 func toolResult(res json.RawMessage) (string, error) {
 	var out struct {
 		Content []struct {
@@ -351,7 +354,7 @@ func toolResult(res json.RawMessage) (string, error) {
 		IsError bool `json:"isError"`
 	}
 	if err := json.Unmarshal(res, &out); err != nil {
-		return "", fmt.Errorf("agents: the fleet door answered a tool result that will not decode: %w", err)
+		return "", fmt.Errorf("agents: the fleet MCP server answered a tool result that will not decode: %w", err)
 	}
 	parts := make([]string, 0, len(out.Content))
 	for _, c := range out.Content {
@@ -370,12 +373,13 @@ func toolResult(res json.RawMessage) (string, error) {
 	return truncateToolResult(text), nil
 }
 
-// askDoor puts one JSON-RPC message to the fleet's door as (org, actor) and
-// returns the `result` member.
+// askDoor puts one JSON-RPC message to the fleet's MCP server as (org, actor)
+// and returns the `result` member.
 //
-// A JSON-RPC ERROR is an error here, deliberately: a tool the door will not
-// route answers -32602, and folding that into an empty result would make "this
-// tool is not yours to call" indistinguishable from "it ran and said nothing".
+// A JSON-RPC ERROR is an error here, deliberately: a tool the MCP server will
+// not route answers -32602, and folding that into an empty result would make
+// "this tool is not yours to call" indistinguishable from "it ran and said
+// nothing".
 func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -393,7 +397,7 @@ func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessa
 	req.Header.SetContentType("application/json")
 	req.SetHost(plane.HostApp)
 	req.URI().SetPath(manifest.MCPPath)
-	// The RUN's identity, in zip's own spelling, and nothing else. The door
+	// The RUN's identity, in zip's own spelling, and nothing else. The MCP server
 	// copies these onto every hop it makes, so a subsystem whose tools depend on
 	// the tenant answers for the org this run is billed to. A blank subject is a
 	// run with no person behind it (a schedule, a service token); the org is the
@@ -406,10 +410,10 @@ func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessa
 	req.SetBody(body)
 
 	if err := doorClient(addr).Do(req, resp); err != nil {
-		return nil, fmt.Errorf("agents: the fleet door at %s did not answer: %w", addr, err)
+		return nil, fmt.Errorf("agents: the fleet MCP server at %s did not answer: %w", addr, err)
 	}
 	if code := resp.StatusCode(); code < 200 || code > 299 {
-		return nil, fmt.Errorf("agents: the fleet door answered %d", code)
+		return nil, fmt.Errorf("agents: the fleet MCP server answered %d", code)
 	}
 	var env struct {
 		Result json.RawMessage `json:"result"`
@@ -418,7 +422,7 @@ func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessa
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(resp.Body(), &env); err != nil {
-		return nil, fmt.Errorf("agents: the fleet door answered something that is not JSON-RPC: %w", err)
+		return nil, fmt.Errorf("agents: the fleet MCP server answered something that is not JSON-RPC: %w", err)
 	}
 	if env.Error != nil {
 		return nil, errors.New(env.Error.Message)
@@ -426,8 +430,8 @@ func askDoor(ctx context.Context, org, actor string, body []byte) (json.RawMessa
 	return append(json.RawMessage(nil), env.Result...), nil
 }
 
-// doorAddr resolves the fleet door's socket, or says which of the two failures
-// it is. See [errNoDoor].
+// doorAddr resolves the fleet MCP server's socket, or says which of the two
+// failures it is. See [errNoDoor].
 //
 // It probes by CONNECTING, because the file does not answer the question: a
 // socket path outlives the process that bound it wherever the run directory is a
@@ -437,7 +441,7 @@ func doorAddr() (string, error) {
 	path := zip.SocketPath(plane.HostApp)
 	up, err := plane.Listening(path)
 	if err != nil {
-		return "", fmt.Errorf("agents: the fleet door's socket is unusable: %w", err)
+		return "", fmt.Errorf("agents: the fleet MCP server's socket is unusable: %w", err)
 	}
 	if !up {
 		return "", fmt.Errorf("%w (%s)", errNoDoor, path)

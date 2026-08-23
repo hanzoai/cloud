@@ -5,8 +5,8 @@ package trust
 //
 // Three properties are worth a test at THIS level rather than in the bundle's
 // own suite, because all three are the HOST's and the bundle cannot see them:
-// which organization a request resolves to, that the public door is genuinely
-// reachable without a credential, and that the two doors disagree about exactly
+// which organization a request resolves to, that the public endpoint is genuinely
+// reachable without a credential, and that the two endpoints disagree about exactly
 // one thing — whether a gated artifact carries its address.
 
 import (
@@ -81,7 +81,7 @@ func decode[T any](t *testing.T, b []byte) T {
 }
 
 // TestTheDeploymentPublishesItsOwnInventory is the whole point of the mount: our
-// controls are compiled in and public, so the public door answers for us with no
+// controls are compiled in and public, so the public endpoint answers for us with no
 // credential and the numbers are the fold's, not anyone's assertion.
 func TestTheDeploymentPublishesItsOwnInventory(t *testing.T) {
 	app := mountApp(t)
@@ -148,7 +148,7 @@ func TestAnotherOrganizationSeesNoneOfOurControls(t *testing.T) {
 		t.Fatalf("a new organization has %d controls — it must inherit none of ours", got.Total)
 	}
 
-	// And its centre is not published, so the public door does not answer for it.
+	// And its centre is not published, so the public endpoint does not answer for it.
 	if code, _ := req(t, app, http.MethodGet, "/v1/trust/published/"+other, "", nil); code != http.StatusNotFound {
 		t.Fatalf("unpublished centre want 404, got %d — empty and unpublished are different answers", code)
 	}
@@ -207,7 +207,7 @@ func TestTheTwoDoorsDisagreeAboutExactlyOneThing(t *testing.T) {
 	if d.Href != "" {
 		t.Fatalf("a visitor was handed the address of a gated artifact: %q", d.Href)
 	}
-	// The bytes are never here in either door — this surface serves metadata and
+	// The bytes are never here in either endpoint — this surface serves metadata and
 	// apps/dataroom serves the artifact behind a grant.
 	if bytes.Contains(pubBody, []byte("secret.pdf")) {
 		t.Fatalf("the gated address leaked somewhere in the published body: %s", pubBody)
@@ -253,7 +253,7 @@ func TestTheOwnInventoryIsNotWritable(t *testing.T) {
 func TestOnlyTwoRoutesAreOpen(t *testing.T) {
 	app := mountApp(t)
 
-	// The published door is the ONE open route this subsystem declares.
+	// The published endpoint is the ONE open route this subsystem declares.
 	// /v1/trust/health is the COMPOSER's, registered for every app in serve.go —
 	// declaring a second one here does not shadow it, it refuses the whole
 	// program, which is why this package registers none.

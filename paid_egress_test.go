@@ -42,7 +42,7 @@ import (
 // exempt from here entirely, and Metered is not a blanket absolution — it says one
 // meter owns one charge, not that every path in that binary's closure is covered.
 // apps/websearch was Metered for its search fee while render.go reached the crawl
-// pod by a second door that no fee applied to. Walking a metered root's closure for
+// pod by a second path that no fee applied to. Walking a metered root's closure for
 // vendor reaches its own meters do not cover is the next thing this check should
 // learn; until it does, a Metered declaration moves a surface out of this net.
 //
@@ -282,7 +282,7 @@ var freeOfVendor = map[string]string{
 	// apps/projects/shot.go, whose every function is UNEXPORTED: capture is
 	// reachable only from shotOf, and shotOf is registered exactly once, at
 	// apps/projects/projects.go's `GET /v1/projects/:slug/shot`, by projects'
-	// own Mount. Neither of these two calls projects.Mount, so there is no door
+	// own Mount. Neither of these two calls projects.Mount, so there is no way
 	// into the renderer from either — not a nil client this time, but no
 	// callable symbol at all.
 	"billing:crawl.hanzo.svc": "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",

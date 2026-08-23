@@ -1,6 +1,6 @@
 package cloud_test
 
-// scope.Group is the third door, and it is the one that shipped broken twice in
+// scope.Group is the third form, and it is the one that shipped broken twice in
 // one day. Each test below is the smallest program that reproduces one of those
 // failures. They share scope_test.go's helpers (deny, pong, get, mountAll,
 // newApp) — same package, one set of primitives.
@@ -52,7 +52,7 @@ func patterns(t *testing.T, app *zip.App) []string {
 	}
 	var out []string
 	for _, r := range app.Routes() {
-		// zip mounts its own plumbing (/zap, the MCP door). This test is about
+		// zip mounts its own plumbing (/zap, the MCP endpoint). This test is about
 		// where a SUBSYSTEM's routes land, so keep the /v1 surface.
 		if strings.HasPrefix(r.Pattern, "/v1") {
 			out = append(out, r.Method+" "+r.Pattern)
@@ -158,8 +158,8 @@ func TestGroupPrefixesWhatRegistersThroughIt(t *testing.T) {
 	}
 }
 
-// TestGroupUseOutsideThePrefixesFailsTheMount is confinement through the door
-// Group opened. scope_test.go already covers `r.Group(p, mw)` — middleware
+// TestGroupUseOutsideThePrefixesFailsTheMount is confinement through the router
+// Group returned. scope_test.go already covers `r.Group(p, mw)` — middleware
 // passed INTO Group. This is the other spelling, `g := r.Group(p); g.Use(mw)`,
 // which is the one that used to bypass confinement entirely by handing back the raw
 // router. Nothing is installed and the mount fails, so the binary refuses to

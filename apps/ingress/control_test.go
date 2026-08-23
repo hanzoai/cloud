@@ -17,8 +17,8 @@ import (
 // into the framework: the success status, the 204 a void op answers, which id
 // wins when the URL and the body disagree, and whether a DELETE reads a body.
 // None of those are visible in the handler source any more, so they are pinned
-// HERE — against a real router, over real requests. The store/engine tests next
-// door prove the edge routes; these prove the API that configures it.
+// HERE — against a real router, over real requests. The store/engine tests beside
+// this file prove the edge routes; these prove the API that configures it.
 
 // compose installs what the program's composer installs — cloud.Bridge, once at
 // the app root. A subsystem never installs its own, so a test app owes the same

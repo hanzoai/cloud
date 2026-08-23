@@ -1,6 +1,6 @@
 // billing.go is the billing capability's half of the contract: the questions a
-// customer's money door asks, answered by the process that holds the merchant
-// store.
+// customer's money endpoint asks, answered by the process that holds the
+// merchant store.
 //
 // The two are not the same app and cannot be. `/v1/billing` belongs to the
 // billing capability (HIP-0018 carries `capability: billing`), and the rows
@@ -13,8 +13,8 @@
 // travel on the inputs that need one, and that is not a loophole — a billing
 // subject is a wallet INSIDE the ledger the caller's identity already pinned, so
 // naming one can widen a read to another account of the caller's own org and to
-// nothing else. The door resolves it server-side (apps/billing's payer) and a
-// client-supplied one never reaches here.
+// nothing else. The endpoint resolves it server-side (apps/billing's payer) and
+// a client-supplied one never reaches here.
 //
 // The outputs carry the json tags the HTTP surface publishes, because they ARE
 // that surface: billing answers with the value it was handed rather than
@@ -145,9 +145,9 @@ type Collected struct {
 
 // InvoicesIn selects which of the caller's invoices to list. Every field
 // narrows and an empty one does not filter, which is the meaning an absent
-// query parameter has always had on the door this shares its query with.
+// query parameter has always had on the endpoint this shares its query with.
 //
-// Subject is the billing subject the door resolved for the caller — a wallet
+// Subject is the billing subject the endpoint resolved for the caller — a wallet
 // inside the caller's own org, never an org.
 type InvoicesIn struct {
 	Subject        string `json:"subject,omitempty"`
@@ -250,13 +250,14 @@ const (
 	BillingTransactions = "billing_transactions"
 )
 
-// CallerIn carries the identity the door already validated: who is asking, what
-// they are called, and what standing they hold in the org.
+// CallerIn carries the identity the endpoint already validated: who is asking,
+// what they are called, and what standing they hold in the org.
 //
 // It is not a tenant claim and cannot become one — there is no org field, and
 // the subject names a wallet inside the org the caller's own principal pinned.
 // It travels because commerce cannot resolve it: the roster is IAM's, the
-// request is the door's, and a callee that guessed would be inventing a member.
+// request is the endpoint's, and a callee that guessed would be inventing a
+// member.
 type CallerIn struct {
 	Subject string `json:"subject,omitempty"`
 	Email   string `json:"email,omitempty"`
@@ -297,8 +298,8 @@ type BillingAccount struct {
 }
 
 // Accounts is that list. It is a wrapper because a bare slice cannot cross this
-// plane as a root value, and the door unwraps it back to the array its wire has
-// always been.
+// plane as a root value, and the endpoint unwraps it back to the array its wire
+// has always been.
 type Accounts struct {
 	Rows []BillingAccount `json:"rows"`
 }
@@ -415,7 +416,7 @@ type CreditGrant struct {
 }
 
 // CreditGrants is that list, with the count beside it — the envelope the grants
-// page reads, carried whole rather than rebuilt at the door.
+// page reads, carried whole rather than rebuilt at the endpoint.
 type CreditGrants struct {
 	Rows  []CreditGrant `json:"grants"`
 	Count int           `json:"count"`
@@ -456,7 +457,7 @@ type CreditTotal struct {
 // reporting the loss. The published shape is keyed by tag, though, and changing
 // it to an array would change every reader. So the slice is the transport and
 // MarshalJSON is the renderer — written once, here, where both ends compile
-// against it, rather than once per door.
+// against it, rather than once per endpoint.
 type CreditBreakdown struct {
 	UserID string      `json:"userId"`
 	Tags   []CreditTag `json:"-"`
@@ -532,7 +533,7 @@ type Alerts struct {
 }
 
 // AlertSpec is a new cap. There is no subject field: the wallet a cap binds is
-// the caller's own, resolved at the door.
+// the caller's own, resolved at the endpoint.
 type AlertSpec struct {
 	Subject      string `json:"subject,omitempty"`
 	Title        string `json:"title"`
@@ -575,8 +576,8 @@ type Dropped struct {
 
 // CapIn asks whether one proposed spend fits inside the org's caps.
 //
-// ProjectValidated says whether the project axis was ESTABLISHED by the door
-// rather than merely claimed. It travels because only the door knows: a
+// ProjectValidated says whether the project axis was ESTABLISHED by the endpoint
+// rather than merely claimed. It travels because only the endpoint knows: a
 // project-scoped enforce row whose axis is unvalidated must not block, and a
 // callee that assumed validation would turn an unproven claim into a refusal.
 type CapIn struct {
@@ -760,12 +761,12 @@ type TierBalance struct {
 
 // TierIn asks for one subject's tier.
 //
-// Tier is the DOOR'S minted override and is empty in the ordinary case, where
-// the answer is derived from the subject's own subscriptions. It is a field here
-// rather than something this side reads because naming a tier is a MINT: the
-// header and the query string that carry one are request facts, and only a
-// caller entitled to mint may have one honoured — a decision the door makes,
-// holding the credential, and states as a value.
+// Tier is the ENDPOINT'S minted override and is empty in the ordinary case,
+// where the answer is derived from the subject's own subscriptions. It is a
+// field here rather than something this side reads because naming a tier is a
+// MINT: the header and the query string that carry one are request facts, and
+// only a caller entitled to mint may have one honoured — a decision the endpoint
+// makes, holding the credential, and states as a value.
 type TierIn struct {
 	Subject string `json:"subject"`
 	Tier    string `json:"tier,omitempty"`
@@ -862,7 +863,8 @@ const (
 	BillingPlans = "billing_plans"
 )
 
-// Rendered is a document the store produced and the door serves without reading.
+// Rendered is a document the store produced and the endpoint serves without
+// reading.
 //
 // It exists for the two families whose wire is a deep tree of the STORE'S OWN
 // models — a saved payment method carries five kinds of processor detail plus a
@@ -871,15 +873,15 @@ const (
 // something else. Carrying the rendered bytes is byte-exact by construction,
 // which is the property a hand-kept mirror can only approximate.
 //
-// It is the same distinction the money door already draws between its typed
+// It is the same distinction the money endpoint already draws between its typed
 // ledger read and its raw balance read, and it is deliberately narrow: a value
-// the door DECIDES on is typed, and only a document it forwards is bytes.
+// the endpoint DECIDES on is typed, and only a document it forwards is bytes.
 type Rendered struct {
 	Body []byte `json:"body"`
 	// Created reports that the act made a NEW row rather than answering with one
 	// that already existed. It rides here because only the store can tell the two
 	// apart — saving a card already on file answers with the row that holds it —
-	// and the door has to know which happened to answer 201 or 200. Absent on a
+	// and the endpoint has to know which happened to answer 201 or 200. Absent on a
 	// read, where nothing was created and the zero value is the truth.
 	Created bool `json:"created,omitempty"`
 }
@@ -892,10 +894,10 @@ type MethodsIn struct {
 
 // MethodSaveIn saves a payment method for a subject.
 //
-// Email is the caller's own address, resolved at the door from its credential:
-// it names the processor's customer profile, and the store must never read an
-// identity it was not handed. Body is the method to save, exactly as the caller
-// sent it, so the vaulting path sees what the browser produced.
+// Email is the caller's own address, resolved at the endpoint from its
+// credential: it names the processor's customer profile, and the store must
+// never read an identity it was not handed. Body is the method to save, exactly
+// as the caller sent it, so the vaulting path sees what the browser produced.
 type MethodSaveIn struct {
 	Subject string `json:"subject"`
 	Email   string `json:"email,omitempty"`
@@ -905,7 +907,7 @@ type MethodSaveIn struct {
 // MethodRef names one saved method to remove.
 //
 // Privileged marks the service or admin caller that may act on any subject
-// inside the org. It is the DOOR'S determination and travels as one, because
+// inside the org. It is the ENDPOINT'S determination and travels as one, because
 // authority decided twice is authority that eventually disagrees with itself.
 type MethodRef struct {
 	ID         string `json:"id"`
@@ -940,8 +942,8 @@ const (
 type SubscriptionRef struct {
 	ID string `json:"id"`
 	// AtPeriodEnd cancels at the end of the paid period rather than at once. It
-	// defaults TRUE on the door, because a customer who cancels has already paid
-	// for the period they are in.
+	// defaults TRUE on the endpoint, because a customer who cancels has already
+	// paid for the period they are in.
 	AtPeriodEnd bool `json:"atPeriodEnd,omitempty"`
 }
 
@@ -1006,15 +1008,15 @@ type Subscription struct {
 	EndedAt    string `json:"endedAt,omitempty"`
 }
 
-// ---- the card doors: top up a wallet, or buy a plan --------------------------
+// ---- the card endpoints: top up a wallet, or buy a plan ----------------------
 //
 // All three MOVE MONEY, so all three carry the same two properties. The SUBJECT
-// is resolved at the door from the caller's own credential and is a field here
-// only so the store is never asked to re-derive an identity nobody proved. And
-// none of them carries an AMOUNT the caller chose for a plan: a subscription is
-// priced from the catalog, so there is no field an underpayment could be written
-// in — it is a request that cannot be expressed rather than a check that can be
-// forgotten.
+// is resolved at the endpoint from the caller's own credential and is a field
+// here only so the store is never asked to re-derive an identity nobody proved.
+// And none of them carries an AMOUNT the caller chose for a plan: a subscription
+// is priced from the catalog, so there is no field an underpayment could be
+// written in — it is a request that cannot be expressed rather than a check that
+// can be forgotten.
 
 const (
 	BillingSubscriptions = "billing_subscriptions"
@@ -1126,10 +1128,10 @@ type Sale struct {
 // Sold is what a sale answered with, and it keeps the two shapes APART: a fresh
 // receipt, or the sealed body of an identical earlier sale replayed verbatim.
 //
-// Exactly one field is ever set, and the door owes a different status for each —
-// 201 for the first, 200 for the second. A retry that got 201 back would read as
-// a second subscription having been opened. Replayed is RAW so the retry gets
-// the bytes the first answer was rather than a second rendering of them.
+// Exactly one field is ever set, and the endpoint owes a different status for
+// each — 201 for the first, 200 for the second. A retry that got 201 back would
+// read as a second subscription having been opened. Replayed is RAW so the retry
+// gets the bytes the first answer was rather than a second rendering of them.
 type Sold struct {
 	Sale     *Sale  `json:"sale,omitempty"`
 	Replayed []byte `json:"replayed,omitempty"`

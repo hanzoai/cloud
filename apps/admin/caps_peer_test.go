@@ -16,7 +16,7 @@ import (
 // capsPeer serves the spend-cap ops as app "commerce" on this process's plane,
 // recording the org each call was answered FOR.
 //
-// It replaces an httptest stub of commerce's HTTP door. That door belonged to a
+// It replaces an httptest stub of commerce's HTTP endpoint. That endpoint belonged to a
 // standalone commerce there is no longer any of — /v1/billing is billing's
 // address and the caps are reached BY NAME — and a test that keeps stubbing it
 // proves the reader can parse a shape nothing serves.
@@ -25,7 +25,7 @@ import (
 // tenancy rule rather than relaxing it: the org rides the CALLER, the alert
 // inputs cannot name one, and an org-less call is refused here exactly as
 // commerce refuses it. A fixture that admitted one would let a test pass through
-// a door production closes.
+// an endpoint production closes.
 type capsPeer struct {
 	mu  sync.Mutex
 	org string

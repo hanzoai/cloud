@@ -146,7 +146,7 @@ func init() {
 		Example: json.RawMessage(`{"structure":"c-corp","jurisdiction":"DE","name":"Acme Inc."}`),
 	})
 	zip.Describe("POST /v1/company/advance", zip.Doc{
-		Description: "Advance runs the ONE guarded transition of the formation machine. It is the\nonly door between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted.",
+		Description: "Advance runs the ONE guarded transition of the formation machine. It is the\nonly endpoint between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
 			"Filing.note":                   "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",

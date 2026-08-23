@@ -45,9 +45,9 @@ const DefaultModel = "enso-flash"
 // difference is measured rather than assumed.
 //
 // DefaultModel serves one-shot text: a narration, a translation, a summary. The
-// chat assistant is a TOOL-DRIVING agent — it is offered the fleet's whole door,
-// picks an op, reads the result and answers from it. Those are different jobs, and
-// the tiers do not rank the same on them.
+// chat assistant is a TOOL-DRIVING agent — it is offered the fleet's whole MCP
+// server, picks an op, reads the result and answers from it. Those are different
+// jobs, and the tiers do not rank the same on them.
 //
 // Measured against the live enso service, paired and interleaved so upstream load
 // drift cannot flatter either side (n=42 full turns, the real assistant

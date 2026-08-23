@@ -3,10 +3,10 @@ package auto
 // tool.go is the mapping between a connector ACTION and the ONE tool plane: the
 // name a tool is known by, and the JSON Schema its arguments have.
 //
-// There is no MCP door here. Every connector action is published into the unified
+// There is no MCP server here. Every connector action is published into the unified
 // registry by connectorToolProvider (automations.go's tools.Register), which is
 // where discovery (GET /v1/tools) and dispatch (POST /v1/tools/call) read it — and
-// through that registry it reaches the fleet's ONE agent door. A second JSON-RPC
+// through that registry it reaches the fleet's ONE agent MCP server. A second JSON-RPC
 // envelope at /v1/auto/mcp used to serve the same catalogue from the same
 // registry with its own schema derivation; it was a duplicate projection of one
 // value, so it is gone rather than dark.

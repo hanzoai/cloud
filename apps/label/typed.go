@@ -128,7 +128,7 @@ const (
 	instantMax = 64
 )
 
-// THE BYTE BOUND OF EVERY DOOR, WHICH IS WHAT THE COUNTS ABOVE ARE WORTH.
+// THE BYTE BOUND OF EVERY ENDPOINT, WHICH IS WHAT THE COUNTS ABOVE ARE WORTH.
 //
 // A bound on COUNT over caller-sized values is not a bound. Every ceiling below
 // is asked at the first statement of the op, before the value reaches a dedupe
@@ -476,7 +476,7 @@ type riskLabelRecord struct {
 	// a case id, a decision id. At most 512 bytes, required at the write, and opaque
 	// to this plane — stored and returned verbatim, never resolved. It is what an
 	// adverse action is defended with, which is why an assertion carrying none is
-	// refused at the door.
+	// refused at the endpoint.
 	Evidence string `json:"evidence"`
 	// By is the identity that asserted, stamped server-side at the write.
 	By string `json:"by"`
@@ -520,7 +520,7 @@ func (o ops) labels(ctx context.Context, in *riskLabelsIn) (*riskLabelsOut, erro
 		return nil, zip.Errorf(http.StatusBadRequest, "to: %v", err)
 	}
 	// EVERY NARROWING TERM IS ADMITTED BEFORE IT IS BOUND, through the same
-	// functions the write door asks. A filter is caller-sized and it becomes a
+	// functions the write endpoint asks. A filter is caller-sized and it becomes a
 	// bound parameter against a single-writer file, so an unbounded one is a
 	// megabyte in a statement for a value that could not be in the store; and a
 	// filter outside a closed vocabulary can only ever match zero rows, so
@@ -746,7 +746,7 @@ func (o ops) resolve(ctx context.Context, in *riskResolveIn) (*riskResolveOut, e
 	// the store read would return that event's assertions once per naming, the
 	// resolution would list the winner as its own conflict, the count checked
 	// against maxResolveRead would be inflated, and a materialiser would get
-	// duplicate training rows. The dedupe is here, at the door, on the same key
+	// duplicate training rows. The dedupe is here, at the endpoint, on the same key
 	// the grouping uses, so nothing below has to defend against it.
 	want := make([]Fact, 0, len(in.Subjects))
 	named := make(map[string]struct{}, len(in.Subjects))
@@ -759,7 +759,7 @@ func (o ops) resolve(ctx context.Context, in *riskResolveIn) (*riskResolveOut, e
 		if err != nil {
 			return nil, zip.Errorf(http.StatusBadRequest, "subjects[%d].%v", i, err)
 		}
-		// The CEILING, at the door and before the value is amplified. Without it
+		// The CEILING, at the endpoint and before the value is amplified. Without it
 		// maxResolve bounds the events and NOTHING bounds the bytes: each subject
 		// is copied into a dedupe key, a grouping key and a bound parameter, so
 		// 500 × whatever the edge let through is what one request could make a
@@ -1091,7 +1091,7 @@ type riskVocabularyIn struct{}
 // riskLabelVocabulary publishes the closed sets and the precedence rule.
 type riskLabelVocabulary struct {
 	// Kinds, Dispositions and Sources are the closed vocabularies. A value
-	// outside them is refused at the door.
+	// outside them is refused at the endpoint.
 	Kinds []string `json:"kinds"`
 	// Dispositions is the closed set a write's `disposition` must be drawn from,
 	// published in full so a caller can validate a batch before filing it instead of

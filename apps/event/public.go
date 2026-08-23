@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // public.go — the ANONYMOUS lane. EVERY credential-less write in this package lands
-// here, whichever door it arrived at.
+// here, whichever endpoint it arrived at.
 //
 // A logged-out visitor on a marketing surface, and a visitor on a customer's published
 // site, carry no bearer and no key, so eventTenant resolves nothing. This file is the
@@ -28,15 +28,15 @@
 // The policy is in two pieces and no more: the request-scoped gates (publicIngest)
 // and the pure decision (admitPublic).
 //
-//   - CAPABILITY is decided by TRUST LEVEL, not by door. There is exactly one caller
+//   - CAPABILITY is decided by TRUST LEVEL, not by endpoint. There is exactly one caller
 //     shape for this lane and no way to reach the write core at full capability
 //     without a credential: the functions that used to take an org and write
 //     unprojected (ingestBody / eventWithOrg / captureWithOrg / insightsWithOrg) are
-//     gone, so a door that resolved a tenant from a request Host has nowhere else to
+//     gone, so an endpoint that resolved a tenant from a request Host has nowhere else to
 //     go. That is the isolation proof — not a check that can be bypassed, but an
 //     argument list that cannot express the alternative.
-//   - TENANT is the DOOR's, and admitPublic cannot influence it: the projection takes
-//     no *zip.Ctx and no org at all, so no header, query, or body field reaches
+//   - TENANT is the ENDPOINT's, and admitPublic cannot influence it: the projection
+//     takes no *zip.Ctx and no org at all, so no header, query, or body field reaches
 //     attribution. The org is the reduced principal's own, resolved from the
 //     credential it presented — a caller that proves no org reaches no lane at all.
 //   - WHAT MAY BE STORED is ONE rule: THE SERVER NAMES THE ROW. An anonymous event is
@@ -571,8 +571,9 @@ func publicSubject(id string) string {
 // the decoded batch: it returns the events that may be stored and how many were
 // dropped. It decides WHAT, never WHERE — it takes no *zip.Ctx AND no org, so neither
 // a request field nor a caller argument can reach attribution through it. Where an
-// a projected row lands is the DOOR's decision (publicIngest's org), and the door passes
-// only a server-side value: the org the presented credential resolved to.
+// a projected row lands is the ENDPOINT's decision (publicIngest's org), and the
+// endpoint passes only a server-side value: the org the presented credential
+// resolved to.
 //
 // Each admitted event is REBUILT from the allowlisted fields rather than edited, so a
 // field this function does not name cannot reach the row. Every caller-controlled
@@ -636,9 +637,9 @@ func attribute(evs []CaptureEvent, subject string) []CaptureEvent {
 	return evs
 }
 
-// publicIngest answers a CREDENTIAL-LESS POST on any door: the request-scoped gates
+// publicIngest answers a CREDENTIAL-LESS POST on any endpoint: the request-scoped gates
 // (capture flag, rate, size, opt-out) then the pure decision (admitPublic) then the ONE
-// write core. dec is the door's wire; source stays the door's origin tag.
+// write core. dec is the endpoint's wire; source stays the endpoint's origin tag.
 //
 // org is where this lane's PROJECTED rows land, and it is the caller's ONLY influence
 // over the outcome. It is always a server-side value — the org the reduced principal's
@@ -671,7 +672,7 @@ func publicIngest(c *zip.Ctx, dec decode, org, source string, subject ...string)
 	if optedOut(c) {
 		return c.JSON(http.StatusOK, CaptureResult{Dropped: len(evs)})
 	}
-	// Rejoin the ONE pipeline: admission decided the projection, the door decided the
+	// Rejoin the ONE pipeline: admission decided the projection, the endpoint decided the
 	// tenant, and ingestDecoded (event.go) does the rest exactly as it does for a bearer.
 	//
 	// The projection's refusals travel WITH their reason (refusal), because this is the

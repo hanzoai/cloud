@@ -6,7 +6,7 @@
 // registers NO routes and NO ops — it is the in-process implementation of
 // cloud's types.FinanceClient (package alias finance.Client, mirroring commerce.Client),
 // the ONE money client the ai prepaid gate, the admin grant, commerce's credit mint and
-// the edge meter all bill through; billing is the customer-facing door onto it.
+// the edge meter all bill through; billing is the customer-facing endpoint onto it.
 //
 // ONE LIGHTWEIGHT FILE PER ORG. Each org's books are an isolated Hanzo Base (SQLite)
 // file at <dataDir>/orgs/<org>/finance.db (a separate <...>/finance-test.db for sandbox
@@ -198,7 +198,7 @@ func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency stri
 // never reached its own read — the write it lost to a concurrent poster of the same Ref,
 // or the request context that died between the charge and the post. Both leave the same
 // state: the ref is credited and this caller was handed an error for it, which at a
-// credit door is a 500 on a card that cleared. So a failed transaction asks the only
+// credit endpoint is a 500 on a card that cleared. So a failed transaction asks the only
 // question it has left — is the money there under this ref? — and a yes is the same
 // answer the replay branch gives ([creditedUnder]).
 func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (string, error) {
@@ -277,7 +277,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 // EXPORTED for the reason [ErrRefReused] is, and it is the deposit twin of exactly that:
 // a conflict is the ONE deposit failure no retry can clear, so a caller that renders it
 // as a transient billing fault sends a customer round a loop that cannot end. The credit
-// door tells the two apart to say whether its refusal is terminal (commerce settle.go),
+// endpoint tells the two apart to say whether its refusal is terminal (commerce settle.go),
 // and the backfill reads its own fixed ref back through it (migrate.go). One error, one
 // meaning, both sides of the money plane.
 var ErrRefTaken = errors.New("already used for a different (subject,amount)")

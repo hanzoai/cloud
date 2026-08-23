@@ -39,12 +39,12 @@ import (
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
 // and the MCP tool list — Go drops comments at compile time. Run by `make describe`.
 //
-// Without it these ops reached the fleet door NAMED AND UNDESCRIBED: an agent was
-// told `class` is a string and not that the strings are exec, dev and desktop,
-// told `project` exists and not that a dev sandbox has no disk without one, told
-// `id` exists and not that it is how you get back the computer you already hold.
-// An op you have to guess the arguments of is one you use wrong on the first try,
-// which for a coding run is a lease spent on a mistake.
+// Without it these ops reached the fleet MCP server NAMED AND UNDESCRIBED: an
+// agent was told `class` is a string and not that the strings are exec, dev and
+// desktop, told `project` exists and not that a dev sandbox has no disk without
+// one, told `id` exists and not that it is how you get back the computer you
+// already hold. An op you have to guess the arguments of is one you use wrong on
+// the first try, which for a coding run is a lease spent on a mistake.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
@@ -123,16 +123,16 @@ func planeAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, erro
 // live resolves the caller's org and the mounted service together, because every
 // op below needs both and neither is worth a second spelling.
 //
-// THESE OPS ARE SERVED ON TWO DOORS and the tenant rule has to hold on both.
+// THESE OPS ARE SERVED ON TWO ENDPOINTS and the tenant rule has to hold on both.
 // Mount registers each one a second time on the public app (sandbox.go), which
 // is what lets an agent name them at all — and a handler written for the plane
 // alone can carry an argument that only holds there. cloud.Who is exactly that:
-// off a request it reads the caller a door stated in-process, on one it reads
+// off a request it reads the caller the plane stated in-process, on one it reads
 // the headers, and a non-empty check cannot tell those apart.
 //
 // cloud.Tenant is the rule that can: it is principal.Acting — from outside, the
 // validated principal and nothing else — plus the one case Acting cannot admit,
-// a call with no request behind it, where the org is what a door stated
+// a call with no request behind it, where the org is what the plane stated
 // in-process and nothing outside can write. What this op does with the answer
 // — open the org's store, lease a pod in its namespace — is the same either way,
 // so the tenant it acts on must be, too.
@@ -165,15 +165,15 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The same fact the HTTP door reads off the principal, read here off the caller
-	// the plane already carries — cloud.Who is how this door spells identity, and
-	// zip.Caller.Admin is the same attestation X-User-IsAdmin carries. One rule,
-	// stated once in imageFor; each door names the caller in its own vocabulary.
-	// NO BEARER on this door. A plane call arrives under a capability envelope and
-	// carries an ATTESTED caller, not the caller's own token — there is nothing here
-	// to exchange, and substituting a credential of ours would put an identity in
-	// the pod that nobody presented. So a plane lease starts without a session, and
-	// the empty string says so rather than a flag saying it twice.
+	// The same fact the HTTP endpoint reads off the principal, read here off the
+	// caller the plane already carries — cloud.Who is how this endpoint spells
+	// identity, and zip.Caller.Admin is the same attestation X-User-IsAdmin carries.
+	// One rule, stated once in imageFor; each endpoint names the caller in its own
+	// vocabulary. NO BEARER on this endpoint. A plane call arrives under a capability
+	// envelope and carries an ATTESTED caller, not the caller's own token — there is
+	// nothing here to exchange, and substituting a credential of ours would put an
+	// identity in the pod that nobody presented. So a plane lease starts without a
+	// session, and the empty string says so rather than a flag saying it twice.
 	m, err := Lease(s, ctx, org, principal.LedgerFrom(ctx), cloud.Who(ctx).Admin, "", Spec{ID: in.ID, Class: in.Class,
 		Project: in.Project, Runtime: in.Runtime, TTLSec: in.TTLSec})
 	if err != nil {

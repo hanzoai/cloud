@@ -1498,7 +1498,7 @@ func (k *k8sClient) waitForJob(ctx context.Context, jobName string, deadline tim
 
 // admitBuild refuses a build when the org already holds as many as it may.
 //
-// Every door that starts a build asks here — the two container lanes and the
+// Every endpoint that starts a build asks here — the two container lanes and the
 // artifact lane — so the ceiling is one rule and cannot mean different things
 // depending on which one a caller reached.
 //

@@ -5,8 +5,8 @@ package social
 // and the generated SDKs. An untyped route contributes a path and a method and
 // nothing else, so before this file every one of these thirteen operations
 // published an operationId and no schema at all: an SDK offered `post_v1_social_posts`
-// with nowhere to put the post, and an agent asking the fleet door what it could do
-// was never told an org's channels could be published to.
+// with nowhere to put the post, and an agent asking the fleet MCP server what it
+// could do was never told an org's channels could be published to.
 //
 // WHAT IS TYPED: all thirteen. Nothing in this surface is wire-bound — every
 // operation answers a value its handler assembled, which is what HIP-1153 §"The

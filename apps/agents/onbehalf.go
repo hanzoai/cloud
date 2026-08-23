@@ -80,9 +80,9 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 		// org that had just linked successfully.
 		//
 		// The conventional ref therefore resolves to a BUILT-IN default rather than
-		// requiring an org to create a row before the front door works. It is not
-		// persisted: writing a row here would fork the definition per org and make
-		// a later product change unable to reach the orgs that had already been
+		// requiring an org to create a row before the default assistant works. It is
+		// not persisted: writing a row here would fork the definition per org and
+		// make a later product change unable to reach the orgs that had already been
 		// seeded. A row the org DOES create wins, because Resolve is tried first.
 		if def, ok := builtinAgent(org, ref, cloud.ChatModel); ok {
 			a = def
@@ -131,8 +131,8 @@ func runOnBehalfModel(s *cloud.Service[state], ctx context.Context, org, userSub
 // A person who wants a different tier pins one in the App Home menu, and that pin
 // still wins below.
 //
-// Tools is the fleet's whole door (ToolsAll), not empty: the tool-calling loop
-// decides what may be OFFERED, but an agent that declares nothing is offered
+// Tools is the fleet's whole tool surface (ToolsAll), not empty: the tool-calling
+// loop decides what may be OFFERED, but an agent that declares nothing is offered
 // nothing, which is how the default assistant came to report it could not reach a
 // cloud that was one socket away.
 func builtinAgent(org, ref, model string) (Agent, bool) {
@@ -148,10 +148,10 @@ func builtinAgent(org, ref, model string) (Agent, bool) {
 		Instructions: builtinAgentInstructions,
 		Description:  "The default Hanzo assistant that answers in chat.",
 		Status:       "ready", ExecutionMode: ModeOneShot,
-		// The default assistant is offered the fleet's whole door. Its instructions
-		// tell it the tools exist and how to call them; without this it was handed
-		// an empty offer and correctly reported it could not reach the cloud, while
-		// the door served 88 tools one socket away.
+		// The default assistant is offered the fleet's whole tool surface. Its
+		// instructions tell it the tools exist and how to call them; without this it
+		// was handed an empty offer and correctly reported it could not reach the
+		// cloud, while the MCP server served 88 tools one socket away.
 		Tools:     []string{ToolsAll},
 		CreatedAt: now, UpdatedAt: now,
 	}, true
@@ -228,7 +228,7 @@ const builtinAgentInstructions = "" +
 	// its own. Scoping tools to "THIS organization's live cloud" is true and was
 	// read as exhaustive: asked the weather, the model reasoned that none of its
 	// tools were for that and declined — while holding `websearch` and `crawl`.
-	// A door that can answer and does not is worse than no door, so the rule is
+	// A tool that can answer and does not is worse than no tool, so the rule is
 	// stated as a rule: search, then answer.
 	"Your reach is not limited to this cloud. `websearch` searches the open web and " +
 	"`crawl` fetches a page. For anything current or factual you do not know — " +

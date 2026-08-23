@@ -105,7 +105,7 @@ func (c *Client) Plan(ctx context.Context, subject string) (Plan, error) {
 	// out of that org's own namespace, so every row already belongs to the subject.
 	//
 	// No UserID filter, deliberately. The HTTP call this replaces sent `?user=`,
-	// and the door reads `?userId=` — so the filter never applied and this has
+	// and the endpoint reads `?userId=` — so the filter never applied and this has
 	// always folded over the org's whole list. Passing one now would silently
 	// narrow a number the cockpit has been showing for as long as it has shown it.
 	reply, err := commercepeer.FinanceSubs(cloud.For(ctx, subject), &plane.SubsIn{})

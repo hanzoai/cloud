@@ -16,7 +16,7 @@ package kms
 // typed answer is byte-identical to the map it replaces, not merely equal as
 // JSON. typed_wire_test.go pins that case by case.
 //
-// ONE RULE AT THE DOOR. Reading a secret admits a member and writing one
+// ONE RULE ON ADMISSION. Reading a secret admits a member and writing one
 // requires admin authority over the org; that split is the estate's, not this
 // subsystem's invention (cloud.Scope). It is decided in ONE function, admits(),
 // which the typed ops and the two untyped ones both ask, so a typed op and a raw
@@ -46,7 +46,7 @@ import (
 // — also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// ---- the door --------------------------------------------------------------
+// ---- admission -------------------------------------------------------------
 
 // admits is the whole admission every secret operation passes, over the three
 // facts it turns on and in the order it has always decided them: the authority a
@@ -77,7 +77,7 @@ func admits(s *cloud.Service[state], need cloud.Scope, a cloud.Authority, org st
 	return nil
 }
 
-// admit is the typed ops' reading of that one door, and the only place this
+// admit is the typed ops' reading of that one rule, and the only place this
 // package reaches for the raw request.
 //
 // It reaches for it because ADMIN-NESS is not the org: cloud.Scope.Admits turns
@@ -85,7 +85,7 @@ func admits(s *cloud.Service[state], need cloud.Scope, a cloud.Authority, org st
 // headers and principal.OrgFrom does not carry, and neither may become an In
 // field — a caller that could name itself an admin would be one. The ORG still
 // comes from principal.OrgFrom, the value cloud.Bridge parked, so the tenant key
-// and the authority arrive by their own proper doors.
+// and the authority arrive by their own proper paths.
 //
 // It fails CLOSED off the HTTP path: an in-process CLI invoke has no request, so
 // there is no principal to be an admin of anything, and the op refuses.
@@ -391,7 +391,7 @@ func (o ops) putSecret(ctx context.Context, in *kmsPut) (*kmsStored, error) {
 // It is deliberately public and unauthenticated, because it IS the credential
 // exchange and runs before any principal exists. That makes it the one route in
 // this subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather
-// than on any caller-supplied header, and body-capped at the same door.
+// than on any caller-supplied header, and body-capped in the same place.
 //
 // The submitted secret is never logged and never echoed, and failures collapse
 // to one clean status with no upstream detail: 401 when the credential does not
@@ -420,13 +420,13 @@ func (o ops) login(ctx context.Context, in *kmsLogin) (*kmsToken, error) {
 	return &kmsToken{AccessToken: tok, ExpiresIn: expiresIn, TokenType: "Bearer"}, nil
 }
 
-// cap refuses an oversized body at the door, before anything reads it.
+// cap refuses an oversized body on arrival, before anything reads it.
 //
 // It lives beside the rate limiter for the same reason the limiter lives there:
-// both are what this PUBLIC, pre-identity door accepts, decided before any
+// both are what this PUBLIC, pre-identity route accepts, decided before any
 // principal exists. A typed op cannot make this decision — it is handed a
 // decoded value, and by then a multi-megabyte body has already been parsed — so
-// the cap is a property of the door rather than of the operation, which is what
+// the cap is a property of the route rather than of the operation, which is what
 // it always was.
 func capBody(max int) zip.Handler {
 	return func(c *zip.Ctx) error {

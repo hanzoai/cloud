@@ -219,7 +219,7 @@ func TestRun_OverThePlane_CompletesAcrossProcesses(t *testing.T) {
 		t.Fatalf("run must complete over the plane: %+v", res)
 	}
 	if res.PR.Identifier != "API-7" {
-		t.Fatalf("the PR must be filed through todo's door, got %q", res.PR.Identifier)
+		t.Fatalf("the PR must be filed through todo's endpoint, got %q", res.PR.Identifier)
 	}
 	// ONE client, both backends: the row landed on the board AND git answered where
 	// the proposal is read. A run whose result carries no address gives a person

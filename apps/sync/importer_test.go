@@ -679,13 +679,13 @@ func TestACredentialGoesOnlyToASourceWeMintFor(t *testing.T) {
 	if _, err := upstream("https://evil.example/a/b.git", ""); err != nil {
 		t.Errorf("an anonymous fetch needs no allowlist: %v", err)
 	}
-	// The plane door says the same thing with a status, so a caller learns it
+	// The plane endpoint says the same thing with a status, so a caller learns it
 	// asked for something it may not have.
 	if err := sourceOK("https://evil.example/a/b.git", "installation-token"); err == nil {
-		t.Error("the plane door accepted a credential for a host the advance refuses")
+		t.Error("the plane endpoint accepted a credential for a host the advance refuses")
 	}
 	if err := sourceOK("https://github.com/a/b.git", "installation-token"); err != nil {
-		t.Errorf("the plane door refused a source we mint for: %v", err)
+		t.Errorf("the plane endpoint refused a source we mint for: %v", err)
 	}
 }
 
@@ -720,8 +720,8 @@ func TestADeletedRefDoesNotResolveADivergence(t *testing.T) {
 	}
 }
 
-// TestOneSpellingOfAnOrg: an org is folded at the door, so a caller that spells
-// it differently reaches the same store and the same namespace.
+// TestOneSpellingOfAnOrg: an org is folded at the entry point, so a caller that
+// spells it differently reaches the same store and the same namespace.
 //
 // [forge.Owner] folds on its own, so a variant spelling already reached the same
 // forge namespace — while the store name it took was a different SQLite file.

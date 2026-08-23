@@ -57,7 +57,7 @@ const (
 //
 // It is read from the REQUEST and never from a body field: a caller-supplied
 // payer is a caller billing somebody else. Empty off the HTTP path, which is the
-// unbilled default — and the door has already refused anything without a
+// unbilled default — and the endpoint has already refused anything without a
 // validated principal before this runs.
 func payer(c *zip.Ctx, org string) string {
 	if subject := principal.Ledger(c); subject != "" {

@@ -45,7 +45,7 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // storeFor is the ONE way this package reaches a store: it names the database
-// through cloud.OrgNamespace — the single door a validated org walks through —
+// through cloud.OrgNamespace — the single place a validated org becomes a name —
 // and asks the registry for that name. Nothing else here resolves a store, so
 // "which file does this request touch" has one answer from one input.
 //

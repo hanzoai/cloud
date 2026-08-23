@@ -52,7 +52,7 @@ func TestBuildTags(t *testing.T) {
 func TestTagsKeyHost(t *testing.T) {
 	// A real request through the real route, because that is the only way to hold
 	// a Ctx — and it is the better subject anyway: it exercises the address the
-	// door is registered at rather than a hand-made request the router never saw.
+	// handler is registered at rather than a hand-made request the router never saw.
 	// The Ctx is request-scoped and released when the handler returns, so what
 	// travels back out is the ANSWER, not the context it was read from.
 	mk := func(u, auth, origin, ref string) (string, string) {

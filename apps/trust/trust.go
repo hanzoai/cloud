@@ -26,14 +26,15 @@
 //	__own()    is this tenant the one whose inventory is compiled in
 //	__audit(q) the platform's audit trail, ALREADY bound to this tenant
 //
-// TWO DOORS. /v1/trust/* is the caller's OWN centre, resolved from the validated
-// bearer. /v1/trust/published/:org is what a visitor with no credential reads,
-// and it is a different question, not a weaker check: a published trust centre
-// is a public document addressed by a public name, the way a site is addressed
-// by its slug. It answers only for an organization that has published, it never
-// carries a gated document's address, and it reaches no other route.
+// TWO ENDPOINTS. /v1/trust/* is the caller's OWN centre, resolved from the
+// validated bearer. /v1/trust/published/:org is what a visitor with no
+// credential reads, and it is a different question, not a weaker check: a
+// published trust centre is a public document addressed by a public name, the
+// way a site is addressed by its slug. It answers only for an organization that
+// has published, it never carries a gated document's address, and it reaches no
+// other route.
 //
-// NEITHER DOOR SERVES BYTES. A document is metadata here — title, kind, date,
+// NEITHER ENDPOINT SERVES BYTES. A document is metadata here — title, kind, date,
 // and whether it is released. The bytes and the grant belong to apps/dataroom,
 // which already does per-page view tracking; this surface says what exists and
 // what it takes to read it, which is the part a reviewer can check.
@@ -308,7 +309,7 @@ func routes(zapp *zip.App, s *cloud.Service[state]) {
 
 }
 
-// The published door renders `security: []`. A published trust centre is a
+// The published endpoint renders `security: []`. A published trust centre is a
 // public document, and requiring a bearer to read one would defeat the point of
 // publishing it. It reaches nothing else: the bundle refuses every other route
 // without the validated tenant, and this one refuses an organization that has

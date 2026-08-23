@@ -17,7 +17,7 @@ package compliance
 // location, is what decides.
 //
 // A verification is ORG-SCOPED with no admin gate, and it should be: proving who
-// your customer is, is the product. The gate is on the money, not on the door.
+// your customer is, is the product. The gate is on the money, not on the endpoint.
 
 import (
 	"context"

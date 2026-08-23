@@ -73,8 +73,8 @@ const (
 	// term in the recursive query's compound SELECT, and SQLite refuses the 500th
 	// with "too many terms in compound SELECT" (measured: 499 runs, 500 does
 	// not). Leaving the ceiling above that makes the store's internal limit the
-	// API's contract, surfacing as an engine error for a request the door should
-	// have named. 256 is under it with room for the query to grow a term.
+	// API's contract, surfacing as an engine error for a request the handler
+	// should have named. 256 is under it with room for the query to grow a term.
 	seedMax = 256
 )
 

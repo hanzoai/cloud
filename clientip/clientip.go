@@ -134,7 +134,7 @@ func TrustedProxy(addr string) bool {
 //
 // It is the ONE client-address read in this repo — the edge rate limiter, the
 // abuse sensor, the audit trail and every metered resource share it, so a
-// forgeable address cannot enter one of them by a side door.
+// forgeable address cannot enter one of them by another path.
 //
 // It reads EVERY X-Forwarded-For header line, not just the first. fasthttp keeps
 // repeated headers as separate lines, and a client that sends its own line before

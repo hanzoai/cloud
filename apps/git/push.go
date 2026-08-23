@@ -202,7 +202,7 @@ func corePush(s *cloud.Service[state], ctx context.Context, org, project string,
 		return "", "", fmt.Errorf("store commit: %w", err)
 	}
 
-	// THE REF POLICY, on the client-less door.
+	// THE REF POLICY, on the client-less endpoint.
 	//
 	// This is the write Red walked through when the policy guarded only
 	// receive-pack: one JSON POST, no git wire protocol, and a FAST-FORWARD CHILD
@@ -210,9 +210,9 @@ func corePush(s *cloud.Service[state], ctx context.Context, org, project string,
 	// because it is append-only and so trips no "the branch was rewritten"
 	// signal — the reviewer approved A and merges A+B.
 	//
-	// The command is stated in the same value the wire door parses out of
-	// pkt-lines, and judged by the same function, so the two doors cannot come to
-	// different answers about the same request. `before` is empty when the branch
+	// The command is stated in the same value the wire endpoint parses out of
+	// pkt-lines, and judged by the same function, so the two endpoints cannot come
+	// to different answers about the same request. `before` is empty when the branch
 	// is new, which is exactly what Creates() reads.
 	//
 	// It runs here, after the objects are written and before the ref moves,

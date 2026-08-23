@@ -37,7 +37,7 @@ package openapi
 //
 // A client has to be able to read the contract before it holds a credential, and
 // a list of operation names grants nothing. Every route named here stays
-// individually gated; reading the map does not open a door.
+// individually gated; reading the map grants no access to any of them.
 //
 // # The projection is TOTAL, and that is the design, not an omission
 //
@@ -109,7 +109,7 @@ func init() {
 			"may run is decided per request by the authorizer, on the decoded input, so a filtered "+
 			"list would be a second claim about permission that is free to be wrong.\n\n"+
 			"Rendered once and served as bytes thereafter, under a strong ETag.")
-	// The sentence above, as data. A door the prose calls unauthenticated and the
+	// The sentence above, as data. An endpoint the prose calls unauthenticated and the
 	// contract calls credentialed is one of the two lying to a generated client.
 	Open(CommandPath, http.MethodGet)
 }

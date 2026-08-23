@@ -72,7 +72,7 @@ func seed(ctx context.Context, store *Store) (int, error) {
 		if !known[e.Category] {
 			return 0, fmt.Errorf("seed taxon %q names category %q, which the seed does not define", e.ID, e.Category)
 		}
-		// The same two shapes the write door enforces. The seed is lifted from
+		// The same two shapes the write endpoint enforces. The seed is lifted from
 		// TypeScript by a parser, and a parser that fails to resolve a reference
 		// yields the expression text — a tile whose href reads `ext.api` and opens
 		// nothing. Refuse it here, where the row is named.

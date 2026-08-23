@@ -1026,7 +1026,7 @@ func columnLabels(status, priority string) ([]string, error) {
 // projectLifecycle refuses to create, rename or delete a board.
 //
 // A board IS a repository on the forge. Its lifecycle is a forge operation with
-// forge permissions, and offering a second door onto it here would mean this
+// forge permissions, and offering a second endpoint onto it here would mean this
 // surface's guard, not the forge's, decided who may make and destroy
 // repositories — a weaker guard on the same object.
 //

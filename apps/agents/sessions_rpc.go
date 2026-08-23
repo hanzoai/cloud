@@ -20,8 +20,8 @@ import (
 // to tear down kept running under the revoked account.
 //
 // The match travels instead, through the SAME StopSessions the co-resident call
-// uses — two doors, one teardown — so the actor scoping that bounds a revoke to
-// its own user's sessions holds identically across the boundary.
+// uses — two entry points, one teardown — so the actor scoping that bounds a revoke
+// to its own user's sessions holds identically across the boundary.
 
 // exposeSessions publishes the teardown and its count on the internal plane.
 // Mount calls it, beside the in-process client.

@@ -434,8 +434,8 @@ func run(t *testing.T, base, bearer, text string) string {
 
 // A POSITIONAL ARGUMENT ADDRESSES A RESOURCE, AND NOTHING ELSE. zip percent-
 // encodes it, but fasthttp's SetRequestURI decodes %2F and resolves "..", so
-// without a guard `platform apps-get ../../../v1/iam/users` arrives at the front
-// door as GET /v1/iam/users — the command that runs is not the command that was
+// without a guard `platform apps-get ../../../v1/iam/users` arrives at the edge
+// as GET /v1/iam/users — the command that runs is not the command that was
 // named, and the exact-naming rule that keeps mutations behind their own names
 // is void.
 //
@@ -472,7 +472,7 @@ func TestCommandRun_AnArgumentCannotRetargetThePath(t *testing.T) {
 		}
 	}
 	if len(seen) != 0 {
-		t.Fatalf("a refused argument still reached the front door: %v", seen)
+		t.Fatalf("a refused argument still reached the edge: %v", seen)
 	}
 
 	// An ordinary id still goes through, at the address the registry named.
@@ -480,11 +480,11 @@ func TestCommandRun_AnArgumentCannotRetargetThePath(t *testing.T) {
 		t.Fatalf("an ordinary id was refused: %v", err)
 	}
 	if len(seen) != 1 || seen[0] != "/v1/platform/apps/web-1.prod" {
-		t.Fatalf("front door saw %v", seen)
+		t.Fatalf("the edge saw %v", seen)
 	}
 }
 
-// THE ORG IS THE WORKSPACE'S, NOT THE CALLER'S HOME. The front door reads a
+// THE ORG IS THE WORKSPACE'S, NOT THE CALLER'S HOME. The edge reads a
 // selection from X-Org-Id and validates it against the token's signed membership
 // set; sending nothing means the caller's home org answers, so a person linked in
 // org A's workspace would run mutations in org B.
@@ -522,7 +522,7 @@ func bearerFor(t *testing.T, orgs ...string) string {
 }
 
 // A caller acts in the workspace's org only if the token says they belong to it.
-// The front door DISCARDS a selection it cannot find rather than refusing, so a
+// The edge DISCARDS a selection it cannot find rather than refusing, so a
 // non-member would otherwise run the command in their own org, silently.
 func TestActing(t *testing.T) {
 	cases := []struct {
@@ -545,7 +545,7 @@ func TestActing(t *testing.T) {
 	}
 }
 
-// The command reaches the front door as the caller: the method and path the
+// The command reaches the edge as the caller: the method and path the
 // registry names, the positional argument substituted into the path, and the
 // LINKED PERSON's bearer — never a service identity.
 func TestCommandRun(t *testing.T) {
@@ -559,10 +559,10 @@ func TestCommandRun(t *testing.T) {
 
 	reply := run(t, front.URL, "tok-1", "platform apps-get web")
 	if gotMethod != http.MethodGet || gotPath != "/v1/platform/apps/web" {
-		t.Fatalf("front door saw %s %s", gotMethod, gotPath)
+		t.Fatalf("the edge saw %s %s", gotMethod, gotPath)
 	}
 	if gotAuth != "Bearer tok-1" {
-		t.Fatalf("the caller's bearer did not reach the front door: %q", gotAuth)
+		t.Fatalf("the caller's bearer did not reach the edge: %q", gotAuth)
 	}
 	if !strings.HasPrefix(reply, "✓ ") || !strings.Contains(reply, "name: web") {
 		t.Fatalf("reply = %q", reply)
@@ -597,7 +597,7 @@ func TestCommandRun_BodyOnAPost(t *testing.T) {
 
 	reply := run(t, front.URL, "tok-1", `deploy sites-create --name "my site"`)
 	if gotMethod != http.MethodPost || gotBody != `{"name":"my site"}` {
-		t.Fatalf("front door saw %s %s", gotMethod, gotBody)
+		t.Fatalf("the edge saw %s %s", gotMethod, gotBody)
 	}
 	if !strings.Contains(reply, "id: site_1") {
 		t.Fatalf("reply = %q", reply)
@@ -634,7 +634,7 @@ func TestCommandRun_HelpInvokesNothing(t *testing.T) {
 
 	reply := run(t, front.URL, "tok-1", "platform apps-get --help")
 	if sent {
-		t.Fatal("a help request reached the front door")
+		t.Fatal("a help request reached the edge")
 	}
 	if !strings.Contains(reply, "GET /v1/platform/apps/:app") {
 		t.Fatalf("the reply does not carry the command's own address: %q", reply)
@@ -642,7 +642,7 @@ func TestCommandRun_HelpInvokesNothing(t *testing.T) {
 }
 
 // The turn's deadline is honoured where the pool slot is held: zip.Remote reads
-// the context only before dialling, so a front door that never answers must not
+// the context only before dialling, so an edge that never answers must not
 // pin a bridge slot for the life of the socket.
 func TestCommandRun_HonoursTheDeadline(t *testing.T) {
 	block := make(chan struct{})

@@ -1,6 +1,6 @@
 package cloud
 
-// payer_wallet_test.go — the two doors must name the SAME wallet, not merely the
+// payer_wallet_test.go — the two paths must name the SAME wallet, not merely the
 // same org.
 //
 // A ledger is an org's books; a wallet is an account inside them. For a tenant org
@@ -12,9 +12,9 @@ package cloud
 //
 // The signed billing_account claim is what distinguishes them, and it rides an
 // HTTP header. So any path that rebuilds a payer from something OTHER than the
-// request — a detached stream, an agent door — can silently drop it and answer one
-// wallet where the direct call answers another. That is not a rounding difference:
-// the gate reads one balance and the debit lands on the other.
+// request — a detached stream, an agent MCP server — can silently drop it and
+// answer one wallet where the direct call answers another. That is not a rounding
+// difference: the gate reads one balance and the debit lands on the other.
 
 import (
 	"context"
@@ -50,12 +50,12 @@ func wallets(t *testing.T, org, user, claim string) (direct, detached Payer) {
 }
 
 // A signed claim naming a person inside the caller's own org is the wallet, on
-// BOTH doors. This is the one the streamed answer used to get wrong.
+// BOTH paths. This is the one the streamed answer used to get wrong.
 func TestDetachKeepsTheClaimedWallet(t *testing.T) {
 	direct, detached := wallets(t, "acme", "bob", "person:acme/bob")
 
 	if direct.Wallet != "acme/bob" {
-		t.Fatalf("the direct door resolved %q, want %q — this test proves nothing if the "+
+		t.Fatalf("the direct path resolved %q, want %q — this test proves nothing if the "+
 			"claim is not being honoured on the path that always did", direct.Wallet, "acme/bob")
 	}
 	if detached.Wallet != direct.Wallet {
@@ -70,24 +70,24 @@ func TestDetachKeepsTheClaimedWallet(t *testing.T) {
 	}
 }
 
-// With no claim the legacy rule answers the org, and the two doors still agree —
+// With no claim the legacy rule answers the org, and the two paths still agree —
 // so the fix cannot be an accident of the claim being present.
 func TestDetachAgreesWithoutAClaim(t *testing.T) {
 	direct, detached := wallets(t, "acme", "bob", "")
 	if direct.Wallet == "" {
-		t.Fatal("no wallet resolved on the direct door")
+		t.Fatal("no wallet resolved on the direct path")
 	}
 	if detached.Wallet != direct.Wallet {
 		t.Fatalf("detached wallet = %q, direct = %q", detached.Wallet, direct.Wallet)
 	}
 }
 
-// A claim naming an account in ANOTHER org is ignored on both doors: a caller
+// A claim naming an account in ANOTHER org is ignored on both paths: a caller
 // cannot name a wallet outside the org the boundary proved they belong to.
 func TestDetachIgnoresACrossOrgClaim(t *testing.T) {
 	direct, detached := wallets(t, "acme", "bob", "person:evil/mallory")
 	if direct.Wallet == "evil/mallory" {
-		t.Fatal("a cross-org billing claim was honoured on the direct door")
+		t.Fatal("a cross-org billing claim was honoured on the direct path")
 	}
 	if detached.Wallet != direct.Wallet {
 		t.Fatalf("detached wallet = %q, direct = %q", detached.Wallet, direct.Wallet)

@@ -11,14 +11,14 @@ package commerce
 // kind, which is why "invoice a customer" was not a step an agent could take.
 //
 // These five ops close that. Each delegates to the SAME core commerce's own HTTP
-// handlers delegate to (invoice_core.go), so the lifecycle gains doors rather
+// handlers delegate to (invoice_core.go), so the lifecycle gains endpoints rather
 // than a second lifecycle — which matters most for collect, where a second
 // implementation would mean a second idempotency guard and, eventually, an
 // invoice charged twice.
 //
 // THEY ANSWER BY NAME RATHER THAN AT AN ADDRESS. /v1/billing is the billing
 // capability's root (HIP-0018), and these rows are in the store this process
-// owns, so the door is billing's and the answer is this app's. apps/billing
+// owns, so the endpoint is billing's and the answer is this app's. apps/billing
 // declares the five REST addresses and relays each one here; the shapes are
 // plane's, declared once and served without re-rendering, so the wire a customer
 // reads is the wire this file produced.
@@ -140,7 +140,7 @@ func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoic
 }
 
 // Renders one invoice as a PDF — the bytes and the filename they are offered
-// under, so the door that serves the download does not need its own renderer.
+// under, so the endpoint that serves the download does not need its own renderer.
 //
 // The render is a pure function of the invoice: no timestamps, no random ids, so
 // the same invoice renders the same bytes however many times it is asked for,

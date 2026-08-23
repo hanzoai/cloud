@@ -167,7 +167,7 @@ func TestFeatureRead_TwoBrandsAreTwoTenants(t *testing.T) {
 	}
 }
 
-// TestFeatureRead_RefusesAnUnqualifiedTenant closes the last door: a key that did
+// TestFeatureRead_RefusesAnUnqualifiedTenant closes the last hole: a key that did
 // not come from the mint is refused at the read, not folded into something
 // plausible.
 func TestFeatureRead_RefusesAnUnqualifiedTenant(t *testing.T) {
@@ -246,7 +246,7 @@ func TestRollup_ClosesTheLoop(t *testing.T) {
 	k := key(t, brandA, orgA)
 	now := time.Now().UTC()
 	// The organisation emits into the SOURCE planes, under its bare slug, the way
-	// the one ingest door writes them.
+	// the one ingest endpoint writes them.
 	for i := range 12 {
 		probe.emit(orgA, emitted{
 			Plane: "account", Subject: "u_7",
@@ -381,8 +381,8 @@ func TestFeatureSurface_IsTheOnlyDatastoreDoor(t *testing.T) {
 		t.Fatalf("the warehouse is reachable from %s — it must be reachable only from %s, "+
 			"because that is the file every read takes a tenant in", strings.Join(offenders, ", "), door)
 	}
-	// And the door really is a door: feature.go must import it, or the assertion
-	// above is vacuously true.
+	// And that file really is the one importer: feature.go must import it, or the
+	// assertion above is vacuously true.
 	src, err := os.ReadFile(door)
 	if err != nil {
 		t.Fatalf("read %s: %v", door, err)
@@ -399,7 +399,7 @@ func TestFeatureSurface_IsTheOnlyDatastoreDoor(t *testing.T) {
 		return true
 	})
 	if !found {
-		t.Fatalf("%s does not import the warehouse — the one-door assertion is vacuous", door)
+		t.Fatalf("%s does not import the warehouse — the one-importer assertion is vacuous", door)
 	}
 }
 

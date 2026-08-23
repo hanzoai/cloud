@@ -38,7 +38,7 @@ import (
 
 // rosterFn reads an org's mailable IAM users. Production is the in-process IAM
 // store; tests override it. It is the ONLY reader — mirroring sendFn, the only
-// door out of the send gate — so a new audience kind cannot introduce a second
+// writer out of the send gate — so a new audience kind cannot introduce a second
 // path to the identity store.
 var rosterFn = iamRoster
 

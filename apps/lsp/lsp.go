@@ -214,7 +214,7 @@ var (
 	ref  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,199}$`)
 )
 
-// relations is the CLOSED set locate refines by. The door names what it serves,
+// relations is the CLOSED set locate refines by. The endpoint names what it serves,
 // so an unknown string is a 400 here rather than an arbitrary method handed to a
 // language server.
 var relations = []string{"definition", "reference", "type", "implementation"}

@@ -191,10 +191,10 @@ func adminPatchProvider(ctx context.Context, in *providerPatchIn) (*Overlay, err
 // the fields present in the body, and writes it back. Returns the new effective
 // overlay so the admin UI can reflect it without a re-fetch.
 //
-// It is the *zip.Ctx door onto [applyPatch], kept for the ONE route that cannot
-// be a typed op: PATCH /v1/admin/pricing/catalog/models/* routes through a greedy
-// wildcard (see ops.go). The typed providers op calls applyPatch directly, so
-// both doors run the same code and cannot drift.
+// It is the *zip.Ctx entry point into [applyPatch], kept for the ONE route that
+// cannot be a typed op: PATCH /v1/admin/pricing/catalog/models/* routes through a
+// greedy wildcard (see ops.go). The typed providers op calls applyPatch directly,
+// so both entry points run the same code and cannot drift.
 func adminPatch(c *zip.Ctx, kind, id string) error {
 	var body patchBody
 	if raw := c.Body(); len(raw) > 0 {

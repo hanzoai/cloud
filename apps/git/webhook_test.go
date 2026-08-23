@@ -22,10 +22,10 @@ import (
 // cloud.OnGitPush. Both were true IN THE TEST, because the test registered a
 // builder in-process. Production never does: the only registrant lives in
 // apps/platform and cloud runs each app as its own OS process, so the client was
-// nil and 204 meant "received", never "built". A green suite over a dead door
+// nil and 204 meant "received", never "built". A green suite over a dead endpoint
 // for as long as it existed.
 //
-// So these tests assert the two things that keep the door honest: no input gets
+// So these tests assert the two things that keep the endpoint honest: no input gets
 // anything but 410, and the refusal names where the delivery belongs.
 
 // postHook posts a raw body to /v1/git/webhook with arbitrary headers and returns
@@ -65,7 +65,7 @@ func forgePayload(owner, name, ref, after, pusher string) []byte {
 	return b
 }
 
-// TestWebhookIsGoneForEveryDelivery: the door has ONE answer. A valid push, an
+// TestWebhookIsGoneForEveryDelivery: the endpoint has ONE answer. A valid push, an
 // unsigned one, an empty body and a non-push event all get 410 — there is no
 // input left that changes the outcome, which is what "retired" has to mean. If
 // any case here starts answering 2xx, a dead trigger has been wired back in.
@@ -115,10 +115,10 @@ func TestWebhookRefusalNamesTheDoorThatBuilds(t *testing.T) {
 	}
 }
 
-// TestWebhookDispatchesNothing: the door does not reach the push-to-deploy client,
-// signed or not. This is the assertion the old suite inverted — it PROVED the
-// call happened, in a process where it never could — so it is stated here in the
-// direction that actually protects the estate.
+// TestWebhookDispatchesNothing: the endpoint does not reach the push-to-deploy
+// client, signed or not. This is the assertion the old suite inverted — it PROVED
+// the call happened, in a process where it never could — so it is stated here in
+// the direction that actually protects the estate.
 func TestWebhookDispatchesNothing(t *testing.T) {
 	var mu sync.Mutex
 	var fired []cloud.GitPushEvent
@@ -139,6 +139,6 @@ func TestWebhookDispatchesNothing(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(fired) != 0 {
-		t.Fatalf("the retired door dispatched %d push event(s) — it must trigger nothing: %+v", len(fired), fired)
+		t.Fatalf("the retired endpoint dispatched %d push event(s) — it must trigger nothing: %+v", len(fired), fired)
 	}
 }

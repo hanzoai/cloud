@@ -17,7 +17,7 @@ import (
 // flatten_test.go guards the GitHub webhook against the 500→4xx bug: integrations
 // mounts AFTER the commerce embed, whose /v1 ErrorHandlerJSON rewrites ANY propagated
 // downstream error into a hardcoded 500. cloud.Terminal writes the reject status
-// in-band so it survives. It also pins the door's address.
+// in-band so it survives. It also pins the endpoint's address.
 
 // installV1Flatten reproduces apps.mountCommerce's ErrorHandlerJSON (see the sync
 // twin): a filter over /v1 that turns any propagated downstream error into 500.
@@ -75,11 +75,11 @@ func TestGithubWebhookRejectsSurviveCommerceFlatten(t *testing.T) {
 	}
 }
 
-// TestGithubWebhookAddress pins where the door is and where it is not: the live path
-// resolves to the handler (a bad signature is rejected, not 404'd), and every address
-// it has left behind is gone. GitHub delivers to a URL configured in the App, so an
-// address that answers 404 costs a push event; the retired ones must answer nothing
-// rather than half a handler.
+// TestGithubWebhookAddress pins where the endpoint is and where it is not: the live
+// path resolves to the handler (a bad signature is rejected, not 404'd), and every
+// address it has left behind is gone. GitHub delivers to a URL configured in the
+// App, so an address that answers 404 costs a push event; the retired ones must
+// answer nothing rather than half a handler.
 func TestGithubWebhookAddress(t *testing.T) {
 	const secret = "wh_secret_moved"
 	t.Setenv(githubWebhookSecretEnv, secret)

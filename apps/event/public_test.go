@@ -30,7 +30,7 @@ import (
 // caller that reaches publicIngest is a REDUCED principal — a team guest, which holds
 // a credential proving its org but not its capability. It carries a guest token so
 // these tests exercise the projection, the bounds and the opt-out gate through the
-// door that still reaches them.
+// endpoint that still reaches them.
 func postAnon(t *testing.T, app *zip.App, path, body string, hdr map[string]string) (int, []byte) {
 	t.Helper()
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
@@ -93,11 +93,11 @@ const anonPageview = `{"batch":[{"type":"pageview","event":"$pageview","distinct
 // It takes no *zip.Ctx AND no org, so there is no header, query, body field, or caller
 // argument through which attribution could be influenced from inside the projection —
 // not a check that can be bypassed, but an argument list that cannot express the
-// alternative. WHERE a row lands is the door's decision (publicIngest's org); this
+// alternative. WHERE a row lands is the endpoint's decision (publicIngest's org); this
 // function only decides WHAT may be stored.
 //
 // What is left to assert at runtime is that the projection's OUTPUT can never name an
-// org either — so whatever tenant the door supplies, no admitted event carries a
+// org either — so whatever tenant the endpoint supplies, no admitted event carries a
 // competing claim into the row.
 func TestAdmitPublic_CannotReachAttribution(t *testing.T) {
 	hostile := [][]CaptureEvent{
@@ -119,9 +119,9 @@ func TestAdmitPublic_CannotReachAttribution(t *testing.T) {
 	}
 }
 
-// TestAdmitPublic_DoorOwnsTheTenant pins the two-door reality after the fix, through the
-// REAL normalizer — the one function that stamps tenant_id. Whichever tenant the door
-// supplies, the row carries EXACTLY that and never the org the body named:
+// TestAdmitPublic_DoorOwnsTheTenant pins the two-endpoint reality after the fix, through
+// the REAL normalizer — the one function that stamps tenant_id. Whichever tenant the
+// endpoint supplies, the row carries EXACTLY that and never the org the body named:
 //
 //   - the org is always the one the CREDENTIAL resolved to (handle, event.go), and
 //     never a body claim. There is no reserved anonymous tenant any more, so both
@@ -133,17 +133,17 @@ func TestAdmitPublic_DoorOwnsTheTenant(t *testing.T) {
 			Properties: map[string]any{"org": "maxpower", "tenant_id": "maxpower"},
 		}})
 		if len(out) != 1 {
-			t.Fatalf("door %q: want 1 admitted event", doorOrg)
+			t.Fatalf("endpoint %q: want 1 admitted event", doorOrg)
 		}
 		f, ok := normalize(doorOrg, time.Now(), out[0])
 		if !ok {
-			t.Fatalf("door %q: want routable", doorOrg)
+			t.Fatalf("endpoint %q: want routable", doorOrg)
 		}
 		if f.org != doorOrg {
-			t.Fatalf("fact org = %q, want the door's %q", f.org, doorOrg)
+			t.Fatalf("fact org = %q, want the endpoint's %q", f.org, doorOrg)
 		}
 		if f.attributes["group_id"] != "" || f.person != "" || len(f.attributes) != 0 {
-			t.Fatalf("door %q: a body claim reached the fact: group=%q person=%q attrs=%v",
+			t.Fatalf("endpoint %q: a body claim reached the fact: group=%q person=%q attrs=%v",
 				doorOrg, f.attributes["group_id"], f.person, f.attributes)
 		}
 	}
@@ -189,7 +189,7 @@ func TestAdmitPublic_ForeignOrgFieldsDropped(t *testing.T) {
 // fact carries the public tenant, not the org the body named.
 func TestAdmitPublic_ForeignOrgNeverStamped(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", GroupID: "maxpower"}})
-	// "acme" is the org every /v1 door hands this lane (handle, event.go).
+	// "acme" is the org every /v1 endpoint hands this lane (handle, event.go).
 	f, ok := normalize("acme", time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
@@ -314,7 +314,7 @@ func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
 //
 // Observable proxy, as everywhere in this package: 403 ⇒ refused at the gate; 503 ⇒
 // ADMITTED and reached requireDatastore (no warehouse in the harness). A 200 means the
-// door answered without needing the warehouse — an all-dropped batch or an opt-out.
+// endpoint answered without needing the warehouse — an all-dropped batch or an opt-out.
 
 // TestPublic_AnonymousPageviewAccepted is the headline: the exact logged-out marketing
 // wire, no bearer and no key, is ADMITTED. Before this change it was 403 and every
@@ -323,7 +323,7 @@ func TestPublic_AnonymousPageviewAccepted(t *testing.T) {
 	app := mountApp(t)
 	code, body := postAnon(t, app, "/v1/event", anonPageview, nil)
 	if code == http.StatusForbidden {
-		t.Fatalf("anonymous pageview must be admitted on the canonical door, got 403 (%s)", body)
+		t.Fatalf("anonymous pageview must be admitted on the canonical endpoint, got 403 (%s)", body)
 	}
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("anonymous pageview want 503 (admitted, datastore down), got %d (%s)", code, body)
@@ -344,7 +344,7 @@ func TestPublic_AnonymousErrorAccepted(t *testing.T) {
 // TestPublic_ForeignOrgClaimBuysNothing: an anonymous caller that names a foreign org
 // EVERY way the wire allows — the X-Org-Id header, a body org/tenant field, groupId —
 // is not refused at the GATE (it is anonymous traffic) but gains nothing: the only kind
-// it sent is non-allowlisted, so nothing is stored, the door answers 403, and no row
+// it sent is non-allowlisted, so nothing is stored, the endpoint answers 403, and no row
 // exists to carry `maxpower`. The tenant it would have landed under is proven by
 // TestAdmitPublic_ForeignOrgNeverStamped.
 func TestPublic_ForeignOrgClaimBuysNothing(t *testing.T) {
@@ -356,9 +356,9 @@ func TestPublic_ForeignOrgClaimBuysNothing(t *testing.T) {
 }
 
 // TestPublic_NonAllowlistedKindRejected: a custom/product/billing event is refused
-// storage on the reduced lane and the door says so (403). A mixed batch keeps its allowlisted
-// events and drops the rest — and still 200s, which is why marketing telemetry lands
-// while the arbitrary surface stays shut.
+// storage on the reduced lane and the endpoint says so (403). A mixed batch keeps its
+// allowlisted events and drops the rest — and still 200s, which is why marketing
+// telemetry lands while the arbitrary surface stays shut.
 func TestPublic_NonAllowlistedKindRejected(t *testing.T) {
 	app := mountApp(t)
 	for _, body := range []string{
@@ -565,7 +565,8 @@ func TestAuthenticated_NotRateLimitedByPublicCounter(t *testing.T) {
 
 // TestAuthenticated_OptOutNotHonoredForPrincipal: the DNT/GPC gate belongs to the
 // anonymous lane. An authenticated product client sending the header is unchanged —
-// first-party product telemetry is governed by the org's own consent, not by this door.
+// first-party product telemetry is governed by the org's own consent, not by this
+// endpoint.
 func TestAuthenticated_OptOutNotHonoredForPrincipal(t *testing.T) {
 	app := mountApp(t)
 	req := httptest.NewRequest(http.MethodPost, "/v1/event", strings.NewReader(anonPageview))
@@ -591,7 +592,7 @@ func TestAuthenticated_OptOutNotHonoredForPrincipal(t *testing.T) {
 //
 // It asked something else once — that the reserved `$public` tenant never reached a
 // destination, because destinations take the RAW pre-scrub event. That tenant is
-// retired: the door attributes a site's events to the key its project minted or
+// retired: the endpoint attributes a site's events to the key its project minted or
 // refuses them (688ac687a), so there is no unattested org left to keep out and the
 // property is held by construction rather than by a check here.
 //
@@ -696,7 +697,7 @@ func TestAnonSubject_EmptyAndOversized(t *testing.T) {
 
 // TestAttribute_StillOwnsTheSignedIdentity: the signed lane is unchanged. attribute runs
 // AFTER the projection, so a workspace token's own subject replaces the namespaced one
-// and the alias is cleared — the reduced-capability contract the door documents.
+// and the alias is cleared — the reduced-capability contract the endpoint documents.
 func TestAttribute_StillOwnsTheSignedIdentity(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", DistinctID: "victim@corp.com", AnonymousID: "a-1"}})
 	got := attribute(out, "signer@corp.com")

@@ -64,9 +64,9 @@ const (
 	SitesResolveOrg = "sites_resolve_org"
 
 	// ProjectsResolveKey answers "which project minted this publishable ingest
-	// key?" for the analytics ingest door — here for the same reason as the two
-	// above, and between the same two processes: the door serves api.hanzo.ai and
-	// the key lives in the project store.
+	// key?" for the analytics ingest endpoint — here for the same reason as the
+	// two above, and between the same two processes: the endpoint serves
+	// api.hanzo.ai and the key lives in the project store.
 	ProjectsResolveKey = "projects_resolve_key"
 
 	// ProjectsOwnership answers "does this org own the project this request
@@ -233,7 +233,7 @@ const (
 	// sync engine decides a mirror should exist; the git app owns the repos and
 	// the reactor that pushes them. Two processes, so declaring it was a nil call
 	// that reported "git mirror controller not registered" while git was healthy
-	// next door.
+	// in the other process.
 	GitMirror = "git_mirror"
 
 	// SyncRun dispatches one reconcile to the universal sync engine. The TRIGGERS
@@ -336,7 +336,7 @@ const (
 	// side, which is what keeps a revoke bounded to its own user's sessions.
 	AgentsSessionsStop  = "agents_sessions_stop"
 	AgentsSessionsCount = "agents_sessions_count"
-	// AgentsRunOnBehalf is the chat bridges' door onto a run. A plugin is a
+	// AgentsRunOnBehalf is the chat bridges' entry point into a run. A plugin is a
 	// PROCESS, so agents.RunOnBehalf — which gates on that package's `mounted`
 	// global — can only ever answer when agents happens to be co-resident. It was
 	// not, and every @hanzo turn in Slack died on ErrNoPeer.
@@ -416,9 +416,9 @@ const (
 	// socket that carries no principal.
 	SettingsFleet = "settings_fleet"
 
-	// The observability plane's claim on the ONE event door. analytics owns POST
-	// /v1/event and its subtree, but the o11y PROCESS owns the Sentry runtime —
-	// so the door asks over the socket rather than through a package global,
+	// The observability plane's claim on the ONE event endpoint. analytics owns
+	// POST /v1/event and its subtree, but the o11y PROCESS owns the Sentry runtime
+	// — so the endpoint asks over the socket rather than through a package global,
 	// which a peer process reads as nil (the 503 "error ingest not initialized"
 	// that this replaces). A second op (obs_event_claim) offered every body to an
 	// LLM-obs sink first; it retired with that sink.
@@ -427,19 +427,19 @@ const (
 	// EventCapture states ONE occurrence onto the shared event plane, for an app
 	// running in another binary.
 	//
-	// It is the WRITE side of the door ObsErrorPost claims a slice of, and it is
-	// here for the same reason: analytics owns POST /v1/event, event.fact and the
+	// It is the WRITE side of the endpoint ObsErrorPost claims a slice of, and it
+	// is here for the same reason: analytics owns POST /v1/event, event.fact and the
 	// /v1/event/insights reads over them, and the pod forks one process per app — so a
 	// peer that wanted its own facts queryable beside the product's had no way to
 	// state one. In-process there is a write core (ingestEvents) and it is
 	// unreachable from another pid; over HTTP there is the public edge, which is a
-	// second gate, a second credential and a hop through the fleet's own front
-	// door to reach a table one socket away.
+	// second gate, a second credential and a hop through the fleet's own public
+	// endpoint to reach a table one socket away.
 	//
 	// So a peer ASKS the app that owns the plane, exactly as a debit asks commerce
 	// and a decision asks risk. The tenant is the CALLER's, minted from the plane
 	// principal, so a peer can only ever write into its own organisation's
-	// partition — the same rule the HTTP door holds, at the other door.
+	// partition — the same rule the HTTP endpoint holds, at the other entry point.
 	EventCapture = "event_capture"
 
 	// RiskDecide judges one subject at one lifecycle moment against that
@@ -464,9 +464,9 @@ const (
 	// HAPPENED, for a gate running in another binary.
 	//
 	// It is RiskDecide's other half and the plane needs both, because a model that
-	// is only ever asked is a model that never learns. The published learn door
+	// is only ever asked is a model that never learns. The published learn endpoint
 	// (POST /v1/risk/learn) is an ORGANISATION teaching its own model over HTTP; it
-	// is the wrong door for the fact this op carries. A settled payment is observed
+	// is the wrong one for the fact this op carries. A settled payment is observed
 	// by the process that took the money, in the same request, and what it observed
 	// must reach the model from a source the PAYER cannot move:
 	//
@@ -482,7 +482,7 @@ const (
 	//	deduplicates on it. Velocity that double-counted a retry would freeze a
 	//	customer for paying once.
 	//
-	// Without it the aggregate halves of the credit door's rule are structurally
+	// Without it the aggregate halves of the credit endpoint's rule are structurally
 	// dead: a fresh organisation is its own payer, so nothing it does teaches the
 	// model anything, and pace and fan-out read an empty history for exactly the
 	// self-serve fraudster they were built for.
@@ -540,7 +540,8 @@ const (
 	// process: the pod forks one process per app, so the advisor and every domain
 	// it asks are separate pids. An in-process read reaches only routes the ASK
 	// binary mounts, which is /v1/ask and nothing else — which is why the advisor
-	// answered every question from its fallback while books sat healthy next door.
+	// answered every question from its fallback while books sat healthy in another
+	// process.
 	BooksFigures    = "books_figures"
 	GitFigures      = "git_figures"
 	ProjectsFigures = "projects_figures"
@@ -552,7 +553,7 @@ const (
 	// It is on the plane because the two ends are different processes: the refusal
 	// runs in whichever binary serves the capability, and the definitions live in
 	// the flags app's per-org store. It is a plane op rather than a call to
-	// /v1/flags because the refusal runs BEFORE the capability's own door, on a
+	// /v1/flags because the refusal runs BEFORE the capability's own endpoint, on a
 	// request that may carry no credential this deployment can replay — and asking
 	// the edge would mean cloud presenting a customer's bearer to cloud.
 	//
@@ -570,8 +571,8 @@ const (
 // It exists because a lazy app has exactly one trigger: a request reaching one
 // of its prefixes. A plane call never touches the router, so an app reached only
 // over its socket was never started and the socket was never bound. That is not
-// a bug in laziness; it is a second door the loader has to open, and this names
-// it.
+// a bug in laziness; it is a second entry point the loader has to serve, and
+// this names it.
 const HostApp = "host"
 
 // The three x402 wire headers, in the leaf because the settlement now crosses a
@@ -787,7 +788,7 @@ type VendorCost struct {
 }
 
 // CostsIn names the billing period, YYYY-MM. Empty means the current one, which
-// is what the door fronting this has always defaulted to. Test selects the
+// is what the endpoint fronting this has always defaulted to. Test selects the
 // sandbox books, which are physically separate from real money, so the selector
 // travels rather than being inferred at the far end.
 type CostsIn struct {
@@ -827,7 +828,7 @@ type ListingIn struct {
 }
 
 // Listed reports whether the listing already existed — the difference between a
-// 200 and a 201 on the door that fronts this.
+// 200 and a 201 on the endpoint that fronts this.
 type Listed struct {
 	Existed bool `json:"existed"`
 }
@@ -861,7 +862,7 @@ type Sub struct {
 
 // SubsIn filters the org's subscriptions. Both fields are optional and an empty
 // one does not filter — the same meaning an absent query parameter has always
-// had on the HTTP door this shares its query with.
+// had on the HTTP endpoint this shares its query with.
 //
 // There is no org field, for the reason every input here lacks one: the tenant
 // rides the caller, so a caller that could name an org could read another
@@ -1519,10 +1520,10 @@ type ObsErrorIn struct {
 // slices, structs, pointers and slices, and refuses anything else AT ENCODE so a
 // field can never silently fail to arrive. Headers was a map[string]string, so
 // every ObsErrorPost call failed inside zip.Call before it reached the socket —
-// the Sentry envelope door answered 503 "error ingest unavailable" in dur_ms=0,
-// for 24h+, with the peer up and the op registered. Its sibling op on the same
-// socket (ObsClaimIn: two scalar fields) kept working throughout, which is
-// exactly why POST /v1/event stayed 200 and only the envelope was dead.
+// the Sentry envelope endpoint answered 503 "error ingest unavailable" in
+// dur_ms=0, for 24h+, with the peer up and the op registered. Its sibling op on
+// the same socket (ObsClaimIn: two scalar fields) kept working throughout, which
+// is exactly why POST /v1/event stayed 200 and only the envelope was dead.
 //
 // A slice of structs is the shape zapenc already carries — one complete ZAP
 // message per element — so the list is not a workaround, it is the wire.
@@ -1665,8 +1666,8 @@ const (
 	// Naming the payer separately is the mechanism this file already relies on
 	// ("a person and an account sharing an identifier are two subjects") applied to
 	// the one place it was missing. It also makes the model's question at a credit
-	// door answerable: a payment is scored against the payer's own payment history
-	// rather than against a spend distribution it has nothing to do with.
+	// endpoint answerable: a payment is scored against the payer's own payment
+	// history rather than against a spend distribution it has nothing to do with.
 	KindPayer = "payer"
 )
 
@@ -1791,8 +1792,8 @@ type RiskObserveIn struct {
 	//
 	// It must be the SETTLEMENT's own identifier — the processor's reference for
 	// the charge, or the ledger receipt where the processor states none — and never
-	// a counter, a timestamp or anything a caller of the settling door chose. A key
-	// the payer can predict is a key the payer can claim first, after which the
+	// a counter, a timestamp or anything a caller of the settling endpoint chose. A
+	// key the payer can predict is a key the payer can claim first, after which the
 	// real observation is inert.
 	Settlement string `json:"settlement" validate:"required"`
 	// Signals are the facts the settling process observed, in the scorer's own
@@ -1856,7 +1857,7 @@ type EventIn struct {
 // EventCaptured is the honest receipt: what landed and what did not. A peer that
 // states an occurrence the plane cannot route is TOLD so, rather than being given
 // a 200 for a row that was never written — the exact silence that let an 88% loss
-// run unnoticed on the HTTP door.
+// run unnoticed on the HTTP endpoint.
 type EventCaptured struct {
 	// Accepted is how many occurrences were admitted and published.
 	Accepted int `json:"accepted"`
@@ -2513,7 +2514,7 @@ type RunIn struct {
 	// caller that scrubbed the returned result would still have streamed the
 	// unredacted bytes into the session as they were written — to a durable event
 	// store, an SSE feed and a chat thread — because the narration leaves the
-	// sandbox by a different door from the result. Nothing downstream can take a
+	// sandbox by a different path from the result. Nothing downstream can take a
 	// secret back out of a message that has already been delivered.
 	//
 	// The sandbox holds these only for the life of the one command, applies them
@@ -2708,7 +2709,7 @@ const (
 
 	// AgentsResolveTarget turns a human's `on <machine>` reference — a target id
 	// or the friendly label the CLI registered — into a target id, org-scoped and
-	// fail-closed. The Slack front door parses the word; agents owns the registry
+	// fail-closed. The Slack adapter parses the word; agents owns the registry
 	// that knows whether the org has such a machine.
 	AgentsResolveTarget = "agents_resolve_target"
 
@@ -2739,9 +2740,10 @@ const (
 	// that a chat surface reaches the engine the way every other capability is
 	// reached: the brain calls the TOOL. That path already runs through this
 	// plane — AgentsRunOnBehalf carries the turn, the run's tool loop asks the
-	// fleet's own door, and the door routes the call to the agents process — so a
-	// second op would be a second way in for exactly one caller, and a caller with
-	// a private way in is a caller whose model never has to choose.
+	// fleet's own MCP server, and the server routes the call to the agents
+	// process — so a second op would be a second way in for exactly one caller,
+	// and a caller with a private way in is a caller whose model never has to
+	// choose.
 )
 
 // The ORG rides in these arguments rather than on the caller's plane identity,
@@ -2875,7 +2877,7 @@ type RouteRunIn struct {
 // IT SAYS WHAT TO DO AND NEVER WHO TO BE, and that absence is the whole shape of
 // the type. There is no org on it, no subject and no credential, so the two
 // questions worth forging — whose balance, whose name — have no field to answer
-// them with. The door reads both off the caller it already proved
+// them with. The handler reads both off the caller it already proved
 // (plugin/agents/coding.go), which is what makes the boundary structural: there
 // is nothing to validate away, because there is nothing there.
 //
@@ -2889,7 +2891,7 @@ type RouteRunIn struct {
 //
 // The subject — the person a run is ATTRIBUTED to, its session's actor and its
 // PR's assignee — used to be filled in by whichever adapter had proved the
-// account link. That was sound while every door was an adapter we wrote. It
+// account link. That was sound while every caller was an adapter we wrote. It
 // stopped being sound the moment this op became an MCP tool, because the thing
 // filling in a tool's arguments is a MODEL: a subject field is a model deciding
 // whose run this is, and it could hand the work, the session and the assignment
@@ -2951,9 +2953,9 @@ type CodingStartIn struct {
 	// task that has to drive a browser or another windowed program. False, the
 	// default, is a headless checkout, which is what writing code needs.
 	Desktop bool `json:"desktop,omitempty"`
-	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the door
-	// that started it has somewhere for it to talk. Empty means nobody is
-	// listening and the run simply does not narrate — which is the app door's
+	// ReplyChannel / ReplyThread are WHERE THE RUN NARRATES ITSELF, when the
+	// surface that started it has somewhere for it to talk. Empty means nobody is
+	// listening and the run simply does not narrate — which is the app surface's
 	// case, because /v1/agents/coding hands back a session id and the session stream is
 	// a better progress feed than any message could be.
 	//
@@ -2976,7 +2978,8 @@ type CodingStartIn struct {
 // the handle every later question about the run is asked with, and the branch is
 // the ref the run is permitted to write (nothing else — see the forge's ref
 // policy). Progress streams at /v1/agents/sessions/{sessionId}/stream for every
-// door equally, which is why neither door grew a progress endpoint of its own.
+// surface equally, which is why neither surface grew a progress endpoint of its
+// own.
 type CodingStarted struct {
 	// SessionID is the run's handle: its durable record, and the id its live
 	// progress streams under at /v1/agents/sessions/{sessionId}/stream. Every

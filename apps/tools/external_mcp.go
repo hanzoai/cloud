@@ -343,7 +343,7 @@ func newMCPProvider(store *MCPServerStore, kms types.KMSClient) *mcpProvider {
 // through the registry, which lists every provider, which asked every one of the
 // org's servers over the network — so an org that enabled thirty listings turned
 // each of its tool calls into thirty outbound HTTP requests, each with a 20s
-// timeout. The MCP door lists on the same path, and tools/list is the method a
+// timeout. The MCP server lists on the same path, and tools/list is the method a
 // client calls constantly.
 const listedFor = time.Minute
 

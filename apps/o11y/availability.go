@@ -133,7 +133,7 @@
 // it is the whole fleet's inventory, so it takes the same predicate the infra-log
 // god-view takes and every customer is 403. What DID change is that the handler
 // is no longer an access boundary in front of an unauthenticated store — there
-// is no second door to leave open, because there is no second store.
+// is no second endpoint to leave open, because there is no second store.
 //
 // And an unreachable datastore is a 503 that says so. The failure this endpoint
 // must never have is the quiet one: a 200 carrying an empty series renders as a

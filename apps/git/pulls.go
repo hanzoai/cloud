@@ -8,7 +8,7 @@ package git
 // the branch was FOR, no way to list what was waiting, and no way to say yes —
 // so "an agent opens a pull request per issue" had to be answered by mirroring
 // the repository to GitHub and asking GitHub (propose.go). A repository that
-// lives only here had no door at all.
+// lives only here had no endpoint at all.
 //
 // A pull request is METADATA plus TWO BRANCH NAMES. It is deliberately not a
 // snapshot: base and head are short names, and they keep moving while the

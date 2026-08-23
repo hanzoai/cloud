@@ -33,10 +33,10 @@ var catalogJSON []byte
 // Op is one operation as its subsystem published it: the id its own registry
 // answers to, and what it wrote about it.
 //
-// There is no schema here on purpose. The door publishes one tool per subsystem
-// whose enum carries NAMES, and a model fetches the schema for the one it picked
-// — a fetch that reaches one subsystem instead of all of them, which is the
-// whole shape this exists to keep.
+// There is no schema here on purpose. The MCP server publishes one tool per
+// subsystem whose enum carries NAMES, and a model fetches the schema for the one
+// it picked — a fetch that reaches one subsystem instead of all of them, which is
+// the whole shape this exists to keep.
 type Op struct {
 	ID  string `json:"id"`
 	Doc string `json:"doc"`

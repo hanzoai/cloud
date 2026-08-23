@@ -7,8 +7,8 @@ package fleet_test
 // These tests are worth more than the unit tests beside them in exactly one way:
 // the child here SERVES CreateServiceAccountKey. Its registry has the op, its
 // own /mcp lists it, and a direct call to the child would run it. So what is
-// being tested is the door's REFUSAL, not the absence of the op — which is the
-// difference between a policy and a coincidence, and the difference the live
+// being tested is the MCP server's REFUSAL, not the absence of the op — which is
+// the difference between a policy and a coincidence, and the difference the live
 // server did not have when it projected 1,323 tools with no auth at all.
 
 import (
@@ -45,8 +45,8 @@ func startNamed(t *testing.T, name string, ops ...string) *child {
 	return &child{name: name, addr: sock, app: app}
 }
 
-// order is the operations the door offers, IN THE ORDER IT OFFERS THEM — unlike
-// listed(), which sorts. The order is the mechanism under test in
+// order is the operations the MCP server offers, IN THE ORDER IT OFFERS THEM —
+// unlike listed(), which sorts. The order is the mechanism under test in
 // TestTheProductSurfaceLeadsTheList, so sorting it away would test nothing.
 func order(t *testing.T, h *zip.App) []string {
 	t.Helper()
@@ -78,7 +78,7 @@ func TestTheDoorDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 	}
 	for _, n := range dangerous {
 		if !served[n] {
-			t.Fatalf("fixture is wrong: the child does not serve %q, so refusing it at the door proves nothing", n)
+			t.Fatalf("fixture is wrong: the child does not serve %q, so refusing it at the MCP server proves nothing", n)
 		}
 	}
 
@@ -86,17 +86,17 @@ func TestTheDoorDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 	for _, n := range order(t, h) {
 		got[n] = true
 	}
-	// The enum carries the name the door PUBLISHES, so both halves are asked in
-	// that spelling — and the dangerous half is asked in both, because a refused
+	// The enum carries the name the MCP server PUBLISHES, so both halves are asked
+	// in that spelling — and the dangerous half is asked in both, because a refused
 	// operation must not reappear under a friendlier name.
 	for _, n := range dangerous {
 		if got[n] || got[fleet.Phrase(n)] {
-			t.Errorf("the door PROJECTED %q — an agent can mint or read a credential with it", n)
+			t.Errorf("the MCP server PROJECTED %q — an agent can mint or read a credential with it", n)
 		}
 	}
 	for _, n := range useful {
 		if !got[fleet.Phrase(n)] {
-			t.Errorf("the door dropped %q (offered as %q) — the gate ate a product tool", n, fleet.Phrase(n))
+			t.Errorf("the MCP server dropped %q (offered as %q) — the gate ate a product tool", n, fleet.Phrase(n))
 		}
 	}
 }
@@ -108,7 +108,7 @@ func TestTheDoorDoesNotProjectACredentialOpItsChildServes(t *testing.T) {
 // gather(), which is where the tool→app routing table is written, so a refused
 // name is never written and a call naming it cannot be dispatched. This test
 // calls a tool that DOES exist in the child, with no tools/list first, so the
-// door must refuse it on the discovery path rather than from a stale table.
+// MCP server must refuse it on the discovery path rather than from a stale table.
 func TestARefusedToolIsNotCALLABLE(t *testing.T) {
 	kid := startNamed(t, "console", "CreateServiceAccountKey", "post_chat_completions")
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})
@@ -126,11 +126,11 @@ func TestARefusedToolIsNotCALLABLE(t *testing.T) {
 		strings.Contains(strings.ToLower(msg), "denied") ||
 		strings.Contains(strings.ToLower(msg), "polic") {
 		t.Errorf("the refusal message %q distinguishes 'withheld' from 'does not exist', "+
-			"which makes the door an oracle for the surface it just declined to expose", msg)
+			"which makes the MCP server an oracle for the surface it just declined to expose", msg)
 	}
 
 	// …and the surviving sibling still runs, so the test is not passing because
-	// the door is broken.
+	// the MCP server is broken.
 	ok := rpc(t, h, `{"jsonrpc":"2.0","id":4,"method":"tools/call",`+
 		`"params":{"name":"post_chat_completions","arguments":{"which":"hello"}}}`)
 	content, _ := ok["content"].([]any)
@@ -147,7 +147,7 @@ func TestARefusedToolIsNotCALLABLE(t *testing.T) {
 //
 // The child's own projection is sorted by name (zip mcpTools), and by that order
 // every PascalCase console op precedes every product op — 'C' < 'p' in ASCII.
-// The door must reverse that.
+// The MCP server must reverse that.
 func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 	kid := startNamed(t, "console",
 		"AgentCheckIn", "GetAlerts", "GetUser", "GetUserPreference", "AuthzCheck",
@@ -156,14 +156,14 @@ func TestTheProductSurfaceLeadsTheList(t *testing.T) {
 
 	got := order(t, h)
 	if len(got) == 0 {
-		t.Fatal("the door listed nothing")
+		t.Fatal("the MCP server listed nothing")
 	}
 	if got[0] != fleet.Phrase("post_chat_completions") {
 		t.Errorf("the first tool is %q; chat leads the product surface", got[0])
 	}
 	// Ranking reads the ROUTE and the enum carries the phrase, so a lookup names
-	// the operation the way the fixture declared it and finds it the way the door
-	// published it. That the two agree for every entry is the point.
+	// the operation the way the fixture declared it and finds it the way the MCP
+	// server published it. That the two agree for every entry is the point.
 	at := func(id string) int {
 		for i, n := range got {
 			if n == fleet.Phrase(id) {
@@ -227,12 +227,12 @@ func TestAQuietFleetReportsNoMetaAtAll(t *testing.T) {
 }
 
 // TestTheGateIsNotAHeaderTrick: the child answers tools/list for the CALLER, so
-// a client could try to influence what it is offered. Nothing about the door's
-// refusal reads the request, and this pins that: the same fleet, asked with a
-// bearer token, an admin-looking header, and nothing at all, projects the same
-// tools. (It also documents the finding this change did NOT fix — see the note
+// a client could try to influence what it is offered. Nothing about the MCP
+// server's refusal reads the request, and this pins that: the same fleet, asked
+// with a bearer token, an admin-looking header, and nothing at all, projects the
+// same tools. (It also documents the finding this change did NOT fix — see the note
 // on transport auth in the report: a bogus bearer is accepted today because
-// there is no authentication at this door at all.)
+// there is no authentication at this endpoint at all.)
 func TestTheGateIsNotAHeaderTrick(t *testing.T) {
 	kid := startNamed(t, "console", append(append([]string{}, dangerous...), useful...)...)
 	h := host(t, []string{"console"}, map[string]*child{"console": kid})

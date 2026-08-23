@@ -42,10 +42,10 @@ func subset(t *testing.T, path string) []byte {
 func ga(string) string { return "" }
 
 // TestMountFleetServesTheCompositionIncludingItself: the host's answer is every
-// app's surface PLUS the door it came through. The door is projected from a real
-// mount rather than written down, so it cannot name an address the fleet does not
-// answer on — and a document that omitted its own endpoint would be a spec no
-// generated client could refresh itself from.
+// app's surface PLUS the endpoint it came through. The endpoint is projected from
+// a real mount rather than written down, so it cannot name an address the fleet
+// does not answer on — and a document that omitted its own endpoint would be a
+// spec no generated client could refresh itself from.
 func TestMountFleetServesTheCompositionIncludingItself(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	openapi.MountFleet(app, func() ([]openapi.Part, error) {

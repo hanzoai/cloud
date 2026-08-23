@@ -1,6 +1,6 @@
 package kv
 
-// kv_test.go pins this door's wire against the REAL plane — no fakes anywhere
+// kv_test.go pins this app's wire against the REAL plane — no fakes anywhere
 // in the path. The plane is apps/pubsub's embedded JetStream node, and that is
 // the whole point: this app has no store of its own, so a test with a fake
 // store would prove nothing about the product.
@@ -37,12 +37,12 @@ import (
 
 const wireTimeout = 15 * time.Second
 
-// mount brings up the plane and this door over it, on ONE app.
+// mount brings up the plane and this subsystem over it, on ONE app.
 //
 // It calls pubsub.Mount for the server rather than reaching for a fake, and
-// that is the composition the fleet ships minus a process boundary: one
-// embedded node, one connection, two doors. See TestRidesThePlaneFromItsOwnBinary
-// for the other half — the same door with the plane on the far side of a socket.
+// that is the composition the fleet ships minus a process boundary: one embedded
+// node, one connection, two subsystems. See TestRidesThePlaneFromItsOwnBinary for
+// the other half — the same subsystem with the plane on the far side of a socket.
 func mount(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_PUBSUB_HOST", "127.0.0.1")
@@ -222,14 +222,14 @@ func TestTenancyIsNeverACallerField(t *testing.T) {
 //
 // In production this app is its own process: there is no embedded server in it,
 // so pubsub.Bus dials the ONE plane at the address the bus knob names. The
-// arrangement below is exactly that — a plane running with no door of its own
+// arrangement below is exactly that — a plane running with no routes of its own
 // on this app, reached over CLOUD_PUBSUB_URL — and the six ops must be
 // indistinguishable from the in-process case. If they are not, the split
 // shipped a capability that only works when it is not split.
 func TestRidesThePlaneFromItsOwnBinary(t *testing.T) {
 	url := plane(t)
 
-	// The door, with nothing but the knob to find the bus by.
+	// The subsystem, with nothing but the knob to find the bus by.
 	t.Setenv("CLOUD_PUBSUB_URL", url)
 	t.Setenv("CLOUD_PUBSUB_PORT", "") // and no server of its own to fall back on
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -345,7 +345,7 @@ func TestEveryRouteIsTypedAndDescribed(t *testing.T) {
 		t.Fatal("the router serves no kv routes")
 	}
 	if len(typed) != 6 {
-		t.Errorf("typed ops = %d, want the 6 the door declares", len(typed))
+		t.Errorf("typed ops = %d, want the 6 the subsystem declares", len(typed))
 	}
 	var bad []string
 	for key := range served {

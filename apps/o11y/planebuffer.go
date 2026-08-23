@@ -109,7 +109,7 @@ func (b *rowBuffer) loop() {
 // a growing backlog against a datastore that is refusing writes is how a
 // telemetry plane turns an ingest problem into an out-of-memory one. Dropping is
 // visible in the freshness of the data; a silent unbounded queue is not. This is
-// the discipline metricsbuffer.go already holds next door.
+// the discipline metricsbuffer.go already holds beside it.
 func (b *rowBuffer) flush(ctx context.Context) {
 	b.mu.Lock()
 	rows := b.pending

@@ -175,9 +175,9 @@ func build(set Set, took []version, entries []Entry) *snap {
 // request — on a one-replica deployment, an OOM every product on the host shares.
 // A Go string is immutable, so host[o:] is the SAME bytes with a different header:
 // walking the dot offsets gives the identical suffixes in O(L) headers over one
-// backing array. The bound at the door ([maxKey], reference.go) and this shape are
-// the two halves of one property — the door refuses a key no published list could
-// carry, and this makes the work linear in whatever the door admits.
+// backing array. The bound on admission ([maxKey], reference.go) and this shape are
+// the two halves of one property — the check refuses a key no published list could
+// carry, and this makes the work linear in whatever the check admits.
 func candidates(set Set, key string) []string {
 	key = strings.TrimSpace(key)
 	if key == "" {

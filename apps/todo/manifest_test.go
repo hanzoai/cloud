@@ -28,8 +28,8 @@ func TestEveryRouteTodoServesIsRoutedToIt(t *testing.T) {
 	manifesttest.Case{
 		Name:  "todo",
 		Mount: todo.Mount,
-		// zip's own per-process control plane (the document, the agent door, the
-		// op plane) is served by the HOST for itself, not routed per app. Every
+		// zip's own per-process control plane (the document, the agent MCP server,
+		// the op plane) is served by the HOST for itself, not routed per app. Every
 		// app inherits it, so no app's row claims it.
 		Exempt: func(p string) bool {
 			return strings.HasPrefix(p, "/.well-known/zip") ||

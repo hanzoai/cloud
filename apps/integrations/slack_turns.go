@@ -61,7 +61,7 @@ func slackTurns(ctx context.Context, org string, in Inbound) ([]plane.Turn, erro
 }
 
 // slackReadTurns is the read itself, given the token. Custody is above and the
-// conversation is here for the same reason the send door splits that way
+// conversation is here for the same reason the send path splits that way
 // (SendSlackAt / slackPostThreadTS): what a transcript IS can then be stated
 // against a Slack stub, without a key store standing behind it.
 func slackReadTurns(ctx context.Context, botToken, org string, in Inbound) ([]plane.Turn, error) {

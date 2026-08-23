@@ -140,16 +140,16 @@ func TestTheStubBuysNothingAndBillsNobody(t *testing.T) {
 	}
 }
 
-// ── the fleet-agent door ────────────────────────────────────────────────────
+// ── the fleet-agent transport ───────────────────────────────────────────────
 //
 // An agent reaches an op with NO HTTP request behind it: the identity boundary
 // states the caller on the context and zip dispatches straight to the handler.
-// Every check the REST door runs still runs — principal.Acting resolves the org
+// Every check the REST endpoint runs still runs — principal.Acting resolves the org
 // off the same stated caller — so this is not a way in, it is a different
 // transport for the same way in.
 //
 // It was, however, a way to spend for free. The payer used to be resolved from
-// the request alone, so on this door the wallet came back empty; empty means
+// the request alone, so on this transport the wallet came back empty; empty means
 // "nobody to bill", which the meter correctly treats as no gate and no debit. An
 // identified tenant could therefore order carrier numbers on a zero balance and
 // leave no ledger row. See cloud.PayerOf.
@@ -168,7 +168,7 @@ func TestFleetAgentCannotOrderOnAnEmptyBalance(t *testing.T) {
 	s, spy := telAt(t, l)
 
 	if _, err := (ops{s: s}).buyNumber(agent("acme"), &buyInput{E164: "+15550001111"}); err == nil {
-		t.Fatal("an agent on a zero balance ordered a number; the gate must refuse it on every door")
+		t.Fatal("an agent on a zero balance ordered a number; the gate must refuse it on every transport")
 	}
 	if spy.bought != 0 {
 		t.Fatalf("carrier asked %d times for an unfunded agent, want 0 — the gate must precede the order", spy.bought)
@@ -179,7 +179,7 @@ func TestFleetAgentCannotOrderOnAnEmptyBalance(t *testing.T) {
 }
 
 // And a funded agent is billed, on its own org. Without this the test above would
-// pass for the wrong reason — a door that refuses everyone is not a gate.
+// pass for the wrong reason — an endpoint that refuses everyone is not a gate.
 func TestFleetAgentOrderBillsItsOwnOrg(t *testing.T) {
 	l := planetest.Money(t, 100000)
 	s, spy := telAt(t, l)

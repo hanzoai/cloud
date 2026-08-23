@@ -102,7 +102,7 @@ func TestTurnRecordsTheConversationItCameFrom(t *testing.T) {
 	}
 	// AND IT SAID SO. A bot that goes quiet is indistinguishable from a broken
 	// one, and "it does nothing" is the bug report that follows. The person cannot
-	// fix an unreachable identity door, but they can stop waiting.
+	// fix an unreachable identity service, but they can stop waiting.
 	if sent != 1 {
 		t.Fatalf("a turn that cannot run must still answer, sent %d", sent)
 	}

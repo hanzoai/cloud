@@ -242,8 +242,8 @@ func TestRings_SurviveAnEviction(t *testing.T) {
 // error, permanent.
 //
 // Two refusals hold it, and this exercises the inner one: [placeable] keeps an
-// unbelievable stamp out of the rings whatever door it came through. The wire
-// door's 400 is the outer one ([TestEvent_RefusesAnUnbelievableTimestamp]).
+// unbelievable stamp out of the rings whatever endpoint it came through. The wire
+// endpoint's 400 is the outer one ([TestEvent_RefusesAnUnbelievableTimestamp]).
 //
 // Mutation proof: delete the skew check in placeable and the real events below
 // stop counting.

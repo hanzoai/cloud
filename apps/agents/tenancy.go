@@ -49,8 +49,8 @@ func (st *state) storeFor(org string) (*Store, error) {
 	return st.stores.For(ns)
 }
 
-// namespaceFor is the single door: the ONE place this package turns an org into
-// the name of a database. Everything below goes through it, so there is one
+// namespaceFor is the single entry point: the ONE place this package turns an org
+// into the name of a database. Everything below goes through it, so there is one
 // place to read to know what a store can be named after.
 func (st *state) namespaceFor(org string) (namespace.Namespace, error) {
 	if st == nil || st.stores == nil {

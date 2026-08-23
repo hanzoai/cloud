@@ -144,7 +144,7 @@ func TestRuntimeForNeverPutsAVolumeOnARuntimeThatCannotHoldIt(t *testing.T) {
 	}
 }
 
-// THE REFUSAL REACHES THE DOOR, not just the derivation.
+// THE REFUSAL REACHES THE ENDPOINT, not just the derivation.
 //
 // Lease is where a forced runtime would do its damage, and it refuses before it
 // writes a row, creates a PVC or asks the cluster for anything — so a request
@@ -189,7 +189,7 @@ func TestLeaseRefusesAForcedRuntimeBeforeItBuildsAnything(t *testing.T) {
 //
 // A browser lets somebody pick a runtime, and a browser can be made to send
 // anything. So the question is not whether the picker offers a safe set — it is
-// whether the door does. It asks for the combination that loses data (a project
+// whether the endpoint does. It asks for the combination that loses data (a project
 // volume under a runtime with no shared filesystem) the way a crafted client
 // would, straight at the route, and requires a 400 carrying cloud's own sentence
 // rather than a 201 carrying a substituted runtime.

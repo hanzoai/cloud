@@ -44,7 +44,7 @@ const mirrorRefSpec = "+refs/*:refs/*"
 // --prune force-overwrites every ref from a source the CALLER chose, and deletes
 // any ref that source does not have. Pointed at an attacker-chosen upstream it
 // therefore does, in one call, everything the ref policy refuses at the push
-// door — including replacing the branch under a PR a human is reading, and
+// endpoint — including replacing the branch under a PR a human is reading, and
 // deleting one outright.
 //
 // The policy cannot be applied to it command-by-command, because the commands

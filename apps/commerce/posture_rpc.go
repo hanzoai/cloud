@@ -10,7 +10,7 @@ package commerce
 // of fields this side decides the meaning of. Methods and plans are RENDERED —
 // carried as the bytes the store produced — because their wire is a deep tree of
 // the store's OWN models, where a mirror here would be sixty fields whose only
-// job is to agree with something else. A value the door decides is typed; a
+// job is to agree with something else. A value the endpoint decides is typed; a
 // document it forwards is bytes.
 
 import (
@@ -76,7 +76,7 @@ func planeSettings(ctx context.Context, _ *struct{}) (*plane.PaymentConfig, erro
 // Moves this org between sandbox money and real money.
 //
 // It flips whether a charge hits a real card, so it is the one posture change
-// that is not self-service — the door holds it at the platform bar. Live and
+// that is not self-service — the endpoint holds it at the platform bar. Live and
 // testMode come back as one fact stated twice, in the two vocabularies its
 // readers use, from the single authority that decided it.
 //
@@ -97,8 +97,8 @@ func planeMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
 //
 // A store that cannot be read answers an EMPTY LIST rather than a failure, which
 // is what this address has always done: the saved-cards panel renders empty
-// instead of breaking the page around it. The subject is the door's, so a query
-// cannot widen the list to another customer of the same org.
+// instead of breaking the page around it. The subject is the endpoint's, so a
+// query cannot widen the list to another customer of the same org.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, error) {
@@ -109,7 +109,7 @@ func planeMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, er
 	rows, lerr := commercebilling.ListMethods(ctx, org, in.Subject, in.Kind, kmsFrom(ctx))
 	if lerr != nil {
 		// The honest empty list this address has always answered with, kept here
-		// rather than at the door so both halves cannot disagree about it.
+		// rather than at the endpoint so both halves cannot disagree about it.
 		rows = nil
 	}
 	if rows == nil {
@@ -122,12 +122,12 @@ func planeMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, er
 // and persists the row.
 //
 // Saving a card that is ALREADY on file answers with the row that already holds
-// it rather than stacking a duplicate, and the door needs to tell the two apart
-// to answer 201 or 200 — so whether the row is new is part of the answer, not
-// something a reader infers.
+// it rather than stacking a duplicate, and the endpoint needs to tell the two
+// apart to answer 201 or 200 — so whether the row is new is part of the answer,
+// not something a reader infers.
 //
 // The email names the processor's customer profile and is the CALLER'S own,
-// resolved at the door from its credential: the store must never read an
+// resolved at the endpoint from its credential: the store must never read an
 // identity it was not handed.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
@@ -140,7 +140,7 @@ func planeMethodSave(ctx context.Context, in *plane.MethodSaveIn) (*plane.Render
 	if uerr := json.Unmarshal(in.Body, &body); uerr != nil {
 		return nil, zip.Errorf(400, "invalid request body")
 	}
-	// The subject the door resolved wins over anything the body carried: a
+	// The subject the endpoint resolved wins over anything the body carried: a
 	// customer id a caller could choose is a card saved onto somebody else.
 	body.CustomerId = in.Subject
 	m, created, merr := commercebilling.CreateMethod(ctx, org, in.Email, kmsFrom(ctx), body)
@@ -166,7 +166,7 @@ func planeMethodSave(ctx context.Context, in *plane.MethodSaveIn) (*plane.Render
 //
 // A method this subject does not own is NOT FOUND rather than refused — the same
 // answer whether the id names nothing or names somebody else's card — so an id
-// cannot be probed for existence. Privileged is the DOOR'S determination that
+// cannot be probed for existence. Privileged is the ENDPOINT'S determination that
 // this caller may act on any subject inside the org, and travels as one, because
 // authority decided twice is authority that eventually disagrees with itself.
 //
@@ -193,9 +193,9 @@ func planeMethodDetach(ctx context.Context, in *plane.MethodRef) (*plane.Detachm
 //
 // The active offer is resolved HERE, in the process that holds the platform row
 // it lives in, and applied to the prices before they leave — so what the catalog
-// quotes is what the checkout will charge. A door that priced this itself would
-// need its own copy of the window rule, and a catalog priced without the offer
-// is a different catalog.
+// quotes is what the checkout will charge. An endpoint that priced this itself
+// would need its own copy of the window rule, and a catalog priced without the
+// offer is a different catalog.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planePlans(ctx context.Context, in *plane.PlansIn) (*plane.Rendered, error) {
@@ -214,7 +214,7 @@ func planePlans(ctx context.Context, in *plane.PlansIn) (*plane.Rendered, error)
 // same plan two ways.
 func promoNow(ctx context.Context) *promo.Promo { return promo.Current(ctx) }
 
-// rendered marshals a store view into the bytes the door forwards.
+// rendered marshals a store view into the bytes the endpoint forwards.
 //
 // It is the ONE place this file turns a value into a document, so the two
 // rendered families cannot come to encode differently, and a marshal that fails

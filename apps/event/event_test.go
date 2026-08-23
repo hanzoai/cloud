@@ -236,7 +236,7 @@ func TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost(t *testing.T) {
 // caller-settable header.
 //
 // Now a Host buys nothing anywhere because there is nothing to buy: without a
-// credential every door refuses, brand host or not.
+// credential every endpoint refuses, brand host or not.
 func TestEvent_NoBrandHostFallback(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)

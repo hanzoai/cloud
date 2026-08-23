@@ -30,7 +30,7 @@ func TestCredentialClass_ReadsTheCredentialNotTheClient(t *testing.T) {
 	}{
 		{"validated secret key", "acme", "Bearer sk-live-1", "", "curl/8", edge.CredSecret},
 		// hk- is not one of the two key shapes (see APIKeyPrefixes: pk- and sk-).
-		// It reaches no key door and resolves to no principal, so it cannot raise
+		// It reaches no key endpoint and resolves to no principal, so it cannot raise
 		// a caller into the agent lane on its own — whatever else validated this
 		// request, the hk- string contributed nothing to the classification.
 		{"hk- is not a key shape, so it does not classify as one", "acme", "Bearer hk-live-1", "", "", edge.CredSession},

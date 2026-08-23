@@ -16,7 +16,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo front-door
+// channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo entry point
 // shared by EVERY chat platform (Slack, Teams, Discord, Telegram). It owns
 // everything provider-blind — the normalized inbound message, the bounded per-org
 // agent-turn pool, the ONE agent brain (on-behalf-of RunOnBehalf), and the
@@ -237,7 +237,7 @@ func channelReply(s *cloud.Service[state], org string, in Inbound) (reply string
 	// in THIS binary, so the direct call made co-residency an undeclared
 	// requirement and answered ErrNoPeer for every deployment that separates them —
 	// which is every real one. It failed the same way for every chat channel, so the
-	// door belongs on the plane where the boundary is explicit.
+	// call belongs on the plane where the boundary is explicit.
 	// Model is the person's OWN choice from the App Home tab, empty when they have
 	// not chosen — the answering side then uses the deployment default. Carried
 	// per turn rather than baked into an agent row, because it is a preference of

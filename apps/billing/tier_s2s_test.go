@@ -46,10 +46,10 @@ import (
 //
 // Both identity codes are named because the fix had to be made TWICE and the
 // second layer was invisible until the first was live. payer admits the caller at
-// the door and answers 401 when it does not; payingOrg resolves the tenant again
-// inside the op behind it and answers 403 "no validated org on the call". Fixing
-// only the door moved the refusal one layer down and changed nothing a caller
-// could see except the number. A test that watched for 401 alone would have
+// the endpoint and answers 401 when it does not; payingOrg resolves the tenant
+// again inside the op behind it and answers 403 "no validated org on the call".
+// Fixing only the endpoint moved the refusal one layer down and changed nothing a
+// caller could see except the number. A test that watched for 401 alone would have
 // called that a pass.
 func TestTier_TrustedS2SReadIsServed(t *testing.T) {
 	const token = "test-commerce-service-token"
@@ -58,9 +58,9 @@ func TestTier_TrustedS2SReadIsServed(t *testing.T) {
 	code, body := s2sCall(t, app, "/v1/billing/tier?user=hanzo", token, "hanzo")
 	switch code {
 	case http.StatusUnauthorized:
-		t.Fatalf("the door refused the trusted S2S caller as unauthenticated: %s", body)
+		t.Fatalf("the endpoint refused the trusted S2S caller as unauthenticated: %s", body)
 	case http.StatusForbidden:
-		t.Fatalf("the door admitted the trusted S2S caller and the op behind it "+
+		t.Fatalf("the endpoint admitted the trusted S2S caller and the op behind it "+
 			"refused them: %s", body)
 	}
 }

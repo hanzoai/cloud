@@ -23,7 +23,7 @@ import (
 // sshUploadPack streams a clone/fetch over the SSH channel via
 // `git upload-pack <bareDir>`. Read-only: no side effects.
 func sshUploadPack(s *cloud.Service[state], ctx context.Context, org, project, name, protocol string, ch io.ReadWriteCloser) error {
-	// Both SSH doors run the pack to completion before returning — the channel
+	// Both SSH handlers run the pack to completion before returning — the channel
 	// IS the stream — so unlike the smart-HTTP clone the reader can be deferred.
 	bareDir, done, err := materializeAt(ctx, s, org, project, name)
 	if err != nil {
@@ -43,7 +43,7 @@ func sshUploadPack(s *cloud.Service[state], ctx context.Context, org, project, n
 // function (gitexec.go runPackSSHScreened). It used to carry none: this handler
 // piped the channel straight into `git receive-pack`, so an org member who
 // enrolled a key through POST /v1/git/keys could create, rewrite, force or
-// DELETE any ref while the HTTP door next to it refused all four. A rule that
+// DELETE any ref while the HTTP endpoint next to it refused all four. A rule that
 // one transport enforces and another does not is not a rule.
 //
 // There is no grant on this path — a grant is an HTTP bearer and SSH

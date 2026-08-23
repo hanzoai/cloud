@@ -20,7 +20,8 @@ import (
 )
 
 // ingest_test.go owns the shared package harness (mounted app, identity
-// requests, door spies, client fixtures) plus the ingress-gate behavior tests.
+// requests, transport spies, client fixtures) plus the ingress-gate behavior
+// tests.
 // ingest is driven DIRECTLY: the goroutine hop lives in
 // integrations.emitIngress and is proven in clients/integrations/
 // ingress_test.go, so every test here is deterministic.
@@ -158,9 +159,9 @@ func putAllowlist(t *testing.T, e *testEnv, org string, body map[string]any) {
 	}
 }
 
-// ── door spies ───────────────────────────────────────────────────────────────
+// ── transport spies ──────────────────────────────────────────────────────────
 
-// doorCall is one recorded transport-door invocation.
+// doorCall is one recorded transport invocation.
 type doorCall struct {
 	org     string
 	root    string
@@ -169,7 +170,7 @@ type doorCall struct {
 	text    string
 }
 
-// doorRec records door invocations. Mutex-guarded so recorders stay
+// doorRec records transport invocations. Mutex-guarded so recorders stay
 // race-clean if a caller ever drives them from a goroutine.
 type doorRec struct {
 	mu    sync.Mutex
@@ -199,10 +200,10 @@ func (r *doorRec) count() int {
 
 // find returns the ONE recorded call whose text contains substr.
 //
-// Assertions read as "what was said" rather than "how many times a door was
-// touched", which is what they actually mean — and unlike an index it does not
-// depend on a turn's reply losing a race with the message under test. An allowed
-// message is answered now, so both arrive on the same door.
+// Assertions read as "what was said" rather than "how many times a transport
+// was touched", which is what they actually mean — and unlike an index it does
+// not depend on a turn's reply losing a race with the message under test. An
+// allowed message is answered now, so both arrive on the same transport.
 func (r *doorRec) find(t *testing.T, substr string) doorCall {
 	t.Helper()
 	r.mu.Lock()
@@ -224,13 +225,13 @@ func (r *doorRec) call(t *testing.T, i int) doorCall {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if i >= len(r.calls) {
-		t.Fatalf("door call %d not recorded (have %d)", i, len(r.calls))
+		t.Fatalf("transport call %d not recorded (have %d)", i, len(r.calls))
 	}
 	return r.calls[i]
 }
 
-// The four spy installers swap the package door vars for recorders and
-// restore them on cleanup. ALL FOUR doors are spies in this package —
+// The four spy installers swap the package transport vars for recorders and
+// restore them on cleanup. ALL FOUR transports are spies in this package —
 // Discord's real HTTP path is proven in apps/integrations/ingress_test.go
 // (C2-4), symmetric with the other transports' existing send-path tests.
 
@@ -334,7 +335,7 @@ func TestIngestPairingDefault(t *testing.T) {
 		t.Fatalf("refresh must keep the pending code: %+v", rows2)
 	}
 
-	// Slack DM: the pairing reply rides the door and carries the code.
+	// Slack DM: the pairing reply rides the transport and carries the code.
 	ingest(ctx, ingressEv(org, "slack", "T024ABC", "u1", "D024BE91L", "", "hello", "s1", ""))
 	var slCode string
 	rows3, _ := listPairing(ctx, st, org, time.Now().Unix())
@@ -347,7 +348,7 @@ func TestIngestPairingDefault(t *testing.T) {
 		t.Fatalf("slack pairing request missing: %+v", rows3)
 	}
 	if sl.count() != 1 {
-		t.Fatalf("slack pairing reply: %d door calls, want 1", sl.count())
+		t.Fatalf("slack pairing reply: %d transport calls, want 1", sl.count())
 	}
 	reply := sl.call(t, 0)
 	if reply.org != org || reply.room != "D024BE91L" || !strings.Contains(reply.text, slCode) {
@@ -598,7 +599,7 @@ func TestIngestRouteAfterGate(t *testing.T) {
 		t.Fatal("blocked inbound must not mint a route")
 	}
 	if tm.count() != 0 {
-		t.Fatal("no door traffic for a blocked event")
+		t.Fatal("no transport traffic for a blocked event")
 	}
 
 	// Allowed inbound stores the JWT-verified reply root; egress rides it.
@@ -619,7 +620,7 @@ func TestIngestRouteAfterGate(t *testing.T) {
 	}
 
 	// The PAIR branch mints the route too — the pairing reply must be able to
-	// ride the teams door.
+	// ride the teams transport.
 	const dmConv = "a:1a2b"
 	const root2 = "https://smba.example/emea/"
 	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u7", dmConv, "", "hello", "t3", root2))
@@ -716,9 +717,9 @@ func TestIngestDiscordRoute(t *testing.T) {
 	var d Delivery
 	decodeJSON(t, res.Body, &d)
 	if d.MessageID != "m-1" {
-		t.Fatalf("delivery = %+v, want the door's message id", d)
+		t.Fatalf("delivery = %+v, want the transport's message id", d)
 	}
 	if got := dc.find(t, "pong"); got.room != "c-99" {
-		t.Fatalf("door call = %+v, want room c-99", got)
+		t.Fatalf("transport call = %+v, want room c-99", got)
 	}
 }

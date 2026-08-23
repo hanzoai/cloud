@@ -95,7 +95,7 @@ func TestCompleteIgnoresProseForAProductThisAppDoesNotPublish(t *testing.T) {
 // A wildcard route is described by the pattern the ROUTER carries (/v1/kms/secrets/+),
 // while the document renders it as a template (/v1/kms/secrets/{wildcard1}). The
 // orphan check compares the two through the same translation the projection uses,
-// so a correctly-keyed description of a relay door is not read as an orphan.
+// so a correctly-keyed description of a relay is not read as an orphan.
 func TestCompleteReadsAWildcardDeclarationThroughTheSameTranslation(t *testing.T) {
 	Describe("/v1/kms/secrets/+", "GET", "Read one secret", "Answers the addressed secret's value.")
 	t.Cleanup(func() { unregister("/v1/kms/secrets/+", "GET") })

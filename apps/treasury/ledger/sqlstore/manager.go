@@ -72,7 +72,7 @@ func (m *Manager) House() (*Store, error) { return m.open(namespace.System()) }
 
 // Get resolves a tenant's OWN ledger. It takes the NAME and not the tenant string
 // it was folded from: this package sits below cloud, so it cannot reach cloud's
-// one door for turning a principal into a name, and a second fold here would be a
+// one rule for turning a principal into a name, and a second fold here would be a
 // second answer to which file a tenant's money is in. Handed the name, it cannot
 // open another tenant's file, cannot reach the house fund (a different KIND), and
 // cannot leave the data directory.

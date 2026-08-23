@@ -52,8 +52,8 @@ func TestReadPlaneDoesNotImportGoGit(t *testing.T) {
 	}
 }
 
-// A stale entry in the allow-list is its own kind of rot: it silently re-opens
-// the door for a file that has already been cleaned up.
+// A stale entry in the allow-list is its own kind of rot: it silently re-admits
+// a file that has already been cleaned up.
 func TestGoGitAllowListHasNoStaleEntries(t *testing.T) {
 	fset := token.NewFileSet()
 	for name := range goGitAllowed {

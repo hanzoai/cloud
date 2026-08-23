@@ -35,8 +35,8 @@ import (
 // WHAT IT WATCHES MOVED WITH THE FOLD, and the failure now has two halves. The
 // ADDRESSES are apps/billing's, and its own guard drives the live router to
 // prove each is mounted and refuses. This half is the other one, and it is the
-// one nothing else can see: a door relaying an op that NOBODY PUBLISHES answers
-// 503, which reads like an outage rather than like a missing registration — the
+// one nothing else can see: an endpoint relaying an op that NOBODY PUBLISHES
+// answers 503, which reads like an outage rather than like a missing registration — the
 // same "no data" that made the original three invisible, wearing a different
 // status. So this asserts the OPS exist on the plane, in the process that owns
 // the rows, which is the half that would go missing here.
@@ -67,7 +67,7 @@ func TestASubscriberCanReadTheirOwnPlan(t *testing.T) {
 		{plane.BillingCredits, "the prepaid balance they bought"},
 	} {
 		if !published[r.op] {
-			t.Errorf("%s is not published, so nothing can answer %s — the money door "+
+			t.Errorf("%s is not published, so nothing can answer %s — the money endpoint "+
 				"relays this by name and an op with no publisher answers 503, which reads "+
 				"like an outage rather than like a registration nobody made", r.op, r.answers)
 		}

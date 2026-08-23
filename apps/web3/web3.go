@@ -1,5 +1,5 @@
 // Package web3 is the chain-access surface: which chains this deployment can
-// reach, a JSON-RPC door onto each, and the two token reads every wallet UI
+// reach, a JSON-RPC endpoint onto each, and the two token reads every wallet UI
 // needs.
 //
 // It replaces the api/ half of hanzoai/bootnode, which was 102 Python files of

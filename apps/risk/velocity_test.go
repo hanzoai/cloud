@@ -1,16 +1,16 @@
 package risk
 
-// velocity_test.go — THE VELOCITY HALVES, MADE REAL AT THE CREDIT DOOR.
+// velocity_test.go — THE VELOCITY HALVES, MADE REAL AT THE CREDIT ENDPOINT.
 //
 // The pace and fan-out rules were STRUCTURALLY dead there — not mis-tuned, but unable
 // to reach a correct answer for any input:
 //
-//	THE DOOR STATED NO LINK IDENTIFIER, so the fan-out half could not fire at all,
-//	and a half that cannot fire reads exactly like a half that found nothing.
+//	THE ENDPOINT STATED NO LINK IDENTIFIER, so the fan-out half could not fire at
+//	all, and a half that cannot fire reads exactly like a half that found nothing.
 //
 //	NOTHING TAUGHT THE MODEL ANYTHING. A decide records nothing by design and the
-//	published learn door is an organisation calling itself — and at a self-serve
-//	credit door the organisation IS the payer. Five payments of eleven thousand
+//	published learn endpoint is an organisation calling itself — and at a self-serve
+//	credit endpoint the organisation IS the payer. Five payments of eleven thousand
 //	dollars looked like five first payments.
 //
 //	THE ACCRUAL COULD BE ERASED. A negative taught amount subtracts from the very
@@ -30,12 +30,12 @@ import (
 // [onFan] is the only half of the rule that can see account farming, because farming
 // is unremarkable from every account taken by itself — the pattern exists ONLY in
 // what the accounts share. It reads two link identifiers, and a link identifier no
-// door states does not exist: with the credit door stating neither, this half could
-// not fire for any input at all, and a half that cannot fire reads exactly like a
-// half that found nothing.
+// endpoint states does not exist: with the credit endpoint stating neither, this half
+// could not fire for any input at all, and a half that cannot fire reads exactly like
+// a half that found nothing.
 //
-// The door now states the address our own edge resolved on the peer axis, so this
-// drives the rule the way the door drives it: twenty nominally unrelated payers
+// The endpoint now states the address our own edge resolved on the peer axis, so this
+// drives the rule the way the endpoint drives it: twenty nominally unrelated payers
 // behind one address, then a first ordinary payment from the twenty-first.
 //
 // Mutation proof: drop [plane.SignalPeer] from [paymentFacts] (or the peer link from
@@ -77,7 +77,7 @@ func TestFan_ThePeerAxisIsReachableFromTheCreditDoor(t *testing.T) {
 	}
 	if out.Action != cloud.ActionReview {
 		t.Fatalf("action %q, want %q — the twenty-first payer behind one address was allowed, "+
-			"so the fan-out is unreachable from this door", out.Action, cloud.ActionReview)
+			"so the fan-out is unreachable from this endpoint", out.Action, cloud.ActionReview)
 	}
 	if !strings.Contains(out.Cause, axisPeer) {
 		t.Errorf("cause %q does not name the identifier the payers share", out.Cause)
@@ -88,10 +88,10 @@ func TestFan_ThePeerAxisIsReachableFromTheCreditDoor(t *testing.T) {
 // settling process actually calls.
 //
 // It is the test the whole batch turns on. Before it, nothing in the fleet taught the
-// credit door's rule anything: decide records nothing, the published learn door is an
-// organisation calling itself, and at a self-serve credit door the organisation IS
-// the payer — so five payments of eleven thousand dollars looked like five first
-// payments, every one of them under every stated bound by construction.
+// credit endpoint's rule anything: decide records nothing, the published learn
+// endpoint is an organisation calling itself, and at a self-serve credit endpoint the
+// organisation IS the payer — so five payments of eleven thousand dollars looked like
+// five first payments, every one of them under every stated bound by construction.
 //
 // Five settle here, and the sixth decide sees fifty-five thousand of prior accrual.
 //
@@ -163,25 +163,27 @@ func TestObserve_ASettledPaymentTeachesTheModel(t *testing.T) {
 }
 
 // TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject — the accrual half of the
-// CROSS-DOOR proof, over the shape the settling process actually states.
+// CROSS-ENDPOINT proof, over the shape the settling process actually states.
 //
 // commerce has ONE card money move and the binary opens TWO addresses onto it: the
 // browser's top-up and the agent's typed payment (apps/commerce risk.go, payments.go).
 // Only one of them used to be screened, and screening the second one is worth nothing
 // unless the two ACCRUE TOGETHER — an attacker with a stolen card does not care which
-// URL takes it, so a per-door accrual halves every velocity bound just by alternating.
+// URL takes it, so a per-endpoint accrual halves every velocity bound just by
+// alternating.
 //
-// This drives the plane the way the two doors drive it: six settlements naming ONE payer,
-// alternating between the two doors' gateway references, each far under [reviewNano] so
-// no point-in-time test can see any of them. What is remarkable is the sum.
+// This drives the plane the way the two endpoints drive it: six settlements naming ONE
+// payer, alternating between the two endpoints' gateway references, each far under
+// [reviewNano] so no point-in-time test can see any of them. What is remarkable is the
+// sum.
 //
-// The commerce half — that both doors really do resolve one payer and state distinct
-// keys — is proven at the doors, in
+// The commerce half — that both endpoints really do resolve one payer and state
+// distinct keys — is proven at the endpoints, in
 // [commerce.TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual].
 //
-// Mutation proof: namespace the observation by door (prefix the subject, or the tenant,
-// with which address it came from) and the final decide allows, because each half of the
-// burst is then a history of its own with nothing over the bound.
+// Mutation proof: namespace the observation by endpoint (prefix the subject, or the
+// tenant, with which address it came from) and the final decide allows, because each
+// half of the burst is then a history of its own with nothing over the bound.
 func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
 	probe.reset(true)
 	mountApp(t)
@@ -190,8 +192,8 @@ func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
 	k := key(t, brandA, orgA)
 	arm(t, p, k)
 
-	// $11,000 six times, alternating doors. The subject is ONE payer, because that is
-	// what both doors resolve through the one payer rule.
+	// $11,000 six times, alternating endpoints. The subject is ONE payer, because that
+	// is what both endpoints resolve through the one payer rule.
 	const each = "11000000000000"
 	const payer = "acme"
 	doors := []string{"sq_pay_browser_", "sq_pay_typed_"}
@@ -209,10 +211,10 @@ func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
 		}
 	}
 
-	// IDEMPOTENT ACROSS THE DOORS TOO. One payment reached through both addresses carries
-	// the gateway's SAME payment id (both doors return it out of one core), so the second
-	// arrival is an inert replay rather than a second count. Double-counting here would
-	// freeze a customer for paying once.
+	// IDEMPOTENT ACROSS THE ENDPOINTS TOO. One payment reached through both addresses
+	// carries the gateway's SAME payment id (both endpoints return it out of one core),
+	// so the second arrival is an inert replay rather than a second count.
+	// Double-counting here would freeze a customer for paying once.
 	replay, err := planeObserve(asPeer(orgA), &contract.RiskObserveIn{
 		Stage: cloud.StagePayment, Kind: contract.KindPayer, Subject: payer,
 		Settlement: "sq_pay_typed_1",
@@ -222,7 +224,7 @@ func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
 		t.Fatalf("replay: %v", err)
 	}
 	if replay.Learned != 0 {
-		t.Errorf("the same gateway payment arriving through the other door learned %d, want 0 — "+
+		t.Errorf("the same gateway payment arriving through the other endpoint learned %d, want 0 — "+
 			"one payment is counted twice and the accrual describes our routing rather than "+
 			"the payer", replay.Learned)
 	}
@@ -241,8 +243,8 @@ func TestObserve_ABurstSplitAcrossTwoDoorsAccruesOnOneSubject(t *testing.T) {
 	}
 	if out.Action != cloud.ActionReview {
 		t.Fatalf("action %q, want %q — six settled payments of $11,000 split across the two credit "+
-			"doors accrued $66,000 past a $50,000 examining bound and the seventh was allowed, "+
-			"which is the same split-payment typology one door at a time", out.Action, cloud.ActionReview)
+			"endpoints accrued $66,000 past a $50,000 examining bound and the seventh was allowed, "+
+			"which is the same split-payment typology one endpoint at a time", out.Action, cloud.ActionReview)
 	}
 	if !strings.Contains(out.Cause, causeAccrued) {
 		t.Errorf("cause %q does not name the accrual", out.Cause)
@@ -276,7 +278,7 @@ func TestObserve_RefusesAnObservationItCannotConvergeOn(t *testing.T) {
 // id this plane will later mint for itself is an id a caller can claim in advance,
 // after which the plane's own observation lands as a duplicate — inert, silent, and
 // exactly as clean-looking as an organisation with nothing to hide. At a self-serve
-// credit door the caller and the payer are the same party, so that is the velocity
+// credit endpoint the caller and the payer are the same party, so that is the velocity
 // bound switched off by the thing it bounds.
 //
 // Mutation proof: delete the [reservedOf] guard in [riskEvent.observation] and the
@@ -288,13 +290,13 @@ func TestObserve_CannotBePreEmptedThroughThePublicLearnDoor(t *testing.T) {
 	holdFolds(t, p)
 	k := key(t, brandA, orgA)
 
-	// The public door refuses every namespace this plane mints for itself, and says
+	// The public endpoint refuses every namespace this plane mints for itself, and says
 	// which one — a silent rewrite would let the caller believe their id landed.
 	for _, ns := range reserved {
 		if _, err := (riskEvent{
 			ID: ns + "guessed", Kind: kindPayer, Subject: "u_pre", Nano: 1_000_000_000,
 		}).observation(time.Now().UTC()); err == nil {
-			t.Errorf("the public learn door accepted an id in this plane's own %q namespace", ns)
+			t.Errorf("the public learn endpoint accepted an id in this plane's own %q namespace", ns)
 		}
 	}
 
@@ -321,7 +323,7 @@ func TestObserve_CannotBePreEmptedThroughThePublicLearnDoor(t *testing.T) {
 // negative amount is not a small event — it is a subtraction from the finding. One
 // taught event of minus fifty thousand cancels an hour of real payments, the
 // converted accrual floors at zero, and the pace rule goes quiet with nothing to see.
-// At a self-serve credit door the payer IS the organisation, so that is
+// At a self-serve credit endpoint the payer IS the organisation, so that is
 // self-suppression for the price of one authenticated call.
 //
 // Mutation proof: remove the sign check from [observe] and the accrual below reads
@@ -334,9 +336,9 @@ func TestObserve_RefusesANegativeValue(t *testing.T) {
 	at := time.Now().UTC()
 
 	if _, err := observe("neg", actor{Kind: kindPayer, Subject: "u_neg"}, -50_000, at); err == nil {
-		t.Fatal("a negative value was admitted at the one door every bound is applied at")
+		t.Fatal("a negative value was admitted at the one entry point every bound is applied at")
 	}
-	// The wire door refuses it too, in its own words, because that is where a caller
+	// The wire path refuses it too, in its own words, because that is where a caller
 	// reaches it.
 	if _, err := (riskEvent{
 		ID: "neg", Kind: kindPayer, Subject: "u_neg", Nano: -50_000 * nanoPerUSD,

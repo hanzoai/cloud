@@ -12,7 +12,7 @@ import (
 //
 // /v1/graphql was claimed by nobody, so it fell to the app holding the /v1
 // remainder — which mounted a projection of its OWN registry and answered with a
-// schema one field wide. The document door had exactly this bug and this is the
+// schema one field wide. The document endpoint had exactly this bug and this is the
 // same test for the same shape, because the reasoning is identical: an answer
 // about the whole fleet is the host's, since no plugin can see past itself.
 func TestTheGraphQLDoorIsTheHostsNotACatchAlls(t *testing.T) {
@@ -78,7 +78,7 @@ func TestClaimingTheGraphQLDoorTookNothingWithIt(t *testing.T) {
 	}
 }
 
-// TestTheIndexAdvertisesTheQueryLanguage keeps the door findable. A caller reads
+// TestTheIndexAdvertisesTheQueryLanguage keeps the endpoint findable. A caller reads
 // the root once and learns every way into this API; a projection missing from
 // that list is one nobody is told about, which is how this address came to be
 // unclaimed in the first place.

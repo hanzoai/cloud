@@ -12,7 +12,8 @@ import (
 )
 
 // collectSpans installs a span sink that forwards the batch for one org onto a channel,
-// and returns the channel + the sink's remover. Mirrors collectErrors next door.
+// and returns the channel + the sink's remover. Mirrors collectErrors in the
+// neighbouring file.
 func collectSpans(t *testing.T, wantOrg string) (<-chan []SpanEvent, func()) {
 	t.Helper()
 	got := make(chan []SpanEvent, 1)

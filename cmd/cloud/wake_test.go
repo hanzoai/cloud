@@ -8,10 +8,10 @@ package main
 // straight to the app's canonical socket without touching the router. So the app was
 // never started, the socket was never bound, and the caller dialled a path that does
 // not exist — correct by design, inert in practice. Nothing in this repo called
-// zip.App.Start, the second door zip added for exactly this.
+// zip.App.Start, the second entry point zip added for exactly this.
 //
 // Both halves are real here: a real host with a real lazy plugin, a real child
-// PROCESS (this test binary, re-execed), the real start door, and the real
+// PROCESS (this test binary, re-execed), the real start endpoint, and the real
 // cloud.Peer on the caller's side. The only thing stubbed is what the child serves,
 // because what it serves is not what is under test — that it is RUNNING is.
 
@@ -69,8 +69,8 @@ func TestMain(m *testing.M) {
 	os.Exit(0)
 }
 
-// router builds a host with one LAZY plugin — this binary — and opens the start
-// door on it. Nothing is running when it returns; that is the point.
+// router builds a host with one LAZY plugin — this binary — and serves the start
+// endpoint on it. Nothing is running when it returns; that is the point.
 func router(t *testing.T, name string) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
@@ -90,8 +90,8 @@ func router(t *testing.T, name string) {
 
 	// Called exactly as run() calls it: no handle, torn down by the app's own
 	// shutdown hooks. If this ever grows a return value again, the caller in
-	// main.go is one `defer f()()` away from never opening the door at all.
-	// The agent door rides the same socket, over this host's own children —
+	// main.go is one `defer f()()` away from never serving the endpoint at all.
+	// The agent MCP server rides the same socket, over this host's own children —
 	// which is one lazy plugin here, and none of it is what this file tests.
 	serveWake(app, fleet.Mount(app, manifest.MCPPath, routed([]string{name}), locate(app)))
 	waitFor(t, zip.SocketPath(plane.HostApp))
@@ -191,7 +191,7 @@ func TestWakeWithNoRouterIsNoPeer(t *testing.T) {
 // TestWakeAgainstAnOlderRouterIsAnOutage is the ROLLING DEPLOY, and it is the case
 // that made carrying this fact on a status code untenable.
 //
-// A host pod on a build that predates the start door still serves a plane socket —
+// A host pod on a build that predates the start endpoint still serves a plane socket —
 // it just has no host_start on it — so the call is answered "unknown op", which on
 // the wire is a 404. The router's own "this fleet runs no such app" was ALSO a 404,
 // and both rebuild into the same *HTTPError with an empty Code, so nothing but the

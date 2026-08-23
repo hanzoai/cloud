@@ -15,12 +15,12 @@ import (
 )
 
 // door_test.go pins the client that makes the catalog worth having: a server an org
-// ENABLED shows up as tools on the fleet's one MCP door, namespaced by the server
-// it came from, callable, and invisible to every other tenant.
+// ENABLED shows up as tools on the fleet's one MCP endpoint, namespaced by the
+// server it came from, callable, and invisible to every other tenant.
 
-// doorApp mounts the tool plane on an app whose MCP door has the per-caller half
-// wired — the same composition plugin/tools/main.go declares. Prepare() is what
-// installs the door, so it is called here rather than left to Listen.
+// doorApp mounts the tool plane on an app whose MCP endpoint has the per-caller
+// half wired — the same composition plugin/tools/main.go declares. Prepare() is
+// what installs the endpoint, so it is called here rather than left to Listen.
 func doorApp(t *testing.T) *zip.App {
 	t.Helper()
 	old := std
@@ -36,7 +36,7 @@ func doorApp(t *testing.T) *zip.App {
 	return app
 }
 
-// rpc posts one JSON-RPC message to the door as org.
+// rpc posts one JSON-RPC message to the MCP endpoint as org.
 func rpc(t *testing.T, app *zip.App, org, body string) map[string]any {
 	t.Helper()
 	r := send(t, app, http.MethodPost, "/mcp", org, json.RawMessage(body), false)
@@ -50,7 +50,7 @@ func rpc(t *testing.T, app *zip.App, org, body string) map[string]any {
 	return out
 }
 
-// doorTools is the tool names the door lists for org.
+// doorTools is the tool names the MCP endpoint lists for org.
 func doorTools(t *testing.T, app *zip.App, org string) map[string]bool {
 	t.Helper()
 	res, _ := rpc(t, app, org, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)["result"].(map[string]any)
@@ -119,8 +119,8 @@ func enable(t *testing.T, org, id, listing, url string) {
 }
 
 // TestDoorListsAnEnabledServersTools: the whole point. An org enables a catalog
-// listing; its tools are on the fleet's ONE door, prefixed by the server they came
-// from, and calling one reaches the vendor with the org's own credential.
+// listing; its tools are on the fleet's ONE MCP endpoint, prefixed by the server
+// they came from, and calling one reaches the vendor with the org's own credential.
 func TestDoorListsAnEnabledServersTools(t *testing.T) {
 	ts := remoteServer(t)
 	app := doorApp(t)
@@ -130,10 +130,10 @@ func TestDoorListsAnEnabledServersTools(t *testing.T) {
 	p.http = ts.Client()
 	std.Register(p)
 
-	// Unactivated, it is not on the door: listing a name that answers 403 would be
-	// worse than not listing it.
+	// Unactivated, it is not on the MCP endpoint: listing a name that answers 403
+	// would be worse than not listing it.
 	if names := doorTools(t, app, "acme"); names["stripe_charge"] {
-		t.Fatal("an unactivated tool must not be on the door")
+		t.Fatal("an unactivated tool must not be on the MCP endpoint")
 	}
 
 	if r := do(t, app, http.MethodPut, "/v1/tools/activation", "acme",
@@ -143,7 +143,7 @@ func TestDoorListsAnEnabledServersTools(t *testing.T) {
 
 	names := doorTools(t, app, "acme")
 	if !names["stripe_charge"] {
-		t.Fatalf("the enabled server's tool is not on the door: %v", names)
+		t.Fatalf("the enabled server's tool is not on the MCP endpoint: %v", names)
 	}
 
 	// And it RUNS, through the tool plane's one dispatch policy.
@@ -174,13 +174,13 @@ func TestDoorIsNamespacedPerServer(t *testing.T) {
 	}
 	names := doorTools(t, app, "acme")
 	if !names["stripe_charge"] || !names["adyen_charge"] {
-		t.Fatalf("both vendors' charge must be on the door under their own names: %v", names)
+		t.Fatalf("both vendors' charge must be on the MCP endpoint under their own names: %v", names)
 	}
 }
 
-// TestDoorIsPerTenant: org B never sees org A's tools on the door, and cannot call
-// one by naming it. The tenancy comes from the validated principal, so there is no
-// field a caller could set to reach across.
+// TestDoorIsPerTenant: org B never sees org A's tools on the MCP endpoint, and
+// cannot call one by naming it. The tenancy comes from the validated principal,
+// so there is no field a caller could set to reach across.
 func TestDoorIsPerTenant(t *testing.T) {
 	ts := remoteServer(t)
 	app := doorApp(t)
@@ -195,7 +195,7 @@ func TestDoorIsPerTenant(t *testing.T) {
 	}
 
 	if names := doorTools(t, app, "rival"); names["stripe_charge"] {
-		t.Fatalf("another tenant sees acme's tool on the door: %v", names)
+		t.Fatalf("another tenant sees acme's tool on the MCP endpoint: %v", names)
 	}
 	res, _ := rpc(t, app, "rival",
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"stripe_charge","arguments":{"amount":42}}}`)["result"].(map[string]any)
@@ -233,8 +233,8 @@ func TestServersArePerTenant(t *testing.T) {
 }
 
 // TestAnonymousDoorIsTheFleetsOwn: a tools/list that names no caller gets the
-// build-time half and nothing else — the memcpy that makes the door affordable is
-// not spent asking about a tenant who is not there.
+// build-time half and nothing else — the memcpy that makes the endpoint
+// affordable is not spent asking about a tenant who is not there.
 func TestAnonymousDoorIsTheFleetsOwn(t *testing.T) {
 	ts := remoteServer(t)
 	app := doorApp(t)

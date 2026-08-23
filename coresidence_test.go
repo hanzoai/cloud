@@ -7,8 +7,8 @@ package cloud
 // currently load-bearing for the fleet's safety, and both are one import away from
 // being reversed by somebody who has not read that file:
 //
-//	apps/commerce INSTALLS a scorer (installRiskScorer, on the credit door's own
-//	plane client). It is the client's first and only producer.
+//	apps/commerce INSTALLS a scorer (installRiskScorer, on the credit endpoint's
+//	own plane client). It is the client's first and only producer.
 //	apps/gateway ARMS the fleet-wide abuse gate on cloud.RiskScorerInstalled(),
 //	and refuses mode=live while that reads false.
 //
@@ -81,7 +81,7 @@ func TestComposition_NoRootLinksBothTheScorerAndTheAbuseGate(t *testing.T) {
 				"cloud.RiskScorerInstalled(). In one process that predicate answers true, and the "+
 				"gate becomes armable on a co-residency accident rather than on whether the risk "+
 				"plane can answer for the FLEET — which is a cross-process question no in-process "+
-				"global settles. Arm it deliberately (a plane op, as the obs event door does), "+
+				"global settles. Arm it deliberately (a plane op, as the obs event endpoint does), "+
 				"never by linking.", root, scorerApp, gateApp)
 		}
 	}

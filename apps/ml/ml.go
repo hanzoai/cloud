@@ -22,7 +22,7 @@
 // admission webhook requires a namespace label this subsystem never wrote).
 // Per-org model-shape SEARCH is /v1/risk/search, which runs natively in the
 // org's own sandbox; fine-tuning is the hanzoai/ai broker at /v1/finetune/*.
-// One door each — a second, degraded door is worse than none.
+// One endpoint each — a second, degraded one is worse than none.
 //
 // Tenancy: every request is scoped to the gateway-minted org (X-Org-Id / c.Org())
 // narrowed by the org SUB-SCOPE (X-Project-Id / principal.Project), and lands in a
