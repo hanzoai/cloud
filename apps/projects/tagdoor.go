@@ -57,9 +57,9 @@ func init() {
 // (like the event plane's /v1/event/tag.js) that reads THIS process's project store
 // directly.
 func mountTagDoor(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/projects/tags", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveTags(s, w, r)
-	})))
+	app.Get("/v1/projects/tags", func(c *zip.Ctx) error {
+		return serveTags(s, c)
+	})
 }
 
 // buildTags maps a site's tag config (platform → non-secret pixel id) to injectable
@@ -85,24 +85,22 @@ func buildTags(tags map[string]string) []browserTagOut {
 }
 
 // tagsKey lifts the publishable key: Authorization: Bearer first, then ?key=, then ?ingest_key=.
-func tagsKey(r *http.Request) string {
-	if b := r.Header.Get("Authorization"); strings.HasPrefix(b, "Bearer ") {
+func tagsKey(c *zip.Ctx) string {
+	if b := c.Header("Authorization"); strings.HasPrefix(b, "Bearer ") {
 		if k := strings.TrimSpace(strings.TrimPrefix(b, "Bearer ")); k != "" {
 			return k
 		}
 	}
-	q := r.URL.Query()
-	if k := strings.TrimSpace(q.Get("key")); k != "" {
+	if k := strings.TrimSpace(c.Query("key")); k != "" {
 		return k
 	}
-	return strings.TrimSpace(q.Get("ingest_key"))
+	return strings.TrimSpace(c.Query("ingest_key"))
 }
 
 // tagsHost lifts the site host for the org-key derivation path: ?host= first, else the
 // Origin, else the Referer — reduced to a bare hostname.
-func tagsHost(r *http.Request) string {
-	q := r.URL.Query()
-	for _, raw := range []string{q.Get("host"), r.Header.Get("Origin"), r.Header.Get("Referer")} {
+func tagsHost(c *zip.Ctx) string {
+	for _, raw := range []string{c.Query("host"), c.Header("Origin"), c.Header("Referer")} {
 		if h := hostnameOf(raw); h != "" {
 			return h
 		}
@@ -132,14 +130,14 @@ func hostnameOf(raw string) string {
 // resolveSiteTags dual-resolves the site and returns its Project.Tags, reading THIS
 // process's store directly (in-process; no cross-process reach). nil,false when nothing
 // resolves — the door then answers an empty set.
-func resolveSiteTags(s *cloud.Service[state], r *http.Request) (map[string]string, bool) {
-	ctx := r.Context()
-	if key := tagsKey(r); key != "" {
+func resolveSiteTags(s *cloud.Service[state], c *zip.Ctx) (map[string]string, bool) {
+	ctx := c.Context()
+	if key := tagsKey(c); key != "" {
 		if p, err := s.State.store.ResolveKey(ctx, key); err == nil {
 			return p.Tags, true
 		}
 	}
-	if host := tagsHost(r); host != "" {
+	if host := tagsHost(c); host != "" {
 		if p, err := s.State.store.ResolveHost(ctx, host); err == nil {
 			return p.Tags, true
 		}
@@ -149,19 +147,18 @@ func resolveSiteTags(s *cloud.Service[state], r *http.Request) (map[string]strin
 
 // serveTags writes the site's browser tag config. Public + cross-origin, non-secret,
 // fail-safe. A raw net/http handler so it sets CORS + cache directly, like /v1/event/tag.js.
-func serveTags(s *cloud.Service[state], w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Cache-Control", "public, max-age=60")
+func serveTags(s *cloud.Service[state], c *zip.Ctx) error {
+	c.SetHeader("Content-Type", "application/json; charset=utf-8")
+	c.SetHeader("Access-Control-Allow-Origin", "*")
+	c.SetHeader("Cache-Control", "public, max-age=60")
 
 	out := tagConfig{Tags: []browserTagOut{}}
-	if tags, ok := resolveSiteTags(s, r); ok {
+	if tags, ok := resolveSiteTags(s, c); ok {
 		out.Tags = buildTags(tags)
 	}
 	body, err := json.Marshal(out)
 	if err != nil {
 		body = []byte(`{"tags":[]}`)
 	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+	return c.Bytes(http.StatusOK, body)
 }
