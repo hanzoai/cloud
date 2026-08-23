@@ -19,7 +19,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// k8sFake is a stand-in for Visor's /v1/k8s surface. It speaks the casibase
+// k8sFake is a stand-in for Visor's /v1/k8s surface. It speaks the
 // {status,msg,data} envelope, scopes every read by ?owner (proving cloud forwards
 // the VALIDATED principal's org), and records the last owner + any mutation it saw
 // so a test can assert an admin-gated call is REFUSED before it ever reaches Visor.
