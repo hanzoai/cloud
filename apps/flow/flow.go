@@ -268,7 +268,7 @@ type flowRuns struct {
 // runs. It is the product's own /health and /v1/version composed — an honest
 // lens for "is the workflow plane up", never a fabricated ok.
 func (o ops) status(ctx context.Context, _ *flowNoInput) (*flowStatus, error) {
-	if _, err := caller(ctx); err != nil {
+	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
 	st, _, err := send(ctx, http.MethodGet, "/health", nil, timeout)
@@ -291,7 +291,7 @@ func (o ops) status(ctx context.Context, _ *flowNoInput) (*flowStatus, error) {
 // server-side to the org's project — the page can only ever hold the caller's
 // own workflows.
 func (o ops) workflows(ctx context.Context, in *flowWorkflows) (*flowResult, error) {
-	org, err := caller(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +315,7 @@ func (o ops) workflows(ctx context.Context, in *flowWorkflows) (*flowResult, err
 //
 // Example: {"name": "support-triage", "description": "route tickets"}
 func (o ops) workflowCreate(ctx context.Context, in *flowCreate) (*flowResult, error) {
-	org, err := caller(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -428,26 +428,6 @@ func (o ops) runs(ctx context.Context, in *flowRuns) (*flowResult, error) {
 
 // ── tenancy ─────────────────────────────────────────────────────────────────
 
-// caller resolves the validated caller's org — the ONE tenancy input for every
-// op on this plane. FAIL CLOSED off the HTTP path: a CLI LocalInvoke has no
-// request, so there is no validated principal and no org to scope by.
-//
-// It reads the org Bridge PARKED, not the request. The org is all this plane
-// needs — nothing here turns on admin-ness, a project or a forwarded credential
-// — so cloud.Request, the pinned escape hatch, is not one of its inputs. The
-// three refusals it replaced were ONE decision written three times, because
-// principal.Org already composes the validated-principal check (OrgOf returns
-// false on an empty X-User-Id, which is exactly principal.Validated): a forged
-// X-Org-Id with no credential parks nothing and is refused here, before an
-// upstream byte (TestNoPrincipalIs403AndNoUpstreamByte).
-func caller(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("sign in to use Flow")
-	}
-	return org, nil
-}
-
 // project resolves (and lazily creates) the flow project that holds this org's
 // workflows — the product's own grouping primitive doing tenant duty. The
 // project is named by the org id; resolution is list-then-create under the
@@ -523,7 +503,7 @@ func (o ops) project(ctx context.Context, org string) (string, error) {
 // It returns the validated id and the workflow's raw record (so a plain read
 // costs one upstream call, not two).
 func (o ops) owned(ctx context.Context, id string) (string, json.RawMessage, error) {
-	org, err := caller(ctx)
+	org, err := principal.Acting(ctx)
 	if err != nil {
 		return "", nil, err
 	}

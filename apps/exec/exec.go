@@ -457,28 +457,24 @@ func isAdmitted(ctx context.Context) bool {
 	return ok
 }
 
-// tenantOf is the ONE tenant decision, and it never reads a header.
+// tenantOf is exec's ONE admission, and it is the fleet's rule PLUS one thing,
+// never a second copy of it.
 //
-// THE BUG IT REPLACES: it used to prefer cloud.Who(ctx).Org. cloud.Who is
-// zip.CallerOf, which reads the X-Org-Id REQUEST HEADER (zip caller.go:377) — and
-// for a request carrying no validated bearer, SanitizeIdentity deliberately
-// RESTORES the client's own header (middleware_identity.go:455). So the caller
-// named the tenant, storeFor opened that org's SQLite file, and `X-Org-Id:
-// victim-corp` ran code in the victim's store and read its artifacts back out.
+// principal.Acting is the rule: from outside, the org a validated principal
+// resolved to and nothing else, because the identity boundary restores an
+// unvalidated caller's own org header for the data path and a tenant read from
+// that is a tenant the caller chose; from inside, the caller a door stated, which
+// nothing outside can write. What exec adds is the UNTENANTED case, and it adds
+// it after — a shared service key carries no tenant, so a request bearing it acts
+// for the deployment itself.
 //
-// principal.OrgFrom is the org a VALIDATED principal resolved to and nothing else
-// (principal.OrgOf: an empty user claim means "the org that rode along is
-// untrusted"). Every other app in this repo resolves through it; this one was the
-// outlier, and plane.go's own note — "an org in the argument is an org the caller
-// chose" — is the rule it was breaking.
-//
-// The untenanted fallback is the deployment's brand org, and it is reachable ONLY
-// through the admission marker. That is what keeps it from being a way in: the
-// shared service key carries no tenant, so a request bearing it acts for the
-// deployment — but a request that never presented it acts for nobody and is
-// refused.
+// The brand org is reachable ONLY through the admission marker, which is what
+// keeps it from being a way in: a request that never presented the key acts for
+// nobody and is refused. Composed this way the addition is visible AS an
+// addition; restating the base rule alongside it is how a package ends up with
+// its own tenancy and drifts from everyone else's.
 func tenantOf(ctx context.Context) (string, error) {
-	if org, ok := principal.OrgFrom(ctx); ok {
+	if org, err := principal.Acting(ctx); err == nil {
 		return org, nil
 	}
 	if isAdmitted(ctx) {
@@ -489,11 +485,11 @@ func tenantOf(ctx context.Context) (string, error) {
 
 // callCtx is the context every sandbox call is made on.
 //
-// It ALWAYS detaches and states the resolved tenant, with no branch. The earlier
-// version passed the request context through whenever it already carried a caller,
-// which meant the peer read the org off the request headers — the same
-// attacker-controlled value tenantOf now refuses to trust. One path, and the org
-// the peer sees is exactly the one this subsystem decided.
+// It ALWAYS detaches and states the resolved tenant, with no branch. Passing the
+// request context through where it already carries a caller would let the peer
+// read the org off the headers instead — the value tenantOf just declined to
+// decide on. One path, and the org the peer sees is exactly the one this
+// subsystem decided.
 //
 // zip reads a STATED caller only on a context with no request behind it
 // (zip.CallerOf prefers the request), which is the anti-laundering rule and the
