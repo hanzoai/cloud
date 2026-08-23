@@ -1014,7 +1014,7 @@ func (s *datastoreSink) Insert(ctx context.Context, table string, columns []stri
 	// four and a half months.
 	//
 	// The table name IS the stream name for these two, which is what lets the
-	// analytics bus drain (apps/analytics/warehouse.go) count onto the same
+	// analytics bus drain (apps/event/warehouse.go) count onto the same
 	// series: a row of a given signal counts once, whichever writer carried it.
 	cloud.ObserveRows(table, len(rows))
 	return nil

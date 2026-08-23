@@ -56,7 +56,7 @@ import (
 const Sep = "/"
 
 // Public is the reserved org the event door files CREDENTIAL-LESS writes under
-// (apps/analytics/event.go). It is not a customer: an unauthenticated stranger
+// (apps/event/event.go). It is not a customer: an unauthenticated stranger
 // writes into it, so a read that admitted it would let that stranger move a real
 // tenant's statistics, and a dataset built over it would be a dataset of
 // whatever the internet sent. It is refused at the mint, which every read passes.
