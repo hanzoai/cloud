@@ -56,6 +56,10 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 		zip.WithOperationID("graphNeighbors"),
 		zip.WithSummary("Walk the edges from a seed set, bounded"),
 		zip.WithTags("graph"))
+	zip.Get(zapp, "/v1/graph/search", o.search,
+		zip.WithOperationID("graphSearch"),
+		zip.WithSummary("Find assertions by their text rather than by an entity key"),
+		zip.WithTags("graph"))
 	zip.Get(zapp, "/v1/graph/vocabulary", o.vocabulary,
 		zip.WithOperationID("graphVocabulary"),
 		zip.WithSummary("The relations in use, and the rule that resolves a conflict"),
@@ -234,6 +238,54 @@ func (o ops) read(ctx context.Context, in *graphReadIn) (*graphReadOut, error) {
 		return nil, err
 	}
 	f := filter{Entity: in.Entity, Relation: in.Relation, Value: in.Value, Limit: in.Limit}
+	if in.AsOf != "" {
+		if f.AsOf, err = instant(in.AsOf); err != nil {
+			return nil, err
+		}
+	}
+	facts, err := st.read(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	return &graphReadOut{Assertions: toWire(facts)}, nil
+}
+
+// ── search ───────────────────────────────────────────────────────────────────
+
+type graphSearchIn struct {
+	// Q is what to look for: words, matched as prefixes, all of them required.
+	// Punctuation is text here rather than syntax, so an entity key searches as
+	// itself.
+	Q string `json:"q"`
+	// Relation narrows to one relation. Absent matches every relation.
+	Relation string `json:"relation,omitempty"`
+	// AsOf bounds the search to what was knowable at an instant, RFC 3339. Absent
+	// searches everything this plane holds.
+	AsOf string `json:"as_of,omitempty"`
+	// Limit caps how many assertions come back. Absent, zero, or anything above
+	// the walk ceiling is the ceiling.
+	Limit int `json:"limit,omitempty"`
+}
+
+// search finds assertions by their text where read finds them by their keys.
+//
+// It is the READ with one more term, not a second way to leave the store: same
+// order, same ceiling, same tenancy, and searching composes with narrowing by
+// relation and by instant because all of them are terms of one filter.
+//
+// It resolves nothing. What matches is what was asserted, including claims that
+// were later corrected — which is the honest answer to "where is this mentioned"
+// and the reason the caller then asks resolve about what it found.
+func (o ops) search(ctx context.Context, in *graphSearchIn) (*graphReadOut, error) {
+	_, st, err := tenantOf(ctx, o.s)
+	if err != nil {
+		return nil, err
+	}
+	q := match(in.Q)
+	if q == "" {
+		return nil, zip.ErrBadRequest("q is required: a search with no word in it is a read")
+	}
+	f := filter{Relation: in.Relation, Limit: in.Limit, Match: q}
 	if in.AsOf != "" {
 		if f.AsOf, err = instant(in.AsOf); err != nil {
 			return nil, err
