@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -409,4 +410,70 @@ func keys(m map[string]any) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ── what the door refuses to spend ───────────────────────────────────────────
+
+// TestAQueryWiderThanTheCeilingIsRefused pins the fan-out bound. Each root field
+// is a hop that may START a lazy child, so the width of one query is how many apps
+// a single caller can make this host dial at once.
+func TestAQueryWiderThanTheCeilingIsRefused(t *testing.T) {
+	c := echo(t, `{"relations":[]}`)
+	g := doorTo(t, "graph", c.addr)
+
+	var b strings.Builder
+	b.WriteString("{")
+	for i := 0; i < 200; i++ {
+		b.WriteString(" f")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(": graphVocabulary { relations }")
+	}
+	b.WriteString(" }")
+
+	res := run(t, g, b.String(), nil)
+	if len(res.Errors) == 0 {
+		t.Fatal("200 root fields must be refused; each one is a hop into the fleet")
+	}
+	if res.Data != nil {
+		t.Error("a refused request runs nothing, so there is no data to be right about")
+	}
+	// REFUSED, not truncated: nothing was dispatched at all.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.calls) != 0 {
+		t.Errorf("the door dispatched %d hops for a request it refused", len(c.calls))
+	}
+}
+
+// TestAQueryAtTheCeilingStillRuns is the other side of that bound: the limit is a
+// ceiling on abuse, not a budget ordinary callers can trip over.
+func TestAQueryAtTheCeilingStillRuns(t *testing.T) {
+	c := echo(t, `{"relations":[]}`)
+	g := doorTo(t, "graph", c.addr)
+
+	var b strings.Builder
+	b.WriteString("{")
+	for i := 0; i < 8; i++ {
+		b.WriteString(" f")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(": graphVocabulary { relations }")
+	}
+	b.WriteString(" }")
+
+	if res := run(t, g, b.String(), nil); len(res.Errors) > 0 {
+		t.Fatalf("an ordinary multi-field query was refused: %v", res.Errors)
+	}
+}
+
+// TestSelectionsDeeperThanTheCeilingAreRefused guards the recursion. Depth buys no
+// hop, but it is still a caller-supplied recursion and expansion copies what a
+// fragment spreads.
+func TestSelectionsDeeperThanTheCeilingAreRefused(t *testing.T) {
+	c := echo(t, `{}`)
+	g := doorTo(t, "graph", c.addr)
+
+	q := "{ graphVocabulary " + strings.Repeat("{ a ", 60) + strings.Repeat("} ", 60) + "}"
+	if res := run(t, g, q, nil); len(res.Errors) == 0 {
+		t.Fatal("a query nesting past the ceiling must be refused")
+	}
 }
