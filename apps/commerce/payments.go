@@ -41,7 +41,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	"github.com/hanzoai/commerce/models/organization"
 	commerceorg "github.com/hanzoai/commerce/pkg/org"
@@ -301,24 +300,17 @@ func (paymentOps) get(ctx context.Context, in *PaymentRef) (*PaymentRecord, erro
 // honest answer to "whose card is this and whose balance goes up" is nobody, not
 // the platform's.
 func payingOrg(ctx context.Context, op string) (*organization.Organization, error) {
-	name, ok := principal.OrgFrom(ctx)
-	if !ok {
-		// A PLANE op is reached with a stated caller and NO request behind it —
-		// plane.For sets zip.Caller{Org} and nothing else — so OrgFrom refuses
-		// here by construction: it composes validated-ness AND an org, and there
-		// is no user on this context to be validated.
-		//
-		// callerOrg is the rule the other plane ops in this package already read
-		// by, and it is the one plane.Ask documents: the org rides the CALLER,
-		// forwarded from the gateway's assertion or stated once and explicitly,
-		// never an argument. Nothing is widened by reading it — the org stated
-		// here is the one billing's door already resolved and validated before it
-		// called, so this reads that decision rather than making a second one.
-		orgName, err := callerOrg(ctx, op)
-		if err != nil {
-			return nil, err
-		}
-		name = orgName
+	// callerOrg, and nothing beside it. It is the package's tenancy rule and it
+	// already answers both shapes a money op is reached in — a request, where the
+	// org is a header and must be vouched for, and a stated caller, where there is
+	// no request and no header in play. A pre-step here that consulted only the
+	// validated principal was a SECOND copy of the request half, and two copies of
+	// one rule is two rules: they disagree about the trusted service, which
+	// legitimately carries no session, and only one of them is right. So there is
+	// one, and every money op reads it.
+	name, err := callerOrg(ctx, op)
+	if err != nil {
+		return nil, err
 	}
 	// Commerce must be co-resident for its ledger to be writable in-process. A
 	// missing embed is an ERROR, never a silent no-op: money that quietly did not
