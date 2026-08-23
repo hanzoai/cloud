@@ -22,6 +22,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/internal/planetest"
 )
 
 // THE TENANT HAS TO SURVIVE THE HOP, and nothing tested that it did.
@@ -43,7 +45,12 @@ func TestTheOrgTheDoorResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	// resolves the peer by name (zip.Serving), and without that it answers
 	// ErrNoPeer and the door reports 503 before the op is ever invoked — which is
 	// what this test did until it served the plane.
-	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	// planetest.Dir, not t.TempDir: a temp dir named for the test carries the
+	// TEST'S NAME, and this one is 49 characters. Darwin allows 103 bytes of
+	// sun_path total, so the socket under it did not bind — as "invalid argument",
+	// which names neither the limit nor the length. Every other plane test in this
+	// repo already takes the short dir; this was the one that did not.
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	plane.Unbind()
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
