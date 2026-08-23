@@ -76,3 +76,39 @@ func TestRateNano_AHalfNamedMeterStillTakesTheFloor(t *testing.T) {
 		}
 	}
 }
+
+// THE UNIT WRAPPERS CONVERT BOTH WAYS — the floor up, the answer down — and a
+// round trip cannot see a wrong factor: multiply and divide by the same wrong
+// number and the floor comes back unchanged. So this pins the floor in the
+// CALLER's unit, which is the whole point of the wrappers, and the test below
+// pins the factors themselves.
+func TestRateUnitsRoundTripTheFloor(t *testing.T) {
+	ctx := context.Background()
+	for _, floor := range []int64{0, 1, 8, 20, 100, 999_999} {
+		if got := RateCents(ctx, "storage", "block-gb-month", floor); got != floor {
+			t.Errorf("RateCents floor %d came back as %d", floor, got)
+		}
+		if got := RateMicros(ctx, "risk", "screen", floor); got != floor {
+			t.Errorf("RateMicros floor %d came back as %d", floor, got)
+		}
+	}
+}
+
+// The factors are the real ones, read in ONE direction against arithmetic anyone
+// can check — which is the half the round trip above is blind to.
+func TestTheUnitFactorsAreWhatTheyClaim(t *testing.T) {
+	if nanoPerCent != 10_000_000 {
+		t.Errorf("nanoPerCent = %d; a cent is 10^-2 USD and a nano-dollar 10^-9, so it is 10^7", nanoPerCent)
+	}
+	if nanoPerMicro != 1_000 {
+		t.Errorf("nanoPerMicro = %d; a micro-USD is 10^-6 USD, so it is 10^3", nanoPerMicro)
+	}
+	// Tied to a number that is actually charged: $0.08/GB-month is 8 cents is
+	// 80,000,000 nano — the storage meter's seeded value.
+	if got := int64(8) * nanoPerCent; got != 80_000_000 {
+		t.Errorf("8 cents = %d nano, want 80000000 — the seeded storage rate", got)
+	}
+	if got := int64(20) * nanoPerMicro; got != 20_000 {
+		t.Errorf("20 uUSD = %d nano, want 20000 — the seeded translate rate", got)
+	}
+}

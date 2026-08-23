@@ -1298,12 +1298,6 @@ const maxBatch = 1000
 // edge gate's price==0 pass-through.
 const defaultScreenUUSD int64 = 100
 
-// nanoPerMicro converts the authority's nano-dollars to the micro-USD this app
-// bills in. Stated once, next to the only two places that cross the boundary,
-// because a factor of a thousand written twice is a factor of a thousand that
-// eventually differs in one of them.
-const nanoPerMicro int64 = 1000
-
 // screenRate resolves the per-screen price from the meter authority, in
 // micro-USD, falling back to the compiled floor.
 //
@@ -1318,7 +1312,7 @@ const nanoPerMicro int64 = 1000
 // var used to be that seam by accident; this is the same seam on purpose, and the
 // same one callProvider uses a repo over.
 var screenRate = func(ctx context.Context) int64 {
-	return cloud.RateNano(ctx, "risk", "screen", defaultScreenUUSD*nanoPerMicro) / nanoPerMicro
+	return cloud.RateMicros(ctx, "risk", "screen", defaultScreenUUSD)
 }
 
 // windowScreens prices a WINDOW of the warehouse: one screen per day rolled up
