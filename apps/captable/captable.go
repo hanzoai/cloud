@@ -179,30 +179,30 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// shareClasses.create: `initialSharesAuthorized`, `votesPerShare`, `parValue`,
 	// `pricePerShare`, `seniority` and both multiples go through num/intNum, which
 	// accept a numeric STRING.
-	g.Post("/classes", route(s, "shareClasses.create", nil, true))
+	zip.Post(g, "/classes", o.createShareClass, zip.WithStatus(http.StatusCreated))
 	// shareClasses.update: same coercing validator as create.
-	g.Patch("/classes/:id", routeID(s, "shareClasses.update", true))
+	zip.Patch(g, "/classes/:id", o.amendShareClass)
 	// equityPlans.create: `initialSharesReserved` goes through intNum (numeric
 	// string accepted), `comments` through optString.
-	g.Post("/plans", route(s, "equityPlans.create", nil, true))
+	zip.Post(g, "/plans", o.createEquityPlan, zip.WithStatus(http.StatusCreated))
 	// shares.add: `quantity`, `pricePerShare` and `capitalContribution` are coerced
 	// numbers; `companyLegends` is validated per element, not per array type.
-	g.Post("/shares", route(s, "shares.add", nil, true))
+	zip.Post(g, "/shares", o.issueShares, zip.WithStatus(http.StatusCreated))
 	// shares.transfer: `quantity` OMITTED means "transfer the whole certificate",
 	// which a typed In cannot say (its zero value means 0), and it is coerced too.
 	zip.Post(g, "/shares/transfer", o.transferShares)
 	// options.add: `quantity`, `exercisePrice`, `cliffYears` and `vestingYears` are
 	// coerced numbers.
-	g.Post("/options", route(s, "options.add", nil, true))
+	zip.Post(g, "/options", o.grantOptions, zip.WithStatus(http.StatusCreated))
 	// safes.create: `capital`, `valuationCap` and `discountRate` are coerced
 	// numbers.
-	g.Post("/safes", route(s, "safes.create", nil, true))
+	zip.Post(g, "/safes", o.recordSafe, zip.WithStatus(http.StatusCreated))
 	// convertibles.create: `capital`, `conversionCap`, `discountRate` and
 	// `interestRate` are coerced numbers.
-	g.Post("/convertibles", route(s, "convertibles.create", nil, true))
+	zip.Post(g, "/convertibles", o.recordConvertible, zip.WithStatus(http.StatusCreated))
 	// rounds.create: `targetAmount`, `pricePerShare` and `preMoneyValuation` are
 	// coerced numbers.
-	g.Post("/rounds", route(s, "rounds.create", nil, true))
+	zip.Post(g, "/rounds", o.openRound, zip.WithStatus(http.StatusCreated))
 	// rounds.investments.add: `amount` is a coerced number and `date`/`comments`
 	// go through optDateString/optString.
 	// 201: an investment into a priced round MINTS a security, and the bundle says
