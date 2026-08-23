@@ -264,7 +264,7 @@ func TestRecordStatesTheSaleEvenWhenTheCreditRefuses(t *testing.T) {
 }
 
 // TestOrderCompletedIsTheTranslatorsOwnName pins the one string that has to agree
-// across two apps: apps/destinations/translate.go maps this name onto the normalized
+// across two apps: apps/destination/translate.go maps this name onto the normalized
 // Purchase, so a rename here silently downgrades every server-side conversion to a
 // custom event no platform optimises on.
 func TestOrderCompletedIsTheTranslatorsOwnName(t *testing.T) {

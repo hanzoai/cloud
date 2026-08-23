@@ -34,7 +34,7 @@ import (
 // Every handler resolves its tenant through principal.Org (the ONE boundary) and
 // scopes strictly to that org — a caller can only ever touch its own content. Every
 // exported op (Generate/Publish/Transition) is called BOTH by the handler here AND by
-// the content automations connector (apps/automations/connector_content.go), so a
+// the content automations connector (apps/auto/connector_content.go), so a
 // human console, an /v1/automations flow, an MCP tool call, and a headless bot all
 // drive the SAME single implementation. The subsystem is a stateless orchestrator over
 // framework (which holds the state) + the AI/social edges — it opens no store of its own.

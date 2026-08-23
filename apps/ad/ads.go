@@ -143,7 +143,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// jsonenc.Unmarshals any non-empty body and returns ErrBadRequest on failure
 	// (zip/typed.go:239-243), turning that 200 into a 400. It converts when zip
 	// can declare a body-tolerant op; until then this route publishes its address
-	// and nothing else. apps/ads/typed_wire_test.go holds it as a CLOSED list.
+	// and nothing else. apps/ad/typed_wire_test.go holds it as a CLOSED list.
 	g.Post("/campaigns/:id/launch", cloud.Handle(s, launchCampaign))
 }
 
