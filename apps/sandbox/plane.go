@@ -130,9 +130,9 @@ func planeAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, erro
 // off a request it reads the caller a door stated in-process, on one it reads
 // the headers, and a non-empty check cannot tell those apart.
 //
-// cloud.Tenant is the rule that can. A request resolves through the validated
-// principal and nothing else; a plane call resolves through the stated caller,
-// which nothing outside the process can write. What this op does with the answer
+// principal.Acting is the rule that can, and it is the fleet's only one: from
+// outside, the validated principal and nothing else; from inside, the caller a
+// door stated, which nothing outside can write. What this op does with the answer
 // — open the org's store, lease a pod in its namespace — is the same either way,
 // so the tenant it acts on must be, too.
 //
@@ -142,9 +142,9 @@ func planeAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, erro
 // It is also what makes the rule observable: refused says 403, resolved gets far
 // enough to meet the mount.
 func live(ctx context.Context) (*Service, string, error) {
-	org, ok := cloud.Tenant(ctx)
-	if !ok {
-		return nil, "", zip.ErrForbidden("sandbox: org required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	s := mounted.Load()
 	if s == nil {
