@@ -40,6 +40,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // The op names. A caller and a callee that spell a name differently fail at the
@@ -511,6 +512,19 @@ const (
 	SandboxWrite = "sandbox_write"
 	SandboxStop  = "sandbox_stop"
 	SandboxEnd   = "sandbox_end"
+
+	// SandboxAttach says SOMEBODY IS WATCHING a project right now.
+	//
+	// It is another op and not another verb: nothing about the sandbox changes,
+	// which is why it is not "resume" or "extend". It reports a fact the sandbox
+	// cannot observe for itself — that a human has this project open — and the
+	// sandbox's idle clock is a different length depending on the answer.
+	//
+	// It crosses the plane because the two ends really are two processes. The
+	// stream that proves presence is agents' (GET /v1/agents/sessions/stream); the
+	// pods are apps/sandbox's; they ship as separate plugin binaries. Nothing else
+	// in this fleet knows the fact and nothing else needs it.
+	SandboxAttach = "sandbox_attach"
 
 	// The FIGURES client: one question — "what are this org's headline numbers?" —
 	// asked of every domain that can answer it, at one address each.
@@ -2629,6 +2643,40 @@ type EndIn struct {
 	// deleting someone's uncommitted work is neither.
 	Purge bool `json:"purge,omitempty"`
 }
+
+// AttachIn names the PROJECT a watcher has open, not a sandbox.
+//
+// The project is what the watcher knows: a browser holds a session, a session
+// carries the project it is building, and the sandbox for that project is a pod
+// whose id has already been replaced twice while the tab stayed open. Keying
+// presence on the sandbox id would go stale at exactly the moment it matters —
+// the reap — because the id changes and the person does not.
+type AttachIn struct {
+	Project string `json:"project"`
+}
+
+// Attached is the sandbox the presence landed on, or an empty id when the project
+// holds none.
+//
+// An empty id is a SUCCESSFUL answer. Watching a project with no live sandbox is
+// the ordinary case — the user opened the page before the agent leased anything —
+// and reporting it as an error would make every stream log a failure for doing
+// nothing wrong.
+type Attached struct {
+	ID string `json:"id,omitempty"`
+}
+
+// AttachEvery is how often a watcher must say it is still there, and it is
+// declared HERE because it is the contract between two processes rather than a
+// detail of either.
+//
+// It is the SSE stream's own heartbeat: agents already writes a `: ping` comment
+// on this cadence to hold the connection open through proxies, and that ping is
+// the moment the stream proves it still has a client — a dead client fails the
+// flush. So presence rides the beat that already exists instead of a second timer
+// invented beside it, and apps/sandbox derives how stale a stamp may be from this
+// one number rather than keeping its own copy of agents' interval.
+const AttachEvery = 25 * time.Second
 
 // ---- coding: every client one autonomous coding run reaches across ------------
 //

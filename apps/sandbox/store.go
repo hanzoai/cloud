@@ -84,6 +84,15 @@ type Sandbox struct {
 	// it: a sandbox idle past the idle window is reclaimed even inside its TTL,
 	// because an idle lease is capacity nobody is using.
 	LastUsedAt int64 `json:"lastUsedAt"`
+	// ConnectedAt is when somebody was last known to have this sandbox's project
+	// OPEN, Unix seconds. It is a fact with an EXPIRY rather than a flag: a
+	// watcher restamps it every beat of its stream, and it goes stale on its own
+	// when the stream dies, so nothing has to be turned off by a process that may
+	// not be there any more. The reaper reads it to choose WHICH idle allowance
+	// applies — see lifecycle.go.
+	//
+	// Zero means nobody has said so, which puts the sandbox on the short clock.
+	ConnectedAt int64 `json:"connectedAt,omitempty"`
 	// ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take
 	// the sandbox at any time; it is a deadline, not a guarantee of survival until
 	// then, since an idle sandbox goes sooner.
@@ -121,6 +130,7 @@ CREATE TABLE IF NOT EXISTS sandbox (
   error        TEXT NOT NULL DEFAULT '',
   created_at   INTEGER NOT NULL,
   last_used_at INTEGER NOT NULL,
+  connected_at INTEGER NOT NULL DEFAULT 0,
   expires_at   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ix_machines_org_project ON sandbox(org, project);
@@ -137,6 +147,14 @@ CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON sandbox(org, status);
 		!strings.Contains(err.Error(), "duplicate column") {
 		return fmt.Errorf("migrate runtime column: %w", err)
 	}
+	// connected_at: same story. Existing rows read as 0, which means "nobody has
+	// said they are watching" — the honest answer for a row written before anyone
+	// could say it, and the one that puts them on the short clock until a watcher
+	// speaks up.
+	if _, err := s.db.Exec(`ALTER TABLE sandbox ADD COLUMN connected_at INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate connected_at column: %w", err)
+	}
 	return nil
 }
 
@@ -144,14 +162,14 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Put(ctx context.Context, m Sandbox) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,expires_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   status=excluded.status, image=excluded.image, pod=excluded.pod, runtime=excluded.runtime,
   volume=excluded.volume,
   error=excluded.error, last_used_at=excluded.last_used_at, expires_at=excluded.expires_at`,
 		m.ID, m.Org, m.Kind, m.Class, m.Project, m.Status, m.Image, m.Pod, m.Runtime, m.Volume,
-		m.Error, m.CreatedAt, m.LastUsedAt, m.ExpiresAt)
+		m.Error, m.CreatedAt, m.LastUsedAt, m.ConnectedAt, m.ExpiresAt)
 	return err
 }
 
@@ -192,7 +210,7 @@ func (s *Store) List(ctx context.Context, org, project, status string) ([]Sandbo
 	for rows.Next() {
 		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
+			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt, &m.ExpiresAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -212,32 +230,27 @@ func (s *Store) LiveOfClass(ctx context.Context, org, class string) (int, error)
 	return n, err
 }
 
-// Expired is what a reaper reads: every sandbox whose lease has run out.
-func (s *Store) Expired(ctx context.Context, org string, now int64) ([]Sandbox, error) {
-	rows, err := s.db.QueryContext(ctx,
-		selectCols+` WHERE org=? AND expires_at>0 AND expires_at<? ORDER BY expires_at LIMIT 200`, org, now)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := []Sandbox{}
-	for rows.Next() {
-		var m Sandbox
-		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt); err != nil {
-			return nil, err
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
-}
-
 // Extend pushes one sandbox's lease out to at, and only ever FORWARD.
 //
 // The `expires_at<?` guard is what makes it monotonic: a stale caller with an
 // older `at` cannot pull a lease in and kill a sandbox early. A lease may be
 // lengthened by work and shortened only by ending it, which is the property the
 // reaper relies on to be safe to run every minute from more than one place.
+// Watched stamps ATTENTION: a live stream said somebody has this project open.
+//
+// MONOTONIC — `connected_at=MAX(connected_at,?)`. Presence arrives from a
+// heartbeat over a socket, so two beats can land out of order and an older one
+// would otherwise move the clock BACKWARDS, briefly making a watched sandbox
+// look stale to a sweep running in that window.
+//
+// It is also why Put does not write this column on conflict: an update carrying
+// a row read before the last beat would undo it. One writer per fact.
+func (s *Store) Watched(ctx context.Context, org, id string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE sandbox SET connected_at=MAX(connected_at,?) WHERE org=? AND id=?`, at, org, id)
+	return err
+}
+
 func (s *Store) Extend(ctx context.Context, org, id string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE sandboxes SET expires_at=? WHERE org=? AND id=? AND expires_at>0 AND expires_at<?`,
@@ -276,12 +289,12 @@ func (s *Store) Delete(ctx context.Context, org, id string) error {
 	return err
 }
 
-const selectCols = `SELECT id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,expires_at FROM sandbox`
+const selectCols = `SELECT id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at FROM sandbox`
 
 func scanMachine(row *sql.Row) (Sandbox, error) {
 	var m Sandbox
 	err := row.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-		&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ExpiresAt)
+		&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt, &m.ExpiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sandbox{}, errNotFound
 	}

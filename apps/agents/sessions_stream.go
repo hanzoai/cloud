@@ -2,6 +2,7 @@ package agents
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -56,6 +58,11 @@ type subscriber struct {
 }
 
 const subBuffer = 256
+
+// sandboxApp is who answers plane.SandboxAttach. Named here because agents holds
+// the only thing that knows a person is watching, and apps/sandbox holds the
+// clock that changes length when they are.
+const sandboxApp = "sandbox"
 
 func newBus() *bus { return &bus{subs: map[int]*subscriber{}} }
 
@@ -148,6 +155,15 @@ func sessionsStream(s *cloud.Service[state], c *zip.Ctx) error {
 	// org for exactly this reason; root is retained past the request the same way,
 	// so it must be an owned copy or the filter races a reused buffer.
 	root := strings.Clone(trimField(c.Query("root")))
+	// The PROJECT this stream is watching, if it is watching one. Cloned for the
+	// same reason as root: the loop below outlives the request.
+	//
+	// It is what makes this stream say somebody is HERE. A sandbox can see when it
+	// was last called and nothing else, so a person reading for twenty minutes and
+	// a tab closed twenty minutes ago look identical to it — and its idle clock is
+	// a different length depending on which one is true. This is the only place in
+	// the fleet that knows.
+	project := strings.Clone(trimField(c.Query("project")))
 
 	c.SetHeader("Content-Type", "text/event-stream")
 	c.SetHeader("Cache-Control", "no-cache")
@@ -164,7 +180,10 @@ func sessionsStream(s *cloud.Service[state], c *zip.Ctx) error {
 		if err := w.Flush(); err != nil {
 			return
 		}
-		hb := time.NewTicker(25 * time.Second)
+		// plane.AttachEvery, not a second 25s written here: the beat and the
+		// staleness apps/sandbox allows are one contract between two processes, and
+		// a copy of the number is how they drift apart.
+		hb := time.NewTicker(plane.AttachEvery)
 		defer hb.Stop()
 		for {
 			select {
@@ -174,6 +193,21 @@ func sessionsStream(s *cloud.Service[state], c *zip.Ctx) error {
 				}
 				if err := w.Flush(); err != nil {
 					return
+				}
+				// PRESENCE RIDES THE BEAT THAT ALREADY EXISTS, and it is sent AFTER
+				// the flush deliberately: the flush is what proves a client is still
+				// on the other end, so a stream whose reader has gone reports nothing
+				// and the sandbox falls to its short clock, which is the point.
+				//
+				// Failure is not surfaced. This is a report, not a request the client
+				// made: the worst a lost beat costs is one interval of staleness
+				// against a grace of three, and a stream that logged a warning every
+				// 25 seconds because sandbox is not mounted in this deployment would
+				// be noise nobody could act on.
+				if project != "" {
+					_, _ = plane.Ask[plane.AttachIn, plane.Attached](
+						cloud.For(context.Background(), org), sandboxApp,
+						plane.SandboxAttach, &plane.AttachIn{Project: project})
 				}
 			case u, open := <-ch:
 				if !open {
