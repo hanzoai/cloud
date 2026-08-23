@@ -22176,6 +22176,31 @@ components:
     deployEmpty:
       properties: {}
       type: object
+    deployHealth:
+      properties:
+        crd:
+          description: |-
+            CRD reports whether the App custom resource is served and listable. Absent
+            when the apiserver was unreachable, because then it is unknown rather than
+            false.
+          type: boolean
+        k8s:
+          description: |-
+            K8s reports whether the Kubernetes API is reachable. Absent when the probe
+            did not get far enough to find out.
+          type: boolean
+        service:
+          description: |-
+            Service names the subsystem answering, so a probe response is attributable
+            when several are collected together.
+          type: string
+        status:
+          description: |-
+            Status is `ok` when this deployment can serve the delivery plane, and
+            `degraded` otherwise. It agrees with the HTTP status by construction — see
+            StatusCode.
+          type: string
+      type: object
     deployLogs:
       properties:
         deploymentId:
@@ -81576,16 +81601,33 @@ paths:
   /v1/deploy/health:
     get:
       description: |-
-        Reports the plane's real reachability: 200 only when the Kubernetes API server answers AND the App CRD is served, 503 with the same body shape otherwise, so a caller reads the same `k8s` and `crd` booleans either way rather than parsing an error envelope. It is a genuine dependency probe, not a process liveness ping — a running plane with no cluster behind it reports degraded.
+        Health reports whether this deployment can observe the delivery plane.
 
-        This is the ONE unauthenticated route that reports state, because liveness must be probe-able without a JWT. It therefore discloses booleans only: the underlying failure — the API server address, an RBAC refusal — is logged server-side and never put on the wire.
+        200 only when the Kubernetes API answers AND the App custom resource is served;
+        503 with the same shape otherwise, naming which half failed. It reports BOOLEANS
+        and never the underlying error, because the route is unauthenticated — liveness
+        must be probe-able without a token — and a raw client error can disclose the
+        apiserver address or an RBAC detail. That detail is logged server-side instead.
       operationId: get_deploy_health
-      summary: Whether this control plane can actually reach the cluster it deploys
-        to
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deployHealth'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deployHealth'
+          description: service unavailable
+      summary: Health reports whether this deployment can observe the delivery plane.
       tags:
       - deploy
       x-app: deploy
       x-public: true
+      x-tool: true
   /v1/deploy/login:
     get:
       description: |-
