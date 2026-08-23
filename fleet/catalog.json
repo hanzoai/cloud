@@ -850,6 +850,14 @@
    "doc": "Closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it."
   },
   {
+   "id": "post_captable_rounds_by_id_investments",
+   "doc": "Records one investor's money into an open round.\n\nThe round must be OPEN; investing into a closed one is refused. Where the round\ncarries a price per share, the investment also issues the shares it buys and the\nanswer names them."
+  },
+  {
+   "id": "post_captable_shares_transfer",
+   "doc": "Moves shares from one stakeholder to another.\n\nOmit `quantity` to transfer the whole certificate, which REASSIGNS it and mints\nno new share. Send a quantity below the amount held to SPLIT it — the source\ncertificate keeps the remainder, and a split additionally requires\n`certificateId` for the new certificate, which must be unique in the company.\nA quantity outside 1..held is refused, so a transfer can never over-issue.\n\nBoth outcomes answer 200: a transfer records a movement between holders and\nmints no security of its own, which is why this is not a 201 the way an\ninvestment is."
+  },
+  {
    "id": "put_captable_company",
    "doc": "Sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one."
   }
