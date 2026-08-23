@@ -9,6 +9,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
 	financeclient "github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -33,10 +34,10 @@ import (
 // CALLER and never from an argument. A caller that could name its own org would
 // be naming another tenant's books, and none of these inputs can express one.
 //
-// cloud.Tenant decides it, and it is the fleet's ONE rule for that: a request
-// resolves through the validated principal, a plane call through the caller a
-// door stated in-process. Both fail closed, and neither can be mistaken for the
-// other — which matters here because commerce is reached in both shapes.
+// principal.Acting decides it, and it is the fleet's ONE rule for that: from
+// outside, the validated principal; from inside, the caller a door stated. Both
+// fail closed, and neither can be mistaken for the other — which matters here
+// because commerce is reached in both shapes.
 //
 // COMMERCE ADDS EXACTLY ONE ADMISSION, on top rather than instead. Every app is
 // its own PROCESS, so `ai` cannot reach an in-process reader and asks over HTTP
@@ -49,7 +50,7 @@ import (
 // rule alongside it would make two tenant decisions in one package, and two
 // copies of one rule is two rules the day they disagree.
 func callerOrg(ctx context.Context, op string) (string, error) {
-	if org, ok := cloud.Tenant(ctx); ok {
+	if org, err := principal.Acting(ctx); err == nil {
 		return org, nil
 	}
 	if c, onRequest := cloud.Request(ctx); onRequest {

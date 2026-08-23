@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -275,41 +274,11 @@ func For(ctx context.Context, org string) context.Context { return plane.For(ctx
 // Who reads the principal a plane op is acting for. A handler that needs
 // authority refuses an empty org rather than treating it as permission.
 //
-// It answers a DIFFERENT question depending on the context it is handed, and a
-// handler that turns a tenant on it has to know which: off a request it is the
-// stated caller, on one it is the headers. [Tenant] is the accessor that knows.
+// It answers a DIFFERENT question depending on the context it is handed: off a
+// request it is the stated caller, on one it is the headers. A handler that turns
+// a TENANT on it must not read it directly — [principal.Acting] is the one rule
+// that tells those apart.
 func Who(ctx context.Context) zip.Caller { return zip.CallerOf(ctx) }
-
-// Tenant is the org a call acts FOR, and the one rule for deciding it.
-//
-// An op reaches this in two shapes, vouched for differently, and the whole point
-// of one accessor is that neither shape can be mistaken for the other:
-//
-//   - ON A REQUEST the org arrived as a header, and a header is the caller's own
-//     until something stands behind it. principal.OrgFrom is that: the org the
-//     identity boundary MINTED from a validated principal, never a client value.
-//     Nothing else here is accepted, because the boundary deliberately restores
-//     an unvalidated caller's own org header for the data path — on the stated
-//     grounds that whatever reads it gates on a validated principal.
-//
-//   - OFF A REQUEST there is no header in play. The org is what [For] stamped,
-//     in-process, downstream of a door that had already validated it, and zip
-//     reads a stated caller only on a request-free context — so that value
-//     cannot be supplied from outside.
-//
-// Fails closed in both. An op with a further admission of its own — a service
-// token, an explicit marker — composes it ON this rather than replacing it, so
-// there is one tenant decision and additions to it are visible as additions.
-func Tenant(ctx context.Context) (string, bool) {
-	if org, ok := principal.OrgFrom(ctx); ok {
-		return org, true
-	}
-	if _, onRequest := Request(ctx); onRequest {
-		return "", false
-	}
-	org := strings.TrimSpace(Who(ctx).Org)
-	return org, org != ""
-}
 
 // As delegates THIS request's principal to a call, pointed at a named tenant.
 //
@@ -343,8 +312,25 @@ func As(c *zip.Ctx, org string) context.Context {
 		OrgAdmin:  c.IsOrgAdmin(),
 		RequestID: c.RequestID(),
 	}
-	if org = strings.TrimSpace(org); org != "" {
-		who.Org = org
+	// BOTH READERS OF THE TENANT MOVE TOGETHER, OR NEITHER DOES.
+	//
+	// principal.OrgFrom asks the parked slot FIRST and the caller second, and
+	// calls them one fact. The parked slot holds the org the boundary minted for
+	// the ORIGINAL request, so re-pointing only the caller left them disagreeing —
+	// and which one a callee saw turned on whether it happened to be co-resident.
+	// A socket hop reads the caller off headers and answers the new tenant;
+	// zip.Here hands this very context to the handler and answers the old one.
+	// Same call, two tenants, decided by a deployment shape plane.Ask exists to
+	// keep from being the caller's business.
+	//
+	// principal.WithActing is the one that can refuse — an org bearing a
+	// whitespace or format rune grants no scoping, because trimming it would fold
+	// two distinct orgs onto one namespace. So it decides, and the caller follows
+	// it: an org it would not park is one this does not state either, and the
+	// delegation falls back to the caller's own tenant rather than half-moving.
+	ctx := principal.WithActing(c.Context(), org)
+	if acting, ok := principal.OrgFrom(ctx); ok && acting != c.Org() {
+		who.Org = acting
 	}
-	return zip.WithCaller(c.Context(), who)
+	return zip.WithCaller(ctx, who)
 }

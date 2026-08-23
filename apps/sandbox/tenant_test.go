@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
@@ -28,8 +29,8 @@ import (
 // off a request zip returns the caller a door stated in-process and nothing
 // outside can write that. On a request the same call returns the headers, and
 // the identity boundary deliberately restores an unvalidated caller's own org
-// header for the data path. Those are different facts. cloud.Tenant is the
-// accessor that distinguishes them, and this pins that live() uses it.
+// header for the data path. Those are different facts. principal.Acting is the
+// one accessor that distinguishes them, and this pins that live() uses it.
 //
 // The tenant IS the datastore key and the namespace a pod is leased in, so the
 // two ends of getting this wrong are another org's files and a computer running
@@ -86,9 +87,9 @@ func TestTheStatedCallerIsStillATenant(t *testing.T) {
 		{"a caller stating an empty org", cloud.For(context.Background(), ""), false},
 		{"no caller at all", context.Background(), false},
 	} {
-		org, ok := cloud.Tenant(tc.ctx)
-		if ok != tc.resolved {
-			t.Errorf("%s: cloud.Tenant = %q,%v — want resolved=%v", tc.what, org, ok, tc.resolved)
+		org, err := principal.Acting(tc.ctx)
+		if (err == nil) != tc.resolved {
+			t.Errorf("%s: principal.Acting = %q,%v — want resolved=%v", tc.what, org, err, tc.resolved)
 		}
 	}
 }
