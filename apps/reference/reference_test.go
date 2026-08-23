@@ -23,11 +23,11 @@ import (
 
 // TestCatalogStatesItsTerms holds the lawfulness rule at the shape: every source
 // we fetch names the licence it is redistributed under, and every source we
-// cannot lawfully hold is DECLARED as a client with the reason rather than being
+// cannot lawfully hold is DECLARED as a gap with the reason rather than being
 // quietly absent. An omission and a refusal look identical from outside, and
 // only one of them is a decision.
 func TestCatalogStatesItsTerms(t *testing.T) {
-	clients := 0
+	gaps := 0
 	for _, s := range Catalog() {
 		if s.Name == "" || s.What == "" || s.Match == "" {
 			t.Errorf("%q is missing a name, a description or a matcher", s.Name)
@@ -36,17 +36,17 @@ func TestCatalogStatesItsTerms(t *testing.T) {
 			t.Errorf("%q is not one lower-case word", s.Name)
 		}
 		switch s.Kind {
-		case KindClient:
-			clients++
+		case KindGap:
+			gaps++
 			if s.Refusal == "" {
-				t.Errorf("%q is a client with no stated reason, which is an omission wearing a decision's clothes", s.Name)
+				t.Errorf("%q is a gap with no stated reason, which is an omission wearing a decision's clothes", s.Name)
 			}
 			if len(s.Sources) != 0 {
-				t.Errorf("%q is a client and yet names sources", s.Name)
+				t.Errorf("%q is a gap and yet names sources", s.Name)
 			}
 		default:
 			if s.Refusal != "" {
-				t.Errorf("%q states a licence refusal but is not a client", s.Name)
+				t.Errorf("%q states a licence refusal but is not a gap", s.Name)
 			}
 			if len(s.Sources) == 0 {
 				t.Errorf("%q has no sources", s.Name)
@@ -64,8 +64,8 @@ func TestCatalogStatesItsTerms(t *testing.T) {
 			t.Errorf("%q has no freshness bound, so it can never be reported stale", s.Name)
 		}
 	}
-	if clients == 0 {
-		t.Error("the catalog declares no clients at all, which would mean every source we want is licensed to us")
+	if gaps == 0 {
+		t.Error("the catalog declares no gaps at all, which would mean every source we want is licensed to us")
 	}
 }
 
@@ -76,7 +76,7 @@ func TestCatalogStatesItsTerms(t *testing.T) {
 // the same field, and the only assertion over it was that the string was not
 // empty — so eight of fourteen sources stated a CATEGORY where a grant was
 // implied and passed. An unlicensed source wearing a licence field is the mirror
-// image of the client argument this plane is built on.
+// image of the gap argument this plane is built on.
 //
 // Basis is a closed vocabulary, so the position is now machine-checkable: what
 // each kind of set may rest on is stated here once, and a source whose basis is
@@ -94,7 +94,7 @@ func TestEverySourceStatesABasisItsKindPermits(t *testing.T) {
 		KindAttest: {GrantNone: true},
 	}
 	for _, s := range Catalog() {
-		if s.Kind == KindClient {
+		if s.Kind == KindGap {
 			continue
 		}
 		for _, src := range s.Sources {
@@ -428,13 +428,13 @@ func TestASetIsAsFreshAsItsOldestPublisher(t *testing.T) {
 	}
 }
 
-// TestClientRefusesWithItsLicenceReason: an unlicensed set names the licence we do
+// TestGapRefusesWithItsLicenceReason: an unlicensed set names the licence we do
 // not hold. It does not answer, and it does not pretend to be missing.
-func TestClientRefusesWithItsLicenceReason(t *testing.T) {
+func TestGapRefusesWithItsLicenceReason(t *testing.T) {
 	for _, name := range []string{"pep", "issuer", "reputation"} {
 		set := setNamed(t, name)
-		if set.Kind != KindClient {
-			t.Fatalf("%q should be a client", name)
+		if set.Kind != KindGap {
+			t.Fatalf("%q should be a gap", name)
 		}
 		s := build(set, nil, nil)
 		a, err := answer(set, s, nil, "anything", time.Now())
@@ -601,7 +601,7 @@ func TestBINMatchIsStructural(t *testing.T) {
 			t.Errorf("%s should be %s, got %+v", pan, want, a)
 		}
 	}
-	// The issuer behind the prefix is the client, and the bin set does not pretend
+	// The issuer behind the prefix is the gap, and the bin set does not pretend
 	// to know it.
 	a, _ := answer(set, s, nil, "4111111111111111", time.Now())
 	for _, forbidden := range []string{"issuer", "bank", "country", "funding"} {
