@@ -127,10 +127,6 @@ const kvmResource = "devices.kubevirt.io/kvm"
 // runaway caller cannot take a node with it.
 const maxLiveExec = 16
 
-// maxTTL caps what a caller may ask for. A longer-lived sandbox is a Deployment
-// an operator declares, not a lease a request can extend to forever.
-const maxTTL = 86400
-
 // ExecResult is what running a command produced. A non-zero ExitCode is data,
 // not an error: the call succeeded and the program failed.
 type ExecResult struct {
