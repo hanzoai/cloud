@@ -101,7 +101,7 @@ func (in *Config) wire(org string) (jetstream.StreamConfig, error) {
 	}
 	subjects := make([]string, len(rel))
 	for i, s := range rel {
-		if subjects[i], err = wireSubject(org, s); err != nil {
+		if subjects[i], err = absSubject(org, s); err != nil {
 			return jetstream.StreamConfig{}, err
 		}
 	}
@@ -375,7 +375,7 @@ func (s streams) purge(ctx context.Context, in *Purge) (*purgeOut, error) {
 	}
 	var opts []jetstream.StreamPurgeOpt
 	if in.Filter != "" {
-		subj, err := wireSubject(org, in.Filter)
+		subj, err := absSubject(org, in.Filter)
 		if err != nil {
 			return nil, err
 		}
@@ -469,7 +469,7 @@ func (m messages) list(ctx context.Context, in *readIn) (*readOut, error) {
 	}
 	switch {
 	case in.NextBySubject != "":
-		subj, err := wireSubject(org, in.NextBySubject)
+		subj, err := absSubject(org, in.NextBySubject)
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +492,7 @@ func (m messages) list(ctx context.Context, in *readIn) (*readOut, error) {
 		}
 		return &out, nil
 	case in.LastBySubject != "":
-		subj, err := wireSubject(org, in.LastBySubject)
+		subj, err := absSubject(org, in.LastBySubject)
 		if err != nil {
 			return nil, err
 		}

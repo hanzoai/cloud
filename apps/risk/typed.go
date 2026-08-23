@@ -1557,10 +1557,10 @@ func searchReport(r report, done bool) riskSearchReport {
 		out.Ended = r.Ended.Format(time.RFC3339)
 	}
 	for _, tr := range r.Trials {
-		out.Trials = append(out.Trials, wireTrial(tr))
+		out.Trials = append(out.Trials, riskTrialOf(tr))
 	}
 	if r.Winner != nil {
-		w := wireTrial(*r.Winner)
+		w := riskTrialOf(*r.Winner)
 		out.Winner = &w
 	}
 	// THE SAME PROJECTION every other published value goes through, so the address a
@@ -1573,11 +1573,11 @@ func searchReport(r report, done bool) riskSearchReport {
 	return out
 }
 
-// wireTrial publishes one trial. The candidate's FAMILY is published beside its
+// riskTrialOf publishes one trial. The candidate's FAMILY is published beside its
 // parameters, because the parameters only mean anything against it: `trees` is a
 // half-space number and a family that does not partition space with trees would
 // publish its own fields here.
-func wireTrial(t trial) riskTrial {
+func riskTrialOf(t trial) riskTrial {
 	return riskTrial{
 		Topology: riskTopology{Family: string(t.Topology.family()),
 			Trees: t.Topology.Trees, Depth: t.Topology.Depth,
