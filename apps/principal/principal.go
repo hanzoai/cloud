@@ -635,6 +635,21 @@ func ProjectScope(c *zip.Ctx) string {
 	return p
 }
 
+// ProjectScopeFrom is [ProjectScope] where only the context crossed the seam —
+// the storage key a TYPED op derives, from the project WithProject parked.
+//
+// It composes the same rule rather than restating it, for the reason
+// ValidatedProjectFrom exists: a plane that read ProjectFrom and applied its own
+// default test would be a second spelling of "default == empty == whole org", and
+// the two would drift the first time either moved. One rule, two doors.
+func ProjectScopeFrom(ctx context.Context) string {
+	p := ProjectFrom(ctx)
+	if IsDefaultProject(p) {
+		return ""
+	}
+	return p
+}
+
 // ValidatedProject returns the caller's project AND whether that project is bound
 // to a VALIDATED identity claim — the signal a per-scope spend cap uses to decide
 // whether a project-scoped cap may HARD-enforce (402) or must DEGRADE to a soft
