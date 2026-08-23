@@ -30732,6 +30732,13 @@ components:
             $ref: '#/components/schemas/providerView'
           type: array
       type: object
+    listing:
+      properties:
+        lastModified:
+          type: string
+        name:
+          type: string
+      type: object
     listingPage:
       properties:
         listings:
@@ -84205,21 +84212,39 @@ paths:
   /v1/exec/files/{sid}:
     get:
       description: |-
-        Lists what a session's sandbox holds — the uploads a run can read and the artifacts it produced — each then fetched from /v1/exec/download.
+        Files lists what a session holds.
 
-        It answers a BARE JSON ARRAY of {name, lastModified}, where `name` is the same {session_id}/{fileId} identifier download takes, because that is what the client matches on. An object wrapper would be a wire change, which is why this is not a typed operation.
+        One recursive `find`, the same traversal the artifact sweep makes. It used to be
+        `ls -1A` — top level only — while the sweep collected with `find`, so a run that
+        wrote a nested artifact reported it in its reply and then omitted it here, and
+        the client's prefix match read the file as expired. Two traversals of one
+        directory is two answers about what a session holds; there is one now.
       operationId: get_exec_files_by_sid
       parameters:
-      - in: path
+      - description: |-
+          SID is the session identifier — the sandbox this listing is of. The URL is
+          the addressing authority: a path segment binds after the body and after the
+          query, so the address decides which session is read whatever else is sent.
+        in: path
         name: sid
         required: true
         schema:
           type: string
-      summary: List the files in an execution session
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/listing'
+                type: array
+          description: ok
+      summary: Files lists what a session holds.
       tags:
       - exec
       x-app: exec
       x-public: true
+      x-tool: true
   /v1/exec/programmatic:
     post:
       description: 'Answers 501. This address belongs to a DIFFERENT protocol from

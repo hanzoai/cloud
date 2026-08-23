@@ -3262,6 +3262,35 @@ emptying its list — meet 1 of 3, graph 6 of 7, pref 1 of 2, research 7 of 8,
 knowledge 8 of 9 — because five ledgers passing first run is a result worth
 distrusting until each is shown to see a real surface.
 
+**DO NOT MEASURE LEDGER COVERAGE BY GREP. It failed FOUR times in one session,
+in both directions, and that is the argument for `openapi/untyped.json`.**
+
+The question "which apps have a gate that fails when a raw route is added" looks
+like a grep and is not. Keyed on the variable NAME it missed `apps/deploy`'s `raw`
+map and `apps/framework`'s `rawRoutes`, and called the two best-gated packages in
+the tree ungated. Keyed on a PHRASE it missed every ledger a different author
+worded differently. Keyed on the MECHANISM (`openapi.Typed` plus a refusal string)
+it reported 29 ungated apps, of which the first two probed — `git` and `team` —
+turned out to be gated. And the mutation check meant to settle it was itself wrong:
+`grep -rln … | head -1` picked `doors_test.go` over `typed_wire_test.go`, so
+`apps/event`'s ledger was never emptied and its gate was recorded as absent when it
+covers all five of its raw routes (7 typed + 5 named = 12 served).
+
+Four measurements, four different answers, none trustworthy. The reason is
+structural rather than careless: **a per-app gate is a convention, and a convention
+is only as discoverable as the names people happened to use.** So the fleet-wide
+answer must not depend on one — `openapi/untyped.json` reads the DOCUMENT, which
+every app produces the same way whatever its tests are called, and needs no author
+to have followed anything.
+
+The per-app ledgers still earn their place, and the division is worth stating once:
+the ratchet catches a growth in the COUNT and cannot name a cause; a ledger names
+the address and the wire fact and goes red when a reason stops being true. Neither
+substitutes for the other, and only one of them can be found by searching.
+
+If you must know whether a specific app is gated, RUN THE MUTATION — empty its
+ledger and watch — and check that the file you edited is the file that declares it.
+
 ## The typed migration: one registry entry, or a route and nothing else
 
 Measured at `e88ea216`, and re-measurable — do not trust these numbers past the

@@ -8,7 +8,10 @@ package projects
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/hanzoai/cloud/openapi"
 	"net/http"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +112,86 @@ func TestDeleteStays204WithNoBody(t *testing.T) {
 	}
 	if code, db := do(t, app, http.MethodDelete, "/v1/projects/"+p.Slug, "acme", nil); code != http.StatusNoContent || len(db) != 0 {
 		t.Fatalf("delete project want 204 with no body, got %d (%q)", code, db)
+	}
+}
+
+// untypedByDesign is the CLOSED list of addresses this app serves raw, each with
+// the wire fact that keeps it there.
+//
+// The package already MEASURES each of these — the tests above drive the wires
+// themselves, which is the stronger form and stays. What this list adds is the
+// SUM: those tests go red when a refused route's WIRE changes, and nothing went
+// red when a route was ADDED raw beside them. openapi/untyped.json catches that
+// fleet-wide by count, and a count is flat when one route converts and another
+// arrives raw in the same change, which is exactly what this catches.
+var untypedByDesign = map[string]string{
+	"GET /v1/projects/tags": "the PUBLIC browser-tag config a hosted <script> fetches. It sets three " +
+		"response headers the caller depends on — Access-Control-Allow-Origin: * (it is read " +
+		"cross-origin from every customer site), Cache-Control on a hot path, and an explicit " +
+		"charset — and it resolves the site from the publishable KEY or the request HOST, which are " +
+		"request-side facts a typed op holds no request to read. It already declares its shape and " +
+		"prose through openapi.Register/Describe, so what staying raw costs is the tool, not the " +
+		"schema.",
+	"GET /v1/projects/{slug}/shot": "answers the site's screenshot BYTES; a typed op's only response " +
+		"path is c.JSON(out).",
+	"POST /v1/projects/{slug}/deploy": "takes the built artifact as its raw body — the bytes are the " +
+		"deploy — so a JSON In would refuse every real publish.",
+}
+
+// TestEveryRouteIsTypedOrNamed requires the two ledgers to SUM to the served
+// surface, so a route added raw goes red without anyone remembering this file, and
+// a reason that stops being true goes red the moment its op is written.
+func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+	app := mountApp(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "projects", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("typed: %v", err)
+	}
+
+	served, typed := map[string]bool{}, map[string]bool{}
+	for path, item := range doc.Paths {
+		if !strings.HasPrefix(path, "/v1/projects") {
+			continue
+		}
+		for method := range item {
+			served[strings.ToUpper(method)+" "+path] = true
+		}
+	}
+	for key := range reg.Ops {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/projects") {
+			typed[key] = true
+		}
+	}
+
+	var untyped []string
+	for key := range served {
+		if !typed[key] {
+			if _, named := untypedByDesign[key]; !named {
+				untyped = append(untyped, key)
+			}
+		}
+	}
+	if len(untyped) > 0 {
+		sort.Strings(untyped)
+		t.Errorf("served but neither typed nor named: %s\n"+
+			"A raw route publishes no schema, no MCP tool, no CLI command and no typed SDK method. "+
+			"Convert it, or name it in untypedByDesign with the wire fact that keeps it raw.",
+			strings.Join(untyped, ", "))
+	}
+	for key := range untypedByDesign {
+		if !served[key] {
+			t.Errorf("untypedByDesign names %q, which this app no longer serves", key)
+		}
+		if typed[key] {
+			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
+		}
+	}
+	if got, want := len(typed)+len(untypedByDesign), len(served); got != want {
+		t.Errorf("the two ledgers must sum to the served surface: typed %d + named %d = %d, served %d",
+			len(typed), len(untypedByDesign), got, want)
 	}
 }

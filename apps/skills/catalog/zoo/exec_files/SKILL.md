@@ -1,7 +1,7 @@
 ---
 name: exec_files
 version: "8.0.0"
-description: "Read exec files: List the files in an execution session."
+description: "Read exec files: Files lists what a session holds.."
 ---
 
 # Zoo · EXEC · files
@@ -14,17 +14,17 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/exec/files/{sid}` — List the files in an execution session
+- `GET https://api.zoo.ngo/v1/exec/files/{sid}` — Files lists what a session holds.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `sid` | path | yes | string |  |
+| `sid` | path | yes | string | SID is the session identifier — the sandbox this listing is of. The URL is the addressing authority: a path segment binds after the body and after the query, so the address decides which session is read whatever else is sent. |
 
 ## Response
 
-- `/v1/exec/files/{sid}` → JSON object.
+- `/v1/exec/files/{sid}` → JSON array of `listing`.
 
 ## Example
 
