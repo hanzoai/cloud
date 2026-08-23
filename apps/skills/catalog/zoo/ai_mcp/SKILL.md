@@ -1,7 +1,7 @@
 ---
 name: ai_mcp
 version: "8.0.0"
-description: "Read ai mcp: Tools reports what THIS PROCESS's MCP door carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed.."
+description: "Read ai mcp: Tools reports what THIS PROCESS's MCP server carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed.."
 ---
 
 # Zoo · AI · mcp
@@ -14,13 +14,13 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/ai/mcp/tools` — Tools reports what THIS PROCESS's MCP door carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed.
+- `GET https://api.zoo.ngo/v1/ai/mcp/tools` — Tools reports what THIS PROCESS's MCP server carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `names` | query | no | boolean | Names asks for this process's tool NAMES and not only how many there are. Off by default: a list of names is a page, and the question this op exists to answer ("is the door up and does it have anything behind it") is answered by the count. |
+| `names` | query | no | boolean | Names asks for this process's tool NAMES and not only how many there are. Off by default: a list of names is a page, and the question this op exists to answer ("is the MCP server up and does it have anything behind it") is answered by the count. |
 
 ## Response
 

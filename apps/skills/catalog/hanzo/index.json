@@ -518,11 +518,11 @@
       "sha256": "9cb4009f091bdad8b7e417bba3256d2a1fc23f765b347c6a79dfa8798253f7b7"
     },
     {
-      "description": "Read ai mcp: Tools reports what THIS PROCESS's MCP door carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed..",
+      "description": "Read ai mcp: Tools reports what THIS PROCESS's MCP server carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed..",
       "name": "ai_mcp",
       "path": "ai_mcp/SKILL.md",
       "service": "ai",
-      "sha256": "45c05821dc36a0f388fadd5847f9f583692429fd48cf84c3c5a2c1a263a12c2c"
+      "sha256": "9998f5e3f047f2a56e9bb29c6ffb971c61333527f3572099fe5c32db85357568"
     },
     {
       "description": "Read ai memory: List the authenticated user's stored facts, List the authenticated user's memories, newest first, Recall recent/relevant memories for context injection; with q it.",
@@ -4676,11 +4676,11 @@
       "sha256": "19d84347ac6be1e3ff372f10f772d18394f867c288ced24d683a13881704c642"
     },
     {
-      "description": "Read world world: Answers GET /v1/world — the product's front door, naming every wire this surface answers on..",
+      "description": "Read world world: Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on..",
       "name": "world_world",
       "path": "world_world/SKILL.md",
       "service": "world",
-      "sha256": "b828e834af5e4c3848f1168d34bea8e9ef3918e508a170eecf63de2e696a7a7a"
+      "sha256": "1d7a4c42ab931d3f763299289e7e60e88b962e08366b9f6323b38f1761348e05"
     },
     {
       "description": "Read x402 settlements: Settlement reads one x402 payment receipt by id..",
