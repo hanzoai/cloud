@@ -57,10 +57,29 @@ const (
 	// hardcoded. Absent ⇒ the orchestrator stays dormant (no unauthenticated POST).
 	enqueueTokenEnv = "PLATFORM_BUILD_CALLBACK_TOKEN"
 
-	// enqueueURLEnv overrides the platform direct-build endpoint; defaults to the
-	// production front door. One URL, one build path.
+	// enqueueURLEnv overrides the direct-build endpoint; defaults to CLOUD'S OWN.
+	//
+	// It pointed at https://platform.hanzo.ai/v1/runner — a DIFFERENT deployment,
+	// and one that names a different credential: cloud's runner refuses with
+	// "invalid build token" and that one with "Invalid enqueue token". This holds
+	// PLATFORM_BUILD_CALLBACK_TOKEN, which is the token CLOUD checks
+	// (apps/platform/runner.go runnerTokenOK) — measured against production, that
+	// token is accepted at /v1/platform/runner and rejected at the other address.
+	// So the hop crossed a service boundary to reach the SAME build muscle this
+	// binary already carries (apps/platform launchDirectBuild), presenting a
+	// credential the far side does not use.
+	//
+	// One capability, one owner: apps/platform builds, and the address is the one
+	// it registers. `hanzo.yml`'s deploy block is still evaluated there, so nothing
+	// about WHERE a build rolls moves with this.
+	//
+	// STILL AN HTTP HOP, and that is the remaining defect rather than the fix: a
+	// call from this process to its own edge is the re-entry apps/commerce's
+	// transport documents. The destination is a plane op beside plane.PlatformPush
+	// — same shape, taking the image list instead of the push — at which point the
+	// URL and the shared token both go away.
 	enqueueURLEnv     = "CLOUD_NATIVE_CICD_ENQUEUE_URL"
-	defaultEnqueueURL = "https://platform.hanzo.ai/v1/runner"
+	defaultEnqueueURL = "http://cloud.hanzo.svc.cluster.local:8000/v1/platform/runner"
 )
 
 // pipeline is the slice of the `hanzo.yml` / `.hanzo/workflows/*.yml` schema the
