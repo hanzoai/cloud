@@ -13,7 +13,7 @@ import (
 //
 // It exists so a request never touches S3. The alternative — a per-request GET
 // against the object store — would put a network hop and a third party's
-// availability under every asset of the front door, to save 9MB in a process that
+// availability under every asset of the console, to save 9MB in a process that
 // already holds far more; and it would make the console's latency the store's
 // latency. A bundle is loaded whole or not at all, so what is mounted is always
 // one complete release rather than a mixture of two.

@@ -210,7 +210,7 @@ func (c *iamClient) do(ctx context.Context, method, path string, q url.Values, b
 
 // iamScopePublish is IAM's storage value for a PUBLISHABLE key
 // (schema.KeyScopePublish). It is the one string the mint, the resolver and the
-// ingest door already agree on; cloud reads it to tell a key's type apart.
+// ingest endpoint already agree on; cloud reads it to tell a key's type apart.
 const iamScopePublish = "publish"
 
 // userKey is the subset of an IAM key row the key surface reads: the publishable
@@ -428,7 +428,7 @@ func agentAppName(org string) string { return org + "-agent" }
 // rotate a live agent's credentials as a side effect of a retry.
 //
 // It does NOT read the secret back, and no caller of this ever sees one. Issuing
-// a token for a run is a separate act, at a separate door, reviewed separately.
+// a token for a run is a separate act, at a separate endpoint, reviewed separately.
 func (c *iamClient) ensureAgentApplication(ctx context.Context, org string) error {
 	name := agentAppName(org)
 	body, err := json.Marshal(iamApplication{

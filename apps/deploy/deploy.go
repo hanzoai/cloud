@@ -315,7 +315,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// It is a typed op DESPITE being unauthenticated, which is the right way round:
 	// the route grants nothing and reports booleans only — never the raw client
 	// error, which can disclose the apiserver address or an RBAC detail — so the
-	// same answer is safe on every door a typed op opens.
+	// same answer is safe on every surface a typed op reaches.
 	zip.Get(cloud.ZipApp(app), dashPrefix+"/health", ops{s: s}.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 	// Sign-in — necessarily public: these three routes ARE how a browser gets an
 	// authenticated principal for this host. They grant nothing themselves; the

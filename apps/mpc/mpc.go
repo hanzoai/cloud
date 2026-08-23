@@ -91,10 +91,10 @@ type Config struct {
 	// (e.g. ["https://kms-mpc-0:9999", "https://kms-mpc-1:9999"]).
 	Nodes []string
 	// Namespace names the org whose secrets these are. It is a NAME rather than
-	// a slug because the caller builds it at cloud's one door (cloud.OrgNamespace)
-	// — this package derives a key from it and must not be the place a string
-	// becomes a tenant. Its id is the AES-GCM AAD and the path scope, so it binds
-	// every ciphertext to exactly one tenant.
+	// a slug because the caller builds it at cloud's one entry point
+	// (cloud.OrgNamespace) — this package derives a key from it and must not be
+	// the place a string becomes a tenant. Its id is the AES-GCM AAD and the path
+	// scope, so it binds every ciphertext to exactly one tenant.
 	Namespace namespace.Namespace
 	// Threshold is the minimum number of nodes required for an operation (t-of-n).
 	Threshold int

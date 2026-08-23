@@ -50,12 +50,12 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 	// than data that arrives with a request.
 	build := regexp.MustCompile(`\bnamespace\.(Org|User|Repo|MustOrg|MustUser|MustRepo|Parse|Of|OrgProject|MustOrgProject)\(`)
 
-	// The doors. orgns.go is cloud's, and holds the argument. finance.go is the
+	// The places. orgns.go is cloud's, and holds the argument. finance.go is the
 	// SECOND and last, and it is one because cloud imports it: a package below
 	// cloud cannot call OrgNamespace, so before this it carried its own org→slug
 	// regexp instead — a second injective slugger the gate could not see, which is
 	// strictly worse than the call it now makes. Its org is principal.Org, the same
-	// validated claim every OrgNamespace caller passes. A THIRD door is not a thing
+	// validated claim every OrgNamespace caller passes. A THIRD place is not a thing
 	// to add; move the caller above cloud, or take the namespace as a parameter.
 	doors := map[string]bool{
 		"orgns.go":                true,
@@ -74,7 +74,7 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 			// A dot-directory is not this module's source. It is .git, or a
 			// worktree an agent parked under .claude — a whole second copy of
 			// this repository, whose orgns.go and apps/finance/finance.go are
-			// the SAME two doors reported at paths that exist for nobody else.
+			// the SAME two places reported at paths that exist for nobody else.
 			// This gate read one and went red while nothing in the module had
 			// changed. Every other source-walking gate here already states the
 			// rule (typed_request_gate_test.go, iamurl_test.go,
@@ -113,7 +113,7 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 	}
 }
 
-// TestOrgNamespaceRefusesWhatSanitizeRefuses pins the door shut on the inputs
+// TestOrgNamespaceRefusesWhatSanitizeRefuses pins the refusal on the inputs
 // that must never become a database name. Each of these would, if admitted, be a
 // file two distinct orgs could share or a segment that escapes the data dir.
 func TestOrgNamespaceRefusesWhatSanitizeRefuses(t *testing.T) {

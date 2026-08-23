@@ -195,7 +195,7 @@ type agentView struct {
 	Description string `json:"description,omitempty"`
 	// Tools are the tool names this agent may call, and the list IS the authority:
 	// an agent that declares none gets none. The single entry "*" means whatever the
-	// fleet's tool door serves at the moment of the run, resolved per run rather
+	// fleet's MCP server serves at the moment of the run, resolved per run rather
 	// than frozen here, which is how the default assistant reaches subsystems that
 	// shipped after it was defined. Empty array, never null.
 	Tools []string `json:"tools"`
@@ -486,13 +486,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 	// The login-manager teardown, for the link process that has no session store
-	// in it — two doors onto the ONE StopSessions (sessions_rpc.go).
+	// in it — two endpoints onto the ONE StopSessions (sessions_rpc.go).
 	exposeSessions()
 	exposeRunOnBehalf()
 
 	o := agentOps{s: s}
-	// Bridge FIRST, and at the door this SUBSYSTEM is, not on one node inside it: a
-	// typed op receives only a context, so the validated org reaches it by being
+	// Bridge FIRST, and at the entry point this SUBSYSTEM is, not on one node inside
+	// it: a typed op receives only a context, so the validated org reaches it by being
 	// parked there — never as an In field, which is caller-supplied and would be a
 	// cross-tenant read the caller asserted for itself.
 	//
@@ -506,7 +506,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/agents/sessions, and every op there answered 403 "X-Org-Id required" to a
 	// request that carried one. Serve installs one app-wide, which is why serving
 	// was unaffected and only the tests — which Mount onto a bare app — could see
-	// it; a gate whose absence just one door down is invisible in production is the
+	// it; a gate whose absence just one route away is invisible in production is the
 	g := app.Group("/v1/agents")
 	// cloud.Bridge parks the validated org on the context a typed op receives; it
 	// is the composer's install — once at the root of every program — so this
@@ -646,7 +646,7 @@ type createAgentIn struct {
 	Description string `json:"description"`
 	// Tools are the tool names this agent may call. Omitted or empty grants NONE —
 	// that default is the agent's authority and is not widened anywhere. The single
-	// entry "*" means whatever the fleet's tool door serves at the time of each run.
+	// entry "*" means whatever the fleet's MCP server serves at the time of each run.
 	Tools []string `json:"tools"`
 	// ExecutionMode is one-shot or long-running. Empty takes one-shot, which runs
 	// only when something POSTs to it. long-running additionally requires Schedule,

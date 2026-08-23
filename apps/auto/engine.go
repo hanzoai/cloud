@@ -38,7 +38,7 @@ const (
 // is wired after MountAll). Handlers render it as 503 "automation engine not ready".
 var ErrEngineNotReady = errors.New("auto: engine not ready")
 
-// tokenSource is the ONE door to per-org credential custody. It defaults to
+// tokenSource is the ONE entry point to per-org credential custody. It defaults to
 // integrations.TokenFor (KMS-sealed, fail-closed). It is a package var ONLY so a
 // test can OBSERVE the (org,provider) a step tokenizes and prove the activity scopes
 // every credential fetch to in.Owner — never to a client-supplied field. Production
@@ -256,8 +256,8 @@ func executeFlow(ctx context.Context, in FlowRunInput) (tasksclient.WorkflowRun,
 	}, FlowRunWorkflow, in)
 }
 
-// runStarter is the ONE door Deliver uses to start a durable run. It defaults to
-// executeFlow (the real engine). It is a package var ONLY so a test can OBSERVE the
+// runStarter is the ONE entry point Deliver uses to start a durable run. It defaults
+// to executeFlow (the real engine). It is a package var ONLY so a test can OBSERVE the
 // FlowRunInput a delivered event would start — proving org scope, payload threading,
 // and exactly-once dispatch — without standing up the engine. Production never
 // reassigns it. (Mirrors tokenSource above.)

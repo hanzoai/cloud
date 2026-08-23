@@ -186,7 +186,7 @@ func TestIAMLaneResolvesTheAccount(t *testing.T) {
 //
 // The attacker needs a token IAM will mint with no sub and a chosen username, so
 // this is a privilege escalation gated on an IAM-side condition rather than an open
-// door — which is exactly the kind that survives review by being called impossible.
+// one — which is exactly the kind that survives review by being called impossible.
 func TestIAMLaneKeysOnTheSubjectNotTheUsername(t *testing.T) {
 	store := openTestStore(t)
 	id, iam := identFor(t, store)
@@ -725,11 +725,11 @@ func TestMemberPlaneOpScopesToTheCaller(t *testing.T) {
 // which is the half a behavioural test cannot hold.
 //
 // The estate's boundary deliberately does not gate audience, and that posture was
-// decided for an API door: a valid signature from a trusted issuer proves IAM
+// decided for an API surface: a valid signature from a trusted issuer proves IAM
 // minted the token for one of its own apps, and cloud kept no mirror of IAM's
 // registry because the mirror drifted and 401'd every new first-party app. Team is
-// a SESSION door and diverges — but the way that divergence rots is by growing back
-// into the mirror, one pattern at a time ("any *-team app", "anything from our
+// a SESSION surface and diverges — but the way that divergence rots is by growing
+// back into the mirror, one pattern at a time ("any *-team app", "anything from our
 // org"). So the set is enumerated: this deployment's own client id, plus entries an
 // operator NAMED, and matching is exact.
 func TestSessionAudienceIsNamedNotPatterned(t *testing.T) {
@@ -764,7 +764,7 @@ func TestSessionAudienceIsNamedNotPatterned(t *testing.T) {
 		t.Fatal("a token naming several audiences, one of them ours, was refused")
 	}
 	// A deployment with NO audience configured admits nothing, rather than
-	// everything: an empty allowlist is a closed door.
+	// everything: an empty allowlist matches nothing.
 	empty := &identity{audience: sessionAudience(config{})}
 	if empty.forThisDeployment([]string{"hanzo-team"}) {
 		t.Fatal("SECURITY: an unconfigured audience set admitted a token")
@@ -778,7 +778,7 @@ func TestSessionAudienceIsNamedNotPatterned(t *testing.T) {
 // DISTINCT IAM applications — IAM refuses only an exact name collision, so the
 // padded one is registrable by anyone through /v1/iam/add-application — and
 // trimming collapses them onto one key. An attacker registers the lookalike, signs
-// their own users in through it, and IAM hands them tokens this door accepts as
+// their own users in through it, and IAM hands them tokens this check accepts as
 // sessions of the real app.
 //
 // It is the estate's identifier rule, which OrgHasUnsafeRune states for orgs:

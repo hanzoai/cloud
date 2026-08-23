@@ -192,7 +192,7 @@ type SendRequest struct {
 }
 
 func (r SendRequest) validate() error {
-	// Room.Kind may be empty on egress: the transport doors address a room by
+	// Room.Kind may be empty on egress: the transports address a room by
 	// id alone; kind is an ingress classification.
 	if r.Room.ID == "" {
 		return fmt.Errorf("send: room id required")

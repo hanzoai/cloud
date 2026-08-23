@@ -3,7 +3,7 @@
 // It is the whole cloud side of the headless bot: the CONTROL PLANE for a bot run
 // — a task executed on a surface (a desktop or terminal sandbox the bot drives)
 // with a LIVE session, the URL the hanzo.app /vnc panel embeds to watch or attach
-// — TOGETHER WITH the door to the service that executes it, @hanzo/bot.
+// — TOGETHER WITH the transport to the service that executes it, @hanzo/bot.
 //
 // One product, not two. The control plane and the transport to the executor were
 // separate apps once (apps/runtime), which made a LANGUAGE boundary look like a

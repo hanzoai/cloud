@@ -15,7 +15,7 @@ import (
 
 // These tests pin the thing a status code cannot see: WHICH BYTES come back.
 // api.hanzo.ai answered GET /mcp with 200 text/html — the console SPA, served by
-// the terminal catch-all because the host had moved zip's door to
+// the terminal catch-all because the host had moved zip's MCP endpoint to
 // manifest.MCPPath and nothing claimed the framework default. A client checking
 // for 200 called that healthy. So every assertion below reads the body and the
 // content type, and none of them is satisfied by a status alone.
@@ -25,7 +25,7 @@ type pingOut struct {
 	OK bool `json:"ok"`
 }
 
-// testDoor is a process's agent door for the tests that drive the console
+// testDoor is a process's agent MCP server for the tests that drive the console
 // handler directly. It is a REAL zip.App's — the same value Mount hands in — so
 // no test is exercising a shape production does not have.
 func testDoor() zapmcp.Handler {
@@ -33,10 +33,10 @@ func testDoor() zapmcp.Handler {
 }
 
 // hostApp is the HOST as cmd/cloud builds it: a typed op (so zip has a registry
-// to project), the MCP door moved to manifest.MCPPath, and the console mounted
+// to project), the MCP route moved to manifest.MCPPath, and the console mounted
 // LAST as the terminal handler — then Prepare(), which is when zip installs the
-// door. That order is the one production runs, and it is the order under
-// suspicion: the catch-all is registered BEFORE the door exists.
+// route. That order is the one production runs, and it is the order under
+// suspicion: the catch-all is registered BEFORE the route exists.
 func hostApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true,
@@ -49,9 +49,9 @@ func hostApp(t *testing.T) *zip.App {
 	return app
 }
 
-// pluginApp is a plugin as cloud.Serve builds it: zip's DEFAULT door, which is
-// also where a host forwards a composed tools/call, so it must keep answering
-// MCP and must not be swallowed by the signpost the host needs.
+// pluginApp is a plugin as cloud.Serve builds it: zip's DEFAULT MCP address,
+// which is also where a host forwards a composed tools/call, so it must keep
+// answering MCP and must not be swallowed by the signpost the host needs.
 func pluginApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "plug", DisableStartupMessage: true})
@@ -121,8 +121,8 @@ func mcpResult(t *testing.T, got reply, path string) map[string]any {
 	return env.Result
 }
 
-// The money proof: the canonical door answers the MCP protocol, in JSON, with a
-// tool list that actually contains the app's typed op.
+// The money proof: the canonical endpoint answers the MCP protocol, in JSON,
+// with a tool list that actually contains the app's typed op.
 func TestMCPDoorAnswersMCP(t *testing.T) {
 	got := call(t, hostApp(t), http.MethodPost, manifest.MCPPath, toolsList)
 	res := mcpResult(t, got, manifest.MCPPath)
@@ -134,39 +134,40 @@ func TestMCPDoorAnswersMCP(t *testing.T) {
 }
 
 // The original bug, still pinned: the framework default must never render the
-// console. What it is answered WITH has changed — this process's own door, not a
-// redirect. The 308 belongs to a host that moved its door and is registered by
-// the same call that registers the target (fleet.Mount); the end-to-end host is
-// pinned in cmd/cloud/mcp_test.go, where both halves are composed. Here the rule
-// is the one the terminal handler can actually keep on its own.
+// console. What it is answered WITH has changed — this process's own MCP server,
+// not a redirect. The 308 belongs to a host that moved its MCP endpoint and is
+// registered by the same call that registers the target (fleet.Mount); the
+// end-to-end host is pinned in cmd/cloud/mcp_test.go, where both halves are
+// composed. Here the rule is the one the terminal handler can actually keep on
+// its own.
 func TestFrameworkPathIsAnsweredAsADoor(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		app  *zip.App
 	}{
-		{"door moved off the framework default", hostApp(t)},
-		{"no door mounted at all", doorlessApp(t)},
+		{"MCP route moved off the framework default", hostApp(t)},
+		{"no MCP route mounted at all", doorlessApp(t)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodHead} {
 				got := call(t, tc.app, m, manifest.FrameworkMCPPath, toolsList)
 				if strings.Contains(got.ctype, "text/html") {
-					t.Errorf("%s %s: content-type %q — the machine door must never be HTML", m, manifest.FrameworkMCPPath, got.ctype)
+					t.Errorf("%s %s: content-type %q — the machine endpoint must never be HTML", m, manifest.FrameworkMCPPath, got.ctype)
 				}
 				if strings.Contains(got.body, "<!doctype") || strings.Contains(got.body, "<!DOCTYPE") {
 					t.Errorf("%s %s: answered with the console SPA shell", m, manifest.FrameworkMCPPath)
 				}
 				// Never a hop to an address this process does not serve. That is the
-				// defect: kms sent its own door to /v1/mcp and /v1/mcp 404'd.
+				// defect: kms sent its own MCP route to /v1/mcp and /v1/mcp 404'd.
 				if got.location != "" {
-					t.Errorf("%s %s: Location %q — the door is HERE; nothing to redirect to",
+					t.Errorf("%s %s: Location %q — the endpoint is HERE; nothing to redirect to",
 						m, manifest.FrameworkMCPPath, got.location)
 				}
 				if m == http.MethodPost {
 					mcpResult(t, got, manifest.FrameworkMCPPath)
 					continue
 				}
-				// The optional SSE stream, which this door does not have.
+				// The optional SSE stream, which this endpoint does not have.
 				if got.status != http.StatusMethodNotAllowed {
 					t.Errorf("%s %s: status %d, want 405", m, manifest.FrameworkMCPPath, got.status)
 				}
@@ -178,9 +179,9 @@ func TestFrameworkPathIsAnsweredAsADoor(t *testing.T) {
 	}
 }
 
-// A GET on the door is a client asking for the optional SSE stream. There is
+// A GET on the endpoint is a client asking for the optional SSE stream. There is
 // none, so MCP Streamable HTTP wants 405 + Allow — not the 404 that says the
-// door is absent.
+// endpoint is absent.
 func TestDoorRefusesNonPOSTHonestly(t *testing.T) {
 	got := call(t, hostApp(t), http.MethodGet, manifest.MCPPath, "")
 	if got.status != http.StatusMethodNotAllowed {
@@ -190,14 +191,14 @@ func TestDoorRefusesNonPOSTHonestly(t *testing.T) {
 		t.Errorf("GET %s: Allow %q, want POST", manifest.MCPPath, got.allow)
 	}
 	if strings.Contains(got.ctype, "text/html") {
-		t.Errorf("GET %s: content-type %q — never HTML on the door", manifest.MCPPath, got.ctype)
+		t.Errorf("GET %s: content-type %q — never HTML on the endpoint", manifest.MCPPath, got.ctype)
 	}
 }
 
 // The signpost is SELF-SCOPING: it is in the terminal handler, so it only fires
-// for a path no route claimed. A plugin serving its own door at the framework
-// default — which is where a host forwards a composed tools/call — must still
-// answer MCP there, not redirect to an address it does not serve.
+// for a path no route claimed. A plugin serving its own MCP server at the
+// framework default — which is where a host forwards a composed tools/call —
+// must still answer MCP there, not redirect to an address it does not serve.
 func TestPluginKeepsItsOwnDoor(t *testing.T) {
 	app := pluginApp(t)
 	got := call(t, app, http.MethodPost, manifest.FrameworkMCPPath, toolsList)
@@ -217,7 +218,7 @@ func TestPluginKeepsItsOwnDoor(t *testing.T) {
 // the internal plane (cloud.Plane, apps/kms/secret_rpc.go) so that no route runs
 // from the edge to a secret. Its own registry is therefore EMPTY — and zip mounts
 // the /mcp route only when it has something to expose (zip mcp.go installMCP), so
-// this app never gets a door and the console catch-all is what answers at it.
+// this app never gets an MCP route and the console catch-all answers at it.
 //
 // nil bundle on purpose: a child cannot bootstrap the console release, so every
 // per-app plugin binary runs exactly this way.
@@ -233,11 +234,11 @@ func doorlessApp(t *testing.T) *zip.App {
 	return app
 }
 
-// A door with nothing behind it is still a door.
+// An MCP endpoint with nothing behind it is still an MCP endpoint.
 //
 // Measured on bin/kms: POST /mcp -> 308 Location /v1/mcp, and POST /v1/mcp -> 404.
 // The fleet asks every child at FrameworkMCPPath and reads any non-2xx as an
-// outage (fleet/fleet.go ask), so a child that redirects its own door to an
+// outage (fleet/fleet.go ask), so a child that redirects its own MCP route to an
 // address it does not serve drops out of the composed tool list AND is reported
 // down — for the crime of having no tools. An empty list is the honest answer and
 // it is a 200.
@@ -251,7 +252,7 @@ func TestDoorlessPluginAnswersItsOwnDoor(t *testing.T) {
 	}
 	t.Logf("doorless POST %s -> %d %s %.140s", manifest.FrameworkMCPPath, got.status, got.ctype, got.body)
 
-	// initialize is the handshake every MCP client opens with; a door that only
+	// initialize is the handshake every MCP client opens with; an endpoint that only
 	// answered tools/list would fail before it ever asked.
 	init := call(t, app, http.MethodPost, manifest.FrameworkMCPPath,
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
@@ -259,12 +260,12 @@ func TestDoorlessPluginAnswersItsOwnDoor(t *testing.T) {
 		t.Errorf("initialize: no protocolVersion — %.200s", init.body)
 	}
 
-	// ONE door: an agent must not be able to tell whether zip's route or the
+	// ONE endpoint: an agent must not be able to tell whether zip's route or the
 	// terminal handler carried the answer. A media type that differed would be the
-	// second door reappearing as a header.
+	// second endpoint reappearing as a header.
 	mounted := call(t, pluginApp(t), http.MethodPost, manifest.FrameworkMCPPath, toolsList)
 	if got.ctype != mounted.ctype {
-		t.Errorf("content-type %q via the terminal handler vs %q via zip's route — one door, one answer",
+		t.Errorf("content-type %q via the terminal handler vs %q via zip's route — one endpoint, one answer",
 			got.ctype, mounted.ctype)
 	}
 }
@@ -273,14 +274,14 @@ func TestDoorlessPluginAnswersItsOwnDoor(t *testing.T) {
 // reader does not re-run the investigation.
 //
 // The console catch-all is registered FIRST (Mount, from cloud.Serve) and zip's
-// door is a CONTROL route installed LAST, in prepare() at Listen (zip generation.go
-// materialise puts ctl on after every entry). Upstream fiber would let the earlier
-// /* win. The zap-proto fork does not: endpoint routes are inserted
-// most-specific-first within the run that follows the last middleware barrier
-// (fiber router_precedence.go insertRouteSorted), so the static /mcp sorts AHEAD
-// of the greedy /* however late it arrives.
+// MCP route is a CONTROL route installed LAST, in prepare() at Listen (zip
+// generation.go materialise puts ctl on after every entry). Upstream fiber would
+// let the earlier /* win. The zap-proto fork does not: endpoint routes are
+// inserted most-specific-first within the run that follows the last middleware
+// barrier (fiber router_precedence.go insertRouteSorted), so the static /mcp
+// sorts AHEAD of the greedy /* however late it arrives.
 func TestCatchAllNeverShadowsTheDoor(t *testing.T) {
-	app := pluginApp(t) // catch-all first; the door does not exist yet
+	app := pluginApp(t) // catch-all first; the route does not exist yet
 	// Test() runs prepare(), which is where installMCP registers the control route.
 	mcpResult(t, call(t, app, http.MethodPost, manifest.FrameworkMCPPath, toolsList),
 		manifest.FrameworkMCPPath)
@@ -295,7 +296,7 @@ func TestCatchAllNeverShadowsTheDoor(t *testing.T) {
 		}
 	}
 	if len(order) != 2 || order[0] != manifest.FrameworkMCPPath {
-		t.Fatalf("POST stack order %v — the door must sort ahead of the catch-all", order)
+		t.Fatalf("POST stack order %v — the MCP route must sort ahead of the catch-all", order)
 	}
 }
 
@@ -315,7 +316,7 @@ func TestConsoleStillServes(t *testing.T) {
 			t.Errorf("GET %s: not the console shell — %.120s", p, got.body)
 		}
 	}
-	// A path merely PREFIXED by the framework door is an ordinary console route
+	// A path merely PREFIXED by the framework MCP path is an ordinary console route
 	// and must keep rendering: the rule matches the address, not a subtree.
 	if got := call(t, app, http.MethodGet, "/mcp-servers", ""); !strings.Contains(got.ctype, "text/html") {
 		t.Errorf("/mcp-servers: content-type %q — the signpost swallowed a console route", got.ctype)

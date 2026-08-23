@@ -5,7 +5,7 @@
 // (pairing / allowlist / open), a durable inbox, and outbound send across every
 // connected transport. Identity and token custody stay in apps/integrations:
 // inbound events arrive on the plane (plane.ChannelsIngest) and replies leave
-// through that package's send doors, so the dependency points one way —
+// through that package's senders, so the dependency points one way —
 // channels → integrations, never back.
 package channels
 
@@ -41,7 +41,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "channels")
 	s := &cloud.Service[state]{Base: b, State: state{store: st}}
-	// Publish state BEFORE serving the ingest door so the first event finds a
+	// Publish state BEFORE serving the ingest endpoint so the first event finds a
 	// mounted service.
 	mounted.Store(s)
 	if err := routes(app, s); err != nil {

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// replay.go — the session-replay snapshot door.
+// replay.go — the session-replay snapshot endpoint.
 //
 //	POST /v1/event/replay   body: {sessionId, windowId, distinctId, events:[…]}  ->  {accepted, dropped}
 //
-// A browser recorder posts a batch of rrweb events; this door turns it into ONE
-// message on the replay ingest topic and answers the SAME receipt every other
-// analytics door answers. It is the whole of cloud's part: the downstream
+// A browser recorder posts a batch of rrweb events; this endpoint turns it into
+// ONE message on the replay ingest topic and answers the SAME receipt every other
+// analytics endpoint answers. It is the whole of cloud's part: the downstream
 // ingester consumes the topic, writes the snappy blocks to object storage and
 // computes the summary row the player reads. Cloud does not touch object storage
 // and does not touch the warehouse on this path.
@@ -28,34 +28,36 @@
 // plane (ingestEvents → the JetStream fact plane → the warehouse). A snapshot batch
 // decodes to none of that: it is an opaque rrweb recording bound for a different
 // consumer on a different transport. Forcing it into the doors table would mean
-// either a decoder that returns no events (a door that always drops) or a second
-// meaning for CaptureEvent. So it is registered explicitly in routes, exactly as
-// the Sentry relay is — the other route on this surface whose body is not the
-// canonical wire.
+// either a decoder that returns no events (an endpoint that always drops) or a
+// second meaning for CaptureEvent. So it is registered explicitly in routes,
+// exactly as the Sentry relay is — the other route on this surface whose body is
+// not the canonical wire.
 //
 // WHAT IS SHARED IS ADMISSION, and that is the half that matters. The credential is
 // resolved by eventTenant — the SAME pluggable, fail-closed, strict-trust-order
-// resolver every door uses — and refused with the SAME cannotAttribute/cannotWrite
-// vocabulary. There is no second resolver here, so a pk- that works on /v1/event
-// works here, and a key that is refused there is refused here, forever, by
-// construction rather than by two functions being kept in agreement.
+// resolver every endpoint uses — and refused with the SAME
+// cannotAttribute/cannotWrite vocabulary. There is no second resolver here, so a
+// pk- that works on /v1/event works here, and a key that is refused there is
+// refused here, forever, by construction rather than by two functions being kept
+// in agreement.
 //
-// THE TENANT IS NEVER READ FROM THE BODY, and it is the ONLY thing this door tells the
-// ingester about who is writing. The org is whatever eventTenant resolved from the
-// credential; it rides the message as a ROUTING fact, and the ingester files the
-// recording under the project that org owns. It is not a credential and it does not
-// authenticate anything — the authentication already happened here, once, against the
-// IAM-issued pk-, and a message on this topic is only ever produced by this door.
+// THE TENANT IS NEVER READ FROM THE BODY, and it is the ONLY thing this endpoint
+// tells the ingester about who is writing. The org is whatever eventTenant
+// resolved from the credential; it rides the message as a ROUTING fact, and the
+// ingester files the recording under the project that org owns. It is not a
+// credential and it does not authenticate anything — the authentication already
+// happened here, once, against the IAM-issued pk-, and a message on this topic is
+// only ever produced by this endpoint.
 //
 // So there is no second token anywhere on this path. An org's recordings cannot be
 // steered into another tenant's stream by naming one, because the caller never names
 // it: the value on the wire is the server-resolved org and nothing a caller can set.
 //
 // A PRODUCE FAILURE IS A 503, NEVER A 200. The produce is the commit point, exactly
-// as the fact publish is on the event plane (bus.go): the door answers "accepted"
-// only after the broker has the message. A fire-and-forget produce would turn every
-// receipt into a maybe, which is the failure mode `answer` (event.go) exists to make
-// impossible.
+// as the fact publish is on the event plane (bus.go): the endpoint answers
+// "accepted" only after the broker has the message. A fire-and-forget produce would
+// turn every receipt into a maybe, which is the failure mode `answer` (event.go)
+// exists to make impossible.
 
 package event
 
@@ -75,15 +77,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// replayPath is the door. No /api/ prefix and no version but v1 — the house rule
+// replayPath is the address. No /api/ prefix and no version but v1 — the house rule
 // for every route on api.hanzo.ai.
 const replayPath = "/v1/event/replay"
 
-// sourceReplay is this door's origin tag. It is a METRIC label only, and it lives
-// here rather than in capture.go's source block deliberately: every tag in that
-// block is stamped into a warehouse row's $source by ingestEvents, and this door
-// writes no row. Naming it there would put a value in a table whose comment promises
-// one tag per entry in `doors` — a promise this door is precisely the exception to.
+// sourceReplay is this endpoint's origin tag. It is a METRIC label only, and it
+// lives here rather than in capture.go's source block deliberately: every tag in
+// that block is stamped into a warehouse row's $source by ingestEvents, and this
+// endpoint writes no row. Naming it there would put a value in a table whose comment
+// promises one tag per entry in `doors` — a promise this endpoint is precisely the
+// exception to.
 const sourceReplay = "replay"
 
 // The snapshot contract, as CONSTANTS rather than literals at the point of use.
@@ -125,7 +128,7 @@ const maxSessionID = 70
 // body therefore still fits a 1 MiB message with room for the escaping, while the
 // global 16 MiB BodyLimit (config.go) would not: a body admitted there would be
 // produced, refused by the bus, and answered 503 for a reason the caller cannot act
-// on. Bounding at the door turns that into an honest 413 the recorder can chunk
+// on. Bounding at the endpoint turns that into an honest 413 the recorder can chunk
 // against.
 const maxReplayBytes = 512 << 10
 
@@ -228,8 +231,8 @@ type snapshotProperties struct {
 // THE ORG TRAVELS IN A HEADER, in one copy, and it is the whole of what this message
 // says about tenancy. The ingester resolves it to the project the org owns and files
 // the recording there; a message whose org resolves to no project is dropped at the
-// far end rather than filed anywhere, which is the same fail-closed shape this door
-// answers with.
+// far end rather than filed anywhere, which is the same fail-closed shape this
+// endpoint answers with.
 func snapshotRecord(in replayBody, org, ip, id string, now time.Time) (*kgo.Record, error) {
 	stamp := now.UTC().Format(snapshotTime)
 	data, err := json.Marshal(snapshotData{
@@ -358,15 +361,16 @@ func (p *producer) close() {
 	}
 }
 
-// produce is this door's ONE client onto the broker, and the only way a recording
-// leaves this package. It is a package var for exactly the reason `publish` is
-// (bus.go): production is always produceSnapshot, and a test substitutes it to read
-// back the record a request actually produced — the headers and the double-encoded
-// value are the whole contract, and none of it is observable through a status code.
+// produce is this endpoint's ONE client onto the broker, and the only way a
+// recording leaves this package. It is a package var for exactly the reason
+// `publish` is (bus.go): production is always produceSnapshot, and a test
+// substitutes it to read back the record a request actually produced — the headers
+// and the double-encoded value are the whole contract, and none of it is observable
+// through a status code.
 var produce = produceSnapshot
 
 // produceSnapshot produces one record, SYNCHRONOUSLY. The produce is the commit
-// point: the door answers a receipt only once the broker has the message, so an
+// point: the endpoint answers a receipt only once the broker has the message, so an
 // "accepted" means durable rather than "buffered in this process".
 func produceSnapshot(ctx context.Context, rec *kgo.Record) error {
 	ctx, cancel := context.WithTimeout(ctx, replayProduceTimeout)
@@ -382,7 +386,7 @@ func produceSnapshot(ctx context.Context, rec *kgo.Record) error {
 // beside the event plane's own close.
 func closeProducer() { snapshots.close() }
 
-// ── the door ────────────────────────────────────────────────────────────────
+// ── the endpoint ────────────────────────────────────────────────────────────
 
 // replayIngest is the handler: admission, then bounds, then the one produce.
 //
@@ -438,7 +442,7 @@ func replayIngest(_ *cloud.Service[state], c *zip.Ctx) error {
 		c.Log().Warn("replay snapshot produce failed", "session", in.SessionID, "err", err)
 		return zip.Errorf(http.StatusServiceUnavailable, "session replay ingest unavailable: %v", err)
 	}
-	// The SAME receipt every other door answers. One batch is one accepted unit:
+	// The SAME receipt every other endpoint answers. One batch is one accepted unit:
 	// the recording is produced whole or not at all, so there is no partial count to
 	// report and `dropped` is honestly zero.
 	cloud.ObserveIngest(sourceReplay, 1, 0)

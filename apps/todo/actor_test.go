@@ -72,8 +72,8 @@ func TestBoardActor_RefusesAUsernameThatIsSomebodyElsesLogin(t *testing.T) {
 		t.Fatalf("a caller whose USERNAME is somebody else's login read their board: %d %s", code, raw)
 	}
 
-	// And the WRITE door refuses the same way — this is the one that puts words
-	// in a colleague's mouth.
+	// And the WRITE endpoint refuses the same way — this is the one that puts
+	// words in a colleague's mouth.
 	code, raw = asSubject(t, app, http.MethodPost, "/v1/todo/projects/api/issues",
 		"hanzo", "u_mallory", "z", map[string]any{"title": "filed as somebody else"})
 	if code != http.StatusForbidden {

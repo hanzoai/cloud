@@ -312,14 +312,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
 	zip.Post(g, "/repos/:name/push", o.pushFiles)
-	// The retired forge push door (webhook.go): a TOMBSTONE answering every
+	// The retired forge push endpoint (webhook.go): a TOMBSTONE answering every
 	// delivery 410 and naming platform.hanzo.ai, kept because a 404 from this
 	// estate reads as "the API is switched off". A static segment that never
 	// shadows the :org/:repo smart-HTTP routes; cloud.Terminal writes the 410
 	// in-band so the commerce /v1 ErrorHandlerJSON (co-mounted ahead) cannot
 	// flatten it to 500.
 	//
-	// Untyped, deliberately: this is the door a forge's own webhook protocol
+	// Untyped, deliberately: this is the endpoint a forge's own webhook protocol
 	// delivered to, and it now reads no request and returns no value — a typed
 	// op is built from an In or an Out, and a tombstone has neither.
 	g.Post("/webhook", cloud.Terminal(cloud.Handle(s, webhook)))

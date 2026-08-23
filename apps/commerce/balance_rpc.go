@@ -35,7 +35,7 @@ import (
 //
 // cloud.Tenant decides it: principal.Acting — from outside, the validated
 // principal — plus the one case Acting cannot admit, a call with no request
-// behind it, where the org is what a door stated in-process. Both fail closed,
+// behind it, where the org is what a caller stated in-process. Both fail closed,
 // and neither can be mistaken for the other, which matters here because commerce
 // is reached in both shapes.
 //

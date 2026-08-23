@@ -15,10 +15,10 @@
 // Capture (WRITE) side of the analytics plane. analytics.go serves the read
 // lenses over the event plane (event.fact, discriminated by signal); this
 // file is the symmetric ingest that FILLS that plane. Products emit here (the ONE
-// native front door) instead of talking to the insights capture service directly —
+// native entry point) instead of talking to the insights capture service directly —
 // cloud owns the tenant boundary; the PLANE's schema is owned by hanzoai/o11y.
 //
-// This file holds the WIRE TYPES and the ONE WRITE CORE (ingestEvents) every door
+// This file holds the WIRE TYPES and the ONE WRITE CORE (ingestEvents) every endpoint
 // funnels into. It owns no route: which paths accept an event is doors (event.go),
 // and admission is handle (event.go). CaptureEvent below is the shape all wires
 // normalize onto, which is why the canonical and PostHog decoders can share one
@@ -73,7 +73,7 @@ const maxBatch = 500
 //
 // Seven days is a late-beacon flush (localStorage/service-worker queues survive a
 // weekend, not a quarter). Backfilling real history is a different job than a public
-// beacon door and does not get to arrive here.
+// beacon endpoint and does not get to arrive here.
 //
 // Both CLAMP rather than refuse, which is the pre-existing choice for the future
 // side: an out-of-window beacon is still a real event, and dropping analytics data
@@ -586,17 +586,17 @@ func projectKey(c *zip.Ctx) string {
 // groupId rows into a brand's own partition, which the /v1/event overview + top
 // lenses, /v1/event/campaign and the GTM funnel (clients/guide) all read.
 //
-// That was a per-DOOR copy of a decision that belongs to the TRUST LEVEL. Both alias
-// handlers now call handle (event.go) like every other door: a credential resolves to
-// its own org, at full capability or through the projection, and a credential-less
-// caller is refused. A Host header no longer names a tenant anywhere.
+// That was a per-ENDPOINT copy of a decision that belongs to the TRUST LEVEL. Both
+// alias handlers now call handle (event.go) like every other endpoint: a credential
+// resolves to its own org, at full capability or through the projection, and a
+// credential-less caller is refused. A Host header no longer names a tenant anywhere.
 
 // ── ONE write core ───────────────────────────────────────────────────────────
 
 // event source tags — the WIRE each row arrived on. Stamped into properties.$source
 // by ingestEvents, which the plane normalizer carries into attributes['$source'], so
 // the ONE event.fact table stays honest about origin WITHOUT a second table or a
-// schema migration: $source is queryable in the attributes map. One tag per door,
+// schema migration: $source is queryable in the attributes map. One tag per endpoint,
 // and doors (event.go) is the only list that binds them.
 //
 // There is no 'capture' tag: rows carrying it were written by the retired
@@ -607,7 +607,7 @@ func projectKey(c *zip.Ctx) string {
 const (
 	sourceEvent   = "event"   // canonical POST /v1/event (canonical wire)
 	sourcePostHog = "posthog" // POST /v1/event/insights/e (PostHog wire)
-	// sourcePlane is the INTERNAL plane door (event_rpc.go): an occurrence stated
+	// sourcePlane is the INTERNAL plane endpoint (event_rpc.go): an occurrence stated
 	// by a peer app over the socket rather than by a client over HTTP. It is a
 	// wire like the others and it is tagged like the others, so "which rows did
 	// the fleet write about itself" is a filter on $source and never a second
@@ -630,7 +630,7 @@ func withSource(p map[string]any, source string) map[string]any {
 
 // ingestEvents is the ONE write core: normalize → scrub → PUBLISH the fact onto the
 // event plane. org is the SERVER-resolved tenant (never client input); source tags
-// the ingest adapter. Every front door — the canonical /v1/event and the deprecated
+// the ingest adapter. Every entry point — the canonical /v1/event and the deprecated
 // PostHog / Segment / beacon adapters — funnels here, so there is exactly one write
 // path. Returns the honest accepted/dropped receipt; the errors it returns are
 // already HTTP-shaped (zip) for the handler to pass straight up.
@@ -653,7 +653,7 @@ func withSource(p map[string]any, source string) map[string]any {
 // ReplacingMergeTree keyed (org, time, id), and a re-published fact collapses on
 // merge instead of duplicating.
 //
-// requireDatastore still gates the door even though the commit is the publish: this
+// requireDatastore still gates the endpoint even though the commit is the publish: this
 // binary is also the plane's sink, so accepting into the stream while the one
 // warehouse client is down would answer 200 for facts that only ever age on the bus.
 // A caller gets the honest 503 while nothing can land.

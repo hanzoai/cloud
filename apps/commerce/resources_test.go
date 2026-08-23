@@ -158,7 +158,7 @@ func TestEveryClaimedMerchantLeafIsServed(t *testing.T) {
 		leaf, ok := strings.CutPrefix(p, "/v1/commerce/")
 		if !ok || leaf == "" {
 			// The ROOT itself, which this app plainly serves — health, the cart, the
-			// typed payment door, the processor callback and the deposit read all
+			// typed payment endpoint, the processor callback and the deposit read all
 			// answer under it. One root claiming the family is the shape the fold
 			// left, and it is why the per-leaf staleness this guard was written for
 			// is no longer representable: there are no leaf claims to go stale.

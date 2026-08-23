@@ -20,7 +20,7 @@
 // cloud.Listen middleware it would serve standalone. Identity, billing and
 // telemetry run in the app's own process, where they already ran.
 //
-// The host is the FRONT DOOR, so it owns three things no plugin can: it serves
+// The host is the ENTRY POINT, so it owns three things no plugin can: it serves
 // the white-labelled console at "/" (webui, mounted last so every app prefix
 // wins); it threads the deployment's operator flags to the children as CLOUD_*
 // env (run→forward). The data-plane key is NOT one of those: it arrives in the
@@ -106,14 +106,14 @@ func forward(kv map[string]string) {
 	}
 }
 
-// doorConfig is the front door's transport posture. The door installs no
+// doorConfig is the entry point's transport posture. The entry point installs no
 // middleware -- that is the program's job behind it -- but it still TERMINATES
 // public HTTP, so the transport ceilings are its to set. They were not set: this
 // app was built with the framework defaults while cloud.App() configured the
-// program behind it correctly, and the door refuses a body before the program
-// ever sees it. GATEWAY_BODY_LIMIT read 100 MiB in the pod's environment and
-// 4,194,305 bytes still answered 400, because 4 MiB is the fasthttp default and
-// nothing here had ever asked.
+// program behind it correctly, and the entry point refuses a body before the
+// program ever sees it. GATEWAY_BODY_LIMIT read 100 MiB in the pod's environment
+// and 4,194,305 bytes still answered 400, because 4 MiB is the fasthttp default
+// and nothing here had ever asked.
 //
 // The numbers come from cloud, not from literals here. A literal is what made
 // the two disagree in the first place.
@@ -123,9 +123,9 @@ func doorConfig() zip.Config {
 		MCP:     zip.MCPConfig{Disabled: true},
 		// The ceiling on plugin PROCESSES, stated here because zip enforces it
 		// where a plugin starts rather than on the reaper's ticker. It has to be:
-		// the door below asks every subsystem at once, which starts children far
-		// faster than any sweep runs, and a bound restored a minute later is not a
-		// bound — that is how this pod came to hold every child it had, stop
+		// the MCP server below asks every subsystem at once, which starts children
+		// far faster than any sweep runs, and a bound restored a minute later is
+		// not a bound — that is how this pod came to hold every child it had, stop
 		// answering its own liveness probe, and get killed.
 		Warm:           manifest.Warm(),
 		ReadBufferSize: edge.ReadBufferSize(),
@@ -145,20 +145,21 @@ func doorConfig() zip.Config {
 }
 
 func run(addr, zapAddr string) error {
-	// THE FLEET'S ONE AGENT DOOR is served BY THIS HOST, at POST /v1/mcp, and
-	// zip's is switched off so that exactly one handler holds the address.
+	// THE FLEET'S ONE AGENT MCP SERVER is served BY THIS HOST, at POST /v1/mcp,
+	// and zip's is switched off so that exactly one handler holds the address.
 	//
-	// zip's door answers out of an app's own typed-op registry plus the build-time
-	// catalogues a host hands it. This host has neither: it registers no op, and
-	// the catalogues are deleted. What it has is CHILDREN, and the honest content
-	// of the fleet's door is what they serve RIGHT NOW — so the host asks them
-	// (fleet.Mount, below, after the mount loops have built the plugin table).
+	// zip's MCP server answers out of an app's own typed-op registry plus the
+	// build-time catalogues a host hands it. This host has neither: it registers
+	// no op, and the catalogues are deleted. What it has is CHILDREN, and the
+	// honest content of the fleet's MCP server is what they serve RIGHT NOW — so
+	// the host asks them (fleet.Mount, below, after the mount loops have built the
+	// plugin table).
 	//
 	// The host is still the only process that can own it: a plugin's MCPTools() is
 	// in-process, so no subsystem can enumerate a lazy sibling.
 	//
 	// The address comes from manifest, not from a literal here: the console's
-	// terminal handler has to know it too (to refuse to answer a machine door with
+	// terminal handler has to know it too (to refuse to answer an MCP request with
 	// the SPA shell, and to send an agent that guessed zip's default to the real
 	// one), and when those two were written down separately the second one was
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
@@ -174,7 +175,7 @@ func run(addr, zapAddr string) error {
 	// The stop function is bound HERE and deferred, not called through a
 	// deferred call of Reap itself — that form evaluates at defer-run time
 	// and would start the sweep during shutdown, which is the mistake serveWake
-	// records one door over.
+	// records one file over.
 	//
 	// The second argument is an LRU CEILING on resident subsystems, and it is what
 	// keeps this pod inside the memory it was PROMISED rather than the memory it is
@@ -299,10 +300,10 @@ func run(addr, zapAddr string) error {
 	// two addresses in the table for one thing, and every table it flows into
 	// after — the index, the composed document, each generated SDK, the tool list —
 	// would carry both and a reader would have to be told which is real. One
-	// string comparison at the door instead, and everything downstream sees the
+	// string comparison at the edge instead, and everything downstream sees the
 	// one name it already knows.
 	//
-	// AT THE DOOR, ahead of the mounts, for the same reason clientip is: zip
+	// AT THE EDGE, ahead of the mounts, for the same reason clientip is: zip
 	// visits an included App with the stack as it stood at inclusion, and a child
 	// must never be handed a spelling it does not serve. Fiber recomputes its
 	// route bucket on the override, so the scan that follows matches the new path.
@@ -336,7 +337,7 @@ func run(addr, zapAddr string) error {
 	// availability, only route specificity, and /healthz collides with no prefix.
 	health(app, absent)
 
-	// Where the door's clients sign in — the authorization server is this
+	// Where the API's clients sign in — the authorization server is this
 	// deployment's issuer, the value every child validates a token against
 	// (oauth.go). Host-served for the reason /healthz is.
 	protectedResource(app, environ.Or("CLOUD_IAM_ISSUER", brand.IssuerFor(environ.Or("CLOUD_BRAND", brand.Default))))
@@ -352,7 +353,7 @@ func run(addr, zapAddr string) error {
 	// registry, one field wide, about the wrong thing.
 	graphql(app, composed)
 
-	// THE AGENT DOOR, at POST /v1/mcp — composed by ASKING, at the moment of
+	// THE AGENT MCP SERVER, at POST /v1/mcp — composed by ASKING, at the moment of
 	// asking. Registered after the mount loops so the plugin table it starts from
 	// is the finished one, and before anything listens.
 	//
@@ -361,28 +362,30 @@ func run(addr, zapAddr string) error {
 	// host can start and its ops are already in the sibling's registry — asking
 	// for it by name would report a permanent outage for an app that is serving.
 	//
-	// The Door is KEPT, because the fleet's own subsystems need it as much as an
-	// external client does — an agent run inside `agents` has to resolve its tool
-	// names against the same aggregated surface. serveWake publishes this same
-	// object on the host's internal socket, so there is one gather, one routing
-	// table and one curation rule for both directions.
+	// The MCP server is KEPT, because the fleet's own subsystems need it as much
+	// as an external client does — an agent run inside `agents` has to resolve
+	// its tool names against the same aggregated surface. serveWake publishes
+	// this same object on the host's internal socket, so there is one gather, one
+	// routing table and one curation rule for both directions.
 	mcp := fleet.Mount(app, manifest.MCPPath, routed(composed), locate(app))
 
 	// LISTING WHAT THE FLEET SERVES MUST NOT START THE FLEET. Discovery asks a
 	// subsystem, and asking a lazy one starts it — so one tools/list started every
 	// subsystem this host composes, and the pod's resident cost became the size of
-	// the catalog rather than of the work. The door asks the ones that are already
-	// running and reads the rest from what they published (fleet/catalog.go); this
-	// is the half only the host can answer, because the plugin table is its.
+	// the catalog rather than of the work. The MCP server asks the ones that are
+	// already running and reads the rest from what they published
+	// (fleet/catalog.go); this is the half only the host can answer, because the
+	// plugin table is its.
 
 	// The bare /mcp needs no route here. webui's terminal handler answers it from
-	// manifest.MCPPath (webui/mcp.go) — one rule, in the one place that can tell a
-	// machine door from a client-side console route. A route registered here would
-	// be a SECOND implementation of that redirect, and one that is not
+	// manifest.MCPPath (webui/mcp.go) — one rule, in the one place that can tell
+	// an MCP request from a client-side console route. A route registered here
+	// would be a SECOND implementation of that redirect, and one that is not
 	// self-scoping: app.All("/mcp") claims the path unconditionally, so the same
-	// call in cloud.Serve would hijack a plugin's OWN zip door at that address.
+	// call in cloud.Serve would hijack a plugin's OWN zip MCP server at that
+	// address.
 	//
-	// The console at "/" is the HOST's, because the host is the front door: every
+	// The console at "/" is the HOST's, because the host is the entry point: every
 	// SPA route (/, /signin, /dashboard, …) is under no app prefix, so it reaches
 	// the host's catch-all rather than a plugin. Registered LAST — after every app
 	// prefix — so a real /v1 route always wins and only unmatched paths fall
@@ -397,7 +400,7 @@ func run(addr, zapAddr string) error {
 	mountSites(app)
 
 	// The console's BYTES are a published site release now, not an embed, so the
-	// app that owns the release pointer has to be running before the front door can
+	// app that owns the release pointer has to be running before the host can
 	// read one. `projects` is lazy — its trigger is a request reaching /v1/projects,
 	// and none has arrived — and the resolver the edge just installed dials its
 	// socket directly rather than waking it. Without this, the host's first act
@@ -426,7 +429,7 @@ func run(addr, zapAddr string) error {
 	}
 
 	// REQUIRED here, unlike in a per-app child (cloud.Listen explains why a child
-	// cannot bootstrap this). console.hanzo.ai is this process; a front door that
+	// cannot bootstrap this). console.hanzo.ai is this process; a host that
 	// came up with no console would serve the API perfectly while every human who
 	// opened the product got a blank page, and it would do it silently. Failing
 	// with the reason is the difference between an alert and a mystery.
@@ -439,7 +442,7 @@ func run(addr, zapAddr string) error {
 	if consoleErr != nil {
 		// Loud, and ALIVE. This used to return the error, and the difference is
 		// what an unreadable 404.html cost: the object store dropped one read, the
-		// front door refused to boot, and api.hanzo.ai answered 503 to every
+		// host refused to boot, and api.hanzo.ai answered 503 to every
 		// caller — including everyone who never opens a browser. Exiting does not
 		// save the console, because a dead process serves a blank page too; it
 		// only adds the API to what is lost. There is no state of the world where
@@ -447,7 +450,7 @@ func run(addr, zapAddr string) error {
 		// more expensive one.
 		//
 		// The alert this was reaching for is the log line, not the exit. A running
-		// process ships it; a CrashLoop takes the telemetry front door down with
+		// process ships it; a CrashLoop takes the telemetry path down with
 		// it and ships nothing.
 		app.Logger().Error("console: no release mounted — serving the API without it",
 			"err", consoleErr)
@@ -460,9 +463,9 @@ func run(addr, zapAddr string) error {
 	go consoleSrc.Watch(consoleCtx)
 
 	// nil is webui's stated "this process serves no console": the catch-all still
-	// keeps the API namespaces honest and still answers the agent door, and a
-	// console path gets a 503 saying so. Mounting an empty release ERRORS, so this
-	// is conditional for the same reason cloud.Listen's is — doing it
+	// keeps the API namespaces honest and still answers the agent MCP address,
+	// and a console path gets a 503 saying so. Mounting an empty release ERRORS,
+	// so this is conditional for the same reason cloud.Listen's is — doing it
 	// unconditionally turns "serves none" back into "starts none".
 	// MOUNTED EITHER WAY, because the Source is polled: webui takes an empty one
 	// and answers 503 until a poll fills it, which is the same answer it gave when
@@ -471,11 +474,11 @@ func run(addr, zapAddr string) error {
 		return fmt.Errorf("console: %w", err)
 	}
 
-	// The start door, AFTER the mount loops so the plugin table it starts from is
-	// the finished one, and before anything listens so no child can ask before it
-	// is there. Without it every internal call to a lazy app dials a socket that
-	// no request has ever caused to exist (wake.go). It closes with the app, so
-	// there is nothing here to defer and nothing to forget to.
+	// The start endpoint, AFTER the mount loops so the plugin table it starts
+	// from is the finished one, and before anything listens so no child can ask
+	// before it is there. Without it every internal call to a lazy app dials a
+	// socket that no request has ever caused to exist (wake.go). It closes with
+	// the app, so there is nothing here to defer and nothing to forget to.
 	serveWake(app, mcp)
 
 	// SIGTERM must reach the children. zip drains its shutdown hooks LIFO, and
@@ -556,8 +559,8 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	// binary projected when it was BUILT (plugin/<app>/mcp.json) so the host could
 	// answer tools/list without running anything. That artifact was a second
 	// source for a fact the child already knows, and it was wrong: o11y's held 12
-	// tools while the o11y binary at the same commit served 365. The door asks the
-	// child now (fleet.Mount), so there is nothing to hand over here.
+	// tools while the o11y binary at the same commit served 365. The MCP server
+	// asks the child now (fleet.Mount), so there is nothing to hand over here.
 	p.Start = startTimeout()
 
 	// zip v1.23 removed (*App).Add: Use is the ONE composition verb, and zip.Load
@@ -614,12 +617,12 @@ func routed(composed []string) []string {
 	return out
 }
 
-// locate is how the door reaches ONE app: the child this host started, or the
+// locate is how the host reaches ONE app: the child this host started, or the
 // instance an operator pointed CLOUD_<NAME>_ADDR at.
 //
 // Both are needed because they are reached differently and only the composition
 // root knows which is which. zip.App.Start covers a spawned child and is the
-// right door for it — idempotent, and the same single-flighted path a request to
+// right call for it — idempotent, and the same single-flighted path a request to
 // the app's prefix takes, so a burst of askers still produces one process. A
 // remotely mounted app is never started, so Start has nothing to report about it
 // and would name it unavailable forever.
@@ -640,11 +643,11 @@ func locate(app *zip.App) fleet.At {
 	}
 }
 
-// inside is how a door reached from INSIDE the fleet reaches one app: the app's
-// own plane socket, where its agent door answers with no edge in front of it
-// (cloud.Door). Same start, different door.
+// inside is how an endpoint reached from INSIDE the fleet reaches one app: the
+// app's own plane socket, where its agent MCP server answers with no edge in
+// front of it (cloud.Door). Same start, different address.
 //
-// A REMOTELY mounted app (CLOUD_<NAME>_ADDR) keeps the edge door, because its
+// A REMOTELY mounted app (CLOUD_<NAME>_ADDR) keeps the edge address, because its
 // plane socket is on its own host and no path here reaches it. So an internal
 // caller's identity survives into every app this host RUNS, and into a remote one
 // only as far as that app's own boundary lets it — which is the honest answer,
@@ -791,9 +794,9 @@ func unfit(absent map[string]string) map[string]string {
 // fleet serves 1039. Every SDK generator, every spec-derived CLI and every third
 // party reading the published spec read that instead. 200 OK the whole time.
 //
-// What it answers with is the CUSTOMER contract (openapi.MountFleet): the door
-// takes no credential, and the same readers that meet it here are the ones the
-// audience rule is written for.
+// What it answers with is the CUSTOMER contract (openapi.MountFleet): the
+// endpoint takes no credential, and the same readers that meet it here are the
+// ones the audience rule is written for.
 //
 // Two properties make the fix the honest one rather than merely a fix:
 //
@@ -829,7 +832,7 @@ func spec(app *zip.App, composed []string) {
 //
 // The host's, for the reason [spec] is the host's: the answer is about the whole
 // fleet and no plugin can see past itself. It reads the SAME subsets the document
-// is composed from, so the two doors describe one API by construction.
+// is composed from, so the two endpoints describe one API by construction.
 //
 // It is composed BEFORE the mount loops — see the call site — because the
 // addresses it answers are inside subtrees the mounts claim. That is also why it
@@ -846,8 +849,8 @@ func index(app *zip.App, composed []string) {
 //
 // It reads the SAME subsets the document and the index do, so all three describe
 // one API by construction — and it dispatches through locate, the resolver the
-// agent door already uses, so a field reaches its app the way every other fleet
-// question does.
+// agent MCP server already uses, so a field reaches its app the way every other
+// fleet question does.
 //
 // /v1/graphql, never /v1/graph: the second is the knowledge graph's own address,
 // assertions and neighbours, and the two mean different things by the word.
@@ -858,9 +861,10 @@ func graphql(app *zip.App, composed []string) {
 // subsets is what this deployment publishes: each app's own document, read from
 // the bytes its binary projected when it was built.
 //
-// Stated once because two doors read it — the fleet document and the index — and
-// they are mounted at different points in run(), so the reading would otherwise be
-// written twice and be free to disagree about which apps this deployment runs.
+// Stated once because two endpoints read it — the fleet document and the
+// index — and they are mounted at different points in run(), so the reading
+// would otherwise be written twice and be free to disagree about which apps this
+// deployment runs.
 func subsets(composed []string) func() ([]openapi.Part, error) {
 	return func() ([]openapi.Part, error) {
 		return openapi.Subsets(composed, plugin.Spec, manifest.StageOf)

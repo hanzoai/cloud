@@ -4,7 +4,7 @@ package openapi
 // lands in.
 //
 // api.hanzo.ai answers ~1,800 paths across ~185 products. The split between the
-// two is AUDIENCE, not secrecy: what the published SDKs, the CLI, the MCP door
+// two is AUDIENCE, not secrecy: what the published SDKs, the CLI, the MCP server
 // and docs.hanzo.ai present to a customer, against what an operator reaches
 // through the same origin.
 //
@@ -30,7 +30,7 @@ package openapi
 //     (Product), the axis every tag is already read off, and /v1/admin/* is the
 //     one family the fleet reserves for the operator whichever app serves a leaf
 //     of it (admin itself, pricing's /v1/admin/pricing, affiliates' operator view);
-//   - it is not a relay door — a `{wildcardN}` address publishes whatever grows
+//   - it is not a relay — a `{wildcardN}` address publishes whatever grows
 //     behind it and names nothing a client can call;
 //   - it is not tagged [Compat] — a legacy spelling is served so a pinned caller
 //     keeps working and is, by its own declaration, not the contract;
@@ -55,7 +55,7 @@ package openapi
 // The whitelist refused a prefix list in the EMITTER because a second copy of the
 // routing table drifts from the first. Nothing here is a copy of anything: the
 // product is read from the operation's own address at the moment it is stamped,
-// the relay door from its own parameters, the legacy spelling from its own tag.
+// the relay from its own parameters, the legacy spelling from its own tag.
 // There is no list to keep current and no address a reader could spell
 // differently from the router — translate has already rendered every path in the
 // one form the document publishes before [stamp] runs.
@@ -113,15 +113,15 @@ func audience(path string, op *Operation) bool {
 //
 // Within an app, earlier than the end of Spec is too early: [Fold] replaces a
 // structural operation wholesale with the typed one, and [Project] replaces a
-// door with the registry behind it, so a mark written before either would be
+// relay with the registry behind it, so a mark written before either would be
 // discarded by it.
 //
 // Across the fleet, the end of Spec is too EARLY for one term of the rule. A
 // subset is written by the app's own binary, which does not read the fleet's
 // manifest and so cannot know its own stage (HIP-0139 §8); the stage arrives with
 // [Part], and Compose is where it is stamped. So Compose asks the whole rule again on
-// the finished composition, where every term — address, product, door, compat and
-// stage — is finally in hand. It is still a pure function of the parts.
+// the finished composition, where every term — address, product, relay, compat
+// and stage — is finally in hand. It is still a pure function of the parts.
 func stamp(d *Document) {
 	for path, item := range d.Paths {
 		for _, op := range item {

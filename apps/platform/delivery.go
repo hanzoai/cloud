@@ -16,8 +16,8 @@ package platform
 // surface — the apps/exec incident exactly. `admit` is the same predicate the
 // wrapper applied (cloud.Scope.Admits over cloud.AuthorityOf, refused with the
 // scope's own sentence), called as the first line of every op, so all three
-// doors ask one question. TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor
-// drives the MCP door specifically, because that is the one a route test cannot
+// endpoints ask one question. TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor
+// drives the MCP server specifically, because that is the one a route test cannot
 // see.
 //
 // The wire did not move. Each of these reads NO body, so zip's decode is skipped
@@ -169,8 +169,8 @@ func (d delivery) getReconciliation(ctx context.Context, in *declarationRef) (*C
 
 // listReconciliations answers every Application the delivery plane holds.
 //
-// Scoped to the namespaces the caller's own validated org owns: the ROLE opens
-// the door and the tenant boundary is applied inside, so an admin of one org
+// Scoped to the namespaces the caller's own validated org owns: the ROLE admits
+// the caller and the tenant boundary is applied inside, so an admin of one org
 // never observes another's.
 func (d delivery) listReconciliations(ctx context.Context, _ *noDeliveryQuery) (*cdResp, error) {
 	c, err := admit(ctx, cloud.Admin)

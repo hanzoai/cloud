@@ -23,7 +23,7 @@ func init() {
 	describeKeyDoors()
 }
 
-// ---- /v1/iam/keys — the two key doors, at their nouns ----
+// ---- /v1/iam/keys — the two key endpoints, at their nouns ----
 
 // A key resolver sits on the request-authentication path of cloud, ai and base,
 // so its address cannot move in a single release: those are separate
@@ -32,8 +32,8 @@ func init() {
 // handlers, so there is no second implementation to keep in agreement. The verbs
 // are deleted later, when nothing asks for them.
 //
-// Which door a key belongs to is the distinction worth keeping straight, and it
-// is why these are two routes and not one with a mode: a publishable key names
+// Which endpoint a key belongs to is the distinction worth keeping straight, and
+// it is why these are two routes and not one with a mode: a publishable key names
 // an organization and a secret key names a principal. One address answering both
 // would be an address whose answer type depends on its input, and the caller
 // that ships a key in a browser would be one parameter away from a person.
@@ -46,7 +46,7 @@ func describeKeyDoors() {
 			"replaces it; both answer while callers migrate.\n\n"+
 			"It names an ORGANIZATION and never a person. No path through it loads or returns a "+
 			"user, so a key placed in client code cannot become a way to learn who anyone is — "+
-			"which is the whole reason this is a separate door from the one below.\n\n"+
+			"which is the whole reason this is a separate endpoint from the one below.\n\n"+
 			"A key that is expired, secret rather than publishable, or simply unknown all answer "+
 			"with the same sentence and a `code` saying which it was. Only a confidential service "+
 			"that has already proved it may resolve keys reads that code — there is no anonymous "+
@@ -65,6 +65,6 @@ func describeKeyDoors() {
 			"credential resolves to.\n\n"+
 			"Requires a confidential caller: the resolver authenticates as an app, so a request "+
 			"without that credential resolves nothing rather than falling back to an anonymous "+
-			"lookup. An unresolvable key answers with a `code` distinguishing expired from wrong-"+
-			"door from unknown, so the holder can be told which one cure applies.")
+			"lookup. An unresolvable key answers with a `code` distinguishing expired from "+
+			"wrong-endpoint from unknown, so the holder can be told which one cure applies.")
 }

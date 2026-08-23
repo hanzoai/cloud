@@ -61,7 +61,7 @@ func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 	}
 	if v.Allow || v.Pair {
 		// Route capture on allow AND pair — the pairing reply below must be able
-		// to ride the teams door. Upserted for all four transports; only discord
+		// to ride the teams transport. Upserted for all four transports; only discord
 		// (row presence = egress capability, ReplyRoot "") and teams (the
 		// JWT-verified serviceURL) read it — slack/telegram bind egress via
 		// per-org token / OrgForExternalID instead.
@@ -132,10 +132,10 @@ func pairingText(code string) string {
 	return "Pairing code: " + code + " — an org admin can approve it in the Hanzo console (expires in 1 hour)."
 }
 
-// serveIngest publishes the inbound door on the plane.
+// serveIngest publishes the inbound endpoint on the plane.
 //
 // The adapters live in the integrations PROCESS and this inbox lives in this
-// one, so the door has to be an address rather than a function pointer. It was a
+// one, so the endpoint has to be an address rather than a function pointer. It was a
 // pointer — integrations.RegisterIngress, installed at Mount — and a package
 // global is per-process: on the emitting side it was nil, and every event
 // returned at the nil check. Nothing logged, because dropping is what a nil
@@ -154,7 +154,7 @@ func serveIngest() {
 // that connected the workspace, which the adapter resolved from the signed
 // team/guild/chat id, and the adapter plugin's own identity is not it. Taken
 // reports whether this inbox carries the transport — a fact worth returning,
-// since the silent version of that answer is the bug this door replaces.
+// since the silent version of that answer is the bug this endpoint replaces.
 func planeIngest(ctx context.Context, in *plane.ChannelsIngestIn) (*plane.ChannelsIngestOut, error) {
 	if in == nil || mounted.Load() == nil {
 		return &plane.ChannelsIngestOut{}, nil

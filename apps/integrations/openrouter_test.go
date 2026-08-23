@@ -60,7 +60,7 @@ func decodeDelivery(t *testing.T) otlp {
 	return o
 }
 
-// TestDeliveryBecomesAUsageRow is the whole point of the door: a real Broadcast
+// TestDeliveryBecomesAUsageRow is the whole point of the endpoint: a real Broadcast
 // payload has to arrive in hanzo.cloud_usage as a row the money lenses already read
 // — provider `openrouter` so GROUP BY provider finds it, the cost in the nano-USD
 // money of record AND in the cents rendering that must agree with it, and the KEY
@@ -115,12 +115,12 @@ func (k keys) Resolve(_ context.Context, key string) (event.Attribution, bool, e
 	return at, ok, nil
 }
 
-// TestProjectKeyIsAdmitted is the defect this door was built with, in one test: a
-// key minted by `POST /v1/projects` lives in the PROJECT store and IAM has never
-// heard of it, so a door that resolves through IAM alone refuses the very key it
-// tells a destination to create. The door calls event.Admit, which asks the
+// TestProjectKeyIsAdmitted is the defect this endpoint was built with, in one test:
+// a key minted by `POST /v1/projects` lives in the PROJECT store and IAM has never
+// heard of it, so an endpoint that resolves through IAM alone refuses the very key
+// it tells a destination to create. The endpoint calls event.Admit, which asks the
 // project store first — and admitting a key only that store holds is the proof the
-// door goes through it, since nothing else in the estate can answer for one.
+// endpoint goes through it, since nothing else in the estate can answer for one.
 // event.Admit asks IAM second (TestAdmitAsksBothIssuers), so an IAM-issued key
 // arrives here by the same call.
 //
@@ -138,8 +138,8 @@ func TestProjectKeyIsAdmitted(t *testing.T) {
 }
 
 // TestForgedKeyIsRefusedBeforeTheBody: neither issuer knows the key, so nothing is
-// read. The payload is deliberately malformed — a door that decoded first would
-// answer 400 and tell a stranger its wire; this one answers 401 to every shape.
+// read. The payload is deliberately malformed — an endpoint that decoded first
+// would answer 400 and tell a stranger its wire; this one answers 401 to every shape.
 func TestForgedKeyIsRefusedBeforeTheBody(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	projects(t, keys{"pk-project": {Org: "hanzo", Project: "openrouter"}})
@@ -159,8 +159,8 @@ func TestForgedKeyIsRefusedBeforeTheBody(t *testing.T) {
 }
 
 // TestEmptyDeliveryIsAccepted keeps Test Connection green: OpenRouter saves a
-// destination only if it answers 2xx to an empty payload, so a door that 400s one
-// can never be configured at all.
+// destination only if it answers 2xx to an empty payload, so an endpoint that 400s
+// one can never be configured at all.
 func TestEmptyDeliveryIsAccepted(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	projects(t, keys{"pk-project": {Org: "hanzo"}})
@@ -175,15 +175,15 @@ func TestEmptyDeliveryIsAccepted(t *testing.T) {
 	}
 }
 
-// projects installs the project store this door resolves against, and takes it back
-// down: the registry is package state in analytics, shared by every test here.
+// projects installs the project store this endpoint resolves against, and takes it
+// back down: the registry is package state in analytics, shared by every test here.
 func projects(t *testing.T, k keys) {
 	t.Helper()
 	event.SetKeyResolver(k)
 	t.Cleanup(func() { event.SetKeyResolver(nil) })
 }
 
-// post drives one Broadcast delivery at the door.
+// post drives one Broadcast delivery at the endpoint.
 func post(t *testing.T, app *zip.App, body, auth string) (int, []byte) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, openrouterPath, strings.NewReader(body))

@@ -12,9 +12,9 @@ package crawl
 //
 // FETCH AND KEEP ARE SEPARATE. Fetch is the pure network primitive: URL in, Page
 // out, no IO beyond the request, which is what makes it testable without a store.
-// Read is the door callers use — archive first, network second, keep what came
-// back. One door, so no caller has to remember to persist and no two callers can
-// disagree about where pages live.
+// Read is the entry point callers use — archive first, network second, keep what
+// came back. One entry point, so no caller has to remember to persist and no two
+// callers can disagree about where pages live.
 //
 // Best-effort by construction: a store that is absent, unreachable or slow costs a
 // cache hit and nothing else. Crawling must not start failing because the corpus
@@ -65,8 +65,8 @@ func Bind(vfs types.VFSClient) {
 	store.Store(&Archive{vfs: vfs})
 }
 
-// Read is the door: return the archived page if we have one, otherwise fetch it
-// and keep it.
+// Read is the entry point: return the archived page if we have one, otherwise
+// fetch it and keep it.
 //
 // A hit skips the network entirely, which is the point — the same URL is read
 // repeatedly across a research loop, a re-ask, and a re-index, and paying for it

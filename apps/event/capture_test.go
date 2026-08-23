@@ -379,8 +379,9 @@ func TestFactColumnsMatchArgsWidth(t *testing.T) {
 // canonDoor is the ONE path the canonical wire is served on. The three name-aliases
 // this file used to sweep (/v1/event{,/batch}, /v1/todo) are retired, and
 // doors_test.go holds them shut on both surfaces. The properties below are the
-// canonical door's own; the per-wire generalisation over every declared door lives
-// in doors_test.go, which builds each door's body from its own decoder.
+// canonical endpoint's own; the per-wire generalisation over every declared
+// endpoint lives in doors_test.go, which builds each endpoint's body from its own
+// decoder.
 const canonDoor = "/v1/event"
 
 // doBody issues a request with a JSON body, mirroring http_test.go's do() (which
@@ -405,8 +406,9 @@ func doBody(t *testing.T, app *zip.App, method, path, user, org, body string) (i
 }
 
 // TestCapture_NoPrincipalGetsAnonymousLane: a credential-less POST is not refused
-// outright at the door and admitted nowhere: admission is decided by trust level
-// rather than per door, and with no credential there is no trust level to decide on.
+// outright at the endpoint and admitted nowhere: admission is decided by trust
+// level rather than per endpoint, and with no credential there is no trust level
+// to decide on.
 // The retired alias routes got this WRONG in the other direction — they resolved a
 // REAL brand org from the Host and admitted the lot.
 func TestCapture_NoPrincipalIsRefused(t *testing.T) {
@@ -507,10 +509,10 @@ func doHost(t *testing.T, app *zip.App, path, user, org, host, body string) (int
 func TestCapture_HostIsNotATenant(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	// Each row carries its door's OWN wire: a canonical pageview decodes to nothing
-	// on the PostHog door and would answer 200 all-dropped, which reads like the
-	// refusal this test exists to rule out. The wire has to be the door's or the
-	// assertion measures the decoder instead of the tenant rule.
+	// Each row carries its endpoint's OWN wire: a canonical pageview decodes to
+	// nothing on the PostHog endpoint and would answer 200 all-dropped, which reads
+	// like the refusal this test exists to rule out. The wire has to be the
+	// endpoint's or the assertion measures the decoder instead of the tenant rule.
 	for _, tc := range []struct{ path, host, body string }{
 		{canonDoor, "hanzo.ai", canonPageview},
 		{canonDoor, "app.lux.cloud", canonPageview},

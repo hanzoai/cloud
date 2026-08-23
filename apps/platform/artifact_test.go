@@ -48,7 +48,7 @@ func TestRunnerArtifact_LaunchesAndIndexes(t *testing.T) {
 // THE RECIPE THE RELEASE SENDS, checked here rather than by a red release.
 //
 // .hanzo/workflows/cicd.yml's `plugins` job POSTs exactly this to publish the
-// plugin set for a release. Every field in it is one this door VALIDATES — the
+// plugin set for a release. Every field in it is one this endpoint VALIDATES — the
 // git host, the flat tag segment, the recipe's own shape — so a typo there is a
 // 400 nobody sees until a tag build, and the artifacts for that release simply
 // never exist. Keeping the body here makes it a compile-and-test-time fact.
@@ -126,7 +126,7 @@ func TestRunnerArtifact_ForgeIsRefusedUntilTheDeploymentTrustsIt(t *testing.T) {
 		t.Fatalf("refusal should name the reason, got %s", body)
 	}
 	// github.com stays trusted with no configuration at all, which is what makes
-	// this a MISSING TRUST rather than a broken door.
+	// this a MISSING TRUST rather than a broken endpoint.
 	code, body = postRunner(t, app, testBuildTok, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud",
 		"sha":  "0abcdef1234567890a1b2c3d4e5f60718293a4bc",
@@ -381,7 +381,7 @@ func git(t *testing.T, dir string, args ...string) {
 // (name, os, arch) finds each one. Recording the recipe's own name and "any"
 // instead — which is what this lane did — puts every file under one name and
 // resolves nothing, which is the whole reason cloud's plugin lane could not
-// publish through this door. The sibling test below pins the other half: a file
+// publish through this endpoint. The sibling test below pins the other half: a file
 // with no platform in its name still takes the recipe's name and "any".
 //
 // Both scripts run for real, so the meta.txt hand-off is exercised rather than

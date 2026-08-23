@@ -2,12 +2,12 @@
 
 package commerce
 
-// sale_rpc.go — the three card doors and the sweep behind them, over the
+// sale_rpc.go — the three card endpoints and the sweep behind them, over the
 // internal plane: top up a wallet with a fresh token or a saved card, buy a plan,
 // and recharge every org that has fallen below its own threshold.
 //
 // ALL OF THESE MOVE MONEY, so all of them share two properties and neither is
-// negotiable. The SUBJECT is resolved at the door from the caller's own
+// negotiable. The SUBJECT is resolved at the endpoint from the caller's own
 // credential and arrives as a value; nothing here re-derives an identity,
 // because a store that chose a subject would be crediting an account nobody
 // proved. And no caller names a PRICE: a plan is charged at its catalog price
@@ -29,9 +29,9 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// exposeSale publishes the card doors and the recharge sweep. Mount calls it.
+// exposeSale publishes the card endpoints and the recharge sweep. Mount calls it.
 //
-// THE THREE CARD DOORS ARE SCREENED, through the same [screened] the agent's
+// THE THREE CARD ENDPOINTS ARE SCREENED, through the same [screened] the agent's
 // payment op goes through. That is the whole reason it is a generic: four copies
 // of the composition is precisely the state that made the first screen a bound
 // on one entrance with others beside it, and these three ARE the others. Each
@@ -41,7 +41,7 @@ import (
 //
 // The sweep is not screened and is not a hole: it is reached by a schedule with
 // no request behind it, charges cards the customer already saved under their own
-// standing instruction, and is refused at the door to anything but platform
+// standing instruction, and is refused at the endpoint to anything but platform
 // authority.
 func exposeSale(s screen) {
 	zip.Post[plane.CardIn, plane.Charged](cloud.Plane(), "/billing/topup/card",
@@ -164,8 +164,8 @@ func planeTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, err
 // arrived is the thing that gate was asking for.
 //
 // It answers TWO SHAPES and keeps them apart. A fresh sale is a receipt; an
-// identical retry is the sealed body of the first one, verbatim. The door owes a
-// different status for each, and a retry answered as fresh would read as a
+// identical retry is the sealed body of the first one, verbatim. The endpoint owes
+// a different status for each, and a retry answered as fresh would read as a
 // second subscription having been opened.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
@@ -249,8 +249,8 @@ func firstRefOf(refs ...string) string {
 	return ""
 }
 
-// chargeFault maps a saved-card charge's refusals onto the statuses this door has
-// always answered with.
+// chargeFault maps a saved-card charge's refusals onto the statuses this endpoint
+// has always answered with.
 //
 // Each is a different thing for the payer to DO — fix the request, name a card
 // that exists, add the card again, wait, use another card, call support — which
@@ -278,8 +278,8 @@ func chargeFault(err error) error {
 	return zip.Errorf(402, "%v", err)
 }
 
-// saleFault maps a sale's refusals onto the statuses this door has always
-// answered with, in the order the door tested them: the sale's own classes
+// saleFault maps a sale's refusals onto the statuses this endpoint has always
+// answered with, in the order the endpoint tested them: the sale's own classes
 // first, then the two a saved card contributes.
 func saleFault(err error) error {
 	switch {

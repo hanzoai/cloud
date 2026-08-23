@@ -1,6 +1,6 @@
 package commerce
 
-// risk_payments_test.go — THE SECOND DOOR ONTO THE MINT, and the one property that
+// risk_payments_test.go — THE SECOND ENDPOINT ONTO THE MINT, and the one property that
 // decides whether screening the first one was a control at all.
 //
 // commerce holds ONE card money move (billing.TakePayment) and this binary opens TWO
@@ -12,7 +12,7 @@ package commerce
 //
 // Four properties, and each one is a way the bypass could come back:
 //
-//	THE TYPED DOOR IS SCREENED, against its REAL registration — not a stand-in route
+//	THE TYPED ENDPOINT IS SCREENED, against its REAL registration — not a stand-in route
 //	that only this file knows how to build. Remove the screen from exposePayments and
 //	the request walks through to the handler.
 //
@@ -20,12 +20,12 @@ package commerce
 //	take a second product surface down, and one that is present and mute must still
 //	refuse: the same two facts, at the new address.
 //
-//	A BURST SPLIT ACROSS BOTH DOORS IS ONE ACCRUAL. This is the whole point of doing
-//	it with the same gate. If the two doors resolved their payer differently, or keyed
+//	A BURST SPLIT ACROSS BOTH ENDPOINTS IS ONE ACCRUAL. This is the whole point of doing
+//	it with the same gate. If the two endpoints resolved their payer differently, or keyed
 //	their settlements differently, then splitting a burst across the two addresses
 //	would halve every velocity bound — a bypass with the screen still switched on.
 //
-//	ONE PAYMENT THROUGH TWO DOORS IS ONE OBSERVATION. The mirror image: keys that
+//	ONE PAYMENT THROUGH TWO ENDPOINTS IS ONE OBSERVATION. The mirror image: keys that
 //	converge for the same money, so nothing is double-counted and no customer is
 //	frozen for paying once.
 
@@ -54,16 +54,16 @@ import (
 
 // creditDoors is every address in this package that reaches commerce's card money
 // move, and therefore every address that MUST carry the screen. It is a closed list
-// because the structural check below reads it: a door added to the binary and not to
-// this list is the bug this whole file is about, so the list is also the place the
+// because the structural check below reads it: an endpoint added to the binary and not
+// to this list is the bug this whole file is about, so the list is also the place the
 // next one gets caught.
 //
 // THREE OF THE FOUR ARE PLANE ADDRESSES, and that is the fold rather than a
 // weakening. /v1/billing is billing's address now, so the browser's top-up, the
 // saved-card top-up and the card subscription are reached BY NAME from the money
-// door and answer here — which is the point at which they touch the card. A
-// screen on the door and not on the op would be a bound on one entrance with the
-// op still callable beside it, which is the exact state this file was written
+// endpoint and answer here — which is the point at which they touch the card. A
+// screen on the endpoint and not on the op would be a bound on one entrance with
+// the op still callable beside it, which is the exact state this file was written
 // about.
 var creditDoors = []string{
 	"/billing/topup/card",
@@ -83,13 +83,14 @@ var screenIsAValue screen = riskGate(luxlog.New("guard"))
 const screenType = "screen"
 
 // TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen — the STRUCTURAL half,
-// and the one that guards the doors this file's behavioural tests cannot reach.
+// and the one that guards the endpoints this file's behavioural tests cannot reach.
 //
 // The behavioural tests drive registrations: exposePayments is called directly, so the
-// typed door's wiring is real. Mount's own registration of the browser door is not —
-// nothing in the package calls Mount, by convention (methods_route_test.go says so in
-// as many words), so a future edit that drops `screen` from that one Post would leave
-// every test in this package green while the original bypass reopened on the other side.
+// typed endpoint's wiring is real. Mount's own registration of the browser endpoint is
+// not — nothing in the package calls Mount, by convention (methods_route_test.go says
+// so in as many words), so a future edit that drops `screen` from that one Post would
+// leave every test in this package green while the original bypass reopened on the
+// other side.
 //
 // So the rule is checked by READING THE SOURCE rather than by remembering it, exactly as
 // apps/risk checks that an observation has one constructor.
@@ -114,30 +115,30 @@ const screenType = "screen"
 //
 //	NOTHING COMPOSES IT AS ROUTER MIDDLEWARE. A `.With(screen)` anywhere is the old
 //	bug by construction: it screens REST and publishes an unscreened tool. It is
-//	checked over EVERY registration rather than only the credit doors, because the
+//	checked over EVERY registration rather than only the credit endpoints, because the
 //	next mint op is not on the list yet.
 //
 // WHAT HOLDS THE SCREEN is not a name this test knows: it is every identifier the
 // package binds to [riskGate]'s answer, plus every parameter DECLARED to be one
-// ([screenValues]). A door reached through a differently-named local, or through a
-// second function that takes the screen, is therefore read correctly — and a door that
-// invents its own screen is not, which is the point.
+// ([screenValues]). An endpoint reached through a differently-named local, or through a
+// second function that takes the screen, is therefore read correctly — and an endpoint
+// that invents its own screen is not, which is the point.
 //
 // AND IT COMPOSES THE ADDRESS, because zip does: a route's path is its router's prefix
-// joined with its leaf, so a door declared on a group is spelled by no single literal
+// joined with its leaf, so an endpoint declared on a group is spelled by no single literal
 // in the source. Matching literals alone would find no registration at all — which is
 // why the found-set is asserted below. Reading only what the framework reads is the
 // difference between a check and a habit.
 //
 // Mutation proof: register the typed op as `zip.Post(app, "/v1/commerce/payments", o.charge, …)`
-// — the money core with no wrap — and this names the file, the line and the door.
+// — the money core with no wrap — and this names the file, the line and the endpoint.
 // Restore the old `zip.Post(app.With(screen).Group("/v1"), "/payments", o.charge)` and
 // it fails twice: once for the unscreened handler, once for the router composition.
 func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 	fset := token.NewFileSet()
 	pkgs := shipped(t, fset)
 
-	// held records which doors were actually FOUND, so the check cannot pass by
+	// held records which endpoints were actually FOUND, so the check cannot pass by
 	// matching nothing — a renamed or recomposed path with the assertion still green is
 	// the same blindness in a new costume, and it is the failure this check already had
 	// once.
@@ -146,7 +147,7 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 		values := screenValues(pkg.Files)
 		if len(values) == 0 {
 			t.Fatal("this check found no identifier holding the screen, so it is reading nothing " +
-				"and would stay green however the credit doors are wired — the screen's type or " +
+				"and would stay green however the credit endpoints are wired — the screen's type or " +
 				"its resolver was renamed and screenType/riskGate must move with it")
 		}
 		groups := groupRouters(pkg.Files)
@@ -161,7 +162,7 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 					return true
 				}
 				// THE SCREEN IS NEVER ROUTER MIDDLEWARE. Checked over every registration in
-				// the package, not only the credit doors: this spelling guards one
+				// the package, not only the credit endpoints: this spelling guards one
 				// projection of four, so an op wired that way is unscreened on the plane an
 				// agent calls whether or not its address is on the list yet.
 				if sel.Sel.Name == "With" {
@@ -188,7 +189,7 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 				if h != nil && carries(h, values) {
 					return true
 				}
-				t.Errorf("%s registers the credit door %s with a handler the screen VALUE never "+
+				t.Errorf("%s registers the credit endpoint %s with a handler the screen VALUE never "+
 					"reached — this address ends in commerce's card money move, and a screen that "+
 					"is not inside the handler is absent from every projection of it except the "+
 					"one HTTP route", fset.Position(call.Pos()), door)
@@ -199,9 +200,9 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 
 	for _, door := range creditDoors {
 		if !held[door] {
-			t.Errorf("no registration of the credit door %s was found — either it moved (and this "+
+			t.Errorf("no registration of the credit endpoint %s was found — either it moved (and this "+
 				"list must move with it) or the check is reading nothing and would stay green "+
-				"however the door is wired", door)
+				"however the endpoint is wired", door)
 		}
 	}
 }
@@ -224,28 +225,28 @@ func shipped(t *testing.T, fset *token.FileSet) map[string]*ast.Package {
 // mints is EVERY function in this package that DEPOSITS into the spendable ledger, and
 // the reason each one may. It is a closed list because the check below reads it.
 //
-// The list exists because the pre-charge refusal is a property of the two doors the
+// The list exists because the pre-charge refusal is a property of the two endpoints the
 // screen is composed onto, and NOT of the ledger. A mint added beside these three is a
 // mint with no screen in front of it: [screen.settle]'s own [payment.diverged] guard
 // backstops the address, but nothing stops a new caller charging a card first and
 // discovering afterwards that the credit has nowhere to go. That is the defect this
 // batch fixed, and a new entry here is where the next one gets caught.
 var mints = map[string]string{
-	"settle": "the CARD settlement — the only mint behind a charge, screened at both doors, " +
+	"settle": "the CARD settlement — the only mint behind a charge, screened at both endpoints, " +
 		"and refused before the card moves when the charge and the credit name two orgs",
 	"planeCredit": "the internal plane's credit op — the org is the CALLER's and can never be an " +
 		"argument, the ref is required, and no card is charged, so there is nothing to take first",
-	"Credit": "commerce's creditledger adapter — the admin grant, the door a platform operator " +
+	"Credit": "commerce's creditledger adapter — the admin grant, the endpoint a platform operator " +
 		"funds another organisation through and the one the pre-charge refusal names",
 }
 
 // TestCreditDoors_EveryMintIntoTheSpendableLedgerIsAccountedFor — the same structural
-// argument as the door check, one level down.
+// argument as the endpoint check, one level down.
 //
-// The door check asks whether every ADDRESS onto the card core is screened. This asks
+// The endpoint check asks whether every ADDRESS onto the card core is screened. This asks
 // what can put money in the ledger AT ALL, because the two questions have different
-// answers: a mint reached from a webhook, a job or a second settlement path is not a
-// door and would not appear on [creditDoors] at all.
+// answers: a mint reached from a webhook, a job or a second settlement path is not an
+// endpoint and would not appear on [creditDoors] at all.
 //
 // It is a LIST WITH REASONS rather than a count, so the failure tells the next author
 // what the check is for: either the new mint charges nothing first (say why, add it) or
@@ -306,9 +307,10 @@ func TestCreditDoors_EveryMintIntoTheSpendableLedgerIsAccountedFor(t *testing.T)
 // Two ways an identifier comes to hold one, and they are the only two the package has:
 // it was bound to [riskGate]'s answer (the composition root's `screen := riskGate(lg)`),
 // or it was DECLARED to be one as a parameter (`func exposePayments(app *zip.App, s
-// screen)`). Following the parameter is what lets a door be registered in a different
-// function from the one that resolved the screen, which is exactly how the typed door
-// is wired — and it is why this reads a value's travel rather than a fixed name.
+// screen)`). Following the parameter is what lets an endpoint be registered in a
+// different function from the one that resolved the screen, which is exactly how the
+// typed endpoint is wired — and it is why this reads a value's travel rather than a
+// fixed name.
 func screenValues(files map[string]*ast.File) map[string]bool {
 	out := map[string]bool{}
 	for _, f := range files {
@@ -369,7 +371,7 @@ func carries(n ast.Node, values map[string]bool) bool {
 // every projection of the route dispatches to.
 //
 // The two registrars put it in different places and both are read, because a check
-// that knew only one of them would be blind to exactly the other door: a typed op is
+// that knew only one of them would be blind to exactly the other endpoint: a typed op is
 // zip.Post(target, path, handler, opts…) so the handler is args[2] and the options
 // follow it, while a raw route is <router>.Post(path, handlers…) whose handler is the
 // LAST of a chain.
@@ -386,11 +388,11 @@ func handlerOf(call *ast.CallExpr, sel *ast.SelectorExpr) ast.Expr {
 	return call.Args[len(call.Args)-1]
 }
 
-// doorOf returns the credit door a registration addresses, or "" for a route that is not
-// one. The address is the ROUTER'S PREFIX joined with the leaf, which is how zip composes
-// it; a path assembled from anything but literals is one this check cannot vouch for, and
-// it reports nothing rather than pretending otherwise (the found-set assertion is what
-// turns such a gap into a failure instead of a silence).
+// doorOf returns the credit endpoint a registration addresses, or "" for a route that is
+// not one. The address is the ROUTER'S PREFIX joined with the leaf, which is how zip
+// composes it; a path assembled from anything but literals is one this check cannot vouch
+// for, and it reports nothing rather than pretending otherwise (the found-set assertion is
+// what turns such a gap into a failure instead of a silence).
 func doorOf(call *ast.CallExpr, sel *ast.SelectorExpr, groups map[string]router) string {
 	leaf := leafOf(call.Args)
 	if leaf == "" {
@@ -485,7 +487,7 @@ func firstNonLiteral(args []ast.Expr) ast.Expr {
 // groupRouters records every group ASSIGNED a name in this package, and its prefix. A
 // named group is the form zipdoc also requires of a router a typed op is declared on,
 // so it is the form this package uses and therefore the form this check has to follow —
-// and the reason a door's ADDRESS is composed rather than matched as a literal.
+// and the reason an endpoint's ADDRESS is composed rather than matched as a literal.
 func groupRouters(files map[string]*ast.File) map[string]router {
 	out := map[string]router{}
 	for _, f := range files {
@@ -524,7 +526,7 @@ func groupCall(e ast.Expr) (router, bool) {
 	return router{prefix: strings.Trim(lit.Value, `"`)}, true
 }
 
-// paymentsDoor is the typed door's address.
+// paymentsDoor is the typed endpoint's address.
 const paymentsDoor = "/v1/commerce/payments"
 
 // isolate gives one test its own risk plane: a socket directory with no listener in it
@@ -537,7 +539,7 @@ const paymentsDoor = "/v1/commerce/payments"
 // characters. Over the cap every dial answers `connect: invalid argument` — which is
 // indistinguishable from the undeployed peer these tests assert about, so the suite
 // would go red on any Mac for a reason that looks exactly like its own subject. That
-// already happened once to the two tests next door; this is the same fix, reached for
+// already happened once to the two tests beside these; this is the same fix, reached for
 // rather than rediscovered.
 func isolate(t *testing.T) {
 	t.Helper()
@@ -560,7 +562,7 @@ func refs(prefix string) func() string {
 // and not a fixture's idea of them.
 //
 // ref returning "" is the processor that settled while stating no reference — the case
-// where the key falls back to the ledger receipt, which this door spells `id`.
+// where the key falls back to the ledger receipt, which this endpoint spells `id`.
 func settledPayment(ref func() string) func(context.Context, *PaymentIn) (*PaymentOut, error) {
 	receipts := refs("txn_typed_")
 	return func(_ context.Context, in *PaymentIn) (*PaymentOut, error) {
@@ -577,8 +579,8 @@ func settledPayment(ref func() string) func(context.Context, *PaymentIn) (*Payme
 // it is what parks the request a typed op reads its payer off ([cloud.Request]), and it
 // must precede every route it serves — fiber runs middleware in registration order.
 // It also publishes the ONE spendable ledger, because a settled payment now deposits
-// into it before anything else happens (settle.go): a door fixture with no ledger
-// behind it is a door that answers 500 to every charge that clears.
+// into it before anything else happens (settle.go): an endpoint fixture with no ledger
+// behind it is an endpoint that answers 500 to every charge that clears.
 func payApp(t *testing.T) *zip.App {
 	t.Helper()
 	isolate(t)
@@ -588,13 +590,13 @@ func payApp(t *testing.T) *zip.App {
 	return app
 }
 
-// typedDoor is the typed credit door, composed the way exposePayments composes it and
+// typedDoor is the typed credit endpoint, composed the way exposePayments composes it and
 // answering at the 201 the op DECLARES: the screen WRAPS THE HANDLER, so the registered
 // op is the screened one and every projection of it runs the screen. It stands in for
 // the money core and for nothing else — the registration form, the response type and
 // the status are the shipped ones.
 //
-// The screen is handed the settlement its fake core stands for, because the door
+// The screen is handed the settlement its fake core stands for, because the endpoint
 // finishes a cleared charge by depositing what SETTLED (settle.go) and the amount of
 // that is a fact about a commerce row this fixture does not write.
 func typedDoor(t *testing.T, app *zip.App, s screen, ref func() string) {
@@ -605,7 +607,7 @@ func typedDoor(t *testing.T, app *zip.App, s screen, ref func() string) {
 		zip.WithStatus(http.StatusCreated))
 }
 
-// browserDoor is the RAW credit door, composed the way mount.go composes it: the screen
+// browserDoor is the RAW credit endpoint, composed the way mount.go composes it: the screen
 // wrapping the handler that answers like commerce's top-up.
 // It states the settlement for [typedDoor]'s reason: the deposit is sized by what
 // cleared, not by what the body asked for.
@@ -618,10 +620,10 @@ func browserDoor(app *zip.App, s screen, ref func() string) {
 	}))
 }
 
-// pay posts the credit door's own body to a door, as a validated customer. The body is
-// [gateBody] — the SAME bytes the browser door is driven with — because PaymentIn and
-// commerce's top-up request declare the amount and the currency under the same names,
-// which is exactly why one signal reader serves both.
+// pay posts the credit endpoint's own body to an endpoint, as a validated customer. The
+// body is [gateBody] — the SAME bytes the browser endpoint is driven with — because
+// PaymentIn and commerce's top-up request declare the amount and the currency under the
+// same names, which is exactly why one signal reader serves both.
 func pay(t *testing.T, app *zip.App, door string) (int, string) {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodPost, door, strings.NewReader(gateBody))
@@ -681,7 +683,7 @@ func TestPayments_TheTypedDoorIsScreened(t *testing.T) {
 	lg := luxlog.New("paytest")
 
 	// A scorer that freezes everything: the verdict is not the subject of this test, the
-	// door's obedience to it is.
+	// endpoint's obedience to it is.
 	frozen := func(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, error) {
 		return cloud.RiskVerdict{Action: cloud.ActionBlock, Score: 0.99, Cause: "above the cut"}, nil
 	}
@@ -692,7 +694,7 @@ func TestPayments_TheTypedDoorIsScreened(t *testing.T) {
 
 		code, body := pay(t, app, paymentsDoor)
 		if code != http.StatusForbidden {
-			t.Fatalf("%d %s, want 403 — a payment the screen froze settled through the second door, "+
+			t.Fatalf("%d %s, want 403 — a payment the screen froze settled through the second endpoint, "+
 				"so the whole risk gate is bypassable by calling the op an agent already has", code, body)
 		}
 		if !strings.Contains(body, "not authorised") {
@@ -715,7 +717,7 @@ func TestPayments_TheTypedDoorIsScreened(t *testing.T) {
 
 		code, body := pay(t, app, paymentsDoor)
 		if code == http.StatusForbidden {
-			t.Fatalf("%d %s — the ungated door refused, so the 403 above proves nothing about the screen", code, body)
+			t.Fatalf("%d %s — the ungated endpoint refused, so the 403 above proves nothing about the screen", code, body)
 		}
 		if !strings.Contains(body, "co-resident") {
 			t.Fatalf("%d %s, want the handler's own refusal — this fixture must reach paymentOps.take "+
@@ -724,7 +726,7 @@ func TestPayments_TheTypedDoorIsScreened(t *testing.T) {
 	})
 }
 
-// tool invokes one MCP tools/call against the app's own /mcp door — the SAME door
+// tool invokes one MCP tools/call against the app's own /mcp endpoint — the SAME address
 // api.hanzo.ai publishes and the SAME dispatch an agent's call takes: zip finds the op
 // by name and runs op.invoke, which is the typed op's HANDLER and nothing around it.
 //
@@ -761,7 +763,7 @@ func tool(t *testing.T, app *zip.App, name, args string) (text string, isError b
 		t.Fatalf("tools/call %s answered %s, which is not JSON-RPC: %v", name, raw, err)
 	}
 	if out.Error != nil {
-		t.Fatalf("tools/call %s was refused by the MCP door itself (%s) — the tool has to be "+
+		t.Fatalf("tools/call %s was refused by the MCP server itself (%s) — the tool has to be "+
 			"REACHABLE for this file to say anything about whether it is screened", name, out.Error.Message)
 	}
 	for _, c := range out.Result.Content {
@@ -778,7 +780,7 @@ func tool(t *testing.T, app *zip.App, name, args string) (text string, isError b
 // a typed op is dispatched to its HANDLER by four projections. So a payment the model
 // froze was refused at the URL and MINTED through the tool, and the settlement the
 // model should have learned from was never taught: the whole control present on the
-// browser's door and absent on the agent's, silently, with every HTTP test green.
+// browser's endpoint and absent on the agent's, silently, with every HTTP test green.
 //
 // Two halves, and the second is the one that has no status code to hide behind — an
 // MCP failure is content, not a transport error, so an unscreened tool answers 200
@@ -845,11 +847,11 @@ func TestPayments_TheAgentsToolIsScreened(t *testing.T) {
 //	THE PAYER RESOLVES HERE TOO. A tools/call is an ordinary HTTP request carrying the
 //	gateway's identity headers, and the app-wide Bridge parks it for /mcp exactly as
 //	for a REST route — so [payerOrg] and [principal.Subject] answer, and the org and
-//	the wallet key are the browser door's.
+//	the wallet key are the browser endpoint's.
 //
 //	THE VALUE IS STATED. Over MCP the request body is a JSON-RPC envelope and the
 //	payment is inside `arguments`, so a screen that read the wire would state no
-//	amount at all — the sharpest axis a credit door has, blind on exactly the plane an
+//	amount at all — the sharpest axis a credit endpoint has, blind on exactly the plane an
 //	agent uses. It is read off the DECODED input instead.
 //
 //	AND THE SETTLEMENT TEACHES. Over MCP the op's answer is wrapped in a tools/call
@@ -879,7 +881,7 @@ func TestPayments_TheAgentsToolJudgesAndTeachesThePayer(t *testing.T) {
 	want := account.Payer(account.Credential{Owner: gateOrg, Name: gateUser}).Subject()
 
 	// THE QUESTION. Same tenant, same stage, same kind, same subject, same privileged
-	// bit, same value as the browser door asks with.
+	// bit, same value as the browser endpoint asks with.
 	if forOrg != gateOrg {
 		t.Errorf("the model asked was %q's, want %q's — the payer does not resolve on the "+
 			"MCP plane, so the screen is judging nobody there", forOrg, gateOrg)
@@ -897,7 +899,7 @@ func TestPayments_TheAgentsToolJudgesAndTeachesThePayer(t *testing.T) {
 	}
 	if got := asked.Signals[plane.SignalNano]; got != "42000000000" {
 		t.Errorf("nano %q, want %q — the amount was not observed on the MCP plane, so the value "+
-			"axis is blind on exactly the door an agent calls", got, "42000000000")
+			"axis is blind on exactly the endpoint an agent calls", got, "42000000000")
 	}
 
 	// AND THE RECORD, which the bypass left structurally missing at this plane.
@@ -958,7 +960,7 @@ func TestPayments_TheReceiptReadIsNotScreened(t *testing.T) {
 }
 
 // TestPayments_ANotDeployedScorerDoesNotCloseTheTypedDoor — the NEGATIVE CONTROL,
-// carried onto the second door.
+// carried onto the second endpoint.
 //
 // A fleet that does not run the risk app must still take money at both addresses. This
 // is the half that keeps the screen from being an outage: widening a gate to a new
@@ -975,7 +977,7 @@ func TestPayments_ANotDeployedScorerDoesNotCloseTheTypedDoor(t *testing.T) {
 	}
 
 	// The producer the fleet installs, against a fleet with no risk app: the socket has
-	// no listener, so the answer is ABSENT and the door stays open.
+	// no listener, so the answer is ABSENT and the endpoint stays open.
 	installRiskScorer(luxlog.New("paytest"))
 	if code, body := pay(t, app, paymentsDoor); code != http.StatusCreated {
 		t.Fatalf("scorer installed, peer not deployed: %d %s, want 201 — an unreachable model is "+
@@ -988,7 +990,7 @@ func TestPayments_ANotDeployedScorerDoesNotCloseTheTypedDoor(t *testing.T) {
 // privileged grant waits rather than minting balance unscored.
 //
 // Mutation proof: drop `Privileged: true` from the query in [riskGate] and this answers
-// 201 — a scorer outage mints spendable balance through the agent's door.
+// 201 — a scorer outage mints spendable balance through the agent's endpoint.
 func TestPayments_APresentScorerThatCannotAnswerMakesTheTypedGrantWait(t *testing.T) {
 	app := payApp(t)
 	typedDoor(t, app, riskGate(luxlog.New("paytest")), refs("sq_pay_"))
@@ -999,7 +1001,7 @@ func TestPayments_APresentScorerThatCannotAnswerMakesTheTypedGrantWait(t *testin
 	code, body := pay(t, app, paymentsDoor)
 	if code == http.StatusCreated {
 		t.Fatalf("the payment SETTLED against a scorer that could not answer: %d %s — a stolen card "+
-			"clears through the typed door during a risk-plane outage", code, body)
+			"clears through the typed endpoint during a risk-plane outage", code, body)
 	}
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("%d %s, want 503", code, body)
@@ -1008,12 +1010,12 @@ func TestPayments_APresentScorerThatCannotAnswerMakesTheTypedGrantWait(t *testin
 
 // TestPayments_TheTypedDoorJudgesAndTeachesThePayer.
 //
-// The subject and the key are the two things that have to match the other door, so they
-// are asserted against the SAME rules the other door's test asserts — account.Payer for
-// the subject, the gateway's own reference for the key — rather than against each other.
-// Matching each other would pass just as well if both were wrong.
+// The subject and the key are the two things that have to match the other endpoint, so
+// they are asserted against the SAME rules the other endpoint's test asserts —
+// account.Payer for the subject, the gateway's own reference for the key — rather than
+// against each other. Matching each other would pass just as well if both were wrong.
 //
-// It also pins the STATUS BAND. The typed op declares 201 and the browser door answers
+// It also pins the STATUS BAND. The typed op declares 201 and the browser endpoint answers
 // 200, so a settlement check that recognised one code would allow the agent's payment,
 // watch it settle, and teach nothing.
 func TestPayments_TheTypedDoorJudgesAndTeachesThePayer(t *testing.T) {
@@ -1035,7 +1037,7 @@ func TestPayments_TheTypedDoorJudgesAndTeachesThePayer(t *testing.T) {
 	want := account.Payer(account.Credential{Owner: gateOrg, Name: gateUser}).Subject()
 
 	// THE QUESTION, first. Same tenant, same stage, same kind, same subject, same
-	// privileged bit as the browser door asks with.
+	// privileged bit as the browser endpoint asks with.
 	if forOrg != gateOrg {
 		t.Errorf("the model asked was %q's, want %q's", forOrg, gateOrg)
 	}
@@ -1043,7 +1045,7 @@ func TestPayments_TheTypedDoorJudgesAndTeachesThePayer(t *testing.T) {
 		t.Errorf("stage %q, want %q", asked.Stage, cloud.StagePayment)
 	}
 	if asked.Subject.Kind != plane.KindPayer || asked.Subject.ID != want {
-		t.Errorf("judged %q/%q, want %q/%q — the two doors must judge one payer or a burst split "+
+		t.Errorf("judged %q/%q, want %q/%q — the two endpoints must judge one payer or a burst split "+
 			"across them is two histories", asked.Subject.Kind, asked.Subject.ID, plane.KindPayer, want)
 	}
 	if !asked.Privileged {
@@ -1071,14 +1073,14 @@ func TestPayments_TheTypedDoorJudgesAndTeachesThePayer(t *testing.T) {
 
 // TestPayments_TheTypedReceiptCarriesTheFallbackKey.
 //
-// The two doors spell the ledger receipt differently — commerce's core returns
-// TransactionID, the browser door forwards it as `transactionId`, the typed op renames it
-// to `id` — and it is the SAME ledger row either way. So a processor that settles while
-// stating no reference must still be keyable at this door.
+// The two endpoints spell the ledger receipt differently — commerce's core returns
+// TransactionID, the browser endpoint forwards it as `transactionId`, the typed op renames
+// it to `id` — and it is the SAME ledger row either way. So a processor that settles while
+// stating no reference must still be keyable at this endpoint.
 //
 // Mutation proof: drop the `id` field from [settlementOf] and this fails on the timeout:
 // the payment settled and taught nothing, so the accrual is blind to every settlement
-// whose processor stated no reference — silently, at the door an agent calls.
+// whose processor stated no reference — silently, at the endpoint an agent calls.
 func TestPayments_TheTypedReceiptCarriesTheFallbackKey(t *testing.T) {
 	seen := watchTeaching(t)
 	app := payApp(t)
@@ -1093,20 +1095,20 @@ func TestPayments_TheTypedReceiptCarriesTheFallbackKey(t *testing.T) {
 	}
 	got := await(t, seen)
 	if !strings.HasPrefix(got.in.Settlement, "txn_typed_") {
-		t.Errorf("settlement %q — the typed door's ledger receipt is not the key, so a settlement "+
+		t.Errorf("settlement %q — the typed endpoint's ledger receipt is not the key, so a settlement "+
 			"with no processor reference teaches nothing here", got.in.Settlement)
 	}
 }
 
-// TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual — THE CROSS-DOOR PROOF, and the
-// reason the second door had to hold the SAME gate rather than a gate of its own.
+// TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual — THE CROSS-ENDPOINT PROOF, and the
+// reason the second endpoint had to hold the SAME gate rather than a gate of its own.
 //
 // Velocity is a bound only if it sees the whole burst. An attacker with a stolen card
 // does not care which URL takes it: six payments, three at each address, is the shape
-// that defeats a per-door accrual. The two doors converge iff three things hold, and
-// each is asserted separately here because each can break on its own:
+// that defeats a per-endpoint accrual. The two endpoints converge iff three things hold,
+// and each is asserted separately here because each can break on its own:
 //
-//	ONE SUBJECT — both doors resolve the payer through [payerOrg] and
+//	ONE SUBJECT — both endpoints resolve the payer through [payerOrg] and
 //	principal.Subject, so all six observations name one key. Two rules here and the
 //	accrual splits in half with the screen still switched on.
 //
@@ -1148,10 +1150,10 @@ func TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual(t *testing.T) {
 	for i := range 2 * each {
 		got := await(t, seen)
 
-		// ONE SUBJECT. This is the property the whole cross-door argument rests on: half
+		// ONE SUBJECT. This is the property the whole cross-endpoint argument rests on: half
 		// a burst filed under a second key is half a burst nothing bounds.
 		if got.in.Kind != plane.KindPayer || got.in.Subject != want {
-			t.Fatalf("observation %d named %q/%q, want %q/%q — the doors accrue on two keys, so "+
+			t.Fatalf("observation %d named %q/%q, want %q/%q — the endpoints accrue on two keys, so "+
 				"splitting a burst across them halves every velocity bound",
 				i, got.in.Kind, got.in.Subject, plane.KindPayer, want)
 		}
@@ -1185,14 +1187,14 @@ func TestPayments_ABurstSplitAcrossBothDoorsIsOneAccrual(t *testing.T) {
 // TestPayments_OnePaymentThroughTwoDoorsIsOneObservation — the mirror image of the burst.
 //
 // The gateway's payment id is the one identifier that is the same across every path that
-// can credit ONE payment, and both doors return it out of the same core. So the same
+// can credit ONE payment, and both endpoints return it out of the same core. So the same
 // money arriving at both addresses — a retry that changed URL, a client that fell back —
 // states ONE settlement key, and the plane's dedupe on (tenant, id) makes the second an
 // inert replay rather than a second count. Velocity that double-counted would freeze a
 // customer for paying once.
 //
 // Mutation proof: key on the ledger receipt instead of the processor reference (swap the
-// order in [settlementOf]) and this fails with two keys — the two doors write their own
+// order in [settlementOf]) and this fails with two keys — the two endpoints write their own
 // receipts even for one payment.
 func TestPayments_OnePaymentThroughTwoDoorsIsOneObservation(t *testing.T) {
 	seen := watchTeaching(t)
@@ -1202,7 +1204,7 @@ func TestPayments_OnePaymentThroughTwoDoorsIsOneObservation(t *testing.T) {
 	})
 
 	screen := riskGate(luxlog.New("paytest"))
-	// ONE gateway payment id, reached through both addresses. Each door still writes its
+	// ONE gateway payment id, reached through both addresses. Each endpoint still writes its
 	// OWN ledger receipt, which is exactly the trap: keyed on the receipt this is two
 	// observations of one payment.
 	browserDoor(app, screen, func() string { return settledRef })
@@ -1217,7 +1219,7 @@ func TestPayments_OnePaymentThroughTwoDoorsIsOneObservation(t *testing.T) {
 
 	first, second := await(t, seen), await(t, seen)
 	if first.in.Settlement != settledRef || second.in.Settlement != settledRef {
-		t.Fatalf("the two doors keyed one payment as %q and %q — the plane deduplicates on the "+
+		t.Fatalf("the two endpoints keyed one payment as %q and %q — the plane deduplicates on the "+
 			"settlement id, so two keys is the same money counted twice and a customer frozen "+
 			"for paying once", first.in.Settlement, second.in.Settlement)
 	}

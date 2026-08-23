@@ -154,7 +154,7 @@ var mounted *Client
 func (c *Client) configured() bool { return c != nil && c.stores != nil }
 
 // storeFor is the ONE way this package reaches a definition store: it names the
-// database through cloud.OrgNamespace — the single door a validated org walks
+// database through cloud.OrgNamespace — the single check a validated org passes
 // through — and asks the registry for that name. Nothing else in flags resolves
 // a store, so "which file does this evaluation read" has exactly one answer and
 // it is derived from exactly one input.

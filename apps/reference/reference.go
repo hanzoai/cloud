@@ -36,7 +36,7 @@
 // there is nowhere in the shape for an organisation to go, so a cross-tenant
 // write is unrepresentable rather than merely forbidden. A tenant's OWN allow
 // and deny entries live in that organisation's own SQLite file (override.go),
-// reached through the one door a validated org walks through. Resolution is
+// reached through the one entry point a validated org has. Resolution is
 // override first, then baseline; first hit wins.
 //
 // WHAT MAY BE IN THE BASELINE. Data someone else published under terms we hold —
@@ -90,7 +90,7 @@ const (
 	subsystem = "reference"
 	// maxKeys bounds one resolve call, so a lookup cannot be turned into a scan.
 	maxKeys = 100
-	// maxKey bounds ONE key, in bytes, everywhere a key crosses this plane's door
+	// maxKey bounds ONE key, in bytes, everywhere a key crosses this plane's boundary
 	// — looked up, written as an override, or removed. It is one constant because
 	// it is one concept: the longest value any published reference list could
 	// carry as a member.
@@ -430,10 +430,10 @@ func unattested(r ReferenceReceipt) string {
 }
 
 // gather produces one source's entries: downloaded for a published source,
-// computed for a local one — and puts what comes back through the SAME door a
+// computed for a local one — and puts what comes back through the SAME bound a
 // caller's key crosses.
 //
-// The door is the same because a member is the same thing from either side. A
+// The bound is the same because a member is the same thing from either side. A
 // key longer than [maxKey] is refused at the lookup, so a MEMBER longer than
 // [maxKey] is one no lookup can ever reach: dead weight in the warehouse, in
 // every hydrate, and in the snapshot every request reads. And a source that
@@ -832,7 +832,7 @@ func (o ops) set(ctx context.Context, in *ReferenceIn) (*ReferenceOut, error) {
 		return nil, zip.ErrNotFound("this plane publishes no set by that name")
 	}
 	// The cursor is a KEY — the last one of the previous page — so it crosses the
-	// same door, and every door is the same door. A cursor past [maxKey] cannot
+	// same bound, and every bound is the same bound. A cursor past [maxKey] cannot
 	// equal any stored key, so it is a nonsense position rather than a page.
 	if err := bounded(in.After); err != nil {
 		return nil, err
@@ -936,7 +936,7 @@ func (o ops) write(ctx context.Context, in *SetReferenceIn) (*SetReferenceOut, e
 		if key == "" {
 			return nil, zip.ErrBadRequest("an override needs a key")
 		}
-		// The SAME bound the lookup door applies, because this is the same key seen
+		// The SAME bound the lookup applies, because this is the same key seen
 		// from the other side. It is what makes [maxOverrides] a bound on BYTES and
 		// not merely on rows: without it one entry could be the whole request body,
 		// and the count bound would let one organisation put gigabytes of its own
@@ -973,7 +973,7 @@ func (o ops) write(ctx context.Context, in *SetReferenceIn) (*SetReferenceOut, e
 	return &SetReferenceOut{Set: set.Name, Written: n, Overrides: got}, nil
 }
 
-// bounded is the [maxKey] door, and it is ONE function because it is one bound:
+// bounded is the [maxKey] check, and it is ONE function because it is one bound:
 // a key too long to look up is too long to store and too long to remove.
 //
 // It REFUSES rather than truncating. A truncated key is a DIFFERENT key —
@@ -988,7 +988,7 @@ func bounded(key string) error {
 	return nil
 }
 
-// over is [maxKey] as a PURE PREDICATE, and it is what makes the door one door:
+// over is [maxKey] as a PURE PREDICATE, and it is what makes the bound one bound:
 // the wire refuses an over-long key with a 400 (bounded) and the ingest path
 // refuses an over-long member by refusing the take (gather). Two presentations of
 // one bound, never two bounds — a second spelling is a bound that can drift, and

@@ -422,7 +422,7 @@ func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project,
 	// treating it as releasable — this is the one place a local ref advance is
 	// announced, so it is the one place that can say so.
 	//
-	// It is here rather than at the four write doors because the tenth door is
+	// It is here rather than at the four writers because the tenth writer is
 	// the hazard: a writer added later announces itself through this function or
 	// it fires no build, and a repo whose pushes fire no build is a defect
 	// somebody notices. A repo that quietly lost a commit to a refetch is not.

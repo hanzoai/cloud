@@ -28,7 +28,7 @@ import (
 // right reason" are different results, and only the second one survives a mutation.
 // It answers per WORKSPACE, because the rows do: a member of A is not a member of
 // B, and that difference IS the tenant boundary meet enforces. An authority that
-// said yes to any workspace would make the boundary untestable at the door.
+// said yes to any workspace would make the boundary untestable at the endpoint.
 type answers struct {
 	row     func(workspace, subject string) plane.Member // what the rows say about one workspace
 	list    plane.Spaces                                 // what they say about all of them

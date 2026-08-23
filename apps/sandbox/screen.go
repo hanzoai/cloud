@@ -66,7 +66,7 @@ func watch(s *Service, c *zip.Ctx) error {
 	})
 }
 
-// screen registers the three doors, beside the terminal's three. One function
+// screen registers the three routes, beside the terminal's three. One function
 // and not three lines in Routes, so that what a screen needs — a credential, a
 // page and a socket — cannot be half registered.
 //

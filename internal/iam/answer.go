@@ -10,7 +10,7 @@
 // except a parsing mistake: a bare resource parses with Status "" and is rejected
 // as `iam status 200`, and an error body does not parse at all and is reported as
 // `iam non-envelope response (400)`. Both wore the words of a business rule —
-// "photo stored but the profile could not be updated" on one door, "no Hanzo
+// "photo stored but the profile could not be updated" on one endpoint, "no Hanzo
 // account for <address> in this org" on the other — which is why each survived
 // until somebody drove the call by hand.
 //

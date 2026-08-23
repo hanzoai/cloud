@@ -70,7 +70,7 @@ const (
 	secretAPIToken     = "api_token"
 )
 
-// tokenFor is the ONE door to per-org Cloudflare token custody. It defaults to
+// tokenFor is the ONE entry point to per-org Cloudflare token custody. It defaults to
 // integrations.TokenFor (KMS-sealed, fail-closed, org-validated). It is a package
 // var ONLY so a test can inject per-org tokens and prove every fetch scopes to the
 // caller's org; production never reassigns it.
@@ -552,7 +552,7 @@ func writeResult(c *zip.Ctx, out json.RawMessage) error {
 // silently reading/writing another tenant's Cloudflare account.
 const actingOrgHeader = "X-Hanzo-Org"
 
-// authClient is the READ front door: it resolves the caller's validated org (403 if
+// authClient is the READ preamble: it resolves the caller's validated org (403 if
 // unvalidated — a forged X-Org-Id with no bearer never gets past this) and builds a
 // Cloudflare client bound to THAT org's KMS-sealed token (503 if the org has not
 // connected Cloudflare or KMS is down). On success it stamps actingOrgHeader with the
@@ -581,7 +581,7 @@ func (o ops) authClient(ctx context.Context) (*client, string, error) {
 	return &client{token: string(bytes.TrimSpace(tok)), base: cfAPIBase()}, org, nil
 }
 
-// authWrite is the MUTATION front door (POST/PUT/DELETE): it additionally requires the
+// authWrite is the MUTATION preamble (POST/PUT/DELETE): it additionally requires the
 // caller be an admin of its OWN org (principal.IsOrgAdmin — NOT SuperAdmin), parity
 // with the AdminOnly connector that seals the token. Wielding the token's dangerous
 // verbs (a Worker script PUT is arbitrary code on the org's Cloudflare account/domains;

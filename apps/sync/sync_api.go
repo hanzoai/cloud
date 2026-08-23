@@ -461,7 +461,7 @@ func validateGitSource(e endpointReq) (Endpoint, error) {
 		return Endpoint{}, zip.ErrBadRequest("source.locator host must be " + host)
 	}
 	u.User = nil // credentials ride env-only at fetch time, never a stored value
-	// Which repository this is, asked at the door with the SAME rule the import
+	// Which repository this is, asked at the entry point with the SAME rule the import
 	// answers to ([newRepo]): an account and a name the flat forge can spell. A
 	// source it could never hold — a nested GitLab namespace, a name outside the
 	// fold — is refused here with a status, rather than accepted and then refused

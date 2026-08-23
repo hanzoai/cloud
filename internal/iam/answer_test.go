@@ -7,7 +7,7 @@ import (
 
 // The bodies are the ones IAM actually sends, kept verbatim: a bare user row from
 // the typed noun, an envelope from a legacy verb, and both error shapes. Reading
-// one of them wrong is what left two doors broken in different ways for months.
+// one of them wrong is what left two endpoints broken in different ways for months.
 
 func TestAnswerReadsBothWireShapes(t *testing.T) {
 	for _, c := range []struct {

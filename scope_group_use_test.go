@@ -150,7 +150,7 @@ func TestGroupPrefixesTheRoutesRegisteredThroughIt(t *testing.T) {
 // This is not a regression — a group whose subtree was empty gated nothing in
 // either order. It is the residue: the one dead-guard shape that survives, and
 // the reason it is written down here is that the next person to write
-// `g.Use(auth)` under their routes will get a green build and an open door.
+// `g.Use(auth)` under their routes will get a green build and an unguarded route.
 //
 // It is also load-bearing, not hypothetical. apps/company registers
 // /v1/company/fundraise/deck ABOVE its `g.Use(limitBody)` on purpose: the deck

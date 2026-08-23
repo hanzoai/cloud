@@ -86,14 +86,14 @@ func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
 			"allows unscored, and nothing says so. Mount must call exposeDecide.")
 }
 
-// TestGeneratedAnalyticsSurfaceIsTheLiveSurface holds the EVENT DOOR to the same
-// gate, and it earns its keep the way the scorer's does.
+// TestGeneratedAnalyticsSurfaceIsTheLiveSurface holds the EVENT ENDPOINT to the
+// same gate, and it earns its keep the way the scorer's does.
 //
 // It is reached by peers in other binaries and by nothing else: no HTTP route
 // stands behind it, and the callers that would notice it missing are the ones
 // whose whole contract is that a failed emit changes nothing. An op that stopped
 // being registered — a build that no longer calls exposeCapture, a rename on one
-// side — would leave every peer's facts unwritten, silently, while every door
+// side — would leave every peer's facts unwritten, silently, while every endpoint
 // they describe kept answering exactly as before. So the registration itself is
 // asserted, from the running registry.
 func TestGeneratedAnalyticsSurfaceIsTheLiveSurface(t *testing.T) {

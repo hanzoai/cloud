@@ -300,8 +300,8 @@ func TestWords_ReadsBothNamingConventions(t *testing.T) {
 	}
 }
 
-// TestRefuse_ANamelessToolIsNotProjectable: the door must not carry a descriptor
-// it cannot route or reason about.
+// TestRefuse_ANamelessToolIsNotProjectable: the MCP server must not carry a
+// descriptor it cannot route or reason about.
 func TestRefuse_ANamelessToolIsNotProjectable(t *testing.T) {
 	for _, n := range []string{"", "___", "-"} {
 		if !refuse(n) {
@@ -354,7 +354,7 @@ func TestRank_AFoldedAddressKeepsItsBucket(t *testing.T) {
 //	GET /v1/integrations/connectors/{id}/token   →  get | connectors | by | id | token
 //
 // The id there is the connector's. The token is exactly what it says, and the
-// door projected it to every model as `get_connector_token` — a live OAuth
+// MCP server projected it to every model as `get_connector_token` — a live OAuth
 // bearer for a customer's connector, one tools/call away, offered by the gate
 // whose whole job is to withhold it. Measured against the deployed fleet, it was
 // one of two ops carrying a secret noun that survived; the other is the counted

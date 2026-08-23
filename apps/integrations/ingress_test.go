@@ -13,7 +13,7 @@ import (
 )
 
 // ingress_test.go proves the two client pieces channels rides: the SendDiscord
-// door (the one new HTTP verb — httptest via the package's own repoint
+// transport (the one new HTTP verb — httptest via the package's own repoint
 // pattern, zero live network) and emitIngress (registration, goroutine hop,
 // bounded context, panic containment).
 
@@ -163,7 +163,7 @@ func TestSendDiscordHTTPErrorRedacted(t *testing.T) {
 		t.Fatalf("err = %v, want the HTTP status", err)
 	}
 	if strings.Contains(err.Error(), "test-token") {
-		t.Fatal("door errors carry status/shape only — never the token")
+		t.Fatal("transport errors carry status/shape only — never the token")
 	}
 }
 

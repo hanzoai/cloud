@@ -16,7 +16,7 @@ import (
 )
 
 // This file proves the unification net-invariant: there is ONE ingest handler
-// implementation and ONE write core; /v1/event is the single canonical door serving
+// implementation and ONE write core; /v1/event is the single canonical endpoint serving
 // EVERY wire shape (Event | [Event] | {batch}) and EVERY auth context (IAM bearer |
 // pk_ key | site-host-forced); the other routes are thin aliases/shims delegating to
 // it. The proof is decomposed to fit the harness (datastore is DOWN, so the HTTP
@@ -27,7 +27,7 @@ import (
 //     normalizer (normalize, fact.go) into an identical fact, org = the
 //     server-resolved tenant. This is exactly what the sink binds into event.event.
 //   - AUTH dimension (HTTP layer): each auth context is ADMITTED (503, never 403),
-//     proving the canonical door resolved a tenant for it. Each pure resolver
+//     proving the canonical endpoint resolved a tenant for it. Each pure resolver
 //     (resolveKeyOrg→org, the host-forced Site.Org) is
 //     unit-proven elsewhere (publishable_test, capture_keyorg_test, hostcarve_test),
 //     so admission + those proofs compose into "lands in the SAME tenant".
@@ -36,7 +36,7 @@ import (
 
 // TestDecodeIngest_ThreeShapes proves the ONE canonical decoder accepts a bare Event
 // object, a bare [Event] array, AND the {batch:[…]} envelope, yielding equivalent
-// CaptureEvents from each — no separate door is needed for any wire.
+// CaptureEvents from each — no separate endpoint is needed for any wire.
 func TestDecodeIngest_ThreeShapes(t *testing.T) {
 	shapes := map[string]string{
 		"bareObject": `{"event":"signup_completed","distinctId":"u1","properties":{"plan":"pro"}}`,
@@ -99,7 +99,7 @@ func TestDecodeIngest_EmptyAndMalformed(t *testing.T) {
 // ── net invariant: SAME fact + SAME tenant across every wire ───────────────────
 
 // TestUnifiedIngest_SameFactSameTenant is THE unification proof at the storage
-// layer: one logical event, expressed as every wire shape the canonical door
+// layer: one logical event, expressed as every wire shape the canonical endpoint
 // accepts, decoded through the ONE decoder and normalized with the SAME server org,
 // yields an identical FACT (modulo the randomly-minted id) whose org is that org.
 // The fact IS the row now — the sink binds wire(f) positionally into event.event
@@ -152,11 +152,11 @@ func TestUnifiedIngest_SameFactSameTenant(t *testing.T) {
 	}
 }
 
-// ── pluggable auth on the ONE door: IAM's pk- folded into /v1/event ──────────
+// ── pluggable auth on the ONE endpoint: IAM's pk- folded into /v1/event ──────
 
 // stubKeyOrg points the ONE IAM key client at a table for the test's duration.
 // resolveKeyOrg is a var precisely so the client can be swapped without a network;
-// these exercise the DOOR, not IAM's resolution.
+// these exercise the ENDPOINT, not IAM's resolution.
 func stubKeyOrg(t *testing.T, table map[string]string) {
 	t.Helper()
 	prev := resolveKeyOrg
@@ -167,7 +167,7 @@ func stubKeyOrg(t *testing.T, table map[string]string) {
 	t.Cleanup(func() { resolveKeyOrg = prev })
 }
 
-// A pk- is a first-class auth mode ON the canonical door: admitted (503,
+// A pk- is a first-class auth mode ON the canonical endpoint: admitted (503,
 // datastore down), so a pk- caller uses /v1/event directly.
 func TestEvent_PkKeyAdmitted(t *testing.T) {
 	stubKeyOrg(t, map[string]string{"pk-acme": "acme"})
@@ -188,7 +188,7 @@ func TestEvent_PkKeyForgedOrgIgnored(t *testing.T) {
 		`{"batch":[{"type":"pageview"}],"org":"attacker"}`,
 		map[string]string{"Authorization": "Bearer pk-acme", "X-Org-Id": "attacker"})
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("pk- door with forged org want 503 (ingested as key org), got %d", code)
+		t.Fatalf("pk- endpoint with forged org want 503 (ingested as key org), got %d", code)
 	}
 }
 

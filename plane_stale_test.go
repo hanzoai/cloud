@@ -63,7 +63,7 @@ func leftover(t *testing.T, app string) string {
 // Before the fix reach() stat'd the path, took the leftover for a live peer, returned
 // nil, and the dial failed with a bare "connection refused" that no caller could tell
 // apart from a peer that answered badly. That is the misread the whole ErrNoPeer
-// distinction exists to prevent, and it arrived through the one door that skipped it.
+// distinction exists to prevent, and it arrived through the one path that skipped it.
 func TestStaleSocketIsNotAPeer(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()

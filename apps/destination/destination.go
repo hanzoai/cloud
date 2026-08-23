@@ -7,7 +7,7 @@
 // server, with PII hashed on the way out.
 //
 // It is a CONSUMER of the canonical /v1/event stream (apps/event), installed
-// as a sink at Mount — never a second collector and never a second ingest door.
+// as a sink at Mount — never a second collector and never a second ingest endpoint.
 //
 // The plane is four decomplected concerns, one per file group:
 //

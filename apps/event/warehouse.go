@@ -15,7 +15,7 @@
 // warehouse.go — THE SINK. The first consumer of the EVENT stream, and the one that
 // makes a fact queryable.
 //
-// It is a CONSUMER, not a step in the ingest path. The door published and answered
+// It is a CONSUMER, not a step in the ingest path. The endpoint published and answered
 // already (bus.go); this runs behind it, on its own durable, at its own pace. A
 // warehouse that is down therefore stops rows from LANDING, never from being ACCEPTED —
 // they wait on the stream and land when it returns. That is the difference between
@@ -204,16 +204,16 @@ var occurrence = table{name: factTable, columns: factColumns, args: factArgs}
 //
 // The org-keyed table now EXISTS (event.sample, migration 0003), so the remaining
 // precondition is that the rename has been applied to the deployment this binary talks
-// to. Adding the sixth writer against a table that is not there yet would make the door
-// accept metrics and the sink fail every insert until the bus gave up on them — a 200
-// that means "discarded", which is exactly the failure the derivation below exists to
-// prevent. So the writer lands with the migration, in one line:
+// to. Adding the sixth writer against a table that is not there yet would make the
+// endpoint accept metrics and the sink fail every insert until the bus gave up on
+// them — a 200 that means "discarded", which is exactly the failure the derivation
+// below exists to prevent. So the writer lands with the migration, in one line:
 //
 //	{signalSample, measurement}
 //
 // where `measurement` is table{name: sampleTable, columns: …, args: …}.
 //
-// Until then the door REFUSES a sample rather than accepting it (landableSignals,
+// Until then the endpoint REFUSES a sample rather than accepting it (landableSignals,
 // below) — the same refusal for the same reason, at the boundary where a caller can
 // still be told.
 var writers = []writer{
@@ -225,14 +225,14 @@ var writers = []writer{
 }
 
 // landableSignals is WHICH SIGNALS CAN BE MADE DURABLE, derived from writers so the
-// answer is written down ONCE. The door reads it (ingestEvents, capture.go) and refuses
-// a fact it cannot land, which is what keeps "accepted" honest: publishing to a subject
-// no writer drains would put the fact on the stream, answer 200, and then let it expire
-// at MaxAge with nothing to show for it.
+// answer is written down ONCE. The endpoint reads it (ingestEvents, capture.go) and
+// refuses a fact it cannot land, which is what keeps "accepted" honest: publishing to
+// a subject no writer drains would put the fact on the stream, answer 200, and then
+// let it expire at MaxAge with nothing to show for it.
 //
 // Deriving it — rather than keeping a second list of "supported types" beside the
 // writers — is what makes the two impossible to disagree about. A writer added here is
-// a signal the door accepts, in one edit.
+// a signal the endpoint accepts, in one edit.
 var landableSignals = func() map[signal]bool {
 	m := make(map[signal]bool, len(writers))
 	for _, w := range writers {
@@ -243,7 +243,7 @@ var landableSignals = func() map[signal]bool {
 
 // ── acknowledged loss, counted ───────────────────────────────────────────────
 //
-// Two things remove a fact the door ALREADY ANSWERED 200 FOR, and both used to happen
+// Two things remove a fact the endpoint ALREADY ANSWERED 200 FOR, and both used to happen
 // with nothing to alarm on:
 //
 //   - undecodable — a message that does not parse is acked and dropped (land, below).
@@ -352,8 +352,8 @@ type drain struct {
 }
 
 // start brings the sink up in the background. It never blocks and never fails a mount:
-// a bus or a store that is down at boot is a warning and a retry, because the door can
-// keep accepting into the stream regardless — which is exactly the decoupling the bus
+// a bus or a store that is down at boot is a warning and a retry, because the endpoint
+// can keep accepting into the stream regardless — which is exactly the decoupling the bus
 // buys.
 func (s *drain) start() {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -423,7 +423,7 @@ func (s *drain) consume(ctx context.Context, cl *infra.PubSubClient) error {
 			Durable:       durable,
 			Description:   "land " + w.signal.subject() + " in " + w.table.name,
 			FilterSubject: w.signal.subject(),
-			// DeliverAll, not DeliverNew: a sink that starts after the door has been
+			// DeliverAll, not DeliverNew: a sink that starts after the endpoint has been
 			// accepting must land what is already on the stream, which is the whole
 			// point of the stream outliving this process.
 			DeliverPolicy: infra.DeliverAll,

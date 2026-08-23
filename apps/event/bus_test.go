@@ -42,7 +42,7 @@ func planeOn(t *testing.T) (string, *infra.PubSubClient) {
 }
 
 // squat creates a stream under `name` that holds the plane's subjects — the shape of
-// every stale generation, and of a tenant door that regressed.
+// every stale generation, and of a tenant endpoint that regressed.
 func squat(t *testing.T, js jetstream.JetStream, name string) {
 	t.Helper()
 	if _, err := js.CreateStream(context.Background(), jetstream.StreamConfig{
@@ -135,7 +135,7 @@ func TestEnsureRefusesToDestroyUndrainedData(t *testing.T) {
 }
 
 // TestEnsureNeverRetiresATenantStream pins the blast radius. A tenant cannot reach
-// these subjects today — the tenant door roots every subject it accepts at pub.<org>.
+// these subjects today — the tenant endpoint roots every subject it accepts at pub.<org>.
 // — so this state is unreachable, which is exactly why it is worth a test: if that
 // rooting ever regressed, the platform must refuse rather than delete a customer's
 // stream to make room for its own.

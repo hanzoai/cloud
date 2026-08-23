@@ -63,7 +63,7 @@ func init() {
 
 // planeSessionOpen opens the session. Target is a VALUE of the request, not a
 // second op: "no machine" is what an ordinary sandbox run says, and splitting it
-// in two would be two doors onto one OpenSessionOn.
+// in two would be two ops onto one OpenSessionOn.
 func planeSessionOpen(ctx context.Context, in *plane.SessionOpenIn) (*plane.SessionOpened, error) {
 	id, err := agents.OpenSessionOn(ctx, in.Org, in.Actor, in.Agent, in.Title, in.Target)
 	if err != nil {

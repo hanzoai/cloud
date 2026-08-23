@@ -387,7 +387,8 @@ func (f *fleet) kill(role string) {
 }
 
 // call dispatches a tool as org through the tool plane's OWN route, optionally
-// paying. This is the door the product serves; nothing here is a stand-in for it.
+// paying. This is the endpoint the product serves; nothing here is a stand-in for
+// it.
 func (f *fleet) call(org, tool, proof string) (int, []byte, http.Header) {
 	f.t.Helper()
 	hr := httptest.NewRequest(http.MethodPost, "/v1/tools/call", strings.NewReader(`{"name":"`+tool+`"}`))

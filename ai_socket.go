@@ -21,7 +21,7 @@ package cloud
 //	any method, any path, first connection, peer perfectly healthy.
 //
 //	THE SURFACE IS NOT THE APP'S. What binds there is the app's PLANE — the
-//	typed-op door at /.well-known/zip/op/<name>, which is what plane.Ask uses
+//	typed-op endpoint at /.well-known/zip/op/<name>, which is what plane.Ask uses
 //	(plane/ask.go: "ServePlane binds before the app's own listener"). The app's
 //	own HTTP routes are on a listener the plane socket knows nothing about, so
 //	/v1/chat/completions is a 404 there even when the wire is spoken correctly.
@@ -38,7 +38,7 @@ package cloud
 // The fleet ROUTER's own HTTP listener — the one CLOUD_LISTEN names and
 // api.hanzo.ai is merely the public face of. It owns the route table that sends
 // /v1/* to `ai`, and it owns starting a cold app, so reaching the model API
-// through it is not a special case: it is the same door every external caller
+// through it is not a special case: it is the same endpoint every external caller
 // uses, entered from inside.
 //
 // On LOOPBACK, which is the whole point. The router runs in this pod, so
@@ -53,7 +53,7 @@ package cloud
 // There is deliberately NO second mechanism here. A raw route reached
 // process-to-process is not something this fleet offers; ops are (plane.Ask), and
 // inventing a parallel path for the one surface that is not an op is what broke
-// it. One door, entered from inside.
+// it. One endpoint, entered from inside.
 
 import (
 	"net"

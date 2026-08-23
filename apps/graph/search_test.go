@@ -215,11 +215,11 @@ func TestTheSearchDoorAnswers(t *testing.T) {
 
 	got := valuesOf(answered(t, app, "", "/v1/graph/search?q=platform"))
 	if len(got) != 1 || got[0] != "acme/team/platform" {
-		t.Errorf("the door found %v, want the one assertion naming platform", got)
+		t.Errorf("the endpoint found %v, want the one assertion naming platform", got)
 	}
 }
 
-// TestABlankSearchIsRefused pins that the door does not quietly become a full
+// TestABlankSearchIsRefused pins that the endpoint does not quietly become a full
 // read when there is nothing to search for.
 func TestABlankSearchIsRefused(t *testing.T) {
 	app := mountGraph(t)
@@ -231,9 +231,9 @@ func TestABlankSearchIsRefused(t *testing.T) {
 }
 
 // TestSearchCannotCrossAGraphDatabase is the tenancy property, restated for the
-// door that reaches rows by text rather than by key. The index lives in the same
-// file as the assertions, so this holds by construction — and this is the test
-// that says a change which moved it out would be wrong.
+// endpoint that reaches rows by text rather than by key. The index lives in the
+// same file as the assertions, so this holds by construction — and this is the
+// test that says a change which moved it out would be wrong.
 func TestSearchCannotCrossAGraphDatabase(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "alpha", "acme/svc/api", "owner", "acme/team/core", true)
@@ -247,8 +247,8 @@ func TestSearchCannotCrossAGraphDatabase(t *testing.T) {
 	}
 }
 
-// TestSearchIsOnTheGraphQLDoorToo keeps the two doors from drifting: one schema,
-// one op, both addresses.
+// TestSearchIsOnTheGraphQLDoorToo keeps the two endpoints from drifting: one
+// schema, one op, both addresses.
 func TestSearchIsOnTheGraphQLDoorToo(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)

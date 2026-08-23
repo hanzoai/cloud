@@ -7,7 +7,8 @@ import (
 )
 
 // A platform in BrowserTags with no injector in tag.js is a site told it is tracking
-// and is not: the door advertises the pixel, the tag fetches its id, and nothing fires.
+// and is not: the endpoint advertises the pixel, the tag fetches its id, and nothing
+// fires.
 // The map and the injectors sit in one package so this reads both from one place.
 func TestEveryBrowserTagHasAnInjector(t *testing.T) {
 	src, err := os.ReadFile("tag.js")

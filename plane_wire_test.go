@@ -54,7 +54,7 @@ func TestCoresidentCallTakesNoWire(t *testing.T) {
 	}
 
 	// The answer is the op's answer, so the op ran — the client is the same
-	// validate → authorize → run core every other door lands on.
+	// validate → authorize → run core every other endpoint lands on.
 	if out.Amount.Decimal != "50.00" {
 		t.Fatalf("reply lost its value: %+v", out)
 	}

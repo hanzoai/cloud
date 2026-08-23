@@ -1,6 +1,6 @@
 package o11y
 
-// THE DOOR, END TO END — the test that was missing while it was shut.
+// THE SURFACE, END TO END — the test that was missing while it refused.
 //
 // TestGateExemptsHealthPathsButGatesData (red_forge_test.go) calls gate()
 // DIRECTLY, with a backend that answers 200 to anything. That proves the
@@ -46,8 +46,8 @@ func doorApp(t *testing.T) *zip.App {
 		case "/v1/o11y/health":
 			_, _ = w.Write([]byte(`{"status":"ok"}`))
 		default:
-			// The runtime's OWN refusal, so a test failure distinguishes "the door
-			// refused" from "the runtime refused".
+			// The runtime's OWN refusal, so a test failure distinguishes "the
+			// surface refused" from "the runtime refused".
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"status":"error","error":{"code":"unauthenticated"}}`))
 		}
@@ -82,14 +82,14 @@ func TestDoorServesTenantFreeReadsAnonymously(t *testing.T) {
 	} {
 		code, body := get(t, app, tc.path)
 		if code != http.StatusOK {
-			t.Errorf("anonymous GET %s = %d %s, want 200 — the unified door must serve what "+
+			t.Errorf("anonymous GET %s = %d %s, want 200 — the unified surface must serve what "+
 				"the standalone serves; a principal cannot be required to learn what you are "+
 				"talking to, or to pass a kubelet probe", tc.path, code, body)
 			continue
 		}
 		if !strings.Contains(body, tc.want) {
 			t.Errorf("anonymous GET %s body = %s, want it to contain %s (the RUNTIME's answer, "+
-				"not a door-shaped placeholder)", tc.path, body, tc.want)
+				"not a placeholder from this surface)", tc.path, body, tc.want)
 		}
 	}
 }
@@ -97,7 +97,7 @@ func TestDoorServesTenantFreeReadsAnonymously(t *testing.T) {
 // TestDoorStillRefusesTenantReads is the other half, and the one that matters
 // more: if everything answers 200 the gate is gone, which is worse than the 403
 // this lane closed. A read of a TENANT's telemetry must still be refused, and
-// the refusal must be the DOOR's, not the runtime's 401 — proving the request
+// the refusal must be the SURFACE's, not the runtime's 401 — proving the request
 // never reached the runtime at all.
 func TestDoorStillRefusesTenantReads(t *testing.T) {
 	app := doorApp(t)
@@ -115,7 +115,7 @@ func TestDoorStillRefusesTenantReads(t *testing.T) {
 			continue
 		}
 		if !strings.Contains(body, "no validated principal") {
-			t.Errorf("anonymous GET %s refused with %s, want the DOOR's own reason; anything "+
+			t.Errorf("anonymous GET %s refused with %s, want the SURFACE's own reason; anything "+
 				"else means the request reached the runtime before being refused", path, body)
 		}
 	}
@@ -141,7 +141,7 @@ func TestDoorExemptionIsTheModulesAnswer(t *testing.T) {
 		})).ServeHTTP(rec, req)
 		if rec.Code == http.StatusOK {
 			t.Errorf("%s was exempted — that namespace has not existed since o11y v1.5.37; "+
-				"an exemption for a route nobody serves is how this gate shut the door", dead)
+				"an exemption for a route nobody serves is how this gate ended up refusing every real one", dead)
 		}
 	}
 }

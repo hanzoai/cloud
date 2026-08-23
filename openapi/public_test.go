@@ -1,7 +1,7 @@
 package openapi
 
 // The audience, tested as the rule it is: a customer operation is public the day
-// it answers, and the operator's surface, the relay doors and the legacy
+// it answers, and the operator's surface, the relays and the legacy
 // spellings are not. Every case here is an address nobody has declared anything
 // about, because that is the case the rule exists for.
 
@@ -53,7 +53,7 @@ func TestACustomerOperationIsPublicByItsAddress(t *testing.T) {
 	}
 }
 
-// A relay door publishes whatever grows behind it and names nothing a client can
+// A relay publishes whatever grows behind it and names nothing a client can
 // call; it stays internal whatever product it sits under.
 func TestARelayDoorIsNotPublic(t *testing.T) {
 	op := &Operation{OperationID: "get_v1_tasks_wildcard1"}
@@ -143,11 +143,11 @@ func TestPublishRefusesADanglingReference(t *testing.T) {
 	}
 }
 
-// The agent door is the fleet's: core projects it with its prose and bodies,
-// Door knows it, it is public, and an app describing itself never carries it.
+// The agent MCP endpoint is the fleet's: core projects it with its prose and
+// bodies, Door knows it, it is public, and an app describing itself never carries it.
 func TestTheAgentDoorIsTheFleetsAndNoApps(t *testing.T) {
 	if !Door(door.Path) {
-		t.Fatal("the agent door is not a Door")
+		t.Fatal("the agent MCP endpoint is not a Door")
 	}
 	app := newApp()
 	app.Get("/v1/widgets", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
@@ -156,7 +156,7 @@ func TestTheAgentDoorIsTheFleetsAndNoApps(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, carried := own.Paths[door.Path]; carried {
-		t.Fatal("an app's own document carries the agent door")
+		t.Fatal("an app's own document carries the agent MCP endpoint")
 	}
 	c, err := core()
 	if err != nil {
@@ -164,9 +164,9 @@ func TestTheAgentDoorIsTheFleetsAndNoApps(t *testing.T) {
 	}
 	op := c.Doc.Paths[door.Path]["post"]
 	if op == nil {
-		t.Fatal("core did not project the agent door")
+		t.Fatal("core did not project the agent MCP endpoint")
 	}
 	if op.Summary == "" || op.RequestBody == nil || !op.Public {
-		t.Fatalf("the door is projected bare: summary=%q body=%v public=%v", op.Summary, op.RequestBody != nil, op.Public)
+		t.Fatalf("the MCP endpoint is projected bare: summary=%q body=%v public=%v", op.Summary, op.RequestBody != nil, op.Public)
 	}
 }

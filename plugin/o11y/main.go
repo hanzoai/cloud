@@ -108,7 +108,7 @@ func run() error {
 	// Fail-SOFT: a plane that will not bind must not take the HTTP surface down
 	// with it — this process is what answers /v1/o11y.
 	//
-	// The AGENT DOOR goes on that plane first, for the third time in this file and
+	// The AGENT MCP SERVER goes on that plane first, for the third time in this file and
 	// for the third identical reason: cloud.Listen registers it for every generated
 	// app main and this one is hand-written. Without it this app's tools are the
 	// only ones in the fleet a caller from INSIDE reaches through the edge, so the

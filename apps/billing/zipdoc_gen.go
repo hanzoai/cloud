@@ -289,18 +289,18 @@ func init() {
 		Description: "Ends a subscription.\n\nIt cancels at the END OF THE PAID PERIOD by default, because a customer who\ncancels has already paid for the period they are in and taking it away is\ntaking money for nothing. `atPeriodEnd: false` ends it at once, which is the\ncaller asking for that.\n\nA subscription from another org is not found rather than refused, so an id\ncannot be probed for existence.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Subscription.mrrCents":       "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats, so no reader\nre-derives it from price and interval.",
-			"SubscriptionRef.atPeriodEnd": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the door, because a customer who cancels has already paid\nfor the period they are in.",
+			"SubscriptionRef.atPeriodEnd": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the endpoint, because a customer who cancels has already\npaid for the period they are in.",
 		},
 	})
 	zip.Describe("POST /v1/billing/subscriptions/:id/reactivate", zip.Doc{
 		Description: "Puts a canceled subscription back on its plan.\n\nWhat asks for this is usually a recovered payment method or a support tool\nrather than a browser, which is most of the argument for it having an address\nat all. The engine decides whether the move is legal; a row it will not\nreactivate comes back with its own reason.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"Subscription.mrrCents":       "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats, so no reader\nre-derives it from price and interval.",
-			"SubscriptionRef.atPeriodEnd": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the door, because a customer who cancels has already paid\nfor the period they are in.",
+			"SubscriptionRef.atPeriodEnd": "AtPeriodEnd cancels at the end of the paid period rather than at once. It\ndefaults TRUE on the endpoint, because a customer who cancels has already\npaid for the period they are in.",
 		},
 	})
 	zip.Describe("POST /v1/billing/topup", zip.Doc{
-		Description: "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token door; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one.",
+		Description: "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token endpoint; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one.",
 		Fields: map[string]string{
 			"Charged.balanceCents":    "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
 			"Charged.processorRef":    "ProcessorRef is the payment processor's own reference. It is the only field\nthat proves money moved at the GATEWAY rather than merely in our ledger,\nwhich is why it is answered and not only logged. Absent where the processor\nreturned none.",
@@ -309,8 +309,8 @@ func init() {
 			"Charged.transactionId":   "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
 			"topupIn.amountCents":     "AmountCents is how much to charge, in cents of Currency. Required.",
 			"topupIn.currency":        "Currency is the ISO-4217 code to charge in. Empty takes the deployment's\nown default.",
-			"topupIn.paymentMethodId": "MethodID names a card the subject already saved, for the saved-card door.",
-			"topupIn.sourceId":        "SourceID is a single-use card token from the payment form, for the token\ndoor. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
+			"topupIn.paymentMethodId": "MethodID names a card the subject already saved, for the saved-card endpoint.",
+			"topupIn.sourceId":        "SourceID is a single-use card token from the payment form, for the token\nendpoint. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
 		},
 	})
 	zip.Describe("POST /v1/billing/topup/token", zip.Doc{
@@ -323,8 +323,8 @@ func init() {
 			"Charged.transactionId":   "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
 			"topupIn.amountCents":     "AmountCents is how much to charge, in cents of Currency. Required.",
 			"topupIn.currency":        "Currency is the ISO-4217 code to charge in. Empty takes the deployment's\nown default.",
-			"topupIn.paymentMethodId": "MethodID names a card the subject already saved, for the saved-card door.",
-			"topupIn.sourceId":        "SourceID is a single-use card token from the payment form, for the token\ndoor. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
+			"topupIn.paymentMethodId": "MethodID names a card the subject already saved, for the saved-card endpoint.",
+			"topupIn.sourceId":        "SourceID is a single-use card token from the payment form, for the token\nendpoint. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
 		},
 	})
 }

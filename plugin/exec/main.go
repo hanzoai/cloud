@@ -24,7 +24,7 @@ import (
 //
 // Metered, not Free: running a snippet leases a sandbox and executes a program in
 // it — a pod and a slice of a node for as long as the program takes. The meter is
-// apps/exec/meter.go, and it sits on this subsystem's own door rather than inside
+// apps/exec/meter.go, and it sits on this subsystem's own endpoint rather than inside
 // the exported interpreter, because apps/functions composes that same call and
 // already charges its own invoke fee for it.
 func main() {

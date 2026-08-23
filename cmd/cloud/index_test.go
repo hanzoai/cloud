@@ -120,9 +120,10 @@ func TestTheRootIndexIsTheHostsNotTheRemainders(t *testing.T) {
 var oneSegment = regexp.MustCompile(`^/v1/[^/{]+$`)
 
 // THE GATE. Every published one-segment READ must still reach the app that serves
-// it. This is the failure mode of a remainder door: a static claim inside somebody
-// else's subtree wins by specificity, and 60 collection endpoints — /v1/models and
-// the whole OpenAI-compatible wire among them — sit at exactly that depth.
+// it. This is the failure mode of a remainder route: a static claim inside
+// somebody else's subtree wins by specificity, and 60 collection endpoints —
+// /v1/models and the whole OpenAI-compatible wire among them — sit at exactly that
+// depth.
 //
 // Per (method, path), which is the unit the index yields on and the unit an
 // operation is: an address that only ACTS at its root publishes no GET there, so
@@ -148,7 +149,7 @@ func TestTheIndexShadowsNoPublishedRead(t *testing.T) {
 	reads, acts := 0, 0
 	for path, methods := range d.Paths {
 		if !oneSegment.MatchString(path) || openapi.Door(path) {
-			continue // a door is the host's own; everything else belongs to an app
+			continue // these are the host's own; everything else belongs to an app
 		}
 		resp, body := reply(t, app, path)
 		to := strings.TrimSpace(body)
@@ -210,7 +211,7 @@ func TestFollowingACapabilityHrefReachesItsIndex(t *testing.T) {
 }
 
 // A name nothing publishes is answered by whatever answers every other unclaimed
-// address under /v1 — the remainder — so the door cannot be asked which names
+// address under /v1 — the remainder — so the surface cannot be asked which names
 // exist. On the real host both fall to ai; here ai is an oracle, so both come
 // back as the same bytes from the same app.
 func TestAnUnpublishedNameIsAnsweredLikeAnyUnclaimedAddress(t *testing.T) {

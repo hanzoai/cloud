@@ -112,7 +112,7 @@ func TestPushReachesPlatform(t *testing.T) {
 
 // TestSyncReachesEngine — integrations and git trigger, sync holds the engine, so
 // this was nil on every path that fires and answered "not registered" while the
-// engine was healthy next door.
+// engine was healthy in the sync app.
 func TestSyncReachesEngine(t *testing.T) {
 	alone(t)
 	cloud.RegisterSync(nil)

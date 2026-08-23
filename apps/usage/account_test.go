@@ -512,7 +512,7 @@ func TestSamplesServesEveryWindowItAdmits(t *testing.T) {
 }
 
 // TestSamplesRefusesWhatItCannotAnswer: past the horizon the stores hold nothing,
-// so the door says so instead of serving a window short of what was asked. On a
+// so the endpoint says so instead of serving a window short of what was asked. On a
 // spend view a truncated window reads as money that was never spent.
 func TestSamplesRefusesWhatItCannotAnswer(t *testing.T) {
 	app := mountBare(t)

@@ -1,6 +1,6 @@
 package marketplace
 
-// payments.go closes BOTH halves of the pay-per-use door this subsystem opens the
+// payments.go closes BOTH halves of the pay-per-use path this subsystem opens the
 // moment a listing is allowed to declare a price. A price nobody can pay is not a
 // price; it is a lie in the shop window.
 //
@@ -9,7 +9,7 @@ package marketplace
 //	charger   →  tools.SetCharger the client tools.Registry.Dispatch settles through,
 //	                              which is x402.Settle on that same resource.
 //
-// ONE table, two doors onto it. The marketplace declares what is priced and who is
+// ONE table, two ways onto it. The marketplace declares what is priced and who is
 // paid; x402 enforces it; the tool plane knows neither. Nothing else in the fleet
 // decides what a listed tool costs.
 //

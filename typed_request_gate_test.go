@@ -52,7 +52,7 @@ var allowedRequestUses = map[string]string{
 		"identity gate reading strictly more than the org. The AMOUNT comes off the decoded In and the " +
 		"SETTLEMENT off the returned receipt, both deliberately not read from the wire (see screen.op), " +
 		"so the request is consulted for exactly the facts no projection can carry on a type: the payer " +
-		"(principal.Subject, which is the validated caller and not the tenant), the door actually reached " +
+		"(principal.Subject, which is the validated caller and not the tenant), the endpoint actually reached " +
 		"(c.Path(), which is /mcp on the agent plane and the mint on the browser's — the request is " +
 		"parked by the app-wide Bridge, which runs for both), and the address + " +
 		"jurisdiction signals a credit decision is made on. None of those is the org, and none may become " +
@@ -84,13 +84,13 @@ var allowedRequestUses = map[string]string{
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
 		"the vhost the caller reached, read only to pick the brand the summary renders for.",
-	"apps/kms/typed.go": "admit — the secret broker's one admission door, and an identity gate reading " +
+	"apps/kms/typed.go": "admit — the secret broker's one admission check, and an identity gate reading " +
 		"strictly more than the org. A member READS a secret and an admin WRITES one (cloud.Scope, the " +
 		"estate's split, not this subsystem's invention), and admin-ness is platform sudo or org-admin: " +
 		"two facts the identity middleware parks in headers and principal.OrgFrom does not carry. " +
 		"Neither may become an In field for the obvious reason — a caller that could name itself an " +
 		"admin would be one. The TENANT still comes from principal.OrgFrom, so the org key and the " +
-		"authority arrive by their own proper doors. ONE function, which every typed op here asks, and " +
+		"authority arrive by their own proper paths. ONE function, which every typed op here asks, and " +
 		"it fails closed off the HTTP path, where there is no principal to be an admin of anything.",
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
@@ -581,7 +581,7 @@ var allowedRequestUses = map[string]string{
 		"actor records WHO granted access, on the validated user id (X-User-Id): an attribution on the " +
 		"access record, never an authority. The TENANT is resolved with principal.Acting throughout, " +
 		"never through the request. All three fail closed off the HTTP path, which is what closes the " +
-		"MCP door and the internal plane — both invoke a typed op DIRECTLY, with no route for the " +
+		"MCP server and the internal plane — both invoke a typed op DIRECTLY, with no route for the " +
 		"group's own sudoGate to sit on.",
 	"apps/link/http.go": "scope — the linked-account surface is scoped to (org, SUBJECT): every op keys " +
 		"the caller's own provider accounts and usage on the validated user id (c.User()) as well as the " +

@@ -2,7 +2,7 @@
 // incoming request: CORS, rate limits, cache TTL and allowed methods, changed
 // without a redeploy.
 //
-// THE GATEWAY IS PLUMBING, AND THIS IS ITS ONE PRODUCT DOOR. The gateway is the
+// THE GATEWAY IS PLUMBING, AND THIS IS ITS ONE PRODUCT ENDPOINT. The gateway is the
 // trust boundary — validate the IAM JWT, strip client-supplied identity, re-mint
 // X-Org-Id — and it is not a network hop: it is compiled INTO the cloud binary as
 // gateway.Mount, and hanzoai/gateway's own routes.go states the law ("ONE routing
@@ -255,12 +255,12 @@ func (o ops) write(ctx context.Context, in *edge.Policy) (*edge.Policy, error) {
 	// RiskScorerInstalled reports on THIS process (risk.go), and as composed today
 	// this one is the gateway binary, which links gateway alone — so nothing it can
 	// observe installs a scorer and the refusal below is currently unconditional.
-	// That is the fail-SAFE direction, and it holds the door shut rather than
-	// opening it, but it answers "is a scorer linked here" and not the question
-	// arming asks, which is whether the risk plane can answer for the fleet.
+	// That is the fail-SAFE direction, and it refuses rather than admits, but it
+	// answers "is a scorer linked here" and not the question arming asks, which is
+	// whether the risk plane can answer for the fleet.
 	// Co-residency would not close the gap either: apps/risk exports no scorer to
 	// install. Reaching the fleet answer is a cross-process ask (a plane op, as the
-	// obs event door does), not a wider reading of this predicate.
+	// obs event endpoint does), not a wider reading of this predicate.
 	if orgCfg.Mode == edge.ModeLive && !cloud.RiskScorerInstalled() {
 		return nil, zip.ErrBadRequest("mode=live requires the risk scorer; none is installed in this deployment")
 	}

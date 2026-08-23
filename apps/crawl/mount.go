@@ -146,8 +146,8 @@ const Path = "/v1/crawl"
 // is also an MCP tool and a CLI command, and tools/call invokes it with no route
 // and therefore no middleware. So the KEY is checked in middleware, where a
 // request is (it is a header, which a typed op cannot see), and the DECISION is
-// made in the handler, where every door reaches it. The middleware only ever adds
-// a fact; it never admits by itself.
+// made in the handler, where every caller reaches it. The middleware only ever
+// adds a fact; it never admits by itself.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("crawl.Mount: nil app")
@@ -287,7 +287,7 @@ func isAdmitted(ctx context.Context) bool {
 // A validated principal is admitted and scoped to its own org and project. A
 // caller with no principal is admitted only on the marker [admitKey] leaves, and
 // takes the shared corpus, which is the same thing the untyped route did through
-// an empty scope. Neither ⇒ refused, so the fetcher is closed on every door
+// an empty scope. Neither ⇒ refused, so the fetcher is closed on every caller
 // including the ones with no request behind them: the CLI projection runs an op
 // with no request at all, and it lands here.
 //

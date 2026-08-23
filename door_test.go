@@ -1,25 +1,26 @@
 package cloud
 
-// The agent door, from both directions, against ONE subsystem.
+// The agent MCP server, from both directions, against ONE subsystem.
 //
 // WHAT IT CAUGHT. Every tool the @hanzo Slack agent called answered `X-Org-Id
 // required` or `sign in to use`, while tools/list and describe worked. The run
 // holds a principal it resolved SERVER-SIDE and no bearer to replay for it, and
-// the door forwarded it into the subsystem's EDGE door — where the identity
-// boundary deletes every authority header and re-mints one only from a credential
-// it verified. So X-User-Id was gone by the time the op read it, principal.OrgOf
-// refused the org that had ridden along, and the op refused the caller.
+// the MCP server forwarded it into the subsystem's EDGE endpoint — where the
+// identity boundary deletes every authority header and re-mints one only from a
+// credential it verified. So X-User-Id was gone by the time the op read it,
+// principal.OrgOf refused the org that had ridden along, and the op refused the
+// caller.
 //
 // The plugin's own request log said `org=hanzo user=hanzo/z@hanzo.ai` for that
 // exact request, which is what made it look impossible. It is not: zip reports the
 // caller as a request BEGINS (telemetry.go, describe before Continue), so the line
 // says what ARRIVED, and the op reads what SURVIVED. Both halves are pinned below.
 //
-// The two cases differ in ONE value — which door the hop goes to — and that is the
-// whole fix: an internal caller reaches the subsystem's plane door, where its
-// statement is worth what the socket is worth; a stranger reaches the edge door,
-// where the boundary judges it. TestForgedIdentityStillDiesAtTheEdge is the half
-// that must never move.
+// The two cases differ in ONE value — which endpoint the hop goes to — and that
+// is the whole fix: an internal caller reaches the subsystem's plane endpoint,
+// where its statement is worth what the socket is worth; a stranger reaches the
+// edge endpoint, where the boundary judges it.
+// TestForgedIdentityStillDiesAtTheEdge is the half that must never move.
 
 import (
 	"context"
@@ -52,9 +53,9 @@ type seen struct {
 const tenantOp = "probe_tenant"
 
 // subsystem is one plugin process's worth of machinery: the identity boundary, one
-// typed op, its EDGE door on its own socket (zip's /mcp, what cloud.Serve leaves
-// where the framework puts it), and its PLANE door (cloud.Door). It returns the
-// two addresses a host can reach it at.
+// typed op, its EDGE endpoint on its own socket (zip's /mcp, what cloud.Serve
+// leaves where the framework puts it), and its PLANE endpoint (cloud.Door). It
+// returns the two addresses a host can reach it at.
 func subsystem(t *testing.T) (edge, plane string) {
 	t.Helper()
 	ResetPlane()
@@ -79,10 +80,10 @@ func subsystem(t *testing.T) (edge, plane string) {
 	return edge, plane
 }
 
-// doors composes the fleet's door at BOTH of its addresses over that one
-// subsystem: the edge's, forwarding into the subsystem's edge door, and the
-// fleet's own internal socket, forwarding into its plane door. Exactly the pair
-// cmd/cloud registers (locate / inside).
+// doors composes the fleet's MCP server at BOTH of its addresses over that one
+// subsystem: the edge's, forwarding into the subsystem's edge endpoint, and the
+// fleet's own internal socket, forwarding into its plane endpoint. Exactly the
+// pair cmd/cloud registers (locate / inside).
 func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
 	t.Helper()
 	edge, plane := subsystem(t)
@@ -92,11 +93,11 @@ func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
 
 	d := fleet.Mount(fromEdge, manifest.MCPPath, []string{"websearch"},
 		func(string) (string, string, error) { return edge, manifest.FrameworkMCPPath, nil })
-	// The door lists from the build-time catalog and asks nothing, so a child
-	// this binary did not build publishes nothing and every route below is
+	// The MCP server lists from the build-time catalog and asks nothing, so a
+	// child this binary did not build publishes nothing and every route below is
 	// "unknown tool". Saying what it publishes is what fleet.Door.Catalog is for;
-	// the Doc is the sentence its own WithSummary carries, so what the door lists
-	// and what the op says about itself cannot drift apart here.
+	// the Doc is the sentence its own WithSummary carries, so what the MCP server
+	// lists and what the op says about itself cannot drift apart here.
 	d.Catalog = func(string) []fleet.Op {
 		return []fleet.Op{{ID: tenantOp, Doc: "what this op resolves about its caller"}}
 	}
@@ -106,9 +107,9 @@ func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
 }
 
 // TestInsideTheFleetTheCallerReachesTheOp is the fix. A sibling states the
-// principal it resolved server-side, reaches the door on the fleet's own socket,
-// and the op resolves the tenant — which is what every tool the agent calls needs
-// and what none of them got.
+// principal it resolved server-side, reaches the endpoint on the fleet's own
+// socket, and the op resolves the tenant — which is what every tool the agent
+// calls needs and what none of them got.
 func TestInsideTheFleetTheCallerReachesTheOp(t *testing.T) {
 	_, inside := doors(t)
 
@@ -126,11 +127,12 @@ func TestInsideTheFleetTheCallerReachesTheOp(t *testing.T) {
 
 // TestForgedIdentityStillDiesAtTheEdge is the half that must NOT move. The SAME
 // headers, from outside, are a caller naming its own tenant with nothing behind it
-// — the F1 forge — and the boundary in front of the subsystem's edge door is what
-// refuses them. It refuses them EARLIER than it once did: a tools/call carrying no
-// credential is answered 401 at the door with a challenge naming where to sign in,
-// so the forged headers never reach an op at all. A fix that made the door work by
-// trusting what it was handed would pass the test above and fail this one.
+// — the F1 forge — and the boundary in front of the subsystem's edge endpoint is
+// what refuses them. It refuses them EARLIER than it once did: a tools/call
+// carrying no credential is answered 401 at the edge with a challenge naming where
+// to sign in, so the forged headers never reach an op at all. A fix that made the
+// endpoint work by trusting what it was handed would pass the test above and fail
+// this one.
 func TestForgedIdentityStillDiesAtTheEdge(t *testing.T) {
 	edge, _ := doors(t)
 
@@ -149,8 +151,8 @@ func TestForgedIdentityStillDiesAtTheEdge(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("a forged identity with no credential got %d from the public door; "+
-			"the door challenges before it routes, so nothing it was handed is ever read", resp.StatusCode)
+		t.Fatalf("a forged identity with no credential got %d from the public endpoint; "+
+			"the endpoint challenges before it routes, so nothing it was handed is ever read", resp.StatusCode)
 	}
 	if h := resp.Header.Get("WWW-Authenticate"); !strings.Contains(h, "oauth-protected-resource") {
 		t.Errorf("WWW-Authenticate = %q; the challenge names the resource metadata an MCP client signs in from", h)
@@ -168,7 +170,7 @@ func TestInsideTheFleetAnOrgAloneIsStillRefused(t *testing.T) {
 
 	if got.Validated || got.OrgOK {
 		t.Errorf("OrgFrom = (%q, %v) validated=%v for an org with no user; the org that "+
-			"rode along is untrusted on every door", got.Org, got.OrgOK, got.Validated)
+			"rode along is untrusted on every endpoint", got.Org, got.OrgOK, got.Validated)
 	}
 }
 
@@ -196,8 +198,8 @@ func accepts(t *testing.T, addr string) {
 	t.Fatalf("%s never began listening", addr)
 }
 
-// tool runs tenantOp through one door as (org, user) and reads back what the op
-// resolved.
+// tool runs tenantOp through one endpoint as (org, user) and reads back what the
+// op resolved.
 func tool(t *testing.T, door *zip.App, org, user string) seen {
 	t.Helper()
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tenantOp + `","arguments":{}}}`
@@ -228,10 +230,10 @@ func tool(t *testing.T, door *zip.App, org, user string) seen {
 		} `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
-		t.Fatalf("the door answered something that is not JSON-RPC: %v", err)
+		t.Fatalf("the endpoint answered something that is not JSON-RPC: %v", err)
 	}
 	if env.Error != nil {
-		t.Fatalf("the door refused to route %s: %s", tenantOp, env.Error.Message)
+		t.Fatalf("the endpoint refused to route %s: %s", tenantOp, env.Error.Message)
 	}
 	if env.Result.IsError || len(env.Result.Content) == 0 {
 		t.Fatalf("tools/call returned no result (isError=%v)", env.Result.IsError)

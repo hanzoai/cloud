@@ -13,7 +13,7 @@ import (
 // client and egress through the ONE existing chat.postMessage path
 // (integrations.SendSlack).
 
-// slackDoor is the send door; tests spy it, prod never repoints.
+// slackDoor is the send path; tests spy it, prod never repoints.
 var slackDoor = func(ctx context.Context, org, channel, threadTS, text string) error {
 	_, err := post(ctx, plane.ChatSendIn{Org: org, Provider: "slack", Room: channel, ReplyTo: threadTS, Text: text})
 	return err

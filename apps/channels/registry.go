@@ -17,7 +17,7 @@ import (
 type capabilities struct {
 	// DM is whether the transport carries a DIRECT message at all. True for slack,
 	// teams and telegram. False for discord, honestly: that ingress is guild-scoped
-	// slash commands — an interaction without a guild id is refused at the door —
+	// slash commands — an interaction without a guild id is refused at the endpoint —
 	// so nothing ever arrives classified as a DM, no reply route is ever learned
 	// for one, and a send addressed at a Discord DM is refused 409.
 	DM bool `json:"dm"`
@@ -27,7 +27,7 @@ type capabilities struct {
 	Group bool `json:"group"`
 	// Thread is whether a reply can be threaded UNDER a specific message. True for
 	// slack alone: it is the only transport whose ingress reports a thread
-	// (thread_ts, published as the envelope's replyTo) and whose door posts back
+	// (thread_ts, published as the envelope's replyTo) and whose send posts back
 	// into it. Discord's replyTo makes an inline reply rather than a thread,
 	// Telegram's answers one message id, and Teams carries no reply target at all —
 	// a replyTo sent to it is ignored.

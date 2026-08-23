@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/todo/projects/:key", zip.Doc{
-		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
+		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second endpoint onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
 	zip.Describe("GET /v1/todo/board", zip.Doc{
 		Description: "Returns a board's issues — work items with their column, priority,\nassignee, labels and schedule.\n\nWHICH board is a filter, not an address. Bound to a repository (the key from\nthe path) it is that project's board; left unbound it is the org's whole\nboard; narrowed by label it is a board smaller than any repository — which is\nthe only way an app that lives as a directory inside a shared repository can\nhave one. Every combination is the same rows through the same projection, so\nno two boards can disagree about what a column means.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
@@ -146,7 +146,7 @@ func init() {
 		},
 	})
 	zip.Describe("PATCH /v1/todo/projects/:key", zip.Doc{
-		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
+		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second endpoint onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
 	zip.Describe("PATCH /v1/todo/projects/:key/issues/:num", zip.Doc{
 		Description: "Edits a work item — rename it, rewrite it, move it to another\ncolumn, or re-prioritise it. Absent fields are left alone.\n\nMOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the\nmove replaces that set rather than writing a status column here that a\nforge-side change could contradict. Moving to `done` also CLOSES the issue on\nthe forge, because a done card and an open issue are a contradiction.",
@@ -194,7 +194,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/todo/projects", zip.Doc{
-		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second door onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
+		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second endpoint onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
 	zip.Describe("POST /v1/todo/projects/:key/issues", zip.Doc{
 		Description: "Opens a work item on the board — an issue on that repository on\nthe deployment's forge, filed as YOU.\n\nThe column and priority are written as LABELS, which is what makes the card\nand the forge issue the same object: someone relabelling in the forge web UI\nhas moved your card.",

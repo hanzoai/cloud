@@ -29,7 +29,7 @@
 // around could be neither obtained nor honored, and every surface configured its
 // own thing instead.
 //
-// It has no INGEST door of its own either: ingestKey below is one of the carriers
+// It has no INGEST endpoint of its own either: ingestKey below is one of the carriers
 // eventTenant consults, so a pk- caller presents it to /v1/event like every other
 // credential. There used to be a POST /v1/ingest that existed only to say "pk- goes
 // here"; @hanzo/event 0.3.0 repointed onto /v1/event and it was deleted.
@@ -43,14 +43,14 @@
 //
 // That is fixed at the boundary instead of routed around: IdentityFromRequest now
 // refuses a pk- outright (cloud.IsPublishableKey), so publishable means
-// publishable no matter which door it arrives at. A pk- stays inside
+// publishable no matter which endpoint it arrives at. A pk- stays inside
 // APIKeyPrefixes on purpose — OrgForKey must resolve it to learn which tenant a
 // beacon belongs to. Resolvable, not authenticating.
 //
 // The tenant is whatever IAM resolves the key to, never a body or header claim,
 // so the tenant invariant the rest of the plane enforces holds here too. Every
-// door funnels through the SAME write core (ingestEvents) onto the SAME event
-// plane: one write path, many front doors. An error is the one signal with a
+// endpoint funnels through the SAME write core (ingestEvents) onto the SAME event
+// plane: one write path, many entry points. An error is the one signal with a
 // table of its own — normalize routes it to event.error, never event.event — so
 // that is the table this lens reads.
 
@@ -80,7 +80,7 @@ const publishablePrefix = cloud.PublishablePrefix
 // Authorization: Bearer header (the common browser-fetch shape), the
 // x-hanzo-ingest-key header, then the ?ingest_key= query (navigator.sendBeacon
 // cannot set headers). Only a pk--prefixed value is returned — an unrelated
-// bearer (a real JWT/IAM key) is ignored here so this door never shadows the
+// bearer (a real JWT/IAM key) is ignored here so this carrier never shadows the
 // identity path. "" when none is present.
 func ingestKey(c *zip.Ctx) string {
 	if auth := strings.TrimSpace(c.Header("authorization")); auth != "" {

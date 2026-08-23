@@ -2,12 +2,12 @@ package openapi_test
 
 // DESCRIBED IS NOT DISPATCHABLE, and x-tool is the difference.
 //
-// The fleet's agent door reads a catalog built from these documents and offers
-// every operation in it as a callable name. A document carries every ROUTE; a
-// child answers only for its TYPED ops, because that is the set zip walks to
+// The fleet's agent MCP server reads a catalog built from these documents and
+// offers every operation in it as a callable name. A document carries every ROUTE;
+// a child answers only for its TYPED ops, because that is the set zip walks to
 // build MCP tools. So an operation that reaches the catalog without being typed
-// is a name the door advertises and the child rejects — measured on the live
-// door as `unknown tool`, across 157 operations.
+// is a name the MCP server advertises and the child rejects — measured on the live
+// MCP server as `unknown tool`, across 157 operations.
 //
 // This asserts the three ways an operation can reach a document and that only
 // one of them is dispatchable. Without it the mark is a boolean nobody checks,

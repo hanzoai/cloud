@@ -47,7 +47,7 @@
 // Row identity: every table is a ReplacingMergeTree keyed on (…, id), so ids
 // are DERIVED — a span's id is its span_id; a log line's id is a hash of what
 // it says and when. Idempotency is structural, exactly as in the analytics
-// warehouse next door. event.trace is the one exception and is not an identity
+// warehouse beside it. event.trace is the one exception and is not an identity
 // table at all: it is an AggregatingMergeTree of per-batch PARTIALS, so a
 // re-sent batch re-adds its span count (min/max absorb the repeat, sum cannot).
 // That is the documented cost of the partial-summary design, and it is the same
@@ -152,7 +152,7 @@ const (
 	// socket, SO_PEERCRED).
 	//
 	// It is a SECOND ear, never a replacement. The otel agent on every node,
-	// the gateway, and another cluster through the otlz door all reach the TCP
+	// the gateway, and another cluster through the otlz endpoint all reach the TCP
 	// addresses above from off-pod, where a socket cannot be shared; moving
 	// 4317 onto a path would take the fleet's telemetry down.
 	planeSpanSocketName = "o11y-spans.sock"
@@ -459,9 +459,9 @@ func shutdownPlaneIngest(context.Context) error {
 // a span the trace list cannot find, and that is exactly the state this file was
 // in while event.span held 172,789 distinct trace ids and event.trace held one.
 //
-// The partial write is NON-FATAL, matching pushOnce's discipline next door: the
-// spans are the facts and they are already durable, the summary is derived from
-// them, and returning an error here would tell the receiver its batch failed
+// The partial write is NON-FATAL, matching pushOnce's discipline in metricspush.go:
+// the spans are the facts and they are already durable, the summary is derived
+// from them, and returning an error here would tell the receiver its batch failed
 // after it had in fact landed — which on the wire path means the sender re-sends
 // it, adding its span count to num_spans a second time (start/end are min/max
 // and absorb the repeat; the count is a sum and does not). Failing soft costs a

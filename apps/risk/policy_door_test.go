@@ -49,7 +49,7 @@ func TestPolicy_HasOneAddress(t *testing.T) {
 	}
 	// The dissolved one takes nothing. Fiber answers an unrouted path 404 and a
 	// routed path with the wrong method 405; either proves it is not this plane's
-	// door, so both are accepted and anything 2xx is the regression.
+	// address, so both are accepted and anything 2xx is the regression.
 	code, body := req(t, app, http.MethodPut, "/v1/risk/state/appetite", orgA, "u_"+orgA, regime)
 	if code == http.StatusOK {
 		t.Fatalf("PUT /v1/risk/state/appetite still writes the regime (%d %s) — the plane has two "+
@@ -204,7 +204,7 @@ func TestPolicy_ArmingIsAnAdminActAndTuningIsNot(t *testing.T) {
 	}
 
 	// AND NOTHING MOVED. A refusal that still recorded the regime would be the
-	// arming arrived at through the door that refused it.
+	// arming arrived at through the endpoint that refused it.
 	if held := readPolicy(t, app, orgA); held.Version != 0 || len(held.History) != 0 {
 		t.Fatalf("the refused arming still minted version %d over %d versions",
 			held.Version, len(held.History))

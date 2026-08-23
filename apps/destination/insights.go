@@ -9,8 +9,8 @@ import (
 
 // insights.go forwards conversions to Hanzo Insights (insights.hanzo.ai). Config: an
 // optional host override; the project write key (api_key, hi_…) is the Secret, resolved
-// from KMS and carried in the BODY, never the URL, a header or a log. The ingest door
-// /v1/e takes the whole batch in one request:
+// from KMS and carried in the BODY, never the URL, a header or a log. The ingest
+// endpoint /v1/e takes the whole batch in one request:
 //
 //	{api_key, batch: [{event, distinct_id, properties, timestamp}, …]}
 //

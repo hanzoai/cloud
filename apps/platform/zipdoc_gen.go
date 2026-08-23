@@ -104,7 +104,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/platform/cd", zip.Doc{
-		Description: "Answers every Application the delivery plane holds.\n\nScoped to the namespaces the caller's own validated org owns: the ROLE opens\nthe door and the tenant boundary is applied inside, so an admin of one org\nnever observes another's.",
+		Description: "Answers every Application the delivery plane holds.\n\nScoped to the namespaces the caller's own validated org owns: the ROLE admits\nthe caller and the tenant boundary is applied inside, so an admin of one org\nnever observes another's.",
 		Fields: map[string]string{
 			"CDApp.automated":    "Automated is whether CD applies git without being asked. It is\ncd.automated in the values file, rendered by the ApplicationSet's\ntemplatePatch — false means the Application reports drift and nothing moves.",
 			"CDApp.health":       "Health is the workload's verdict: Healthy, Progressing, Degraded, Missing.",
@@ -751,7 +751,7 @@ func init() {
 			"runnerBuildReq.ref":          "Ref is the git ref to build when no SHA is given.",
 			"runnerBuildReq.repo":         "Repo is the repository clone URL to build. Required on the image lane.",
 			"runnerBuildReq.sha":          "SHA is the commit to pin; it wins over Ref and Branch.",
-			"runnerBuildReq.tag":          "Tag is the publish path segment, so both front doors write ONE index at ONE\nURL. It defaults to the pinned ref, and must be named explicitly for a\nbranch.",
+			"runnerBuildReq.tag":          "Tag is the publish path segment, so both entry points write ONE index at ONE\nURL. It defaults to the pinned ref, and must be named explicitly for a\nbranch.",
 			"runnerBuildResp.buildJobId":  "BuildJobID is the queued build's id, and what its progress is read by.",
 			"runnerBuildResp.image":       "Image is the ref the image lane will push.",
 			"runnerBuildResp.index":       "Index is the binaries.json URL the artifact lane will publish.",

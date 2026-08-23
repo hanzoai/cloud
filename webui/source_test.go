@@ -32,7 +32,7 @@ func TestBundleWithoutShellIsRefused(t *testing.T) {
 // TestNoBundleIsA503_NotAShell: a process that mounted no console (every per-app
 // child — cloud.Listen explains why one cannot bootstrap it) still owns the
 // terminal handler. It must keep the API namespaces honest and must NOT invent a
-// page: an empty 200 of HTML is the one answer a front door may never give.
+// page: an empty 200 of HTML is the one answer a public endpoint may never give.
 func TestNoBundleIsA503_NotAShell(t *testing.T) {
 	h, err := Handler(nil, testDoor(), nil)
 	if err != nil {

@@ -5,8 +5,8 @@
 // (apps/index), the vector index (apps/knowledge) and the org's own repositories
 // (apps/code) — into one ranked result set.
 //
-// THIS IS THE DOOR. A caller asks here and does not choose a backend. The other
-// three addresses stay exactly what they are — each backend's own surface, with
+// THIS IS THE ENTRY POINT. A caller asks here and does not choose a backend. The
+// other three addresses stay exactly what they are — each backend's own surface, with
 // the shape and the vocabulary that backend's clients need — and none of them is
 // an address a caller should have to pick between. /v1/index speaks the
 // Meilisearch dialect because a Meilisearch client repoints by changing one host;
@@ -24,8 +24,8 @@
 // /v1/search, /v1/index/indexes/:uid/search, /v1/knowledge/search and
 // /v1/code/search holds their answer, and gets a different request shape and a
 // different score scale from each. This package exists to end that and has not
-// yet: it fuses the lexical and vector legs, and the other two doors are still
-// open beside it.
+// yet: it fuses the lexical and vector legs, and the other two endpoints still
+// answer beside it.
 //
 // WHAT BELONGS HERE. A query whose honest answer has a SCORE. A query whose
 // honest answer has a TRUTH VALUE — the definition of a symbol, the callers of a
@@ -91,7 +91,7 @@ const (
 //
 // The modes name RETRIEVAL KINDS, not legs: `text` runs every lexical leg (the
 // index and the code corpus), `semantic` runs the vector one. A caller chooses how
-// to search, never which subsystem answers — which is the whole point of one door.
+// to search, never which subsystem answers — which is the whole point of one address.
 const (
 	ModeAuto     = "auto"
 	ModeText     = "text"
@@ -157,7 +157,7 @@ type Hit struct {
 	// knowledge leg returned, "code" for a span out of one of the org's own
 	// repositories. It is PROVENANCE — read it to say where a hit came from, not
 	// to branch on: the fused ranking is what decides order, and a caller that
-	// filters by corpus wants the backend's own door instead.
+	// filters by corpus wants the backend's own endpoint instead.
 	Corpus string `json:"corpus"`
 	// DocType is the knowledge doctype: kb-page, kb-memory or kb-source from the
 	// semantic leg, and a lexical row's own doctype/type field otherwise. Absent

@@ -100,7 +100,7 @@ func applyCommerceRates(ctx context.Context, doc map[string]any) (priced, added,
 			// Unpublished rows are deliberately withheld from the public
 			// projection — the Enso vision engines are internal and reached only
 			// through the family's vision fallback. Publishing them here would
-			// put them on the price list by the back door.
+			// put them on the price list without the decision to publish them.
 			if e == nil || !e.Published {
 				continue
 			}

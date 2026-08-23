@@ -171,8 +171,9 @@ type state struct{ store *Store }
 var mounted *cloud.Service[state]
 
 // Mount registers the templates surface. templates is a "complex" mount now
-// (a package-global `mounted` so Lookup is ONE door for the projects fork flow,
-// and a shutdown that closes the store), so it builds the Service value directly.
+// (a package-global `mounted` so Lookup is ONE entry point for the projects fork
+// flow, and a shutdown that closes the store), so it builds the Service value
+// directly.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("template.Mount: nil app")
@@ -492,9 +493,9 @@ func Shutdown(_ context.Context) error {
 func List() ([]StarterKit, error) { return catalog() }
 
 // Lookup resolves ONE template for a caller org: that org's OWN private template
-// first, then the public catalog. It is the single door other subsystems (the
-// projects fork flow) read templates through, so "which templates may this org
-// use" is answered in exactly one place. org "" (anonymous/unvalidated) resolves
+// first, then the public catalog. It is the single entry point other subsystems
+// (the projects fork flow) read templates through, so "which templates may this
+// org use" is answered in exactly one place. org "" (anonymous/unvalidated) resolves
 // against the public catalog only.
 func Lookup(ctx context.Context, org, slug string) (StarterKit, bool) {
 	if org != "" && mounted != nil {

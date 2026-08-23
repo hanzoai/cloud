@@ -325,8 +325,8 @@ func TestForeignOrgSeesNothing(t *testing.T) {
 	}
 }
 
-// TestNoPrincipalReachesNothing is the closed door: without the validated header
-// pair there is no tenant, and every leaf refuses.
+// TestNoPrincipalReachesNothing is the fail-closed check: without the validated
+// header pair there is no tenant, and every leaf refuses.
 func TestNoPrincipalReachesNothing(t *testing.T) {
 	f := &fake{}
 	app := mountHTTP(t, newPlane(f))
@@ -352,7 +352,7 @@ func TestNoPrincipalReachesNothing(t *testing.T) {
 	}
 }
 
-// TestTheAnonymousLaneIsNotATenant: the reserved org the event door files
+// TestTheAnonymousLaneIsNotATenant: the reserved org the event endpoint files
 // credential-less writes under has no dataset plane, because a stranger's rows
 // are not an organisation's.
 func TestTheAnonymousLaneIsNotATenant(t *testing.T) {
@@ -461,7 +461,7 @@ func TestNoSubjectStraddlesASplit(t *testing.T) {
 
 // TestAPublishedVersionCannotBeMutated is the immutability proof, at both layers.
 //
-// At the DOOR: a ready version refuses materialisation, and so does a version
+// At the ENDPOINT: a ready version refuses materialisation, and so does a version
 // whose earlier attempt did not complete.
 //
 // At the ENGINE: writing a lower-ranked lifecycle row for a published version —
@@ -480,7 +480,7 @@ func TestAPublishedVersionCannotBeMutated(t *testing.T) {
 		t.Fatalf("want ready version 1, got %d %q", first.Version, first.Status)
 	}
 
-	// The door refuses a second materialisation of a published version.
+	// The endpoint refuses a second materialisation of a published version.
 	code, body := do(t, app, http.MethodPost, "/v1/dataset/d/materialize", "one", nil)
 	if code != http.StatusConflict {
 		t.Fatalf("re-materialising a published version: want 409, got %d (%s)", code, body)
@@ -932,7 +932,7 @@ func TestTheRowCapBindsAndTheVersionSaysSo(t *testing.T) {
 
 // TestLineageIsAdmittedLikeTheScanItIs. Lineage RE-RUNS the census a
 // materialisation is charged for — an exact distinct-count over up to 400 days of
-// one tenant's feature surface — so it is admitted through the same door: gated
+// one tenant's feature surface — so it is admitted by the same rule: gated
 // at the meter, one per tenant, and inside the plane's ceiling.
 //
 // It shipped as a bare GET with none of the three. Any authenticated caller could

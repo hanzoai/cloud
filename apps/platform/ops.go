@@ -129,7 +129,7 @@ func (o ops) request(ctx context.Context) (*zip.Ctx, error) {
 // which never pass through the router a wrapper would have lived on.
 //
 // It returns the request because an admitted op always needs it — the ROLE only
-// opens the door, and the tenant boundary is then applied inside each handler by
+// admits, and the tenant boundary is then applied inside each handler by
 // scopedNamespaces, which reads the caller's own validated org off it.
 // It is a FUNCTION rather than a method because it reads nothing off a receiver —
 // only the context and the scope — and two receivers need it: the fleet board and

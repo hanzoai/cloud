@@ -27,7 +27,7 @@ func main() {
 		Prefixes: manifest.PrefixesFor("tools"),
 		Mount:    tools.Mount,
 		Shutdown: tools.Shutdown,
-		// The per-caller half of the fleet's ONE MCP door. This app's typed ops are
+		// The per-caller half of the fleet's ONE MCP server. This app's typed ops are
 		// projected into mcp.json at build time like every other app's; what cannot
 		// be projected is the caller's OWN tools — its connectors, skills, agents,
 		// and the external servers it enabled — because those are rows. The host

@@ -65,7 +65,7 @@ func TestNoRuntimeDirIsNotAFailure(t *testing.T) {
 }
 
 // The two ears are not the same ear. A socket path must never be one of the
-// TCP addresses, or the senders that cannot share a filesystem lose their door.
+// TCP addresses, or the senders that cannot share a filesystem lose their address.
 func TestTheSocketDoesNotReplaceTheTCPEar(t *testing.T) {
 	for _, tcp := range []string{planeSpanListen, planeLogListen} {
 		if filepath.IsAbs(tcp) {

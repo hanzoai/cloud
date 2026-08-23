@@ -187,7 +187,7 @@ func TestLiveRecordFailsClosedOnBadTenant(t *testing.T) {
 }
 
 // The hourly rollup is fed by the view on insert and is itself org-scoped — the
-// trend plane must not become a cross-tenant back door around the raw table.
+// trend plane must not become a cross-tenant route around the raw table.
 func TestLiveRollupIsFedAndOrgScoped(t *testing.T) {
 	liveDatastore(t)
 	ctx := context.Background()

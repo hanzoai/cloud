@@ -62,10 +62,10 @@ type payerKey struct{}
 
 // PayerOf resolves the payer from whichever side of the client this call arrived on.
 //
-// TWO DOORS, ONE ANSWER, and that is the whole point. A request-bearing call reads
+// TWO PATHS, ONE ANSWER, and that is the whole point. A request-bearing call reads
 // the request; a call with no request at all — the ZAP plane, MCP's tools/call, the
 // fleet-agent path — reads the caller the identity boundary stated on the context.
-// Both resolve through principal's own rules (Payer / PayerFrom), so the two doors
+// Both resolve through principal's own rules (Payer / PayerFrom), so the two paths
 // cannot disagree about who pays.
 //
 // IT USED TO READ ONLY THE FIRST, and that was a free pass. Off the HTTP path the
@@ -258,7 +258,7 @@ func Detach(ctx context.Context, c *zip.Ctx) context.Context {
 	// carries WHO PAYS, and it is parked rather than re-derived because the wallet
 	// rule reads a signed claim off an HTTP header that a stated caller has no field
 	// for. Resolving it here, while the request is still real, is what makes the two
-	// doors agree on the wallet rather than merely on the org.
+	// paths agree on the wallet rather than merely on the org.
 	ctx = context.WithValue(ctx, payerKey{}, PayerOf(c.Context()))
 	return zip.WithCaller(ctx, zip.Caller{
 		Org:       strings.Clone(c.Org()),

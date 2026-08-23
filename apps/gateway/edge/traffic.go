@@ -53,7 +53,7 @@ package edge
 //
 // THE BOUND IS IN BYTES, BECAUSE BYTES ARE WHAT RUNS OUT. A cap on the NUMBER of
 // keys is not a bound when the values behind them can be any size, so every
-// string that can enter an entry is clamped at the door here and every entry has
+// string that can enter an entry is clamped on admission here and every entry has
 // a published worst-case size (callerBytes, hostBytes, tenantBytes). Every
 // admission — a tenant, a caller, an address — charges that size against ONE
 // process budget (MaxBytes), so count × size IS the byte bound and the ceiling in
@@ -140,8 +140,8 @@ const (
 const MaxBytes = 128 << 20
 
 // The published worst-case size of ONE entry, in bytes: the struct, its map
-// overhead, its key, and every string it can hold — all of which are clamped at
-// the door below, which is what makes these ceilings rather than averages.
+// overhead, its key, and every string it can hold — all of which are clamped
+// on admission below, which is what makes these ceilings rather than averages.
 const (
 	callerBytes = 768
 	hostBytes   = 256
@@ -882,8 +882,8 @@ func (t *Traffic) Screen(org, refusal string, now time.Time) {
 
 // Hold pins a verdict to a caller for d, so an attack costs one screen rather
 // than one per request. d is clamped to holdCap: enforcement without a fresh
-// judgement is bounded, always. Every string is clamped at this door, so a held
-// verdict has a published size.
+// judgement is bounded, always. Every string is clamped on admission here, so a
+// held verdict has a published size.
 //
 // A hold on a caller the sensor could not admit is not stored — there is nowhere
 // to put it — and the gate simply asks again next request. Enforcement is never

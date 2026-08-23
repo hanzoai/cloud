@@ -6,11 +6,11 @@ package cloud
 // organization it cannot select: IAM mints such a token no membership set, so the
 // org-switch admits nothing and the effective org is always the application's own
 // owner. That makes it an org-scoped credential in the strongest sense available,
-// and it is what CI presents at the build door.
+// and it is what CI presents at the build endpoint.
 //
 // It is not an admin of anything, and must not become one: authz.Claims.OrgAdmin
 // refuses every application by construction, because an app is issued for a purpose
-// and not handed an org's self-service surface. So a door whose act IS a purpose
+// and not handed an org's self-service surface. So an endpoint whose act IS a purpose
 // needs a different question, and these tests pin the fact it asks — that the
 // boundary mints it from validated claims alone, and that no other principal kind
 // picks it up.
@@ -52,7 +52,7 @@ type observed struct {
 }
 
 // kindProbe runs a request through SanitizeIdentity into a handler that reads the
-// principal accessors every door reads.
+// principal accessors every endpoint reads.
 func kindProbe(t *testing.T, v *identityValidator, mutate func(*http.Request)) observed {
 	t.Helper()
 	var got observed
@@ -96,7 +96,7 @@ func TestAppPrincipalCarriesItsOrgAndNoAdminScope(t *testing.T) {
 		t.Fatalf("org=%q, want hanzo — an application's org is its owner", got.org)
 	}
 	if !got.isApp {
-		t.Fatal("an application acting as itself was not recognised as one, so no door can tell it from an anonymous caller with an org")
+		t.Fatal("an application acting as itself was not recognised as one, so no endpoint can tell it from an anonymous caller with an org")
 	}
 	if got.admin || got.orgAdmin {
 		t.Fatalf("an application holds NO admin scope (super=%v org=%v)", got.admin, got.orgAdmin)

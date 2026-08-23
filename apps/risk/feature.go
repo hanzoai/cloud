@@ -1,9 +1,9 @@
 package risk
 
-// feature.go — THE ONLY DOOR to the event surface, and the place the tenant
+// feature.go — THE ONLY ENTRY POINT to the event surface, and the place the tenant
 // boundary is decided.
 //
-// Every org's events already land in one columnar store through one ingest door
+// Every org's events already land in one columnar store through one ingest endpoint
 // (POST /v1/event → the bus → one durable consumer per table): product events in
 // event.fact under signal='act', captured failures in event.error, and every
 // priced inference in hanzo.cloud_usage. This file turns that stream into a
@@ -31,7 +31,7 @@ package risk
 //     uncomputable rather than merely disallowed.
 //
 // The SOURCE planes are read with the BARE org, because that is the column they
-// carry: event.fact and hanzo.cloud_usage were written by the ingest door long
+// carry: event.fact and hanzo.cloud_usage were written by the ingest endpoint long
 // before this plane existed and their tenant column is the IAM org slug. The
 // qualification is applied on the way IN — the rollup writes the qualified key
 // into hanzo.risk_feature — so this plane's own index is qualified end to end and
@@ -79,7 +79,7 @@ var (
 // the organisation it names.
 const sep = "/"
 
-// public is the reserved tenant the ingest door files CREDENTIAL-LESS writes
+// public is the reserved tenant the ingest endpoint files CREDENTIAL-LESS writes
 // under. It is not an organisation: nobody authenticated for it, its rows are a
 // projection of whatever an unauthenticated stranger sent, and admitting it as a
 // tenant would let that stranger move a real org's — or the network's —
@@ -168,7 +168,7 @@ func (t tenant) org() string {
 // asking", refused in the fleet's one envelope. It is the same fact
 // [cloud.ResourceMeter.Gate] answers with when it is handed an empty org, and this
 // package must not hold a second spelling of it: the ops that price first reach
-// the money door and the ops that resolve the tenant first — [ops.search] — reach
+// the meter and the ops that resolve the tenant first — [ops.search] — reach
 // here, so two spellings meant ONE surface answering ONE refusal in two shapes
 // depending on which operation was called. Measured: eight ops nested,
 // /v1/risk/search flat.

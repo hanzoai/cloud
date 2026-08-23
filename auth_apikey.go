@@ -32,10 +32,10 @@ type keyResolver interface {
 	resolve(ctx context.Context, key string) *idClaims
 }
 
-// The two key doors, named once each. Both are under `keys` and the address says
-// what comes BACK — an org from a publishable key, a principal from a secret one
-// — which is the only thing separating them. Spelling a path inline at its call
-// site is how two callers of one door come to disagree about where it is.
+// The two key endpoints, named once each. Both are under `keys` and the address
+// says what comes BACK — an org from a publishable key, a principal from a secret
+// one — which is the only thing separating them. Spelling a path inline at its
+// call site is how two callers of one endpoint come to disagree about where it is.
 const (
 	iamKeyOrg       = "/v1/iam/keys/org"
 	iamKeyPrincipal = "/v1/iam/keys/principal"
@@ -102,21 +102,21 @@ const maxKeyOrgLen = 128
 
 // OrgForKey resolves an opaque Hanzo API key (pk-/sk-) to the org it belongs
 // to — the SAME owner org SanitizeIdentity mints when that key arrives as a bearer
-// — and is the exported door a keyed, bearer-less SDK path uses to attribute a
-// project key to a tenant.
+// — and is the exported entry point a keyed, bearer-less SDK path uses to
+// attribute a project key to a tenant.
 //
-// TWO doors in IAM, because a publishable key and a secret key are resolved by
+// TWO endpoints in IAM, because a publishable key and a secret key are resolved by
 // different questions and the answers must not be interchangeable:
 //
 //   - a SECRET key (sk-) asks WHO, and keys/principal answers with the
 //     principal. IAM refuses a pk- there BY DESIGN (store.UserByAccessKey), which
-//     is right and was also the bug: cloud sent every prefix down this one door, so
-//     a publishable key resolved to nothing and the ingest path it exists for could
-//     never attribute a beacon. A publishable key that resolves to nobody is a
-//     publishable key that does not work.
+//     is right and was also the bug: cloud sent every prefix to this one endpoint,
+//     so a publishable key resolved to nothing and the ingest path it exists for
+//     could never attribute a beacon. A publishable key that resolves to nobody is
+//     a publishable key that does not work.
 //   - a PUBLISHABLE key (pk-) asks WHICH ORG, and keys/org answers with the org
 //     and nothing else — no user, no email, no admin bit. That is the property that
-//     makes it safe to ship in client JS, so it is a separate door with its own
+//     makes it safe to ship in client JS, so it is a separate endpoint with its own
 //     narrower capability (CapPublishableResolve), not a flag on the first.
 //
 // FAILS CLOSED: ("", false) for a non-key-shaped string, an unknown/unresolvable
@@ -173,9 +173,9 @@ func (k *iamKeys) resolve(ctx context.Context, key string) *idClaims {
 // else. "" for an unknown/expired/non-publishable key or an unconfigured resolver.
 //
 // It shares this resolver's credential and cache shape but NOT its cache: the two
-// doors answer different questions, and one map keyed only on the key string would
-// let a pk- entry read as a principal or a sk- entry read as a bare org. The values
-// are different types precisely so they cannot be confused.
+// endpoints answer different questions, and one map keyed only on the key string
+// would let a pk- entry read as a principal or a sk- entry read as a bare org. The
+// values are different types precisely so they cannot be confused.
 func (k *iamKeys) resolveOrg(ctx context.Context, key string) string {
 	if k.auth == "" || k.base == "" || key == "" {
 		return ""

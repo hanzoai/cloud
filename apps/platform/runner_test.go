@@ -308,7 +308,7 @@ func TestRunnerBuild_StatedOrgNamesNothing(t *testing.T) {
 // by construction, because an app is issued for a purpose and not handed an org's
 // self-service surface — so asking for the admin bit asked a question no
 // non-interactive credential can answer, and the only thing left that reached this
-// door was the fabric's shared token, which names no org at all.
+// endpoint was the fabric's shared token, which names no org at all.
 func TestRunnerBuild_AppIdentityBuildsItsOwnOrg(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app, store := runnerAppStore(t)
@@ -330,7 +330,7 @@ func TestRunnerBuild_AppIdentityBuildsItsOwnOrg(t *testing.T) {
 // And it reaches ITS OWN namespace only. The image is on a registry the fabric
 // owns, so the outer allowlist admits it; the org binding is what refuses it, and
 // the message says which — otherwise this test would pass on the old code for the
-// wrong reason (an app identity used to be refused at the door as "not an admin",
+// wrong reason (an app identity used to be refused at the endpoint as "not an admin",
 // before any registry decision was reached).
 func TestRunnerBuild_AppIdentityCannotCrossBrands(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
@@ -402,7 +402,7 @@ func TestRunnerBuild_FabricTokenSpansOwnedRegistries(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
 	app := runnerApp(t)
 	// One image per owned namespace, and NONE of them the cloud image: cloud is
-	// versioned by its own release lane and refused at this door regardless of
+	// versioned by its own release lane and refused at this endpoint regardless of
 	// who asks, so naming it here would test the exclusion rather than the span.
 	for _, image := range []string{"ghcr.io/hanzoai/app:v1", "ghcr.io/luxfi/node:v1", "ghcr.io/zooai/app:v1"} {
 		code, body := postRunner(t, app, testBuildTok, map[string]any{

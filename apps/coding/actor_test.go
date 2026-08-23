@@ -24,7 +24,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// asCaller builds the context a door hands Start. Only the SUBJECT matters now —
+// asCaller builds the context an endpoint hands Start. Only the SUBJECT matters now —
 // the address is read from the identity store, not from the request.
 func asCaller(subject string) context.Context {
 	return zip.WithCaller(context.Background(), zip.Caller{Org: "hanzo", User: subject})

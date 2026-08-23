@@ -34,7 +34,7 @@ import (
 )
 
 // mountPublished is the WHOLE surface this app publishes, which mountApp is not:
-// routes() registers the typed ops, and Mount registers one more door beside them
+// routes() registers the typed ops, and Mount registers one more route beside them
 // — the forge's push receiver, a RAW handler because the HMAC covers the bytes and
 // has to run before the decode. It publishes two shapes all the same, so a gate
 // that read only the typed half would pass while they went unread.

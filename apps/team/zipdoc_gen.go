@@ -31,10 +31,10 @@ func init() {
 		Description: "Verifies the state nonce against the flow cookie, exchanges the\nIAM code for the user, ensures the account has a workspace, mints the account\ntoken, and bounces the browser back to the SPA with ?token= (which Auth reads\nvia getLoginInfoFromQuery).",
 	})
 	zip.Describe("GET /v1/team/account/providers", zip.Doc{
-		Description: "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
+		Description: "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that provider accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
 		Fields: map[string]string{
 			"ProviderInfo.displayName": "DisplayName is the human label for the sign-in button; this deployment\nsends \"Hanzo\". Omitted from the body when empty.",
-			"ProviderInfo.name":        "Name is the provider id, and it is the value that goes back in the URL to\nstart a login: GET /v1/team/account/auth/{provider}. This deployment\nsurfaces exactly one, \"openid\" — the hanzo.id door.",
+			"ProviderInfo.name":        "Name is the provider id, and it is the value that goes back in the URL to\nstart a login: GET /v1/team/account/auth/{provider}. This deployment\nsurfaces exactly one, \"openid\" — the hanzo.id provider.",
 		},
 		Response: json.RawMessage(`[{"name":"openid","displayName":"Hanzo"}]`),
 	})
