@@ -21,7 +21,7 @@ package risk
 // process per app, so the write core is in another pid — the shape risk_rpc.go's
 // own header names twice (cloud.SetRiskScorer, cloud.SetObsErrorIngest) and the
 // answer is the one both landed on: a plane op on the owning app's socket
-// (plane.EventCapture, apps/analytics/event_rpc.go). No new transport, no HTTP
+// (plane.EventCapture, apps/event/event_rpc.go). No new transport, no HTTP
 // hop through the fleet's front door, no second gate.
 //
 // THREE RULES, and each is the difference between telemetry and a liability:

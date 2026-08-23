@@ -10,7 +10,7 @@ import (
 )
 
 // campaign_paid_test.go is the END-TO-END proof of the paid GTM channel: the SAME
-// adapter plugin/campaigns/clients.go registers (campaign.Plan → ad.PaidPlan → LaunchPaid)
+// adapter plugin/campaign/clients.go registers (campaign.Plan → ad.PaidPlan → LaunchPaid)
 // driven through the campaign.Channel interface, so the whole chain
 // campaign → ads → integrations.TokenFor → provider is exercised against an
 // httptest Meta stub. It lives in package ads because only this package can point

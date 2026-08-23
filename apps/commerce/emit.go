@@ -22,11 +22,11 @@ package commerce
 // # It is the event plane's door, not a second one
 //
 // The call is [eventpeer.EventCapture] over the peer socket, which is the
-// SAME write core POST /v1/event reaches (apps/analytics/event_rpc.go). One
+// SAME write core POST /v1/event reaches (apps/event/event_rpc.go). One
 // admission, one normalizer, one storage projection, one fan-out — so a purchase
 // this process states and a purchase a browser posts are the same kind of thing,
 // counted once by the same lens and translated once by the same translator
-// (apps/destinations/translate.go maps `order_completed` onto the normalized
+// (apps/destination/translate.go maps `order_completed` onto the normalized
 // Purchase every adapter renders). A private path from commerce to the ad
 // platforms would be a second answer to "what is a sale", and the two would
 // disagree the first time either changed.
@@ -164,7 +164,7 @@ func purchase(p payment, ref string) *plane.EventIn {
 	// sale worth nothing, which a platform averages into its bidding, where an absent
 	// one is a sale of unstated size; and an empty currency restated here would be a
 	// second place deciding what empty means, when the translator already reads it as
-	// USD (apps/destinations/translate.go).
+	// USD (apps/destination/translate.go).
 	attrs := []plane.Signal{{Name: "event_id", Value: ref}}
 	if p.cents > 0 {
 		attrs = append(attrs, plane.Signal{

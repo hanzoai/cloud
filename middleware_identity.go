@@ -366,7 +366,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 				// IT USED TO READ `owner == adminOrg`, i.e. claims.homeOrg(), i.e.
 				// Claims.Orgs[0].Org — a POSITIONAL read. IAM's MemberOrgRefs always writes
 				// the user's OWN org at index 0 and appends every granted membership after
-				// it (iam internal/store/membership.go), so that test could only ever be
+				// it (iam internal/org/membership.go), so that test could only ever be
 				// true for someone whose USER ROW lives in the admin org. An operator
 				// provisioned into a brand org and then granted admin-org membership — the
 				// deliberate, signed, revocable way operators are actually made — was
