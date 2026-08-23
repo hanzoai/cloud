@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
@@ -315,15 +316,15 @@ func TestSanitizeWhitespaceInjective(t *testing.T) {
 }
 
 // TestOrgHasUnsafeRuneMatchesSanitize proves the middleware-level predicate
-// (cloud.OrgHasUnsafeRune, the trust boundary that gates claims.Owner before any
+// (principal.OrgHasUnsafeRune, the trust boundary that gates claims.Owner before any
 // header is set) and the slug normalizer agree: exactly the runes the middleware
 // refuses are the ones namespace.Sanitize refuses, so the two layers cannot drift and
 // leave a fold path open.
 func TestOrgHasUnsafeRuneMatchesSanitize(t *testing.T) {
 	unsafe := []string{"acme ", " acme", "ac me", "acme\t", "acme ", "acme\u200b", "acme\ufeff", "\n"}
 	for _, s := range unsafe {
-		if !cloud.OrgHasUnsafeRune(s) {
-			t.Errorf("cloud.OrgHasUnsafeRune(%q) = false, want true", s)
+		if !principal.OrgHasUnsafeRune(s) {
+			t.Errorf("principal.OrgHasUnsafeRune(%q) = false, want true", s)
 		}
 		if namespace.Sanitize(s) != "" {
 			t.Errorf("namespace.Sanitize(%q) accepted an unsafe-rune org", s)
@@ -331,8 +332,8 @@ func TestOrgHasUnsafeRuneMatchesSanitize(t *testing.T) {
 	}
 	safe := []string{"acme", "Acme", "team.a", "a-b-c", "org123", "café", "emoji😀"}
 	for _, s := range safe {
-		if cloud.OrgHasUnsafeRune(s) {
-			t.Errorf("cloud.OrgHasUnsafeRune(%q) = true, want false (visible identifier)", s)
+		if principal.OrgHasUnsafeRune(s) {
+			t.Errorf("principal.OrgHasUnsafeRune(%q) = true, want false (visible identifier)", s)
 		}
 		if namespace.Sanitize(s) == "" {
 			t.Errorf("namespace.Sanitize(%q) refused a safe org", s)

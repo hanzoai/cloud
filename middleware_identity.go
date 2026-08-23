@@ -46,34 +46,8 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/brand"
-	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
-
-// OrgHasUnsafeRune reports whether s carries any whitespace, control, or
-// zero-width/format rune — the class that defeats the injectivity of the
-// org→namespace map. strings.TrimSpace (and fasthttp's own header-value OWS
-// trimming) silently drop such runes at the edges, so two DISTINCT IAM org
-// names ("acme" vs "acme ", or an NBSP/ZWSP variant) would collapse onto ONE
-// namespace / image ref — a cross-org fold. The identity trust boundary
-// REFUSES to grant org-scoping from an org bearing one of these (fail secure)
-// instead of folding it, so distinct raw names never collide and no namespace
-// is ever derived from an invisible-character identifier.
-//
-// Case / '-' / '.' / other visible punctuation are deliberately NOT unsafe:
-// those fold INJECTIVELY through the slugger's hash. Only the invisible /
-// edge-trimmable class — which no injective fold can survive once transport
-// strips it — is rejected. A legitimate IAM org slug never contains such a
-// rune, so no real caller is affected.
-//
-// It is DERIVED from namespace.Sanitize rather than re-deciding the rune class,
-// because the identity boundary and the slugger have to refuse exactly the same
-// names: this predicate is the reason a request gets no org-scoping, and
-// Sanitize's "" is the reason that org could not have named a database anyway.
-// Two spellings of one rule is a rule that eventually disagrees with itself.
-// The empty org is not "unsafe" — it names nothing, which callers already
-// handle — so it is excluded, exactly as it was when the loop lived here.
-func OrgHasUnsafeRune(s string) bool { return s != "" && namespace.Sanitize(s) == "" }
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access
 // token (mirrors edge.Cookie). hanzo_iam_token is the cookie the ai
@@ -265,7 +239,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 		// trimming would collapse "acme " onto "acme", and the injective org
 		// boundary must never fold two distinct org identifiers into one.
 		cliOrg := string(req.Header.Peek("X-Org-Id"))
-		if OrgHasUnsafeRune(cliOrg) {
+		if principal.OrgHasUnsafeRune(cliOrg) {
 			cliOrg = ""
 		}
 		cliApp := strings.TrimSpace(string(req.Header.Peek("X-App-Id")))
@@ -286,7 +260,7 @@ func SanitizeIdentity(v *identityValidator) zip.Handler {
 			// below — the billing anchor, the SuperAdmin predicate, the effective org —
 			// reads this ONE value, so both defects close together.
 			owner := claims.homeOrg()
-			if OrgHasUnsafeRune(owner) {
+			if principal.OrgHasUnsafeRune(owner) {
 				owner = ""
 			}
 			// FAIL CLOSED on a token that names no home org (no `orgs` claim: minted
