@@ -1960,11 +1960,11 @@
       "sha256": "5e0f4e9e4471c99d2b765a725a17f0818a502a330f60c57d2f60c85f92895384"
     },
     {
-      "description": "Read exec files: List the files in an execution session.",
+      "description": "Read exec files: Files lists what a session holds..",
       "name": "exec_files",
       "path": "exec_files/SKILL.md",
       "service": "exec",
-      "sha256": "a1470e7d3d65e29ed85f0bbf0002567d163465d163883bb9f5d01e48cdbe129d"
+      "sha256": "e4f88af88d119894afe3816b4b24ee9f6c90f06cdb679d3051e420326540e881"
     },
     {
       "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",

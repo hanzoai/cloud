@@ -7,9 +7,11 @@ package visor
 
 import (
 	"encoding/json"
+	"github.com/hanzoai/cloud/openapi"
 	"maps"
 	"net/http/httptest"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -184,5 +186,85 @@ func TestMCPPublishesTheSurface(t *testing.T) {
 	// The raw routes are absent here too — same registry, same consequence.
 	if strings.Contains(tools, "launchBot") {
 		t.Errorf("launchBot is raw by design but appears as an MCP tool")
+	}
+}
+
+// untypedByDesign is the CLOSED list of visor addresses that stay raw handlers.
+//
+// The three refusals were already written at their registrations, and
+// TestOpenAPICarriesTheSurface already asserted that each is ABSENT from the
+// document. What neither did is SUM: a fourth raw route added tomorrow is absent
+// from the document too, so the existing check passes for it, and nothing here
+// notices. openapi/untyped.json catches that fleet-wide by count — and a count is
+// flat when one route converts while another arrives raw in the same change, which
+// is precisely what this catches.
+//
+// It said FIVE until the two compute-catalog reads became typed ops. Their reason,
+// "the shape is Visor's and not this package's", is a true fact that argues against
+// MODELLING upstream's shape and says nothing about publishing the address.
+var untypedByDesign = map[string]string{
+	"POST /v1/visor/machines": "TWO success shapes on one address: 201 with the machine, or — with " +
+		"`dryRun: true` — 200 with the upstream PRICE QUOTE passed through verbatim, nothing launched " +
+		"and nothing spent. An op declares one Out, and this one SPENDS REAL MONEY, so collapsing the " +
+		"two would mean a caller could not tell a quote from a launch by its shape.",
+	"POST /v1/visor/compute/bots/launch": "the same dryRun quote-or-launch split as the machine " +
+		"launch, and the same money.",
+	"POST /v1/visor/compute/bots/{id}/{action}": "a verb dispatch that streams the agent's answer " +
+		"back VERBATIM; a typed op answers one marshalled value.",
+}
+
+// TestEveryRouteIsTypedOrNamed is the term the list above was missing.
+func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+	app := projectionApp(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "visor", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("typed: %v", err)
+	}
+
+	served, typed := map[string]bool{}, map[string]bool{}
+	for path, item := range doc.Paths {
+		if !strings.HasPrefix(path, "/v1/visor") {
+			continue
+		}
+		for method := range item {
+			served[strings.ToUpper(method)+" "+path] = true
+		}
+	}
+	for key := range reg.Ops {
+		if _, path, ok := strings.Cut(key, " "); ok && strings.HasPrefix(path, "/v1/visor") {
+			typed[key] = true
+		}
+	}
+
+	var untyped []string
+	for key := range served {
+		if !typed[key] {
+			if _, named := untypedByDesign[key]; !named {
+				untyped = append(untyped, key)
+			}
+		}
+	}
+	if len(untyped) > 0 {
+		sort.Strings(untyped)
+		t.Errorf("served but neither typed nor named: %s\n"+
+			"A raw route publishes no schema, no MCP tool, no CLI command and no typed SDK method. "+
+			"Convert it, or name it in untypedByDesign with the wire fact that keeps it raw.",
+			strings.Join(untyped, ", "))
+	}
+	for key := range untypedByDesign {
+		if !served[key] {
+			t.Errorf("untypedByDesign names %q, which visor no longer serves", key)
+		}
+		if typed[key] {
+			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
+		}
+	}
+	if got, want := len(typed)+len(untypedByDesign), len(served); got != want {
+		t.Errorf("the two ledgers must sum to the served surface: typed %d + named %d = %d, served %d",
+			len(typed), len(untypedByDesign), got, want)
 	}
 }
