@@ -214,8 +214,8 @@ func TestAPropertyAndAnEdgeAreDifferentAssertions(t *testing.T) {
 // deciding on this needs to see that the question was contested.
 func TestTheDoorAnswersWhatIsInForceAndWhatDisagreed(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/svc/api", "owner", "acme/team/core", true)
-	assertFact(t, app, "acme/svc/api", "owner", "acme/team/platform", true)
+	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
+	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/platform", true)
 
 	env := ask(t, app, `{
 		entity(key: "acme/svc/api") {
@@ -284,8 +284,8 @@ func TestTheDoorAnswersWhatIsInForceAndWhatDisagreed(t *testing.T) {
 // exact order that settled the tie, from the same door that answered.
 func TestTheVocabularyPublishesTheRuleItAdjudicatesBy(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/svc/api", "owner", "acme/team/core", true)
-	assertFact(t, app, "acme/svc/api", "runsOn", "acme/cluster/a", true)
+	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
+	assertFact(t, app, "", "acme/svc/api", "runsOn", "acme/cluster/a", true)
 
 	env := ask(t, app, `{ vocabulary { relations rule bound } }`)
 	v := env["data"].(map[string]any)["vocabulary"].(map[string]any)
