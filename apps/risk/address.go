@@ -162,7 +162,7 @@ func address(f family, s anomaly.Snapshot, warmed time.Time) string {
 // addressBytes is the width of a rendered address: SHA-256 in hex.
 const addressBytes = sha256.Size * 2
 
-// admitAddress is the ONE door a caller-supplied address comes through: it is the
+// admitAddress is the ONE check a caller-supplied address comes through: it is the
 // exact width of a rendered SHA-256 and it is lower-case hex, or it is refused.
 //
 // It is a BOUND before it is a validation. Without it an address is an unbounded

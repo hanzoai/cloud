@@ -32,7 +32,7 @@ import (
 //	present but EMPTY   → the host stamped nothing (its ClientIP answered "")
 //	ABSENT              → the value never crossed: not stamped, or stripped
 //
-// The mount is zip.Load — the same door the host uses for a real plugin — over a
+// The mount is zip.Load — the same path the host uses for a real plugin — over a
 // real unix socket, because the rung under test is TRANSIT between two endpoints
 // that are each individually correct.
 func TestWhatTheChildActuallyReceives(t *testing.T) {
@@ -88,7 +88,7 @@ func TestWhatTheChildActuallyReceives(t *testing.T) {
 		return c.Continue()
 	}))
 
-	// zip.Load with Addr: the REAL plugin mount door, pointed at an already-running
+	// zip.Load with Addr: the REAL plugin mount path, pointed at an already-running
 	// instance so nothing is spawned. This is the hop that ships.
 	leaf, err := zip.Load(zip.Plugin{Name: "probe", Addr: sock}, "/v1")
 	if err != nil {

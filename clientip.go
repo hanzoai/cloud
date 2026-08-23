@@ -19,8 +19,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The caller's address lives in package clientip, and this is the door the rest of
-// the fleet already comes through.
+// The caller's address lives in package clientip, and this is the entry point the
+// rest of the fleet already comes through.
 //
 // IT MOVED SO THE HOST COULD REACH IT. cmd/cloud deliberately imports nothing from
 // apps/, and the host-is-light gate enforces it — importing this package for one

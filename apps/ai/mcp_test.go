@@ -2,18 +2,18 @@
 
 package ai
 
-// mcp_test.go drives ai's REAL door, never a description of it.
+// mcp_test.go drives ai's REAL MCP server, never a description of it.
 //
 // It used to compose the WHOLE fleet here — every manifest row, loaded as a
 // remote mount carrying that app's committed plugin/<app>/mcp.json — and assert
-// the union. That composition is gone with the artifact: the fleet's door is no
-// longer the concatenation of files this package can read, it is what the
+// the union. That composition is gone with the artifact: the fleet's MCP server
+// is no longer the concatenation of files this package can read, it is what the
 // subsystems answer when the host asks them, and the only honest place to test
 // that is against subsystems that are RUNNING (fleet/mcp_test.go, which starts
 // real children on real sockets and goes red on a short list).
 //
-// What remains here is what belongs here: ai's own op, on ai's own door, and the
-// property that a tool call IS an API call — the same gate, the same words, both
+// What remains here is what belongs here: ai's own op, on ai's own MCP server, and
+// the property that a tool call IS an API call — the same gate, the same words, both
 // projections. Every assertion reads a BODY. A tools/list that 200s with an empty
 // array is the exact failure this fleet has shipped, and a status code cannot
 // tell it from a full one.
@@ -36,11 +36,11 @@ import (
 )
 
 // door is the framework's default MCP path. This file asserts what is BEHIND the
-// door, never where it is: the public address is one value the composition root
+// path, never where it is: the public address is one value the composition root
 // owns, and pinning it here would be a second place for it to be written down.
 const door = "/mcp"
 
-// served is ai's own op, mounted on its own door, with the identity boundary's
+// served is ai's own op, mounted on its own MCP server, with the identity boundary's
 // carrier installed exactly as cloud.Listen installs it.
 func served(t *testing.T) *zip.App {
 	t.Helper()
@@ -50,7 +50,7 @@ func served(t *testing.T) *zip.App {
 	return app
 }
 
-// rpc posts one JSON-RPC message to the door, optionally as a validated caller
+// rpc posts one JSON-RPC message to the MCP server, optionally as a validated caller
 // (the headers SanitizeIdentity mints), and returns the body.
 func rpc(t *testing.T, app *zip.App, msg, user, org string) string {
 	t.Helper()
@@ -69,14 +69,14 @@ func rpc(t *testing.T, app *zip.App, msg, user, org string) string {
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("POST %s answered %d — the door must answer JSON-RPC, body: %s",
+		t.Fatalf("POST %s answered %d — the MCP server must answer JSON-RPC, body: %s",
 			door, resp.StatusCode, trunc(string(b)))
 	}
 	return string(b)
 }
 
-// list asks the door for its tools and returns their names, in the order the
-// door served them.
+// list asks the MCP server for its tools and returns their names, in the order
+// the MCP server served them.
 func list(t *testing.T, app *zip.App) []string {
 	t.Helper()
 	body := rpc(t, app, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "", "")
@@ -154,7 +154,7 @@ func call(t *testing.T, app *zip.App, name, user string) (string, bool) {
 		t.Fatalf("tools/call is not an MCP envelope: %v\nbody: %s", err, trunc(body))
 	}
 	if env.Error != nil {
-		t.Fatalf("the door refused to dispatch %q: %s", name, env.Error.Message)
+		t.Fatalf("the MCP server refused to dispatch %q: %s", name, env.Error.Message)
 	}
 	if len(env.Result.Content) == 0 {
 		t.Fatalf("tools/call %q returned no content: %s", name, trunc(body))
@@ -207,7 +207,7 @@ func TestAToolCarriesItsOpsGateExactly(t *testing.T) {
 	if len(got.Apps) != len(manifest.Apps) {
 		t.Fatalf("the inventory names %d subsystems; the manifest holds %d", len(got.Apps), len(manifest.Apps))
 	}
-	// This process registered ai's op and nothing else, so its door serves
+	// This process registered ai's op and nothing else, so its MCP server serves
 	// exactly what it declared — and says so.
 	if got.Tools != 1 {
 		t.Errorf("this process registered 1 typed op; it reports tools=%d", got.Tools)
@@ -232,16 +232,16 @@ func TestAToolCarriesItsOpsGateExactly(t *testing.T) {
 // TestTheInventoryReadsTheLiveRegistry: the anti-green-surface gate, at the only
 // scope a subsystem can honestly answer for.
 //
-// The op must report what THIS PROCESS's door actually carries, so registering a
-// second typed op has to move the number. If it does not, the op is reading
-// something other than the registry — which is precisely the instrument this
+// The op must report what THIS PROCESS's MCP server actually carries, so
+// registering a second typed op has to move the number. If it does not, the op is
+// reading something other than the registry — which is precisely the instrument this
 // fleet keeps mistaking for the mechanism, and the shape of the artifact that was
 // just deleted.
 func TestTheInventoryReadsTheLiveRegistry(t *testing.T) {
 	app := served(t)
 	one := surface(app, true)
 	if got := len(list(t, app)); one.Tools != got {
-		t.Fatalf("the inventory says %d tools; the door serves %d", one.Tools, got)
+		t.Fatalf("the inventory says %d tools; the MCP server serves %d", one.Tools, got)
 	}
 	if len(one.Names) != one.Tools {
 		t.Fatalf("names=%v does not match tools=%d", one.Names, one.Tools)
@@ -268,7 +268,7 @@ func TestTheInventoryReadsTheLiveRegistry(t *testing.T) {
 func TestAiIsOnItsOwnDoor(t *testing.T) {
 	names := list(t, served(t))
 	if len(names) != 1 || names[0] != "aiMCPTools" {
-		t.Fatalf("ai's door carries %v, want exactly [aiMCPTools]", names)
+		t.Fatalf("ai's MCP server carries %v, want exactly [aiMCPTools]", names)
 	}
 	// The namespace scheme: a hand-written operationId carries its subsystem, so
 	// it cannot meet another subsystem's.

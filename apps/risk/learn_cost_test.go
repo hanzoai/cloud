@@ -139,8 +139,8 @@ func BenchmarkLearn(b *testing.B) {
 // its own retention bound.
 //
 // WHY IT IS MEASURED AND NOT ASSUMED. [plane.prior] is on the decide path, and
-// the credit door that calls it decides inside a 150ms budget. The pace half is
-// three ring reads and is a fixed number of adds; the fan-out half is TWO SQL
+// the credit endpoint that calls it decides inside a 150ms budget. The pace half
+// is three ring reads and is a fixed number of adds; the fan-out half is TWO SQL
 // COUNTS, and the row a `device` predicate selects on is not in the record's
 // covering index — so the read is a range scan of the tenant's own recent rows,
 // and how many that is depends on how full the record is.
@@ -156,7 +156,7 @@ func BenchmarkLearn(b *testing.B) {
 //
 //	28,556 rows (the ceiling)    6.3 ms/op    2,976 B    58 allocs
 //
-// Six milliseconds is 4% of the door's budget for the WORST record the bound
+// Six milliseconds is 4% of the endpoint's budget for the WORST record the bound
 // admits, and it is why there is no second index: [maxRowBytes] is measured
 // against a real row ([TestBounds_ArePublishedInTheDimensionThatBinds]) and
 // covers ONE index, so buying this read a covering index would spend the record's

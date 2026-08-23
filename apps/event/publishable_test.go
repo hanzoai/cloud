@@ -19,7 +19,7 @@ import (
 //
 // The prefix is asserted against the ONE authority rather than a literal, and the
 // safety property it depends on is asserted with it: a pk- must resolve (so the
-// ingest door can attribute a beacon) and must NOT authenticate (so a key shipped
+// ingest endpoint can attribute a beacon) and must NOT authenticate (so a key shipped
 // in a browser bundle is not a reading credential).
 func TestPublishablePrefixIsTheIAMFamily(t *testing.T) {
 	if publishablePrefix != cloud.PublishablePrefix {

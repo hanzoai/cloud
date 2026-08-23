@@ -55,7 +55,7 @@ package coding
 // # The five ops are the whole vocabulary
 //
 // lease → run → end, with read/write for files. They are the same ops the fleet
-// door now publishes to agents (lease_sandbox, run_in_sandbox, …), so a human
+// MCP server now publishes to agents (lease_sandbox, run_in_sandbox, …), so a human
 // driving a sandbox from chat and this Runner driving one for a coding task are
 // using ONE surface. A second private path into a sandbox is the duplication
 // this file exists to avoid.
@@ -161,7 +161,7 @@ func argvFor(tool, prompt string) []string {
 // every other set in this package is: `default:` in the two switches above
 // reads dev, so an unknown name did not fail — it silently ran a DIFFERENT
 // harness than the one that was asked for, and answered as though it had run
-// the right one. A typo is refused at the door instead.
+// the right one. A typo is refused by the check instead.
 var tools = map[string]bool{"dev": true, "claude": true, "codex": true, "python": true, "node": true}
 
 // CheckTool refuses a harness we do not carry. Empty is not a request, so it is

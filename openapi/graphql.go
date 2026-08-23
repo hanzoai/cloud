@@ -541,7 +541,7 @@ func sanitize(s string) string {
 // It is derived from the SAME document [GraphQL] renders, at the same time, so
 // the schema a caller reads and the dispatch a caller gets cannot describe
 // different surfaces. A field published without a way to send it is the failure
-// this whole door exists to avoid.
+// this whole endpoint exists to avoid.
 type Field struct {
 	// App is the subsystem that answers, as the manifest names it.
 	App string

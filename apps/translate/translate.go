@@ -47,11 +47,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The PROSE for the translate door. Its two review-lane siblings are typed ops whose
-// descriptions zipdoc lifts from their doc comments; this one is raw by construction
-// (serve, below, names the blocker), so there is no comment to lift and the
-// subsystem's ONLY product route was reaching the document — and every SDK and CLI
-// generated from it — as an operationId and nothing else.
+// The PROSE for the translate endpoint. Its two review-lane siblings are typed ops
+// whose descriptions zipdoc lifts from their doc comments; this one is raw by
+// construction (serve, below, names the blocker), so there is no comment to lift
+// and the subsystem's ONLY product route was reaching the document — and every SDK
+// and CLI generated from it — as an operationId and nothing else.
 //
 // Declared through the registry openapi.Register shares, so it renders only while the
 // router actually serves the route.
@@ -152,7 +152,7 @@ func (s *state) engine(t Tier) Engine {
 var mounted *state
 
 // storeFor is the ONE way this package reaches a store: it names the database
-// through cloud.OrgNamespace — the single door a validated org walks through —
+// through cloud.OrgNamespace — the single entry point for a validated org —
 // and asks the registry for that name. Nothing else here resolves a store, so
 // "which file does this request touch" has one answer from one input.
 //

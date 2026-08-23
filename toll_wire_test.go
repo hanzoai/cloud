@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-// The four-door proof in toll_test.go builds its OWN app and calls
+// The four-endpoint proof in toll_test.go builds its OWN app and calls
 // app.Authorize(Toll(...)) itself. That proves Toll charges correctly wherever it
 // is installed. It says nothing about whether the SERVER installs it — delete the
 // two lines in serve.go and every one of those subtests still passes, measured.
 //
 // Two claims, and only one of them had a gate:
 //
-//	Toll charges once on every door        toll_test.go       proven
+//	Toll charges once on every endpoint    toll_test.go       proven
 //	the server actually mounts Toll        nothing            <- this file
 //
 // That gap is the shape of the failure this whole client exists to stop. Money was

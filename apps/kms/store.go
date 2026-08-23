@@ -94,7 +94,7 @@ func fileOrg(path string) (org string, facade bool) {
 }
 
 // namespaceFor names the database a secret path's records live in. It is the ONE
-// door in this package: the facade partition is the system namespace and a
+// place in this package: the facade partition is the system namespace and a
 // tenant's is an org namespace, so which of the two a path reaches is decided by
 // KIND and cannot be argued into by a cleverly spelled org.
 func namespaceFor(path string) (namespace.Namespace, error) {

@@ -17,8 +17,8 @@ package websearch
 // challenge page in the failure modes.
 //
 // SO IT IS A FALLBACK CHAIN, NOT A SECOND ENGINE. `mojeek` is one name, one
-// registry entry and one set of results; the key decides which door it knocks
-// on, exactly as the cache→static→browser chain decides how a page is fetched.
+// registry entry and one set of results; the key decides which endpoint it calls,
+// exactly as the cache→static→browser chain decides how a page is fetched.
 // Registering an api-mojeek beside the scraped mojeek would be two spellings of
 // one index, and a caller choosing between them would be choosing a credential,
 // which is not their decision to make.

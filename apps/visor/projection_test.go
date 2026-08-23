@@ -97,7 +97,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 	// …and WITHOUT the leading `getMachine` the source comment opens with. The
 	// identifier belongs to Go's namespace, not the document's: zip strips an exact
 	// leading match of the handler's own name and re-capitalises (v1.18.13), so the
-	// summary reads as prose to the SDK, the MCP door and the CLI that print it.
+	// summary reads as prose to the SDK, the MCP server and the CLI that print it.
 	if !strings.HasPrefix(get.Summary, "Returns one of the caller org") {
 		t.Errorf("summary = %q, want the doc comment's first sentence", get.Summary)
 	}
@@ -172,7 +172,7 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 // docFor extraction the OpenAPI builder does (zip mcp.go), so one doc comment
 // serves the document, the CLI help and the tool list. Nothing here passes
 // WithSummary to say the same sentence twice. That prose is what the FLEET's one
-// MCP door hands a model: this app's catalogue is plugin/visor/mcp.json, and
+// MCP server hands a model: this app's catalogue is plugin/visor/mcp.json, and
 // manifest/mcp_test.go fails a tool whose description is empty.
 func TestMCPPublishesTheSurface(t *testing.T) {
 	tools := body(t, projectionApp(t), "POST", "/mcp",

@@ -1,6 +1,6 @@
 package lsp
 
-// mount.go is this subsystem's registration: build the state, bind the doors.
+// mount.go is this subsystem's registration: build the state, bind the routes.
 //
 // It follows apps/code's Mount exactly — same signature, same fail-closed
 // argument checks, and routes() as a FUNCTION rather than inline so this
@@ -62,9 +62,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // Typed rather than raw so the OpenAPI operation, the MCP tool, the CLI command
 // and every generated SDK method are all projected from these five entries — a
 // surface built for coding agents, where the MCP tool list is not a side benefit
-// of typing it but the point. Five doors rather than one door with an `op` field
-// for the same reason: an agent picks a tool by its name and its description, and
-// a union behind one name is a tool it has to be told how to use.
+// of typing it but the point. Five endpoints rather than one endpoint with an `op`
+// field for the same reason: an agent picks a tool by its name and its description,
+// and a union behind one name is a tool it has to be told how to use.
 func routes(app cloud.Router, s *state) error {
 	// cloud.Bridge is not installed here: the composer installs it once at the
 	// root, after the identity check that mints the validated org and before any

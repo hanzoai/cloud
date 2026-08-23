@@ -143,7 +143,7 @@ func TestABuildRefusesAnAbbreviatedRevision(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			// Asserted at the BUILD BOUNDARY, which is where the rule now lives — both
-			// build doors reach it, and the gate it replaces guarded only one of them.
+			// build paths reach it, and the gate it replaces guarded only one of them.
 			_, err := validateBuildRef(c.revision)
 			switch {
 			case c.refuse && err == nil:

@@ -134,7 +134,7 @@ func TestSynopsisReadsASubsystemInAnotherModule(t *testing.T) {
 // The first import that DOCUMENTS ITSELF wins, not the first that resolves.
 //
 // plugin/licensing imports two packages of one module: pkg/licensing, for the one
-// type its host's adapter has to name, and the front door it mounts. The type
+// type its host's adapter has to name, and the entry point it mounts. The type
 // package documents no package — resolving is not the test, having something to
 // say is — so "the first that resolves" would publish nothing here.
 func TestSynopsisTakesTheImportThatDocumentsItself(t *testing.T) {

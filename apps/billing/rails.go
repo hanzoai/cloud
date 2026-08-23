@@ -3,10 +3,10 @@ package billing
 // rails.go serves the two top-up rails of /v1/billing that are not a card:
 // crypto custody and bank wire.
 //
-// Neither moves money. The crypto door issues a per-payer custody address and
-// the wire door renders the receiving brand's bank details; balance changes only
-// when a chain confirmation or a bank receipt is settled, in the process that
-// holds the ledger. So there is no charge here and nothing to screen.
+// Neither moves money. The crypto endpoint issues a per-payer custody address and
+// the wire endpoint renders the receiving brand's bank details; balance changes
+// only when a chain confirmation or a bank receipt is settled, in the process
+// that holds the ledger. So there is no charge here and nothing to screen.
 //
 // What both DO carry is the payer, into something a stranger acts on later — an
 // address that credits one wallet, a reference that names one payer on a bank
@@ -25,7 +25,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mountRails registers the crypto and wire doors. Called from routes.
+// mountRails registers the crypto and wire routes. Called from routes.
 func mountRails(app cloud.Router, o ops) {
 	zapp := cloud.ZipApp(app)
 	zip.Get(zapp, "/v1/billing/crypto/options", o.cryptoOptions)

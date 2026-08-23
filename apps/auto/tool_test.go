@@ -10,11 +10,11 @@ import (
 	"github.com/hanzoai/cloud/apps/tools"
 )
 
-// This subsystem serves NO tool door of its own. Every connector action reaches a
-// caller through connectorToolProvider — the ONE projection, registered into the
-// unified tool plane at Mount — so these tests exercise that provider directly.
-// It is what POST /v1/tools/call dispatches through, and therefore what the
-// fleet's one MCP door reaches.
+// This subsystem serves NO tool endpoint of its own. Every connector action
+// reaches a caller through connectorToolProvider — the ONE projection, registered
+// into the unified tool plane at Mount — so these tests exercise that provider
+// directly. It is what POST /v1/tools/call dispatches through, and therefore what
+// the fleet's one MCP server reaches.
 
 // TestConnectorToolsArePublished: every connector action is published as a
 // "<connector>_<action>" tool with a derived input schema.

@@ -13,9 +13,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// askApp mounts the door with a stand-in books peer and a stubbed model — the
+// askApp mounts the endpoint with a stand-in books peer and a stubbed model — the
 // same harness the behaviour suite uses, which is the point: one harness, so a
-// wire proof and a behaviour proof are made against the same door.
+// wire proof and a behaviour proof are made against the same endpoint.
 func askApp(t *testing.T) *zip.App {
 	t.Helper()
 	noNetworkSearch(t)

@@ -1,6 +1,6 @@
 // Package billing is your org's balance, what it has spent, and the cards it pays with.
 //
-// It is the customer's own money door, serving the org-scoped
+// It is the customer's own money surface, serving the org-scoped
 // /v1/billing/{balance,usage,usage/accounts,ledger} reads. It does not own the
 // prefix whole: commerce serves the merchant half of /v1/billing/* (invoices,
 // subscriptions, alerts, methods, webhooks) from the store it keeps.
@@ -164,7 +164,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Raw: serves bytes — the split-deploy leg forwards commerce's body and
 	// status, and the co-resident leg writes the same envelope from the ledger.
 	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
-	// A GPU is a metered resource like any other, so it has no charge door here: a
+	// A GPU is a metered resource like any other, so it has no charge route here: a
 	// machine is launched through /v1/visor/machines, which fronts the compute provider's
 	// resell endpoint (apps/visor) where the balance gate and the per-hour meter both
 	// live, keyed on the server-minted machine id. One meter bills every resource.
@@ -195,7 +195,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	mountRails(app, o)
 	// The four families this app took over when /v1/billing became one address:
 	// the saved cards, the posture and catalog, the customer's own plan, and the
-	// card doors that pay for it.
+	// card endpoints that pay for it.
 	mountMethods(app, o)
 	mountPosture(app, o)
 	mountSubscriptions(app, o)

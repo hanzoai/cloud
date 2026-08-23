@@ -110,7 +110,7 @@ ORDER BY (set, source, version, key)`
 // The warehouse as VALUES, on the same terms as apps/event/warehouse.go:
 // production is always the ONE datastore client, and a test substitutes them to
 // drive the durable half — the version manifest, the resume cursor, the prune —
-// without standing up a store. They are the only door this package reaches the
+// without standing up a store. They are the only path this package reaches the
 // warehouse through, so there is one place to substitute and no second path that
 // could stay real while these are faked.
 var (

@@ -31,7 +31,7 @@ func svc(chains map[string]Chain) *cloud.Service[state] {
 // authed is a context carrying a validated principal.
 //
 // It goes through zip's CALLER rather than a fabricated context value, because
-// that is one of the two doors principal.OrgFrom actually reads (the other is
+// that is one of the two places principal.OrgFrom actually reads (the other is
 // the route middleware's slot, which a unit test has no route to run). Minting
 // the org any other way would test a path production does not have.
 func authed() context.Context {

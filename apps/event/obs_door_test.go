@@ -5,8 +5,9 @@ import (
 	"testing"
 )
 
-// TestObsShapedBodyIsRefusedNotAbsorbed pins the unified event door: POST /v1/event
-// is ONE door for every event kind, and there is nothing in front of it.
+// TestObsShapedBodyIsRefusedNotAbsorbed pins the unified event endpoint: POST
+// /v1/event is ONE endpoint for every event kind, and there is nothing in front
+// of it.
 //
 // There used to be. The observability plane got FIRST REFUSAL on every
 // authenticated body here — a plane op (obs_event_claim) that took the ones which
@@ -16,15 +17,16 @@ import (
 // they have never existed. It could only ever decline. So this test no longer has
 // two worlds to distinguish — "peer present" was never a reachable state — and what
 // it pins is the single one that remains: an obs-shaped body is ORDINARY here, and
-// the door owes it the same honest receipt as anything else.
+// the endpoint owes it the same honest receipt as anything else.
 //
 // THE ASSERTION BELOW USED TO READ `want 200 via the product wire`, and 200 is what
-// it got — while storing zero facts. The trace was gone and the door said fine,
-// which is precisely how an o11y outage runs for months without anyone seeing it:
-// the only thing that changes is a number in a receipt nobody reads. A test that
-// asserts the STATUS of a body that lands nothing certifies the loss. So this one
-// asserts BOTH halves — the refusal AND the empty warehouse — because either alone
-// is the bug: a 400 with facts landed would be a lie in the other direction.
+// it got — while storing zero facts. The trace was gone and the endpoint said
+// fine, which is precisely how an o11y outage runs for months without anyone
+// seeing it: the only thing that changes is a number in a receipt nobody reads. A
+// test that asserts the STATUS of a body that lands nothing certifies the loss. So
+// this one asserts BOTH halves — the refusal AND the empty warehouse — because
+// either alone is the bug: a 400 with facts landed would be a lie in the other
+// direction.
 func TestObsShapedBodyIsRefusedNotAbsorbed(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
@@ -42,8 +44,8 @@ func TestObsShapedBodyIsRefusedNotAbsorbed(t *testing.T) {
 	}
 
 	// And the product wire is INTACT beside it. This is the pairing that makes the
-	// refusal above a statement about the BODY rather than about a broken door: the
-	// same door, the same credential, one shape refused and the other stored.
+	// refusal above a statement about the BODY rather than about a broken endpoint:
+	// the same endpoint, the same credential, one shape refused and the other stored.
 	if code, got := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme",
 		`{"event":"$pageview","distinctId":"d"}`); code != http.StatusOK {
 		t.Fatalf("product event = %d (%s), want 200", code, got)
@@ -71,10 +73,10 @@ func TestTeamWireRidesTheCanonicalDoor(t *testing.T) {
 }
 
 // TestPostHogWireRidesTheCanonicalDoor pins the other half of retiring
-// /v1/event/insights/e: the door was removed, but until the canonical decode learned
-// this wire's shape, a PostHog body landing on /v1/event decoded with an EMPTY
-// person and an unnamed kind — which admitPublic drops whole, so the SDK saw a
-// 200 that stored nothing. insights.hanzo.ai's /e, /batch and /capture all
+// /v1/event/insights/e: the endpoint was removed, but until the canonical decode
+// learned this wire's shape, a PostHog body landing on /v1/event decoded with an
+// EMPTY person and an unnamed kind — which admitPublic drops whole, so the SDK
+// saw a 200 that stored nothing. insights.hanzo.ai's /e, /batch and /capture all
 // rewrite onto /v1/event, so this is the live path for every PostHog SDK.
 func TestPostHogWireRidesTheCanonicalDoor(t *testing.T) {
 	// A bare PostHog event: snake_case person, string timestamp.

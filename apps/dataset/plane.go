@@ -1,6 +1,6 @@
 package dataset
 
-// plane.go is THE door to the store, and the place the tenant boundary is
+// plane.go is THE entry point to the store, and the place the tenant boundary is
 // decided. Every statement this package can run is in this file, and every one
 // of them opens with `org = ?`.
 //
@@ -91,7 +91,7 @@ const (
 // The rank IS the ReplacingMergeTree version column, which is what makes
 // immutability structural rather than merely policed: Datastore keeps the row
 // with the GREATEST version among duplicates, so no later write of a LOWER stage
-// can displace a published version. The door refuses a second `ready` for one
+// can displace a published version. The entry point refuses a second `ready` for one
 // version; the engine refuses everything below it. Two layers, and the weaker one
 // is not the only one.
 //
@@ -130,7 +130,7 @@ func rank(status string) uint8 {
 // as it leads every predicate. ORDER BY (org, name, version) so a per-tenant read
 // is a prefix scan. NO TTL — see the file note.
 //
-// It is bounded by the door, not by the engine: [maxNames] partitions per tenant
+// It is bounded by the entry point, not by the engine: [maxNames] partitions per tenant
 // and [maxVersions] rows in each. The register is metadata — a spec, a digest and
 // a set of counts per version — so a tenant's whole register is kilobytes, which
 // is what makes keeping a disposed dataset's record affordable.

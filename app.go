@@ -25,9 +25,9 @@ import (
 // request log and no typed-op enrichment — a shape nobody chose and nobody could
 // see, because there was nothing to compare it against.
 //
-// WHERE THE EDGE IS. Production runs ingress → gateway → the front door
+// WHERE THE EDGE IS. Production runs ingress → gateway → the host
 // (cmd/cloud) → this program. The gateway is the public edge and owns rate
-// limiting for the internet. The front door installs no middleware of its own —
+// limiting for the internet. The host installs no middleware of its own —
 // it routes, serves the console, threads operator flags and scopes credentials —
 // so a program built here is its OWN edge and defends itself. That is why the
 // browser and flood defenses are here rather than borrowed from a parent. A
@@ -36,9 +36,9 @@ import (
 // with the request.
 //
 // name is what the program calls itself in a diagnostic. tools is the per-caller
-// half of this program's agent door — the tools that exist because of WHO is
-// asking, which only a program holding a subsystem list can declare; everyone
-// else passes nil and offers none. The door itself is not optional either way:
+// half of this program's agent MCP server — the tools that exist because of WHO
+// is asking, which only a program holding a subsystem list can declare; everyone
+// else passes nil and offers none. The server itself is not optional either way:
 // see [callerTools].
 func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	app := zip.New(zip.Config{
@@ -188,24 +188,24 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 }
 
 // callerTools is this program's per-caller tool half — and stating it, rather
-// than leaving it nil, is what makes the agent door UNCONDITIONAL.
+// than leaving it nil, is what makes the agent MCP server UNCONDITIONAL.
 //
-// zip mounts the door only for an app that has something to project: a typed op,
+// zip mounts the server only for an app that has something to project: a typed op,
 // a composed plugin's catalogue, or a per-caller Source. With all three absent it
 // returns before registering the route at all (zip@v1.25.1 mcp.go:99). That is
 // the right default for a program nobody interrogates, and the wrong one for
-// every program built here, because the fleet's door ASKS EVERY COMPOSED
+// every program built here, because the fleet's MCP server ASKS EVERY COMPOSED
 // SUBSYSTEM on each tools/list (fleet.Ask). A subsystem whose routes are all raw
 // — a reverse proxy, or a surface owned by another module — projects no typed op,
 // so nothing claimed POST /mcp in its process, so the ask fell through to the
 // console's terminal handler and was answered with the signpost that is correct
-// only on the front door: 308 → /v1/mcp, an address a child does not serve
+// only on the host: 308 → /v1/mcp, an address a child does not serve
 // (webui/mcp.go:44). Thirty of the fleet's subsystems — the whole of exec, tasks,
 // agent, ask, websearch, crawl, index, kms, billing, platform and twenty more —
 // were reported UNREACHABLE that way while every one of them was up, healthy and
 // serving its REST surface.
 //
-// A door whose registry is empty answers {"tools":[]}, and that is a REAL answer:
+// A server whose registry is empty answers {"tools":[]}, and that is a REAL answer:
 // "asked, and serves nothing" is a different fact from "could not be asked", and
 // keeping those two apart is the whole of package fleet. Its hanzo.ai/unavailable
 // list means nothing while a healthy subsystem has no way to say the first one.
@@ -226,9 +226,9 @@ func callerTools(declared zip.Source) zip.Source {
 // exist because of who is asking, and a name nobody projected is nobody's.
 //
 // Its Call is reached only for a name the build-time catalogue did not claim, and
-// it answers with the same sentence zip's own miss does — the fleet's door never
-// routes one here (it refuses an unlisted name itself, fleet/mcp.go), so this is
-// the reply to a client that guessed.
+// it answers with the same sentence zip's own miss does — the fleet's MCP server
+// never routes one here (it refuses an unlisted name itself, fleet/mcp.go), so
+// this is the reply to a client that guessed.
 type noCallerTools struct{}
 
 func (noCallerTools) Tools(context.Context) []map[string]any { return nil }

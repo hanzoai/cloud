@@ -7,7 +7,7 @@ package commerce
 // ledger.
 //
 // All four rows live in commerce's per-tenant datastore, which has one owner, so
-// the door that publishes them (apps/billing, at /v1/billing) asks this process
+// the endpoint that publishes them (apps/billing, at /v1/billing) asks this process
 // by name. Each op is a thin adapter over a value-taking core the module exports
 // — the query is written once, in the module, and this file only moves the
 // answer onto the wire.
@@ -58,7 +58,7 @@ func exposeStatement() {
 // The caller's own standing travels IN, which looks backwards until you ask who
 // else could supply it: the membership roster is IAM's, not commerce's, so a
 // callee that answered "what role does this person hold" would be inventing the
-// answer. The door validated it; this reports it. The org is still the caller's
+// answer. The edge validated it; this reports it. The org is still the caller's
 // and cannot be named, so the account described is always the caller's own.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
@@ -98,7 +98,7 @@ func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, err
 	rows, merr := commercebilling.ListMembers(ctx, org, in.Account, in.Subject, in.Email, in.Role)
 	if merr != nil {
 		// The core's one error is the foreign-account refusal, and 403 is what
-		// the door has always answered it with. It is not a 404: the caller named
+		// the endpoint has always answered it with. It is not a 404: the caller named
 		// an account, and saying "not yours" tells them nothing they did not
 		// already know about their own org.
 		return nil, zip.Errorf(403, "account members: %v", merr)
@@ -150,7 +150,7 @@ func planePayouts(ctx context.Context, _ *struct{}) (*plane.Payouts, error) {
 //
 // The SUBJECT travels and the org does not, which is the tenancy rule this plane
 // keeps everywhere: a subject is a wallet inside the caller's own org, so naming
-// one can reach another account of that org and nothing beyond it. The door
+// one can reach another account of that org and nothing beyond it. The edge
 // resolves it from the validated principal, so a query cannot widen the read.
 //
 // Count is the size of the whole history rather than of the page, because that

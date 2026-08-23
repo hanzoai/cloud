@@ -7,7 +7,7 @@ package channels
 // message drove two mechanisms and only the second one ever replied. The turn
 // belongs on this side because everything it needs is already here — the policy
 // gate that decides whether a sender may speak, the route that says where a
-// reply goes, and the four egress doors.
+// reply goes, and the four egress transports.
 //
 // What is NOT here is custody. Which Hanzo account a chat user has linked is
 // integrations' to answer (plane.ChatIdentity) because the link lives in KMS
@@ -222,10 +222,10 @@ func answer(ctx context.Context, s *cloud.Service[state], org string, m Message)
 	if err != nil || who == nil {
 		// ERROR, not warn, and SAID. Someone asked a question; a bot that goes quiet
 		// is indistinguishable from a broken one, and "it does nothing" is the bug
-		// report that follows. The person cannot fix an unreachable identity door,
+		// report that follows. The person cannot fix an unreachable identity endpoint,
 		// but they can stop waiting, and we can be found in the logs and the trace.
 		if err == nil {
-			err = errors.New("identity door returned nothing")
+			err = errors.New("identity endpoint returned nothing")
 		}
 		s.Log.Error("channels: identity unreachable", "channel", m.Channel, "org", org, "err", err)
 		return "I could not reach your Hanzo account just now, so I have not run anything. This is on our side — please try again shortly.", false, "", err

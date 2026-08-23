@@ -9,7 +9,7 @@ package risk
 // behaviour normally lives — and it answers it from that organisation's own
 // history. That is the right question and it has a blind spot with a name: a
 // FRESH account has no history, so the model is warming, so it declines, so the
-// event is judged by nothing at all. The credit door
+// event is judged by nothing at all. The credit endpoint
 // (apps/commerce/risk.go) is exactly where that blind spot is expensive: a
 // settled card charge mints spendable balance, and the first payment on a fresh
 // account is the one the model can never have an opinion about.
@@ -39,7 +39,7 @@ package risk
 // at /v1/aml). This binary does not link it and does not make one — the AML plane
 // is its own deployment reached over the wire, so there is no in-process screen to
 // defer to, and a rule that CALLED one would put a network hop on the credit
-// door's request path inside a 150ms budget. What this reads instead is the
+// endpoint's request path inside a 150ms budget. What this reads instead is the
 // jurisdiction LISTING ([policy.go]'s [jurisdictions]), which is a statement about
 // a country rather than a finding about a person. Naming the difference is not
 // pedantry: it is what keeps a risk control from being read as a legal conclusion
@@ -220,7 +220,7 @@ func onGeography(country string, nano int64) (determination, bool) {
 		// vocabulary reserves the severer actions for.
 		//
 		// RESTRICT AND NOT BLOCK. Restrict is "proceeds at a reduced ceiling", and
-		// at this door the reduced ceiling is zero — the top-up does not settle —
+		// at this endpoint the reduced ceiling is zero — the top-up does not settle —
 		// while block is reserved for a finding that this party may not transact
 		// at all. That finding is the AML plane's to make about a person; this one
 		// is about a country and a number, so it freezes the payment and summons a
@@ -273,7 +273,7 @@ func onPace(seen reading) determination {
 			// determination cloud's vocabulary reserves the severer actions for.
 			//
 			// RESTRICT AND NOT BLOCK, for [onGeography]'s reason: the reduced ceiling at
-			// this door is zero, and a finding that a party may not transact at all is
+			// this endpoint is zero, and a finding that a party may not transact at all is
 			// the AML plane's to make about a person. This is about a count and a sum.
 			out = severest(out, determination{cloud.ActionRestrict, causeBurstValue + w.Axis})
 		case w.Nano >= reviewNano:

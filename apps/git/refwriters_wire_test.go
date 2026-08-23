@@ -4,11 +4,11 @@ package git
 // first: with the real client, against the real server, doing the thing an
 // attacker would actually do.
 //
-// refpolicy_wire_test.go proved the rule was correct AND reached — at ONE door.
-// That was the false comfort: the rule was reached at the door the test knocked
-// on, and nowhere else. A red-team review walked in through the side of the
-// building with the same credential. So each test here is named for the door it
-// knocks on, and the file fails if a door is reopened.
+// refpolicy_wire_test.go proved the rule was correct AND reached — at ONE writer.
+// That was the false comfort: the rule was reached at the writer the test
+// exercised, and nowhere else. A red-team review walked in through the side of the
+// building with the same credential. So each test here is named for the writer it
+// exercises, and the file fails if a writer is reopened.
 
 import (
 	"bytes"
@@ -34,7 +34,7 @@ import (
 // POST. The run opens a clean PR on agent/<session>, a human reads it, and
 // before the merge the run posts a FAST-FORWARD CHILD onto the same branch.
 //
-// This is worse than the force-push the wire door already refused, because it is
+// This is worse than the force-push the wire writer already refused, because it is
 // append-only: nothing anywhere reports that the branch was rewritten. The
 // reviewer approved A and merges A+B.
 func TestClientlessPushCannotAppendToAnAgentBranch(t *testing.T) {
@@ -42,7 +42,7 @@ func TestClientlessPushCannotAppendToAnAgentBranch(t *testing.T) {
 	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
 		t.Fatalf("create repo: %d %s", code, b)
 	}
-	// The run's branch, created legitimately through the same door.
+	// The run's branch, created legitimately through the same writer.
 	code, b := do(t, app, http.MethodPost, "/v1/git/repos/code/push", "acme", map[string]any{
 		"branch": "agent/abc123def456", "message": "the reviewed change",
 		"files": []map[string]any{{"path": "a.txt", "content": "reviewed\n"}},
@@ -51,7 +51,7 @@ func TestClientlessPushCannotAppendToAnAgentBranch(t *testing.T) {
 		t.Fatalf("the legitimate first push must land: %d %s", code, b)
 	}
 
-	// The switch. Same door, same credential, one more file.
+	// The switch. Same writer, same credential, one more file.
 	code, b = do(t, app, http.MethodPost, "/v1/git/repos/code/push", "acme", map[string]any{
 		"branch": "agent/abc123def456", "message": "the payload",
 		"files": []map[string]any{{"path": "evil.txt", "content": "payload\n"}},
@@ -87,8 +87,8 @@ func TestClientlessPushToAnOrdinaryBranchStillWorks(t *testing.T) {
 // ── writer 2: SSH receive-pack ───────────────────────────────────────────────
 
 // The same attack over SSH, with the REAL git CLI against the REAL listener.
-// This door ran `git receive-pack <bareDir>` with nothing in front of it, so
-// every refusal the HTTP door made was available here by enrolling a key —
+// This writer ran `git receive-pack <bareDir>` with nothing in front of it, so
+// every refusal the HTTP writer made was available here by enrolling a key —
 // which any org member may do at POST /v1/git/keys.
 func TestSSHPushCarriesTheSameRefPolicy(t *testing.T) {
 	app := mountApp(t)
@@ -183,7 +183,7 @@ func TestSSHPushCarriesTheSameRefPolicy(t *testing.T) {
 // `+refs/*:refs/*` with --prune is the most powerful writer in the forge: it
 // force-overwrites every ref from a source the CALLER names, and DELETES any ref
 // that source does not have. Pointed at an attacker-chosen upstream it did, in
-// one call, everything the push door refuses — including replacing the branch
+// one call, everything the push writer refuses — including replacing the branch
 // under a PR a human is reading, and deleting it outright.
 func TestMirrorCannotReachTheAgentNamespace(t *testing.T) {
 	app := mountApp(t)
@@ -236,7 +236,7 @@ func TestMirrorCannotReachTheAgentNamespace(t *testing.T) {
 // A fast-forward is not a safe exception. Appending a commit to a branch a
 // reviewer has already read IS a fast-forward, and it is precisely the
 // capability the policy calls "changing what a name already points at". This
-// door took the ref from its argument and only asked git to refuse a
+// writer took the ref from its argument and only asked git to refuse a
 // NON-fast-forward, so the append went through.
 func TestInboundSyncCannotAdvanceAnAgentBranch(t *testing.T) {
 	app := mountApp(t)
@@ -257,7 +257,7 @@ func TestInboundSyncCannotAdvanceAnAgentBranch(t *testing.T) {
 		CloneURL: "https://github.com/acme/code.git", Origin: "github.com",
 	})
 	if err == nil && res.Applied {
-		t.Fatal("THE INBOUND DOOR ADVANCED AN AGENT BRANCH")
+		t.Fatal("THE INBOUND WRITER ADVANCED AN AGENT BRANCH")
 	}
 	if !res.Conflict || !strings.Contains(res.Detail, "agent branch") {
 		t.Fatalf("refused, but not by the ref policy: %+v (err=%v)", res, err)
@@ -328,9 +328,9 @@ func doAuth(t *testing.T, app *zip.App, method, path, token string, body any) (i
 	return resp.StatusCode, out
 }
 
-// ── writer 9: the merge door ─────────────────────────────────────────────────
+// ── writer 9: the merge path ─────────────────────────────────────────────────
 
-// TestMergeObeysTheRefPolicy proves merging is not a door around checkRefPolicy:
+// TestMergeObeysTheRefPolicy proves merging is not a way around checkRefPolicy:
 // an agent branch may be created and never rewritten, and that holds whether the
 // rewrite arrives as a push or as a merge.
 func TestMergeObeysTheRefPolicy(t *testing.T) {

@@ -90,13 +90,15 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 	return plane.Ask[In, Out](ctx, app, op, in)
 }
 
-// Door publishes app's AGENT DOOR on the internal plane, at [manifest.MCPPath].
+// Door publishes app's AGENT MCP SERVER on the internal plane, at
+// [manifest.MCPPath].
 //
 // It is the same move [fleet.Door.Serve] makes one level up, for the same
-// reason: the door a subsystem serves on the edge is reachable only through the
-// identity boundary, and the fleet's own callers are not on the edge.
+// reason: the MCP server a subsystem serves on the edge is reachable only
+// through the identity boundary, and the fleet's own callers are not on the
+// edge.
 //
-// # Why the edge door cannot answer an internal caller
+// # Why the edge MCP server cannot answer an internal caller
 //
 // The boundary (SanitizeIdentity) deletes every authority header on ingress and
 // re-mints one only from a credential it verified. That is exactly right for a
@@ -108,7 +110,7 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 // as the request BEGINS, before any middleware). The op was not seeing a
 // different fact from the log; it was seeing a LATER one.
 //
-// So the internal caller is not sent through the edge. It reaches this door,
+// So the internal caller is not sent through the edge. It reaches this endpoint,
 // where [zip.CallerOf] reads the caller off the request it is actually serving
 // and [principal.OrgFrom] decides on it with the SAME rule a routed request gets
 // — an org with no validated user is still refused, here as there.
@@ -120,9 +122,9 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 // to it, in the same way there is no path to a route nobody registered. A
 // sibling's statement is worth what that socket is worth — the same worth
 // [zip.WithCaller] already gives one, and the same authority a plane op has
-// granted since the plane existed. The edge door is untouched: a forged
-// X-Org-Id / X-User-Id arriving at the front door is still hopped into the
-// subsystem's EDGE door, and still dies at the boundary there.
+// granted since the plane existed. The edge MCP server is untouched: a forged
+// X-Org-Id / X-User-Id arriving at the public endpoint is still hopped into the
+// subsystem's EDGE MCP server, and still dies at the boundary there.
 //
 // It is at manifest.MCPPath and not zip's own /mcp because zip already serves the
 // PLANE's ops at /mcp — a different registry, and one route per address.

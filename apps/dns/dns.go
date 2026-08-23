@@ -158,7 +158,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// plane's, relayed unparsed. What ends it is hanzoai/dns handing its host what
 	// hanzoai/ai hands one: a route table (`path -> methods` plus
 	// `"METHOD /path" -> sentence`) or a *zip.App. openapi.Table and openapi.Front
-	// already consume both, and a relay REPLACES the door with what the door
+	// already consume both, and a relay REPLACES the route with what the route
 	// reaches — so the day that table exists, /v1/dns publishes the plane's real
 	// addresses instead of five wildcard operations, with no edit to this file
 	// beyond the declaration. Until then five operations is the honest count and

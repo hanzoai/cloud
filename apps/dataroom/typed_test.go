@@ -5,9 +5,10 @@ package dataroom
 // and that it DID reach the agent surface (the ops are MCP tools with schemas).
 //
 // The second is the point of the exercise. An untyped route reaches no MCP tool
-// at all, so before typed.go an agent asking the fleet door what it could do was
-// never told a data room could be opened. TestDataroomOpsAreMCPTools is the local
-// form of that acceptance test; the live one is tools/list at the fleet door.
+// at all, so before typed.go an agent asking the fleet MCP server what it could do
+// was never told a data room could be opened. TestDataroomOpsAreMCPTools is the
+// local form of that acceptance test; the live one is tools/list at the fleet MCP
+// server.
 
 import (
 	"context"
@@ -26,7 +27,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mountMCPApp mounts dataroom on an app whose MCP door is reachable, the way
+// mountMCPApp mounts dataroom on an app whose MCP server is reachable, the way
 // captable's does: Bridge at the app level so a tools/call carrying an org header
 // resolves a principal, since there is no URL on that transport.
 func mountMCPApp(t *testing.T) (*zip.App, *memVFS) {

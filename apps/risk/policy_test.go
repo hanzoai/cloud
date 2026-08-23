@@ -644,7 +644,7 @@ func TestPolicy_TwoBrandsShareAFileAndNotAHistory(t *testing.T) {
 }
 
 // TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing holds the ONE
-// door the appetite bounds now live behind.
+// check the appetite bounds now live behind.
 //
 // Those bounds used to be spelled twice — once at [ops.appetite] and once in
 // [admitRegime] — and collapsing them to one spelling is right. But the surviving
@@ -707,7 +707,7 @@ func TestPolicy_AnAppetiteOutsideTheContractIsRefusedAndChangesNothing(t *testin
 
 	// NOTHING MOVED. A refused policy change that still minted a version, or still
 	// took the model live, would be the disarm this record exists to prevent —
-	// arrived at through the door that refused.
+	// arrived at through the endpoint that refused.
 	after := readPolicy(t, app, orgA)
 	if after.Version != held.Version || len(after.History) != len(held.History) {
 		t.Fatalf("a refused appetite moved the record: version %d→%d, history %d→%d",

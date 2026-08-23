@@ -229,7 +229,7 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	// WEB grounding domain — selected explicitly by mode (search|news|research|deep). This is the
 	// answer engine: it grounds on live web sources (not ledger figures), streams the SearchEvent
 	// envelope, and meters the caller. The loop lives in ONE home (clients/answer); /v1/ask is its
-	// ONE door. It is ADDITIVE — when no web mode is set the advisor's figure path below runs
+	// ONE endpoint. It is ADDITIVE — when no web mode is set the advisor's figure path below runs
 	// exactly as before.
 	if answer.IsMode(in.Mode) {
 		return serveWeb(s, c, in, q)
@@ -274,7 +274,7 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 }
 
 // serveWeb hands a web-mode question to the answer engine. It is pure delegation:
-// the door translates its own body into the engine's Request and lends it the
+// the endpoint translates its own body into the engine's Request and lends it the
 // Base (logger + the ONE per-org meter) and the AI plane. No loop logic lives
 // here — clients/answer is its one home.
 func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in askRequest, q string) error {

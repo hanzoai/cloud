@@ -63,8 +63,8 @@ func TestPostSlackBlocksErrorEnvelope(t *testing.T) {
 	}
 }
 
-// TestNotifySlackFailsClosedUnmounted proves the high-level door fails closed when
-// the integrations subsystem is not mounted (no org can be resolved to a token).
+// TestNotifySlackFailsClosedUnmounted proves the high-level entry point fails closed
+// when the integrations subsystem is not mounted (no org can be resolved to a token).
 func TestNotifySlackFailsClosedUnmounted(t *testing.T) {
 	if mounted != nil {
 		t.Skip("integrations mounted in this run; unmounted-path test not applicable")

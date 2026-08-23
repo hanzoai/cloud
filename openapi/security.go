@@ -139,7 +139,7 @@ func Open(path, method string) {
 // call it over operations their parts already stamped.
 //
 // It runs LAST in each, for the reason [stamp] does: [Fold] replaces a structural
-// operation with the typed one and [Project] replaces a door with the registry
+// operation with the typed one and [Project] replaces a relay with the registry
 // behind it, so a mark written before either would be thrown away by it.
 func secure(d *Document) {
 	if d.Components == nil {

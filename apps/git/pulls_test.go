@@ -16,7 +16,7 @@ import (
 // after every merge and every refusal — because a row saying "merged" is the one
 // thing a merge op can produce without merging anything.
 
-// pushTo commits one file onto a branch through the client-less push door,
+// pushTo commits one file onto a branch through the client-less push endpoint,
 // creating the repo on the first call, and returns the new commit hash.
 func pushTo(t *testing.T, app *zip.App, org, repo, branch, path, content string) string {
 	t.Helper()
@@ -54,7 +54,7 @@ func branchAt(t *testing.T, org, repo, branch string) string {
 // forkBranch points a new branch at an existing commit — what `git checkout -b`
 // does. corePush starts an ORPHAN commit on a branch it has never seen, so this
 // is what makes a branch a real DESCENDANT of base and the fast-forward case
-// reachable through the public doors.
+// reachable through the public endpoints.
 func forkBranch(t *testing.T, org, repo, branch, at string) {
 	t.Helper()
 	st, err := mounted.Load().State.storage.storer(org, "", repo)
@@ -226,7 +226,7 @@ func TestPullsAreOrgScoped(t *testing.T) {
 	}
 
 	// A third org holds no repo of that name at all: every address 404s, and the
-	// merge door does not answer differently from the read door.
+	// merge endpoint does not answer differently from the read endpoint.
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/v1/git/repos/code/pulls"},
 		{http.MethodGet, "/v1/git/repos/code/pulls/1"},

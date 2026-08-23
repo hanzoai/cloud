@@ -1,19 +1,19 @@
 package commerce
 
-// risk_settlement_test.go — THE CREDIT DOOR'S OTHER HALF: what it STATES, and what
-// it TELLS the model afterwards.
+// risk_settlement_test.go — THE CREDIT ENDPOINT'S OTHER HALF: what it STATES, and
+// what it TELLS the model afterwards.
 //
 // The screen was reading history that nothing was writing. [riskGate] asks the
 // scorer about a payer, the scorer's aggregate rules answer from what that payer had
-// already done — and at a self-serve credit door the organisation IS the payer, so
+// already done — and at a self-serve credit endpoint the organisation IS the payer, so
 // nothing it did taught its own model anything. Five payments of eleven thousand
 // dollars each looked like five first payments, every one of them under every stated
 // bound by construction.
 //
 // Two properties make that fixed, and both are here:
 //
-//	THE DOOR STATES ITS AXES. A rule half over an identifier no gate states cannot
-//	fire for any input, and reads exactly like a half that found nothing.
+//	THE ENDPOINT STATES ITS AXES. A rule half over an identifier no gate states
+//	cannot fire for any input, and reads exactly like a half that found nothing.
 //
 //	THE SETTLEMENT TEACHES. What the model learns comes from what this process
 //	WATCHED SETTLE — never from the request body — is keyed on the settlement so a
@@ -38,7 +38,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// The settlement fixture: a real [TakePaymentOut] shape, because what this door
+// The settlement fixture: a real [TakePaymentOut] shape, because what this endpoint
 // keys an idempotent record on is read out of exactly that answer.
 const (
 	settledRef     = "sq_pay_9Xk2"
@@ -60,9 +60,9 @@ type caught struct {
 }
 
 // watchTeaching substitutes the plane client and hands back what leaves. The client is a
-// variable for exactly this: the door's record can be asserted without standing up a
-// risk child to receive it.
-// The buffer holds a BURST rather than one payment, because the cross-door proof
+// variable for exactly this: the endpoint's record can be asserted without standing up
+// a risk child to receive it.
+// The buffer holds a BURST rather than one payment, because the cross-endpoint proof
 // (risk_payments_test.go) drives several payments before it reads any: teaching is
 // detached, so a buffer smaller than the burst blocks the goroutines under test
 // instead of recording them.
@@ -79,7 +79,7 @@ func watchTeaching(t *testing.T) <-chan caught {
 	return seen
 }
 
-// doorApp is the credit door with a handler that answers like the real one.
+// doorApp is the credit endpoint with a handler that answers like the real one.
 func doorApp(t *testing.T, status int, body string) *zip.App {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
@@ -91,9 +91,9 @@ func doorApp(t *testing.T, status int, body string) *zip.App {
 	})
 	app := zip.New(zip.Config{Logger: luxlog.New("doortest"), DisableStartupMessage: true})
 	// settling supplies the ledger and the receipt read the settlement credit needs
-	// (settle_test.go). What a door TEACHES is this file's subject and what it CREDITS
-	// is not, but the two run at the same point and the credit runs first, so a door
-	// with no ledger behind it never reaches the teaching at all.
+	// (settle_test.go). What an endpoint TEACHES is this file's subject and what it
+	// CREDITS is not, but the two run at the same point and the credit runs first, so an
+	// endpoint with no ledger behind it never reaches the teaching at all.
 	app.Post("/v1/billing/topup/token", settling(t).route(settledBody(status, body)))
 	return app
 }
@@ -113,7 +113,7 @@ func post(t *testing.T, app *zip.App) int {
 	return resp.StatusCode
 }
 
-// await takes the one observation the door should have stated, or fails.
+// await takes the one observation the endpoint should have stated, or fails.
 func await(t *testing.T, seen <-chan caught) caught {
 	t.Helper()
 	select {
@@ -147,13 +147,13 @@ func released(within time.Duration) bool {
 // other being hoped about.
 func inflight() int { return len(teaching) + len(emitting) }
 
-// none asserts the door stated nothing, which is the correct answer for a top-up
+// none asserts the endpoint stated nothing, which is the correct answer for a top-up
 // that did not settle.
 func none(t *testing.T, seen <-chan caught) {
 	t.Helper()
 	select {
 	case c := <-seen:
-		t.Fatalf("the door taught the model from a top-up that did not settle: %+v", c.in)
+		t.Fatalf("the endpoint taught the model from a top-up that did not settle: %+v", c.in)
 	case <-time.After(250 * time.Millisecond):
 	}
 }
@@ -162,7 +162,7 @@ func none(t *testing.T, seen <-chan caught) {
 //
 // [risk.onFan] is the only half of the rule that can see account farming, because a
 // farm is unremarkable from every account taken by itself — the pattern exists only
-// in what the accounts SHARE. It reads two link identifiers, and this door stated
+// in what the accounts SHARE. It reads two link identifiers, and this endpoint stated
 // NEITHER: with ip, currency, country and nano the only facts, the counterparty and
 // device axes were empty on every top-up and that half could not fire for any input.
 //
@@ -174,42 +174,43 @@ func TestPaymentFacts_StatesThePeerThatArmsTheFanOut(t *testing.T) {
 	const address = "198.51.100.22"
 	facts := paymentFacts(address, "US", 4200, "USD")
 	if got := facts[plane.SignalPeer]; got != address {
-		t.Errorf("peer %q, want %q — an axis the door does not state cannot be read, and the "+
+		t.Errorf("peer %q, want %q — an axis the endpoint does not state cannot be read, and the "+
 			"fan-out half is unreachable without it", got, address)
 	}
 	// ABSENT, NEVER EMPTY. cloud.Facts drops an empty value, but the map itself must
 	// not carry one: a key present with no value is a gate claiming to have looked.
 	bare := paymentFacts("", "", 4200, "USD")
 	if got, held := bare[plane.SignalPeer]; held {
-		t.Errorf("the door stated a peer of %q when the edge resolved none — every payer whose "+
+		t.Errorf("the endpoint stated a peer of %q when the edge resolved none — every payer whose "+
 			"address we cannot resolve then shares ONE identifier, and the fan-out reports a "+
 			"farm made of strangers", got)
 	}
 }
 
 // TestPaymentAxes_MatchWhatTheDoorActuallyStates holds the boot declaration to the
-// door.
+// endpoint.
 //
 // The unarmed axis is announced at boot precisely so it cannot read as a rule that
-// found nothing — but a declaration that drifts from the door is worse than none,
+// found nothing — but a declaration that drifts from the endpoint is worse than none,
 // because it is a claim an operator will believe. This is what keeps them one fact:
 // every armed axis must be stateable, and every unarmed one must be unstated.
 //
 // Mutation proof: state a device in [paymentFacts] without moving it out of
-// [paymentUnarmed] (or add an axis to [paymentAxes] the door never states) and this fails.
+// [paymentUnarmed] (or add an axis to [paymentAxes] the endpoint never states) and this
+// fails.
 func TestPaymentAxes_MatchWhatTheDoorActuallyStates(t *testing.T) {
-	// Everything the door can observe, stated at once, so this is the door's whole
-	// reach rather than one sample of it.
+	// Everything the endpoint can observe, stated at once, so this is the endpoint's
+	// whole reach rather than one sample of it.
 	facts := paymentFacts("198.51.100.22", "US", 4200, "USD")
 	for _, axis := range paymentAxes {
 		if facts[axis] == "" {
-			t.Errorf("the boot declaration claims %q is armed, and the door states nothing for "+
+			t.Errorf("the boot declaration claims %q is armed, and the endpoint states nothing for "+
 				"it — an operator is being told a rule half can fire when it cannot", axis)
 		}
 	}
 	for _, axis := range paymentUnarmed {
 		if got, held := facts[axis]; held {
-			t.Errorf("the boot declaration says %q is UNARMED and the door states %q for it — "+
+			t.Errorf("the boot declaration says %q is UNARMED and the endpoint states %q for it — "+
 				"the announcement an operator reads is false", axis, got)
 		}
 	}
@@ -223,7 +224,7 @@ func TestPaymentAxes_MatchWhatTheDoorActuallyStates(t *testing.T) {
 	}
 }
 
-// TestTeachSettlement_ASettledTopUpTeachesThePayer is HIGH-2 at the door: what
+// TestTeachSettlement_ASettledTopUpTeachesThePayer is HIGH-2 at the endpoint: what
 // LEAVES this process when a charge clears.
 //
 // Mutation proof: remove the teachSettlement call from [riskGate] and this fails on
@@ -274,7 +275,7 @@ func TestTeachSettlement_ASettledTopUpTeachesThePayer(t *testing.T) {
 
 // TestTeachSettlement_KeysOnTheProcessorReferenceFirst.
 //
-// Two paths can credit ONE payment — the synchronous door and a replayed webhook —
+// Two paths can credit ONE payment — the synchronous endpoint and a replayed webhook —
 // and each writes its own ledger row with its own receipt, while both carry the
 // gateway's payment id. Keyed on the reference, two paths crediting one payment teach
 // ONE observation; keyed on the receipt they teach two, and the accrual counts money
@@ -327,7 +328,7 @@ func TestTeachSettlement_TeachesNothingWithoutASettlement(t *testing.T) {
 		{"the card was declined", http.StatusPaymentRequired, `{"error":{"code":"declined"}}`},
 		{"the gateway broke", http.StatusBadGateway, `{"error":{"code":"upstream"}}`},
 		{"the request was malformed", http.StatusBadRequest, `{"error":{"code":"bad"}}`},
-		// A 200 that names no settlement is the one case where the door DID answer
+		// A 200 that names no settlement is the one case where the endpoint DID answer
 		// success: it is still not taught, because an observation under an invented id
 		// counts the same money again on the next retry.
 		{"success naming no settlement", http.StatusOK, `{"status":"ok"}`},
@@ -345,8 +346,8 @@ func TestTeachSettlement_TeachesNothingWithoutASettlement(t *testing.T) {
 //
 // The money has moved and the customer has been answered by the time the model is
 // told anything. So a risk plane that is absent, refusing, panicking or slow must
-// leave the door's own answer untouched — a telemetry row is expendable and a settled
-// payment is not.
+// leave the endpoint's own answer untouched — a telemetry row is expendable and a
+// settled payment is not.
 //
 // Mutation proof: return the teach error from [riskGate] and the first row here
 // answers 500 for a charge that cleared.
@@ -389,8 +390,8 @@ func TestTeachSettlement_CannotFailTheSettledPayment(t *testing.T) {
 				t.Fatal("the teaching call never ran")
 			}
 			// AND THE GOROUTINE SURVIVES ITS OWN FAILURE, so the ceiling slot it holds
-			// comes back and the next payment is still taught. A leaked slot is the door
-			// quietly teaching less and less until it teaches nothing.
+			// comes back and the next payment is still taught. A leaked slot is the
+			// endpoint quietly teaching less and less until it teaches nothing.
 			//
 			// It is WAITED FOR rather than read once. The slot is released by the
 			// goroutine's own outermost defer, which by construction runs AFTER the call
@@ -398,7 +399,7 @@ func TestTeachSettlement_CannotFailTheSettledPayment(t *testing.T) {
 			// has. Reading the ceiling at that instant tests the scheduler.
 			if !released(3 * time.Second) {
 				t.Errorf("%d teaching slot(s) were never released — the ceiling leaks and the "+
-					"door eventually stops teaching anything", len(teaching))
+					"endpoint eventually stops teaching anything", len(teaching))
 			}
 		})
 	}

@@ -14,20 +14,20 @@
 
 // Package analytics is product analytics: send an event, read back who did what.
 //
-// It is the product-event plane: it owns the ingest door every Hanzo client
+// It is the product-event plane: it owns the ingest endpoint every Hanzo client
 // posts to, lands each event in the `hanzo` warehouse, and serves the per-org
 // read lenses — KPIs, time series, rankings, captured errors — over what it
 // wrote.
 //
 // It is BOTH halves, and that is deliberate: one write core (ingestEvents) behind
-// N doors (event.go), and the read lenses over the same warehouse, so a fact is
-// admitted, stamped with the SERVER-resolved tenant, and read back through one
+// N endpoints (event.go), and the read lenses over the same warehouse, so a fact
+// is admitted, stamped with the SERVER-resolved tenant, and read back through one
 // vocabulary. Two lenses share one warehouse:
 //
 //   - LLM lens (REAL today): hanzo.cloud_usage, the live per-org usage ledger the
 //     cloud o11y path already writes (requests, tokens, spend, models, errors).
 //   - Web/commerce lens: event.fact (signal='act') on the o11y-owned event plane — what this
-//     package's own doors ingest (as facts, landed by the sink in warehouse.go).
+//     package's own endpoints ingest (as facts, landed by the sink in warehouse.go).
 //
 // The accepted batch is also handed to registered SINKS (forward.go) — apps/
 // destinations forwards it to the org's connected ad platforms. analytics never
@@ -62,14 +62,14 @@
 //	GET  /v1/event/insights/health        the insights surface is serving
 //	GET  /v1/event/health       subsystem health (datastore connectivity + lens tables)
 //
-//	WRITE (the ingest door — see doors, event.go)
+//	WRITE (the ingest endpoint — see doors, event.go)
 //	POST /v1/event                  the canonical wire (object | array | {batch:[…]});
 //	                                decodeEvent sniffs the PostHog wire here too
-//	POST /v1/event/:project/envelope|store   the Sentry error wire, same door
+//	POST /v1/event/:project/envelope|store   the Sentry error wire, same endpoint
 //
 // The six reads above /v1/event/health are TYPED ops, so each publishes its
 // prose, its In/Out schema, an MCP tool and a CLI command. /v1/event/health and
-// the ingest doors are untyped and cannot be typed without moving their wire;
+// the ingest endpoints are untyped and cannot be typed without moving their wire;
 // routes (below) names each one's blocker where it is registered.
 //
 // Registered as id "event" with cloud.HealthOwner + order 132: it serves its
@@ -125,8 +125,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func build(b cloud.Base) (state, error) {
 	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
 	startSink(b.Log)
-	// The event door for a peer in another process, published beside the HTTP
-	// doors and reaching the same write core — see event_rpc.go.
+	// The event endpoint for a peer in another process, published beside the HTTP
+	// endpoints and reaching the same write core — see event_rpc.go.
 	exposeCapture()
 	return state{}, nil
 }
@@ -171,9 +171,10 @@ func stopSink() {
 func Shutdown(context.Context) error {
 	stopSink()
 	closeBus()
-	// The replay door's Kafka client (replay.go) is the subsystem's OTHER outbound
-	// connection, and it is released here for the same reason the bus is: Mount does
-	// not return a handle, so what the package opened the package has to close.
+	// The replay endpoint's Kafka client (replay.go) is the subsystem's OTHER
+	// outbound connection, and it is released here for the same reason the bus is:
+	// Mount does not return a handle, so what the package opened the package has to
+	// close.
 	closeProducer()
 	return nil
 }
@@ -222,37 +223,40 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/health", o.health,
 		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
-	// Capture (WRITE) side — the ingest that fills the event plane. Every ingest door
-	// is registered HERE and only here, from doors (event.go): one Post per declared
-	// door, no hand-written path beside it. A door contributes its WIRE and nothing
-	// else — admission (handle) and the write core (ingestEvents) are shared — so
-	// this is one pipeline behind N paths, and a path that is not in doors is not an
-	// ingest door anywhere: not routed, and not carved on a site host either.
+	// Capture (WRITE) side — the ingest that fills the event plane. Every ingest
+	// endpoint is registered HERE and only here, from doors (event.go): one Post per
+	// declared endpoint, no hand-written path beside it. An endpoint contributes its
+	// WIRE and nothing else — admission (handle) and the write core (ingestEvents)
+	// are shared — so this is one pipeline behind N paths, and a path that is not in
+	// doors is not an ingest endpoint anywhere: not routed, and not carved on a site
+	// host either.
 	//
-	// EVERY door is untyped, and none of them is a candidate. A typed op receives a
-	// context and a DECODED In, and admission (handle, event.go) is decided from
-	// facts that live only on the request: the presented credential (Authorization /
-	// x-hanzo-ingest-key / ?ingest_key=, publishable.go ingestKey), the client IP
-	// and the socket peer the anonymous rate caps key on, the DNT/Sec-GPC headers,
-	// and the RAW body — whose LENGTH is the anonymous lane's 64 KiB → 413 bound
-	// (public.go maxPublicBytes) and whose first non-space BYTE selects the wire.
-	// The canonical door also accepts a bare JSON ARRAY body, which cannot decode
-	// into any struct In: zip's op.invoke answers 400 on a body it cannot unmarshal,
-	// and it answers 200 with a receipt. See LLM.md; each door names its own blocker.
+	// EVERY endpoint is untyped, and none of them is a candidate. A typed op
+	// receives a context and a DECODED In, and admission (handle, event.go) is
+	// decided from facts that live only on the request: the presented credential
+	// (Authorization / x-hanzo-ingest-key / ?ingest_key=, publishable.go ingestKey),
+	// the client IP and the socket peer the anonymous rate caps key on, the
+	// DNT/Sec-GPC headers, and the RAW body — whose LENGTH is the anonymous lane's
+	// 64 KiB → 413 bound (public.go maxPublicBytes) and whose first non-space BYTE
+	// selects the wire. The canonical endpoint also accepts a bare JSON ARRAY body,
+	// which cannot decode into any struct In: zip's op.invoke answers 400 on a body
+	// it cannot unmarshal, and it answers 200 with a receipt. See LLM.md; each
+	// endpoint names its own blocker.
 	for _, d := range doors {
 		app.Post(d.path, cloud.Handle(s, d.ingest))
 	}
 
-	// The tag that feeds the canonical door, on the same origin as the door
-	// (tag.go). GET, static, unauthenticated: it is the install path for a
+	// The tag that feeds the canonical endpoint, on the same origin as the
+	// endpoint (tag.go). GET, static, unauthenticated: it is the install path for a
 	// surface with no bundler, and the page supplies the key.
 	app.Get(tagPath, zip.AdaptNetHTTP(http.HandlerFunc(serveTag)))
 
-	// The Sentry error wire, on the SAME door: POST /v1/event/{project}/envelope|store.
-	// The project segment is variable, so the door's owner carries the route and
-	// relays to the o11y PROCESS over the plane socket (plane.ObsErrorPost). It
-	// used to call a package global that o11y set in its own process, which read
-	// nil here and answered 503 "error ingest not initialized" for every SDK.
+	// The Sentry error wire, on the SAME endpoint:
+	// POST /v1/event/{project}/envelope|store. The project segment is variable, so
+	// the endpoint's owner carries the route and relays to the o11y PROCESS over the
+	// plane socket (plane.ObsErrorPost). It used to call a package global that o11y
+	// set in its own process, which read nil here and answered 503 "error ingest not
+	// initialized" for every SDK.
 	//
 	// The runtime authenticates the DSN key itself — there is no Hanzo principal
 	// on this path by design — so the whole request travels: path, query, headers
@@ -294,16 +298,16 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/event/:project/envelope", obsError)
 	app.Post("/v1/event/:project/store", obsError)
 
-	// The session-replay snapshot door (replay.go). Registered HERE, by hand, for
-	// the same reason the Sentry wire above is: it is not an entry in `doors`, and
-	// it cannot be. A door in that table is a wire that decodes to []CaptureEvent
-	// and flows through the ONE write core onto the event plane; a snapshot batch is
-	// an opaque rrweb recording bound for a different consumer on a different
-	// transport, and it lands no row in the warehouse at all.
+	// The session-replay snapshot endpoint (replay.go). Registered HERE, by hand,
+	// for the same reason the Sentry wire above is: it is not an entry in `doors`,
+	// and it cannot be. An endpoint in that table is a wire that decodes to
+	// []CaptureEvent and flows through the ONE write core onto the event plane; a
+	// snapshot batch is an opaque rrweb recording bound for a different consumer on
+	// a different transport, and it lands no row in the warehouse at all.
 	//
 	// What it DOES share is the thing worth sharing: admission. replayIngest
 	// resolves its credential through eventTenant and refuses through the same
-	// cannotAttribute/cannotWrite vocabulary as every door, so there is no second
+	// cannotAttribute/cannotWrite vocabulary as every endpoint, so there is no second
 	// resolver on this surface.
 	app.Post(replayPath, cloud.Handle(s, replayIngest))
 
@@ -321,7 +325,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 	// /v1/event/insights — console READS over the SAME engine, and nothing else: the
 	// PostHog-wire ingest that used to sit at /v1/insights/e is retired onto the one
-	// door, so this group registers no door of its own. Flags live at /v1/flags.
+	// endpoint, so this group registers no endpoint of its own. Flags live at
+	// /v1/flags.
 	ig := app.Group("/v1/event/insights")
 	zip.Get(ig, "/health", o.insightsHealth)
 	zip.Get(ig, "/events", o.insightsEvents)
@@ -739,7 +744,7 @@ type healthReport struct {
 	// (warehouse.go). It is reported on the DEGRADED report too, and deliberately: a
 	// warehouse that is unreachable is exactly when facts start failing their
 	// deliveries, so suppressing the number here would hide it precisely when it
-	// moves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the door already
+	// moves. ANY NON-ZERO VALUE IS AN ALARM — it counts data the endpoint already
 	// answered 200 for.
 	Lost loss `json:"lost"`
 }

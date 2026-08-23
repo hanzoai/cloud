@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	// cloud.OrgNamespace is the ONE door a tenant string passes through to become
+	// cloud.OrgNamespace is the ONE check a tenant string passes through to become
 	// the name of a database.
 	"github.com/hanzoai/cloud"
 	// cek is the ONE opener: each tenant's database is born encrypted under the

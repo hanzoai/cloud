@@ -359,7 +359,7 @@ func isBasePath(p string) bool {
 // and so can vouch for nothing.
 //
 // It is gone. A site's beacon carries the project key minted with the project and
-// posts it to the ingest door like every other caller, which is one mechanism
+// posts it to the ingest endpoint like every other caller, which is one mechanism
 // instead of two and gives a site's own analytics full fidelity rather than the
 // anonymous projection. A beacon POST to a site host is now what every other
 // unknown path on a site host is: served from the site's bytes, or 404.

@@ -16,9 +16,9 @@ import (
 // them, watch the suite stay green, and ship a silent wire change — each one breaks
 // on inputs no existing test sends.
 //
-// There used to be a fourth: the subsystem's own MCP JSON-RPC door, excluded because
-// a JSON-RPC envelope answers an unparseable body with HTTP 200. It is gone, not
-// retyped — the fleet serves ONE MCP door, on the host, and every connector action
+// There used to be a fourth: the subsystem's own MCP JSON-RPC endpoint, excluded
+// because a JSON-RPC envelope answers an unparseable body with HTTP 200. It is gone, not
+// retyped — the fleet serves ONE MCP server, on the host, and every connector action
 // reaches it through the unified tool plane. A transport nobody duplicates needs no
 // exclusion.
 //

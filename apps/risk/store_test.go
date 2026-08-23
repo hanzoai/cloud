@@ -32,7 +32,7 @@ type stmt struct {
 	Args []any
 }
 
-// emitted is one row of a SOURCE plane, as the ingest door would have written
+// emitted is one row of a SOURCE plane, as the ingest endpoint would have written
 // it: product events in event.event, captured failures in event.error, metered
 // inference in hanzo.cloud_usage. It is filed under the BARE org, because that is
 // the tenant column those planes actually carry.
@@ -72,7 +72,7 @@ func (w *warehouse) reset(up bool) {
 	w.table, w.src = map[string][]map[string]any{}, map[string][]emitted{}
 }
 
-// emit files source-plane rows under the BARE org, the way the ingest door does.
+// emit files source-plane rows under the BARE org, the way the ingest endpoint does.
 func (w *warehouse) emit(org string, evs ...emitted) {
 	w.mu.Lock()
 	defer w.mu.Unlock()

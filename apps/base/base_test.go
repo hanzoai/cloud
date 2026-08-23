@@ -131,8 +131,8 @@ func TestHealthNoEmbed(t *testing.T) {
 
 // TestTableWireIsTheSameEngine proves the claim the one registration rests on:
 // the table wire and the collections API are two RENDERINGS of one read, not two
-// doors. Both are reached under the ONE prefix, both refuse the same way without a
-// principal, and a record written through one is read back through the other — off
+// endpoints. Both are reached under the ONE prefix, both refuse the same way without
+// a principal, and a record written through one is read back through the other — off
 // the same org's Base, since a second engine would answer an empty list here.
 //
 // It pins the ADDRESS as much as the behaviour. The wire used to sit at the root,

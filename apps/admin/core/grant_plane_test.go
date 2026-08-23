@@ -26,7 +26,7 @@ type creditCall struct {
 
 // servePlaneCredit serves finance.credit + finance.balance as app "commerce" on
 // this process's plane. It is the REAL op ids and the REAL wire — only the books
-// are a fixture — so a test cannot pass through a door production closes.
+// are a fixture — so a test cannot pass through a path production closes.
 func servePlaneCredit(t *testing.T, got *creditCall, balance string) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", "")

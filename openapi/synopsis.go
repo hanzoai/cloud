@@ -44,8 +44,8 @@ import (
 // which stdlib and this module's own imports never reach.
 //
 // The first import that DOCUMENTS ITSELF wins, not merely the first that
-// resolves. An app can import two packages of one subsystem — licensing's front
-// door, and the type its host's adapter has to name — and only one of them says
+// resolves. An app can import two packages of one subsystem — licensing's root
+// package, and the type its host's adapter has to name — and only one of them says
 // what the product is.
 //
 // Empty on any failure, deliberately. This is prose: a describe run from outside

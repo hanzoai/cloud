@@ -9,7 +9,7 @@
 //
 // Surface (/v1 only; org/project-scoped except where marked public):
 //
-//	GET /v1/world            front door: the product and its wires    -> {…} PUBLIC
+//	GET /v1/world            index: the product and its wires         -> {…} PUBLIC
 //	GET /v1/world/news       merged, filtered, freshest-first feed -> {items:[…]}
 //	GET /v1/world/pipeline   per-project pipeline config (read)    -> {…}
 //	PUT /v1/world/pipeline   per-project pipeline config (write)   -> {…}

@@ -1,6 +1,6 @@
 package event
 
-// event_rpc_test.go — the peer door, held to the two properties that make it safe
+// event_rpc_test.go — the peer endpoint, held to the two properties that make it safe
 // to let another process write into a shared, per-tenant store.
 //
 //	THE TENANT IS THE CALLER'S. Not a field (there is none), not a default, and

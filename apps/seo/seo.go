@@ -89,7 +89,7 @@ import (
 //
 // THE ORG PREFIX IS LOAD-BEARING and is not decoration. It picks the store FILE:
 // a bare "seo/NAME" resolves to path "/seo", which the store treats as the
-// deployment facade and lands in the _platform partition, while the REST door
+// deployment facade and lands in the _platform partition, while the REST endpoint
 // that provisioned these folded the caller's org and landed them under
 // /orgs/hanzo. Those are two different databases, and reading through the wrong
 // one is not an error — it is a secret that is simply not there.

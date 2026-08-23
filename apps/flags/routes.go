@@ -86,7 +86,7 @@ type caller struct {
 const errNoTenant = "no tenant: present a signed-in principal, or a project key as ?api_key= / x-api-key"
 
 // resolveKeyOrg maps a presented project key to its org through the ONE IAM key
-// client, exactly as the event door does. Package var ONLY so a test can substitute
+// client, exactly as the event endpoint does. Package var ONLY so a test can substitute
 // a resolver without standing up IAM; production is always cloud.OrgForKey.
 var resolveKeyOrg = cloud.OrgForKey
 
@@ -98,7 +98,7 @@ var resolveKeyOrg = cloud.OrgForKey
 // field — an In field is caller-supplied, so a tenant read from one is a
 // cross-tenant read the caller asserted for itself. Resolution FAILS CLOSED: a
 // presented-but-unresolvable key is refused rather than falling back to the host,
-// which is the same rule the event door holds.
+// which is the same rule the event endpoint holds.
 func keyOrg(ctx context.Context, c *zip.Ctx) (string, bool) {
 	key := trim(c.Query("api_key"))
 	if key == "" {

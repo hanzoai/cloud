@@ -36,7 +36,7 @@ import (
 // THERE IS NO SLACK-SPECIFIC BRANCH LEFT. A `code:` prefix used to route past the
 // brain into the coding engine, and it was deleted rather than kept beside the
 // tool path: a coding run is a TOOL the brain calls (create_agent_coding, the
-// fleet's own door), so a prefix a person had to type made the model's choice
+// fleet's own MCP server), so a prefix a person had to type made the model's choice
 // irrelevant here and left every surface that did not know the word —
 // hanzo.app, hanzo.chat, MCP — unable to run code at all. Keeping it as a
 // shortcut would have kept the model path unexercised, which is the same thing
@@ -74,7 +74,7 @@ var (
 //
 // It no longer sizes a coding pool. Admission for a coding run is the ENGINE's,
 // stated once where the run actually consumes a sandbox; a second pool here would
-// have been a second policy that the app door did not share and that could
+// have been a second policy that the app endpoint did not share and that could
 // disagree with the real one about what "full" means.
 func slackBridgeReady(s *cloud.Service[state]) {
 	channelReady()
@@ -573,7 +573,7 @@ func PostSlackBlocks(ctx context.Context, botToken, channel, text string, blocks
 }
 
 // PostSlackBlocksThread posts a Block Kit message threaded under threadTS (when
-// non-empty) via the shared chat.postMessage path — the same door PostSlackBlocks
+// non-empty) via the shared chat.postMessage path — the same path PostSlackBlocks
 // uses, plus in-thread delivery so a coding result lands under the triggering
 // @hanzo message.
 func PostSlackBlocksThread(ctx context.Context, botToken, channel, threadTS, text string, blocks []any) error {
@@ -591,7 +591,7 @@ func PostSlackBlocksThread(ctx context.Context, botToken, channel, threadTS, tex
 // Slack workspace. It resolves the org's KMS-sealed bot token (TokenFor —
 // fail-closed: unmounted / org not connected / KMS-down all error, never post) and
 // delivers through PostSlackBlocks. The caller never handles the raw token. This is
-// the door the git-lifecycle notifier (clients/git) uses so token custody stays
+// the entry point the git-lifecycle notifier (clients/git) uses so token custody stays
 // entirely inside the integrations plane.
 func NotifySlack(ctx context.Context, org, channel, text string, blocks []any) error {
 	tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)

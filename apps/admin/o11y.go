@@ -225,7 +225,7 @@ type o11yModelStat struct {
 type o11ySvcStat struct {
 	// Service is the emitting service's name, from the span's own service column.
 	// The whole cloud binary reports under ONE such name however many subsystems
-	// it mounts, which is what the per-subsystem board next door exists to split
+	// it mounts, which is what the per-subsystem board beside it exists to split
 	// apart.
 	Service string `json:"service"`
 	// Requests is how many spans it emitted in the window. The board ranks on

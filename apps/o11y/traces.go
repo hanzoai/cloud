@@ -48,7 +48,7 @@ import (
 // positional parameter, never interpolated, and the FIRST predicate — which is
 // also the table's leading sort key, so the scan starts inside the tenant rather
 // than filtering into it. There is no platform-sudo widening, and that is the
-// one place this parts company with the RED read next door (metricsread.go): a
+// one place this parts company with the RED read beside it (metricsread.go): a
 // RED series is an AGGREGATE over a product, so an admin seeing all of it
 // discloses no tenant's records, while a trace list IS the tenant's records, one
 // row at a time. A sudo bit must not turn "my traces" into "everyone's".

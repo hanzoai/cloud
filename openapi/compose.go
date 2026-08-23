@@ -31,12 +31,12 @@ import (
 // and the fix is in Wire(), not here.
 //
 // The one exception is not a policy either, it is the matcher: an operation that
-// arrived through a DOOR (openapi/relay.go — a wildcard standing for a whole
+// arrived through a RELAY (openapi/relay.go — a wildcard standing for a whole
 // registry) loses to one that did not, because a wildcard is registered after the
 // specific paths that carve out of it and fiber picks the specific one. Compose can
 // see that because a relayed operation names its own registry in x-app and a
 // direct one does not, so the rule is read off the data rather than configured.
-// Two specific claims, or two doors, are still a refusal.
+// Two specific claims, or two relays, are still a refusal.
 
 // Part is one app's contribution: its document, the name a conflict is reported
 // against, and the stage that name is at. The name is the app's, not the file's —
@@ -116,7 +116,7 @@ func (c *Conflict) Error() string {
 // every generated SDK would bind whichever the merge read last. There is one gate
 // for that, here, and both composition points call it: [Compose], where the
 // claimants are two apps, and [Project], where they are an app and the registry
-// behind its door. A second implementation would be a second policy.
+// behind its relay. A second implementation would be a second policy.
 //
 // Shapes are compared as CANONICAL JSON rather than with DeepEqual: they arrive as
 // decoded `any` trees whose numbers may be float64 or json.Number depending on how
@@ -195,7 +195,7 @@ func Compose(parts []Part) (*Document, error) {
 		Paths:   map[string]PathItem{},
 	}
 	opOwner := map[string]string{} // "METHOD path" → app
-	behind := map[string]bool{}    // "METHOD path" → the claim came through a door
+	behind := map[string]bool{}    // "METHOD path" → the claim came through a relay
 	schemas := newNouns()
 	tags := map[string]bool{}
 
@@ -206,11 +206,11 @@ func Compose(parts []Part) (*Document, error) {
 				at := strings.ToUpper(method) + " " + path
 				op := item[method]
 				// x-app names the registry that registered the operation, and it is
-				// set where that is known: [Project] stamps the module behind a door,
+				// set where that is known: [Project] stamps the module behind a relay,
 				// this stamps the app for everything else. Never overwritten — an
 				// operation that already named its registry knows better than the
 				// part it arrived in, which is exactly the traceability the field is
-				// for. Two nested doors would each stamp their own source, and the
+				// for. Two nested relays would each stamp their own source, and the
 				// innermost — the one that ran first — is the one that answers.
 				relayed := op.App != "" && op.App != p.App
 				if op.App == "" {
@@ -227,23 +227,23 @@ func Compose(parts []Part) (*Document, error) {
 					op.Tags = append(op.Tags, Compat)
 				}
 				// The stage is the SERVING app's, so it comes from the part and not
-				// from op.App: a relayed operation names the registry behind the door
+				// from op.App: a relayed operation names the registry behind the relay
 				// in x-app, and who is shown a capability is a fact about the app whose
 				// prefix the request reaches. Written unconditionally, because an app
 				// describing itself cannot know it and therefore never sets it.
 				op.Stage = p.Stage
 				if prev, dup := opOwner[at]; dup {
-					// A DOOR YIELDS TO A SPECIFIC ROUTE, because that is what the
+					// A RELAY YIELDS TO A SPECIFIC ROUTE, because that is what the
 					// matcher does: a wildcard is registered after the paths that
 					// carve out of it, and fiber picks the specific one. So a claim
-					// that arrived through a door is not a rival to one that did not
+					// that arrived through a relay is not a rival to one that did not
 					// — it is the loser, and publishing it would name a handler no
 					// request reaches. apps/o11y mounts /v1/o11y/scope in front of
-					// the o11y door for exactly this reason.
+					// the o11y relay for exactly this reason.
 					//
 					// This is the ONE case Compose resolves, and it resolves it by
 					// reading the router's own rule rather than by preferring an app.
-					// Two specific claims, or two doors, remain a refusal: those are
+					// Two specific claims, or two relays, remain a refusal: those are
 					// bugs at the composition root and there is no rule that picks.
 					switch {
 					case relayed && !behind[at]:

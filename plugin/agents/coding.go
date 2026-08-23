@@ -1,11 +1,11 @@
 package main
 
-// coding.go is where the coding engine gets its door. One typed op:
+// coding.go is where the coding engine gets its endpoint. One typed op:
 //
 //	POST /v1/agents/coding
 //
 // Every surface arrives through it. An HTTP client posts to it; a model calls it
-// as `create_agent_coding` because the fleet's door projects the same
+// as `create_agent_coding` because the fleet's MCP server projects the same
 // registration into the MCP tool list. There is no second adapter to keep in
 // step, so a run cannot differ by how it was asked for.
 //
@@ -13,14 +13,14 @@ package main
 // began with `code:`. That existed because the brain could not reach the sandbox,
 // so a human had to type a magic word to route around it. The op was always a
 // registered, dispatchable product op; the bridge just never offered it. Deleting
-// the prefix deleted the second engine with it: two doors that agreed only by
-// coincidence became one that cannot disagree with itself.
+// the prefix deleted the second engine with it: two endpoints that agreed only
+// by coincidence became one that cannot disagree with itself.
 //
 // It lives at the composition root because the engine cannot live anywhere else.
 // apps/coding imports apps/agents (the routed workflow's types), so apps/agents
 // can never import apps/coding, and neither can hold both halves. A main is a
 // leaf: it is the one place that can. That is the same reason the six client ops
-// next door are declared here rather than in either app.
+// in clients.go are declared here rather than in either app.
 //
 // # Why the tenant is read and never accepted
 //
@@ -49,20 +49,20 @@ import (
 // and the MCP tool list — Go drops comments at compile time.
 //
 // The composition root needs it as much as any app, and had it least: the ops
-// declared HERE are the coding run itself, and they reached the door with a bare
-// schema — twelve properties and not one word. An agent was told `tool` is a
-// string and not that the strings are dev, claude, codex, python and node; told
-// `repo` and `project` both exist with nothing to say which one names the code.
-// This is the surface a chat turn uses to start a run, so a guess here is a run
-// spent on the wrong thing.
+// declared HERE are the coding run itself, and they reached the tool list with a
+// bare schema — twelve properties and not one word. An agent was told `tool` is
+// a string and not that the strings are dev, claude, codex, python and node;
+// told `repo` and `project` both exist with nothing to say which one names the
+// code. This is the surface a chat turn uses to start a run, so a guess here is
+// a run spent on the wrong thing.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // mountAgents is the process's Mount: the agents subsystem, then the coding
-// door that rides in the same process. Composition, not a second plugin — the
-// engine has to be here (the session store, the durable engine and the routed
-// mailbox are all in this process) and giving it its own binary would put a
-// socket between a run and the mailbox it is handed through.
+// endpoint that rides in the same process. Composition, not a second plugin —
+// the engine has to be here (the session store, the durable engine and the
+// routed mailbox are all in this process) and giving it its own binary would put
+// a socket between a run and the mailbox it is handed through.
 func mountAgents(app cloud.Router, deps cloud.Deps) error {
 	if err := agentsMount(app, deps); err != nil {
 		return err
@@ -125,10 +125,10 @@ func shutdownAgents(ctx context.Context) error {
 }
 
 // codingDoor is the one registration of the coding op in this program. It is its
-// own function so a test can stand the real door up on a socket and be DOWNSTREAM
-// of the registration rather than beside it — a harness that rebuilt the route by
-// hand would stay green through exactly the mutation that matters, and this op's
-// reachability is now the only way a chat turn gets to a sandbox.
+// own function so a test can stand the real endpoint up on a socket and be
+// DOWNSTREAM of the registration rather than beside it — a harness that rebuilt
+// the route by hand would stay green through exactly the mutation that matters,
+// and this op's reachability is now the only way a chat turn gets to a sandbox.
 func codingDoor(app *zip.App) {
 	zip.Post[plane.CodingStartIn, plane.CodingStarted](app, "/v1/agents/coding", startCoding,
 		zip.WithStatus(http.StatusAccepted),
@@ -147,7 +147,7 @@ func codingDoor(app *zip.App) {
 //
 // The handle is a session id, and that is deliberate: the session is already the
 // run's durable record and its live stream (/v1/agents/sessions/{id}/stream), so
-// this door does not grow a progress endpoint, a status endpoint or a cancel
+// this op does not grow a progress endpoint, a status endpoint or a cancel
 // endpoint of its own. One way to watch a run, whoever started it.
 //
 // It is also how work CONTINUES. Pass an earlier run's session as `after` and
@@ -168,7 +168,7 @@ func startCoding(ctx context.Context, in *plane.CodingStartIn) (*plane.CodingSta
 	// session actor and the PR assignee; a model must not be able to state it.
 	// It is read in the handler rather than in middleware because zip dispatches
 	// an MCP tools/call and a call-plane op straight into the op with no route
-	// middleware, so a middleware guard would cover one door in three.
+	// middleware, so a middleware guard would cover one entry point in three.
 	acc, err := coding.Start(ctx, org, strings.TrimSpace(cloud.Who(ctx).User), *in, routeLog)
 	if err != nil {
 		return nil, codingRefusal(err)
@@ -189,7 +189,7 @@ func codingRefusal(err error) error {
 	return zip.ErrBadRequest(err.Error())
 }
 
-// The plane door is gone with the bridge it served. Its only caller was the Slack
+// The plane op is gone with the bridge it served. Its only caller was the Slack
 // `code:` prefix, which existed because the brain could not reach the sandbox —
 // and the sandbox has been a typed product op, registered and dispatchable, the
-// whole time. One door, chosen by the model, reached from every surface.
+// whole time. One entry point, chosen by the model, reached from every surface.

@@ -234,7 +234,7 @@ func TestDetermine_ANonFiringRuleLeavesTheModelsAnswerWhole(t *testing.T) {
 // The thresholds are policy, and a policy that read as zero would not be a
 // permissive setting — it would be the rule silently switched off in one
 // direction and firing on everything in the other. Both are refused HERE, where a
-// number is changed, rather than discovered at a credit door.
+// number is changed, rather than discovered at a credit endpoint.
 func TestDetermine_TheStatedBoundsCannotDisableTheRule(t *testing.T) {
 	switch {
 	case freezeNano <= 0:
@@ -331,7 +331,7 @@ func TestDetermine_OverTheWireInShadowIsUnchanged(t *testing.T) {
 // finding that this party may not transact at all", which is the AML plane's to
 // make about a person and not this one's about a country and a number.
 //
-// WHAT DEPENDS ON IT. The credit door tells a DETERMINATION apart from a
+// WHAT DEPENDS ON IT. The credit endpoint tells a DETERMINATION apart from a
 // no-decision by the pair (action == block AND a refusal), because
 // [cloud.riskUnavailable] is then the only thing that can have produced it. Emit
 // block from here — with a warming model's refusal still riding along, which the
@@ -367,7 +367,7 @@ func TestActions_TheScorerNeverBlocks(t *testing.T) {
 				case "ActionBlock", "ActionChallenge":
 					found++
 					t.Errorf("%s:%d names cloud.%s — this app's vocabulary is allow, review and "+
-						"restrict, and the credit door reads a block CARRYING a refusal as the fail "+
+						"restrict, and the credit endpoint reads a block CARRYING a refusal as the fail "+
 						"policy's no-decision rather than as a determination",
 						name, fset.Position(sel.Pos()).Line, sel.Sel.Name)
 				}
@@ -656,7 +656,7 @@ func TestDetermine_TheSeverestOfTheThreeHalvesStandsAndEveryFindingIsReported(t 
 // The bounds are policy, and a policy that read as zero would not be a permissive
 // setting — it would be the rule firing on everything in one direction and
 // silently switched off in the other. Both are refused HERE, where a number is
-// changed, rather than discovered at a credit door.
+// changed, rather than discovered at a credit endpoint.
 func TestDetermine_TheAggregateBoundsCannotDisableTheRules(t *testing.T) {
 	// THE COUNT MUST BE ABOVE WHAT A FOLD ALONE PRODUCES. A tenant's own surface
 	// folds in one observation per (subject, featureBucket); at or under that
@@ -709,7 +709,7 @@ func TestDetermine_TheAggregateBoundsCannotDisableTheRules(t *testing.T) {
 
 // TestPace_OverTheWire is the velocity deliverable through the op a gate actually
 // calls, on an ARMED organisation, against REAL aggregates filled by that
-// organisation's own learn door — and with a model that has learned far too
+// organisation's own learn endpoint — and with a model that has learned far too
 // little to have an opinion.
 //
 // It is what proves the reading, the axes and the bounds are wired end to end
@@ -815,7 +815,7 @@ func TestFan_OverTheWire(t *testing.T) {
 
 // TestAggregates_OverTheWireAnOrdinaryEventIsAllowed is the negative control for
 // both halves, and it is the row that makes every assertion above mean something:
-// the same armed organisation, the same door, real aggregates holding real
+// the same armed organisation, the same endpoint, real aggregates holding real
 // history, and one ordinary low-value payment ALLOWS.
 //
 // A rule that reviewed this is a rule nobody can ship.

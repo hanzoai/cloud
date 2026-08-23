@@ -14,7 +14,7 @@
 
 package event
 
-// event_rpc.go — the event door, for a peer in ANOTHER PROCESS.
+// event_rpc.go — the event endpoint, for a peer in ANOTHER PROCESS.
 //
 // This package owns POST /v1/event, event.fact and the /v1/event/insights reads over
 // them. The pod forks one process per app, so an app that wanted its OWN facts
@@ -27,21 +27,21 @@ package event
 //	             and read as nil in the one that needed it — and it is the same
 //	             mistake one layer over.
 //	OVER HTTP    the public edge: a second gate, a second credential and a hop
-//	             through the fleet's front door to reach a table one socket away.
+//	             through the fleet's edge to reach a table one socket away.
 //	             A peer with no browser and no bearer would have to be issued one
 //	             to state a fact about its own work.
 //
 // So the peer ASKS, on the app's own socket, exactly as a debit asks commerce and
-// a decision asks risk. It is the WRITE side of the door ObsErrorPost already
-// claims a slice of, and it reaches the SAME write core every HTTP door reaches
+// a decision asks risk. It is the WRITE side of the surface ObsErrorPost already
+// claims a slice of, and it reaches the SAME write core every HTTP endpoint reaches
 // — one admission, one normalizer, one storage projection. A second path into
 // event.fact would be a second answer to "what is an event", and the two would
 // disagree the first time the scrubber changed.
 //
 // THE TENANT IS THE CALLER'S. It is minted from the plane principal and there is
 // no field on the wire that could name one, so a peer can only ever write into
-// its own organisation's partition. That is the HTTP door's rule (analytics.go's
-// tenancy paragraph) applied at the other door, and it is the whole of the
+// its own organisation's partition. That is the HTTP endpoint's rule (analytics.go's
+// tenancy paragraph) applied at the other endpoint, and it is the whole of the
 // isolation: `org` is stamped into the fact by normalize, and every read binds it
 // positionally.
 
@@ -55,7 +55,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// exposeCapture publishes the door. build calls it.
+// exposeCapture publishes the endpoint. build calls it.
 func exposeCapture() {
 	zip.Post[planeops.EventIn, planeops.EventCaptured](cloud.Plane(), "/event/capture", planeCapture,
 		zip.WithOperationID(planeops.EventCapture),
@@ -63,8 +63,8 @@ func exposeCapture() {
 }
 
 // Captures ONE occurrence onto the calling organisation's own event plane — the
-// same plane the HTTP door fills and /v1/event/insights reads back, through the SAME
-// write core.
+// same plane the HTTP endpoint fills and /v1/event/insights reads back, through the
+// SAME write core.
 //
 // The organisation is the CALLER's, minted from the plane principal and never
 // from this body, which carries no field that could name one. A peer that states
@@ -95,7 +95,7 @@ func planeCapture(ctx context.Context, in *planeops.EventIn) (*planeops.EventCap
 		Product:    strings.TrimSpace(in.Product),
 		DistinctID: strings.TrimSpace(in.Subject),
 		Timestamp:  strings.TrimSpace(in.At),
-		// THE FOUR COMMERCE FACTS ARE COLUMNS, and this door has to say so. Every
+		// THE FOUR COMMERCE FACTS ARE COLUMNS, and this endpoint has to say so. Every
 		// value on this plane is TEXT ([planeops.Signal] is its one name/value pair),
 		// so a peer's sale arrived with revenue, currency, product and quantity
 		// sitting in the property bag as strings while the fields the rest of the
@@ -103,7 +103,7 @@ func planeCapture(ctx context.Context, in *planeops.EventIn) (*planeops.EventCap
 		// nothing, and apps/destinations forwarded a purchase worth nothing to every
 		// connected platform. They are read under the SAME names the HTTP wire spells
 		// them with (CaptureEvent's json tags), so one sale has one vocabulary
-		// whichever door it came in through, and an unparseable value is simply the
+		// whichever endpoint it came in through, and an unparseable value is simply the
 		// zero it already was.
 		Revenue:    revenue,
 		Currency:   said(attrs, "currency"),

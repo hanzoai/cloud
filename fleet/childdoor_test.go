@@ -7,27 +7,29 @@ package fleet_test
 // The rest of this package's tests build children out of typed ops, which is the
 // half of the fleet that was never broken. Thirty of the fleet's 117 subsystems
 // have no typed op at all — their routes are raw handlers, or they belong to
-// another module — and for those zip returned before registering a door
+// another module — and for those zip returned before registering an MCP route
 // (zip@v1.25.1 mcp.go:99: no registry, no plugin catalogue, no per-caller Source
 // ⇒ no route). Nothing claimed POST /mcp in those processes, the ask fell through
 // to the console's terminal handler, and it answered the signpost that is right
-// only on the front door: 308 → /v1/mcp, which inside a child is a 404. The door
-// read the non-2xx as an outage (fleet/fleet.go, ask) and reported thirty healthy
-// subsystems as unreachable:
+// only on the public endpoint: 308 → /v1/mcp, which inside a child is a 404. The
+// MCP server read the non-2xx as an outage (fleet/fleet.go, ask) and reported
+// thirty healthy subsystems as unreachable:
 //
 //	"exec answered 308 for /mcp"
 //
 // So this test composes a REAL one of those thirty the way cloud.Serve composes a
 // plugin child — cloud.App, its own Mount, the console mounted LAST as the
-// terminal handler — puts it on a unix socket, and drives the composed door over
-// that wire. apps/exec is the representative: 56 operations, every one of them a
-// raw reverse-proxy route by design (apps/exec/typed_wire_test.go is that
-// ledger), so its registry is empty for the same reason the other twenty-nine are.
+// terminal handler — puts it on a unix socket, and drives the composed MCP
+// server over that wire. apps/exec is the representative: 56 operations, every
+// one of them a raw reverse-proxy route by design (apps/exec/typed_wire_test.go
+// is that ledger), so its registry is empty for the same reason the other
+// twenty-nine are.
 //
 // It asserts the ANSWER, never a status: the child's own reply must be a JSON-RPC
-// result carrying a tools array, and the fleet's door must name no outage for it.
-// An empty array is a real answer — "asked, serves nothing" is a different fact
-// from "could not be asked", and telling those apart is what package fleet is for.
+// result carrying a tools array, and the fleet's MCP server must name no outage
+// for it. An empty array is a real answer — "asked, serves nothing" is a
+// different fact from "could not be asked", and telling those apart is what
+// package fleet is for.
 
 import (
 	"encoding/json"
@@ -49,7 +51,7 @@ import (
 // socket. Nothing here is a fixture: cloud.App is the one constructor every
 // plugin main reaches Serve through, MountAll is the loop Serve runs, and
 // webui.Mount is the terminal handler Serve installs last in EVERY process —
-// which is the handler that answered the door.
+// which is the handler that answered the ask.
 func darkChild(t *testing.T, name string, mount cloud.MountFunc) *child {
 	t.Helper()
 	cfg := &cloud.Config{Brand: "hanzo", Domain: "api.hanzo.ai", DataDir: t.TempDir(), Enable: []string{name}}
@@ -77,7 +79,7 @@ func darkChild(t *testing.T, name string, mount cloud.MountFunc) *child {
 func TestASubsystemWithNoTypedOpStillAnswersTheDoor(t *testing.T) {
 	kid := darkChild(t, "exec", exec.Mount)
 
-	// END ONE — the child's own door, at the address the fleet asks. The claim is
+	// END ONE — the child's own MCP server, at the address the fleet asks. The claim is
 	// about the BYTES: a JSON-RPC result with a tools array. A 308 has neither, and
 	// so did every one of the thirty.
 	req, err := http.NewRequest(http.MethodPost, manifest.FrameworkMCPPath, strings.NewReader(toolsListBody))
@@ -93,7 +95,7 @@ func TestASubsystemWithNoTypedOpStillAnswersTheDoor(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 
 	if loc := resp.Header.Get("Location"); loc != "" {
-		t.Errorf("the child SIGNPOSTED its own door to %q — that address is a 404 in this process, "+
+		t.Errorf("the child SIGNPOSTED its own MCP address to %q — that address is a 404 in this process, "+
 			"which is why following the hop is not the fix", loc)
 	}
 	var env struct {
@@ -111,7 +113,7 @@ func TestASubsystemWithNoTypedOpStillAnswersTheDoor(t *testing.T) {
 	}
 	t.Logf("exec POST %s -> %d, %d tools", manifest.FrameworkMCPPath, resp.StatusCode, len(env.Result.Tools))
 
-	// END TWO — the composed door over the same child, over its real socket. A
+	// END TWO — the composed MCP server over the same child, over its real socket. A
 	// subsystem that answers must not be NAMED as an outage: that list is what a
 	// client reads to know its catalogue is short, so a false entry there is the
 	// same lie as a silently short list.
@@ -119,15 +121,15 @@ func TestASubsystemWithNoTypedOpStillAnswersTheDoor(t *testing.T) {
 	res := rpc(t, h, toolsListBody)
 	for _, o := range outages(t, res) {
 		if o.App == "exec" {
-			t.Fatalf("the door reports exec unreachable: %q — it is up and it answered", o.Error)
+			t.Fatalf("the MCP server reports exec unreachable: %q — it is up and it answered", o.Error)
 		}
 	}
 	if _, ok := res["tools"]; !ok {
-		t.Fatalf("the door answered without a tools array — %v", res)
+		t.Fatalf("the MCP server answered without a tools array — %v", res)
 	}
 }
 
-// outages reads the door's own outage list off the result's _meta.
+// outages reads the MCP server's own outage list off the result's _meta.
 func outages(t *testing.T, res map[string]any) []fleet.Outage {
 	t.Helper()
 	meta, _ := res["_meta"].(map[string]any)

@@ -4,7 +4,7 @@
 // git, open a native "PR" work item, and return a Result the caller renders.
 //
 // It is a LIBRARY, not an app: no route, no plugin, no manifest row. Its one
-// caller is plugin/agents, which registers the one door. It touches its
+// caller is plugin/agents, which registers the one endpoint. It touches its
 // collaborators only through interface clients (Sessions, PR, Runner) plus two
 // git functions (CloneURL, VerifyRef), so the whole orchestration is unit-testable
 // with fakes and — critically — coding does NOT import apps/git: git imports
@@ -26,8 +26,8 @@ import (
 	"strings"
 )
 
-// RepoRE is the repo-name rule every door validates against, mirroring the git
-// subsystem's own name check. It is here and exported because a door that
+// RepoRE is the repo-name rule every endpoint validates against, mirroring the git
+// subsystem's own name check. It is here and exported because an endpoint that
 // invented its own rule would eventually accept a token carrying a path
 // separator, and a repo name that can carry a path can address another org's
 // namespace.
@@ -235,8 +235,8 @@ type Req struct {
 	// sandboxrunner.go are the only two things that read them.
 	Tool    string
 	Desktop bool
-	// SessionID adopts an ALREADY-OPEN session instead of opening one. The door
-	// (Start) opens it so it can answer with a real handle the moment the run is
+	// SessionID adopts an ALREADY-OPEN session instead of opening one. The entry
+	// point (Start) opens it so it can answer with a real handle the moment the run is
 	// admitted, rather than an empty promise the caller cannot watch. Empty keeps
 	// the original behaviour — Run opens its own — which is what the unit tests
 	// exercise and what a direct Dispatcher caller still gets.
@@ -383,7 +383,7 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	actor := strings.TrimSpace(req.UserID)
 
 	// 1. Register the live session (the durable record + live stream root), or
-	// adopt the one the door already opened to answer its caller with.
+	// adopt the one the entry point already opened to answer its caller with.
 	sessionID := strings.TrimSpace(req.SessionID)
 	if sessionID == "" {
 		var err error

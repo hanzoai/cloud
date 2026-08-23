@@ -28,23 +28,24 @@ import (
 
 // THE TENANT HAS TO SURVIVE THE HOP, and nothing tested that it did.
 //
-// The door resolves who is asking and the op behind it acts for them, but they
-// are two resolutions on two different context shapes: the door has a REQUEST,
-// and the plane op has only what ask() stamped — plane.For sets
+// The endpoint resolves who is asking and the op behind it acts for them, but
+// they are two resolutions on two different context shapes: the endpoint has a
+// REQUEST, and the plane op has only what ask() stamped — plane.For sets
 // zip.Caller{Org} and leaves everything else empty. A fix to one says nothing
 // about the other, which is exactly how a first attempt at this passed its own
 // tests and changed a 401 into a 403 in production and nothing else.
 //
 // So this asserts the HANDOFF rather than either end: a trusted service with no
-// session reaches the door, and the org the door resolved is the org the op is
-// invoked for. The stub stands in for commerce and records what it was told.
+// session reaches the endpoint, and the org the endpoint resolved is the org
+// the op is invoked for. The stub stands in for commerce and records what it
+// was told.
 func TestTheOrgTheDoorResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	const token = "test-commerce-service-token"
 
 	// The stub has to be REACHABLE as commerce, not merely registered: plane.Ask
 	// resolves the peer by name (zip.Serving), and without that it answers
-	// ErrNoPeer and the door reports 503 before the op is ever invoked — which is
-	// what this test did until it served the plane.
+	// ErrNoPeer and the endpoint reports 503 before the op is ever invoked —
+	// which is what this test did until it served the plane.
 	// planetest.Dir, not t.TempDir: a temp dir named for the test carries the
 	// TEST'S NAME, and this one is 49 characters. Darwin allows 103 bytes of
 	// sun_path total, so the socket under it did not bind — as "invalid argument",
@@ -76,12 +77,12 @@ func TestTheOrgTheDoorResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("the trusted service did not reach the op: %d %s", code, body)
 	}
-	// The whole point: the op was invoked FOR the tenant the door admitted, not
-	// for nobody. Empty here is the production 403 — the op reached, and refusing
-	// because it could not tell whose books it was reading.
+	// The whole point: the op was invoked FOR the tenant the endpoint admitted,
+	// not for nobody. Empty here is the production 403 — the op reached, and
+	// refusing because it could not tell whose books it was reading.
 	if sawOrg != "hanzo" {
 		t.Errorf("the plane op acted for org %q, want \"hanzo\" — the tenant did not "+
-			"survive the hop from the door to the op", sawOrg)
+			"survive the hop from the endpoint to the op", sawOrg)
 	}
 	// The SUBJECT is a separate question and this does not decide it. A service
 	// token carries no X-User-Name or X-User-Id, so principal.Subject has no

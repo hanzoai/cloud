@@ -5,15 +5,15 @@ package fleet_test
 // The grouped surface, over the wire, at the scale that broke the flat one.
 //
 // The measurement these tests exist to hold is not a ratio someone computed. It
-// was taken from the deployed door:
+// was taken from the deployed MCP server:
 //
 //	$ curl -s https://api.hanzo.ai/v1/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 //	200  977636 bytes   1189 tools   (2026-08-06, _meta: 134 refused, 31 apps unavailable)
 //
 // ~244,000 tokens to enumerate what can be called, and Slack keeps 128 of them.
 // So [liveFlatBytes] below is a real number from a real server, and
-// TestTheWholeFleetFitsInAModelsHead puts the SAME fleet through the new door
-// and prints what it costs now.
+// TestTheWholeFleetFitsInAModelsHead puts the SAME fleet through the new MCP
+// server and prints what it costs now.
 //
 // "The same fleet" is literal: the corpus is plugin/*/openapi.json — each
 // subsystem's own spec, written by its own binary, which is where its operation
@@ -35,8 +35,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// liveFlatBytes and liveFlatTools are the deployed door's flat tools/list, as
-// measured. See the file comment.
+// liveFlatBytes and liveFlatTools are the deployed MCP server's flat tools/list,
+// as measured. See the file comment.
 const (
 	liveFlatBytes = 977636
 	liveFlatTools = 1189
@@ -65,7 +65,7 @@ func corpus(t *testing.T) map[string][]fleet.CorpusOp {
 }
 
 // serving brings up one child per app, each declaring the operations given, and
-// returns a door over all of them.
+// returns an MCP server over all of them.
 //
 // The routes are this test's, the ids and the DOCUMENTATION are the fleet's: zip
 // derives a tool name from the route only when nobody declared one, and every op
@@ -116,7 +116,7 @@ func declaring(t *testing.T, by map[string][]string) *zip.App {
 }
 
 // ---------------------------------------------------------------------------
-// what the door publishes
+// what the MCP server publishes
 // ---------------------------------------------------------------------------
 
 // TestTheDoorPublishesOneToolPerSubsystem is the shape of the answer: a tool per
@@ -133,7 +133,7 @@ func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 	got := names(res)
 	want := []string{fleet.Describe, "ai", "git"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("the door publishes %v, want %v", got, want)
+		t.Fatalf("the MCP server publishes %v, want %v", got, want)
 	}
 	// describe leads because everything else is unusable without it; the
 	// subsystems then follow in productStems order, chat before git.
@@ -158,9 +158,9 @@ func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 }
 
 // TestNoSubsystemIsCalledDescribe is the one thing dropping the `hanzo_` prefix
-// put at risk, checked where it is decidable: the door's tools are the app names
-// plus [fleet.Describe], so an app called `describe` would publish a SECOND tool
-// under that name and the door would answer it as its own — the subsystem
+// put at risk, checked where it is decidable: the MCP server's tools are the app
+// names plus [fleet.Describe], so an app called `describe` would publish a SECOND
+// tool under that name and the MCP server would answer it as its own — the subsystem
 // silently unreachable, with nothing in either file to say why.
 //
 // It reads the manifest, which is the fleet's source of truth for app names, so
@@ -168,14 +168,14 @@ func TestTheDoorPublishesOneToolPerSubsystem(t *testing.T) {
 func TestNoSubsystemIsCalledDescribe(t *testing.T) {
 	for _, a := range manifest.Apps {
 		if a.Name == fleet.Describe {
-			t.Fatalf("manifest declares an app named %q, which is also the door's own tool; "+
+			t.Fatalf("manifest declares an app named %q, which is also the MCP server's own tool; "+
 				"rename the app or rename the tool — they cannot share one name", a.Name)
 		}
 	}
 }
 
 // TestTheWholeFleetFitsInAModelsHead is the measurement, over this fleet's own
-// operation corpus, through the real door, on the wire.
+// operation corpus, through the real MCP server, on the wire.
 func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	by := corpus(t)
 	declared := 0
@@ -192,8 +192,8 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	tools, ops := names(res), offered(res)
 
 	// Every published tool is ONE subsystem of the corpus, and every name in its
-	// enum is an operation THAT subsystem declared — under the name the door
-	// publishes for it, or under its own id where naming it would have been
+	// enum is an operation THAT subsystem declared — under the name the MCP
+	// server publishes for it, or under its own id where naming it would have been
 	// ambiguous. Nothing leaks between apps, and nothing is invented.
 	owns := map[string]map[string]bool{}
 	for app, ops := range by {
@@ -213,7 +213,7 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 		subsystems++
 		app := name
 		if owns[app] == nil {
-			t.Fatalf("the door published %q and no such subsystem is in the corpus", name)
+			t.Fatalf("the MCP server published %q and no such subsystem is in the corpus", name)
 		}
 		for _, op := range offered(map[string]any{"tools": []any{tl}}) {
 			if !owns[app][op] {
@@ -237,7 +237,7 @@ func TestTheWholeFleetFitsInAModelsHead(t *testing.T) {
 	}
 
 	if len(tools) >= slackKeeps {
-		t.Fatalf("the door publishes %d tools and a client keeps %d — the cap is still binding", len(tools), slackKeeps)
+		t.Fatalf("the MCP server publishes %d tools and a client keeps %d — the cap is still binding", len(tools), slackKeeps)
 	}
 	if tools[0] != fleet.Describe {
 		t.Errorf("the first tool is %q; a client that truncates must keep the one tool the enums cannot be read without", tools[0])
@@ -333,8 +333,8 @@ func routed(t *testing.T, name string, routes ...string) *child {
 // lives or dies on, and it is asked of a real child over a real socket rather
 // than of the naming function.
 //
-// The door publishes `deploy_project`. A model reads that in the enum and sends
-// it back, and what has to happen is that the child's own
+// The MCP server publishes `deploy_project`. A model reads that in the enum
+// and sends it back, and what has to happen is that the child's own
 // `post_projects_by_slug_deploy` handler runs, with the model's arguments,
 // and answers what it would have answered anyway. So the two spellings are
 // compared to EACH OTHER — a change that broke either path by breaking both
@@ -408,7 +408,7 @@ func TestASubsystemToolWithNoOpSaysWhatItNeeds(t *testing.T) {
 }
 
 // TestAnUnservedOpInAnEnvelopeIsRefusedNotForwarded: the envelope does not make
-// the door credulous. A name nobody listed is the same -32602 it always was.
+// the MCP server credulous. A name nobody listed is the same -32602 it always was.
 func TestAnUnservedOpInAnEnvelopeIsRefusedNotForwarded(t *testing.T) {
 	h := host(t, []string{"alpha"}, map[string]*child{"alpha": start(t, "alpha", 1)})
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":3,"method":"tools/call",`+
@@ -482,7 +482,7 @@ func TestDescribeOfANameNobodyServesIsRefused(t *testing.T) {
 //
 // The child really does serve CreateServiceAccountKey — its registry has it and
 // a direct call to the child would mint a key — so what is under test is the
-// door's refusal at every path that now exists:
+// MCP server's refusal at every path that now exists:
 //
 //	tools/list        the name is in no subsystem's `op` enum
 //	tools/call        console{op:CreateServiceAccountKey} does not run it
@@ -509,13 +509,14 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	for _, n := range append(offered(res), names(res)...) {
 		if strings.Contains(n, "ServiceAccountKey") {
-			t.Errorf("the door offers %q — an agent can mint a credential with it", n)
+			t.Errorf("the MCP server offers %q — an agent can mint a credential with it", n)
 		}
 	}
 	if raw, _ := json.Marshal(res); strings.Contains(string(raw), "ServiceAccountKey") {
 		t.Errorf("the name survives somewhere in tools/list: %s", raw)
 	}
-	// …and the surviving siblings are still offered, so this is a gate and not a broken door.
+	// …and the surviving siblings are still offered, so this is a gate and not a broken
+	// MCP server.
 	if got := strings.Join(offered(res), ","); got != "create_chat_completion,GetUser" {
 		t.Errorf("the gate ate a surviving op: enum is %q", got)
 	}
@@ -539,7 +540,7 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	}
 
 	// The refusal says nothing a caller could not have guessed. Naming which of
-	// "withheld" and "does not exist" it was would make the door an oracle for
+	// "withheld" and "does not exist" it was would make the MCP server an oracle for
 	// the surface it just declined to expose.
 	for _, res := range []map[string]any{call, desc} {
 		e, _ := res["error"].(map[string]any)
@@ -552,7 +553,7 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 	}
 
 	// And the sibling still runs through the same envelope, so none of the above
-	// passes because the door is broken.
+	// passes because the MCP server is broken.
 	ok := rpc(t, h, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"console",`+
 		`"arguments":{"op":"post_chat_completions","input":{"which":"hello"}}}}`)
 	content, _ := ok["content"].([]any)
@@ -570,19 +571,19 @@ func TestARefusedOpIsInvisibleUncallableAndUndescribable(t *testing.T) {
 // tools/list has an empty routing table AND an empty published-name table, and
 // it must fill BOTH before it decides the name is nobody's.
 //
-// A client caches tools/list across reconnects; the door remembers nothing
-// between requests. So the very first thing a restarted door sees can be a
-// tools/call naming an operation it has never gathered, spelled the way it
-// published it an hour ago.
+// A client caches tools/list across reconnects; the MCP server remembers
+// nothing between requests. So the very first thing a restarted MCP server
+// sees can be a tools/call naming an operation it has never gathered, spelled
+// the way it published it an hour ago.
 func TestAColdDoorDispatchesAPublishedNameOnTheFirstCall(t *testing.T) {
 	kid := routed(t, "projects", "/v1/projects/:slug/deploy")
 	h := host(t, []string{"projects"}, map[string]*child{"projects": kid})
 
-	// No tools/list first. This is the door's first request.
+	// No tools/list first. This is the MCP server's first request.
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"projects",`+
 		`"arguments":{"op":"deploy_project","input":{"which":"cold"}}}}`)
 	if e, refused := res["error"].(map[string]any); refused {
-		t.Fatalf("a cold door refused its own published name: %v", e)
+		t.Fatalf("a cold MCP server refused its own published name: %v", e)
 	}
 	if text := textOf(t, res); !strings.Contains(text, `"which":"cold"`) {
 		t.Fatalf("the cold call did not reach projects' handler: %q", text)

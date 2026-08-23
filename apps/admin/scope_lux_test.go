@@ -103,11 +103,11 @@ func TestScope_LuxAdminCannotReachDO(t *testing.T) {
 // read-path pins are covered above; this closes the write path.
 //
 // The recording moved with the address. The write used to be a forward carrying
-// X-Org-Id to commerce's own HTTP door; it is a call BY NAME now, and the org
+// X-Org-Id to commerce's own HTTP endpoint; it is a call BY NAME now, and the org
 // rides the CALLER — plane.AlertSpec cannot name one — so the peer records the
 // tenant the call was answered for, which is the same question asked where the
 // answer now lives. The fixture refuses an org-less call exactly as commerce
-// does, so this cannot pass through a door production closes.
+// does, so this cannot pass through an endpoint production closes.
 func TestScope_LuxAdminSpendCapWriteHardPinned(t *testing.T) {
 	commerce := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

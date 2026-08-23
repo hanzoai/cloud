@@ -4,8 +4,8 @@ package esign
 // only esign routes that reach a schema, the MCP tool list, the CLI and the
 // generated SDKs. Before this file the whole surface published thirteen
 // operationIds and NO body: every SDK offered "upload a PDF for signature" with
-// nowhere to put the PDF, and an agent asking the fleet door what it could do was
-// told a document could be signed and never what to send.
+// nowhere to put the PDF, and an agent asking the fleet MCP server what it could
+// do was told a document could be signed and never what to send.
 //
 // The package doc and HIP-1125 §3 both said nothing here could be typed, on one
 // premise: every route is built by a handler FACTORY closing over a bundle route
@@ -73,7 +73,7 @@ import (
 type ops struct{ s *cloud.Service[state] }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// the two doors
+// the two surfaces
 // ─────────────────────────────────────────────────────────────────────────────
 
 // owner is the tenant of a SENDER's call: the validated principal's own org, read
@@ -138,7 +138,7 @@ func bundleMessage(status int, body []byte) string {
 // run is the shared tail of every typed op: dispatch the bundle route on the
 // resolved tenant's store, index any signing tokens the answer minted, and decode
 // the answer into out. ONE place turns a bundle response into either an out value
-// or a goja.BundleErr, so the two doors cannot come to disagree about what a
+// or a goja.BundleErr, so the two surfaces cannot come to disagree about what a
 // refusal looks like.
 //
 // The cross-tenant index write is part of the operation and not a follow-up: a
@@ -341,8 +341,8 @@ func (in *esignFieldIn) UnmarshalJSON(b []byte) error {
 	return unreadable(in.SizedIn, b)
 }
 
-// esignTokenRef is the signer's door: the capability that opens it and the tenant
-// the caller claims it belongs to.
+// esignTokenRef is what a signer presents: the capability that admits them and
+// the tenant the caller claims it belongs to.
 //
 // Both are path segments and NEITHER is in the body, which is what stops a body
 // from naming a different tenant than the URL the router matched. The org is not
@@ -354,7 +354,7 @@ type esignTokenRef struct {
 	// an unknown token gets.
 	Org string `json:"-" url:"org"`
 	// Token is the crypto-random signing capability from the link, and it is the
-	// whole credential — there is no account behind this door. It names the
+	// whole credential — there is no account behind it. It names the
 	// recipient, so a signer reaches only their own fields.
 	Token string `json:"-" url:"token"`
 }
@@ -560,8 +560,8 @@ type esignInvite struct {
 	// for.
 	Role string `json:"role"`
 	// Token is the crypto-random signing capability for this recipient. It is the
-	// entire credential their door accepts, so treat it as a secret and hand it
-	// only to them: the signing link is built from it.
+	// entire credential their signing endpoint accepts, so treat it as a secret
+	// and hand it only to them: the signing link is built from it.
 	Token string `json:"token"`
 }
 
@@ -667,7 +667,7 @@ type esignState struct {
 	Title string `json:"title"`
 }
 
-// esignSigner is the recipient a signing token identifies — you, at this door.
+// esignSigner is the recipient a signing token identifies — you, at this endpoint.
 type esignSigner struct {
 	// Email is the address the link was issued to.
 	Email string `json:"email"`
@@ -727,7 +727,7 @@ type esignCompletion struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// the sender's door — a validated principal, scoped to its own org
+// the sender's surface — a validated principal, scoped to its own org
 // ─────────────────────────────────────────────────────────────────────────────
 
 // health reports whether the e-signature surface is mounted.
@@ -749,7 +749,7 @@ func health(context.Context, *esignNone) (*esignHealth, error) {
 // own key so it survives sealing untouched: a completed document can always be
 // compared against what was uploaded. Creation is recorded on the audit trail.
 //
-// This is the sender's door: a validated principal is required, and the document
+// This is the sender's surface: a validated principal is required, and the document
 // lands in that principal's OWN org. Isolation is physical rather than a filter —
 // each tenant has its own store — so another org's document id is simply not
 // there. A body over 32 MiB is refused with 413.
@@ -805,9 +805,10 @@ func (o ops) getDocument(ctx context.Context, in *esignRef) (*esignDocument, err
 // AddRecipient adds someone to a draft and mints their signing token.
 //
 // It answers 201 with the recipient's id and their signing TOKEN — the
-// crypto-random capability that is the only credential the signer's door accepts —
-// so this response is where the signing link is built from. A CC recipient is
-// recorded as already complete, because they are never asked to sign.
+// crypto-random capability that is the only credential the signer's surface
+// accepts — so this response is where the signing link is built from. A CC
+// recipient is recorded as already complete, because they are never asked to
+// sign.
 //
 // Only while DRAFT: adding a recipient to a document already sent is a 409,
 // because the field layout and the turn order were fixed when it went out. An
@@ -920,7 +921,7 @@ func (o ops) auditDocument(ctx context.Context, in *esignRef) (*esignTrail, erro
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// the signer's door — no account, the token IS the credential
+// the signer's surface — no account, the token IS the credential
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ViewSigning opens a document you were asked to sign, using your signing link.
@@ -930,12 +931,12 @@ func (o ops) auditDocument(ctx context.Context, in *esignRef) (*esignTrail, erro
 // recipient as having opened it and records that on the audit trail, so this read
 // has a side effect by design.
 //
-// This door takes NO account: the signing token is the entire credential, and it
-// names the recipient, so a signer sees only their own fields and never the other
-// recipients' tokens. The token resolves to its owning tenant FIRST, before any
-// per-tenant store is opened, and the org segment is only checked against that
-// answer. An unknown or wrong-org token is one and the same 404, never a hint that
-// some other document exists.
+// This surface takes NO account: the signing token is the entire credential, and
+// it names the recipient, so a signer sees only their own fields and never the
+// other recipients' tokens. The token resolves to its owning tenant FIRST, before
+// any per-tenant store is opened, and the org segment is only checked against
+// that answer. An unknown or wrong-org token is one and the same 404, never a
+// hint that some other document exists.
 func (o ops) viewSigning(ctx context.Context, in *esignTokenRef) (*esignSession, error) {
 	org, err := o.signer(*in)
 	if err != nil {
@@ -1065,7 +1066,7 @@ func declare(app cloud.Router, s *cloud.Service[state]) {
 	}
 	o := ops{s: s}
 
-	// The sender's door.
+	// The sender's surface.
 	zip.Post(g, "/documents", o.createDocument, zip.WithStatus(http.StatusCreated))
 	zip.Get(g, "/documents", o.listDocuments)
 	zip.Get(g, "/documents/:id", o.getDocument)
@@ -1075,7 +1076,7 @@ func declare(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/documents/:id/download", o.downloadDocument)
 	zip.Get(g, "/documents/:id/audit", o.auditDocument)
 
-	// The signer's door.
+	// The signer's surface.
 	zip.Get(g, "/o/:org/sign/:token", o.viewSigning)
 	zip.Post(g, "/o/:org/sign/:token/fields/:fieldId", o.signField)
 	zip.Post(g, "/o/:org/sign/:token/complete", o.completeSigning)

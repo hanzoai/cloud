@@ -13,7 +13,7 @@ package billing
 // carries five kinds of processor detail plus a billing address, all of them the
 // store's own models, so a mirror in this package would be sixty fields whose
 // only job is to agree with something else. The bytes the store produced cross
-// whole. A value the door DECIDES is typed; a document it forwards is bytes.
+// whole. A value the endpoint DECIDES is typed; a document it forwards is bytes.
 
 import (
 	"context"
@@ -45,7 +45,7 @@ func mountMethods(app cloud.Router, o ops) {
 }
 
 // The family is RAW at both addresses because its answer is a rendered document
-// rather than a value this door decides, so its prose is declared beside the
+// rather than a value this endpoint decides, so its prose is declared beside the
 // routes. Declared through the same registry Register uses, so each renders only
 // while the router actually serves it.
 func init() {
@@ -103,8 +103,8 @@ func listMethods(s *cloud.Service[state], c *zip.Ctx) error {
 // saveMethod vaults an instrument and stores the row.
 //
 // The body crosses VERBATIM: the vaulting path has to see what the browser
-// produced, and re-shaping it here would be this door deciding which processor
-// details are worth keeping.
+// produced, and re-shaping it here would be this endpoint deciding which
+// processor details are worth keeping.
 func saveMethod(s *cloud.Service[state], c *zip.Ctx) error {
 	org, subject, err := payerOf(c)
 	if err != nil {
@@ -143,9 +143,9 @@ func callerEmail(c *zip.Ctx) string { return cloud.Who(c.Context()).Email }
 
 // document writes a rendered answer back as the store produced it.
 //
-// It is one function so the four raw doors in this package cannot come to
+// It is one function so the four raw endpoints in this package cannot come to
 // disagree about the header, and it writes the bytes untouched — re-marshalling
-// them would make this door a second renderer of somebody else's document.
+// them would make this endpoint a second renderer of somebody else's document.
 func document(c *zip.Ctx, status int, body []byte) error {
 	c.SetHeader("Content-Type", "application/json")
 	return c.Bytes(status, body)

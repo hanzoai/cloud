@@ -167,7 +167,7 @@ func TestWalkFollowsDirection(t *testing.T) {
 	}
 }
 
-// TestAdmitRefusesAtTheDoor: every bound is asked once, at the door.
+// TestAdmitRefusesAtTheDoor: every bound is asked once, at admission.
 func TestAdmitRefusesAtTheDoor(t *testing.T) {
 	long := make([]byte, entityMax+1)
 	for i := range long {

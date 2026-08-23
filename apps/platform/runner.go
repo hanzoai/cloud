@@ -80,7 +80,7 @@ type runnerBuildReq struct {
 	Binaries []binarySpec `json:"binaries,omitempty" url:"-"`
 	// Bucket mirrors hanzo.yml's `bucket:` — where the artifact lane publishes.
 	Bucket string `json:"bucket,omitempty" url:"-"`
-	// Tag is the publish path segment, so both front doors write ONE index at ONE
+	// Tag is the publish path segment, so both entry points write ONE index at ONE
 	// URL. It defaults to the pinned ref, and must be named explicitly for a
 	// branch.
 	Tag string `json:"tag,omitempty" url:"-"`
@@ -185,7 +185,7 @@ func repository(image string) string {
 	return image
 }
 
-// excluded names the images this door does not publish, because their versions
+// excluded names the images this endpoint does not publish, because their versions
 // are ordered somewhere else and two allocators cannot agree on a number.
 //
 // ghcr.io/hanzoai/cloud is the whole list, and the reason is stated above
@@ -313,7 +313,7 @@ func runnerTokenOK(c *zip.Ctx) bool {
 // for the admin bit asked a question no non-interactive credential can answer:
 // authz.Claims.OrgAdmin refuses every machine by construction — correctly, since an
 // app is issued for a purpose and not handed an org's self-service surface — so the
-// only credential that still reached this door from a pipeline was the fabric's
+// only credential that still reached this endpoint from a pipeline was the fabric's
 // shared token, which names no org and is therefore wider than any single build.
 func runnerOrg(c *zip.Ctx) string {
 	org, ok := principal.Org(c) // composes principal.Validated
@@ -419,7 +419,7 @@ func (o ops) runnerBuild(ctx context.Context, body *runnerBuildReq) (*runnerBuil
 		return nil, zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
 	}
 	if imageExcluded(req.Image) {
-		return nil, zip.ErrForbidden(repository(req.Image) + " is versioned by its own release lane and is not published from this door")
+		return nil, zip.ErrForbidden(repository(req.Image) + " is versioned by its own release lane and is not published from this endpoint")
 	}
 
 	// H1 — bind the image's registry namespace to the org the CREDENTIAL names.

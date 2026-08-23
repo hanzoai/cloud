@@ -141,7 +141,7 @@ func TestLive_ClosingARepositoryClosesReadAccess(t *testing.T) {
 		t.Fatalf("closing twice re-opened it: api=%v clone=%v", api, clone)
 	}
 
-	// And it comes back: the bit is a flip, not a one-way door, which is what
+	// And it comes back: the bit is a flip, not a one-way change, which is what
 	// makes going private a decision somebody can take back.
 	if err := c.SetPublic(ctx, owner, repo, true); err != nil {
 		t.Fatalf("re-open: %v", err)

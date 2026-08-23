@@ -79,7 +79,7 @@ func TestCampaignPaidChannel_EndToEnd(t *testing.T) {
 		t.Fatalf("Meta must be called with acme's connector token, got %q", gotAuth)
 	}
 
-	// Spend read composes the same token door → provider insights.
+	// Spend read composes the same token path → provider insights.
 	cents, err := paid.Spend(context.Background(), "acme", ref)
 	if err != nil {
 		t.Fatalf("paid Spend: %v", err)

@@ -9,7 +9,7 @@ package event
 // event.fact's act rows through the ONE datastore client. Flags stay at /v1/flags (the
 // native flags engine) — this namespace deliberately does not duplicate them.
 //
-// The PostHog wire had a door of its own here — /v1/event/insights/e — because external
+// The PostHog wire had an endpoint of its own here — /v1/event/insights/e — because external
 // SDKs emit this shape and insights.hanzo.ai rewrites every PostHog ingest path onto
 // it. It is retired: a wire is a SHAPE, and a shape never earned a path, so decodeEvent
 // sniffs this one on /v1/event and hands it to decodeInsights below. The wire did not
@@ -23,7 +23,7 @@ package event
 //
 // SCALE PATH: accept is stateless (any replica); the commit is the JetStream
 // publish (bus.go) and the landing is the per-signal durable consumer
-// (warehouse.go) — the queue is already between the door and the store, so
+// (warehouse.go) — the queue is already between the endpoint and the store, so
 // scaling ingest is scaling replicas, no handler changes.
 
 import (
@@ -94,7 +94,7 @@ func (e insightsEvent) toCapture() CaptureEvent {
 		// The plane normalizer maps CaptureEvent.UTM into the envelope's
 		// attributes['utm_*'] entries (fact.go attributesOf), so surfacing them here
 		// is what lets the web/commerce lens attribute traffic to a campaign. They
-		// were previously dropped on the PostHog-wire front door.
+		// were previously dropped on the PostHog-wire endpoint.
 		UTM: UTM{
 			Source:   str("utm_source"),
 			Medium:   str("utm_medium"),
@@ -111,7 +111,7 @@ func (e insightsEvent) toCapture() CaptureEvent {
 
 // decodeInsights is the PostHog WIRE's decoder — the second and last `decode` in this
 // package (decodeIngest is the other). Pure over the raw bytes, exactly like its twin,
-// so the ONE pipeline can be handed a wire instead of forking per door: it accepts the
+// so the ONE pipeline can be handed a wire instead of forking per endpoint: it accepts the
 // single-event and {batch:[…]} PostHog shapes and yields the SAME []CaptureEvent the
 // write core consumes. An empty/whitespace-only body ⇒ no events (an honest empty
 // receipt, not an error), matching decodeIngest.
@@ -172,7 +172,7 @@ type eventList struct {
 }
 
 // InsightsEvents returns the caller org's most recent product events, newest first.
-// The console's raw-event view over event.event — the same table the capture doors
+// The console's raw-event view over event.event — the same table the capture endpoints
 // fill — one row per stored event, with the row's attributes returned as the
 // properties object.
 //

@@ -15,8 +15,8 @@
 // schema_test.go — the pins that keep ONE schema one.
 //
 // Every test here protects a property that has no other guard: a rule about naming, a
-// rule about tenancy, or a rule about the door and the store agreeing. They are cheap
-// because they are all pure — no bus, no store, no HTTP.
+// rule about tenancy, or a rule about the endpoint and the store agreeing. They are
+// cheap because they are all pure — no bus, no store, no HTTP.
 
 package event
 
@@ -122,20 +122,20 @@ func TestEverySignalIsRoutableAndSpelledOnce(t *testing.T) {
 // landed.
 func TestDoorAcceptsExactlyWhatTheSinkCanLand(t *testing.T) {
 	if len(landableSignals) != len(writers) {
-		t.Fatalf("landable=%d writers=%d — the door's answer must be derived from the "+
+		t.Fatalf("landable=%d writers=%d — the endpoint's answer must be derived from the "+
 			"sink's, never kept beside it", len(landableSignals), len(writers))
 	}
 	for _, w := range writers {
 		if !landableSignals[w.signal] {
-			t.Errorf("%s has a writer but the door refuses it", w.signal)
+			t.Errorf("%s has a writer but the endpoint refuses it", w.signal)
 		}
 	}
 	// signalSample is the one signal deliberately NOT landable: event.sample acquires
 	// its name by RENAME (migration 0003), so a writer shipped ahead of that migration
-	// would accept metrics and fail every insert. The refusal is at the door, where a
-	// caller can still be told.
+	// would accept metrics and fail every insert. The refusal is at the endpoint,
+	// where a caller can still be told.
 	if landableSignals[signalSample] {
-		t.Error("the door accepts samples — add the sixth writer only alongside the " +
+		t.Error("the endpoint accepts samples — add the sixth writer only alongside the " +
 			"migration that gives event.sample its name")
 	}
 }

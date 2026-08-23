@@ -18,7 +18,7 @@ import (
 // Hanzo inference — the same models, prompts and tools every other surface uses.
 // The carrier moves the audio; it does not decide what is said.
 //
-// This talks to the platform's own AI door rather than reaching into a model
+// This talks to the platform's own AI endpoint rather than reaching into a model
 // package directly, so an assistant improved for chat is improved for calls in
 // the same deploy, and there is one place that decides which model answers.
 type Assistants interface {
@@ -38,7 +38,7 @@ type aiDoor struct {
 func assistantsFromEnv() Assistants {
 	base := strings.TrimRight(os.Getenv("HANZO_AI_BASE"), "/")
 	if base == "" {
-		// The platform's own door. Same host the console and every SDK use, so a
+		// The platform's own address. Same host the console and every SDK use, so a
 		// deployment that sets nothing still reaches our stack rather than none.
 		base = "https://api.hanzo.ai"
 	}
@@ -52,8 +52,8 @@ func assistantsFromEnv() Assistants {
 // Reply asks the assistant for its next turn.
 //
 // The model is NOT named here. Which model an assistant runs on is the catalog's
-// decision, resolved behind this door — naming one in a telecom package is how a
-// model change becomes a change in six unrelated repositories.
+// decision, resolved behind this endpoint — naming one in a telecom package is how
+// a model change becomes a change in six unrelated repositories.
 func (a *aiDoor) Reply(ctx context.Context, agent, org, said string) (string, error) {
 	req := map[string]any{
 		"assistant": agent,

@@ -17,7 +17,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// anon_wire_integrity_test.go — the two ways the ONE door lost a caller's events
+// anon_wire_integrity_test.go — the two ways the ONE endpoint lost a caller's events
 // while answering 200.
 //
 // Same observable as anon_capability_test.go: 503 ⇒ ADMITTED (reached the write core,
@@ -78,7 +78,7 @@ func TestAnonCanonicalWireStillCannotWidenItsKind(t *testing.T) {
 
 // ── 2. a failed platform key on the bearer carrier was filed under $public ────
 
-// postAuth posts to a door with an Authorization header and nothing else.
+// postAuth posts to an endpoint with an Authorization header and nothing else.
 func postAuth(t *testing.T, app *zip.App, path, auth, body string) (int, []byte) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
@@ -126,7 +126,7 @@ func TestUnresolvableAccessKeyBearerRefuses(t *testing.T) {
 // the reason the fix tests a PREFIX rather than "any bearer". An arbitrary bearer is not
 // distinguishable from one minted for another audience — IdentityMiddleware already
 // declines to 401 it — so treating its presence as "presented" would 403 every stale or
-// foreign token that reaches an ingest door, a refusal on evidence we do not have.
+// foreign token that reaches an ingest endpoint, a refusal on evidence we do not have.
 func TestUnidentifiableBearerStillTakesTheAnonymousLaneAfterTheFix(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)

@@ -14,11 +14,11 @@ import (
 // resolves a tool name to its connector action and runs it with a RunContext whose
 // credential Token is pinned to the VALIDATED org.
 //
-// Two callers reach it, and neither is an HTTP door of this subsystem's own:
+// Two callers reach it, and neither is an HTTP endpoint of this subsystem's own:
 //
 //   - connectorToolProvider.Dispatch — the unified tool plane, which is how a
 //     connector action is reached from POST /v1/tools/call and therefore from the
-//     fleet's one agent door.
+//     fleet's one agent MCP server.
 //   - InvokeTool — the in-process client a sibling subsystem (the Business AI guide)
 //     uses to act as an org without an HTTP hop, metering + auditing with no HTTP
 //     context.
@@ -27,8 +27,8 @@ import (
 // (one unit) and audit record — so they can never diverge on what a tool does or
 // on who is allowed to run it.
 
-// Dispatch sentinels let each door map a failure onto its own error convention
-// (the JSON-RPC door to -32601/-32005, the in-process door to a returned error)
+// Dispatch sentinels let each caller map a failure onto its own error convention
+// (the JSON-RPC one to -32601/-32005, the in-process one to a returned error)
 // without duplicating the resolve/limit/run logic.
 var (
 	errUnknownTool = errors.New("unknown tool")

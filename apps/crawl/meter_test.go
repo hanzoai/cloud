@@ -136,8 +136,9 @@ func TestUnfundedOrgKeepsTheStaticPage(t *testing.T) {
 	}
 }
 
-// A caller with no principal — the shared-service-key door — has no ledger, so
-// nothing is gated and nothing is billed, and the render still happens.
+// A caller with no principal — the shared-service-key entry point — has no
+// ledger, so nothing is gated and nothing is billed, and the render still
+// happens.
 func TestServiceCallerRendersUnbilled(t *testing.T) {
 	l := planetest.Money(t, 0) // an empty balance that must not be consulted at all
 	meterOn(t, l)

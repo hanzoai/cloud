@@ -176,9 +176,9 @@ func TestKeyIsDeterministicAndDistinct(t *testing.T) {
 	}
 }
 
-// Read is the door: a hit must not touch the network. Proven by archiving a page
-// under a url that could never be fetched — if Read reached the network it would
-// error rather than return the stored body.
+// Read is the entry point: a hit must not touch the network. Proven by archiving
+// a page under a url that could never be fetched — if Read reached the network it
+// would error rather than return the stored body.
 func TestReadServesFromArchiveWithoutFetching(t *testing.T) {
 	f := newFakeVFS()
 	bind(t, f)

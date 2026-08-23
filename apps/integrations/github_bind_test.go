@@ -19,7 +19,7 @@ import (
 // it back can read EVERY tenant's installation. An id that resolved therefore
 // proved only that the App was installed somewhere. Any org could mint a state for
 // itself, name another tenant's install, and mint live installation tokens against
-// it. These tests keep that door shut.
+// it. These tests keep that hole closed.
 
 // githubState mints a genuine signed state and live nonce for org, exactly as the
 // connect leg does. Nothing here is forged: an attacker is ENTITLED to a valid

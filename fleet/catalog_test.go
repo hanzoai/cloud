@@ -19,7 +19,7 @@ import (
 // The catalog is generated from plugin/<app>/openapi.json, and those are
 // regenerated from each app's own router by `make -f mk/fleet.mk check`. This is
 // the link between the two: regenerate the specs without regenerating the
-// catalog and the door would publish an operation set the fleet no longer
+// catalog and the MCP server would publish an operation set the fleet no longer
 // serves — the exact way the hand-kept catalogue this replaced went stale.
 //
 // The AUDIENCE is read off openapi.yaml and not off the subset, for the reason
@@ -141,15 +141,15 @@ func contract(t *testing.T) map[string]bool {
 //
 // It is structural now rather than a decision to inspect. gather reads Published
 // for every app and there is no asked set, so there is nothing to reach [Ask],
-// which is the only thing that starts a child. The door used to ask any subsystem
-// that was already running, on the reasoning that asking something up is free —
-// which held per subsystem and not for the one caller that touches all of them:
-// measured on the deployed host, a single list took 92 seconds against
+// which is the only thing that starts a child. The MCP server used to ask any
+// subsystem that was already running, on the reasoning that asking something up
+// is free — which held per subsystem and not for the one caller that touches all
+// of them: measured on the deployed host, a single list took 92 seconds against
 // Cloudflare's 100-second ceiling and three in a row drove the pod past its own
 // liveness probe until the kubelet killed it.
 //
-// The assertion is that a door over apps NOBODY has started still answers with
-// their tools, and that it answers the same both times — a live-asking door
+// The assertion is that an MCP server over apps NOBODY has started still answers
+// with their tools, and that it answers the same both times — a live-asking one
 // cannot do the first and a caching one cannot promise the second.
 func TestListingStartsNothing(t *testing.T) {
 	var apps []string
@@ -162,13 +162,13 @@ func TestListingStartsNothing(t *testing.T) {
 		}
 	}
 	if len(apps) == 0 {
-		// FAIL, never skip. An empty catalog is a door that publishes nothing,
+		// FAIL, never skip. An empty catalog is an MCP server that publishes nothing,
 		// which is the outage this file exists to prevent — and a skip reports it
 		// in the one shade CI reads as fine, so the property below would go
 		// untested exactly when it had stopped holding. The generator drops an
 		// operation that is not marked dispatchable, so "no app carries one" means
 		// the mark stopped being written, not that there is nothing to check.
-		t.Fatal("no app carries a published operation: the fleet door would list " +
+		t.Fatal("no app carries a published operation: the fleet's MCP server would list " +
 			"nothing. Regenerate with `make -f mk/fleet.mk documents`, and if the " +
 			"catalog is still empty the x-tool mark is not reaching the documents")
 	}
@@ -193,8 +193,8 @@ func TestListingStartsNothing(t *testing.T) {
 		t.Fatalf("gathered %d tools from a published catalog of %d", len(first), want)
 	}
 
-	// Same answer twice, from a door that holds no cache: the reply is a function
-	// of the release, which is what lets two replicas agree.
+	// Same answer twice, from an MCP server that holds no cache: the reply is a
+	// function of the release, which is what lets two replicas agree.
 	second, _, _ := d.gather(nil, refuse)
 	if len(second) != len(first) {
 		t.Fatalf("two lists disagreed: %d then %d", len(first), len(second))
@@ -207,8 +207,8 @@ func TestListingStartsNothing(t *testing.T) {
 }
 
 // TestEverySubsystemThePublicDoorListsIsInTheCatalog is the gate that replaces
-// the runtime fallback. The door reads the catalog and asks nothing, so an app
-// the generator skipped publishes NOTHING — the door would offer fewer tools than
+// the runtime fallback. The MCP server reads the catalog and asks nothing, so an
+// app the generator skipped publishes NOTHING — it would offer fewer tools than
 // the fleet routes, silently, and no request would fail to say so.
 //
 // present-and-empty is a legitimate answer (an app that serves no typed op);
@@ -218,7 +218,7 @@ func TestEverySubsystemThePublicDoorListsIsInTheCatalog(t *testing.T) {
 	var missing []string
 	for _, a := range manifest.Apps {
 		if manifest.Coresident(a.Name) {
-			continue // never mounted on its own, so the door never lists it
+			continue // never mounted on its own, so the MCP server never lists it
 		}
 		if _, ok := catalog[a.Name]; !ok {
 			missing = append(missing, a.Name)
@@ -226,7 +226,7 @@ func TestEverySubsystemThePublicDoorListsIsInTheCatalog(t *testing.T) {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		t.Fatalf("%d subsystems have no catalog entry, so the door publishes nothing for them: %v\n"+
+		t.Fatalf("%d subsystems have no catalog entry, so the MCP server publishes nothing for them: %v\n"+
 			"\tfix: make -f mk/fleet.mk check (regenerates plugin/*/openapi.json, then the catalog)",
 			len(missing), missing)
 	}

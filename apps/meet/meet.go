@@ -470,7 +470,7 @@ type lobby struct {
 
 // session answers GET /v1/meet/session. It admits on the SAME two lanes as mint
 // and refuses on the same terms, so a caller that could not join anything is told
-// so at the door rather than after composing a room name.
+// so up front rather than after composing a room name.
 //
 // It answers OUTSIDE ready(), deliberately, and for the same reason the bundle is
 // served outside it: an unconfigured deployment should render a client that states

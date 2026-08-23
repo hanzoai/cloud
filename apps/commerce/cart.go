@@ -10,7 +10,7 @@ package commerce
 // for as long as it has existed. The cart they operate on could not be created,
 // read or amended through it — hanzoai/commerce implements the whole noun
 // (models/cart, api/cart) and cloud simply never mounted the route table that
-// carries it, so the first step of the flow had no door while the last three did.
+// carries it, so the first step of the flow had no endpoint while the last three did.
 //
 // THIS IS THE MISSING STEP, not a new one. The rules live where they already
 // lived: cart.Cart.SetItem resolves a product or a variant into a line item,
@@ -32,7 +32,7 @@ package commerce
 // cart id belonging to another tenant is not found there — 404, never 403, so the
 // id space cannot be probed.
 //
-// WHAT THIS DOOR DOES NOT DO, stated because the standalone one does: commerce's
+// WHAT THIS SURFACE DOES NOT DO, stated because the standalone one does: commerce's
 // own api/cart handlers mirror every write into Mailchimp's abandoned-cart feed
 // when the org has that integration configured. That is a storefront-marketing
 // side effect of the standalone deployment, not part of what a cart IS, and it is
@@ -179,7 +179,7 @@ type cartOps struct{}
 // No middleware rides these registrations. The app-wide cloud.Bridge (serve.go)
 // parks the validated org each handler reads, and a cart moves no money, so there
 // is no credit screen to compose here — the risk gate belongs on the acts that
-// mint, which is why it is on the payment door and not on this one.
+// mint, which is why it is on the payment endpoint and not on this one.
 func exposeCart(app *zip.App) {
 	o := cartOps{}
 	zip.Post(app, "/v1/commerce/cart", o.open,
@@ -346,7 +346,7 @@ func (cartOps) discard(ctx context.Context, in *CartRef) (*Cart, error) {
 
 // loadCart resolves the caller's org and loads one cart inside it. It is the ONE
 // place a cart id becomes a cart, so every op scopes its read the same way and no
-// door can be the one that forgets the namespace.
+// handler can be the one that forgets the namespace.
 func loadCart(ctx context.Context, id, op string) (*cartmodel.Cart, error) {
 	org, err := payingOrg(ctx, op)
 	if err != nil {

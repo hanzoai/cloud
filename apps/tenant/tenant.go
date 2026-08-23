@@ -55,7 +55,7 @@ import (
 // organisation it names.
 const Sep = "/"
 
-// Public is the reserved org the event door files CREDENTIAL-LESS writes under
+// Public is the reserved org the event endpoint files CREDENTIAL-LESS writes under
 // (apps/event/event.go). It is not a customer: an unauthenticated stranger
 // writes into it, so a read that admitted it would let that stranger move a real
 // tenant's statistics, and a dataset built over it would be a dataset of

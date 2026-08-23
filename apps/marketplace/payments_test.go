@@ -122,9 +122,9 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 	}
 
 	// The REAL tool plane, not a stand-in for it. A payment client proved through a
-	// hand-rolled route proves the client and not the product: the door that has to
-	// carry a payer, map a 402 and let the challenge header out is tools' own
-	// callTool, so that is the door every test here knocks on.
+	// hand-rolled route proves the client and not the product: the handler that has
+	// to carry a payer, map a 402 and let the challenge header out is tools' own
+	// callTool, so that is the handler every test here calls.
 	if err := tools.Mount(app, deps); err != nil {
 		t.Fatalf("tools.Mount: %v", err)
 	}

@@ -133,9 +133,9 @@ type actor struct {
 //
 // There is no other way to build one — [TestObservation_HasOneConstructor] walks
 // the package's own syntax tree and fails on a second composite literal — because
-// a bound applied at some of the doors is a bound at none of them: the live wire,
-// the replay from the tenant's own record and the fold from its own feature
-// surface all reach the same rings and the same disk.
+// a bound applied at some of the entry points is a bound at none of them: the
+// live wire, the replay from the tenant's own record and the fold from its own
+// feature surface all reach the same rings and the same disk.
 //
 // It REFUSES rather than truncating. Two subjects differing only past the cut
 // would silently become one set of aggregates, which is a wrong answer wearing a
@@ -148,7 +148,7 @@ type actor struct {
 // an hour of real payments, the converted accrual reads zero ([nanoOfUSD] floors a
 // negative sum, because a wrapped or negative nano would make the largest accrual
 // there is look like the smallest), and the pace rule goes quiet with nothing to
-// see. At a self-serve credit door the payer IS the organisation, so that is
+// see. At a self-serve credit endpoint the payer IS the organisation, so that is
 // self-suppression available for the price of one authenticated call.
 //
 // Nothing legitimate is lost. A refund or a chargeback is a different fact with a
@@ -169,7 +169,7 @@ func observe(id string, a actor, usd float64, at time.Time) (observation, error)
 	}
 	// NaN is refused with it: it is neither negative nor positive, it poisons every
 	// sum it enters, and no comparison against a bound is true of it — a silent
-	// disarming of the same rule by the same door.
+	// disarming of the same rule by the same endpoint.
 	if usd < 0 || math.IsNaN(usd) {
 		return observation{}, zip.ErrBadRequest(
 			"the value moved must not be negative — the aggregates accrue a sum and the stated bounds are read off it, so a negative amount cancels real activity rather than describing any")
@@ -209,8 +209,8 @@ const (
 	settled = "settled_"
 )
 
-// reserved is the closed set, so the door that refuses them and the doors that mint
-// them read one list.
+// reserved is the closed set, so the check that refuses them and the places that
+// mint them read one list.
 var reserved = []string{folded, settled}
 
 // reservedOf reports which of this plane's own namespaces an id falls in, if any.
@@ -274,7 +274,7 @@ type resident struct {
 	// geom is the SPACE mod runs in — a family and that family's own geometry
 	// (family.go). It is what a replant is rebuilt from and what a published value
 	// records, and it is held rather than read back off the store because a shape
-	// resolved at the door is a shape nobody has to discover.
+	// resolved at the entry point is a shape nobody has to discover.
 	//
 	// It replaced an [anomaly.Config] held here, which braided FOUR facts with four
 	// owners into one field: this geometry, the regime below, the seed below, and a
@@ -824,8 +824,8 @@ func (r *resident) run(d detector, g shape) {
 // rather than by reading the store back. A shape used to be allowed to hold zeros
 // meaning "the deployment's own", resolved by the engine AFTER construction — so this
 // function built a store, asked it what it had actually been given, and recorded that.
-// Shapes are complete at the door now ([halfspace.complete]), so there is one shape
-// here and nothing to discover about it.
+// Shapes are complete at the entry point now ([halfspace.complete]), so there is one
+// shape here and nothing to discover about it.
 func (p *plane) plant(t tenant, g shape, pol regime, vel *rings) (*resident, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -932,8 +932,8 @@ func (p *plane) install(r *resident, m model) error {
 	// THE GEOMETRY IS OURS, not the caller's. The engine regenerates the trees from
 	// the snapshot's SEED, so a caller that chooses the seed chooses WHERE THE
 	// REGIONS ARE — precisely the state a snapshot is supposed not to disclose,
-	// arriving through the other door. A model that has already been planted has a
-	// geometry of its own, minted here from this process's own randomness or
+	// arriving through the other entry point. A model that has already been planted
+	// has a geometry of its own, minted here from this process's own randomness or
 	// restored with this tenant's own state, and a snapshot carrying a different
 	// seed did not come from it.
 	//
@@ -1095,7 +1095,8 @@ func (p *plane) score(t tenant, o observation) (decided, error) {
 // the work" would be true of the model calls and false of the operation, and the
 // operation is what a caller waits for.
 //
-// [plane.score] is the query, it is pure, and it is the one door to a verdict.
+// [plane.score] is the query, it is pure, and it is the one entry point to a
+// verdict.
 //
 // It takes a BATCH because durability is per batch: the whole batch is written to
 // the tenant's own record in one transaction BEFORE anything moves in memory, so
@@ -1336,8 +1337,9 @@ func (p *plane) appetite(t tenant, review, sample float64, live bool, by string)
 //
 // IT ADOPTS THE SHAPE AS WELL AS THE MASSES, which is what makes a search winner
 // adoptable ([plane.install] replants). The two arrive together because they are one
-// value: masses are meaningless against a different space, so a door that took one
-// without the other could only ever install into the space that was already running.
+// value: masses are meaningless against a different space, so an endpoint that took
+// one without the other could only ever install into the space that was already
+// running.
 //
 // THE FOLD WATERMARK COMES BACK WITH THEM, off the value's own record. It is in the
 // address for a reason — two models with identical masses reached by different routes
@@ -1578,8 +1580,8 @@ func bucketMark(done, held time.Time) time.Time {
 // aggregates' leading edge there, after which every real event is older than
 // every window and reads as if it never happened — one row, and that subject's
 // velocity features are blind for good. The surface is written from an ingest
-// door that takes a caller's timestamp, so the value is checked HERE, where it is
-// used, and not only where it was written.
+// endpoint that takes a caller's timestamp, so the value is checked HERE, where it
+// is used, and not only where it was written.
 //
 // One bucket becomes ONE observation carrying the bucket's activity, not N
 // synthetic events: the rings aggregate anyway, and inventing N timestamps inside
@@ -1597,11 +1599,12 @@ func replayable(rs []row, now time.Time, back time.Duration) (out []observation,
 		if within(r.Bucket, now, back) != nil {
 			continue
 		}
-		// THROUGH THE ONE DOOR, and the refusals are COUNTED. The surface is written
-		// from an ingest door that takes a caller's own subject, so [maxField] has to
-		// hold here too or the fold is the way around it — but a bucket dropped in
-		// silence is a piece of that organisation's own history the model never sees
-		// and nobody can find out about. The count travels on the fold report.
+		// THROUGH THE ONE CONSTRUCTOR, and the refusals are COUNTED. The surface is
+		// written from an ingest endpoint that takes a caller's own subject, so
+		// [maxField] has to hold here too or the fold is the way around it — but a
+		// bucket dropped in silence is a piece of that organisation's own history the
+		// model never sees and nobody can find out about. The count travels on the
+		// fold report.
 		o, err := observe(
 			bucketID(r.Kind, r.Subject, r.Bucket),
 			actor{Kind: r.Kind, Subject: r.Subject},
@@ -2290,7 +2293,7 @@ func (p *plane) for_(t tenant) (*shelf, error) {
 	if !t.qualified() {
 		return nil, fmt.Errorf("risk: unqualified tenant key %q", string(t))
 	}
-	// cloud.OrgNamespace is the fleet's ONE door from a validated org to the name
+	// cloud.OrgNamespace is the fleet's ONE path from a validated org to the name
 	// of the database its records live in, and the org half of this key came from
 	// the validated principal through [qualify]. The brand half is NOT in the
 	// namespace: a shelf file is the fleet's per-org file, so two brands' identically

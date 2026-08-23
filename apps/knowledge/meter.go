@@ -6,7 +6,7 @@ package knowledge
 // stays free. One act is not: a long-tail connector's pull is a JavaScript piece
 // EXECUTED on the auto engine's sandbox pods (sync_piece.go, AUTO_UPSTREAM →
 // auto.hanzo.svc). That is the same capacity apps/auto owns and correctly prices;
-// reaching it by in-cluster URL rather than through its door does not make the
+// reaching it by in-cluster URL rather than through its endpoint does not make the
 // pod cheaper, it only makes the charge disappear. A tenant could run pieces all
 // day through /v1/knowledge and never appear on auto's ledger.
 //

@@ -5,7 +5,7 @@ package billing
 //
 // The ledger read used to reach that list two ways — the plane when commerce
 // answered, an HTTP GET of /v1/billing/transactions when it did not. The HTTP
-// half was the standalone commerce's door, and there is no standalone commerce:
+// half was the standalone commerce's endpoint, and there is no standalone commerce:
 // it is a plugin in this binary. Worse, the fallback could only fire on ErrNoPeer — "this fleet runs no
 // commerce" — and it answered that by dialling CLOUD_COMMERCE_HTTP_URL, which
 // production points at commerce.hanzo.svc:8001, a Service selecting

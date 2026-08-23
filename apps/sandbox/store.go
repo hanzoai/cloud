@@ -174,7 +174,7 @@ ON CONFLICT(id) DO UPDATE SET
 }
 
 // Get is org-scoped in the WHERE clause, always. The file is already per-org;
-// this is the second lock on the same door.
+// this is the second lock on the same path.
 func (s *Store) Get(ctx context.Context, org, id string) (Sandbox, error) {
 	row := s.db.QueryRowContext(ctx, selectCols+` WHERE org=? AND id=?`, org, id)
 	return scanMachine(row)

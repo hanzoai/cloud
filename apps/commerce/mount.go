@@ -76,7 +76,7 @@ var Prefixes = []string{
 	// ONE ROOT for every merchant noun (HIP-1220 §1). It carries the public
 	// checkout and org reads, the merchant resources, the storefront, the
 	// SuperAdmin catalog and plan CRUD, the typed cart and the typed payment
-	// door — each a leaf under /v1/commerce rather than a top-level address of
+	// endpoint — each a leaf under /v1/commerce rather than a top-level address of
 	// its own. The reason the leaves were ever named here is the bare /v1/*
 	// AI catch-all: it refuses on a prepaid BALANCE, so an unclaimed store read
 	// or cart open 402'd for want of an LLM balance it has nothing to do with
@@ -175,8 +175,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeGrants()
 	exposeAlerts()
 	exposeRails()
-	// The posture, the plan and the card doors: the four families the money door
-	// serves that this app used to answer at /v1/billing itself. They are ops
+	// The posture, the plan and the card endpoints: the four families the money
+	// endpoint serves that this app used to answer at /v1/billing itself. They are ops
 	// here for the same reason the rest are — the store has one owner, and the
 	// address belongs to somebody else.
 	exposePosture()
@@ -198,19 +198,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	lg := luxlog.Default().New("subsystem", "commerce")
 	// The other direction of the same idea as the ops above: those publish what
 	// this process OWNS, and this reaches for the one thing it does not. The credit
-	// doors below screen against a model that can only live in one binary, so the
+	// endpoints below screen against a model that can only live in one binary, so the
 	// scorer is installed as a plane client — cloud.SetRiskScorer's first producer
 	// (risk.go).
 	installRiskScorer(lg)
-	// THE CREDIT SCREEN, resolved ONCE and composed onto the HANDLER of every door
-	// that mints.
+	// THE CREDIT SCREEN, resolved ONCE and composed onto the HANDLER of every
+	// endpoint that mints.
 	//
 	// There are two, and they are registered a hundred lines apart: the browser's
 	// POST /v1/billing/topup/token below, and the agent's typed POST /v1/commerce/payments in
 	// exposePayments. Both end in commerce's ONE card money move (billing.TakePayment),
 	// so both mint spendable balance from a settled charge — which is why the screen is
 	// named here, at the composition root, and handed to each registration rather than
-	// being reached for at either. A gate fetched independently at each door is a gate
+	// being reached for at either. A gate fetched independently at each endpoint is a gate
 	// that can be fetched at one of them.
 	//
 	// IT GOES ON THE HANDLER, NOT ON THE ROUTER, and that is what makes it a control on
@@ -219,11 +219,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// while router middleware wraps only the fiber handler REST is served through. The
 	// screen was mounted on a router; `takePayment` is in tools/list; so an agent's
 	// tools/call reached the same authorized deposit unscreened and taught the model
-	// nothing when it settled. Both doors now WRAP THEIR HANDLER with it (risk.go
+	// nothing when it settled. Both endpoints now WRAP THEIR HANDLER with it (risk.go
 	// screen.route, screen.op), which is the one composition point every projection has
 	// to run through.
 	//
-	// It is one VALUE, not one call per door, so there is no arrangement of these two
+	// It is one VALUE, not one call per endpoint, so there is no arrangement of these two
 	// registrations in which they hold different screens.
 	screen := riskGate(lg)
 	// The typed payment surface. Registered EARLY, beside the health probe and
@@ -231,17 +231,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// agent-callable money ops, and a failure to boot the legacy embed must not be
 	// what decides whether an agent can take a payment. They share commerce's ONE
 	// charge core with the browser's card top-up (payments.go), so registering
-	// them here adds a door, never a second money path.
+	// them here adds an endpoint, never a second money path.
 	//
-	// AND A DOOR ONTO THE MINT IS SCREENED, which is why the screen is passed in. The
+	// AND AN ENDPOINT ONTO THE MINT IS SCREENED, which is why the screen is passed in. The
 	// shared core is the whole argument: POST /v1/commerce/payments reaches the same authorized
 	// deposit the top-up does, and it is published as an MCP tool besides — so the
 	// screen is composed onto its HANDLER, where every projection of the op runs it,
 	// rather than onto the router only REST is served through. exposePayments puts the
 	// screen on the WRITE only; the receipt read mints nothing.
 	exposePayments(zapp, screen)
-	// The three CARD doors the money surface relays to, screened through the same
-	// VALUE for the same reason: one screen, handed to every door, so there is no
+	// The three CARD endpoints the money surface relays to, screened through the same
+	// VALUE for the same reason: one screen, handed to every endpoint, so there is no
 	// arrangement of these registrations in which two of them hold different ones.
 	exposeSale(screen)
 	// The typed cart surface (cart.go). It reads and writes the embedded module's
@@ -476,7 +476,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// protocol: the signature verifies the raw payload bytes, so there is no
 	// typed input to declare.
 	//
-	// IT STAYS IN THIS PROCESS while every other /v1/billing door moved to the
+	// IT STAYS IN THIS PROCESS while every other /v1/billing endpoint moved to the
 	// billing capability, and the reason is the signature. The processor signs
 	// the RAW BODY — Square signs the notification URL concatenated with it — so
 	// the bytes have to be verified before anything can be typed out of them,
@@ -488,7 +488,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// (HIP-0139 §3.1), and the processor dashboards are repointed to it.
 	app.Post("/v1/commerce/webhooks/:provider", commercemid.RequestContext(), commercebilling.HandleProviderWebhook)
 
-	// EVERY /v1/billing DOOR IS GONE FROM THIS FILE, and what replaced them is
+	// EVERY /v1/billing ENDPOINT IS GONE FROM THIS FILE, and what replaced them is
 	// beside them: the plane ops in this package's *_rpc.go files.
 	//
 	// There used to be thirty-seven registrations here, each one a commerce
@@ -501,13 +501,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// They were also the wrong app's addresses. /v1/billing is the billing
 	// capability's root (HIP-0018 carries `capability: billing`; HIP-1220 §2 says
 	// commerce must not serve it), and every one of those thirty-seven was a line
-	// in openapi/misfiled.txt. So the doors moved to apps/billing and the ANSWERS
+	// in openapi/misfiled.txt. So the endpoints moved to apps/billing and the ANSWERS
 	// stayed here, where the store is: each question is a plane op on a
 	// value-taking core exported by the module, and billing asks it by name.
 	//
 	// What that bought beyond conformance is the gate chains. A relayed op takes
 	// its tenant from the caller — there is no org field on any input — and its
-	// billing subject from the door that resolved it, so the pin that eight
+	// billing subject from the endpoint that resolved it, so the pin that eight
 	// separate PinBillingSubject links used to apply per route is now a property
 	// of the types. A route cannot be added here that forgets it, because there is
 	// no route here to add.

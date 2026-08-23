@@ -165,7 +165,7 @@ type WorkspaceInfo struct {
 type ProviderInfo struct {
 	// Name is the provider id, and it is the value that goes back in the URL to
 	// start a login: GET /v1/team/account/auth/{provider}. This deployment
-	// surfaces exactly one, "openid" — the hanzo.id door.
+	// surfaces exactly one, "openid" — the hanzo.id provider.
 	Name string `json:"name"`
 	// DisplayName is the human label for the sign-in button; this deployment
 	// sends "Hanzo". Omitted from the body when empty.
@@ -205,7 +205,7 @@ func statusUnauthorized(msg string) Status {
 }
 
 // signInAtIssuer is the refusal every credential verb answers with. One string,
-// so the door's answer is a single fact a test can pin.
+// so the endpoint's answer is a single fact a test can pin.
 const signInAtIssuer = "sign in at hanzo.id"
 
 // trunc bounds a caller-supplied string before it rides back in an error. The RPC
@@ -264,7 +264,7 @@ func init() {
 			"status code reads every failure here as a success.\n\n"+
 			"NO CREDENTIAL IS EVER HANDLED HERE. login, signUp, the OTP verbs, password change "+
 			"and reset, join and the guest-token exchange each answer Unauthorized with \"sign "+
-			"in at hanzo.id\" — a stated policy, not an unknown method, so the door being shut "+
+			"in at hanzo.id\" — a stated policy, not an unknown method, so the refusal "+
 			"is a fact a test can pin. Sessions come from the OAuth pair under /account/auth.\n\n"+
 			"Auth is the team session token: Authorization: Bearer, else the HttpOnly "+
 			"account-token cookie. The tenant is that token's SIGNED org claim, never a header, "+
@@ -286,7 +286,7 @@ func init() {
 			"The provider segment only picks a hint: the redirect_uri is ALWAYS the canonical "+
 			"openid callback, the one IAM has registered. Measured end to end, hanzo.id strips "+
 			"that hint today, so /auth/google and /auth/openid land on the same Hanzo sign-in "+
-			"page — the federation shortcut is an upstream fix, not a second door here.")
+			"page — the federation shortcut is an upstream fix, not a second endpoint here.")
 	openapi.Describe("/v1/team/account/auth/:provider/callback", http.MethodGet,
 		"Complete a sign-in and hand the browser its session",
 		"COMPLETES the OAuth hop: hanzo.id redirects the browser here with ?code and ?state, "+
@@ -319,7 +319,7 @@ func init() {
 			"The token is VERIFIED — signature and expiry, against this service's own signing "+
 			"secret — BEFORE it is stored. Anything this service did not sign is 401 and "+
 			"nothing is written; persisting a caller-supplied value unchecked would be a "+
-			"session-fixation door, where an attacker pins a cookie the victim's browser then "+
+			"session-fixation hole, where an attacker pins a cookie the victim's browser then "+
 			"presents as its own.\n\n"+
 			"The token may arrive as `token` in the JSON body or, when the body is absent or "+
 			"unparseable, from the Authorization bearer — an unreadable body is NOT an error "+
@@ -368,7 +368,7 @@ func (g *api) register(app cloud.Router, guard guardFn) {
 type providerList []ProviderInfo
 
 // ListProviders returns the identity providers this deployment starts a login
-// with. It is always exactly one — hanzo.id. Which identities that door accepts
+// with. It is always exactly one — hanzo.id. Which identities that provider accepts
 // (Google, GitHub, passkey, password) is IAM's question, answered on IAM's own
 // page next to the identity check and the training-data consent that must
 // precede a first session; listing them here would be a second place holding
@@ -732,7 +732,7 @@ func (g *api) rpc(c *zip.Ctx) error {
 	// Every verb that would establish a session from a credential this service
 	// handled itself. Stating the policy beats falling through to UnknownMethod:
 	// that answer renders "Unknown method: login" to the user, tells a caller the
-	// parser did not recognise the verb rather than that the door is shut, and —
+	// parser did not recognise the verb rather than that the verb is refused, and —
 	// because "no handler" and "handler refused" then produce the same envelope —
 	// makes a resurrected handler indistinguishable from a deleted one. A test can
 	// pin THIS answer; it cannot pin an absence.
@@ -1087,7 +1087,7 @@ func (id *identity) verified(ctx context.Context, raw string) (caller, error) {
 // user obtained for a DIFFERENT app — chat, the console, any OIDC client they ever
 // clicked through — is not consent to that. Without the gate, one app's token is
 // every app's session, which is the confused-deputy shape the estate closes
-// elsewhere by narrowing at the resource server rather than at the door.
+// elsewhere by narrowing at the resource server rather than at the edge.
 //
 // The set is this deployment's OWN client id and nothing else by default, so it
 // cannot drift into a registry mirror: it is one value team already has to know to
@@ -1159,7 +1159,7 @@ func (id *identity) iam(ctx context.Context, raw string) (caller, error) {
 // one key, handing every session of the real app to whoever registered the
 // lookalike. This is the rule OrgHasUnsafeRune states for orgs — an injective
 // boundary must never fold two distinct identifiers into one — applied to the
-// identifier this door happens to compare.
+// identifier this check happens to compare.
 //
 // Whitespace is dealt with once, on the way IN, where the set is BUILT
 // (sessionAudience): an operator's config entry is theirs to tidy, a signed claim

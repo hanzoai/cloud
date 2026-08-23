@@ -13,7 +13,7 @@ import (
 // and makes the pod mint an OAuth token to authenticate to its own deployment.
 //
 // The peer's PLANE SOCKET (zip.SocketPath("ai")) cannot serve it at all: that
-// socket speaks ZAP, not HTTP, and carries the typed-op door rather than the
+// socket speaks ZAP, not HTTP, and carries the typed-op plane rather than the
 // app's routes — so a raw /v1 request there is first unintelligible and then, if
 // framed correctly, a 404. Reaching it that way is what made @hanzo answer "the
 // agent hit an error handling that" for every Slack turn.
@@ -47,7 +47,7 @@ func TestSiblingFollowsTheConfiguredListenerPort(t *testing.T) {
 	}
 }
 
-// A sibling never dials the peer's plane socket. That door is zip's typed-op
+// A sibling never dials the peer's plane socket. That socket is zip's typed-op
 // plane (plane.Ask), it does not speak HTTP, and the app's own routes are not on
 // it — so naming it here can only ever produce an EOF or a 404.
 func TestSiblingNeverDialsThePlaneSocket(t *testing.T) {

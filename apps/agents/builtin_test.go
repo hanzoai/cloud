@@ -20,12 +20,12 @@ func TestBuiltinResolvesTheConventionalRef(t *testing.T) {
 	if a.Model != "zen-70b" {
 		t.Errorf("the default must use the deployment's model, got %q", a.Model)
 	}
-	// The default declares the fleet's whole door. The tool loop still decides what
-	// is OFFERED per run, but an agent that declares nothing is offered nothing —
-	// which is how the assistant came to report it could not reach a cloud that was
-	// one socket away.
+	// The default declares the fleet's whole tool surface. The tool loop still
+	// decides what is OFFERED per run, but an agent that declares nothing is
+	// offered nothing — which is how the assistant came to report it could not
+	// reach a cloud that was one socket away.
 	if len(a.Tools) != 1 || a.Tools[0] != ToolsAll {
-		t.Errorf("the default must declare the whole door (%q), got %v", ToolsAll, a.Tools)
+		t.Errorf("the default must declare the whole tool surface (%q), got %v", ToolsAll, a.Tools)
 	}
 	if a.Instructions == "" {
 		t.Error("the default must know what it is")

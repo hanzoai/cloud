@@ -102,8 +102,8 @@ func TestScreenPageNeedsNoOriginButItsOwn(t *testing.T) {
 }
 
 func TestTicketNamesTheDoorItWasMintedAt(t *testing.T) {
-	// The terminal's URL used to be spelled into the mint, so a second door
-	// would have handed callers the first door's address — a ticket that opens
+	// The terminal's URL used to be spelled into the mint, so a second endpoint
+	// would have handed callers the first endpoint's address — a ticket that opens
 	// the right sandbox and shows the wrong thing.
 	app := mountHTTP(t)
 	s := mounted.Load()
@@ -120,7 +120,7 @@ func TestTicketNamesTheDoorItWasMintedAt(t *testing.T) {
 		}
 		want := "/v1/sandbox/" + m.ID + "/" + door + "?ticket="
 		if !strings.Contains(string(body), want) {
-			t.Errorf("%s ticket url does not name its own door: %s", door, body)
+			t.Errorf("%s ticket url does not name its own endpoint: %s", door, body)
 		}
 	}
 }

@@ -20,7 +20,7 @@ import (
 // RunContext is what an action's Run receives. It is the connector's ENTIRE view
 // of the world: the org (for logging/attribution only — never a place to widen
 // scope), the resolved input, the prior steps' outputs (threaded), and Token —
-// the ONLY door to a credential. Token is bound at dispatch time to the VALIDATED
+// the ONLY path to a credential. Token is bound at dispatch time to the VALIDATED
 // org (StepInput.Owner) and the connector's own provider id, so a connector can
 // reach no other tenant's and no other provider's secret.
 type RunContext struct {

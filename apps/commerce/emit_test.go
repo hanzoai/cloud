@@ -31,7 +31,7 @@ type sale struct {
 	in  *plane.EventIn
 }
 
-// mute substitutes the event plane's client so a door fixture states its sale to a
+// mute substitutes the event plane's client so an endpoint fixture states its sale to a
 // function instead of to an analytics child that is not running. It is [quiet]'s
 // half for the other plane: [screen.emit] spawns a goroutine the request outlives,
 // and a fixture that unbinds the plane underneath it is racing a peer call it
@@ -111,7 +111,7 @@ func TestPurchase_IsTheMoneyThatMoved(t *testing.T) {
 
 // TestPurchase_DedupsOnTheSettlement. `event_id` is what makes the browser pixel and
 // this server-side conversion count ONCE at the platform, and settlement is
-// at-least-once — the door retries, a webhook replays. Keyed on the settlement's own
+// at-least-once — the endpoint retries, a webhook replays. Keyed on the settlement's own
 // reference they converge; keyed on anything minted per call they do not.
 //
 // Mutation proof: mint an id here and the two statements below stop matching.
@@ -139,7 +139,7 @@ func TestPurchase_StatesNothingItCannotIdentify(t *testing.T) {
 
 // TestPurchase_ASaleOfNothingStatesNoValue. Zero and absent are different facts: a
 // stated 0 is a purchase worth nothing, which is a number a platform will average
-// into its bidding. An amount this door never observed is simply not said.
+// into its bidding. An amount this endpoint never observed is simply not said.
 func TestPurchase_ASaleOfNothingStatesNoValue(t *testing.T) {
 	p := paid()
 	p.cents = 0

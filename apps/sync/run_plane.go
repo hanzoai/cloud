@@ -14,17 +14,17 @@ import (
 // integrations, a native push lands on git, and neither of them is where the
 // engine runs. cloud.RegisterSync only registers in-process, so syncFn was nil on
 // every path that actually fires — cloud.Sync answered ErrSyncUnavailable while
-// this engine was up next door, and every mirror and every chained propagation
-// silently stopped happening, reported as a missing registration rather than as
-// the reachable call it was.
+// this engine was up in another process, and every mirror and every chained
+// propagation silently stopped happening, reported as a missing registration
+// rather than as the reachable call it was.
 //
 // The trigger travels instead. The socket has already decided who may ask (0600,
 // SO_PEERCRED), and the tenant is the caller's plane identity rather than the
 // argument, so a webhook routed to one org can never reconcile another's syncs.
 
 // exposeRun publishes the reconcile on the internal plane. Mount calls it, beside
-// cloud.RegisterSync — the two doors onto the ONE engine, so a co-resident trigger
-// and a remote one cannot reconcile differently.
+// cloud.RegisterSync — the two entry points onto the ONE engine, so a co-resident
+// trigger and a remote one cannot reconcile differently.
 func exposeRun() {
 	zip.Post[plane.SyncIn, plane.SyncRan](cloud.Plane(), "/sync/run", planeRun,
 		zip.WithOperationID(plane.SyncRun),

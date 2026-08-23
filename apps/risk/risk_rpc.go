@@ -8,7 +8,7 @@ package risk
 // and nothing else. The pod forks one process per app — /cloud, /billing,
 // /commerce, /risk are separate pids — so every gate outside this one read nil,
 // took the absent exemption, and allowed unscored. The observability plane's
-// event door was the same shape and learned it the expensive way; obsevents.go is
+// event endpoint was the same shape and learned it the expensive way; obsevents.go is
 // gone and apps/o11y/obs_rpc.go is what replaced it. This is that.
 //
 // So the model is ASKED, not linked. One op, on this app's own socket, answering
@@ -25,7 +25,7 @@ package risk
 //
 //	IT DOES NOT CHARGE. Every HTTP op on this surface gates on the caller's own
 //	balance first ([ops.gate]), and that rule cannot cross to this one: the
-//	gate that asks is the CREDIT DOOR, so the balance it would be charged
+//	gate that asks is the CREDIT ENDPOINT, so the balance it would be charged
 //	against is empty exactly when the customer is trying to fill it. A screen
 //	that refuses a top-up because the account has no money is a control that
 //	fires only on the customers it must not fire on. The per-tenant in-flight
@@ -119,9 +119,9 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 		return nil, err
 	}
 	// The SAME per-tenant in-flight slot every HTTP op takes through [ops.admit] —
-	// the plane is a second door onto one model, so it cannot be a door with no
-	// bound on it. admit itself is not reused because the ONE thing that differs is
-	// the line above it: where the tenant comes from.
+	// the plane is a second entry point to one model, so it cannot be an entry point
+	// with no bound on it. admit itself is not reused because the ONE thing that
+	// differs is the line above it: where the tenant comes from.
 	if err := p.enter(t); err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 	// AND THE DECISION IS STATED ON THE SHARED EVENT PLANE, so it is answerable in
 	// the same query as the traffic that produced it (emit.go). It happens AFTER
 	// the verdict is computed and it is detached, bounded and droppable: this op
-	// answers the credit door, so nothing about making a decision visible may be
+	// answers the credit endpoint, so nothing about making a decision visible may be
 	// able to refuse one.
 	emit(ctx, s.Log, t, decision(t, in, ev.Nano, d, out))
 	return out, nil
@@ -168,12 +168,12 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 
 // Teaches the CALLING organisation's own model from something that settled.
 //
-// # Why the plane needs a learn door at all
+// # Why the plane needs a learn endpoint at all
 //
-// The aggregate halves of the credit door's rule — pace and fan-out — read what an
-// event's identifiers had ALREADY done. Nothing was teaching them. [planeDecide]
-// records nothing by design, the published learn door is an organisation calling
-// itself over HTTP, and the organisation at a self-serve credit door IS the payer:
+// The aggregate halves of the credit endpoint's rule — pace and fan-out — read what
+// an event's identifiers had ALREADY done. Nothing was teaching them. [planeDecide]
+// records nothing by design, the published learn endpoint is an organisation calling
+// itself over HTTP, and the organisation at a self-serve credit endpoint IS the payer:
 // a fresh org signs up, tops up, and teaches its model nothing at all. So the two
 // halves read an empty history for precisely the subject they were built for, and a
 // payment split into five pieces looked like five first payments.
@@ -196,13 +196,13 @@ func planeDecide(ctx context.Context, in *contract.RiskDecideIn) (*contract.Risk
 //	IT CANNOT BE PRE-EMPTED. Dedupe means the FIRST writer of an id wins, so an id
 //	a customer could guess is an id a customer could claim in advance, after which
 //	the real settlement is silently inert — velocity switched off by the party it
-//	bounds. The id lands in [reserved] namespace and the public learn door refuses
+//	bounds. The id lands in [reserved] namespace and the public learn endpoint refuses
 //	that namespace outright ([riskEvent.observation]), so the only writer of a
 //	settlement observation is a settlement.
 //
 // # It is a LEARN and it is priced like one — which is to say, not
 //
-// The HTTP learn door meters per event ([ops.learn] calls pay). This one does not,
+// The HTTP learn endpoint meters per event ([ops.learn] calls pay). This one does not,
 // for [planeDecide]'s reason one step further on: the settlement it records is a
 // customer's payment ARRIVING, so the balance a charge would be taken from is the
 // balance being filled. Charging for the record of a payment is a fee on paying.
@@ -236,7 +236,7 @@ func planeObserve(ctx context.Context, in *contract.RiskObserveIn) (*contract.Ri
 	if err != nil {
 		return nil, err
 	}
-	// THROUGH THE CONVERSION AND NOT THE CALLER'S DOOR. [riskEvent.under] is the
+	// THROUGH THE CONVERSION AND NOT THE CALLER'S ENTRY POINT. [riskEvent.under] is the
 	// shared conversion — same time bound, same one constructor — while
 	// [riskEvent.observation] is the caller-facing wrapper that refuses this plane's
 	// own id namespaces. Reaching it from here would refuse the very namespace that
@@ -265,7 +265,7 @@ func planeObserve(ctx context.Context, in *contract.RiskObserveIn) (*contract.Ri
 // It states NO id, exactly as [decideEvent] does, because the id is not a property
 // of the event — it is the key the record converges on, and the caller of this
 // function is what supplies it ([planeObserve] states the settlement's, in the
-// [reserved] namespace no caller of the public door can write).
+// [reserved] namespace no caller of the public endpoint can write).
 func observeEvent(in *contract.RiskObserveIn) riskEvent {
 	return riskEvent{
 		Kind:    in.Kind,

@@ -69,7 +69,7 @@ func TestLiveHTTPSandboxEditsRealCode(t *testing.T) {
 	const org = "hanzo"
 
 	// The org gate is a ROUTE fact, not a handler courtesy: no principal, no
-	// sandbox. Checked first so a later 201 cannot be explained by an open door.
+	// sandbox. Checked first so a later 201 cannot be explained by an ungated route.
 	if code, b := req(t, app, http.MethodGet, "/v1/sandbox", "", ""); code != http.StatusForbidden {
 		t.Fatalf("unauthenticated list: want 403, got %d %s", code, b)
 	}

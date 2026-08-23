@@ -193,7 +193,7 @@ func TestSendRequestValidate(t *testing.T) {
 		r    SendRequest
 		ok   bool
 	}{
-		// Room.Kind is optional on egress — doors address rooms by id alone.
+		// Room.Kind is optional on egress — transports address rooms by id alone.
 		{"kind optional on egress", SendRequest{Room: Room{ID: "r"}, Text: "x"}, true},
 		{"attachments alone suffice", SendRequest{Room: Room{ID: "r"}, Attachments: att}, true},
 		{"room id required", SendRequest{Text: "x"}, false},

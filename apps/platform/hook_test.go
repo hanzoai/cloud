@@ -1,15 +1,15 @@
 package platform
 
-// hook_test.go drives the forge's push door over REAL HTTP against the real
+// hook_test.go drives the forge's push endpoint over REAL HTTP against the real
 // route, because the two properties that matter are both properties of the wire:
 // what a delivery has to carry to be believed, and what running it costs the
 // fleet. Both clients are observed through the same registrations production uses
 // — the push builder and the lifecycle subscriber list — so a test cannot pass by
 // asserting a call it made itself.
 //
-// The door this replaces was tested by registering a builder in-process and
+// The endpoint this replaces was tested by registering a builder in-process and
 // checking the call that registration had just made possible, which is why its
-// suite stayed green for as long as the door was dead. Every assertion here is
+// suite stayed green for as long as the endpoint was dead. Every assertion here is
 // about the CLIENT, and the fired/not-fired counts are the whole point.
 
 import (
@@ -91,13 +91,13 @@ func (f *fired) settle(t *testing.T, pushes, events int) {
 	}
 }
 
-// hookApp mounts the forge door the way Mount does — the raw route over a Service
+// hookApp mounts the forge endpoint the way Mount does — the raw route over a Service
 // whose KMS holds `key` — and registers both clients so the test observes exactly
 // what production dispatches. An empty key seals nothing, which is how the
 // no-secret refusal is exercised.
 //
 // The Service carries NO STORE, and that is an assertion rather than a shortcut:
-// this door verifies, resolves and dispatches, and reads nothing of platform's
+// this endpoint verifies, resolves and dispatches, and reads nothing of platform's
 // own state. A version of it that grew a read would stop building here.
 func hookApp(t *testing.T, key string) (*zip.App, *fired) {
 	t.Helper()
@@ -111,7 +111,7 @@ func hookAppOn(t *testing.T, key, domain string) (*zip.App, *fired) {
 	return hookAppWith(t, sealed(t, key), domain, nil)
 }
 
-// sealed is a KMS holding key at the ref the door reads. An empty key seals
+// sealed is a KMS holding key at the ref the endpoint reads. An empty key seals
 // nothing, which is the deployment whose secret was never provisioned.
 func sealed(t *testing.T, key string) *fakeKMS {
 	t.Helper()
@@ -150,7 +150,7 @@ func hookAppWith(t *testing.T, kms cloud.KMSClient, domain string, build func(co
 
 	// The edge's own body limit, so the bound under test is the HANDLER's. Left at
 	// the zip default (4 MiB) the framework refuses an oversized delivery first,
-	// and the test would prove fiber's cap rather than this door's — while the
+	// and the test would prove fiber's cap rather than this endpoint's — while the
 	// fleet edge admits 16 MiB (cloud.Config BodyLimit), which is the size a
 	// delivery really arrives at with.
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), BodyLimit: 16 << 20})
@@ -244,7 +244,7 @@ func TestHook_RefusesASignatureOverOtherBytes(t *testing.T) {
 }
 
 // No signature header at all is refused. An unsigned delivery is the shape an
-// arbitrary internet caller sends, since this door takes no session.
+// arbitrary internet caller sends, since this endpoint takes no session.
 func TestHook_RefusesAnUnsignedDelivery(t *testing.T) {
 	app, f := hookApp(t, hookSecret)
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
@@ -375,7 +375,7 @@ func TestHook_RefusesAnOversizedBody(t *testing.T) {
 
 // ── the payload, and both clients ──────────────────────────────────────────────
 
-// THE PROPERTY THIS DOOR EXISTS FOR: a verified push reaches BOTH clients, exactly
+// THE PROPERTY THIS ENDPOINT EXISTS FOR: a verified push reaches BOTH clients, exactly
 // once each, carrying what each one reads.
 func TestHook_FiresBothClientsOnce(t *testing.T) {
 	app, f := hookApp(t, hookSecret)
@@ -468,7 +468,7 @@ func TestHook_DerivesTheCloneURLAndIgnoresThePayloadsOwn(t *testing.T) {
 
 // A deployment that cannot name its own forge refuses. The value it would carry on
 // is the empty origin, which every mirror reads as "a native push, send it on" —
-// the one loop this door must not start.
+// the one loop this endpoint must not start.
 func TestHook_RefusesWhenTheDeploymentNamesNoForge(t *testing.T) {
 	app, f := hookAppOn(t, hookSecret, "")
 	body := pushBody(t, hookOwner, "cloud", "refs/heads/main", hookBefore, hookCommit, "z")
@@ -507,7 +507,7 @@ func TestHook_RefusesAnUnmappedNamespace(t *testing.T) {
 
 // ── the deliveries deliberately declined ─────────────────────────────────────
 
-// Each of these is a VERIFIED delivery this door correctly does nothing with. All
+// Each of these is a VERIFIED delivery this endpoint correctly does nothing with. All
 // answer a benign 200 naming the reason, so the forge does not retry-storm and an
 // operator reads why on the forge's own delivery page.
 func TestHook_DeclinesWithAReason(t *testing.T) {
@@ -530,7 +530,7 @@ func TestHook_DeclinesWithAReason(t *testing.T) {
 		{"another event", "not a push", func(t *testing.T) []byte {
 			return []byte(`{"action":"opened","issue":{"number":7}}`)
 		}},
-		// The coordinate leaves this door as a clone URL, a directory key and a git
+		// The coordinate leaves this endpoint as a clone URL, a directory key and a git
 		// argument. A separator, a leading dash or a dot-dot in any part of it is
 		// refused at the boundary rather than in each place it would arrive.
 		{"traversal in the name", "malformed coordinate", func(t *testing.T) []byte {
@@ -836,7 +836,7 @@ func TestSecretIsHeldAndRefused(t *testing.T) {
 
 // A FAILED REFRESH DOES NOT TAKE THE KEY WITH IT. The read failed; the secret
 // did not change — it is still the value the forge is signing with. Discarding
-// it turned one KMS blip into a window of deliveries this door could not verify,
+// it turned one KMS blip into a window of deliveries this endpoint could not verify,
 // and this fork does not redeliver them.
 func TestSecretSurvivesAFailedRefresh(t *testing.T) {
 	kms := newFakeKMS()
@@ -886,7 +886,7 @@ func TestSecretRefreshSurvivesAPanickingKMS(t *testing.T) {
 	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}}
 
 	func() {
-		defer func() { _ = recover() }() // the edge recovers; the door must settle
+		defer func() { _ = recover() }() // the edge recovers; the endpoint must settle
 		_, _ = s.State.hook.read(s, context.Background())
 	}()
 
@@ -901,7 +901,7 @@ func TestSecretRefreshSurvivesAPanickingKMS(t *testing.T) {
 	if v, err := s.State.hook.read(s, context.Background()); err == nil || v != "" {
 		t.Fatalf("a panicked read settled as %q, %v", v, err)
 	}
-	// KMS is healthy again, the window turns, and the door recovers by itself.
+	// KMS is healthy again, the window turns, and the endpoint recovers by itself.
 	kms.panics = false
 	if err := kms.PutSecret(context.Background(), forge.WebhookRef, []byte(hookSecret)); err != nil {
 		t.Fatalf("seal: %v", err)

@@ -6,8 +6,8 @@
 // themselves leaves). That is the whole reason it exists as its own package. The
 // console has to be served from TWO places — every per-app plugin mounts it as
 // its "/" catch-all through cloud.Listen, and the light host (cmd/cloud) owns "/"
-// at the front door and cannot import package cloud (that would relink the fleet
-// it was split to avoid). One console implementation, reachable from both.
+// at the entry point and cannot import package cloud (that would relink the
+// fleet it was split to avoid). One console implementation, reachable from both.
 //
 // IT CARRIES NO BYTES. The console used to be //go:embed'd from webui/dist, which
 // the image build overwrote with the real static export — so the frontend's
@@ -82,19 +82,20 @@ func consoleTitle(host string) string {
 // caller registers it LAST — after every /v1 subsystem route, the /zap plane, and
 // the health contract — so the router's in-order matching gives all real API
 // routes precedence and only unmatched paths reach the SPA. Both cloud.Listen
-// (every plugin) and cmd/cloud (the host front door) call it, so the "/"
+// (every plugin) and cmd/cloud (the host process) call it, so the "/"
 // catch-all is spelled ONE way.
 //
 // fsys is the console bundle, supplied by the CALLER — this package holds no
 // bytes of its own (see the package doc). A nil fsys means this process serves no
 // console: the catch-all still keeps the API namespaces honest and still answers
-// the agent door, and a console path gets a 503 that says so.
+// the agent MCP address, and a console path gets a 503 that says so.
 //
 // app is not only where the catch-all is registered: it is also where this
-// process's AGENT DOOR comes from. zip.App.MCP is that door as a value — a frame
-// in, a frame out — and the terminal handler answers with it at the address the
-// door lives (see mcp.go). Nothing is configured and nothing is duplicated; the
-// console is simply handed the door the app already has.
+// process's AGENT MCP SERVER comes from. zip.App.MCP is that server as a
+// value — a frame in, a frame out — and the terminal handler answers with it
+// at the address the server lives (see mcp.go). Nothing is configured and
+// nothing is duplicated; the console is simply handed the server the app
+// already has.
 func Mount(app *zip.App, fsys fs.FS) error {
 	h, err := Handler(fsys, app.MCP, routerAllow(app))
 	if err != nil {
@@ -155,8 +156,8 @@ const terminal = "/*"
 
 // Handler is the console as a stdlib http.Handler (correct Content-Type,
 // conditional GET, precompressed negotiation, SPA fallback) plus this process's
-// agent door — the form Mount adapts onto the zip router via zip.AdaptNetHTTP,
-// and the form a test drives directly.
+// agent MCP server — the form Mount adapts onto the zip router via
+// zip.AdaptNetHTTP, and the form a test drives directly.
 //
 // allow may be nil, which means this handler cannot tell an unserved address from
 // an unserved METHOD and answers 404 for both. That is the old behaviour, kept
@@ -182,9 +183,9 @@ func Handler(fsys fs.FS, door zapmcp.Handler, allow Allow) (http.Handler, error)
 // of ~10KB out of RAM and is always the release that is actually mounted.
 type consoleHandler struct {
 	fsys fs.FS
-	// door is this process's MCP door — zip's, handed in whole. The console does
+	// door is this process's MCP server — zip's, handed in whole. The console does
 	// not implement MCP and holds no tool list; it holds the one address a machine
-	// door has and the value that answers there.
+	// calls and the value that answers there.
 	door zapmcp.Handler
 	// allow is the router's answer to "what methods serve this path". nil means
 	// nobody can be asked, and then an unserved METHOD is indistinguishable from an
@@ -198,13 +199,13 @@ type consoleHandler struct {
 // rather than as a bad source. nil is the separate, stated case of "no bundle in
 // this process" and is not an error.
 //
-// The door is REQUIRED. A terminal handler with no door cannot answer the one
-// address in the process that is guaranteed not to be a console route, and the
-// SPA fallback is the wrong answer there in the most damaging possible way — the
-// bug this package was already carrying, pointing the other way.
+// The door is REQUIRED. A terminal handler with no MCP server cannot answer
+// the one address in the process that is guaranteed not to be a console route,
+// and the SPA fallback is the wrong answer there in the most damaging possible
+// way — the bug this package was already carrying, pointing the other way.
 func newConsoleHandler(fsys fs.FS, door zapmcp.Handler) (*consoleHandler, error) {
 	if door == nil {
-		return nil, fmt.Errorf("webui: no MCP door: the terminal handler answers one and cannot invent it")
+		return nil, fmt.Errorf("webui: no MCP server: the terminal handler answers one and cannot invent it")
 	}
 	if fsys == nil {
 		return &consoleHandler{door: door}, nil
@@ -246,14 +247,15 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		upath = "/" + upath
 	}
 
-	// The agent door, BEFORE the static-console gate — an MCP client speaks POST,
-	// and the gate below would have answered it "method not allowed" in the
-	// console's own voice, which is how POST /mcp came to look like a door that
-	// exists but is misconfigured. This handler is TERMINAL, so it only ever sees a
-	// path no route claimed in THIS process — which is why it is the right place to
-	// answer the door and the wrong place to guess where the door went. It answers
-	// with the process's OWN door, so a plugin whose route zip never mounted is
-	// served here and a host that claimed the path with a signpost never arrives.
+	// The agent MCP server, BEFORE the static-console gate — an MCP client speaks
+	// POST, and the gate below would have answered it "method not allowed" in the
+	// console's own voice, which is how POST /mcp came to look like an endpoint
+	// that exists but is misconfigured. This handler is TERMINAL, so it only ever
+	// sees a path no route claimed in THIS process — which is why it is the right
+	// place to answer the MCP request and the wrong place to guess where the
+	// endpoint went. It answers with the process's OWN MCP server, so a plugin
+	// whose route zip never mounted is served here and a host that claimed the
+	// path with a signpost never arrives.
 	if h.mcpDoor(w, r, upath) {
 		return
 	}
@@ -266,7 +268,8 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// not what method a browser would have used. With the gate first, a POST to an
 	// unmatched API path was answered "method not allowed" — which tells a client
 	// the endpoint EXISTS and it used the wrong verb, when in fact nothing serves
-	// that address at all. 405 is a claim about a door; only a door may make it.
+	// that address at all. 405 is a claim about an endpoint; only an endpoint may
+	// make it.
 	for _, p := range apiPrefixes {
 		if upath != strings.TrimSuffix(p, "/") && !strings.HasPrefix(upath, p) {
 			continue
@@ -298,7 +301,7 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// No bundle in this process, said plainly. The alternative — a blank shell, or
 	// a placeholder that renders — is a page that LOOKS like the product and is
-	// not, which is the one answer a front door may never give. 503 also tells a
+	// not, which is the one answer an entry point may never give. 503 also tells a
 	// probe the truth: this address is meant to serve a console and cannot.
 	if h.fsys == nil {
 		http.Error(w, "console unavailable: this process serves no console bundle", http.StatusServiceUnavailable)

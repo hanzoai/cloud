@@ -21,7 +21,7 @@ func init() {
 		Example: json.RawMessage(`{"kind":"faq","id":"where-is-data-held"}`),
 	})
 	zip.Describe("GET /v1/trust", zip.Doc{
-		Description: "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published door; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
+		Description: "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published endpoint; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
 		Fields: map[string]string{
 			"centre.controls":        "Controls is the control inventory, each entry naming what it asserts, the\nmechanism, where it is enforced, how it is verified and the clauses it maps\nto.",
 			"centre.coverage":        "Coverage is the per-framework counts, computed from Controls against each\nframework's whole published clause list.",
@@ -149,7 +149,7 @@ func init() {
 		Example: json.RawMessage(`{"framework":"soc2"}`),
 	})
 	zip.Describe("GET /v1/trust/documents", zip.Doc{
-		Description: "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published door it does not.",
+		Description: "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published endpoint it does not.",
 		Fields: map[string]string{
 			"docRow.attested":          "Attested reports whether somebody OUTSIDE this organization put their name\nto it. Those are the artifacts a reviewer asks for, and they are released\nthrough a grant rather than published — there is no field that can say\notherwise.",
 			"docRow.href":              "Href is where to read it, present only when this reader may.",
@@ -203,7 +203,7 @@ func init() {
 		Description: "Reads your organization's trust-centre profile — the name, tagline and\nsummary a visitor sees, whether the centre is published, and where to send\nsomebody who wants a gated document.",
 	})
 	zip.Describe("GET /v1/trust/published/:org", zip.Doc{
-		Description: "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC door and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\ndoor.",
+		Description: "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC endpoint and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\nendpoint.",
 		Fields: map[string]string{
 			"centre.controls":        "Controls is the control inventory, each entry naming what it asserts, the\nmechanism, where it is enforced, how it is verified and the clauses it maps\nto.",
 			"centre.coverage":        "Coverage is the per-framework counts, computed from Controls against each\nframework's whole published clause list.",

@@ -279,14 +279,14 @@ func WithActing(ctx context.Context, org string) context.Context {
 // so a tenant key read from one is a cross-tenant read the caller asserted for
 // itself.
 // It has TWO readers, in this order, and they answer the same question through
-// different doors:
+// different paths:
 //
 //  1. the slot [WithOrg] parked, which the route middleware fills; and
-//  2. zip's own caller, for the door that has NO route to run middleware on.
+//  2. zip's own caller, for the path that has NO route to run middleware on.
 //
 // The second is not a second rule. MCP's tools/call invokes an op DIRECTLY — no
 // route, so no middleware, so nothing parks slot 1 — and until zip carried the
-// caller over that door there was nothing else to read, which is why this package
+// caller over that path there was nothing else to read, which is why this package
 // grew the slot at all. zip carries it now (caller_mcp_test.go), so the org is
 // read back through [OrgOf]: the SAME two facts, the SAME decision, one more
 // reader. A tool call therefore resolves the tenant a routed request would, and
@@ -431,14 +431,14 @@ func WithValidated(ctx context.Context, c *zip.Ctx) context.Context {
 // Validated, and the same answer. FALSE off the HTTP path, where there is no
 // request and so no attested caller: an op that gates on it refuses rather than
 // serving an unauthenticated one.
-// It reads the same two doors [OrgFrom] does, and for the same reason: the slot
+// It reads the same two paths [OrgFrom] does, and for the same reason: the slot
 // is filled by route middleware, and tools/call has no route. The fallback is
 // [Validated]'s own predicate — a non-empty user — read off zip's caller instead
 // of off a request, because over MCP there is a caller and no *zip.Ctx to ask.
 //
 // This is what made an op that gates on it unreachable AS A TOOL: the gate had
-// been moved INTO the handler precisely so every door would reach it, but the
-// fact it reads was still parked by the one door tools/call does not pass
+// been moved INTO the handler precisely so every path would reach it, but the
+// fact it reads was still parked by the one path tools/call does not pass
 // through, so the gate was unsatisfiable exactly where it was meant to work.
 func ValidatedFrom(ctx context.Context) bool {
 	if ok, _ := ctx.Value(validatedKey{}).(bool); ok {
@@ -652,7 +652,7 @@ func ProjectFrom(ctx context.Context) string {
 	if project, ok := ctx.Value(projectKey{}).(string); ok && project != "" {
 		return project
 	}
-	// The SAME second reader [OrgFrom] has, for the same reason: a door with no
+	// The SAME second reader [OrgFrom] has, for the same reason: a path with no
 	// route parks nothing, and zip carries the caller instead. Without this a plane
 	// or agent caller carrying a real project resolved to "default" — so its
 	// storage keys, its metrics and the scope a spend cap sums over all named the
@@ -667,8 +667,8 @@ func ProjectFrom(ctx context.Context) string {
 // client. It composes the SAME rule rather than restating its two inputs, which is
 // the whole reason it exists: the caller that read ProjectFrom and ValidatedFrom
 // separately reconstructed a DIFFERENT rule — it dropped the default-project
-// carve-out, so a project cap hard-enforced 402 on the agent door while the
-// identical REST call softened. One rule, two doors.
+// carve-out, so a project cap hard-enforced 402 on the agent path while the
+// identical REST call softened. One rule, two paths.
 func ValidatedProjectFrom(ctx context.Context) (string, bool) {
 	project := ProjectFrom(ctx)
 	return project, ValidatedFrom(ctx) && !IsDefaultProject(project)
@@ -695,7 +695,7 @@ func ProjectScope(c *zip.Ctx) string {
 // It composes the same rule rather than restating it, for the reason
 // ValidatedProjectFrom exists: a plane that read ProjectFrom and applied its own
 // default test would be a second spelling of "default == empty == whole org", and
-// the two would drift the first time either moved. One rule, two doors.
+// the two would drift the first time either moved. One rule, two paths.
 func ProjectScopeFrom(ctx context.Context) string {
 	p := ProjectFrom(ctx)
 	if IsDefaultProject(p) {

@@ -335,7 +335,7 @@ func init() {
 			"o11ySvcStat.errorRate":       "percent (0..100)",
 			"o11ySvcStat.latencyP95Ms":    "LatencyP95Ms is that service's 95th-percentile span duration in\nmilliseconds.",
 			"o11ySvcStat.requests":        "Requests is how many spans it emitted in the window. The board ranks on\nthis.",
-			"o11ySvcStat.service":         "Service is the emitting service's name, from the span's own service column.\nThe whole cloud binary reports under ONE such name however many subsystems\nit mounts, which is what the per-subsystem board next door exists to split\napart.",
+			"o11ySvcStat.service":         "Service is the emitting service's name, from the span's own service column.\nThe whole cloud binary reports under ONE such name however many subsystems\nit mounts, which is what the per-subsystem board beside it exists to split\napart.",
 			"o11yTotals.completionTokens": "CompletionTokens is the generated half of Tokens.",
 			"o11yTotals.costCents":        "CostCents is what those calls cost, in US CENTS. The trace and gen_ai\nfigures elsewhere on this board are not in cents; this one is.",
 			"o11yTotals.errors":           "Errors is how many of Requests the ledger marked failed.",

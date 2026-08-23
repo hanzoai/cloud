@@ -27,10 +27,10 @@
 // /v1/ml) where they are real — and the ledger is a measured gate
 // (typed_wire_test.go intentRefused), not a comment.
 //
-// INFERENCE IS NOT HERE. The fleet's ONE inference door is the OpenAI-
+// INFERENCE IS NOT HERE. The fleet's ONE inference endpoint is the OpenAI-
 // compatible /v1 surface (apps/ai + the zen claim), where requests are
 // metered and billed. This plane is the runtime's management lens; opening a
-// second, unmetered completion door under /v1/engine would split billing, so
+// second, unmetered completion endpoint under /v1/engine would split billing, so
 // it deliberately does not exist.
 //
 // SHARED RUNTIME, READ-ONLY. The engine deployment is one shared runtime with

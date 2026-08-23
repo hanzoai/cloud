@@ -57,7 +57,7 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 	return resp.StatusCode, b
 }
 
-// ── identity reaches a typed op through EVERY door ─────────────────────────────
+// ── identity reaches a typed op through EVERY entry point ──────────────────────
 
 // A typed op receives a context and its decoded input — never the request — so it
 // sees its caller only because something parked the principal on the context.
@@ -70,9 +70,9 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 // and calls Mount — a context value does not cross the host↔plugin socket),
 // and MCP's tools/call, which invokes an op DIRECTLY so no route middleware runs.
 // principal.ValidatedFrom now falls back to zip's own caller, which crosses every
-// door, so both are served.
+// entry point, so both are served.
 //
-// The fallback widens the DOOR, not the TRUST, and the distinction is load-bearing:
+// The fallback widens the WAY IN, not the TRUST, and the distinction is load-bearing:
 // cloud installs SanitizeIdentity app-wide (app.go, `app.Use(IdentityMiddleware)`),
 // and it DELETES every client-sent authority header before any handler reads one.
 // So an X-User-Id a typed op sees was minted by cloud from a verified token.
@@ -85,7 +85,7 @@ func do(t *testing.T, app *zip.App, req *http.Request) (int, []byte) {
 func TestTypedOpsSeeTheirCallerThroughEveryDoor(t *testing.T) {
 	const path = "/v1/o11y/status?product=not-a-real-service"
 
-	// No Bridge — the standalone binary, and the tools/call door.
+	// No Bridge — the standalone binary, and the tools/call path.
 	bare := zip.New(zip.Config{Logger: luxlog.New("test")})
 	mountScopedReads(bare)
 	if code, body := do(t, bare, scopeReq("GET", path, "acme")); code != http.StatusOK {
@@ -98,7 +98,7 @@ func TestTypedOpsSeeTheirCallerThroughEveryDoor(t *testing.T) {
 	}
 
 	// And with NO principal, both shapes refuse. This is the assertion that must
-	// never flip: the door got wider, the trust did not.
+	// never flip: the way in got wider, the trust did not.
 	for _, app := range []*zip.App{bare, scopeApp(t)} {
 		req := httptest.NewRequest("GET", path, nil)
 		req.Header.Set("X-Org-Id", "acme") // an org with nobody behind it

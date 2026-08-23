@@ -12,10 +12,11 @@ import (
 // few-hundred-millisecond budget, and a second network path to the same store would
 // be a second way to do one thing.
 //
-// It exists because a caller should not have to know WHICH door holds their answer.
-// /v1/code/search stays exactly what it is — the code surface's own door, with repo
-// and type and the span shape a coding agent wants — and this is how the fused door
-// reaches the same index without asking the caller to choose.
+// It exists because a caller should not have to know WHICH endpoint holds their
+// answer. /v1/code/search stays exactly what it is — the code surface's own
+// endpoint, with repo and type and the span shape a coding agent wants — and this
+// is how the fused endpoint reaches the same index without asking the caller to
+// choose.
 
 // ErrNotMounted reports that the code subsystem is not mounted in this binary. The
 // fused surface maps it to a DISABLED leg, never to a failed query: a deployment
@@ -31,7 +32,7 @@ func Ready() bool { return mounted != nil }
 // org MUST come from a validated principal: the per-org store IS the tenant
 // boundary, so a caller can never reach another tenant's code. It runs the SAME
 // engine /v1/code/search runs, in hybrid mode — the default there too — so the fused
-// door and the code door can never disagree about what the index holds.
+// endpoint and the code endpoint can never disagree about what the index holds.
 //
 // It bills NOTHING. The metering a request-scoped search does is attributed to the
 // caller's ledger through the request, and this client is reached from a fused query

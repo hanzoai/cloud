@@ -479,7 +479,7 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	}
 }
 
-// The pk- fix at the door a caller actually uses: a publishable key is `type:
+// The pk- fix at the address a caller actually uses: a publishable key is `type:
 // publishable` on the ONE endpoint. Nothing minted one before — cloud had no pk-
 // mint surface at all — so every product configured its own ingest credential and
 // error reporting stayed on a separate DSN.

@@ -260,7 +260,7 @@ func TestAWriteNeedsAnAdmin(t *testing.T) {
 
 // TestUnpublishedIsForTheEditorAlone pins the one fact the read varies on. Hiding a
 // product must actually hide it, and the person who hid it must still be able to
-// see it — otherwise unpublishing is a one-way door.
+// see it — otherwise unpublishing is irreversible.
 func TestUnpublishedIsForTheEditorAlone(t *testing.T) {
 	app := mountApp(t)
 	hidden := false
@@ -275,7 +275,7 @@ func TestUnpublishedIsForTheEditorAlone(t *testing.T) {
 		t.Error("a signed-out visitor was served an unpublished taxon")
 	}
 	if !has(read(t, app, "/v1/taxonomy", super), "staged") {
-		t.Error("the editor cannot see the taxon it staged — unpublishing would be a one-way door")
+		t.Error("the editor cannot see the taxon it staged — unpublishing would be irreversible")
 	}
 }
 
@@ -415,7 +415,8 @@ func TestBrandNarrowsTheCatalogue(t *testing.T) {
 }
 
 // TestIdsAreSlugs — an id is a URL segment, a console route and a JSON key at
-// once, so it is validated at the door rather than escaped at three call sites.
+// once, so it is validated at the entry point rather than escaped at three call
+// sites.
 func TestIdsAreSlugs(t *testing.T) {
 	app := mountApp(t)
 	// %20 rather than a literal space: the space is what must be refused, and an
@@ -779,7 +780,7 @@ func TestStagingIsScopedToWhoeverCanUnstageIt(t *testing.T) {
 		t.Fatalf("put: %d (%s)", code, out)
 	}
 	if !has(read(t, app, "/v1/taxonomy", adminA), "acme-secret") {
-		t.Error("acme's admin cannot see the row it staged — unpublishing would be a one-way door")
+		t.Error("acme's admin cannot see the row it staged — unpublishing would be irreversible")
 	}
 	for _, tc := range []struct {
 		name string

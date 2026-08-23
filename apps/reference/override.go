@@ -5,11 +5,11 @@ package reference
 //
 // ISOLATION IS PHYSICAL, NOT PREDICATED. An override lives in the
 // organisation's OWN SQLite file, reached through cloud.OrgNamespace — the one
-// door a validated org walks through — so a distinct organisation is a distinct
-// file and a query in one cannot reach another's rows. There is no `org` column
-// to forget in a WHERE clause, because there is no shared table. This is the
-// same physical isolation every other per-entity store in the binary has
-// (HIP-0302), and it is why the cross-tenant write in this design is
+// path a validated org is resolved through — so a distinct organisation is a
+// distinct file and a query in one cannot reach another's rows. There is no
+// `org` column to forget in a WHERE clause, because there is no shared table.
+// This is the same physical isolation every other per-entity store in the binary
+// has (HIP-0302), and it is why the cross-tenant write in this design is
 // unrepresentable rather than merely refused.
 //
 // The wire agrees with the store: no In struct carries a scope, an org or a
@@ -69,7 +69,7 @@ func maxOverrides() int { return ownBudget / (len(Catalog()) * rowBytes) }
 // byte bound, so neither [rowBytes] nor anything derived from it meant anything
 // until this bound existed.
 //
-// The bound is at the store door rather than at the wire op because the row is
+// The bound is at the store rather than at the wire op because the row is
 // what the budget is about: bounded where a row is written, it holds for every
 // path that reaches the store and not only the one a reviewer happened to read.
 // 128 bytes is three times the UUID IAM mints.
@@ -101,7 +101,7 @@ const (
 	Deny  = "deny"
 )
 
-// verdictOK is the closed vocabulary. Anything else is refused at the door: a
+// verdictOK is the closed vocabulary. Anything else is refused on arrival: a
 // free-text verdict cannot be counted, tested or acted on.
 func verdictOK(v string) bool { return v == Allow || v == Deny }
 

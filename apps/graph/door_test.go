@@ -17,7 +17,7 @@ import (
 // two of reading one back, differing only in which of them remembered to send a
 // project. A test harness that can be written two ways is a harness where a test
 // proves something about the spelling it happened to pick, which is how the
-// project-scoped door went unexercised by the read helper that predated it.
+// project-scoped endpoint went unexercised by the read helper that predated it.
 
 // call is the primitive: a request as the caller of one project, carrying the org
 // and the validated principal every op here requires. An empty project names none,
@@ -54,7 +54,7 @@ func call(t *testing.T, app *zip.App, method, path, project string, body any) (i
 }
 
 // assertFact files one assertion into the caller's graph and fails unless the
-// door took it.
+// endpoint took it.
 func assertFact(t *testing.T, app *zip.App, project, entity, relation, value string, names bool) {
 	t.Helper()
 	code, b := call(t, app, http.MethodPost, "/v1/graph", project, map[string]any{
@@ -69,7 +69,7 @@ func assertFact(t *testing.T, app *zip.App, project, entity, relation, value str
 	}
 }
 
-// answered is what a read or a search returned. Both doors answer in the read
+// answered is what a read or a search returned. Both endpoints answer in the read
 // shape, which is why one reader serves them and why a caller can hand what it
 // searched for to anything that takes assertions.
 func answered(t *testing.T, app *zip.App, project, path string) []wireFact {

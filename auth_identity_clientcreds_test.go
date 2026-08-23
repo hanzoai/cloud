@@ -157,7 +157,7 @@ func TestAProgramIsOneWhateverItsTokenIsAddressedTo(t *testing.T) {
 // subject that looks like "<org>/<app>", one audience equal to azp, and no
 // membership set — which is what an unresolved membership lookup leaves behind.
 // Reading that as an application handed it the org off `owner` and a build
-// door's whole registry namespace.
+// endpoint's whole registry namespace.
 //
 // IAM signs the kind, so the answer no longer depends on a shape anyone can
 // arrange. This pins the exact claims that used to pass.

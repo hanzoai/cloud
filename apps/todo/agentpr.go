@@ -10,8 +10,9 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 )
 
-// agentpr.go is the IN-PROCESS door for opening a native "PR" work item from a
-// coding-agent run (clients/coding), the twin of the createIssue HTTP handler.
+// agentpr.go is the IN-PROCESS entry point for opening a native "PR" work item
+// from a coding-agent run (clients/coding), the twin of the createIssue HTTP
+// handler.
 // It writes the SAME todo Issue table through the SAME store — a Kind:"pr",
 // Source:"agent" row bound to the git Repo, with the pushed branch as the ExtRef
 // anchor — so the row shows up on the repo's PRs tab (Filter{Repo, Kind:"pr"})

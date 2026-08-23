@@ -23,7 +23,7 @@ import (
 // IT IS EMPTY, and both entries left for reasons worth keeping apart.
 //
 // POST /v1/tools/mcp was a hand-rolled JSON-RPC surface and is GONE rather than
-// typed: the fleet serves ONE MCP door, on the host, and this plane reaches it as
+// typed: the fleet serves ONE MCP server, on the host, and this plane reaches it as
 // a typed op (POST /v1/tools/call) like everything else.
 //
 // POST /v1/tools/plugins/build was refused for a capability zip did not have. A

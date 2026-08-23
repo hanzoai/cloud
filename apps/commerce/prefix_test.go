@@ -27,18 +27,19 @@ import (
 //     failed, and how the commerce unfork regressed it once already.
 //   - /v1/commerce                the merchant root, and every noun under it:
 //     the storefront (GET /v1/commerce/store/current + the listing upsert/reads),
-//     the SuperAdmin catalog and plan CRUD, the cart and the typed payment door.
-//     The storefront read is the one that proved it — dropped by the unfork it
-//     matched no owner, fell to the /v1/* AI balance gate and 402'd every store
-//     read for a commerce-funded org (the karma outage). It is metadata, never
-//     LLM inference. One root claims the family; the routing test below drives
-//     the real paths rather than trusting this list to enumerate them.
+//     the SuperAdmin catalog and plan CRUD, the cart and the typed payment
+//     endpoint. The storefront read is the one that proved it — dropped by the
+//     unfork it matched no owner, fell to the /v1/* AI balance gate and 402'd
+//     every store read for a commerce-funded org (the karma outage). It is
+//     metadata, never LLM inference. One root claims the family; the routing test
+//     below drives the real paths rather than trusting this list to enumerate
+//     them.
 func TestCommercePrefixesPinned(t *testing.T) {
 	// ONE root, and only one. The two /v1/billing stems that used to sit beside it
 	// went with the fold: /v1/billing is billing's address, and the processor
 	// callback answers under this app's own root as /v1/commerce/webhooks. A stem
 	// re-added here would win a billing address by specificity and answer it
-	// without the door's subject resolution — TestCommerceRegistersNoBillingRoute
+	// without the endpoint's subject resolution — TestCommerceRegistersNoBillingRoute
 	// is the assertion that catches it at the route rather than at this list.
 	want := map[string]bool{
 		"/v1/commerce": false,

@@ -166,8 +166,8 @@ func (s *state) ledger(sandbox bool) *cloud.OrgStore[*store] {
 }
 
 // storeFor is the ONE way this package reaches a book store: it names the
-// database through cloud.OrgNamespace — the single door a validated org walks
-// through — and asks the chosen registry for that name.
+// database through cloud.OrgNamespace — the single check a validated org
+// passes — and asks the chosen registry for that name.
 func (s *state) storeFor(org string, sandbox bool) (*store, error) {
 	ns, err := cloud.OrgNamespace(org, "")
 	if err != nil {

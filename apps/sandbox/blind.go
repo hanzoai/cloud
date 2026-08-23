@@ -4,7 +4,7 @@ package sandbox
 //
 // # Why it is here and not in the caller
 //
-// A sandbox command leaves by TWO doors. The result goes back to the caller, and
+// A sandbox command leaves by TWO paths. The result goes back to the caller, and
 // the narration goes STRAIGHT TO THE SESSION as the bytes are produced —
 // durable events, an SSE feed, a chat thread — without passing through the
 // caller at all. A caller that redacted the result it received would therefore
@@ -12,7 +12,7 @@ package sandbox
 // can take a secret back out of a message already delivered.
 //
 // So redaction happens where the bytes are PRODUCED. The caller says what must
-// never appear (plane.RunIn.Blind); this applies it to both doors.
+// never appear (plane.RunIn.Blind); this applies it to both paths.
 //
 // # What it is not
 //
@@ -134,7 +134,7 @@ func (b *blinder) hide(s string) string {
 	return b.rep.Replace(s)
 }
 
-// result returns r with both streams hidden — the second door.
+// result returns r with both streams hidden — the second path.
 func (b *blinder) result(r ExecResult) ExecResult {
 	if b == nil {
 		return r

@@ -50,11 +50,11 @@ const defaultFeeCents int64 = 1
 // meter is the per-org gate and debit, bound once by Mount.
 //
 // Package-level for the reason the logger beside it is (see setLogger): the
-// three doors into search — the two handlers here and compose.go's in-process
-// caller — do not all have a meter to pass, and metaSearch is a pure function
-// over the enabled engines that every one of them reaches. An atomic pointer
-// rather than a plain var because Mount runs at boot while other subsystems are
-// already serving, exactly as crawl's archive is bound.
+// three entry points into search — the two handlers here and compose.go's
+// in-process caller — do not all have a meter to pass, and metaSearch is a pure
+// function over the enabled engines that every one of them reaches. An atomic
+// pointer rather than a plain var because Mount runs at boot while other
+// subsystems are already serving, exactly as crawl's archive is bound.
 var meter atomic.Pointer[cloud.ResourceMeter]
 
 // bindMeter installs the process-wide meter. A nil meter leaves search fully
@@ -123,7 +123,7 @@ func afford(ctx context.Context, engs []engine) ([]engine, *cloud.Charge) {
 	// NO PAYER, NO PURCHASE. Everywhere else an absent wallet means "nobody to
 	// bill", and the surface proceeds — correct when the act costs us nothing. Here
 	// it would mean buying a vendor's query for a caller we cannot name or charge,
-	// which is the platform paying for work it cannot attribute. Two doors arrive
+	// which is the platform paying for work it cannot attribute. Two callers arrive
 	// this way: the agent tool dispatcher, which manufactures its own context and
 	// carries no identity at all, and any in-process composer that has not carried
 	// its caller across a detach.
@@ -166,7 +166,7 @@ func free(engs []engine) []engine {
 // per ENGINE per search when WEBSEARCH_RENDER is on, so a single query can hold
 // the pod several times over — and it fires for the keyless engines too, which
 // paid() correctly reports free: the ENGINE costs nothing and the browser does.
-// Reading the same pod through a second door does not make it cheaper, and
+// Reading the same pod through a second entry point does not make it cheaper, and
 // declaring this surface Metered for its search fee never covered it.
 const (
 	kind   = "search"

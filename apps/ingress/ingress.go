@@ -1,4 +1,4 @@
-// Package ingress is your front door: automatic TLS certificates and hostname
+// Package ingress is your edge: automatic TLS certificates and hostname
 // routing to any backend, changed live.
 //
 // It is cloud's embedded, runtime-configurable edge, controlled at /v1/ingress.

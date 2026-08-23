@@ -2,7 +2,7 @@
 
 package ai
 
-// mcp.go is ai's half of the fleet's ONE agent door.
+// mcp.go is ai's half of the fleet's ONE agent MCP server.
 //
 // THE AGGREGATION ALREADY EXISTS AND NOTHING HERE REBUILDS IT. A typed op is a
 // tool — zip projects the same registry entry into the REST route, the OpenAPI
@@ -11,11 +11,11 @@ package ai
 // there is no tool list in this file and no schema written by hand: the
 // declaration is the source, and a second list beside it could only ever drift
 // from the first. What was missing is not a registry. It is the ANSWER to "what
-// is on the door", which until now no process could give and no test asserted —
-// and an inventory nobody can read is how a door that serves nothing passes for
-// a healthy one.
+// is on the MCP server", which until now no process could give and no test
+// asserted — and an inventory nobody can read is how an MCP server that serves
+// nothing passes for a healthy one.
 //
-// So this file adds exactly one op, and it reports what THIS PROCESS's door
+// So this file adds exactly one op, and it reports what THIS PROCESS's MCP server
 // actually carries — read from the live registry, never from a description of it.
 //
 // IT USED TO REPORT A THIRD NUMBER, `published`: every tool the BUILD could
@@ -23,10 +23,10 @@ package ai
 // are gone. They were a second source for a fact each child already knows, and
 // they were wrong — plugin/o11y/mcp.json held 12 tools while the o11y binary at
 // the same commit served 365 — so the fleet-wide question is answered by ASKING
-// the fleet now, at the one door, which also NAMES every subsystem it could not
-// reach (package fleet). No process but the host can ask that question, and a
-// subsystem inventing an answer to it is precisely the green surface this file
-// was written against.
+// the fleet now, at the one MCP address, which also NAMES every subsystem it
+// could not reach (package fleet). No process but the host can ask that
+// question, and a subsystem inventing an answer to it is precisely the green
+// surface this file was written against.
 //
 // A deployment manifest answers what was INTENDED; only the process answers what
 // it LOADED, and during a rolling upgrade the two disagree by design (scope.go
@@ -39,8 +39,8 @@ package ai
 // the PATH-derived id (get_v1_o11y_logs, get_v1_analytics_top), and a path lives
 // under the subtree the manifest grants exactly one subsystem, so two defaults
 // cannot meet; an op that DOES name itself escapes that, so the name is checked
-// instead — the fleet door refuses to serve one name from two apps and logs both
-// (fleet/mcp.go). A hand-written id in this package therefore carries its
+// instead — the fleet MCP server refuses to serve one name from two apps and logs
+// both (fleet/mcp.go). A hand-written id in this package therefore carries its
 // subsystem: aiMCPTools, never mcpTools.
 
 import (
@@ -52,7 +52,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mcpGate is the refusal, spelled ONCE. The MCP door renders a handler error as
+// mcpGate is the refusal, spelled ONCE. The MCP server renders a handler error as
 // isError content carrying err.Error(); the REST route renders the same error as
 // a 403 whose msg is the same string. One value, so a caller refused at one
 // projection is refused at the other in the same words — which is the property
@@ -60,7 +60,7 @@ import (
 // only ever a comment.
 const mcpGate = "sign in to read this deployment's MCP tool surface"
 
-// mcpOps binds the op to the app whose door it reports. A TypedHandler is
+// mcpOps binds the op to the app whose MCP server it reports. A TypedHandler is
 // func(context.Context, *In) (*Out, error) — no parameter for the app — so the
 // app arrives as a RECEIVER, which is also the only bound form cmd/zipdoc can
 // lift prose from.
@@ -92,17 +92,17 @@ func mountMCP(app *zip.App) {
 // is FLAT, so every name in this file carries the product prefix.
 type aiMCPQuery struct {
 	// Names asks for this process's tool NAMES and not only how many there are.
-	// Off by default: a list of names is a page, and the question this op exists
-	// to answer ("is the door up and does it have anything behind it") is answered
-	// by the count.
+	// Off by default: a list of names is a page, and the question this op exists to
+	// answer ("is the MCP server up and does it have anything behind it") is
+	// answered by the count.
 	Names bool `json:"names"`
 }
 
-// aiMCPSurface is what the one MCP door carries, from this process's vantage.
+// aiMCPSurface is what the one MCP server carries, from this process's vantage.
 type aiMCPSurface struct {
-	// Tools is how many tools THIS PROCESS's door carries: its own typed-op
+	// Tools is how many tools THIS PROCESS's MCP server carries: its own typed-op
 	// registry, projected. It is the only number a subsystem can state honestly —
-	// what the FLEET's door carries is a question only the host can ask, and it
+	// what the FLEET's server carries is a question only the host can ask, and it
 	// asks it by asking every subsystem (POST /v1/mcp, tools/list).
 	Tools int `json:"tools"`
 	// Apps is one row per subsystem this deployment composes, in manifest order.
@@ -117,18 +117,18 @@ type aiMCPApp struct {
 	// Name is the subsystem, as the manifest names it.
 	Name string `json:"name"`
 	// Served reports that THIS process mounted it, so its tools are on this
-	// process's door rather than behind a sibling this process only knows the name
-	// of.
+	// process's MCP server rather than behind a sibling this process only knows the
+	// name of.
 	Served bool `json:"served"`
 }
 
-// Tools reports what THIS PROCESS's MCP door carries: how many tools its own
+// Tools reports what THIS PROCESS's MCP server carries: how many tools its own
 // registry projects, optionally their names, and which subsystems this process
-// composed. It is the answer to "is this door up and does it have anything behind
-// it" — a question a status code cannot answer, since an empty door and a full
-// one are both 200. What the FLEET's door carries is the fleet door's own answer:
-// POST /v1/mcp, tools/list, which asks every subsystem and names the ones that
-// did not reply.
+// composed. It is the answer to "is this MCP server up and does it have anything
+// behind it" — a question a status code cannot answer, since an empty server and
+// a full one are both 200. What the FLEET's server carries is the fleet server's
+// own answer: POST /v1/mcp, tools/list, which asks every subsystem and names the
+// ones that did not reply.
 func (o mcpOps) tools(ctx context.Context, in *aiMCPQuery) (*aiMCPSurface, error) {
 	// A TOOL CALL IS AN API CALL. The gate is the op's own, read from the bit
 	// cloud.Bridge parked, so it holds identically over REST and over MCP — and
@@ -139,8 +139,8 @@ func (o mcpOps) tools(ctx context.Context, in *aiMCPQuery) (*aiMCPSurface, error
 	return surface(o.app, in.Names), nil
 }
 
-// surface reads the door: this process's own registry, and which subsystems it
-// actually composed.
+// surface reads the MCP server: this process's own registry, and which subsystems
+// it actually composed.
 //
 // Both halves come from the LIVE app — App.MCPTools and App.Plugins — never from
 // a list of what was meant to mount, and never from an artifact. There is no

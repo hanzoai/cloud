@@ -16,8 +16,8 @@ import (
 )
 
 // ingress.go is the chat-ingress client between the platform adapters and the
-// channels inbox, plus the transport send doors. Token custody never leaves this
-// package; the event crosses on the PLANE.
+// channels inbox, plus the transport send helpers. Token custody never leaves
+// this package; the event crosses on the PLANE.
 //
 // It used to cross on a package global — channels.Mount installed a consumer
 // function pointer here — and a package global is per-PROCESS. In production
@@ -70,7 +70,7 @@ func LinkedSubject(org, provider, extUser string) (string, bool, error) {
 	return link.Subject, true, nil
 }
 
-// ── transport send doors (each delegates to the ONE existing HTTP path) ──────
+// ── transport send helpers (each delegates to the ONE existing HTTP path) ────
 
 // SendSlack posts text to channel, threaded under threadTS when non-empty
 // (slackPostThread, slack_events.go — posts top-level chat.postMessage when
@@ -211,7 +211,7 @@ func planeChatIdentity(ctx context.Context, in *plane.ChatIdentityIn) (*plane.Ch
 	return &plane.ChatIdentityOut{Subject: link.Subject, Model: link.Model, Say: say, Ephemeral: ephemeral}, nil
 }
 
-// serveSend publishes the outbound door on the plane.
+// serveSend publishes the outbound send on the plane.
 //
 // The four Send* helpers above are Go calls, and every one of them ends at
 // TokenFor, which is gated on this package's `mounted` global. channels holds

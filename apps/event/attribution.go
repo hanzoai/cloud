@@ -17,8 +17,8 @@
 //
 // A key is minted with a project (apps/projects) and this is where a beacon
 // carrying it is turned back into (org, project). The projects app owns the row,
-// the ingest door reads it, and they are not the same process in production — the
-// pod boots one process per app — so this is the same two-resolver client
+// the ingest endpoint reads it, and they are not the same process in production —
+// the pod boots one process per app — so this is the same two-resolver client
 // sites.SetResolver already uses: in-process when the store is here, over the
 // plane when it is not.
 
@@ -93,7 +93,7 @@ func currentKeyResolver() KeyResolver {
 
 // resolveAttribution answers which project a key names. It reports only found/not —
 // a store failure is logged by the resolver and read here as "not resolved",
-// because this door's caller is a browser that can do nothing with the
+// because this endpoint's caller is a browser that can do nothing with the
 // difference. What it must never do is answer with an org and no project: that
 // is the silent misfiling this whole change removes.
 func resolveAttribution(ctx context.Context, key string) (Attribution, bool) {
@@ -109,17 +109,17 @@ func resolveAttribution(ctx context.Context, key string) (Attribution, bool) {
 }
 
 // Admit answers what a presented key names — the org whose rows it writes, and the
-// project that minted it when a project did. It is the ONE sequence any door admits
-// a key by: /v1/event through keyAdmission (event.go), which adds the capability an
-// event write also needs, and the OpenRouter webhook (apps/integrations) on its own,
-// because a webhook has nothing to grant.
+// project that minted it when a project did. It is the ONE sequence any endpoint
+// admits a key by: /v1/event through keyAdmission (event.go), which adds the
+// capability an event write also needs, and the OpenRouter webhook
+// (apps/integrations) on its own, because a webhook has nothing to grant.
 //
 // TWO ISSUERS, disjoint rather than a fallback chain: a project key exists only in
 // the project store and an IAM key only in IAM, so a lookup in one can never shadow
 // the other and the order costs nothing but a miss. Projects are asked first because
 // they answer the strictly narrower question — org AND project, where IAM can only
-// ever say org, having no project to scope to. A door that asks one issuer refuses
-// every key the other minted.
+// ever say org, having no project to scope to. An endpoint that asks one issuer
+// refuses every key the other minted.
 func Admit(ctx context.Context, key string) (Attribution, bool) {
 	if at, ok := resolveAttribution(ctx, key); ok {
 		return at, true

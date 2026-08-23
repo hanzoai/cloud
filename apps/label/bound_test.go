@@ -14,11 +14,11 @@ package label
 //
 // TWO HALVES, AND NEITHER IS SUFFICIENT ALONE.
 //
-//	TestEveryCallerSizedFieldDeclaresACeiling is STRUCTURAL: it walks every door's
-//	In type with reflect and fails on a string field with no declared ceiling. A
-//	new field cannot arrive unbounded and be noticed later, which is what happened
-//	here — the write door bounded its subject and the read doors, added after, did
-//	not, and nothing compared them.
+//	TestEveryCallerSizedFieldDeclaresACeiling is STRUCTURAL: it walks every
+//	endpoint's In type with reflect and fails on a string field with no declared
+//	ceiling. A new field cannot arrive unbounded and be noticed later, which is
+//	what happened here — the write endpoint bounded its subject and the read
+//	endpoints, added after, did not, and nothing compared them.
 //
 //	TestNoCountBoundStandsWithoutAByteBound is BEHAVIOURAL: every declared ceiling
 //	is refused one byte over, over the real router. A declaration nothing enforces
@@ -65,11 +65,11 @@ const (
 	instant = "instant"
 )
 
-// ceilings is the declared bound on every caller-sized field of every door, keyed
-// by the field's path from its In type. A number is a ceiling in bytes.
+// ceilings is the declared bound on every caller-sized field of every endpoint,
+// keyed by the field's path from its In type. A number is a ceiling in bytes.
 var ceilings = map[string]string{
-	// The write door. One assertion is bounded by admit(), which is the same
-	// function the read doors ask for the same fields.
+	// The write endpoint. One assertion is bounded by admit(), which is the same
+	// function the read endpoints ask for the same fields.
 	"riskLabelIn.Labels[].Kind":        vocabulary,
 	"riskLabelIn.Labels[].Subject":     fmt.Sprint(subjectMax),
 	"riskLabelIn.Labels[].At":          instant,
@@ -87,7 +87,7 @@ var ceilings = map[string]string{
 	"riskLabelsIn.From":    instant,
 	"riskLabelsIn.To":      instant,
 
-	// The resolve door: the one where the count multiplies the value.
+	// The resolve endpoint: the one where the count multiplies the value.
 	"riskResolveIn.Subjects[].Kind":    vocabulary,
 	"riskResolveIn.Subjects[].Subject": fmt.Sprint(subjectMax),
 	"riskResolveIn.Subjects[].At":      instant,
@@ -101,8 +101,8 @@ var ceilings = map[string]string{
 	"riskHoldIn.IDs[]": fmt.Sprint(idMax),
 }
 
-// TestEveryCallerSizedFieldDeclaresACeiling walks every door with reflect and
-// refuses a string field that declares no bound.
+// TestEveryCallerSizedFieldDeclaresACeiling walks every endpoint with reflect
+// and refuses a string field that declares no bound.
 //
 // This is the STRUCTURAL half. A field is caller-sized exactly when it is a string
 // (numbers and bools are fixed width and a bool cannot be made large), so the walk
@@ -154,20 +154,20 @@ func TestEveryCallerSizedFieldDeclaresACeiling(t *testing.T) {
 	sort.Strings(stale)
 	for _, f := range missing {
 		t.Errorf("UNBOUNDED: %s is caller-sized and declares no ceiling. A count bound over it "+
-			"bounds rows and not bytes. Give it a ceiling in `ceilings` and enforce it at the door "+
+			"bounds rows and not bytes. Give it a ceiling in `ceilings` and enforce it at the endpoint "+
 			"(admitSubject / admitKind / admitSource / admitEvidence / stamp).", f)
 	}
 	for _, f := range stale {
-		t.Errorf("STALE: %q is declared in `ceilings` and is not a field of any door. A ceiling for "+
+		t.Errorf("STALE: %q is declared in `ceilings` and is not a field of any endpoint. A ceiling for "+
 			"a field that no longer exists inflates the count and hides the next real gap.", f)
 	}
-	t.Logf("%d caller-sized fields across %d doors, every one bounded", len(seen), len(doors))
+	t.Logf("%d caller-sized fields across %d endpoints, every one bounded", len(seen), len(doors))
 }
 
-// TestEveryDoorIsWalked pins the door list against the registry, because a list
-// nothing checks is a list that goes stale. An op added without its In type added
-// to `doors` publishes a door the walk above never sees, which is precisely how an
-// unbounded field arrives unnoticed.
+// TestEveryDoorIsWalked pins the endpoint list against the registry, because a
+// list nothing checks is a list that goes stale. An op added without its In type
+// added to `doors` publishes an endpoint the walk above never sees, which is
+// precisely how an unbounded field arrives unnoticed.
 func TestEveryDoorIsWalked(t *testing.T) {
 	app, _ := wireApp(t, "")
 	doc, err := openapi.FleetSpec(app)
@@ -193,7 +193,8 @@ func TestEveryDoorIsWalked(t *testing.T) {
 // The resolve case is the one that mattered. maxResolve bounded the events at 500
 // and nothing bounded a subject, so the request a shared single-writer pod had to
 // hold was 500 × whatever the edge let through, amplified three times below the
-// door. With the ceiling asked at the door, 500 × subjectMax IS that bound.
+// endpoint. With the ceiling asked at the endpoint, 500 × subjectMax IS that
+// bound.
 func TestNoCountBoundStandsWithoutAByteBound(t *testing.T) {
 	app, _ := wireApp(t, "")
 	at := time.Now().UTC().Add(-300 * 24 * time.Hour).Format(time.RFC3339)
@@ -248,11 +249,11 @@ func TestNoCountBoundStandsWithoutAByteBound(t *testing.T) {
 		// beside it.
 		if len(raw) > 1024 {
 			t.Errorf("%s refused with a %d-byte body — the oversized value was measured after it was "+
-				"rendered into the refusal, so the ceiling is not at the door", tc.what, len(raw))
+				"rendered into the refusal, so the ceiling is not at the endpoint", tc.what, len(raw))
 		}
 	}
 
-	// The write door refuses PER FACT rather than per request, deliberately: a
+	// The write endpoint refuses PER FACT rather than per request, deliberately: a
 	// webhook redelivering five disputes must not lose four to one malformed
 	// fifth. So the property is that the over-long value is refused and NOT
 	// recorded, not that the request fails.

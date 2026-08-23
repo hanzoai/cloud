@@ -20,10 +20,10 @@ import (
 // `.hanzo/workflows/*.yml` (native-first), or the root `hanzo.yml` (the SAME schema,
 // GitHub-Actions-compatible location) as a fallback, at the pushed commit — then
 // enqueues each declared image to platform.hanzo.ai's in-cluster BuildKit via the
-// ONE direct-build front door (`/v1/runner`). That is the SAME build muscle
+// ONE direct-build endpoint (`/v1/runner`). That is the SAME build muscle
 // the platform GitHub-App webhook and the `hanzoai/ci mode:delegate` path drive:
 // platform builds, pushes to the registry, and patches the operator Service CR, and
-// the operator deploys. One build path — now with a THIRD front door: a native push.
+// the operator deploys. One build path — now with a THIRD entry point: a native push.
 //
 // It is the native twin of `.github/workflows/cicd.yml`: the exact same `hanzo.yml`
 // (images/test/deploy) config, sourced from native git and triggered by a native
@@ -256,7 +256,7 @@ func enqueuePipeline(ctx context.Context, s *cloud.Service[state], ev cloud.Life
 // enqueueBody builds the /v1/arcd/enqueue request for one image. The image tag
 // (`sha-<short7>-amd64[-<suffix>]`) is the SAME deterministic shape the ci
 // mode:delegate path emits, so a native-push build and a delegated build produce the
-// identical ref — the two front doors converge, never fork a tag. Returns nil for an
+// identical ref — the two entry points converge, never fork a tag. Returns nil for an
 // image with no `repo` (nothing to push to).
 func enqueueBody(img pipelineImage, ghRepo, branch, sha string) *enqueueReq {
 	repo := strings.TrimSpace(img.Repo)

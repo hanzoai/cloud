@@ -25,7 +25,7 @@ package git
 // /repos/:name/mirror force-overwrites every ref and deletes any the source
 // lacks, SSH receive-pack ran the same git binary with no policy in front of it,
 // and the import path fast-forwards a named ref from an upstream. A run refused
-// at the front door walked in through any of them.
+// at the one guarded writer could still write through any of them.
 //
 // The bait-and-switch that motivated this file was therefore still live, and in
 // a nastier form than a force-push: a FAST-FORWARD CHILD posted onto the branch
@@ -36,9 +36,9 @@ package git
 //
 //  1. The credential stopped being an identity (grant.go). A run now holds a
 //     grant — a bounded permission to create ONE ref in ONE repository, which
-//     resolves to no principal at all — so every one of those doors but the wire
-//     receive-pack is shut to it by the ordinary authorization it already had,
-//     not by a new check. That is also why the merge door (writer 9) needs no
+//     resolves to no principal at all — so every one of those writers but the
+//     wire receive-pack is closed to it by the ordinary authorization it already
+//     had, not by a new check. That is also why merge (writer 9) needs no
 //     rule of its own about runs: it reads its org from the validated principal,
 //     and a grant is not one.
 //  2. This policy moved to ALL of the writers, not one (see refwriters.go for
@@ -86,7 +86,7 @@ import (
 
 // # Every writer, and where each states its intent
 //
-// The rule is only as good as the count of doors it stands in. There are nine
+// The rule is only as good as the count of writers it stands in. There are nine
 // ways a ref in one of our bare repositories can change, and they are:
 //
 //  1. HTTP receive-pack      smart_http.go receivePack — parses the commands off
@@ -119,7 +119,7 @@ import (
 //     — it read base to judge the merge, so it hands that value back to go-git
 //     and the write fails rather than discarding a push that landed in between.
 //
-// A tenth door is a change to this list, not just a new function.
+// A tenth writer is a change to this list, not just a new function.
 
 // agentRefPrefix is the machine namespace. It matches the branch coding derives
 // from a session id (coding.BranchFor), spelled here rather than imported

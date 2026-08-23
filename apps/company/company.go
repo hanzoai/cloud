@@ -63,7 +63,7 @@ func init() {
 // company.go mounts the /v1/company surface and wires the state machine to its
 // provider clients. The design is decomplected: ACTION endpoints populate the
 // formation's data (structure, founders, KYC, payment, documents, esign, genesis,
-// import), and ONE transition door — POST /v1/company/advance {to} — runs the
+// import), and ONE transition endpoint — POST /v1/company/advance {to} — runs the
 // guarded machine (Advance). Side effects live in the actions; ordering + gates live
 // in the machine; the two never braid.
 //
@@ -875,7 +875,7 @@ func (o ops) recordGenesis(ctx context.Context, _ *noInput) (*formationView, err
 	return view(f), nil
 }
 
-// ---- the transition door ----
+// ---- the transition endpoint ----
 
 // advanceIn names the stage to move to.
 type advanceIn struct {
@@ -885,7 +885,7 @@ type advanceIn struct {
 }
 
 // Advance runs the ONE guarded transition of the formation machine. It is the
-// only door between stages: the actions populate data, this decides ordering.
+// only endpoint between stages: the actions populate data, this decides ordering.
 //
 // An edge the machine does not define answers 409; an edge whose guard is not yet
 // satisfied answers 422 naming what is missing. Reaching the terminal `company`

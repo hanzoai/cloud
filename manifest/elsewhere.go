@@ -9,9 +9,9 @@ package manifest
 // /v1/index, /v1/admin/providers, /v1/scrape/preview) answer 404 on api.hanzo.ai
 // today because the sibling that receives them does not serve them.
 //
-// A door that published those would publish phantoms: paths in the contract that
+// An app that published those would publish phantoms: paths in the contract that
 // no request reaches, which is precisely the defect a router-derived document
-// exists to make impossible. So the door asks which of its routes are not its own,
+// exists to make impossible. So the app asks which of its routes are not its own,
 // and the answer comes from Apps — the one routing table — rather than from a
 // second list beside it.
 //

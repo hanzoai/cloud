@@ -137,7 +137,7 @@ func (s *Store) ListSuppressions(ctx context.Context, org string, limit int) ([]
 
 // sendFn is the delivery hand-off past the suppression gate. Production is the
 // platform notify rail (notify.Send); tests override it to assert exactly which
-// recipients reach the rail. It is the ONLY door out of deliver, so there is
+// recipients reach the rail. It is the ONLY send out of deliver, so there is
 // never a second sender.
 var sendFn = notify.Send
 

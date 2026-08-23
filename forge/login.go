@@ -6,7 +6,7 @@ package forge
 // else — an id, an email, a display name — is answered "unknown actor", which
 // reads as "this user has no forge identity" and is indistinguishable from the
 // user genuinely not having one. That is how a coding run came to refuse every
-// caller: the door passed the token's `sub`, a UUID, and the forge said it had
+// caller: the endpoint passed the token's `sub`, a UUID, and the forge said it had
 // never heard of them. It had not.
 //
 // # The rule is the forge's, not ours

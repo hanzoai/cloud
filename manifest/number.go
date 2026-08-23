@@ -36,7 +36,7 @@ import "strings"
 //
 // That asymmetry is the whole design. Publishing both would make the fleet's
 // surface ambiguous and double every route table it passes through; accepting
-// both costs one string comparison at the door and makes a whole class of
+// both costs one string comparison at the entry point and makes a whole class of
 // customer error impossible.
 //
 // THE CONSEQUENCE IS THE POINT: a capability is never renamed for number again.
@@ -234,8 +234,8 @@ func respell(p, from, to string) string {
 // already canonical is returned unchanged, which is every path the fleet
 // publishes.
 //
-// It is THE one place the alias is applied. The host calls it at the door, ahead
-// of routing, so every child sees canonical paths and no app carries a second
+// It is THE one place the alias is applied. The host calls it at the entry point,
+// ahead of routing, so every child sees canonical paths and no app carries a second
 // route; OwnerOf calls it so that "whose surface is this?" answers the same for
 // both spellings; and nothing else needs to know the alias exists.
 //

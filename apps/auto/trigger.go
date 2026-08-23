@@ -41,7 +41,7 @@ var (
 	ErrNoOrg = errors.New("automations: Deliver requires a server-verified org")
 	// ErrRateLimited — the org's durable per-window run-start budget is exhausted.
 	ErrRateLimited = errors.New("automations: per-org run budget exceeded")
-	// ErrBusy — the org's concurrent run-start slots are full (front-door burst bound).
+	// ErrBusy — the org's concurrent run-start slots are full (entry-point burst bound).
 	ErrBusy = errors.New("automations: too many concurrent run-starts for this org")
 )
 

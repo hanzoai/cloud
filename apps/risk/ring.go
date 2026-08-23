@@ -71,9 +71,9 @@ import (
 //
 // 128 bytes is longer than any identifier a real system carries — a UUID is 36,
 // a Stripe id 30, a SHA-256 fingerprint in hex 64 — and it is REFUSED rather than
-// truncated at the one door that mints an observation ([observe]), because two
-// subjects differing only past the cut would silently become one set of
-// aggregates: a wrong answer wearing a right one's clothes.
+// truncated at the one entry point that mints an observation ([observe]),
+// because two subjects differing only past the cut would silently become one
+// set of aggregates: a wrong answer wearing a right one's clothes.
 const maxField = 128
 
 // maxAxis is the longest aggregation axis name velocity keys on ("account",
@@ -136,9 +136,10 @@ const maxResident = 64
 const planeRingCeiling = maxResident * residentRingBudget
 
 // ringWindow is the longest span the aggregates keep, and therefore the retention
-// of the durable record and the horizon a wire door will accept a stamp inside. It
-// is the same thirty days the feature inventory's widest window reads, because
-// keeping a record the rings could never hold is keeping it for nothing.
+// of the durable record and the horizon a wire endpoint will accept a stamp
+// inside. It is the same thirty days the feature inventory's widest window
+// reads, because keeping a record the rings could never hold is keeping it for
+// nothing.
 const ringWindow = 30 * 24 * time.Hour
 
 // burstWindow is the NARROWEST span the aggregates keep, which makes it the window
@@ -348,21 +349,22 @@ func (r *rings) strain() strain {
 // so an unbelievable timestamp is REFUSED and never quietly accepted.
 const skew = 2 * time.Minute
 
-// within reports whether an event stamped at is inside the window the door
+// within reports whether an event stamped at is inside the window the endpoint
 // reading it covers, and says which side it fell out of.
 //
-// ONE definition, used at every door: the learn wire ([riskEvent.observation]) and
-// the surface replay ([replayable]) both call it, so a bound cannot be enforced
-// on the path a reviewer looked at and missing on the one they did not. `back` is
-// the door's own lookback — thirty days for the live wire, the requested window
-// for a replay — because how far back is legitimate is a property of the door and
-// how far FORWARD is legitimate never is.
+// ONE definition, used at every endpoint: the learn wire
+// ([riskEvent.observation]) and the surface replay ([replayable]) both call it,
+// so a bound cannot be enforced on the path a reviewer looked at and missing
+// on the one they did not. `back` is the endpoint's own lookback — thirty days
+// for the live wire, the requested window for a replay — because how far back
+// is legitimate is a property of the endpoint and how far FORWARD is legitimate
+// never is.
 func within(at, now time.Time, back time.Duration) error {
 	switch {
 	case at.After(now.Add(skew)):
 		return zip.ErrBadRequest("'at' is in the future — an event that has not happened cannot be learned from")
 	case at.Before(now.Add(-back)):
-		return zip.ErrBadRequest("'at' is older than " + back.String() + " — history is folded in from your own event surface, not through this door")
+		return zip.ErrBadRequest("'at' is older than " + back.String() + " — history is folded in from your own event surface, not through this endpoint")
 	default:
 		return nil
 	}
@@ -372,13 +374,13 @@ func within(at, now time.Time, back time.Duration) error {
 // given the newest timestamp they already carry and the plane's own clock.
 //
 // TWO REFUSALS, ONE RULE, and it is the rings' own structural defence rather than
-// a validation a door might forget:
+// a validation an endpoint might forget:
 //
 //   - AHEAD OF THE CLOCK. The aggregates track a leading edge, so an event from
 //     the future moves it there and every later real event is then older than
 //     every window — the subject reads as having done nothing, permanently. The
-//     wire door refuses such a stamp with a 400 ([within]); this refuses it again,
-//     here, so no path into the rings can poison the edge.
+//     wire endpoint refuses such a stamp with a 400 ([within]); this refuses it
+//     again, here, so no path into the rings can poison the edge.
 //
 //   - BEHIND THE WINDOW THE RULES READ. velocity folds anything older than a
 //     window's span to the leading edge — the right call for a compliance
@@ -418,9 +420,9 @@ func placeable(at, edge, now time.Time) bool {
 // ── the durable record ───────────────────────────────────────────────────────
 
 // observationDDL is the tenant's own record of what it taught its model: the
-// events it sent through the learn door, and nothing else. The warehouse already
-// holds what the organisation EMITTED; this holds what it TAUGHT, which is a
-// different fact with a different owner.
+// events it sent through the learn endpoint, and nothing else. The warehouse
+// already holds what the organisation EMITTED; this holds what it TAUGHT, which
+// is a different fact with a different owner.
 //
 // The primary key is (tenant, id) and not id. A shelf file is keyed on the bare
 // org slug, so two brands' identically named organisations share one file — the
@@ -537,11 +539,11 @@ func (p *plane) note(t tenant, obs []observation) (first []bool, err error) {
 // is what makes a rollout a rebuild rather than a blindness.
 //
 // The rebuild EQUALS what the live rings held when the events were taught in time
-// order, which is what the learn door asks for ("oldest first"). Taught out of
-// order across a window boundary the two can differ, because a live ring cannot
-// re-place an event whose leading edge has already moved past it and a replay
-// can. Said here rather than claimed away: the property that holds unconditionally
-// is that the same record rebuilds the same aggregates.
+// order, which is what the learn endpoint asks for ("oldest first"). Taught
+// out of order across a window boundary the two can differ, because a live ring
+// cannot re-place an event whose leading edge has already moved past it and a
+// replay can. Said here rather than claimed away: the property that holds
+// unconditionally is that the same record rebuilds the same aggregates.
 //
 // A record that cannot be read yields EMPTY rings and the error. Empty rings are
 // honest — every velocity feature then reads blind, which the model reports — and
@@ -571,7 +573,7 @@ func (p *plane) rebuild(t tenant) (*rings, time.Time, int, error) {
 		if err := rows.Scan(&id, &kind, &subject, &peer, &device, &usd, &at); err != nil {
 			return vel, time.Time{}, 0, fmt.Errorf("risk: replay observations: %w", err)
 		}
-		// THROUGH THE ONE DOOR, even on the way back in. A row written before a
+		// THROUGH THE ONE ENTRY POINT, even on the way back in. A row written before a
 		// bound existed, or by a build that did not have one, does not enter the
 		// aggregates: the ceilings this plane publishes are counts of what [observe]
 		// admits, so a row it would refuse is a row the ceiling does not cover.
@@ -580,9 +582,10 @@ func (p *plane) rebuild(t tenant) (*rings, time.Time, int, error) {
 		// rebuild would make one unplaceable row a tenant-wide outage that repeats on
 		// every residency until the row ages out of retention — every velocity feature
 		// blind for up to thirty days, for a single bad value written by an older
-		// build. That is a denial of service reachable through the learn door, and the
-		// door is the tenant's own. Losing the row degrades the one subject on it,
-		// which is the blast radius every other bound in this file is held to.
+		// build. That is a denial of service reachable through the learn endpoint,
+		// and the endpoint is the tenant's own. Losing the row degrades the one
+		// subject on it, which is the blast radius every other bound in this file is
+		// held to.
 		o, err := observe(id, actor{Kind: kind, Subject: subject, Peer: peer, Device: device}, usd, time.Unix(at, 0).UTC())
 		if err != nil {
 			p.log.Warn("a recorded observation cannot enter the aggregates; that subject rebuilds without it",
@@ -759,7 +762,7 @@ func (p *plane) sharing(t tenant, statement, value string) (int, error) {
 }
 
 // prior reads what this tenant's own aggregates already hold about one event's
-// identifiers, and it is the ONE door to that reading: the axes come from
+// identifiers, and it is the ONE entry point to that reading: the axes come from
 // [anomaly.Keys], which is the same definition the ingest path records to and the
 // model reads, so a rule can never be evaluated on a key the aggregates were
 // never filled on.

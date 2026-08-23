@@ -2,18 +2,19 @@
 
 package fleet_test
 
-// The door, end to end, over the wire it actually uses.
+// The MCP server, end to end, over the wire it actually uses.
 //
 // Every test here starts REAL child processes' worth of machinery — a zip app
 // per subsystem, listening on its own ZAP unix socket, exactly as a plugin child
-// does — and drives the composed door with JSON-RPC bodies. Nothing is stubbed at
-// the client being tested, because the client being tested is the client that was wrong:
-// the old door answered from a committed array and every test of it passed while
-// the array was missing 353 of o11y's ops.
+// does — and drives the composed MCP server with JSON-RPC bodies. Nothing is
+// stubbed at the client being tested, because the client being tested is the
+// client that was wrong: the old MCP server answered from a committed array and
+// every test of it passed while the array was missing 353 of o11y's ops.
 //
 // So the assertions are BY BODY and never by status code, and they are EXACT
-// SETS: "the door lists what the children serve" is only a real claim if dropping
-// a child from the door turns it red. See TestDoorListsExactlyWhatItsChildrenServe.
+// SETS: "the MCP server lists what the children serve" is only a real claim if
+// dropping a child from the MCP server turns it red. See
+// TestDoorListsExactlyWhatItsChildrenServe.
 
 import (
 	"context"
@@ -35,7 +36,7 @@ import (
 )
 
 // child is one subsystem: a zip app with its own typed ops, serving its own MCP
-// door on its own socket — the shape cloud.Serve gives every plugin binary.
+// endpoint on its own socket — the shape cloud.Serve gives every plugin binary.
 type child struct {
 	name string
 	addr string
@@ -97,8 +98,8 @@ func waitFor(t *testing.T, sock string) {
 	t.Fatalf("%s never accepted", sock)
 }
 
-// host composes a door over the named children. at answers from the map, so a
-// name with no child is an app this host cannot reach — which is exactly the
+// host composes an MCP server over the named children. at answers from the map,
+// so a name with no child is an app this host cannot reach — which is exactly the
 // "deliberately stopped" case.
 func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 	t.Helper()
@@ -110,9 +111,9 @@ func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 		}
 		return k.addr, manifest.FrameworkMCPPath, nil
 	})
-	// The door lists what a subsystem PUBLISHED and asks nothing, so a fixture has
-	// to say what these children publish. They are real apps, so their own
-	// registries are the publication — the same value plugin/gen-fleet-catalog
+	// The MCP server lists what a subsystem PUBLISHED and asks nothing, so a
+	// fixture has to say what these children publish. They are real apps, so their
+	// own registries are the publication — the same value plugin/gen-fleet-catalog
 	// reads out of each app's openapi.json for the embedded catalog.
 	d.Catalog = func(app string) []fleet.Op {
 		k := kids[app]
@@ -130,7 +131,7 @@ func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 	return h
 }
 
-// rpc posts one JSON-RPC message to the door and returns the decoded result.
+// rpc posts one JSON-RPC message to the MCP server and returns the decoded result.
 func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 	t.Helper()
 	req, err := http.NewRequest("POST", "http://cloud/v1/mcp", strings.NewReader(body))
@@ -138,7 +139,7 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// A bearer, because the edge door challenges a tools/call that carries none
+	// A bearer, because the edge challenges a tools/call that carries none
 	// (challenge_test.go); these tests are about dispatch, which starts after that.
 	req.Header.Set("Authorization", "Bearer test")
 	resp, err := h.Test(req, zip.TestConfig{Timeout: 60 * time.Second, FailOnTimeout: true})
@@ -152,7 +153,7 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 		Error  *map[string]any `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &env); err != nil {
-		t.Fatalf("door answered %d with %q, which is not a JSON-RPC envelope", resp.StatusCode, raw)
+		t.Fatalf("the MCP server answered %d with %q, which is not a JSON-RPC envelope", resp.StatusCode, raw)
 	}
 	if env.Error != nil {
 		return map[string]any{"error": *env.Error}
@@ -160,13 +161,13 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 	return env.Result
 }
 
-// offered is every OPERATION the door offers, in the order it offers them.
+// offered is every OPERATION the MCP server offers, in the order it offers them.
 //
-// The door publishes one tool per subsystem and carries the operations in that
-// tool's `op` enum (fleet/grouped.go), so the operations are read out of the
+// The MCP server publishes one tool per subsystem and carries the operations in
+// that tool's `op` enum (fleet/grouped.go), so the operations are read out of the
 // enums rather than off the tool names. That is the same question these tests
-// always asked — "what can be called through this door" — put to the surface
-// that now answers it. describe has no enum and contributes nothing.
+// always asked — "what can be called through this MCP server" — put to the
+// surface that now answers it. describe has no enum and contributes nothing.
 func offered(res map[string]any) []string {
 	var out []string
 	for _, tl := range published(res) {
@@ -183,7 +184,7 @@ func offered(res map[string]any) []string {
 	return out
 }
 
-// published is the TOOLS the door publishes — the per-subsystem envelopes
+// published is the TOOLS the MCP server publishes — the per-subsystem envelopes
 // themselves, not the operations inside them.
 func published(res map[string]any) []any {
 	tools, _ := res["tools"].([]any)
@@ -202,7 +203,7 @@ func names(res map[string]any) []string {
 	return out
 }
 
-// listed is the operation names the door offers, sorted.
+// listed is the operation names the MCP server offers, sorted.
 func listed(t *testing.T, h *zip.App) []string {
 	t.Helper()
 	out := offered(rpc(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
@@ -240,7 +241,7 @@ func TestDoorListsExactlyWhatItsChildrenServe(t *testing.T) {
 	want := []string{"alpha_opa", "alpha_opb", "alpha_opc", "beta_opa", "beta_opb"}
 	got := listed(t, h)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("door lists %v, the children serve %v", got, want)
+		t.Fatalf("the MCP server lists %v, the children serve %v", got, want)
 	}
 	if u := unavailable(t, h); len(u) != 0 {
 		t.Fatalf("every child answered, so nothing may be reported unavailable: %v", u)
@@ -263,7 +264,7 @@ func TestDoorAnswersTheChildsOwnProjection(t *testing.T) {
 	}
 	sort.Strings(want)
 	if got := listed(t, h); strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("door lists %v; alpha's own MCPTools() is %v", got, want)
+		t.Fatalf("the MCP server lists %v; alpha's own MCPTools() is %v", got, want)
 	}
 }
 
@@ -274,7 +275,7 @@ func TestToolsCallReachesTheOwnersOwnHandler(t *testing.T) {
 	h := host(t, []string{"alpha", "beta"}, kids)
 
 	// No tools/list first: a call must be able to find its owner by asking, or the
-	// door only works for a client that listed in the same process lifetime.
+	// MCP server only works for a client that listed in the same process lifetime.
 	res := rpc(t, h, `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"beta_opb","arguments":{"which":"x"}}}`)
 	content, _ := res["content"].([]any)
 	if len(content) == 0 {
@@ -335,12 +336,12 @@ func TestInitializeAndPingAnswerWithoutTouchingAChild(t *testing.T) {
 // TestALISTIsAFactOfTHERELEASENotOfWhoIsUp is the contract that replaced four
 // tests, and the replacement is a narrowing rather than a loosening.
 //
-// Those four pinned the door NAMING a subsystem it could not reach: it asked
-// every running child, so a child that had stopped produced an error and the
-// answer carried hanzo.ai/unavailable. That reporting was real and it was paid
-// for by asking, and asking is what the door may no longer do — one list took 92
-// seconds against Cloudflare's 100-second ceiling and three in a row drove the
-// pod past its own liveness probe until the kubelet killed it.
+// Those four pinned the MCP server NAMING a subsystem it could not reach: it
+// asked every running child, so a child that had stopped produced an error and
+// the answer carried hanzo.ai/unavailable. That reporting was real and it was
+// paid for by asking, and asking is what the MCP server may no longer do — one
+// list took 92 seconds against Cloudflare's 100-second ceiling and three in a row
+// drove the pod past its own liveness probe until the kubelet killed it.
 //
 // So the two facts are separated. WHAT the fleet serves is a property of the
 // release: generated from each subsystem's own document at build time, identical

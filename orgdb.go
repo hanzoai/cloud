@@ -48,7 +48,7 @@ import (
 // It takes the NAME rather than the parts a name is made of, so it cannot pair
 // one namespace's path with another namespace's key, and so the question "could
 // this have come from caller input" is asked once — at OrgNamespace, the only
-// door — instead of again at every subsystem that opens a file.
+// entry point — instead of again at every subsystem that opens a file.
 //
 // Path convention — see namespace.Key:
 //
@@ -131,7 +131,7 @@ type OrgStore[T io.Closer] struct {
 	closed bool
 }
 
-// ErrStoreClosed is what every door that opens an org file answers after
+// ErrStoreClosed is what every entry point that opens an org file answers after
 // CloseAll. It is an ERROR and not a silent no-op because a caller that arrives
 // after shutdown is a fact worth surfacing: the request fails, the operator sees
 // why, and nothing resurrects.

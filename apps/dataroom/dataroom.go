@@ -232,7 +232,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The two SuperAdmin-only and the six org-scoped ops each ask their own gate,
 	// because a typed op is also an MCP tool and an internal-plane op and both
 	// invoke it with no route to hang middleware on. `sudoGate` on the platform
-	// group is the routed door's first refusal, so a non-SuperAdmin sending an
+	// group is the routed endpoint's first refusal, so a non-SuperAdmin sending an
 	// unparseable body is told about authority rather than about JSON.
 	zip.Get(g, "/trust", o.readDesk)
 	zip.Put(g, "/trust", o.setCenter)

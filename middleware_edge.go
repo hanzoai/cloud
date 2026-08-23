@@ -197,14 +197,14 @@ func edgeCORS(pol *edge.Store, proven verifiedHostFn) zip.Handler {
 		// resource accept" — and answering it as a preflight told every non-browser
 		// caller 204 with no Allow, which is the one field the question is about.
 		// So this owns the preflight and only the preflight; the bare one carries on
-		// to the contract's own door (openapi.MountIndex), which knows the methods
+		// to the contract's own endpoint (openapi.MountIndex), which knows the methods
 		// because it holds the document.
 		if c.Method() == "OPTIONS" && c.Header("Access-Control-Request-Method") != "" {
 			// This middleware OWNS the preflight: it is the only thing in the process
 			// that answers one, so it answers every one, and admission decides which
 			// headers ride along rather than whether there is a reply at all. A
 			// preflight continuing past here meets a router with no OPTIONS route and
-			// is told the door does not exist — the least true answer available, and
+			// is told the address does not exist — the least true answer available, and
 			// one that hides the missing header the browser actually stopped on.
 			if allowed {
 				// The allow-headers answer depends on what the browser asked, so the

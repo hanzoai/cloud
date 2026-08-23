@@ -21,7 +21,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// door_honesty_test.go — the door told every client it was fine while storing nothing.
+// door_honesty_test.go — the endpoint told every client it was fine while storing nothing.
 //
 // EVERY wire shape /v1/event publishes, posted without a resolvable tenant, answered
 // 200 {"accepted":0,"dropped":1}. The projection refuses a kind it cannot name
@@ -62,10 +62,10 @@ func refusedAnon(t *testing.T, what string, status int, body []byte) bool {
 	return refused(t, what, status, body, http.StatusUnauthorized, "ingest_key_required")
 }
 
-// ── 1. the defect, on every shape the door publishes ─────────────────────────
+// ── 1. the defect, on every shape the endpoint publishes ─────────────────────
 
 // TestEveryWireShapeRefusesWhenNothingLands is the regression, stated once per SHAPE
-// because the door dispatches on shape: a fix that only reached the canonical decoder
+// because the endpoint dispatches on shape: a fix that only reached the canonical decoder
 // would leave the PostHog and team wires lying exactly as before, and those carry the
 // SDK traffic that went missing.
 //
@@ -105,7 +105,7 @@ func TestAcceptedPathIsUnchanged(t *testing.T) {
 		code, body := postAnon(t, app, "/v1/event", tc.body, nil)
 		if code != http.StatusServiceUnavailable {
 			t.Errorf("anonymous pageview (%s) = %d (%s), want 503 ADMITTED — the fix must not "+
-				"narrow what the door accepts", tc.name, code, body)
+				"narrow what the endpoint accepts", tc.name, code, body)
 		}
 	}
 }

@@ -15,7 +15,7 @@ package commerce
 // something a stranger will later act on — a custody address that credits one
 // wallet, a payment reference that names one payer on a bank statement — so a
 // subject that was not the caller's would credit the wrong account with money
-// that really arrived. The door resolves it; these never read one off a body.
+// that really arrived. The endpoint resolves it; these never read one off a body.
 
 import (
 	"context"

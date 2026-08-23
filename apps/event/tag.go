@@ -22,7 +22,7 @@
 // surface that builds; this is the same wire for one that does not, served from
 // the origin that eats it so a caller allowlists ONE host.
 //
-// It is served HERE, beside the door, because a tag that drifts from its wire is
+// It is served HERE, beside the endpoint, because a tag that drifts from its wire is
 // a tag that 400s: /v1/event/tag.js and POST /v1/event ship in one binary and version
 // together.
 //

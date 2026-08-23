@@ -1,7 +1,7 @@
 package ask
 
-// web_test.go — the DOOR's dispatch proof. The answer engine's own behaviour (the
-// loop, ranking, the read stage, the SearchEvent wire) is proven in
+// web_test.go — the ENDPOINT's dispatch proof. The answer engine's own behaviour
+// (the loop, ranking, the read stage, the SearchEvent wire) is proven in
 // clients/answer; what /v1/ask owes is the routing decision: a `mode` goes to the
 // engine, and NO mode still goes to the figure advisor, unchanged.
 

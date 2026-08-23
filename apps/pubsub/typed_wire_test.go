@@ -1,6 +1,6 @@
 package pubsub
 
-// typed_wire_test.go pins the tenant door's wire against the REAL embedded
+// typed_wire_test.go pins the tenant endpoint's wire against the REAL embedded
 // plane — no fakes anywhere in the path: every assertion below rides Mount's
 // own JetStream node on an ephemeral port.
 //
@@ -13,7 +13,7 @@ package pubsub
 //     response;
 //   - the route oracle: every served /v1/pubsub operation is a typed,
 //     described op — and the CLOSED refusal list, pinning each intent address
-//     this door deliberately does NOT serve to a route-level 404.
+//     this surface deliberately does NOT serve to a route-level 404.
 //
 // Key-value is apps/kv's, and is proved there against this same plane.
 
@@ -40,7 +40,7 @@ import (
 const wireTimeout = 15 * time.Second
 
 // mountWire mounts the WHOLE subsystem — embedded server on an ephemeral port,
-// tenant door over it — and returns the app the door is registered on.
+// tenant endpoint over it — and returns the app the endpoint is registered on.
 func mountWire(t *testing.T) *zip.App {
 	t.Helper()
 	srv = nil
@@ -99,8 +99,8 @@ func obj(t *testing.T, raw []byte) map[string]any {
 }
 
 // TestRequestReplyAnswersOverTheBus proves the synchronous half against a LIVE
-// responder subscribed on the NATS port — the two doors meeting on one bus —
-// and pins the honest refusals: 404 with nobody listening, 408 with a
+// responder subscribed on the NATS port — the two entry points meeting on one
+// bus — and pins the honest refusals: 404 with nobody listening, 408 with a
 // responder that never replies.
 func TestRequestReplyAnswersOverTheBus(t *testing.T) {
 	app := mountWire(t)
@@ -111,8 +111,8 @@ func TestRequestReplyAnswersOverTheBus(t *testing.T) {
 		t.Fatalf("connect responder: %v", err)
 	}
 	defer nc.Close()
-	// The responder lives on the cluster door, where subjects are physical —
-	// the org root the tenant door maps onto is exactly what it subscribes.
+	// The responder lives on the cluster listener, where subjects are physical —
+	// the org root the tenant endpoint maps onto is exactly what it subscribes.
 	echo, err := nc.Subscribe("pub."+org+".echo", func(m *natsio.Msg) { _ = m.Respond(m.Data) })
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
@@ -171,8 +171,8 @@ func TestPublishTakesBothPaths(t *testing.T) {
 	}
 
 	// A stream on the plane, created where streams are created: the cluster
-	// door. Its physical name is the org's, so the tenant door's receipt has a
-	// prefix to strip.
+	// listener. Its physical name is the org's, so the tenant endpoint's receipt
+	// has a prefix to strip.
 	nc, err := natsio.Connect(srv.ClientURL())
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -217,9 +217,9 @@ func TestPublishTakesBothPaths(t *testing.T) {
 
 // Tenancy is a fact about the PRINCIPAL, never a field the caller can send.
 //
-// One org's subjects are not another's to name: the door roots every subject in
-// the caller's own namespace, so a responder living in one org's root is simply
-// not there for another — the same address, a different plane.
+// One org's subjects are not another's to name: the endpoint roots every subject
+// in the caller's own namespace, so a responder living in one org's root is
+// simply not there for another — the same address, a different plane.
 func TestPubsubTenancyIsNeverACallerField(t *testing.T) {
 	app := mountWire(t)
 
@@ -309,7 +309,7 @@ func TestEveryPubsubRouteIsTypedAndDescribed(t *testing.T) {
 		t.Fatal("the router serves no pubsub routes")
 	}
 	if len(typed) != 2 {
-		t.Errorf("typed ops = %d, want the 2 the door declares (publish, request)", len(typed))
+		t.Errorf("typed ops = %d, want the 2 the surface declares (publish, request)", len(typed))
 	}
 	var bad []string
 	for key := range served {
@@ -357,14 +357,14 @@ func TestKeyValueIsNotThisApps(t *testing.T) {
 }
 
 // refusedByDesign is the CLOSED list of intent operations (hanzoai/openapi
-// d86248f^:pubsub/openapi.yaml) this door deliberately does NOT serve, each
+// d86248f^:pubsub/openapi.yaml) this surface deliberately does NOT serve, each
 // with the reason. Addresses are the intent's own. The package doc carries the
 // same three decisions in prose; this list is what keeps them checkable.
 var refusedByDesign = map[string]string{
 	"GET /v1/pubsub/subscribe": "an SSE stream is not a typed op — zip's typed path answers ONE JSON Out " +
 		"and has no vocabulary for text/event-stream (the same measured fact that keeps POST /v1/ask " +
 		"untyped). Consumption is the NATS port's native subscriptions and apps/mq's pull ops.",
-	"GET /v1/pubsub/objects/{bucket}":           "cloud's object door is /v1/storage; a second object store here would be two doors to one noun.",
+	"GET /v1/pubsub/objects/{bucket}":           "cloud's object endpoint is /v1/storage; a second object store here would be two endpoints to one noun.",
 	"GET /v1/pubsub/objects/{bucket}/{name}":    "same: objects belong to /v1/storage.",
 	"PUT /v1/pubsub/objects/{bucket}/{name}":    "same: objects belong to /v1/storage.",
 	"DELETE /v1/pubsub/objects/{bucket}/{name}": "same: objects belong to /v1/storage.",

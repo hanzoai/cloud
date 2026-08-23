@@ -2,8 +2,8 @@
 
 package commerce
 
-// TAKING A PAYMENT, as a typed op — the agent's door onto the same card rail the
-// console's "add credits" button uses.
+// TAKING A PAYMENT, as a typed op — the agent's entry point onto the same card
+// rail the console's "add credits" button uses.
 //
 // Money could already be taken here: commerce's TopupWithToken charges a Square
 // token and credits the ledger, and mount.go registers it at
@@ -16,8 +16,8 @@ package commerce
 //
 // The fix is NOT a second charge path. commerce's money move now lives as a core
 // that takes values instead of a request (billing.TakePayment), so the browser
-// route and the two ops below are three doors onto ONE implementation of bounds,
-// idempotency, processor selection, charge and ledger credit. A second
+// route and the two ops below are three entry points onto ONE implementation of
+// bounds, idempotency, processor selection, charge and ledger credit. A second
 // implementation would be a second set of bounds to drift and a second
 // idempotency derivation to disagree — which is a double charge waiting for the
 // right retry.
@@ -136,11 +136,11 @@ type paymentOps struct{}
 //
 // THE SCREEN IS A PARAMETER, and it is the one thing about this surface that could
 // not be decided here. `take` runs the same credit-minting core as the browser's card
-// top-up, so it is a CREDIT DOOR and has to be screened by the same risk gate that
-// door is — but which gate that is belongs to the composition root, beside the other
-// registration, where both are visible as one decision (mount.go, risk.go). Taking it
-// as an argument is also what keeps this file from importing the risk client to fetch a
-// gate it does not own.
+// top-up, so it is a CREDIT ENDPOINT and has to be screened by the same risk gate
+// that endpoint is — but which gate that is belongs to the composition root, beside
+// the other registration, where both are visible as one decision (mount.go,
+// risk.go). Taking it as an argument is also what keeps this file from importing the
+// risk client to fetch a gate it does not own.
 //
 // AND IT IS COMPOSED ONTO THE HANDLER, which is the only place it reaches the whole
 // op. zip records a typed op ONCE and projects it four ways — this REST route, the
@@ -170,7 +170,7 @@ type paymentOps struct{}
 // carrying a signed `person:` billing_account claim — they are not, and the wallet the
 // AI spend gate reads is the person's. That is why the SPENDABLE credit is posted by
 // the settlement, through the same payer rule the screen judges by (settle.go): one
-// payment, one payer, one wallet, whichever door took it.
+// payment, one payer, one wallet, whichever endpoint took it.
 func exposePayments(app *zip.App, s screen) {
 	o := paymentOps{}
 	// BOTH OPS ARE DECLARED ON THE APP WITH THEIR WHOLE PATH, and the screen is in the
@@ -229,8 +229,8 @@ func exposePayments(app *zip.App, s screen) {
 //
 // It BUILDS the handler rather than being it, because the screen has to sit inside
 // the value every projection of this op dispatches to — see exposePayments. `charge`
-// is the money move, `take` is the screened door onto it, and the only registrable
-// one is the second.
+// is the money move, `take` is the screened entry point onto it, and the only
+// registrable one is the second.
 func (o paymentOps) take(s screen) zip.TypedHandler[PaymentIn, PaymentOut] {
 	return s.op(o.charge)
 }

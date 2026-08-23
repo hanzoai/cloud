@@ -27,15 +27,15 @@ import (
 //
 // WHICH APP it names changed, and the reason is the point of the fold:
 // /v1/billing is the billing capability's address (HIP-0018, HIP-1220 §2), so
-// billing owns the door and commerce owns the store behind it. The router's
-// half moved with the door.
+// billing owns the endpoint and commerce owns the store behind it. The router's
+// half moved with the endpoint.
 func TestLedgerReadsAreRoutedToBilling(t *testing.T) {
 	prefixes := PrefixesFor("billing")
 	if len(prefixes) == 0 {
 		t.Fatal("billing claims no prefixes — the app is not routable at all")
 	}
 
-	// Every family the money door answers, leaf by leaf, because a root prefix
+	// Every family the money endpoint answers, leaf by leaf, because a root prefix
 	// is a claim about a SUBTREE and this test exists to catch the case where a
 	// leaf is not in it. accounts/:id/members is here for the same reason: a
 	// parameterised child is exactly where a prefix list is easiest to get wrong.

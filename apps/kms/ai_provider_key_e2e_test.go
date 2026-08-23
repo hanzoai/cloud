@@ -33,10 +33,10 @@ import (
 // The coordinates are the part worth proving. A bare ref resolves to path "/",
 // which fileOrg treats as the FACADE and lands in the deployment's system
 // partition — while the REST surface folds the caller's org and lands the same
-// name at /orgs/{org}. Those are different databases. Write through one door and
+// name at /orgs/{org}. Those are different databases. Write through one endpoint and
 // read through the other and the secret is simply not there: no error, no
 // warning, just a key the gateway cannot find. This asserts the seal and the
-// resolve use the SAME door.
+// resolve use the SAME endpoint.
 func TestAIProviderKeySealsAndResolvesEndToEnd(t *testing.T) {
 	cfg := baseCfg(t, masterKeyB64(t))
 	_, deps := newApp(t, cfg)

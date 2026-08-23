@@ -160,17 +160,17 @@ func Reach(ctx context.Context, app string) error {
 	}
 	host, err := Listening(zip.SocketPath(HostApp))
 	if err != nil {
-		// The router's door is there and unusable. That is an outage, and the same
+		// The router's socket is there and unusable. That is an outage, and the same
 		// fail-open argument as below applies: it may never read as absence.
-		return fmt.Errorf("wake %s: the router's start door is unusable: %w", app, err)
+		return fmt.Errorf("wake %s: the router's start socket is unusable: %w", app, err)
 	}
 	if !host {
 		if underRouter() {
-			// We were SPAWNED by a router and its door is gone. That is an outage,
+			// We were SPAWNED by a router and its socket is gone. That is an outage,
 			// and reading it as "not deployed here" would be the fail-open this
 			// whole change exists to close — a payment rail that concluded nothing
 			// is priced because the router's socket was missing for a moment.
-			return fmt.Errorf("wake %s: this process runs under a router whose start door is not there", app)
+			return fmt.Errorf("wake %s: this process runs under a router whose start socket is not there", app)
 		}
 		// No router in this process tree and none expected: nothing can start an
 		// app, and nothing is going to. A single-app binary run directly and a

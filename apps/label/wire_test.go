@@ -576,7 +576,7 @@ func TestAnUnmaturedEventIsNotAnUnjudgedOne(t *testing.T) {
 
 // TestBacktestCanStandAtAPastInstant pins the `now` override. Without it every
 // backtest scores a model against knowledge that arrived after the decision it
-// is being scored on, which is the same leak by another door.
+// is being scored on, which is the same leak by another path.
 func TestBacktestCanStandAtAPastInstant(t *testing.T) {
 	app, s := wireApp(t, "")
 	at := time.Now().UTC().Add(-400 * 24 * time.Hour).Truncate(time.Second)

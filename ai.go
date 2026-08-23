@@ -45,13 +45,13 @@ var (
 
 // nil means that subsystem isn't co-resident; apps/ leaves it uninstalled.
 //
-// There were FIVE of these, and the fifth was a door rather than a snapshot: an
+// There were FIVE of these, and the fifth was a writer rather than a snapshot: an
 // exported SetRollingCapReader, written from outside this package so a separate
-// rollingcap app could install the AI-spend cap. A door across this edge cannot
+// rollingcap app could install the AI-spend cap. A writer across this edge cannot
 // work, because the edge these globals sit on is a PROCESS. Every app is its own
 // child, so a value written into this variable in one child is invisible in
 // every other — and the only reader was the `ai` module's gate, in ai's child.
-// The cap composes where that gate runs (apps/ai/cap.go) and needs no door.
+// The cap composes where that gate runs (apps/ai/cap.go) and needs no writer.
 func TierReader() TierReaderFunc       { return tierReader }
 func BalanceReader() BalanceReaderFunc { return balanceReader }
 func UsageRecorder() UsageRecorderFunc { return usageRecorder }

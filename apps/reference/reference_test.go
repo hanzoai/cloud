@@ -510,9 +510,9 @@ func TestCandidatesAreBoundedAndMostSpecificFirst(t *testing.T) {
 // walking the dot offsets is the identical answer in O(L) headers over one
 // backing array.
 //
-// The door refuses a key this long. This measures at a size the door would never
-// admit precisely so the SHAPE is pinned and not just the bound — the two are
-// independent, and either one alone is one edit away from the outage.
+// The endpoint refuses a key this long. This measures at a size the endpoint would
+// never admit precisely so the SHAPE is pinned and not just the bound — the two
+// are independent, and either one alone is one edit away from the outage.
 func TestASuffixWalkIsLinearInTheKey(t *testing.T) {
 	set := setNamed(t, "domain")
 	key := strings.Repeat("a.", 4096) + "example"
@@ -1024,7 +1024,7 @@ func TestTheVolumeOneOrgMayOccupyIsStated(t *testing.T) {
 			n, over, int64(ownBudget))
 	}
 	// And it has to leave a usable plane behind: a per-set bound under one legal
-	// write would advertise a call the door refuses.
+	// write would advertise a call the endpoint refuses.
 	if n < maxKeys {
 		t.Errorf("one org may hold %d entries per set and one resolve names %d keys; the plane is too small to use", n, maxKeys)
 	}

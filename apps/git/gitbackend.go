@@ -43,7 +43,7 @@ type gitRepository struct {
 var _ Repository = (*gitRepository)(nil)
 
 // openRepository opens the bare repository backing a stored Repo and returns it
-// as the model. This is the ONE door readers use; the go-git handle is not
+// as the model. This is the ONE entry point readers use; the go-git handle is not
 // reachable through the returned value.
 func openRepository(s *cloud.Service[state], r Repo) (Repository, error) {
 	st, err := s.State.storage.storer(r.Org, r.Project, r.Name)

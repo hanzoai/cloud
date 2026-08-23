@@ -20,7 +20,7 @@ import (
 // request costs is a property of what it asked for, which only the app knows. The
 // edge therefore charges nothing and apps/seo/typed.go owns the debit: it
 // authorizes the caller against the vendor's published quote before the call and
-// debits the vendor's own stated charge after it. A flat price at the door would
+// debits the vendor's own stated charge after it. A flat price at the edge would
 // bill a hundred-row expansion and a single backlink summary the same, and would
 // bill it a second time on top of the meter.
 func main() {

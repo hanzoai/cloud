@@ -8,8 +8,8 @@
 // Dockerfile". The declaration for those artifacts ALREADY EXISTED: hanzo.yml's
 // `binaries:` + `bucket:` blocks, which hanzoai/ci's reusable workflow has read
 // since it was written. Only the GitHub lane implemented them. This is the
-// platform-native implementation of the SAME contract — one recipe, two front
-// doors, exactly as `images:` is already built by buildx on a runner and by
+// platform-native implementation of the SAME contract — one recipe, two lanes,
+// exactly as `images:` is already built by buildx on a runner and by
 // BuildKit in-cluster.
 //
 // Shape of one build (a k8s Job on the isolated build namespace + CI pool):

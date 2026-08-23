@@ -60,7 +60,7 @@ func read(t *testing.T, app *zip.App, bearer string) (int, lobby, string) {
 	return resp.StatusCode, out, string(b)
 }
 
-// TestSessionRefusesACallerWithNothing pins the door. The lobby names the caller's
+// TestSessionRefusesACallerWithNothing pins the endpoint. The lobby names the caller's
 // own workspaces, so an unauthenticated read of it would be a tenant enumeration
 // with no credential at all.
 func TestSessionRefusesACallerWithNothing(t *testing.T) {

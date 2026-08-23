@@ -679,7 +679,7 @@ func (f *cockpitFakes) servePlaneBooks(t *testing.T) {
 		func(ctx context.Context, in *plane.CreditIn) (*plane.Credited, error) {
 			// The org rides the CALLER — plane.CreditIn cannot name one — and the
 			// ref is required, both exactly as the real op enforces them. A fixture
-			// that admitted either would let a test pass through a door production
+			// that admitted either would let a test pass through a way in production
 			// closes.
 			org := cloud.Who(ctx).Org
 			if org == "" {

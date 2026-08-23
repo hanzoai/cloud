@@ -136,9 +136,9 @@ var mounted *cloud.Service[state]
 const store = "tracker"
 
 // storeFor is the ONE way this package reaches a todo store. It names the
-// database through cloud.OrgNamespace — the single door a validated org walks
-// through — and asks the registry for that name, so "which file does this
-// request touch" has one answer derived from one input.
+// database through cloud.OrgNamespace — the single path a validated org takes —
+// and asks the registry for that name, so "which file does this request touch"
+// has one answer derived from one input.
 //
 // todo is project-scoped: the IAM project (principal.Project, "default" when
 // none is selected) is the physical tenant boundary — the todo's own
@@ -206,7 +206,7 @@ func init() {
 			"Refused — a board is a repository on the forge",
 			"Answers 405. A todo board IS a repository on this deployment's forge, so creating, "+
 				"renaming and deleting one is a FORGE operation carried out with FORGE permissions.\n\n"+
-				"Offering it here would put a second door on the same object, guarded by this surface "+
+				"Offering it here would put a second endpoint on the same object, guarded by this surface "+
 				"instead of by the forge — a weaker guard on the same thing. So the route exists and "+
 				"refuses, rather than 404ing: \"not this service's job\" and \"no such thing\" are "+
 				"different facts, and the body names the forge so a caller knows where the job IS done.\n\n"+
@@ -240,8 +240,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	//
 	// A BOARD IS A REPOSITORY, so the repository lifecycle is NOT on this surface:
 	// creating, renaming and deleting a board are forge operations with forge
-	// permissions, and re-exposing them here would be a second door onto the same
-	// object with its own weaker guard. Those four routes answer 405 naming the
+	// permissions, and re-exposing them here would be a second endpoint onto the
+	// same object with its own weaker guard. Those four routes answer 405 naming the
 	// forge (projectLifecycle), rather than 404 — the distinction between "no such
 	// route" and "not this service's job" is the whole point.
 	zip.Get(g, "/projects", o.forgeProjects)

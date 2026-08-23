@@ -64,7 +64,7 @@ func init() {
 			"graphAssertOut.duplicate": "Duplicate is how many members this plane already held. A redelivery\ncollides on its content address and is counted here, not refused: it is\nthe success a retrying caller depends on.",
 			"graphAssertOut.reasons":   "Reasons names why each refused member was refused, in the order sent.",
 			"graphAssertOut.recorded":  "Recorded is how many members became new rows.",
-			"graphAssertOut.refused":   "Refused is how many members were turned away at the door, before the store\nwas touched — a missing entity, a timestamp that is not RFC 3339, a\nconfidence outside [0,1]. The rest of the batch was still recorded.",
+			"graphAssertOut.refused":   "Refused is how many members were turned away on arrival, before the store\nwas touched — a missing entity, a timestamp that is not RFC 3339, a\nconfidence outside [0,1]. The rest of the batch was still recorded.",
 			"graphFact.at":             "At is when the thing was so, RFC 3339. Required, and refused when it sits\nmore than five minutes ahead of the server clock — an assertion dated\nfurther out would never mature and would skew every read until it did.",
 			"graphFact.confidence":     "Confidence in [0,1]. A tie-breaker within the order, never a substitute\nfor it. Absent is 0, the weakest an assertion can be.",
 			"graphFact.entity":         "Entity is the thing being described, in the organization's own namespace.\nIt is not created: an entity exists because something was asserted about it.\nRequired, 512 bytes at most.",
@@ -77,7 +77,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/graph/graphql", zip.Doc{
-		Description: "Is the door. It answers 200 with a GraphQL error list for a query\nthat cannot run, which is the wire every GraphQL client parses — a transport\nerror would be read as the server being down rather than the query being\nwrong.",
+		Description: "Is the endpoint. It answers 200 with a GraphQL error list for a query\nthat cannot run, which is the wire every GraphQL client parses — a transport\nerror would be read as the server being down rather than the query being\nwrong.",
 	})
 	zip.Describe("POST /v1/graph/neighbors", zip.Doc{
 		Fields: map[string]string{

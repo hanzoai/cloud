@@ -190,8 +190,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// peer set, not by arbitrary internet IPs. loginMaxConnsPerHost is the hard bound
 	// on the actual IAM fan-out regardless.
 	//
-	// The BODY CAP lives at this door beside the limiter, and for the same
-	// reason: both are what a public, pre-identity door accepts, decided before
+	// The BODY CAP lives at this endpoint beside the limiter, and for the same
+	// reason: both are what a public, pre-identity endpoint accepts, decided before
 	// any principal exists and before anything parses a byte. A typed op is
 	// handed a decoded value, so by the time it could refuse a 64 MiB body the
 	// body has been read — the cap was never the operation's business.
@@ -218,7 +218,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the estate's rule, not this subsystem's invention — authz states it at the
 	// definition of Verb ("cloud gates writes on org-admin authority while admitting
 	// members to read") and Role.Admits encodes it (member reads; admin and owner read
-	// and write). KMS asks the same question through the same two doors.
+	// and write). KMS asks the same question through the same two scopes.
 	//
 	// It lands hardest, and most usefully, on MACHINES. A client_credentials identity
 	// carries no membership, so SanitizeIdentity grants it neither admin scope; it can
@@ -289,14 +289,14 @@ func newEmbeddedClient(cfg *cloud.Config, dur *org.Durability, log luxlog.Logger
 	return c, nil
 }
 
-// guard is the RAW handlers' reading of the one admission door (admits, typed.go),
+// guard is the RAW handlers' reading of the one admission check (admits, typed.go),
 // so the two value routes and the typed collection ops cannot answer differently
 // about who may pass or in what order.
 //
 // The scope is the ROUTE'S, passed in rather than fixed here, because reading a
 // secret and replacing one are different acts and the gate is where that
 // difference belongs. Taking it as a parameter also puts the answer at the route
-// table, where a reader sees which door each operation is behind without
+// table, where a reader sees which scope each operation is behind without
 // following a call.
 func guard(s *cloud.Service[state], scope cloud.Scope, h zip.Handler) zip.Handler {
 	return func(ctx *zip.Ctx) error {

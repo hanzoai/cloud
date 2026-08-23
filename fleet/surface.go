@@ -7,11 +7,11 @@ import (
 	"unicode"
 )
 
-// What the fleet's door is WILLING to say a tool is, and in what ORDER.
+// What the fleet's MCP server is WILLING to say a tool is, and in what ORDER.
 //
 // [Door.gather] asks every subsystem what it serves and returns the union. That
 // is the right answer to "what exists" and the wrong answer to "what may an
-// agent call", and until this file the door had no second answer: on
+// agent call", and until this file the MCP server had no second answer: on
 // api.hanzo.ai it projected 1,323 tools with zero annotations, zero
 // readOnlyHint, and no auth at the transport. Two independent facts made that
 // concrete rather than theoretical:
@@ -53,7 +53,7 @@ import (
 //
 // It exists for the same reason [Unavailable] does, and it is the same defect
 // if it is missing: a silently shortened list cannot be told apart from a fleet
-// that serves nothing. The door already refuses to shorten quietly for an
+// that serves nothing. The MCP server already refuses to shorten quietly for an
 // outage; refusing to shorten quietly for a POLICY is the same obligation. The
 // count and the rule travel with the answer, so an operator who wonders where
 // CreateServiceAccountKey went reads why rather than filing a bug against a
@@ -65,7 +65,7 @@ const Refused = "hanzo.ai/refused"
 const TheRule = "a tool is not projected when its name discloses a bearer secret at any verb, " +
 	"or when a mutating verb acts on an identity or authority object"
 
-// refuse reports whether the fleet's door will project a tool at all.
+// refuse reports whether the fleet's MCP server will project a tool at all.
 //
 // The rule, in two clauses over the name's words:
 //

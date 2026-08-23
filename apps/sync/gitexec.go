@@ -327,7 +327,8 @@ func mirrorSource(raw string) (string, error) {
 // userinfo, and on the outbound allowlist. Stricter than a source, because a
 // host we will PUSH tenant code to is a stricter question than one we read from
 // — and because the local forge must never be a target (that would be this
-// process force-feeding its own canonical store through the tenant-facing door).
+// process force-feeding its own canonical store through the tenant-facing
+// endpoint).
 func validateMirrorTarget(raw string) (canonical, host string, err error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -360,8 +361,8 @@ func mirrorOutHostAllowed(host string) bool {
 // push tenant code to is an obvious question. The inbound half is the same
 // question and it was not asked: the credential a fetch carries is a live GitHub
 // App installation token, minted for the org, and the URL it travels to is an
-// ARGUMENT — the /v1/sync door pins its own source host, but the internal plane
-// takes CloneURL and Token straight off the request. Offering that token to a
+// ARGUMENT — the /v1/sync endpoint pins its own source host, but the internal
+// plane takes CloneURL and Token straight off the request. Offering that token to a
 // host of the caller's choosing hands a working credential to whoever answers
 // there, on the way to a fetch that would have failed anyway.
 //

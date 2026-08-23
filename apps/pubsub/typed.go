@@ -1,6 +1,6 @@
 package pubsub
 
-// typed.go is the pubsub PRODUCT: the /v1/pubsub door onto the same embedded
+// typed.go is the pubsub PRODUCT: the /v1/pubsub endpoint onto the same embedded
 // bus every in-process app rides. Two typed ops — publish and request/reply —
 // each one registry entry projecting the REST route, the OpenAPI schema and
 // prose, the MCP tool, the CLI command and every generated SDK method.
@@ -12,15 +12,15 @@ package pubsub
 //
 // TENANCY IS A NAMESPACE, NOT AN ACCOUNT. The embedded node runs one JetStream
 // domain shared with the platform's own planes (the event stream, o11y, the
-// Kafka facade), so the door scopes tenants by construction rather than by
+// Kafka facade), so the endpoint scopes tenants by construction rather than by
 // NATS accounts: org subjects live under "pub.<org>." — mapped on the way in,
 // stripped on the way out, so a caller sees its own clean namespace and can
 // never name another org's subjects or the platform's (event.>, $KV.>). The
-// name rule for streams and buckets is [Qualify], next door.
+// name rule for streams and buckets is [Qualify], in pubsub.go.
 //
 // The NATS client port (:4222) is the CLUSTER'S plane — in-process apps and
-// in-cluster clients, unscoped, exactly as before. This door is a TENANT'S
-// plane, and only the tenant doors do tenancy.
+// in-cluster clients, unscoped, exactly as before. This endpoint is a TENANT'S
+// plane, and only the tenant endpoints do tenancy.
 //
 // NOT SERVED, by decision rather than omission — the intent spec
 // (hanzoai/openapi d86248f^:pubsub/openapi.yaml) authored 29 operations; the
@@ -32,15 +32,15 @@ package pubsub
 //     (same measured fact that keeps POST /v1/ask untyped, apps/ask/ask.go).
 //     Consumption is served by the NATS port, which speaks native
 //     subscriptions, and by apps/mq's pull ops over the same streams.
-//   - /v1/pubsub/objects/* (4 ops): cloud's object door is /v1/storage. A
-//     second object store riding stream chunks would be two doors to one noun.
+//   - /v1/pubsub/objects/* (4 ops): cloud's object endpoint is /v1/storage. A
+//     second object store riding stream chunks would be two endpoints to one noun.
 //   - /v1/pubsub/{varz,connz,jsz,routez,gatewayz,leafz,subsz} (6 ops + subsz):
 //     operator telemetry, server-wide and cross-tenant by definition — connz
 //     lists every client of every tenant. The operator plane is apps/o11y;
 //     publishing it on a tenant surface would be a leak, not a feature.
 //
 // Payloads are TEXT. `data` is a JSON string carried verbatim as UTF-8 bytes —
-// the JSON door is a text door, and its own round trip is exact. Binary
+// the JSON endpoint is a text endpoint, and its own round trip is exact. Binary
 // payloads belong on the NATS port; bytes published there that are not UTF-8
 // read back lossily here.
 
@@ -63,18 +63,18 @@ import (
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// ops binds the door to the typed ops. A TypedHandler is
+// ops binds the endpoint to the typed ops. A TypedHandler is
 // func(context.Context, *In) (*Out, error) — no parameter for the service — so
 // it arrives as a RECEIVER and every op is a method value (o.publish), the only
 // bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// state is empty on purpose: the door owns no store. Its whole state is the
+// state is empty on purpose: the endpoint owns no store. Its whole state is the
 // package's running server (srv) and the one cached client connection (door).
 type state struct{}
 
-// routes registers the tenant door. Registration order is match order, but both
-// paths here begin with a distinct static segment, so nothing can shadow
+// routes registers the tenant endpoint. Registration order is match order, but
+// both paths here begin with a distinct static segment, so nothing can shadow
 // anything.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
@@ -90,7 +90,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 // ----- tenancy --------------------------------------------------------------
 
-// root is the org's subject namespace: every subject this door touches lives
+// root is the org's subject namespace: every subject this endpoint touches lives
 // under it, so no caller can name another org's subjects or the platform's.
 func root(org string) string { return "pub." + org + "." }
 
@@ -212,7 +212,7 @@ func (o ops) publish(ctx context.Context, in *busPublish) (*busAck, error) {
 
 	// One question decides the path: does a stream capture this subject? A
 	// JetStream publish to an uncaptured subject would not fail fast — it would
-	// wait out the ack timeout — so the door asks first and falls back core.
+	// wait out the ack timeout — so the handler asks first and falls back core.
 	if _, err := js.StreamNameBySubject(ctx, subj); err == nil {
 		ack, perr := js.PublishMsg(ctx, msg)
 		if perr != nil {

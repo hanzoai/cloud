@@ -264,21 +264,21 @@ type uploadedFile struct {
 // output, not a listing of the directory — and each is fetched from
 // GET /v1/exec/download/{session}/{name}.
 //
-// The tenant is the caller's, never the body's, at every door. A typed op is also
-// an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
+// The tenant is the caller's, never the body's, at every entry point. A typed op is
+// also an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no
 // route and therefore no middleware, so nothing there could have checked a
 // credential. tenantOf refuses a context carrying neither a validated principal nor
-// exec's own admission marker, so those doors fail closed without a second gate to
-// keep in step.
+// exec's own admission marker, so those entry points fail closed without a second
+// gate to keep in step.
 func run(ctx context.Context, in *CodeRun) (*CodeResult, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// Running a program costs a sandbox, and this door is where THIS subsystem's
-	// callers pay for it. Both halves sit here rather than inside Run because Run
-	// is shared: apps/functions charges its own invoke fee around the same call,
-	// and a charge one layer down would bill that path twice. See meter.go.
+	// Running a program costs a sandbox, and this entry point is where THIS
+	// subsystem's callers pay for it. Both halves sit here rather than inside Run
+	// because Run is shared: apps/functions charges its own invoke fee around the
+	// same call, and a charge one layer down would bill that path twice. See meter.go.
 	ch, err := afford(ctx)
 	if err != nil {
 		return nil, cloud.Denied(err)
@@ -436,15 +436,15 @@ func write(ctx context.Context, id, p string, data []byte) (*plane.Wrote, error)
 //     exactly this), so `POST /V1/EXEC` matched the route and missed the list.
 //     With no key at all it ran code; with CODE_EXEC_API_KEY unset it ran code
 //     where the documented behaviour is a 503.
-//   - THE OTHER DOORS. A typed op is also an MCP tool and an op-plane op, and
+//   - THE OTHER ENTRY POINTS. A typed op is also an MCP tool and an op-plane op, and
 //     neither is a `/v1/...` request. MCP's tools/call invokes the op DIRECTLY
 //     (zip typed.go:474, registeredOp.direct) — no route, so no route middleware,
 //     so no list could ever have covered it.
 //
 // Both are the same defect: authorization inferred from the SPELLING of a request
 // instead of being a property of the request. So the middleware now parks this
-// marker, and every path into this subsystem reads it. A door that does not run
-// exec's middleware does not carry the marker and is refused — by construction,
+// marker, and every path into this subsystem reads it. An entry point that does not
+// run exec's middleware does not carry the marker and is refused — by construction,
 // not by remembering to add it to a list.
 type admittedKey struct{}
 
@@ -463,10 +463,10 @@ func isAdmitted(ctx context.Context) bool {
 // principal.Acting is the rule: from outside, the org a validated principal
 // resolved to and nothing else, because the identity boundary restores an
 // unvalidated caller's own org header for the data path and a tenant read from
-// that is a tenant the caller chose; from inside, the caller a door stated, which
-// nothing outside can write. What exec adds is the UNTENANTED case, and it adds
-// it after — a shared service key carries no tenant, so a request bearing it acts
-// for the deployment itself.
+// that is a tenant the caller chose; from inside, the caller an entry point stated,
+// which nothing outside can write. What exec adds is the UNTENANTED case, and it
+// adds it after — a shared service key carries no tenant, so a request bearing it
+// acts for the deployment itself.
 //
 // The brand org is reachable ONLY through the admission marker, which is what
 // keeps it from being a way in: a request that never presented the key acts for

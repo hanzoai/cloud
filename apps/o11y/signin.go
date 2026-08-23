@@ -21,7 +21,7 @@ import (
 // would have to name a brand's hostname, and a hostname baked into a shared
 // surface is how one brand's identity ends up in front of another's customer —
 // the same defect that had every white-label pay page rendering a Hanzo login.
-// The console knows where it is; this door does not, and answering as the API it
+// The console knows where it is; this endpoint does not, and answering as the API it
 // belongs to needs no such claim.
 //
 // So it says what happened, in the caller's own terms, carrying the reason the

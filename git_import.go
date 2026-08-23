@@ -134,7 +134,7 @@ func InboundGitSync(ctx context.Context, req GitInboundReq) (GitSyncResult, erro
 //
 // Absent co-residency it asks the sync app, like the two calls above. It used to
 // return ErrGitImporterUnavailable here, which was honest about this process and
-// wrong about the world: the statuses exist, in the process next door, and the
+// wrong about the world: the statuses exist, in the sibling process, and the
 // console repo list rendered every repo as never-imported because the app that
 // draws the list is not the app that answers for the sync.
 //

@@ -320,7 +320,7 @@ func TestTypedAnswersAreByteIdentical(t *testing.T) {
 	} {
 		caller := org
 		if c.signer {
-			caller = "" // the signer's door takes no principal
+			caller = "" // the signer's endpoint takes no principal
 		}
 		code, typed := do(t, app, http.MethodGet, c.path, caller, nil)
 		if code != http.StatusOK {
@@ -483,10 +483,10 @@ func TestSignersDoorResolvesTheTokenNotTheClaim(t *testing.T) {
 			t.Errorf("%s: the refusal names which failure it was: %s", c.name, body)
 		}
 	}
-	// A validated principal for another org buys nothing here either: the door
+	// A validated principal for another org buys nothing here either: the endpoint
 	// reads the token, never the caller.
 	if code, _ := do(t, app, http.MethodGet, "/v1/esign/o/other/sign/"+token, "other", nil); code != http.StatusNotFound {
-		t.Errorf("a principal cannot redirect the signer's door: got %d", code)
+		t.Errorf("a principal cannot redirect the signer's endpoint: got %d", code)
 	}
 }
 
@@ -586,7 +586,7 @@ func TestUnreadableBodiesKeepTheRelaysRefusal(t *testing.T) {
 	// Bytes that are not JSON are still the 400 there.
 	if code, body := doRaw(t, app, http.MethodPost,
 		"/v1/esign/o/"+org+"/sign/"+token+"/reject", "", []byte("{not json")); code != http.StatusBadRequest {
-		t.Errorf("unreadable bytes on the signer's door: want 400, got %d (%s)", code, body)
+		t.Errorf("unreadable bytes on the signer's endpoint: want 400, got %d (%s)", code, body)
 	}
 }
 

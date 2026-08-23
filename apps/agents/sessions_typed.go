@@ -196,7 +196,7 @@ func (o sessionOps) stop(ctx context.Context, in *controlIn) (*controlResult, er
 	return o.control(ctx, in, CmdStop)
 }
 
-// MessageSession sends a steering message to a running session — the door a
+// MessageSession sends a steering message to a running session — the endpoint a
 // human or another agent interrupts through. It requires a `message` or a
 // `payload`; the other three commands do not.
 func (o sessionOps) message(ctx context.Context, in *controlIn) (*controlResult, error) {

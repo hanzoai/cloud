@@ -22,15 +22,15 @@ package risk
 // own header names twice (cloud.SetRiskScorer, cloud.SetObsErrorIngest) and the
 // answer is the one both landed on: a plane op on the owning app's socket
 // (plane.EventCapture, apps/event/event_rpc.go). No new transport, no HTTP
-// hop through the fleet's front door, no second gate.
+// hop through the fleet's public endpoint, no second gate.
 //
 // THREE RULES, and each is the difference between telemetry and a liability:
 //
 //	IT CANNOT FAIL THE DECISION. The emit is detached, bounded and dropped under
-//	pressure. A gate asking this scorer is the CREDIT DOOR; a telemetry outage
+//	pressure. A gate asking this scorer is the CREDIT ENDPOINT; a telemetry outage
 //	that refused a payment would be a control firing on exactly the customers it
 //	must not fire on. Nothing about the emit is on the 150ms budget's path — the
-//	verdict is computed, then handed over, and the door returns.
+//	verdict is computed, then handed over, and the endpoint returns.
 //
 //	IT CANNOT CROSS A TENANT. The row is stated for the tenant the decision was
 //	REACHED under — the one [planeTenant] minted from the plane principal — never
@@ -128,7 +128,7 @@ const (
 )
 
 // emitBudget bounds ONE emit end to end, including waking a lazy peer. It is
-// generous where the decide budget is tight, and it costs the door nothing
+// generous where the decide budget is tight, and it costs the endpoint nothing
 // because it bounds a detached goroutine rather than the request: five seconds is
 // thirty-three decide budgets, far past a healthy socket call, and enough for a
 // cold analytics child to come up (plane.Reach single-flights the start, so an
@@ -154,7 +154,7 @@ var inflight = make(chan struct{}, maxEmits)
 // DETACHED and FAIL-SOFT.
 //
 // The context is deliberately not the caller's. planeDecide's ctx is cancelled
-// the moment the door answers, so an emit carrying it would be racing the
+// the moment the endpoint answers, so an emit carrying it would be racing the
 // response it is describing and would lose on every fast decision. It is
 // [context.WithoutCancel] — the request's values (its trace, its request id) are
 // kept, its cancellation is not — with the emit's own budget over it and the

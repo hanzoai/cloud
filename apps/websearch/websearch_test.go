@@ -75,7 +75,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 		t.Fatalf("native search did not return the mocked result: %s", string(body))
 	}
 
-	// The scrape door routes to the in-process crawl handler and answers in the
+	// The scrape endpoint routes to the in-process crawl handler and answers in the
 	// firecrawl shape — the envelope is firecrawl's, the address is ours.
 	//
 	// The URL is deliberately one that cannot be fetched, and the assertion is on

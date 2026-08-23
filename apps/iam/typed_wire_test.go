@@ -68,7 +68,7 @@ import (
 // one of them that was typed.
 const (
 	typedOps = 91
-	// 85 + the two key doors iam v1.34.69 added at their nouns — keys/org and
+	// 85 + the two key endpoints iam v1.34.69 added at their nouns — keys/org and
 	// keys/principal, beside the resolve-key and get-user spellings they replace.
 	// They are raw handlers ON PURPOSE and the ratchet's usual remedy does not
 	// apply: this pair's REFUSALS are the {status, msg, code} envelope, and

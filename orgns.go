@@ -17,7 +17,7 @@ import (
 // lives in hanzoai/namespace so that every service reaches the same answer —
 // these strings are directory names on live volumes and keys in live buckets,
 // and a second implementation of them does not fail, it opens an empty database
-// beside a real one. What stays here is the DOOR: which cloud values are
+// beside a real one. What stays here is the ENTRY POINT: which cloud values are
 // allowed to become a name.
 //
 // THE ISOLATION ARGUMENT, in one paragraph. An ENTITY's namespace is reachable
@@ -28,9 +28,10 @@ import (
 // [a-z0-9][a-z0-9_-]* and folds case. So the only way to name an entity's
 // database is to hold an org string, and the only org strings in this codebase
 // come from principal.Org (a validated IAM claim) or from a server-side
-// resolution an in-process caller states as its contract. A namespace built from
-// a query parameter, a body field, a header or a caller-supplied id would have
-// to pass through OrgNamespace too — which is the point of having one door.
+// resolution an in-process caller states as its contract. A namespace built
+// from a query parameter, a body field, a header or a caller-supplied id would
+// have to pass through OrgNamespace too — which is the point of having one
+// entry point.
 //
 // namespace.System is outside the argument rather than an exception to it: it
 // takes no input, so nothing can be folded into it, and it names the deployment
@@ -45,8 +46,8 @@ import (
 // two distinct orgs can never share a namespace, and the project rides in the
 // GROUP slot, which is what a group is for.
 //
-// It stays spelled here, as cloud's name for that door rather than a second
-// implementation of it, because "which values may name a database" is a
+// It stays spelled here, as cloud's name for that entry point rather than a
+// second implementation of it, because "which values may name a database" is a
 // question about cloud's principals — and TestOnlyOrgnsBuildsANamespace answers
 // it by proving this file is the only one that asks.
 func OrgNamespace(org, project string) (namespace.Namespace, error) {
@@ -79,9 +80,9 @@ const Reserved = "platform"
 
 // nsOnDisk reads a namespace back out of the directory name OrgNamespace wrote.
 //
-// It is the inverse of the door above, not a second one: the segment it is
-// given was produced by namespace.Sanitize when the store was created, so
-// folding it through Sanitize AGAIN would be wrong — a slug that already
+// It is the inverse of the entry point above, not a second one: the segment
+// it is given was produced by namespace.Sanitize when the store was created,
+// so folding it through Sanitize AGAIN would be wrong — a slug that already
 // carries a disambiguation suffix looks exactly like a raw owner that needs
 // one, and would be re-suffixed into the name of a different, empty database.
 //

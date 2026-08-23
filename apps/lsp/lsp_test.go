@@ -10,7 +10,7 @@ package lsp
 //
 // Four properties, and they are the four this rewrite has to hold:
 //
-//	THE OPS REACH THE RIGHT DOOR. Five ops, one daemon URL each, with locate's
+//	THE OPS REACH THE RIGHT ENDPOINT. Five ops, one daemon URL each, with locate's
 //	relation carried and defaulted.
 //	A COLD REVISION IS ONE ROUND TRIP MORE, NOT A LOOP. 409 → /root → ask again,
 //	exactly once.
@@ -41,7 +41,7 @@ const (
 	testSHA = "0123456789abcdef0123456789abcdef01234567"
 )
 
-// call is one request the daemon received: which door, what it said, and which
+// call is one request the daemon received: which path, what it said, and which
 // key it presented.
 type call struct {
 	path string
@@ -152,7 +152,7 @@ func (f *fleet) take(t *testing.T, r *http.Request, path string, in any, set fun
 	f.calls = append(f.calls, c)
 }
 
-// paths is the door sequence the daemon saw.
+// paths is the endpoint sequence the daemon saw.
 func (f *fleet) paths() []string {
 	out := make([]string, 0, len(f.calls))
 	for _, c := range f.calls {
@@ -206,7 +206,7 @@ func (f *fleet) saw(ctx context.Context, org string) {
 	f.subs = append(f.subs, cloud.Who(ctx).User)
 }
 
-// TestEachOpReachesAskUnderItsOwnName proves the door→op mapping: every route
+// TestEachOpReachesAskUnderItsOwnName proves the route→op mapping: every route
 // posts /ask, and the op it names is its own. A mapping that drifts here answers
 // a hover as a completion, which no status code would reveal.
 func TestEachOpReachesAskUnderItsOwnName(t *testing.T) {
@@ -374,7 +374,7 @@ func TestNoPrincipalIsRefusedBeforeAnythingIsReached(t *testing.T) {
 }
 
 // TestEveryDaemonCallPresentsTheKey proves the shared service key is sent on both
-// doors. The daemon compares it in constant time and 401s without it, so a
+// endpoints. The daemon compares it in constant time and 401s without it, so a
 // forgotten header is a fleet that cannot answer at all.
 func TestEveryDaemonCallPresentsTheKey(t *testing.T) {
 	f := newFleet(t, testKey, source())

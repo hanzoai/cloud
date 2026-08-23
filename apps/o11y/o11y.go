@@ -65,7 +65,7 @@ import (
 
 // The prose for the operations this package serves but does not OWN the shape of:
 // the three native service probes hanzoai/o11y registers, and the DSN ingest
-// doors. None has an operation to type — a probe is a bare handler and an
+// endpoints. None has an operation to type — a probe is a bare handler and an
 // envelope frame is a foreign wire — so zipdoc has nothing to lift, and without
 // a Describe they publish an operationId and nothing else. Declared
 // here because this file owns what a caller actually meets on the way through:
@@ -173,8 +173,8 @@ func init() {
 			"operation — declaring a JSON response for a redirect would publish a shape that "+
 			"does not exist and hide the header that is the entire point.\n\n"+
 			"UNAUTHENTICATED by necessity: it is how a caller GETS a principal, so requiring "+
-			"one would be circular. It is not an open door — the code it carries is single-use "+
-			"and verified against the provider.")
+			"one would be circular. It is not an open endpoint — the code it carries is "+
+			"single-use and verified against the provider.")
 	openapi.Describe("/v1/o11y/complete/oidc", http.MethodGet,
 		"Complete a generic OIDC sign-in",
 		"The callback any configured OIDC provider redirects back to. Same shape and same "+
@@ -272,8 +272,8 @@ func newHandler(rawURL string) (http.Handler, error) {
 // onto before it stopped rewriting paths at all. Four names, zero routes: the
 // exemption matched nothing and this gate refused EVERY public op. /version,
 // /health, the three probes and sign-in answered 403 at api.hanzo.ai while the
-// standalone o11y answered 200, which is precisely why o11y still had a door of
-// its own. A copy of a route fact, kept one repo away from the routes, drifts
+// standalone o11y answered 200, which is precisely why o11y still had an address
+// of its own. A copy of a route fact, kept one repo away from the routes, drifts
 // the moment the routes move; the fact has one home now and it is beside them.
 //
 // The exempt set is the runtime's own OpenAccess routes plus the two
@@ -367,7 +367,7 @@ func orgOf(r *http.Request) string { return strings.TrimSpace(r.Header.Get("X-Or
 // The three predicates that used to live here — isHealthPath, isErrorIngestPath
 // and isSentryIngestPath — are gone. They were this repo's copy of hanzoai/o11y's
 // route table, and isHealthPath had already drifted into naming four paths that
-// no longer existed, which is what closed the unified door. The answer comes from
+// no longer existed, which is what broke the unified endpoint. The answer comes from
 // the module now: module.Anonymous covers all three families, and module.IngestWire
 // is the DSN-wire term the edge needs to match byte-for-byte.
 //
@@ -403,7 +403,7 @@ func mountRuntime(deps cloud.Deps) error {
 		gh := gate(h)
 		runtimeHandler = gh
 		// The embedded runtime is one router that matches the request's own path,
-		// so every declared address reaches the same door: module.Whole, which is
+		// so every declared address reaches the same handler: module.Whole, which is
 		// what SetHandler meant before a runtime could resolve per address.
 		module.SetRuntime(module.Whole(gh))
 		// Runtime (and its ONE datastore connection) is live; start native
@@ -430,7 +430,7 @@ func mountRuntime(deps cloud.Deps) error {
 	}
 	gh := gate(h)
 	runtimeHandler = gh
-	// A reverse proxy has one door and the far side selects the route, so there
+	// A reverse proxy has one handler and the far side selects the route, so there
 	// is nothing here to resolve per address.
 	module.SetRuntime(module.Whole(gh))
 	log.Info("o11y runtime handler installed (reverse proxy fallback)", "upstream", upstream())
@@ -498,9 +498,9 @@ func mountRuntime(deps cloud.Deps) error {
 //
 // [zip.App.Declaration] drops HEAD and OPTIONS unconditionally — they are the
 // shadows fiber generates for a GET and for CORS, and a host does not route those
-// on their own, so a door opened with All cannot cross a graft intact. One door
-// needed that exception: the /v1/sentinel proxy, which answered OPTIONS as a real
-// method. It is gone — the runtime carries the error face at /v1/o11y/sentinel
+// on their own, so a route declared with All cannot cross a graft intact. One
+// route needed that exception: the /v1/sentinel proxy, which answered OPTIONS as a
+// real method. It is gone — the runtime carries the error face at /v1/o11y/sentinel
 // now, twelve named paths with typed ops instead of a wildcard — so there is no
 // All left here and nothing to register on the host but the child itself.
 // Everything with a shape to name is in the child, which is where it always
@@ -515,7 +515,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// READ/SERVE plane — specific routes before the wildcard.
 	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
 	mountAlerts(a) // POST /v1/o11y/alerts/:receiver + GET /v1/o11y/alerts/last
-	// The sign-in failure door, before the wildcard like every other specific
+	// The sign-in failure route, before the wildcard like every other specific
 	// route: the module redirects a failed callback to a SAME-ORIGIN /v1/o11y/login
 	// and this deployment serves its console elsewhere, so without this the redirect
 	// lands on a 404.
@@ -528,14 +528,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := mountRuntime(deps); err != nil {
 		return err
 	}
-	// The Sentry wire on the ONE /v1/event door: POST /v1/event/{project}/envelope|store.
-	// The door's owner (analytics) carries the route — the project segment is
+	// The Sentry wire on the ONE /v1/event endpoint: POST /v1/event/{project}/envelope|store.
+	// The endpoint's owner (analytics) carries the route — the project segment is
 	// variable, so no static prefix could route it here — and forwards through
 	// cloud.ObsErrorIngest to this handler, which rewrites onto the runtime's own
 	// ingest routes BEFORE the principal gate sees the path, so the existing
 	// ingest exemption stays the only exemption. No /api/ segment anywhere:
 	// /v1/ is the only prefix this platform speaks.
-	// Both obs claims on the ONE event door are published as PLANE OPS
+	// Both obs claims on the ONE event endpoint are published as PLANE OPS
 	// (obs_rpc.go): analytics owns the route, this process owns the sink and the
 	// runtime, and a package global cannot cross between two processes.
 	exposeObs()
@@ -603,7 +603,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // gives the specific routes precedence over the runtime relay.
 //
 // host is the router the graft lands on, and now takes nothing but the graft:
-// the one door that could not cross it — the /v1/sentinel wildcard — is gone,
+// the one route that could not cross it — the /v1/sentinel wildcard — is gone,
 // folded into the module's own named routes under /v1/o11y/sentinel. See
 // [Mount].
 //

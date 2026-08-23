@@ -1,6 +1,7 @@
 package platform
 
-// red_hook_test.go — red's adversarial probes against the forge's push door, kept.
+// red_hook_test.go — red's adversarial probes against the forge's push endpoint,
+// kept.
 //
 // The findings red confirmed are answered by NAMED tests in hook_test.go beside
 // the behaviour they pin, which is where a regression test belongs — a dispatch
@@ -11,7 +12,7 @@ package platform
 //
 // What stays here is what red proved and nobody has to fix: the wire the fork
 // actually signs with, what an anonymous flood costs, and the two bounds this
-// door does NOT hold on its own. They are adversarial evidence rather than a
+// endpoint does NOT hold on its own. They are adversarial evidence rather than a
 // pending bug, and deleting them would delete the measurement.
 
 import (
@@ -78,7 +79,7 @@ func TestRED_EveryRealForgeSpellingIsAccepted(t *testing.T) {
 }
 
 // A KMS failure IS cached: a flood costs one read per window, not one per request.
-// This is the property the door claims loudest, measured.
+// This is the property the endpoint claims loudest, measured.
 func TestRED_FloodAgainstAFailingKMSCostsOneRead(t *testing.T) {
 	kms := newFakeKMS()
 	kms.down = fmt.Errorf("kms: secret not found")
@@ -95,7 +96,7 @@ func TestRED_FloodAgainstAFailingKMSCostsOneRead(t *testing.T) {
 	t.Log("REFUTED as amplification: 200 deliveries → 1 KMS read, all 503 fail-closed")
 }
 
-// ── the bound this door does NOT hold: the allocation ────────────────────────
+// ── the bound this endpoint does NOT hold: the allocation ────────────────────
 //
 // maxHookBody bounds what is HASHED, and it cannot bound what is ALLOCATED: the
 // request is in memory before any handler can measure it. The real bound is the

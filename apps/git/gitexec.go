@@ -347,7 +347,7 @@ type screen func(cmds []refCommand, caps string) error
 //
 // The SSH transport gets git's NATIVE protocol, not stateless-rpc: one
 // bidirectional stream carrying advertisement, commands and pack together. So
-// unlike the HTTP door there is no request body to inspect before deciding —
+// unlike the HTTP transport there is no request body to inspect before deciding —
 // the commands arrive mid-conversation, and the multi-gigabyte pack arrives
 // immediately behind them and must never be buffered.
 //
@@ -366,7 +366,7 @@ type screen func(cmds []refCommand, caps string) error
 //
 // Refusing at step 3 rather than inside git is what makes the SSH transport
 // carry the SAME rule as the HTTP one, from the same function, rather than
-// being the door the rule forgot.
+// being the transport the rule forgot.
 func runPackSSHScreened(ctx context.Context, bareDir, service, protocol string, ch io.ReadWriteCloser, sc screen) error {
 	if err := acquirePackSlot(ctx); err != nil {
 		return err

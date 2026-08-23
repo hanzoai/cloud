@@ -55,9 +55,9 @@ import (
 //
 // So it claims exactly what is true and no more: each operation is a route the
 // subsystem that publishes it registered in its own router. What it does NOT
-// prove, and what only a probe of the deployed host can: that the front door
-// delivers that path to that subsystem. It did not, for all 23 of pricing's, until
-// the ingress carve that gave them to an edge worker was deleted.
+// prove, and what only a probe of the deployed host can: that the edge delivers
+// that path to that subsystem. It did not, for all 23 of pricing's, until the
+// ingress carve that gave them to an edge worker was deleted.
 var (
 	fleetInfo = Info{
 		Title:   "Hanzo Cloud API",
@@ -74,13 +74,13 @@ var (
 	// API, and a client generated from either document calls the same host. Only
 	// the description differs, and it differs because it has one fact to add that
 	// the reader cannot get anywhere else: this document is the customer surface,
-	// and the operator's /v1/admin family, the relay doors and the legacy
+	// and the operator's /v1/admin family, the relay routes and the legacy
 	// spellings are served beside it without being part of it.
 	publicInfo = Info{
 		Title:   fleetInfo.Title,
 		Version: fleetInfo.Version,
 		Description: "The Hanzo Cloud API as a customer calls it: every operation under /v1/ except " +
-			"the operator's admin product, relay doors, legacy spellings and capabilities still " +
+			"the operator's admin product, relay routes, legacy spellings and capabilities still " +
 			"reached by flag. Tagged by product: the first path segment after /v1/.",
 	}
 )
@@ -155,11 +155,11 @@ func Subsets(apps []string, read func(app string) []byte, stage func(app string)
 }
 
 // core is the operations no app owns: the endpoint that serves the document, its
-// command projection, the agent door (openapi/mcp.go) and the hypermedia index
-// a client discovers the rest from (openapi/index.go). They are MOUNTED and
-// projected rather than written down — a hand-kept literal would be a second
-// definition of a route the host already serves, free to disagree with the
-// address the fleet actually answers on.
+// command projection, the agent MCP server (openapi/mcp.go) and the hypermedia
+// index a client discovers the rest from (openapi/index.go). They are MOUNTED
+// and projected rather than written down — a hand-kept literal would be a
+// second definition of a route the host already serves, free to disagree with
+// the address the fleet actually answers on.
 func core() (Part, error) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	Mount(app, Info{})
@@ -174,7 +174,7 @@ func core() (Part, error) {
 	// app's package doc carries the rest of the fleet's.
 	doc.Info.Description = "The served contract: the OpenAPI document every client, " +
 		"tool list and command group is generated from, its command projection, " +
-		"the agent door that offers the same operations over MCP, and the index a " +
+		"the agent endpoint that offers the same operations over MCP, and the index a " +
 		"client follows from the API root to reach any of it."
 	return Part{App: "openapi", Doc: doc}, nil
 }
@@ -203,13 +203,14 @@ func Fleet(subsets []Part) (*Document, error) {
 // projected when they were built, and then projected to the customer surface
 // ([Publish]).
 //
-// The projection is here, not at the caller, because this door and openapi.yaml
-// are one artifact — cmd/cloud/openapi_test.go holds the served bytes against the
-// committed file — and a projection applied at only one of the two is how they
-// come to differ. It answered with the INTERNAL document until this was written,
-// so an unauthenticated GET returned the operator's whole /v1/admin family and
-// every alpha capability, which is the same reach a generated SDK has: the
-// audience rule was stated in one place and applied in another.
+// The projection is here, not at the caller, because this endpoint and
+// openapi.yaml are one artifact — cmd/cloud/openapi_test.go holds the served
+// bytes against the committed file — and a projection applied at only one of the
+// two is how they come to differ. It answered with the INTERNAL document until
+// this was written, so an unauthenticated GET returned the operator's whole
+// /v1/admin family and every alpha capability, which is the same reach a
+// generated SDK has: the audience rule was stated in one place and applied in
+// another.
 //
 // It exists because [Mount]'s answer is WRONG on the light host, and wrong in the
 // way that is hardest to see. The host mounts no subsystem — that laziness is
@@ -224,7 +225,7 @@ func Fleet(subsets []Part) (*Document, error) {
 // first request, off bytes already in the binary: no subsystem starts, no socket
 // opens, and a deployment that never gets asked never pays.
 //
-// Unauthenticated for the reasons stated on [Mount]: same document, same door.
+// Unauthenticated for the reasons stated on [Mount]: same document, same endpoint.
 func MountFleet(app *zip.App, subsets func() ([]Part, error)) {
 	serve(app, func() (*Document, error) {
 		parts, err := subsets()

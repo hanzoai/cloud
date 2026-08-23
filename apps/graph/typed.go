@@ -65,7 +65,7 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 		zip.WithSummary("The relations in use, and the rule that resolves a conflict"),
 		zip.WithTags("graph"))
 
-	// The GraphQL door, at the address apps/explorer already established for one
+	// The GraphQL endpoint, at the address apps/explorer already established for one
 	// (/v1/<product>/graphql). It is UNTYPED by construction rather than by
 	// omission: a typed op declares one In and one Out, and this route's input is
 	// a query whose OUTPUT SHAPE the caller chooses. Its bodies are declared
@@ -142,7 +142,7 @@ type graphAssertOut struct {
 	// collides on its content address and is counted here, not refused: it is
 	// the success a retrying caller depends on.
 	Duplicate int `json:"duplicate"`
-	// Refused is how many members were turned away at the door, before the store
+	// Refused is how many members were turned away on arrival, before the store
 	// was touched — a missing entity, a timestamp that is not RFC 3339, a
 	// confidence outside [0,1]. The rest of the batch was still recorded.
 	Refused int `json:"refused"`

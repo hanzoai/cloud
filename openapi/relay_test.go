@@ -1,6 +1,6 @@
 package openapi_test
 
-// What a door owes, tested as refusals.
+// What a relay owes, tested as refusals.
 //
 // A relay is the one client in this package that can ADD an operation, so it is the
 // one that has to be hardest to lie with. Everything below is a case where the
@@ -50,13 +50,13 @@ func TestProjectReplacesTheDoorWithWhatIsBehindIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, still := doc.Paths["/v1/thing/{wildcard1}"]; still {
-		t.Error("the door survived its own registry — one address published twice, and {wildcard1} is what a spec-derived CLI turns into a phantom command")
+		t.Error("the relay's route survived its own registry — one address published twice, and {wildcard1} is what a spec-derived CLI turns into a phantom command")
 	}
 	if len(doc.Paths) != 2 {
 		t.Fatalf("paths = %d, want 2", len(doc.Paths))
 	}
 	if got := doc.Paths["/v1/thing/a"]["get"].App; got != "github.com/hanzoai/thing" {
-		t.Errorf("x-app = %q, want the module behind the door — an operation nobody can trace to a repo is one nobody can file against", got)
+		t.Errorf("x-app = %q, want the module behind the relay — an operation nobody can trace to a repo is one nobody can file against", got)
 	}
 	if len(doc.Tags) != 1 || doc.Tags[0].Name != "thing" {
 		t.Errorf("tags = %+v, want exactly the products the operations carry", doc.Tags)
@@ -74,7 +74,7 @@ func TestProjectRefusesARelayThatPublishesNothing(t *testing.T) {
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing", Behind: empty,
 	}})
 	if err == nil {
-		t.Fatal("Project accepted a door with nothing behind it — a silently smaller document is the failure this exists to prevent")
+		t.Fatal("Project accepted a relay with nothing behind it — a silently smaller document is the failure this exists to prevent")
 	}
 	if !strings.Contains(err.Error(), "github.com/hanzoai/thing") {
 		t.Errorf("error does not name the source: %v", err)
@@ -90,12 +90,12 @@ func TestProjectRefusesARelayThatCouldNotDescribeItself(t *testing.T) {
 		Behind: func() (*openapi.Document, error) { return nil, boom },
 	}})
 	if !errors.Is(err, boom) {
-		t.Fatalf("Project = %v, want the registry's own error — a door that cannot say what is behind it is not a door with nothing behind it", err)
+		t.Fatalf("Project = %v, want the registry's own error — a relay that cannot say what is behind it is not a relay with nothing behind it", err)
 	}
 }
 
 // PLACEMENT, which is why x-app exists at all: an operation published through the
-// wrong door is unreachable there, so it is a routing bug in the registry that
+// wrong relay is unreachable there, so it is a routing bug in the registry that
 // registered it — and the message has to name that registry.
 func TestProjectRefusesAnOperationOutsideItsOwnDoor(t *testing.T) {
 	err := openapi.Project(door("/v1/thing"), []openapi.Relay{{
@@ -103,7 +103,7 @@ func TestProjectRefusesAnOperationOutsideItsOwnDoor(t *testing.T) {
 		Behind: behind("/v1/thing/a", "/v1/billing/charge"),
 	}})
 	if err == nil {
-		t.Fatal("Project published /v1/billing/charge through the /v1/thing door")
+		t.Fatal("Project published /v1/billing/charge through the /v1/thing relay")
 	}
 	for _, want := range []string{"github.com/hanzoai/thing", "/v1/billing/charge", "/v1/thing"} {
 		if !strings.Contains(err.Error(), want) {
@@ -114,7 +114,7 @@ func TestProjectRefusesAnOperationOutsideItsOwnDoor(t *testing.T) {
 
 // THE SAME noun gate the compose uses, on the same terms: one schema name, one
 // shape, whether the two claimants are two apps or an app and the registry behind
-// its door.
+// its relay.
 func TestProjectRefusesOneSchemaNameWithTwoShapes(t *testing.T) {
 	doc := door("/v1/thing")
 	doc.Components = &openapi.Components{Schemas: map[string]any{"None": map[string]any{"type": "object"}}}
@@ -135,9 +135,9 @@ func TestProjectRefusesOneSchemaNameWithTwoShapes(t *testing.T) {
 	}
 }
 
-// The router keeps its authority. A specific path registered in front of the door
-// is the one the matcher picks, so the relay's operation there would name a
-// handler no request reaches.
+// The router keeps its authority. A specific path registered in front of the
+// wildcard is the one the matcher picks, so the relay's operation there would name
+// a handler no request reaches.
 func TestProjectLeavesTheHostsOwnRouteAlone(t *testing.T) {
 	doc := door("/v1/thing")
 	doc.Paths["/v1/thing/a"] = openapi.PathItem{"get": {OperationID: "hostsOwn"}}
@@ -155,7 +155,7 @@ func TestProjectLeavesTheHostsOwnRouteAlone(t *testing.T) {
 	}
 }
 
-// A relay with no door does not apply — the same law Register and Describe obey,
+// A relay with no route does not apply — the same law Register and Describe obey,
 // and what makes one binary per app work: the relay registry is process-wide and a
 // describe run mounts one subsystem.
 func TestRelayWithNoDoorDoesNotApply(t *testing.T) {
@@ -163,7 +163,7 @@ func TestRelayWithNoDoorDoesNotApply(t *testing.T) {
 	if err := openapi.Project(doc, []openapi.Relay{{
 		Source: "github.com/hanzoai/thing", Prefix: "/v1/thing",
 		Behind: func() (*openapi.Document, error) {
-			t.Fatal("asked a registry about a door this process does not have")
+			t.Fatal("asked a registry about a route this process does not have")
 			return nil, nil
 		},
 	}}); err != nil {
@@ -175,7 +175,7 @@ func TestRelayWithNoDoorDoesNotApply(t *testing.T) {
 }
 
 // A route table's "*" means the registry dispatches every method at that address,
-// which is the same expansion the door itself gets — so the two halves of one
+// which is the same expansion the route itself gets — so the two halves of one
 // wildcard cannot disagree about which verbs exist.
 func TestTableExpandsTheAnyMethodToTheOnesThisGeneratorPublishes(t *testing.T) {
 	r := openapi.Table("github.com/hanzoai/ai", "/v1", func() map[string][]string {
@@ -212,7 +212,7 @@ func TestTableExpandsTheAnyMethodToTheOnesThisGeneratorPublishes(t *testing.T) {
 }
 
 // A REGISTRY THAT SAYS NOTHING ABOUT A ROUTE IS REFUSED, exactly as an app's own
-// undescribed operation is (openapi/prose.go). A door is where another repo's
+// undescribed operation is (openapi/prose.go). A relay is where another repo's
 // surface enters this document, so it is where that repo's silence has to be
 // caught — downstream every projection has an address and no sentence, and none of
 // them can write one.
@@ -229,7 +229,7 @@ func TestTableRefusesARouteTheRegistrySaysNothingAbout(t *testing.T) {
 	}
 }
 
-// Two relays at one door is two answers to one question, and it is a programming
+// Two relays at one route is two answers to one question, and it is a programming
 // error at wire time — the same shape Register and Describe refuse.
 func TestFrontRefusesTwoRelaysAtOneDoor(t *testing.T) {
 	defer func() {
