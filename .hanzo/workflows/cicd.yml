@@ -1593,26 +1593,44 @@ jobs:
   live:
     needs: image
     runs-on: [hanzo-build-linux-amd64]
-    timeout-minutes: 45
+    timeout-minutes: 100
     steps:
       # cd.hanzo.ai reconciles on its own schedule, so between the pin and the
       # running pod there is a window in which every job below would describe the
       # PREVIOUS version. Wait for the header the image itself reports, and refuse
       # to fan out if it never arrives.
+      #
+      # THE BOUND IS SIZED FROM A MEASUREMENT. v8.5.137 was tagged 20:37Z and served
+      # at 21:59Z — 82 minutes, of which the cd sync itself was 75 SECONDS
+      # (deployStartedAt 21:45:24 -> deployedAt 21:46:39). The remainder is the
+      # `cloud-prepull` DaemonSet pulling a multi-GB image onto the node, which the
+      # sync blocks on before the Deployment rolls, so the wait is an image pull and
+      # not a scheduling delay. At 120 iterations this car gave up at 20 minutes and
+      # failed SEVEN CONSECUTIVE releases that all reached production anyway — it
+      # reported a working pipeline as a dead one, and took `receipt` down with it.
+      # Lower this only against a fresh measurement of that pull; do not lower it
+      # because the number looks large.
+      #
+      # It does not cost seven long-held runners. A run that is overtaken exits on
+      # the branch below within one sleep, so only the NEWEST release waits out the
+      # pull; the older ones leave as soon as production passes them.
       - name: Prove the release is live
         run: |
           set -euo pipefail
           WANT="v${{ needs.image.outputs.version }}"
-          for i in $(seq 1 120); do
-            GOT=$(curl -fsSI https://api.hanzo.ai/v1/health 2>/dev/null \
+          for i in $(seq 1 540); do
+            # Bounded, because an unbounded probe inside a loop is a job that never
+            # ends: a blackholed connection would stall here rather than costing one
+            # iteration, and the loop's own bound would stop meaning anything.
+            GOT=$(curl -fsSI --connect-timeout 5 --max-time 15 https://api.hanzo.ai/v1/health 2>/dev/null \
               | tr -d '\r' | sed -n 's/^[Xx]-[Aa]pi-[Vv]ersion: *//p' | head -1 || true)
             if [ "$GOT" = "$WANT" ]; then echo "api.hanzo.ai is serving ${WANT} after $((i*10))s"; exit 0; fi
             # The question is whether production is OLDER than this release, not
             # whether it is exactly this release. Releases overlap and cd converges
             # on the newest pin, so a run that is overtaken between its pin and this
-            # probe would otherwise wait out the full twenty minutes for a version
-            # nothing will ever serve again — and report a release that did reach
-            # production as one that did not.
+            # probe would otherwise wait out the whole bound for a version nothing
+            # will ever serve again — and report a release that did reach production
+            # as one that did not.
             if [ -n "$GOT" ] && [ "${GOT#v}" != "${WANT#v}" ] \
                && [ "$(printf '%s\n%s\n' "${GOT#v}" "${WANT#v}" | sort -V | head -1)" = "${WANT#v}" ]; then
               echo "api.hanzo.ai is serving ${GOT}, which is past ${WANT} — a later release reached production first"; exit 0
