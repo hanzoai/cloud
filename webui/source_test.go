@@ -111,3 +111,61 @@ func TestReleaseSwapIsServedImmediately(t *testing.T) {
 		t.Errorf("GET the new release's chunk = %d, want 200", code)
 	}
 }
+
+// polledFS is a source that re-reads on an interval: empty now, filled later.
+// swap is the poll landing.
+type polledFS struct{ cur atomic.Pointer[fstest.MapFS] }
+
+func (p *polledFS) Polled() bool { return true }
+func (p *polledFS) Open(name string) (fs.File, error) {
+	m := p.cur.Load()
+	if m == nil {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+	return m.Open(name)
+}
+func (p *polledFS) swap(m fstest.MapFS) { p.cur.Store(&m) }
+
+// TestAPolledSourceMountsEmptyAndRecovers is the outage this separation cost,
+// written down.
+//
+// A release read from the object store can be empty at boot for a reason that is
+// nothing to do with the bundle — S3 briefly unreachable, one auxiliary object
+// unreadable. That used to be refused HERE, at mount, exactly as a broken static
+// bundle is. The composition root then mounted nothing and skipped the watch
+// loop, so the console stayed down after the cause was repaired, because nothing
+// was left to re-read it. The repair was already in the object store; no process
+// ever looked again.
+//
+// The distinction this pins: emptiness is a MOMENT for a polled source and a
+// VERDICT for a static one. TestBundleWithoutShellIsRefused above pins the other
+// half, and the two must stay different.
+func TestAPolledSourceMountsEmptyAndRecovers(t *testing.T) {
+	src := &polledFS{}
+
+	h, err := Handler(src, testDoor(), nil)
+	if err != nil {
+		t.Fatalf("a polled source must mount while empty — it is what can still fill in: %v", err)
+	}
+
+	// Empty: the honest 503, never a blank page dressed as the product.
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("empty source answered %d, want 503", rec.Code)
+	}
+
+	// The poll lands — no restart, no re-mount.
+	src.swap(fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>console</title>")}})
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("after the poll landed the console answered %d, want 200 — recovery must not need a restart", rec.Code)
+	}
+	// The shell that just arrived, with its <title> rewritten to the request host's
+	// brand — which is brandTitle doing its job, not the bundle leaking through.
+	if !strings.Contains(rec.Body.String(), "<!doctype html>") {
+		t.Errorf("served %q, want the shell that just arrived", rec.Body.String())
+	}
+}

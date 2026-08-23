@@ -132,8 +132,14 @@ func TestSitesConfigIsNotResolvedHere(t *testing.T) {
 // It is matched on the mount call rather than on the absence of a `return`,
 // because "no return of consoleErr" is a claim about every line and would pass
 // the day someone spells the return differently — a test that stops looking.
-// webui.Mount(app, nil) is the positive act of choosing the no-console path, so
-// deleting it to restore the fatal is what fails here.
+//
+// WHAT THE POSITIVE ACT IS CHANGED, and this test changed with it. It used to be
+// webui.Mount(app, nil): the console failed to load, so the process mounted
+// nothing. That kept the API up and cost a different outage — nothing was left to
+// re-read the release, so the console stayed down after the object that broke it
+// was repaired. The Source is polled now and mounts EMPTY, answering 503 until a
+// poll fills it, so the positive act is mounting it UNCONDITIONALLY. The property
+// is the same one: the console never decides whether the API serves.
 func TestAnUnreadableConsoleDoesNotStopTheFrontDoor(t *testing.T) {
 	src, err := os.ReadFile("main.go")
 	if err != nil {
@@ -145,9 +151,16 @@ func TestAnUnreadableConsoleDoesNotStopTheFrontDoor(t *testing.T) {
 	}
 	run := string(src)[i:]
 
-	if !strings.Contains(run, "webui.Mount(app, nil)") {
-		t.Fatal("run() never mounts the no-console path — a console the store cannot serve " +
+	if !strings.Contains(run, "webui.Mount(app, release.FS(consoleSrc))") {
+		t.Fatal("run() never mounts the console — a console the store cannot serve " +
 			"takes the whole API down with it, which is the 2026-08-15 outage")
+	}
+	// And the mount is not gated on the load having succeeded. Gating it is what
+	// made a failed boot read permanent: unmounted, unwatched, and unrecoverable
+	// until someone restarted the process.
+	if strings.Contains(run, "if consoleErr == nil {") {
+		t.Error("run() gates the console mount on the load — a boot read that failed can then " +
+			"never recover, because nothing re-reads the release")
 	}
 	for _, line := range strings.Split(run, "\n") {
 		if strings.Contains(line, "return") && strings.Contains(line, "consoleErr") {
