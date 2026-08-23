@@ -219,12 +219,12 @@ func isMutation(method string) bool {
 // with no principal — anonymous, OR one bearing an INVALID/garbage bearer that
 // failed validation — has an empty c.User().
 //
-// In that unvalidated case the org header is NOT trustworthy: SanitizeIdentity's
-// Phase-1 residual restores a client-supplied X-Org-Id for the data path, so an
-// anonymous attacker could send X-Org-Id: victim-org and, if we recorded it,
-// forge a FALSE ATTRIBUTION (an event stamped with a victim's org). So when there
-// is no validated sub, the actor is left EMPTY — the record stands as an honest
-// anonymous event identified by SourceIP, never mis-attributed to a claimed org.
+// In that unvalidated case the org header carries no weight: SanitizeIdentity
+// restores a client-supplied X-Org-Id for the data path, so it is the caller's
+// own claim rather than a fact about them, and an audit record is exactly the
+// place a claim must not become one. So with no validated sub the actor is left
+// EMPTY — the record stands as an honest anonymous event identified by SourceIP,
+// attributed to nobody rather than to whoever the request named.
 //
 // With a validated sub, org/sub/email all reflect the verified principal and are
 // recorded authoritatively.
