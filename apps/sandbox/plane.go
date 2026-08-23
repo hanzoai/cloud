@@ -76,14 +76,32 @@ func expose() {
 
 // live resolves the caller's org and the mounted service together, because every
 // op below needs both and neither is worth a second spelling.
+//
+// THESE OPS ARE SERVED ON TWO DOORS and the tenant rule has to hold on both.
+// Mount registers each one a second time on the public app (sandbox.go), which
+// is what lets an agent name them at all — and a handler written for the plane
+// alone can carry an argument that only holds there. cloud.Who is exactly that:
+// off a request it reads the caller a door stated in-process, on one it reads
+// the headers, and a non-empty check cannot tell those apart.
+//
+// cloud.Tenant is the rule that can. A request resolves through the validated
+// principal and nothing else; a plane call resolves through the stated caller,
+// which nothing outside the process can write. What this op does with the answer
+// — open the org's store, lease a pod in its namespace — is the same either way,
+// so the tenant it acts on must be, too.
+// THE TENANT IS ASKED FIRST. A caller with no tenant is told that and nothing
+// else — whether this process happens to mount sandbox is a fact about our
+// deployment, and answering it before deciding who is asking hands it to anyone.
+// It is also what makes the rule observable: refused says 403, resolved gets far
+// enough to meet the mount.
 func live(ctx context.Context) (*Service, string, error) {
+	org, ok := cloud.Tenant(ctx)
+	if !ok {
+		return nil, "", zip.ErrForbidden("sandbox: org required")
+	}
 	s := mounted.Load()
 	if s == nil {
 		return nil, "", zip.Errorf(503, "sandbox not mounted")
-	}
-	org := cloud.Who(ctx).Org
-	if org == "" {
-		return nil, "", zip.ErrForbidden("sandbox: org required")
 	}
 	return s, org, nil
 }

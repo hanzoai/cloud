@@ -12,6 +12,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
 	zapmcp "github.com/zap-proto/mcp"
@@ -273,7 +274,42 @@ func For(ctx context.Context, org string) context.Context { return plane.For(ctx
 
 // Who reads the principal a plane op is acting for. A handler that needs
 // authority refuses an empty org rather than treating it as permission.
+//
+// It answers a DIFFERENT question depending on the context it is handed, and a
+// handler that turns a tenant on it has to know which: off a request it is the
+// stated caller, on one it is the headers. [Tenant] is the accessor that knows.
 func Who(ctx context.Context) zip.Caller { return zip.CallerOf(ctx) }
+
+// Tenant is the org a call acts FOR, and the one rule for deciding it.
+//
+// An op reaches this in two shapes, vouched for differently, and the whole point
+// of one accessor is that neither shape can be mistaken for the other:
+//
+//   - ON A REQUEST the org arrived as a header, and a header is the caller's own
+//     until something stands behind it. principal.OrgFrom is that: the org the
+//     identity boundary MINTED from a validated principal, never a client value.
+//     Nothing else here is accepted, because the boundary deliberately restores
+//     an unvalidated caller's own org header for the data path — on the stated
+//     grounds that whatever reads it gates on a validated principal.
+//
+//   - OFF A REQUEST there is no header in play. The org is what [For] stamped,
+//     in-process, downstream of a door that had already validated it, and zip
+//     reads a stated caller only on a request-free context — so that value
+//     cannot be supplied from outside.
+//
+// Fails closed in both. An op with a further admission of its own — a service
+// token, an explicit marker — composes it ON this rather than replacing it, so
+// there is one tenant decision and additions to it are visible as additions.
+func Tenant(ctx context.Context) (string, bool) {
+	if org, ok := principal.OrgFrom(ctx); ok {
+		return org, true
+	}
+	if _, onRequest := Request(ctx); onRequest {
+		return "", false
+	}
+	org := strings.TrimSpace(Who(ctx).Org)
+	return org, org != ""
+}
 
 // As delegates THIS request's principal to a call, pointed at a named tenant.
 //
