@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 670,
+  "skill_count": 671,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -2210,6 +2210,13 @@
       "path": "graph_graph/SKILL.md",
       "service": "graph",
       "sha256": "e4e60e180a286c2a06834093d734e9897429e594bdffb2764c34311152dd5e0c"
+    },
+    {
+      "description": "Read graph search: Find assertions by their text rather than by an entity key.",
+      "name": "graph_search",
+      "path": "graph_search/SKILL.md",
+      "service": "graph",
+      "sha256": "943c874618656b4d228cea0f326818cc1df0e1032ef912a120c34457157d0f47"
     },
     {
       "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",
