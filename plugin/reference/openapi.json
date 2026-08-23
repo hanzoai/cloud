@@ -461,7 +461,7 @@
             "type": "integer"
           },
           "kind": {
-            "description": "Kind is how the baseline comes to exist: fetch (downloaded from a\npublisher), local (computed here), attest (held by the component that\nscreens against it, freshness reported), or client (declared and NOT held,\nbecause the source needs a licence we do not have).",
+            "description": "Kind is how the baseline comes to exist: fetch (downloaded from a\npublisher), local (computed here), attest (held by the component that\nscreens against it, freshness reported), or gap (declared and NOT held,\nbecause the source needs a licence we do not have).",
             "type": "string"
           },
           "match": {

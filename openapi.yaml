@@ -7480,7 +7480,7 @@ components:
           description: |-
             Kind is how the baseline comes to exist: fetch (downloaded from a
             publisher), local (computed here), attest (held by the component that
-            screens against it, freshness reported), or client (declared and NOT held,
+            screens against it, freshness reported), or gap (declared and NOT held,
             because the source needs a licence we do not have).
           type: string
         match:
@@ -67852,9 +67852,9 @@ paths:
         check stays pending; for a real provider it reflects the settled decision,
         ATTRIBUTED to the provider.
 
-        It NEVER trusts a client-asserted status — the status comes from the provider
-        client — so a client cannot force a pass here, and an already-passing founder
-        (e.g. a reviewer confirmation) is left untouched.
+        It NEVER trusts a client-asserted status — the status comes from the PROVIDER —
+        so a client cannot force a pass here, and an already-passing founder (e.g. a
+        reviewer confirmation) is left untouched.
       operationId: post_company_kyc_refresh
       responses:
         "200":
