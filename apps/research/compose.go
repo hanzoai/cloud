@@ -1,6 +1,6 @@
 package research
 
-// compose.go — the in-process seam the experiments primitive composes to use the
+// compose.go — the in-process client the experiments primitive composes to use the
 // research plane as its EVIDENCE store, one-way (experiments imports research;
 // research imports none of them). Per-variant A/B samples are experiment evidence
 // exactly like a benchmark run is: immutable, idempotent (latest-run-canonical),
@@ -27,7 +27,7 @@ var mountedStores *cloud.OrgStore[*store]
 // "which file does this request touch" has one answer from one input.
 //
 // org MUST already be validated: principal.Org for a request, or the caller's
-// own server-side resolution for an in-process seam.
+// own server-side resolution for an in-process client.
 func storeFor(stores *cloud.OrgStore[*store], org string) (*store, error) {
 	ns, err := cloud.OrgNamespace(org, "")
 	if err != nil {
@@ -50,7 +50,7 @@ func shipFor(stores *cloud.OrgStore[*store], org string) (acked bool, err error)
 // Record writes experiment evidence rows for (org, project) idempotently into the
 // org's durable research plane (latest-run-canonical, exactly as POST
 // /v1/research/experiments) AND ships them fenced before returning. It is the
-// in-process seam the experiments primitive composes to persist per-variant A/B
+// in-process client the experiments primitive composes to persist per-variant A/B
 // samples. No SSRF gate is needed: the caller sets no BYO endpoint (these are
 // in-process samples, not a measured probe).
 //

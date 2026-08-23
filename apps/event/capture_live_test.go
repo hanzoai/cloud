@@ -9,7 +9,7 @@
 
 // Live end-to-end proof of the capture plane against a REAL datastore.
 // It drives the ACTUAL POST /v1/event handler (bind → normalize → publish) with the
-// publish seam landing each fact SYNCHRONOUSLY through the SAME per-signal writers
+// publish client landing each fact SYNCHRONOUSLY through the SAME per-signal writers
 // the sink uses (warehouse.go) — the bus hop is the one piece substituted, because a
 // live NATS is not part of this harness — and then reads the rows back through the
 // EXACT SQL the /v1/event/overview + /top handlers run. So a green run proves
@@ -52,7 +52,7 @@ func liveApp(t *testing.T) *zip.App {
 	return app
 }
 
-// landDirect substitutes the publish seam so every fact lands through its writer's
+// landDirect substitutes the publish client so every fact lands through its writer's
 // REAL statement against the REAL datastore, synchronously — the exact INSERT the
 // drain executes, minus the bus in between. Restored via t.Cleanup.
 func landDirect(t *testing.T) {

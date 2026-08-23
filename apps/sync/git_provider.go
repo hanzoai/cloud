@@ -12,7 +12,7 @@ import (
 
 // git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ the FORGE
 // (git.hanzo.ai, where this estate's repositories live). It carries no git logic
-// of its own — Reconcile composes the git seams (cloud.InboundGitSync /
+// of its own — Reconcile composes the git clients (cloud.InboundGitSync /
 // cloud.ImportGitRepo / cloud.EnsureGitMirror), which importer.go answers
 // against the forge. The forge is the ONE git store, and it is CANONICAL:
 //

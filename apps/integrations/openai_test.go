@@ -1,7 +1,7 @@
 package integrations
 
 // openai_test.go proves openai.go's wire protocol against a scriptable
-// httptest stand-in for auth.openai.com (OPENAI_AUTH_BASE seam; zero live
+// httptest stand-in for auth.openai.com (OPENAI_AUTH_BASE client; zero live
 // network): device start/poll (pending = HTTP 403, no RFC-8628 strings),
 // server-side PKCE riding the exchange, bundle adoption via one live refresh,
 // mandatory rotation on refresh, and token-free transport failures.

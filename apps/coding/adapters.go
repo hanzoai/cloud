@@ -9,27 +9,27 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// adapters.go binds coding's seams to the apps that OWN them — across the
+// adapters.go binds coding's clients to the apps that OWN them — across the
 // process boundary, because that is where they are.
 //
 // It used to bind them to agents and todo in-process, which was right while
 // one binary held every subsystem. It is not right now: each app is its own
 // process, and every one of those calls reads the callee's `mounted` package
 // global. A package global is per-PROCESS, so in the process that runs a coding
-// run they are all nil and each seam answered its zero value — "todo: not
+// run they are all nil and each client answered its zero value — "todo: not
 // mounted", an empty clone URL the dispatcher reads as "git is not available",
 // and a VerifyRef that reports every pushed branch absent and fails the run
 // closed with no PR. The chat turn died of exactly this shape one file over.
 //
 // The orchestration in coding.go is untouched. It always reached its
-// collaborators through injected seams, which is what makes this a re-binding
+// collaborators through injected clients, which is what makes this a re-binding
 // and not a rewrite: same Dispatcher, same order, same fail-closed rules, the
 // calls simply land on a socket instead of a nil global.
 //
 // The Runner is the exception that proves it: the bot-gateway sandbox was
 // always an HTTP client (task.go), so it never had a boundary to cross.
 
-// seamTimeout bounds ONE seam call. Every seam here is a small read or write —
+// clientTimeout bounds ONE client call. Every client here is a small read or write —
 // open a row, append an event, resolve a name — so a call that has not answered
 // in this long is a wedged peer, not a slow one, and the run gets an honest
 // error instead of hanging inside a step.
@@ -38,17 +38,17 @@ import (
 // plugin process is zaphttp's 30s default (zap-proto/http client.go: readTimeout
 // 30s; only the cmd/cloud host re-registers the zap scheme with a longer one,
 // and a plugin does not link the host). Under it, the deadline that fires is
-// always this one — the one whose error names the seam — instead of a bare 502
+// always this one — the one whose error names the client — instead of a bare 502
 // from the wire. It is also why the RUN itself is not a plane call: a 25-minute
 // coding run cannot be a request, so it stays a bounded goroutine on the trigger
-// side and only its seams cross.
-const seamTimeout = 20 * time.Second
+// side and only its clients cross.
+const clientTimeout = 20 * time.Second
 
-// NewDispatcher assembles the production Dispatcher: every seam a peer call over
+// NewDispatcher assembles the production Dispatcher: every client a peer call over
 // the internal plane, the runner on coding's own bot-gateway wire. log is the
 // structured logger for best-effort mirror failures (nil is fine).
 //
-// It also wires the routed completion seam to THIS dispatcher, so the durable
+// It also wires the routed completion client to THIS dispatcher, so the durable
 // delivery activity verifies the pushed ref, files the PR and closes the session
 // exactly as the local path does.
 func NewDispatcher(log func(msg string, kv ...any)) Dispatcher {
@@ -71,10 +71,10 @@ func NewDispatcher(log func(msg string, kv ...any)) Dispatcher {
 	return d
 }
 
-// bounded gives one seam call its own deadline without letting it outlive the
+// bounded gives one client call its own deadline without letting it outlive the
 // run's. A run already cancelled fails here rather than on the wire.
 func bounded(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, seamTimeout)
+	return context.WithTimeout(ctx, clientTimeout)
 }
 
 // planeSessions is the live agent-session registry, in the agents process.
@@ -122,7 +122,7 @@ func (planeSessions) Close(ctx context.Context, org, sessionID, status string) e
 // proposal where the code lives (git — a GitHub pull request for a repository
 // that mirrors there, the branch's page here otherwise).
 //
-// Two peers, ONE seam. The board row is ours and is filed for every run, whatever
+// Two peers, ONE client. The board row is ours and is filed for every run, whatever
 // host the code is on; the address is a property of the host and only git can
 // answer it. Splitting them at the caller would put the choice of backend in the
 // orchestration, which is exactly where it must not be.
@@ -157,7 +157,7 @@ func (planePR) Open(ctx context.Context, in PRInput) (PRRef, error) {
 	// out loud instead of quietly answering with a link that is not where the
 	// review will happen.
 	//
-	// It is a real pull request for every repository now. The seam this replaces
+	// It is a real pull request for every repository now. The client this replaces
 	// answered two different things depending on whether a mirror row pointed at
 	// GitHub — a pull request there, and otherwise a link to a branch-browsing
 	// page, which nobody can approve. The forge has native pull requests, so the
@@ -234,9 +234,9 @@ func planeRoute(ctx context.Context, run RoutedRun) error {
 // lives and where the delivery activity can therefore hand the run over.
 //
 // It builds the process's Dispatcher on first use, which is what binds the
-// routed COMPLETION seam (setRoutedFinalizer): when the machine reports, the
+// routed COMPLETION client (setRoutedFinalizer): when the machine reports, the
 // delivery activity has to verify the pushed ref, file the PR and close the
-// session, and it reaches those seams through that dispatcher. Enqueueing
+// session, and it reaches those clients through that dispatcher. Enqueueing
 // without it would queue runs whose sessions never close.
 func Enqueue(ctx context.Context, in plane.RouteRunIn, log func(msg string, kv ...any)) error {
 	enqueueOnce.Do(func() { NewDispatcher(log) })

@@ -36,13 +36,13 @@ func openTestStore(t *testing.T) *accountStore {
 	return s
 }
 
-// testIdent is the seam a test drives, with NO IAM validator: the HS256 arm alone,
+// testIdent is the client a test drives, with NO IAM validator: the HS256 arm alone,
 // which is what the services that never see an IAM token are built with.
 func testIdent(accounts *accountStore) *identity {
 	return &identity{secret: testSecret, accounts: accounts}
 }
 
-// identFor is the seam with both lanes live, verifying against a REAL issuer: the
+// identFor is the client with both lanes live, verifying against a REAL issuer: the
 // tokens are signed, the JWKS is fetched, and the claim mapping under test is
 // cloud's own. Nothing between a signed token and a caller is faked.
 func identFor(t *testing.T, accounts *accountStore) (*identity, *iamtest.Issuer0) {
@@ -166,7 +166,7 @@ func TestIAMLaneResolvesTheAccount(t *testing.T) {
 		if len(cl.orgs) != 2 || cl.orgs[0].Org != "acme" || cl.orgs[1].Org != "beta" {
 			t.Fatalf("%s: orgs = %v, want [acme beta]", name, cl.orgs)
 		}
-		// An IAM credential NEVER leaves the seam: raw is empty on this lane, so no
+		// An IAM credential NEVER leaves the client: raw is empty on this lane, so no
 		// echo site can hand a platform bearer back to page JS.
 		if cl.raw != "" {
 			t.Fatalf("%s: caller.raw carries the IAM credential", name)
@@ -214,7 +214,7 @@ func TestIAMLaneKeysOnTheSubjectNotTheUsername(t *testing.T) {
 		t.Fatalf("SECURITY: a token with no subject resolved to account %q — the victim's", cl.account)
 	}
 	if _, err := whoOn(t, id, attack, "", ""); err == nil {
-		t.Fatal("SECURITY: the seam admitted a subject-less token")
+		t.Fatal("SECURITY: the client admitted a subject-less token")
 	}
 	// The same token, now WITH its own subject, is a different person entirely and
 	// resolves to no account here — so the refusal above is about the missing
@@ -245,7 +245,7 @@ func TestIAMLaneRefusesAnIDToken(t *testing.T) {
 		t.Fatal("SECURITY: an id_token was accepted as a team session credential")
 	}
 	if _, err := whoOn(t, id, idToken, "", ""); err == nil {
-		t.Fatal("SECURITY: the seam admitted an id_token")
+		t.Fatal("SECURITY: the client admitted an id_token")
 	}
 	// An access token is admitted, and so is a token minted before IAM emitted the
 	// claim at all — the one permissive branch, which must not sign existing users
@@ -281,7 +281,7 @@ func TestIAMLaneRefusesWhatDoesNotVerify(t *testing.T) {
 		if _, err := id.iam(context.Background(), raw); err == nil {
 			t.Fatalf("iam(%s) admitted a caller it must refuse", name)
 		}
-		// And through the whole seam, with no HS256 credential to fall back to.
+		// And through the whole client, with no HS256 credential to fall back to.
 		if _, err := whoOn(t, id, raw, "", ""); err == nil {
 			t.Fatalf("who(bearer=%s) admitted a caller it must refuse", name)
 		}

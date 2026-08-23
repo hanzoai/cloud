@@ -33,7 +33,7 @@ func unseed(t *testing.T) {
 // IsSelfHost answered false for everything, `api.hanzo.ai` read as not-ours, and
 // the claim gate that TestSelfHostsAreNotClaimable proves correct was inert in the
 // only process that runs it. The tests could not see it — they publish the set
-// themselves, in one binary, which is the same blind spot the risk scorer seam has.
+// themselves, in one binary, which is the same blind spot the risk scorer client has.
 //
 // The fix is to derive from config wherever the question is asked. ConfigFromEnv is
 // the ONE reader of that config and every process has the same environment, so the

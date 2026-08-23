@@ -23,7 +23,7 @@ import (
 // queues — so a scheduled post survives restarts and publishes at most once (the
 // publish is CLAIMED by a scheduled→publishing transition before it fires).
 //
-// PUBLISH SEAM — HONEST. A post is pushed through publisherFor(channel). Today no
+// PUBLISH CLIENT — HONEST. A post is pushed through publisherFor(channel). Today no
 // in-process social-publish connector is wired: clients/social's provider push is
 // fail-closed (no deployment carries the OAuth-app credentials) and the
 // clients/automations connector registry is package-private. So every social
@@ -242,7 +242,7 @@ func (s *Store) MarkCalendarFailed(ctx context.Context, org, id, msg string, now
 	return nil
 }
 
-// ---- publish seam ----
+// ---- publish client ----
 
 // publisher pushes one post to its channel. Registering a real connector here is
 // the single change that lights up a channel.
@@ -255,7 +255,7 @@ func publisherFor(channel string) (publisher, bool) {
 }
 
 // publishPost pushes a post through its channel connector, or returns
-// errNotImplemented (→ 501) naming the seam a real connector would plug into.
+// errNotImplemented (→ 501) naming the client a real connector would plug into.
 func publishPost(ctx context.Context, s *cloud.Service[state], p CalendarPost) error {
 	pub, ok := publisherFor(p.Channel)
 	if !ok {
@@ -447,7 +447,7 @@ func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*struct{}, er
 
 // publishCalendarPost publishes a post NOW, synchronously, whatever its
 // schedule. No social connector is wired today, so every channel answers an
-// honest 501 naming the seam a real one would plug into, and the post is
+// honest 501 naming the client a real one would plug into, and the post is
 // recorded failed with that exact reason — never a faked "published".
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}

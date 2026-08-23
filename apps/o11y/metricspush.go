@@ -144,7 +144,7 @@ func stopNativeMetricsPush() {
 }
 
 // writeBatch is the sink one push writes to. Named so tests substitute it
-// without a datastore — the seam that keeps pushOnce pure.
+// without a datastore — the client that keeps pushOnce pure.
 type writeBatch func(context.Context, *zapmetricreceiver.MetricBatch) error
 
 // pushOnce gathers the registry and writes one batch.

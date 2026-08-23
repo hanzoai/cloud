@@ -95,11 +95,11 @@ const (
 	statusStopped = "stopped"
 )
 
-// Runtime is the seam onto the run registry — the bot runtime, which owns the
+// Runtime is the client onto the run registry — the bot runtime, which owns the
 // sandboxes and is therefore the only truthful answer to "what is running". Bound
 // to the real transport in wire.go; a fake in tests.
 //
-// Every method takes org FIRST and the runtime scopes by it. The seam carries no
+// Every method takes org FIRST and the runtime scopes by it. The client carries no
 // authority: cloud decides WHETHER a caller may ask, the runtime answers WHAT it
 // holds for that org.
 type Runtime interface {

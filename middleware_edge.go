@@ -133,7 +133,7 @@ func EdgeCORS(pol *edge.Store) zip.Handler {
 	return edgeCORS(pol, corsVerifiedHost)
 }
 
-// edgeCORS is EdgeCORS over an explicit PROVEN source — the seam the tests drive
+// edgeCORS is EdgeCORS over an explicit PROVEN source — the client the tests drive
 // without standing up a projects store or a plane.
 func edgeCORS(pol *edge.Store, proven verifiedHostFn) zip.Handler {
 	var (

@@ -1,6 +1,6 @@
 package o11y
 
-// The seam between what an agent RUN emits and what this package files it under.
+// The client between what an agent RUN emits and what this package files it under.
 //
 // planeOrg reads one key — hanzo.org — per span, and falls back to the platform's
 // own org when it is absent. The agent spans used to name their tenant
@@ -8,7 +8,7 @@ package o11y
 // stored as PLATFORM telemetry: absent from the org-scoped read the console
 // issues, and sitting in the platform's bucket with that tenant's tool names and
 // user subjects in it. Both halves looked correct in isolation, which is exactly
-// why the seam needs a test of its own.
+// why the client needs a test of its own.
 //
 // The other half lives in apps/agents (TestEverySpanOfARunIsFiledUnderItsTenant),
 // which asserts every span a run produces carries this key. Together they are the

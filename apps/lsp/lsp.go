@@ -528,7 +528,7 @@ func text(b []byte) bool {
 	return len(b) > 0 && !bytes.ContainsRune(b, 0) && utf8.Valid(b)
 }
 
-// ── the identity seam ────────────────────────────────────────────────────────
+// ── the identity client ────────────────────────────────────────────────────────
 
 // as is the context a forge read rides: THIS request's principal, delegated
 // unchanged, so the forge answers for the caller's own authority and this

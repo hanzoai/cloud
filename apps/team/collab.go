@@ -18,7 +18,7 @@ package team
 //
 // The LIVE editing lane (Y.js sync) is the WebSocket served by collabws.go in
 // this same service; this RPC lane is markup-snapshot blob I/O, and blobs are
-// cloud's domain (deps.VFS — the SAME seam and tenant-scoped key layout as
+// cloud's domain (deps.VFS — the SAME client and tenant-scoped key layout as
 // files.go). Both lanes hang under one prefix, so the /v1 catch-all at the edge
 // carries them and no route of their own is needed.
 //
@@ -66,7 +66,7 @@ const collabPrefix = teamPrefix + "/collaborator"
 
 // collabService serves the collaborator planes: the markup-snapshot RPC lane
 // (this file) and the live hocuspocus WS lane (collabws.go), sharing one
-// tenancy gate and one VFS seam. degraded is the fail-closed posture Mount
+// tenancy gate and one VFS client. degraded is the fail-closed posture Mount
 // resolved (no HS256 secret): a typed op cannot be wrapped by Mount's guard, so
 // it asks for itself — see typed.go.
 type collabService struct {

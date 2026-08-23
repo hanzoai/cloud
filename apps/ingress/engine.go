@@ -44,7 +44,7 @@ func newEngine(log luxlog.Logger) *Engine {
 }
 
 // apply recompiles the routing table from the current config and atomically swaps
-// it in — the hot-reload seam. A route referencing an unknown/failed service or a
+// it in — the hot-reload client. A route referencing an unknown/failed service or a
 // bad middleware chain is SKIPPED (and counted), so one malformed object can never
 // take the whole edge down. Returns (live, skipped) route counts.
 func (e *Engine) apply(routes []Route, services map[string]Upstream, mws map[string]Middleware, tlsHosts map[string]struct{}) (live, skipped int) {

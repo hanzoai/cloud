@@ -4,7 +4,7 @@
 // org-overridable library of standardized templates, a PURE merge-field
 // generation engine that renders those templates from the org's own
 // company/cap-table data, a KMS-sealed store for the generated documents, and
-// the e-signature + filing seams that carry a document to execution — all on
+// the e-signature + filing clients that carry a document to execution — all on
 // the shared audit plane.
 //
 // THE BOUNDARY (a design invariant, enforced in the engine and the data model). Hanzo
@@ -21,8 +21,8 @@
 //     yield identical bytes, so a rendered contract is reproducible).
 //   - cek            encryption at rest for the document store (a rendered contract
 //     carries names + terms and is sealed on disk).
-//   - the Esign / Filing seams (providers.go) — provider-agnostic, honest-stub default,
-//     config-driven real provider — mirroring the company formation seams.
+//   - the Esign / Filing clients (providers.go) — provider-agnostic, honest-stub default,
+//     config-driven real provider — mirroring the company formation clients.
 //   - audit.Recorder the ONE tamper-evident trail (deps.Audit); every generate / sign /
 //     file action is recorded, referencing opaque document ids.
 package legal
@@ -155,7 +155,7 @@ type Document struct {
 	SignedAt        int64     `json:"signedAt,omitempty"`
 }
 
-// FilingStatus mirrors the company formation filing seam: honest states, no
+// FilingStatus mirrors the company formation filing client: honest states, no
 // fabricated filing id when no partner is wired.
 type FilingStatus string
 

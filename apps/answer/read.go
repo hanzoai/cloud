@@ -33,7 +33,7 @@ const (
 	maxPageText = 6000
 )
 
-// Page is the crawl seam's value: the URL a page was fetched for and its
+// Page is the crawl client's value: the URL a page was fetched for and its
 // LLM-ready markdown. The answer engine depends on THIS, never on the crawler's
 // own result shape — which is what lets a test inject a fake crawl.
 type Page struct {
@@ -56,7 +56,7 @@ var crawl = crawlPages
 // onRead is the per-source reading progress. It fires for every URL BEFORE the
 // batch dispatches, which is the same instant crawlPages would spawn that URL's
 // worker: the workers all launch in one uninterrupted loop, so emitting here is
-// observably identical and keeps the callback off the crawl seam a test swaps.
+// observably identical and keeps the callback off the crawl client a test swaps.
 func read(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, srcs []Source, urls []string, limit int, onRead func(host string)) []Source {
 	if len(urls) == 0 || len(srcs) == 0 {
 		return srcs
@@ -180,7 +180,7 @@ func crawlPages(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, ur
 
 // landed drops the slots nothing came back for, in rank order.
 //
-// The seam promises "the pages that came back", so handing out zero-value Pages
+// The client promises "the pages that came back", so handing out zero-value Pages
 // would break that contract for every caller — a URL of "" matches no Source, and a
 // cancelled crawl would report a list of nothing-shaped pages instead of an empty
 // one.

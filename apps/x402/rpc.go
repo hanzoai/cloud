@@ -50,7 +50,7 @@ type rail struct{ s *cloud.Service[state] }
 // and answers what happened.
 //
 // FREE FIRST: the price table is asked before anything is required of the world,
-// because the tool plane offers EVERY dispatch to this seam and an unpriced call must
+// because the tool plane offers EVERY dispatch to this client and an unpriced call must
 // not need a payer, a proof or a wallet. A price that cannot be looked up is NOT
 // free — that is a refusal, and the caller must serve nothing.
 //

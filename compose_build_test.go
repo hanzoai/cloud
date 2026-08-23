@@ -3,7 +3,7 @@ package cloud_test
 // THE GATE THAT WAS MISSING. Nothing in this repo called zip's [zip.App.Build]
 // from a test, so "this program does not compose" was a fact only a production
 // startup could discover — and for a subsystem whose surface no test drove, not
-// even then. Three subsystems shipped a middleware seam that could never run:
+// even then. Three subsystems shipped a middleware client that could never run:
 // auditlog and catalog declared middleware on a group whose subtree held no
 // routes (their ops are declared on the App with the whole path, so the routes
 // are siblings of that group, not children), and zen installed a Claim on "/v1"
@@ -18,7 +18,7 @@ package cloud_test
 // BOTH ROUTERS, because a subsystem is mounted through two and they are not the
 // same. Production goes through MountAll, which hands each Mount a *scope* bound
 // to its declared prefixes; a scope rewrites a middleware-carrying Group into an
-// app-wide, path-gated Use, so it can HIDE a seam that a bare *zip.App refuses.
+// app-wide, path-gated Use, so it can HIDE a client that a bare *zip.App refuses.
 // A package's own tests usually mount on the bare app. A subsystem is correct
 // only when it composes both ways, so both are asserted.
 
@@ -116,7 +116,7 @@ func TestSubsystemComposesOnABareApp(t *testing.T) {
 
 // TestMiddlewareOverAnEmptySubtreeIsRefused pins the RULE the three fixes obey,
 // against the framework rather than against our memory of it. Without this, a
-// future zip that stopped refusing the shape would let the seam rot back in and
+// future zip that stopped refusing the shape would let the client rot back in and
 // every test above would still be green — the subsystems would compose, and the
 // middleware would once again never run.
 //
@@ -129,7 +129,7 @@ func TestMiddlewareOverAnEmptySubtreeIsRefused(t *testing.T) {
 	app.Get("/v1/thing", pong)
 
 	if err := app.Build(); err == nil {
-		t.Fatal("Build accepted middleware over an empty subtree — the seam this " +
+		t.Fatal("Build accepted middleware over an empty subtree — the client this " +
 			"file exists to catch would run nowhere and nothing would say so")
 	}
 }

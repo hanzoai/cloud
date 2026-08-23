@@ -36,7 +36,7 @@ import (
 // client-supplied field — the run is THAT org's agent on behalf of THAT org's
 // linked user, billed against THAT org's ledger.
 
-// ── normalized inbound + reply seam ─────────────────────────────────────────
+// ── normalized inbound + reply client ─────────────────────────────────────────
 
 // Inbound is the normalized inbound chat event — ONE shape for every platform. An
 // adapter produces it AFTER it has authenticated the request and parsed the

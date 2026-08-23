@@ -706,7 +706,7 @@ func TestObservation_HasOneConstructor(t *testing.T) {
 	}
 }
 
-// TestOps_EveryOpIsAdmittedAndPriced is the STRUCTURAL half of the money seam and
+// TestOps_EveryOpIsAdmittedAndPriced is the STRUCTURAL half of the money client and
 // of the concurrency bound.
 //
 // Half this surface used to be free: state, features, appetite, snapshot, restore
@@ -869,7 +869,7 @@ func TestEveryOp_IsGatedOnTheCallersOwnBalance(t *testing.T) {
 
 // TestFeatures_IsPricedFromItsWindow: the most expensive read on this surface is
 // not also the cheapest. A 400-day catalogue costs 400 screens, and it is charged
-// at BOTH seams — the gate before the work and the meter after it.
+// at BOTH clients — the gate before the work and the meter after it.
 //
 // Both, because they fail differently and only one of them is a refusal. A meter
 // that reports the right number while the gate asks for nothing is an op that

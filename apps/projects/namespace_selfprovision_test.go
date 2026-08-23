@@ -61,7 +61,7 @@ func TestRedGoneNeverMintsTheNamespace(t *testing.T) {
 
 // TestRedTheCreatePathDoesEnsureTheNamespace is the positive control for the
 // test above: if the delete path's silence were silence everywhere, the first
-// test would pass against a seam that had lost EnsureOrg altogether.
+// test would pass against a client that had lost EnsureOrg altogether.
 func TestRedTheCreatePathDoesEnsureTheNamespace(t *testing.T) {
 	app, f, _ := mountShared(t)
 	s := mounted

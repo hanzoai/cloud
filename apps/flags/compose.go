@@ -1,6 +1,6 @@
 package flags
 
-// compose.go — the in-process COMPOSITION seam other subsystems evaluate flags
+// compose.go — the in-process COMPOSITION client other subsystems evaluate flags
 // through, one-way (they import flags; flags imports none of them). It is the same
 // pattern SetPlatformSwitch/Bool/Register expose for admission: exported functions
 // over the process-wide `mounted` client, so a composing subsystem reaches the ONE
@@ -30,7 +30,7 @@ type Assignment struct {
 }
 
 // Assign evaluates one (org, project) flag for one subject and returns its
-// deterministic assignment. This is THE assignment seam: subject -> variant is a
+// deterministic assignment. This is THE assignment client: subject -> variant is a
 // pure function of (key, subject, definition) via the same engineEvaluate the
 // /v1/flags surface runs — no second bucketing engine, no assignment store.
 // personProps is the optional PostHog person_properties bag the flag's targeting

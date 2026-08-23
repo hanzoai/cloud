@@ -24,7 +24,7 @@ import (
 const listActionsLimit = 200
 
 // state is the guide subsystem's own data. Shared deps (logger, meter, brand) live
-// in the embedded cloud.Base. invoke/toolOK are the per-principal MCP plane seam,
+// in the embedded cloud.Base. invoke/toolOK are the per-principal MCP plane client,
 // defaulted to automations and overridable in tests; detectors are the auto-detect
 // registry.
 type state struct {
@@ -33,7 +33,7 @@ type state struct {
 	brand        string                  // deployment brand — the resolution + admin authoring key
 	defBlueprint Blueprint               // embedded fail-safe blueprint for this brand (ultimate fallback)
 	detectors    map[string]Detector
-	signals      Signals // cross-subsystem growth-observe seam (bound at the composition root)
+	signals      Signals // cross-subsystem growth-observe client (bound at the composition root)
 	ai           cloud.AIClient
 	model        string
 	audit        *audit.Recorder // tamper-evident trail for SuperAdmin blueprint edits
@@ -50,7 +50,7 @@ var mounted *cloud.Service[state]
 // "which file does this request touch" has one answer from one input.
 //
 // org MUST already be validated: principal.Org for a request, or the caller's
-// own server-side resolution for an in-process seam.
+// own server-side resolution for an in-process client.
 func storeFor(stores *cloud.OrgStore[*Store], org string) (*Store, error) {
 	ns, err := cloud.OrgNamespace(org, "")
 	if err != nil {
@@ -1000,7 +1000,7 @@ func doStep(s *cloud.Service[state], c *zip.Ctx) error {
 		// after the handler returns and the Ctx is recycled, so the detach is right —
 		// but a detached context carries no identity, and the JSON arm below runs the
 		// same agent on c.Context(). Today nothing is lost: this reaches automations,
-		// which bills by explicit argument. That is a property of one seam, not of the
+		// which bills by explicit argument. That is a property of one client, not of the
 		// asymmetry, and answer.go had the identical shape until a streamed answer
 		// turned out to buy searches and page renders for free. Carry it now.
 		caller := cloud.Detach(context.Background(), c)

@@ -11,14 +11,14 @@
 //   - engine.go       the ONE place a sync happens: resolve → loop-guard → cursor
 //     dedupe → provider.Apply → chain (hop-bounded). Kind-agnostic.
 //   - provider.go     the engine↔provider contract (Plan/Apply per kind) + registry.
-//   - git_provider.go the git provider, composing the git seams below.
+//   - git_provider.go the git provider, composing the git clients below.
 //   - advance.go      the fast-forward-ONLY ref advance — the safety property.
-//   - importer.go     those seams, answered against the forge (git.hanzo.ai).
+//   - importer.go     those clients, answered against the forge (git.hanzo.ai).
 //   - gitexec.go      the hardened `git` subprocess every advance runs through.
 //   - sync_api.go     /v1/sync CRUD + /v1/sync/:id/run (manual).
 //
 // Triggers (GitHub App webhook, Hanzo Git push webhook) resolve to Syncs and call
-// cloud.Sync — they never sync directly, so the engine is the single seam.
+// cloud.Sync — they never sync directly, so the engine is the single client.
 package sync
 
 import (
@@ -58,7 +58,7 @@ var schedStop func()
 // "which file does this request touch" has one answer from one input.
 //
 // org MUST already be validated: principal.Org for a request, or the caller's
-// own server-side resolution for an in-process seam.
+// own server-side resolution for an in-process client.
 //
 // sync is org-scoped, not project-scoped — a link binds two endpoints within
 // one org.
@@ -91,13 +91,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	registerProvider(gitProvider{})
 	cloud.RegisterSync(reconcileEvent)
-	// The git object seams, answered against the FORGE (importer.go). This app
+	// The git object clients, answered against the FORGE (importer.go). This app
 	// owns them now because it owns the one thing the forge cannot hold — the
 	// record of what an advance did — and because the forge itself is reachable
 	// from any process, so there is no store to be co-resident with any more.
 	cloud.RegisterGitImporter(importer{})
 	cloud.RegisterGitMirrorController(mirrorControl{})
-	// The same reconcile and the same git seams, offered to the processes the
+	// The same reconcile and the same git clients, offered to the processes the
 	// triggers actually land in — integrations and the webhook door, neither of
 	// which is this one (run_plane.go, import_plane.go).
 	exposeRun()
@@ -113,7 +113,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // then closes every open per-org store — in THAT order, so a store is never closed out
 // from under a running reconcile. Idempotent.
 //
-// The git seams are withdrawn first, so a call arriving mid-shutdown gets the
+// The git clients are withdrawn first, so a call arriving mid-shutdown gets the
 // fail-closed "not registered" rather than reaching a store that is about to
 // close under it.
 func Shutdown() error {

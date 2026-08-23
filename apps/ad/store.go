@@ -118,7 +118,7 @@ func (s *Store) addColumnIfMissing(table, col, spec string) error {
 func (s *Store) Close() error { return s.db.Close() }
 
 // AdCampaign is an org-scoped ad campaign — the root of the ad hierarchy
-// (campaign → ad sets → ads; the ad-set/ad legs hang off this seam as
+// (campaign → ad sets → ads; the ad-set/ad legs hang off this client as
 // follow-ups). Budget and Spend are minor units (cents). Platform is the ad
 // network (meta/google/tiktok/x); Status is the lifecycle
 // (draft/active/paused/completed) — both validated at the write layer against

@@ -515,7 +515,7 @@ func usageByModelFrom(rows []map[string]any) []usageByModel {
 
 // ── /v1/admin/products — workload registry (ProductRow[]) ────────────────────
 // The handler + the fleet projection live in products.go: it reads the operator App-CR +
-// drift observation through the in-process paas.CurrentFleet seam (reuse, never fork).
+// drift observation through the in-process paas.CurrentFleet client (reuse, never fork).
 
 // ── /v1/admin/overview — Platform Overview tiles (OverviewData) ───────────────
 
@@ -628,8 +628,8 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 	}
 	sources = append(sources, core.SrcOf("o11y", oErr, o11yRows, now))
 
-	// Fleet workload registry — the operator App-CR + drift observation via the paas seam
-	// (products.go). A nil/unready seam degrades to an honest-empty rollup (zeros, no error);
+	// Fleet workload registry — the operator App-CR + drift observation via the paas client
+	// (products.go). A nil/unready client degrades to an honest-empty rollup (zeros, no error);
 	// a hard observation error marks the "fleet" source degraded without failing the overview.
 	fleetRows, fleetRoll, fleetErr := fleetProducts(ctx, c)
 	sources = append(sources, core.SrcOf("fleet", fleetErr, len(fleetRows), now))

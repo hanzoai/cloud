@@ -123,7 +123,7 @@ type attempt struct {
 }
 
 type state struct {
-	store AttemptStore // the durability seam — fileStore (local dev) or cloud backend
+	store AttemptStore // the durability client — fileStore (local dev) or cloud backend
 	// claims is the published plane's own store. Separate from `store` because
 	// the two planes must never share a write path: an attempt is something our
 	// harness did, a claim is a report of someone else's number, and one surface

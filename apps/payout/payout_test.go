@@ -213,18 +213,18 @@ func TestAFailedReadIsNotZero(t *testing.T) {
 	}
 }
 
-// The SHAPE of the money seam. The three credit programs minted platform credit
+// The SHAPE of the money client. The three credit programs minted platform credit
 // because this client carried a Deposit, so reviving that mint must start by
 // re-declaring the capability here, in front of a test that says no.
-func TestSeamIsReadOnly(t *testing.T) {
+func TestClientIsReadOnly(t *testing.T) {
 	var c any = payout.NewClient()
 	if _, ok := c.(interface {
 		Deposit(context.Context, string, string, int64, string, string, string, string) (string, error)
 	}); ok {
-		t.Fatal("payout.Client grew a Deposit again — this seam READS; money-in is an admin grant")
+		t.Fatal("payout.Client grew a Deposit again — this client READS; money-in is an admin grant")
 	}
 	if _, ok := c.(payout.Commerce); !ok {
-		t.Fatal("Client must still satisfy the read seam")
+		t.Fatal("Client must still satisfy the read client")
 	}
 }
 

@@ -35,7 +35,7 @@ import (
 // rested on one premise — every route was built by a handler FACTORY closing over
 // a bundle route name, and a closure has no doc comment to lift — which is a fact
 // about the FACTORY and not about the routes. Writing the ops as methods over the
-// same bundle seam, on the shared apps/goja kit, retired it; the HIP is wrong and
+// same bundle client, on the shared apps/goja kit, retired it; the HIP is wrong and
 // should be corrected rather than worked around.
 var untypedByDesign = map[string]string{}
 

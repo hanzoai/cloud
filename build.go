@@ -450,7 +450,7 @@ func IsBotActor(login string) bool {
 //
 // It answers HOW MANY BUILDS IT LAUNCHED. Most pushes track no application, so
 // zero is ordinary rather than a failure — but zero and one are different facts,
-// and a seam that returns only an error collapses them into the same "accepted".
+// and a client that returns only an error collapses them into the same "accepted".
 // The plane half already carried the number (plane.Built.Builds) while the
 // in-process half threw it away, so the answer a caller got depended on which
 // process the builder happened to be in.
@@ -502,7 +502,7 @@ func OnGitPush(ctx context.Context, ev GitPushEvent) (int, error) {
 // ---- first-party service release (push→build→image→CR rollout) ----
 
 // ServiceReleaseEvent describes a proven, clean-semver image ready to roll live on
-// an operator-managed first-party service. It is the payload of the release seam
+// an operator-managed first-party service. It is the payload of the release client
 // that closes push→build→image→CR: after a build produces the image, the CR for
 // this service is patched to it and the operator reconciles the Deployment.
 //
@@ -517,7 +517,7 @@ type ServiceReleaseEvent struct {
 	SHA     string
 }
 
-// serviceReleaser is the registered first-party CR-rollout seam. clients/paas
+// serviceReleaser is the registered first-party CR-rollout client. clients/paas
 // (the owner of the hanzo.ai/v1 Service CR control plane) installs it in Mount; a
 // proven build calls OnServiceRelease, which patches spec.image on the matching
 // CR. The inversion keeps package cloud from importing clients/paas (which imports
@@ -560,7 +560,7 @@ func OnServiceRelease(ctx context.Context, ev ServiceReleaseEvent) error {
 // ---- git lifecycle event stream ----
 //
 // One event, many subscribers. push-to-deploy (OnGitPush) is the deploy
-// subscriber-of-record and stays exactly as it is; this seam generalizes the SAME
+// subscriber-of-record and stays exactly as it is; this client generalizes the SAME
 // inversion to N reactors (mirror-out, Slack-notify, …) so git/platform EMIT a
 // lifecycle fact and never import the subscribers. It is deliberately SEPARATE
 // from OnGitPush — the deploy path is single-registrant and synchronous, this
@@ -585,7 +585,7 @@ const (
 //   - Pusher              who pushed (best-effort; "" for a client-less push).
 //   - DeployID/Detail     the deployment id + a human one-liner (a deploy transition).
 //   - Origin              "" for a native push; the source host when the refs
-//     arrived via an inbound mirror sync — the loop-prevention seam that lets the
+//     arrived via an inbound mirror sync — the loop-prevention client that lets the
 //     outbound mirror subscriber suppress a re-mirror of refs it just pulled in.
 type LifecycleEvent struct {
 	Kind     LifecycleKind
@@ -632,7 +632,7 @@ func RegisterLifecycleSubscriber(fn func(ctx context.Context, ev LifecycleEvent)
 	lifecycleSubscribers = append(lifecycleSubscribers, fn)
 }
 
-// ResetLifecycleSubscribers clears the registry. TEST-ONLY seam (a test mounts and
+// ResetLifecycleSubscribers clears the registry. TEST-ONLY client (a test mounts and
 // unmounts repeatedly); production registers once at Mount and never resets.
 func ResetLifecycleSubscribers() { lifecycleSubscribers = nil }
 
@@ -669,7 +669,7 @@ func EmitLifecycle(ctx context.Context, ev LifecycleEvent) {
 // rather than pretending.
 //
 // NETWORK PATH PRESERVED: absent co-residency the ZAP-RPC + disabled fallbacks apply
-// (out-of-process commerce, or not wired), so the remote proxy seam
+// (out-of-process commerce, or not wired), so the remote proxy client
 // (CLOUD_COMMERCE_ZAP_ADDR) is unchanged — the live default still selects the
 // network client when commerce is not enabled in this process.
 func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {

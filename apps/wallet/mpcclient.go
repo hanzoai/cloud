@@ -3,7 +3,7 @@ package wallet
 // mpcclient.go is the thin typed client to the DEPLOYED luxfi/mpc ring's
 // INTERNAL threshold API (github.com/luxfi/mpc cmd/mpcd/main.go, served on the
 // node's --api port, :9800). This is the canonical server-to-server custody
-// seam — the exact wire contract luxfi/mpc's own /sign handler documents for a
+// client — the exact wire contract luxfi/mpc's own /sign handler documents for a
 // custody adapter. cloud speaks the ring's real HTTP protocol WITHOUT importing
 // github.com/luxfi/mpc (which would drag chi/Postgres/HSM/webauthn into the hot
 // binary): the clients/mpc precedent applied to signing.

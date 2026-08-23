@@ -59,7 +59,7 @@ package risk
 // A family owes nothing else. It does not own its durability (the shelf does), its
 // policy (policy.go does), its aggregates (ring.go does), its address (address.go
 // does) or its retention. Those are this plane's, and they are the same for every
-// family — which is the point of the seam being here and not around the whole plane.
+// family — which is the point of the client being here and not around the whole plane.
 
 import (
 	"encoding/json"
@@ -404,14 +404,14 @@ func (s *shape) UnmarshalJSON(b []byte) error {
 // fact about the type here rather than a predicate every call site has to remember.
 // That deleted the org argument from seven call sites that all passed the same one.
 //
-// # What this seam does NOT hide, stated so it is not discovered later
+// # What this client does NOT hide, stated so it is not discovered later
 //
 // [anomaly.Snapshot], [anomaly.Assessment] and [anomaly.State] are the plane's shared
 // VOCABULARY — the value, the verdict and the report — and a second family speaks
 // them. Two of the three are family-neutral. Snapshot is not: `Ref` and `Cur` are
 // [][]float64, which is a tree count by a region count, so a family whose state is not
 // a rectangle of masses either fits itself into that or the Snapshot widens. That is
-// the one place a remote family presses on this seam, and it presses on the address
+// the one place a remote family presses on this client, and it presses on the address
 // too, which hashes those arrays. Naming it here is cheaper than finding it in a
 // migration.
 type detector interface {
@@ -428,7 +428,7 @@ type detector interface {
 	// state is the governance report, and its Digest is the QUALIFIED name of this
 	// space ([family.qualify]) rather than the family's bare digest.
 	//
-	// That is the one place this seam RESHAPES what a family hands back, and it is
+	// That is the one place this client RESHAPES what a family hands back, and it is
 	// deliberate. The report is surfaced to a caller who is told to compare its `shape`
 	// with the `shape` on a published value and with the `shape` a verdict cites — and
 	// those three were derived in three different places from three different sources.

@@ -210,7 +210,7 @@ func TestRefusedStaysRefused(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody
+// because the CLIENT they arrived through cannot carry one — not because nobody
 // wrote it.
 //
 // EMBEDDED STRUCT. makeIn (consumers.go) is the create body: the path's stream,

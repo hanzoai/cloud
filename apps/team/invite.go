@@ -23,7 +23,7 @@ package team
 // Huly accounts protocol whose invite verb is `sendInvite`; this implements that
 // backend RPC (account method "sendInvite") plus "getMemberships" for the
 // mid-session refresh. If the shipped SPA build has no invite button wired to
-// sendInvite yet, the RPC is still the one backend seam the front binds to when
+// sendInvite yet, the RPC is still the one backend client the front binds to when
 // the button lands — no second path.
 
 import (
@@ -228,7 +228,7 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 		g.log.Error("team: invite — local member row write failed", "err", err)
 		return g.fail(c, statusInvite("could not add workspace member: "+err.Error()))
 	}
-	// The entitlement gate AT THE ADD POINT — the SAME seam selectWorkspace gates login
+	// The entitlement gate AT THE ADD POINT — the SAME client selectWorkspace gates login
 	// with (entitle). A guest added beyond the plan's team.guests cap is caught here too,
 	// not only at the guest's later login. OBSERVE-MODE, consistent with the login gate:
 	// entitle logs the denial and admits today; the 402 below arms itself the day

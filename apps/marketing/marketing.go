@@ -30,10 +30,10 @@
 //     apps/social, which owns the connected accounts and the publish edge — a
 //     scheduled social post has two stores today and apps/social is the one.
 //   - Suppression / unsubscribe — a per-org opt-out list enforced at the ONE send
-//     seam (suppress.go); every send path passes through it, plus a signed
+//     client (suppress.go); every send path passes through it, plus a signed
 //     public one-click unsubscribe.
 //
-// THE ONE SEND SEAM. Every marketing delivery funnels through state.deliver,
+// THE ONE SEND CLIENT. Every marketing delivery funnels through state.deliver,
 // which checks the per-org suppression list and then hands off to the platform
 // notify rail (notify.Send) — marketing never builds a second sender.
 //
@@ -53,7 +53,7 @@
 //
 // TENANT ISOLATION is enforced SERVER-SIDE on every request: the org is the
 // value SanitizeIdentity minted from the VALIDATED bearer owner claim (HIP-0026),
-// carried to the typed seam by cloud.Bridge and read back with
+// carried to the typed client by cloud.Bridge and read back with
 // principal.OrgFrom — NEVER a client-supplied header and never an In field.
 // Every store query filters WHERE org=?, so one tenant can never read or mutate
 // another's data. The MCP projection carries no principal, so every org-scoped

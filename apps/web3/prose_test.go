@@ -30,7 +30,7 @@ import (
 )
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody
+// because the CLIENT they arrived through cannot carry one — not because nobody
 // wrote it. It is exact in BOTH directions: a bare property anywhere else goes
 // red, and an entry here that starts publishing prose goes red too, which is the
 // day the generator learns and this ledger must shrink rather than outlive the

@@ -28,7 +28,7 @@ import (
 const testTimeout = 30 * time.Second
 
 // fakeProvider is an injectable idv.Provider whose Start/Check statuses are fixed by
-// the test — so we can drive the seam, including a HOSTILE provider that tries to
+// the test — so we can drive the client, including a HOSTILE provider that tries to
 // report a terminal decision on Start.
 type fakeProvider struct {
 	name        string
@@ -447,9 +447,9 @@ func TestListSubjectsOmitsPII(t *testing.T) {
 	}
 }
 
-// TestProviderSeamRefreshReportsDecision proves refresh reflects a provider's settled
+// TestProviderClientRefreshReportsDecision proves refresh reflects a provider's settled
 // decision (provider-reported), attributed to the provider.
-func TestProviderSeamRefreshReportsDecision(t *testing.T) {
+func TestProviderClientRefreshReportsDecision(t *testing.T) {
 	app, _ := mount(t)
 	setProvider(fakeProvider{name: "persona", startStatus: idv.StatusPending, checkStatus: idv.StatusVerified, verifyURL: "https://verify.example/x"})
 	const org = "acme"

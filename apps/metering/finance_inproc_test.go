@@ -11,7 +11,7 @@ import (
 	"github.com/hanzoai/cloud/types"
 )
 
-// TestRecord_DebitsFinanceInProcess pins the money-critical seam: when a finance ledger is
+// TestRecord_DebitsFinanceInProcess pins the money-critical client: when a finance ledger is
 // co-resident (finance.Current() != nil), Record posts the usage debit DIRECTLY to the
 // native ledger and NEVER touches HTTP. It also locks the anti-leak invariant — a micros-only
 // debit (the AI meter prices sub-cent) lands EXACTLY in the 18-decimal ledger (not dropped to
@@ -29,7 +29,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	}
 
 	// A commerce fake that MUST NOT be hit: any HTTP call records fc.method, which we assert
-	// stays empty. The client is Enabled (BaseURL set) so the finance seam — not "not
+	// stays empty. The client is Enabled (BaseURL set) so the finance client — not "not
 	// configured" — is what intercepts.
 	fc := &fakeCommerce{status: 500, reply: `boom`}
 	srv := httptest.NewServer(fc.handler())
@@ -73,7 +73,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 		t.Fatalf("balance after a repeated correlation id = %s; want 0.285 (it billed)", bal)
 	}
 
-	// Not one byte of HTTP: the finance seam intercepted every debit.
+	// Not one byte of HTTP: the finance client intercepted every debit.
 	if fc.method != "" {
 		t.Fatalf("commerce HTTP was called (%s %s); finance co-resident must intercept", fc.method, fc.path)
 	}

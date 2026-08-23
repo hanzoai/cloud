@@ -374,7 +374,7 @@ func parseMem(s string) (float64, bool) {
 // EstimateCompose parses a compose document and prices it with the process rate
 // card. id labels the result (the template id); pass "" for an ad-hoc compose.
 // This is the ONE entrypoint the HTTP handlers and the in-process deploy/metering
-// seam call.
+// client call.
 func EstimateCompose(id string, doc []byte) (Estimate, error) {
 	return estimateWith(id, doc, rates)
 }
@@ -451,7 +451,7 @@ func priceFootprint(vcpuHr, gbHr float64, rc RateCard) (microPerHour int64, cent
 // replicas — with the process rate card. It is the single-container analogue of
 // EstimateTemplate: a platform app (clients/platform) is one image at N replicas,
 // not a compose stack, so the deploy-compute meter prices a running deployment
-// through THIS seam while a multi-service blueprint prices through EstimateTemplate.
+// through THIS client while a multi-service blueprint prices through EstimateTemplate.
 // Same kernel — class inferred from the image, class-default footprint × replicas,
 // priced by the SAME RateCard via priceFootprint — so a bare deployment and a
 // one-service template of the same image cost identically. est.MicroUSDPerHour is

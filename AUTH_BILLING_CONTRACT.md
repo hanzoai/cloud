@@ -112,7 +112,7 @@ cloud is the single meter and gate. `SanitizeIdentity` (mirrored in-binary by
 
 ## 4a. Per-product metering + the product/agent cost axes
 
-Two metering seams share the ONE commerce ledger (`Deps.Metering`):
+Two metering clients share the ONE commerce ledger (`Deps.Metering`):
 
 - **`BillingGate`** (`middleware_billing.go`) — the request EDGE, priced by PATH
   (`DefaultPrice`). `/v1/ai/*` self-meters token spend upstream (gateway/ai), so it
@@ -166,7 +166,7 @@ silently ignored):
 A row that already carries `metadata.product`/`agent` wins, so this degrades to a
 no-op when the meter/commerce persist them natively (forward-compatible).
 
-**Remaining checklist** (each is the same seam):
+**Remaining checklist** (each is the same client):
 
 1. **Native `product`/`agent` fields** — add `Product`/`Agent` to
    `commerce/metering.Usage` + `commerce` `usageRequest`/metadata, have each

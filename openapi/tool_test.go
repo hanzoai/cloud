@@ -32,7 +32,7 @@ type toolOut struct {
 }
 
 // declaredIn is the body an untyped route DECLARES through openapi.Register —
-// the seam that gives an untyped route a schema and still no tool.
+// the client that gives an untyped route a schema and still no tool.
 type declaredIn struct {
 	Note string `json:"note"`
 }

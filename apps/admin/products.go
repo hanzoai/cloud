@@ -8,7 +8,7 @@ package admin
 // SOURCE — reuse, never fork. The inventory is the SAME observation the native PaaS control
 // plane already computes for /v1/platform/fleet (clients/platform: observeFleet → observeCR →
 // drift.go, one k8s dynamic client, one drift model). paas publishes it as an in-process
-// seam (platform.CurrentFleet, fleet.go); admin RESOLVES that seam and projects each AppView
+// client (platform.CurrentFleet, fleet.go); admin RESOLVES that client and projects each AppView
 // onto the productRow the SPA decodes. There is no second k8s client and no second drift
 // definition — the admin board and the PaaS board can never disagree about what the fleet is
 // or what "drift" means. When the PaaS plane is not co-resident, or its k8s client did not
@@ -29,7 +29,7 @@ import (
 // verdict. Optionally narrowed by kind, tier or env, each an exact match.
 //
 // The rows are the SAME observation /v1/platform/fleet renders — read through the in-process
-// platform seam, not a second k8s client — so the two boards can never disagree about what
+// platform client, not a second k8s client — so the two boards can never disagree about what
 // the fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,
 // never a fabricated row.
 //

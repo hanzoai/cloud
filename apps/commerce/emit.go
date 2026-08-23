@@ -99,8 +99,8 @@ func (s screen) emit(p payment, ref string) {
 	}
 	// The peer call is read HERE, on the request's own goroutine, so the detached
 	// goroutine below holds a VALUE rather than reading a package variable while
-	// something else writes it — [screen.learn]'s reason, and a seam read from a
-	// goroutine nobody joins is a seam no test can put back.
+	// something else writes it — [screen.learn]'s reason, and a client read from a
+	// goroutine nobody joins is a client no test can put back.
 	call := send
 	go func() {
 		defer func() { <-emitting }()

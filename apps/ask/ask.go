@@ -38,7 +38,7 @@ import (
 )
 
 // state is the advisor's own data: the contributor registry (the plug-in domains) and the
-// NARRATION-ONLY model seam. ai + model rephrase the grounded facts more naturally; they NEVER
+// NARRATION-ONLY model client. ai + model rephrase the grounded facts more naturally; they NEVER
 // source a figure. nil ai ⇒ the advisor returns its deterministic templated answer over the same
 // real figures — the numbers are identical whether the model plane is up or down.
 type state struct {
@@ -162,7 +162,7 @@ type askAnswer struct {
 // rule: this route cannot be a typed op, so zipdoc has no doc comment to lift, and
 // without a Describe the document publishes an operationId and nothing else — an SDK
 // method that cannot explain itself and a CLI command with no help. Describe is the
-// seam for exactly the operations the wire refuses to type.
+// client for exactly the operations the wire refuses to type.
 func init() {
 	openapi.Register("/v1/ask", http.MethodPost, askRequest{}, nil)
 	openapi.Describe("/v1/ask", http.MethodPost,
@@ -187,7 +187,7 @@ func init() {
 //
 // app is not handed to the registry: a contributor reaches its domain by NAME over the
 // plane, so there is nothing for it to do with this process's router. Keeping the router
-// out of the seam is what makes "which process owns that data" stop being the advisor's
+// out of the client is what makes "which process owns that data" stop being the advisor's
 // problem.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "ask")

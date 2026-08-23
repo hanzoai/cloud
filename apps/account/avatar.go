@@ -9,7 +9,7 @@ package account
 // attempt with "Edit in IAM", which links to an IAM that cannot do it either.
 // Production agreed: the address was a 404 while the key surface beside it was a 403.
 //
-// STORAGE IS deps.VFS — the existing S3 seam (SeaweedFS via clients/s3vfs), which
+// STORAGE IS deps.VFS — the existing S3 client (SeaweedFS via clients/s3vfs), which
 // was chosen for exactly this: "an adapter+crypto is needless complexity for small
 // avatars". No new store, no second blob path.
 //

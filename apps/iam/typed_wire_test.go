@@ -6,7 +6,7 @@ package iam
 // It held a permanent refusal: iam was "a WHOLLY OPAQUE product", five `app.All`
 // wildcards relaying a nested app through zip.AdaptNetHTTP, and "none of the five
 // can become a typed op … a structural fact about the mount, not a backlog item".
-// The fact was true and the reason was wrong: it was a property of the SEAM, not of
+// The fact was true and the reason was wrong: it was a property of the CLIENT, not of
 // iam. zip.Graft composes the App instead of adapting a handler, so the nested
 // registry arrives with it, and the refusal has nothing left to refuse.
 //
@@ -269,7 +269,7 @@ func TestServingIsUnchanged(t *testing.T) {
 	// The nested app's OWN Guard envelope reaches the caller unchanged. cloud's error
 	// shape is nested under "error"; this one is flat with a numeric "status", which is
 	// the tell that the response was composed inside github.com/hanzoai/iam — and it is
-	// the proof that the graft carried iam's app.Use(Guard) seam with it rather than
+	// the proof that the graft carried iam's app.Use(Guard) client with it rather than
 	// copying its routes out from under it.
 	status, body := get(t, app, "/v1/iam/users")
 	if status != http.StatusUnauthorized {

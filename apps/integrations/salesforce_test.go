@@ -12,7 +12,7 @@ import (
 // newSalesforceMock stands in for the Salesforce token endpoint. It reuses the shared
 // fakeIDToken helper (microsoft_test.go). It returns tokens +
 // a plausible https instance_url + a decode-only id_token. Repoints the login base via
-// the env seam.
+// the env client.
 func newSalesforceMock(t *testing.T, instanceURL string) {
 	t.Helper()
 	idToken := fakeIDToken(t, map[string]any{"user_id": "005x00000012345", "email": "admin@acme.com"})
@@ -155,7 +155,7 @@ func TestSalesforceE2ESealsAndIsolates(t *testing.T) {
 			t.Fatalf("%s must be sealed for acme, got %q ok=%v", name, got, ok)
 		}
 	}
-	// Tenant isolation: org B has nothing and the token seam refuses it.
+	// Tenant isolation: org B has nothing and the token client refuses it.
 	if _, ok := kmsSecret(t, kc, "orgb", "salesforce", accessSecret); ok {
 		t.Fatal("orgb must not have a credential")
 	}

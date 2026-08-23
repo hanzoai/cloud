@@ -41,7 +41,7 @@ type fakeVector struct {
 
 // fakeAI is a deterministic in-test AIClient: Embed returns one embedDims-vector
 // per input, so the KB index path is exercised offline through the SAME deps.AI
-// seam production uses — no HTTP embed endpoint.
+// client production uses — no HTTP embed endpoint.
 type fakeAI struct{ dims int }
 
 func (fakeAI) ChatCompletion(context.Context, *cloud.ChatRequest) (*cloud.ChatResponse, error) {

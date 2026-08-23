@@ -1,7 +1,7 @@
 package main
 
 // client.go — the KMS REST client for ONE face (the standalone source OR the
-// cloud destination), plus the transport seam that lets tests drive cloud's REAL
+// cloud destination), plus the transport client that lets tests drive cloud's REAL
 // in-process /v1/kms (via zip's app.Fiber().Test) without a network listener.
 //
 // The tool authenticates with a per-CR org-bound bearer (owner==projectSlug),
@@ -32,7 +32,7 @@ import (
 	"github.com/hanzoai/cloud/internal/shorten"
 )
 
-// doer is the transport seam. Production is *http.Client; tests inject an adapter
+// doer is the transport client. Production is *http.Client; tests inject an adapter
 // that routes requests to cloud's in-process zip app (app.Fiber().Test), which has
 // the identical Do(*http.Request) (*http.Response, error) signature.
 type doer interface {

@@ -9,10 +9,10 @@ import (
 	agentspeer "github.com/hanzoai/cloud/plane/agents"
 )
 
-// adapters.go binds the Sessions seam to the agents in-process control plane
+// adapters.go binds the Sessions client to the agents in-process control plane
 // (clients/agents). It is the ONLY file in clients/link that imports agents;
 // http.go/store.go/route.go stay free of it so the orchestration is unit-tested
-// against a fake seam. agents does NOT import link, so this direction is
+// against a fake client. agents does NOT import link, so this direction is
 // cycle-free. It is also where the revoking user's Subject becomes the session
 // Actor (agents.BillingActor) — the single place that binds a login-manager stop to
 // the caller's own sessions, so http.go never needs to know the actor format.

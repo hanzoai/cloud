@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// stubToken overrides the connector-custody seam so the provider path is
+// stubToken overrides the connector-custody client so the provider path is
 // exercised without standing up KMS + integrations. Restored on cleanup.
 func stubToken(t *testing.T, fn func(ctx context.Context, org, provider, name string) ([]byte, error)) {
 	t.Helper()
@@ -30,7 +30,7 @@ func stubMeta(t *testing.T, h http.HandlerFunc) *httptest.Server {
 }
 
 // TestLaunchPaid_MetaCreatesViaConnectorToken is the proof that /v1/ad consumes
-// the connector plane: LaunchPaid resolves the ORG'S token via the TokenFor seam
+// the connector plane: LaunchPaid resolves the ORG'S token via the TokenFor client
 // and creates the campaign on Meta with that token on the Authorization header.
 func TestLaunchPaid_MetaCreatesViaConnectorToken(t *testing.T) {
 	var (

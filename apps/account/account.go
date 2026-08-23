@@ -111,7 +111,7 @@ type state struct {
 	iam      *iamClient
 	csrfKey  []byte       // keyed-BLAKE3 MAC key for the money-write CSRF token (csrf.go)
 	writesRL *rateLimiter // per-IP abuse cap on the money-write routes (ratelimit.go)
-	// vfs is cloud's blob seam (deps.VFS) — where a profile photo's bytes live
+	// vfs is cloud's blob client (deps.VFS) — where a profile photo's bytes live
 	// (avatar.go). NewBase does not carry it, so it is taken from deps here, the
 	// same way apps/team's files plane takes it.
 	vfs cloud.VFSClient

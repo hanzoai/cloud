@@ -7,13 +7,13 @@ package commerce
 //
 // The address has three parts — (Org, Subject, Test) — and the adapter used to drop
 // the third on the floor. `Test` was never passed to Deposit and both balance reads
-// hardcoded `false`, so every credit commerce minted through this seam landed in the
+// hardcoded `false`, so every credit commerce minted through this client landed in the
 // LIVE books whatever the caller meant, and a sandbox tenant's grant became money the
 // AI spend gate buys real inference with. finance keeps sandbox money in a separate
 // file per org, so this is not a flag being ignored — it is a different ledger.
 //
 // It asserts against a RECORDING finance client rather than a real one on purpose.
-// What changed here is the translation, and a recording seam states the arguments
+// What changed here is the translation, and a recording client states the arguments
 // exactly; that finance then routes (org, test) to the right file is finance's own
 // property and is covered where it lives (apps/finance).
 
@@ -69,10 +69,10 @@ func (r *recorder) SumUsageSince(context.Context, string, bool, int64) (int64, e
 	return 0, nil
 }
 
-// seam is the adapter under test, bound once. A composite literal cannot start an
+// client is the adapter under test, bound once. A composite literal cannot start an
 // if-statement's expression, and naming it also says what it is: the ONE value
 // commerce is handed as its credit ledger.
-var seam = ledger{}
+var client = ledger{}
 
 // recording publishes the recorder as the process finance client for one test.
 func recording(t *testing.T) *recorder {
@@ -102,7 +102,7 @@ func TestLedgerAdapter_TestRoutesToTheSandboxBooks(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := recording(t)
 
-			_, cents, err := seam.Credit(context.Background(), creditledger.CreditInput{
+			_, cents, err := client.Credit(context.Background(), creditledger.CreditInput{
 				Org:            "acme",
 				Subject:        "acme/alice",
 				Currency:       "usd",
@@ -147,14 +147,14 @@ func TestLedgerAdapter_TestRoutesToTheSandboxBooks(t *testing.T) {
 func TestLedgerAdapter_SandboxMoneyIsNotSpendable(t *testing.T) {
 	recording(t)
 
-	if _, _, err := seam.Credit(context.Background(), creditledger.CreditInput{
+	if _, _, err := client.Credit(context.Background(), creditledger.CreditInput{
 		Org: "acme", Subject: "acme/alice", Currency: "usd",
 		AmountCents: 9900, IdempotencyKey: "pay_sandbox", Test: true,
 	}); err != nil {
 		t.Fatalf("credit: %v", err)
 	}
 
-	live, err := seam.Balance(context.Background(), "acme", "acme/alice", "usd", false)
+	live, err := client.Balance(context.Background(), "acme", "acme/alice", "usd", false)
 	if err != nil {
 		t.Fatalf("live balance: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestLedgerAdapter_SandboxMoneyIsNotSpendable(t *testing.T) {
 		t.Fatalf("LIVE balance=%d after a SANDBOX credit, want 0 — sandbox money became spendable", live)
 	}
 
-	sandbox, err := seam.Balance(context.Background(), "acme", "acme/alice", "usd", true)
+	sandbox, err := client.Balance(context.Background(), "acme", "acme/alice", "usd", true)
 	if err != nil {
 		t.Fatalf("sandbox balance: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestLedgerAdapter_BalanceReadsTheAccountItIsAsked(t *testing.T) {
 		subject string
 		cents   int64
 	}{{"acme", 100}, {"acme/alice", 700}} {
-		if _, _, err := seam.Credit(context.Background(), creditledger.CreditInput{
+		if _, _, err := client.Credit(context.Background(), creditledger.CreditInput{
 			Org: "acme", Subject: seed.subject, Currency: "usd",
 			AmountCents: seed.cents, IdempotencyKey: "seed:" + seed.subject,
 		}); err != nil {
@@ -194,7 +194,7 @@ func TestLedgerAdapter_BalanceReadsTheAccountItIsAsked(t *testing.T) {
 	}
 	rec.reads = nil
 
-	pool, err := seam.Balance(context.Background(), "acme", "", "usd", false)
+	pool, err := client.Balance(context.Background(), "acme", "", "usd", false)
 	if err != nil {
 		t.Fatalf("pool balance: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestLedgerAdapter_BalanceReadsTheAccountItIsAsked(t *testing.T) {
 		t.Errorf("pool read addressed subject %q, want acme", got.subject)
 	}
 
-	member, err := seam.Balance(context.Background(), "acme", "acme/alice", "usd", false)
+	member, err := client.Balance(context.Background(), "acme", "acme/alice", "usd", false)
 	if err != nil {
 		t.Fatalf("member balance: %v", err)
 	}

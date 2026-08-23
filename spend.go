@@ -131,7 +131,7 @@ func (s Standing) String() string {
 //
 // The allowance leg is a PARAMETER rather than something resolved in here, and
 // it has no wrapper that defaults it. A convenience Stand(lic, w) existed and
-// passed AllowanceUnknown for every caller, which meant any new seam could skip
+// passed AllowanceUnknown for every caller, which meant any new client could skip
 // the leg by picking the shorter name and nothing would say so. One name, leg
 // always stated.
 //

@@ -550,7 +550,7 @@ func intQuery(raw string, def int) int {
 	return n
 }
 
-// The two seams sync writes and reads through, as package vars so the reconcile
+// The two clients sync writes and reads through, as package vars so the reconcile
 // is testable without a live GitHub and the site source without a store.
 var (
 	reconcile = func(ctx context.Context, org string, rows []Entry) (int, int, error) {
@@ -568,7 +568,7 @@ var (
 		}
 		return write(ctx, org, docs)
 	}
-	// The corpus's two sources, one seam each: what we BUILT and what is LIVE.
+	// The corpus's two sources, one client each: what we BUILT and what is LIVE.
 	fromOrgs  = orgRepos
 	liveSites = serving
 )

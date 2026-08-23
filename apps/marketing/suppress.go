@@ -23,7 +23,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// suppress.go is the ONE send seam. Every marketing delivery — a campaign blast,
+// suppress.go is the ONE send client. Every marketing delivery — a campaign blast,
 // a drip sequence step, a calendar email — calls state.deliver, and deliver is
 // the SINGLE place the per-org suppression (unsubscribe / opt-out) list is
 // checked. Because there is exactly one gate, a recipient who opted out can never
@@ -141,7 +141,7 @@ func (s *Store) ListSuppressions(ctx context.Context, org string, limit int) ([]
 // never a second sender.
 var sendFn = notify.Send
 
-// deliver is the single marketing send seam. It refuses a suppressed recipient
+// deliver is the single marketing send client. It refuses a suppressed recipient
 // (skipped, not an error — a blast over a list simply omits opt-outs) and
 // otherwise delivers through the notify rail. sent reports the gate decision so
 // callers can record per-recipient outcomes (sent vs skipped).

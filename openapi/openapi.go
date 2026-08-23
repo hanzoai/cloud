@@ -308,7 +308,7 @@ type Parameter struct {
 
 // Operation is one operation.
 //
-// Everything past Parameters is omitempty and comes from exactly two seams, both
+// Everything past Parameters is omitempty and comes from exactly two clients, both
 // anchored in the handler's own Go types so neither can drift:
 //
 //   - Register/Describe (register.go): a subsystem declares its binding structs
@@ -317,12 +317,12 @@ type Parameter struct {
 //   - zip's typed ops, folded in from the registry (Fold): Summary/Description
 //     from the lifted godoc, query parameters and bodies from the In/Out types.
 //
-// A route neither seam knows keeps exactly the structural facts the router can
+// A route neither client knows keeps exactly the structural facts the router can
 // prove, and asserts no status code, content type or prose it has no evidence
 // for — OpenAPI 3.1 makes `responses` OPTIONAL (3.0 required it), so absent
 // stays valid and absent beats invented.
 //
-// RequestBody and Responses are `any` because the two seams produce different
+// RequestBody and Responses are `any` because the two clients produce different
 // (JSON-identical) shapes: Register builds the closed *RequestBody /
 // map[string]*Response, the fold reuses zip's open maps verbatim.
 // App is PROVENANCE: the registry that registered this operation. It is the one
@@ -446,10 +446,10 @@ type PathItem map[string]*Operation
 //     parameter S is the SERVICE (service.go:90), not the payload. cloud.Typed
 //     does not help either: it is an any→*zip.App mount adapter.
 //     What cannot be DERIVED can still be DECLARED: Register (register.go) is
-//     the seam a subsystem uses to state its binding structs once, next to its
+//     the client a subsystem uses to state its binding structs once, next to its
 //     route table, and the schema is reflected from those structs.
 //   - response body schema / status codes — same dead end, at the far end,
-//     with the same declaration seam (the success shape under a "2XX" range,
+//     with the same declaration client (the success shape under a "2XX" range,
 //     because the exact code lives in the handler body).
 //   - query and header parameters — read positionally via c.Query("k") at
 //     runtime; not part of the match, so the router has never heard of them.
@@ -477,7 +477,7 @@ type PathItem map[string]*Operation
 // pretty-print a response only for a typed op, and behind a catch-all it cannot
 // enumerate subcommands at all.
 //
-// The path to more schema is not a better reader. Two seams exist, both
+// The path to more schema is not a better reader. Two clients exist, both
 // anchored in the handler's own Go types so neither can drift:
 //
 //   - Register (register.go): a subsystem declares its binding structs for a
@@ -515,7 +515,7 @@ type PathItem map[string]*Operation
 //
 // This costs the document nothing. Merged or chained, one pattern is one
 // operation — which is what the spec emits either way. Detecting routing bugs is
-// the bots guard's job, at the seam where the premise holds; the spec's only
+// the bots guard's job, at the client where the premise holds; the spec's only
 // requirement is that (method, path) → operation stay injective, which From
 // enforces via operationId uniqueness.
 type Document struct {
@@ -574,7 +574,7 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 		}
 		// An UNTYPED route inside a GRAFTED app has its prose in neither place a
 		// host can reach: not in the typed registry (it is not typed) and not in
-		// [Describe] (that is this repo's seam, and the route is another repo's).
+		// [Describe] (that is this repo's client, and the route is another repo's).
 		// It is in the doc comment on the handler, where it belongs, and zipdoc
 		// put it in zip's process-wide extraction — so ask there.
 		//
@@ -716,7 +716,7 @@ func Fold(doc *Document, reg Registry) error {
 		doc.Paths[path][strings.ToLower(method)] = op
 	}
 	// MERGE, never replace: From may already have named schemas from Register.
-	// On a name both seams claim, the typed op wins — its schema is derived from
+	// On a name both clients claim, the typed op wins — its schema is derived from
 	// the handler signature itself, the strongest evidence there is — and the
 	// override is deterministic (sorted key order above, single writer here).
 	if len(reg.Schemas) > 0 {

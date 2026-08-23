@@ -56,7 +56,7 @@ type entry struct {
 	Poke     pokeSpec // kind=poke
 }
 
-// kube is the k8s seam — an interface so the engine e2e tests drive the
+// kube is the k8s client — an interface so the engine e2e tests drive the
 // whole durable path with a fake cluster.
 type kube interface {
 	listEnabled(ctx context.Context) ([]entry, error)

@@ -340,7 +340,7 @@ func TestOrgIsolation(t *testing.T) {
 		t.Fatalf("beta must NEVER surface acme's $4,200")
 	}
 
-	// The same rule on a second domain, because tenancy is a property of the SEAM and not of
+	// The same rule on a second domain, because tenancy is a property of the CLIENT and not of
 	// one contributor that happened to get it right.
 	_, ap := ask(t, app, "acme", "what have I deployed?")
 	if v, _ := figure(ap, "Projects"); v != "7" {

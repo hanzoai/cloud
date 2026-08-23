@@ -6,7 +6,7 @@ import (
 	"github.com/hanzoai/cloud/apps/framework"
 )
 
-// hooks.go is the seam between the framework DocType lifecycle and the ONE vector
+// hooks.go is the client between the framework DocType lifecycle and the ONE vector
 // index (index.go). For every KNOWLEDGE doctype (kb-page, kb-memory, kb-source) it
 // registers:
 //

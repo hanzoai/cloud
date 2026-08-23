@@ -19,7 +19,7 @@
 // response carries Disclaimer to keep that honest on the wire.
 //
 // WHAT IT COMPOSES (DRY — it forks none of these):
-//   - apps/idv           the ONE identity/business verification seam (Persona /
+//   - apps/idv           the ONE identity/business verification client (Persona /
 //     Onfido / Stripe Identity behind a fail-closed interface;
 //     the honest Manual provider by default).
 //   - audit.Recorder     the ONE tamper-evident audit plane (deps.Audit). Every
@@ -39,7 +39,7 @@ const Disclaimer = "Hanzo Compliance orchestrates licensed verification provider
 	"entity and its counsel. Statuses are provider-reported or pending, never a platform assertion."
 
 // SubjectKind is the kind of party under verification (individual → KYC, business →
-// KYB). It mirrors idv.Kind so the seam and the record speak one vocabulary.
+// KYB). It mirrors idv.Kind so the client and the record speak one vocabulary.
 type SubjectKind = idv.Kind
 
 // Subject is a party the org is verifying as part of its own onboarding/compliance —

@@ -21,7 +21,7 @@ import (
 // audiences.go is the cohort engine. An Audience is a saved filter over the
 // org's product analytics — "distinct users who did EVENT within the last N
 // days" — evaluated live against the event plane (event.fact) through the
-// shared datastore seam (the SAME lens clients/analytics reads).
+// shared datastore client (the SAME lens clients/analytics reads).
 //
 // TENANCY & SAFETY. Every query leads with `org = ?` (the IAM org slug, the
 // plane's canonical org column) as a BOUND arg, and the event name +

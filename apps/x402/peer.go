@@ -21,7 +21,7 @@ import (
 // process all three are nil and the rail could enforce nothing.
 //
 // So each is asked of the process that owns it, exactly as resource_billing_peer.go
-// asks commerce whether a create may run. The in-process seam stays the FAST PATH
+// asks commerce whether a create may run. The in-process client stays the FAST PATH
 // when the owner happens to be co-resident (a test, a fused composition); the plane
 // is the same policy over a socket when it is not. One policy, two transports.
 //

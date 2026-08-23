@@ -21,7 +21,7 @@ import (
 
 // fakeCommerce is an in-memory commerce ledger: it records deposits per org (the
 // wallet balance) and lets a test SET a referred org's metered spend (the accrual
-// base). It is the money-seam stand-in that lets the tests PROVE commission accrues
+// base). It is the money-client stand-in that lets the tests PROVE commission accrues
 // (spend × rate) and a credits payout moves a wallet — without a live commerce.
 type fakeCommerce struct {
 	mu       sync.Mutex

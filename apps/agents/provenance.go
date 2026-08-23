@@ -350,17 +350,17 @@ func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error)
 
 // ---- the deploy, as the build's last turn ----
 
-// deployWriter fills the seam clients/projects left open (projects/observer.go):
+// deployWriter fills the client clients/projects left open (projects/observer.go):
 // when a site goes live, the build session that produced it gets ONE more turn
 // saying so, with the URL. That is what closes the story a visitor reads —
-// prompt, reasoning, diffs, DEPLOY — and it is why the seam exists: projects
+// prompt, reasoning, diffs, DEPLOY — and it is why the client exists: projects
 // still knows nothing about sessions, it only calls an interface.
 //
 // The write is best-effort and silent on failure. A deploy is the user's
 // outcome; it must never fail because its narration could not be recorded.
 type deployWriter struct{ s *cloud.Service[state] }
 
-// mountProvenance registers the deploy seam. Called once from Mount; the wiring
+// mountProvenance registers the deploy client. Called once from Mount; the wiring
 // lives HERE, next to the writer it installs, so the provenance lane is one file
 // you can read end to end and agents.go stays a router.
 func mountProvenance(s *cloud.Service[state]) { projects.SetDeployObserver(deployWriter{s: s}) }

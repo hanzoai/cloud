@@ -75,9 +75,9 @@ type SessionMatch struct {
 	Account  string
 }
 
-// Sessions is the seam to the agent-session control plane (clients/agents,
+// Sessions is the client to the agent-session control plane (clients/agents,
 // in-process). Revoke stops the sessions that ran under a revoked account/device;
-// the device view counts a machine's active sessions. A nil seam (unit test / no
+// the device view counts a machine's active sessions. A nil client (unit test / no
 // agents mounted) makes revoke skip the stop and the count report 0 — the registry
 // truth (the revoked row) is unaffected.
 type Sessions interface {
@@ -92,7 +92,7 @@ type state struct {
 
 var mounted *cloud.Service[state]
 
-// Mount wires the /v1/link surface. The sessions seam is set from the agents
+// Mount wires the /v1/link surface. The sessions client is set from the agents
 // in-process adapter (adapters.go) so a revoke can stop the affected sessions.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -587,8 +587,8 @@ func (o ops) revokeDevice(ctx context.Context, in *machineRef) (*revokeResp, err
 	return &revokeResp{Revoked: len(revoked), SessionsStopped: stopped, Links: views}, nil
 }
 
-// stopSessions forwards to the sessions seam, tolerating a nil seam (unit test /
-// no agents) and a seam error (a stop failure must not fail the revoke — the row
+// stopSessions forwards to the sessions client, tolerating a nil client (unit test /
+// no agents) and a client error (a stop failure must not fail the revoke — the row
 // is already revoked, which is the durable truth). Returns how many stopped.
 func stopSessions(s *cloud.Service[state], ctx context.Context, org string, m SessionMatch) int {
 	if s.State.sessions == nil {

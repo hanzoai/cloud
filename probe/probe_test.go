@@ -24,7 +24,7 @@
 //
 // What remains pinned is the DEFAULT: a typed op with no [zip.App.Authorize]
 // installed answers an anonymous MCP caller. The remedy exists — an Authorizer
-// runs at the op-invoke seam for REST and MCP alike — so this is a statement
+// runs at the op-invoke client for REST and MCP alike — so this is a statement
 // about what cloud must install, not about what zip cannot do.
 package probe
 
@@ -263,8 +263,8 @@ func digParams(t *testing.T, doc map[string]any, path, method string) []any {
 //
 // So an op with no Authorizer installed answers an anonymous caller. That is now
 // a statement about the DEFAULT, not about the framework: zip.App.Authorize runs
-// one decision on the decoded In at the op-invoke seam, for REST and MCP alike,
-// which is the seam this test was written to say did not exist. What is still
+// one decision on the decoded In at the op-invoke client, for REST and MCP alike,
+// which is the client this test was written to say did not exist. What is still
 // true — and is the reason an org must never be an In field — is that an In
 // field is caller-supplied, so reading the org from one is a cross-tenant read.
 func TestTypedOpMCPIsAnonymous(t *testing.T) {

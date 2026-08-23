@@ -227,14 +227,14 @@ func Minted(c *zip.Ctx) (Principal, bool) {
 }
 
 // orgKey names the request-scoped slot the validated org crosses the typed-op
-// seam in. Unexported zero-size type, so only this package can mint or read one —
+// client in. Unexported zero-size type, so only this package can mint or read one —
 // the same unforgeability the header gate has.
 type orgKey struct{}
 
 // WithOrg parks the request's VALIDATED org on ctx so a TYPED op — which
 // receives a context.Context and nothing else — can resolve it. It IS Org: the
 // trust decision stays in that one function and this only carries its answer to
-// the one seam that cannot call it. A request with no validated principal parks
+// the one client that cannot call it. A request with no validated principal parks
 // NOTHING, so the reader sees ("", false) rather than an empty org a query would
 // then treat as a tenant.
 func WithOrg(ctx context.Context, c *zip.Ctx) context.Context {
@@ -321,7 +321,7 @@ func OrgFrom(ctx context.Context) (string, bool) {
 // a handler that holds the request and a core that holds only the context.
 func Refused(c *zip.Ctx) error { return refused(Validated(c)) }
 
-// RefusedFrom is [Refused] where only the context crossed the seam.
+// RefusedFrom is [Refused] where only the context crossed the client.
 func RefusedFrom(ctx context.Context) error { return refused(ValidatedFrom(ctx)) }
 
 // Refusal is the sentence [Refused] carries, for a surface that writes its own
@@ -348,13 +348,13 @@ func Acting(ctx context.Context) (string, error) {
 	return "", RefusedFrom(ctx)
 }
 
-// validatedKey names the slot the WEAKER fact crosses the same seam in.
+// validatedKey names the slot the WEAKER fact crosses the same client in.
 // Unexported zero-size type, exactly like orgKey.
 type validatedKey struct{}
 
 // WithValidated parks whether the request carried a validated principal AT ALL —
 // the fact a gate turns on when there is no tenant to scope by. It IS Validated,
-// carried to the one seam that cannot call it, exactly as WithOrg is Org.
+// carried to the one client that cannot call it, exactly as WithOrg is Org.
 //
 // Two facts, TWO slots, because they are not the same question: OrgFrom composes
 // this one AND an org, so it refuses a validated caller whose token names no home
@@ -411,7 +411,7 @@ func Owner(c *zip.Ctx) string {
 	return strings.Clone(owner)
 }
 
-// brandKey names the slot the vouching brand crosses the typed-op seam in.
+// brandKey names the slot the vouching brand crosses the typed-op client in.
 // Unexported zero-size type, exactly like orgKey.
 type brandKey struct{}
 
@@ -443,7 +443,7 @@ func Brand(c *zip.Ctx) (string, bool) {
 
 // WithBrand parks the vouching brand on ctx so a TYPED op — which receives a
 // context.Context and nothing else — can compare it with the deployment's. It IS
-// Brand, carried to the one seam that cannot call it, exactly as WithOrg is Org.
+// Brand, carried to the one client that cannot call it, exactly as WithOrg is Org.
 // A request with nothing to compare parks NOTHING.
 func WithBrand(ctx context.Context, c *zip.Ctx) context.Context {
 	id, ok := Brand(c)
@@ -506,7 +506,7 @@ func ledgerOf(org, owner string, super bool) string {
 	return org
 }
 
-// LedgerFrom is [Ledger] where only the context crossed the seam — the ZAP plane,
+// LedgerFrom is [Ledger] where only the context crossed the client — the ZAP plane,
 // and any core that took identity as arguments rather than reading a request.
 func LedgerFrom(ctx context.Context) string {
 	c := zip.CallerOf(ctx)
@@ -567,13 +567,13 @@ func Project(c *zip.Ctx) string {
 	return strings.Clone(project)
 }
 
-// projectKey names the slot the NARROWING crosses the typed-op seam in.
+// projectKey names the slot the NARROWING crosses the typed-op client in.
 // Unexported zero-size type, exactly like orgKey.
 type projectKey struct{}
 
 // WithProject parks the caller's project on ctx so a TYPED op — which receives a
 // context.Context and nothing else — can resolve it. It IS Project, carried to
-// the one seam that cannot call it, exactly as WithOrg is Org.
+// the one client that cannot call it, exactly as WithOrg is Org.
 //
 // It parks UNCONDITIONALLY, and that is the difference from WithOrg. Org is an
 // AUTHORITY, so an unvalidated request must park nothing rather than an empty
@@ -587,7 +587,7 @@ func WithProject(ctx context.Context, c *zip.Ctx) context.Context {
 
 // ProjectFrom resolves what WithProject parked — the typed-op counterpart of
 // Project, and the same value, with the SAME signature for the same reason the
-// others share theirs: one fact, read from either side of the seam.
+// others share theirs: one fact, read from either side of the client.
 //
 // A ctx with no request behind it answers DefaultProject, which is what Project
 // answers for a request that names no project: "no narrowing". Neither is an
@@ -610,7 +610,7 @@ func ProjectFrom(ctx context.Context) string {
 }
 
 // ValidatedProjectFrom is [ValidatedProject] where only the context crossed the
-// seam. It composes the SAME rule rather than restating its two inputs, which is
+// client. It composes the SAME rule rather than restating its two inputs, which is
 // the whole reason it exists: the caller that read ProjectFrom and ValidatedFrom
 // separately reconstructed a DIFFERENT rule — it dropped the default-project
 // carve-out, so a project cap hard-enforced 402 on the agent door while the
@@ -635,7 +635,7 @@ func ProjectScope(c *zip.Ctx) string {
 	return p
 }
 
-// ProjectScopeFrom is [ProjectScope] where only the context crossed the seam —
+// ProjectScopeFrom is [ProjectScope] where only the context crossed the client —
 // the storage key a TYPED op derives, from the project WithProject parked.
 //
 // It composes the same rule rather than restating it, for the reason

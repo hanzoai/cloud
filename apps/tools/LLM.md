@@ -58,7 +58,7 @@ behind, which nothing reads because the row is gone.
 Closing it properly means adding `DeleteSecret` to `types.KMSClient`, implementing
 it on `KMSPeer` over the existing `plane.KMS*` ops, and updating the fifteen
 implementations (mostly test fakes across twelve packages). That is a change to a
-fleet-wide seam and it belongs to whoever owns that seam — not smuggled in behind
+fleet-wide client and it belongs to whoever owns that client — not smuggled in behind
 a catalog feature.
 
 ## The door — `door.go`
@@ -90,7 +90,7 @@ A priced tool used to be unpayable. `tools.SetCharger` had no production caller 
 `ErrChargerUnset` — a permanent 402 with no terms in it, which no client could ever
 satisfy. Prices were in the catalog and revenue was not.
 
-The seam is now closed in ONE place, `apps/marketplace/payments.go`, wired from
+The client is now closed in ONE place, `apps/marketplace/payments.go`, wired from
 `marketplace.Mount`:
 
 - `x402.Publish(&registry{store})` — the price table. Resource ids are `tool:<name>`
@@ -117,7 +117,7 @@ mis-order the expensive half of the shop.
 
 ### The process boundary — CLOSED, over the internal plane
 
-The three seams are process-globals (`x402.reg`, `tools.std`, wallets' mounted
+The three clients are process-globals (`x402.reg`, `tools.std`, wallets' mounted
 singleton), so the wiring above binds **within one process**. The shipped fleet runs
 **one process per app**, and that is the only topology there is:
 
@@ -174,7 +174,7 @@ absence gives away every priced tool for the length of the window.
 zero-copy over a buffer the transport reuses, so a retained reply string mutates
 under its owner — that is what turned a recorded payee address into the bytes of a
 later message's amount. `cloud.Ask` detaches every reply. The REQUEST side has no
-such seam: a handler's decoded input aliases the server's body buffer, which
+such client: a handler's decoded input aliases the server's body buffer, which
 fasthttp recycles, so anything a plane op keeps past its return must be cloned at the
 op (`apps/x402/rpc.go` does, for the resource it writes to the settlement row).
 
@@ -201,7 +201,7 @@ processes plus a schedule, which is its own piece of work.
 
 `CheapestPublicForTool` (`apps/marketplace/store.go`) resolves a price by tool NAME
 across every publisher, and takes the cheapest. That was inert while nothing could
-pay; with the rail live it is a live seam, so state the shape plainly:
+pay; with the rail live it is a live client, so state the shape plainly:
 
 - tool names are a flat fleet-wide namespace (`tool.go`), but an org registering an
   external MCP server contributes names prefixed by that server's `brand` — so two
@@ -222,7 +222,7 @@ change what a listing means, which is the marketplace's call to make.
 
 ### Still NOT closed — the tool REGISTRY across the boundary
 
-Same bug class, different seam, and it is why a seller cannot list and a buyer cannot
+Same bug class, different client, and it is why a seller cannot list and a buyer cannot
 install in the shipped fleet:
 
 - `marketplace.publish` calls `tools.Default().Exists`, and the marketplace binary
@@ -231,7 +231,7 @@ install in the shipped fleet:
   activation store — so every install answers `500 activation store not configured`.
 
 Both need their own ops on `tools` (an existence check and an activation write), and
-they belong to whoever owns the activation seam, not smuggled in behind a payment
+they belong to whoever owns the activation client, not smuggled in behind a payment
 fix. `split_test.go` seeds the listing ROW and activates in the tools process, and
 says so at the line rather than faking a provider to hide it.
 
@@ -245,7 +245,7 @@ answered would be a lie about a capability the fleet does not have.
 What was checked, and what is actually there. Lines are as of `c7a82cd1`; the
 SYMBOL is the durable handle, because a doc commit moves every number below it:
 
-| seam | where | verdict |
+| client | where | verdict |
 |---|---|---|
 | org-scoped container launch | `apps/platform/platform.go:236` routes `POST /v1/run` → `apps/platform/run.go:62` `run` → `k8s.go:603` `applyService` → `k8s.go:628` `Create` on `k8s.Apps` | REAL. Billing-gated, KMS-sealed env, `tenant-<org>` namespace. |
 | the CR it writes | `apps/platform/k8s.go:524` `serviceCR` | **No `command`, no `args`.** It carries `image`, `replicas`, `ports`, `imagePullSecrets`, optional `env`/`volumes`/`ingress`/`autoscaling` — nothing else. |

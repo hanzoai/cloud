@@ -16,11 +16,11 @@ import (
 )
 
 // importer.go implements the cloud.GitImporter and cloud.GitMirrorController
-// seams against the FORGE.
+// clients against the FORGE.
 //
 // Both used to be answered by an embedded git server that held bare
 // repositories on this fleet's own disks. The repositories live on the forge
-// now, so the two questions those seams ask —
+// now, so the two questions those clients ask —
 //
 //	"bring this upstream in, without ever overwriting what we hold"
 //	"and keep these other places in step with it"
@@ -52,7 +52,7 @@ import (
 // which is also why the forge's own push-mirror feature is not used here: it
 // would require handing the forge a long-lived credential for the upstream to
 // keep, and it replicates with --mirror, which is force plus prune. Force is the
-// one thing this seam exists to never do.
+// one thing this client exists to never do.
 
 // nameRE bounds a repository name. It is the retired store's rule and the shape
 // the forge accepts as a path segment: no slash, no traversal, no surprise. It
@@ -66,7 +66,7 @@ var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 // NESTS is not an account this can name.
 var accountRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,38}$`)
 
-// repo is one repository this seam syncs: the ACCOUNT it belongs to upstream,
+// repo is one repository this client syncs: the ACCOUNT it belongs to upstream,
 // and its own name. Both are folded, so it is one value however it was spelled,
 // and it is comparable, so it keys a map.
 type repo struct{ account, name string }
@@ -500,7 +500,7 @@ func (importer) RepoStatus(ctx context.Context, org, account string, names []str
 	for _, n := range names {
 		r, err := newRepo(account, n)
 		if err != nil {
-			// A name this seam could never have imported has nothing to report, and
+			// A name this client could never have imported has nothing to report, and
 			// the zero status is exactly that answer.
 			out[fold(n)] = cloud.GitRepoStatus{}
 			continue

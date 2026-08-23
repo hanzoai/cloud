@@ -9,7 +9,7 @@ package dataroom
 // shareable links with access controls, viewers, views, per-page analytics)
 // translated to SQLite: Boolean → INTEGER 0/1, timestamps → INTEGER unix millis,
 // storage references → the opaque object-storage key (bytes live on the cloud
-// s3/storage seam, never in Base). Tenant isolation is the per-tenant DB file
+// s3/storage client, never in Base). Tenant isolation is the per-tenant DB file
 // selected by the validated org (there is one file per org, so no org column is
 // needed for scoping).
 const schema = `

@@ -26,7 +26,7 @@ type streamUpdate struct {
 }
 
 // bus is the in-process publish/subscribe fan-out under the sessions surface. It
-// is the SINGLE seam the live stream hangs off:
+// is the SINGLE client the live stream hangs off:
 //
 //   - Today: the SSE handler (GET /v1/agents/sessions/stream) subscribes and
 //     writes each update as an SSE frame. Because zip's SendStreamWriter streams

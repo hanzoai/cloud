@@ -226,7 +226,7 @@ func TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope(t *testing.T
 func TestPricedOps_RefuseAnUnidentifiedCallerEvenWhenTheOperatorPricesThemAtZero(t *testing.T) {
 	probe.reset(true)
 	// Zero is a legal price. It used to be reachable through an env var; the
-	// price is a row now, so the seam is the resolver itself.
+	// price is a row now, so the client is the resolver itself.
 	saved := screenRate
 	t.Cleanup(func() { screenRate = saved })
 	screenRate = func(context.Context) int64 { return 0 }

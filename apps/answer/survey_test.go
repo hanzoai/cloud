@@ -11,7 +11,7 @@ package answer
 // with the full frame sequence intact.
 //
 // Hermetic: a scripted AI plane, a per-query search stub on loopback, and the
-// swapped crawl seam. Nothing here dials a model, a search engine, or a page.
+// swapped crawl client. Nothing here dials a model, a search engine, or a page.
 
 import (
 	"context"

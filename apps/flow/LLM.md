@@ -3,7 +3,7 @@
 Hanzo Flow is the visual AI workflow product: github.com/hanzoai/flow, a
 Python/FastAPI service (the builder UI, the graph engine, the component
 library). cloud does not reimplement it. This app is the product-repo model
-with an HTTP seam — the same posture apps/iam takes for its Go product, except
+with an HTTP client — the same posture apps/iam takes for its Go product, except
 the product is Python so the mount is a typed passthrough to the service
 instead of an in-process handler. cloud adds IAM auth, the org boundary, and
 the unified projection (OpenAPI, MCP tool, CLI command, SDK method — all from
@@ -67,7 +67,7 @@ Families and reasons (full prose in the ledger):
   exposing them would let a caller address another org's project.
 - users — product user table is service-internal; identity is IAM.
 - ai-providers — deployment-global upstream today; per-org custody needs the
-  integrations KMS seam first.
+  integrations KMS client first.
 - webhooks — needs a public ingress contract (signatures, replay) first.
 - mcp — overlaps apps/tools' MCP catalog; composition is task-level work.
 

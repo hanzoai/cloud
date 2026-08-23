@@ -49,7 +49,7 @@ var xtermCSS string
 
 // document is the assembled page, built once. The three vendored files are
 // substituted into their markers here rather than being concatenated at build
-// time, so what is in the repository is what upstream published and the seams are
+// time, so what is in the repository is what upstream published and the clients are
 // visible in the template instead of in a script nobody runs.
 var document = sync.OnceValue(func() string {
 	r := strings.NewReplacer("__CSS__", xtermCSS, "__XTERM__", xtermJS, "__FIT__", fitJS)

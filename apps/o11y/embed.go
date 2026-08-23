@@ -115,7 +115,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	embeddedServer = server
 
 	// Keyed error ingest (pk- → org) for the embedded sentry runtime goes through the
-	// ONE binary-wide key resolver — the same seam /v1/event's out-of-band resolution
+	// ONE binary-wide key resolver — the same client /v1/event's out-of-band resolution
 	// uses — so a publishable key attributes errors to the SAME org it attributes
 	// events to. This is what lights sentry.hanzo.ai up with the key that already
 	// feeds analytics + insights: one key, one endpoint, no per-project DSN secret.
@@ -124,7 +124,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	return server.PublicHandler(), nil
 }
 
-// projectKeys and iamKeys are the two key spaces, as seams. They are variables so
+// projectKeys and iamKeys are the two key spaces, as clients. They are variables so
 // the ORDER between them is a property a test can hold without standing up a plane
 // peer or an IAM — the order IS the fix, so it is the thing worth pinning.
 var (

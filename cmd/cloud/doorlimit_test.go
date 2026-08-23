@@ -71,7 +71,7 @@ func TestTheDoorCarriesTheHeaderCeilingToo(t *testing.T) {
 // TestTheDoorReportsTheCallerAndNotTheIngress holds the door to the one fact every
 // per-caller rule is keyed on.
 //
-// zip resolves the caller ONCE at the seam and believes a forwarded header only
+// zip resolves the caller ONCE at the client and believes a forwarded header only
 // where the app names its own hops. Unnamed, its answer is the socket peer — which
 // behind the bar is one in-cluster address for every visitor on earth, so the free
 // lane's per-visitor ceiling becomes a single global bucket that whoever arrives

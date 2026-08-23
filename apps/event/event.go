@@ -34,7 +34,7 @@
 //  2. a publishable key (pk-…) — IAM resolves it to its org; it can write but not read
 //     (the SAME key publishable.go mints; folded in here so a pk- caller uses
 //     /v1/event directly);
-//  3. an out-of-band IAM access key (sk-…) — resolved through the ONE key seam
+//  3. an out-of-band IAM access key (sk-…) — resolved through the ONE key client
 //     (cloud.OrgForKey).
 //
 // One of those resolves ⇒ FULL capability into that credential's org, and that branch of
@@ -170,7 +170,7 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 	}
 	// ONE publishable key, and IAM issues it. A pk- on any ingest-shaped carrier
 	// (Bearer, x-hanzo-ingest-key, ?ingest_key= for sendBeacon, which cannot set
-	// headers) resolves through the SAME IAM seam as every other key. Cloud used
+	// headers) resolves through the SAME IAM client as every other key. Cloud used
 	// to mint and verify its own pk_ under an HMAC of CLOUD_INGEST_KEY_SECRET —
 	// a second publishable-key family with its own prefix, secret and mint
 	// endpoint, beside the one IAM already owned.
@@ -892,7 +892,7 @@ var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}, insightsBo
 //
 // Schema alone was only half of that: a call with somewhere to put the event and no
 // word about what a publishable key may do with it is a door a reader has to guess at.
-// Describe is the seam for the other half, and it derives from the SAME rows — a door
+// Describe is the client for the other half, and it derives from the SAME rows — a door
 // added tomorrow declares its schema and its prose together, or fails the gate in
 // doors_test.go rather than silently publishing neither.
 //

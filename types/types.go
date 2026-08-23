@@ -456,7 +456,7 @@ type O11yClient interface {
 }
 
 // VFSClient is the inter-subsystem interface to vfs. Delete removes the blob at
-// key (idempotent — a missing key is not an error at the seam; the underlying
+// key (idempotent — a missing key is not an error at the client; the underlying
 // hanzoai/vfs forwards to backend.Delete(ctx,key)).
 type VFSClient interface {
 	Put(ctx context.Context, key string, payload []byte) error

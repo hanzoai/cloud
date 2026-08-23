@@ -76,7 +76,7 @@ func TestGeneratedSurfaceIsTheLiveSurface(t *testing.T) {
 // payment is being screened. An op that stopped being registered — a Mount that
 // no longer calls exposeDecide, a rename on one side — would leave every gate in
 // the fleet reading the absent exemption and allowing unscored, silently, which is
-// precisely the failure this whole seam exists to end. So the registration itself
+// precisely the failure this whole client exists to end. So the registration itself
 // is asserted, from the running registry.
 func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
 	live := liveOps(t, riskpeer.App, risk.Mount, false)

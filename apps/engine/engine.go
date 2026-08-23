@@ -10,7 +10,7 @@
 // the LLM inference engine: `hanzo-engine serve`, the OpenAI- and Anthropic-
 // compatible server, quantization, multimodality). This subsystem does NOT
 // reimplement any of it: every op is a TYPED PASSTHROUGH to the engine
-// deployment over an HTTP seam, the posture apps/flow takes for its Python
+// deployment over an HTTP client, the posture apps/flow takes for its Python
 // product. cloud adds IAM auth and the unified surface (OpenAPI/MCP/CLI/SDK
 // projection).
 //

@@ -267,7 +267,7 @@ func TestScope_MemberWithoutOrgAdminDenied(t *testing.T) {
 	}
 }
 
-// TestScope_DescendantsSingletonToday pins the honest RECURSION-SEAM gap: IAM has no
+// TestScope_DescendantsSingletonToday pins the honest RECURSION-CLIENT gap: IAM has no
 // parent-org field yet, so the subtree is the singleton. When IAM adds the parent link,
 // this test changes (and descendants becomes the BFS) — nothing else does.
 func TestScope_DescendantsSingletonToday(t *testing.T) {

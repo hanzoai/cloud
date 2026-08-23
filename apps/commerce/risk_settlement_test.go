@@ -53,13 +53,13 @@ func settledBody(status int, body string) zip.Handler {
 	}
 }
 
-// caught is one observation that LEFT this process, as the seam saw it.
+// caught is one observation that LEFT this process, as the client saw it.
 type caught struct {
 	org string
 	in  *plane.RiskObserveIn
 }
 
-// watchTeaching substitutes the plane seam and hands back what leaves. The seam is a
+// watchTeaching substitutes the plane client and hands back what leaves. The client is a
 // variable for exactly this: the door's record can be asserted without standing up a
 // risk child to receive it.
 // The buffer holds a BURST rather than one payment, because the cross-door proof

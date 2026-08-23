@@ -9,7 +9,7 @@ import (
 )
 
 // Detector reports whether a step's done-criterion is satisfied by the org's real
-// state. It is the auto-detect seam: a step names a Signal, the engine looks the
+// state. It is the auto-detect client: a step names a Signal, the engine looks the
 // detector up by that name and runs it. A detector MUST be honest — a data source
 // it cannot reach returns an error (treated as "not present"), never a spurious
 // true.
@@ -17,8 +17,8 @@ type Detector func(ctx context.Context, org string, step JourneyStep) (bool, err
 
 // newDetectors wires the auto-detect signals. storeFor resolves the caller's per-org
 // store for the self-ledger "acted" signal; sig is the injected cross-subsystem read
-// seam the growth signals probe (Signals, bound at the composition root) — guide
-// imports no sibling subsystem, so a nil seam field honest-degrades its signal to
+// client the growth signals probe (Signals, bound at the composition root) — guide
+// imports no sibling subsystem, so a nil client field honest-degrades its signal to
 // not-present, never a spurious true.
 //
 // Self-contained + analytics:

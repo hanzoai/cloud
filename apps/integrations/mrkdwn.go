@@ -10,7 +10,7 @@ package integrations
 // spends context on a rule it will drop by the third turn. So the translation
 // belongs here, at the edge, where prose becomes a Slack message.
 //
-// It is applied at the two seams where MODEL text goes out, and deliberately not
+// It is applied at the two clients where MODEL text goes out, and deliberately not
 // inside slackChatPost. Block Kit callers in this package already write mrkdwn by
 // hand (mrkdwnSection), and running a Markdown translator over correct mrkdwn
 // corrupts it: `*bold*` is mrkdwn bold and Markdown italic, so a blanket pass at

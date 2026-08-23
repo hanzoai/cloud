@@ -29,7 +29,7 @@ const (
 	publishLeaseWait = 8 * time.Second
 )
 
-// publish.go is the distribution seam: fan a published/queued content item OUT to
+// publish.go is the distribution client: fan a published/queued content item OUT to
 // social channels. The site half of "publish" needs no push — the site PULLS live
 // content (karma.style reads GET /v1/framework/Post?filters=[["status","in",
 // ["published"]]]), so becoming `published` IS site-publish. This file handles only

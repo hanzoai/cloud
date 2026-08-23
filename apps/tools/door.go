@@ -28,7 +28,7 @@ import (
 // enforces. A tool that is refused at POST /v1/tools/call is refused here, for
 // the same reason, with the same words. One plane, one policy, two doors onto it.
 //
-// zip.Source is the seam (zip >= v1.18.14): the host declares the tools plugin
+// zip.Source is the client (zip >= v1.18.14): the host declares the tools plugin
 // OPEN (manifest/apps.go), asks it for the caller's tools on a tools/list that
 // NAMES a caller, and hands it a tools/call no catalogue claimed. An anonymous
 // list still costs a memcpy and starts nothing.

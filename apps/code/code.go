@@ -12,7 +12,7 @@
 //     a def→ref edge table.
 //   - semantic (embed.go/search.go)   — AST-boundary chunks embedded via the SAME
 //     gateway /embeddings clients/knowledge uses, ranked by cosine over a float32
-//     vector table (the sqlite-vec `vec0` drop-in seam).
+//     vector table (the sqlite-vec `vec0` drop-in client).
 //
 // Storage is ONE SQLite file per org at {DataDir}/orgs/{slug}/code.db (HIP-0302):
 // the org boundary is PHYSICAL — a query in one org's file can never reach
@@ -144,7 +144,7 @@ func Shutdown(_ context.Context) error {
 // "which file does this request touch" has one answer from one input.
 //
 // org MUST already be validated: principal.Org for a request, or the caller's
-// own server-side resolution for an in-process seam.
+// own server-side resolution for an in-process client.
 //
 // code is org-scoped: it carries no project axis.
 func (s *service) storeFor(org string) (*Store, error) {
@@ -170,7 +170,7 @@ func (s *service) engineFor(org, billingOrg, project string) (*engine, error) {
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// ── the identity seam ────────────────────────────────────────────────────────
+// ── the identity client ────────────────────────────────────────────────────────
 
 // meter resolves the two facts a retrieval charges and scopes against, beyond
 // the tenant — the ONE reason this package reaches for the REQUEST.
@@ -642,7 +642,7 @@ type IndexResult struct {
 }
 
 // IndexFiles indexes a repo's files into the org's code index — the package-level
-// seam the git plane's lifecycle reactor calls on push (clients/git owns the repo
+// client the git plane's lifecycle reactor calls on push (clients/git owns the repo
 // bytes; clients/code owns the index; neither imports the other, so the reactor
 // reads the tree and hands it here). It reuses the exact per-file pipeline the
 // POST /v1/code/index handler runs, with prune=true so a push is a full-tree

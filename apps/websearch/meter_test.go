@@ -230,7 +230,7 @@ func TestSearXNGDoorBillsTheCaller(t *testing.T) {
 // authenticated — but both were a way to spend without being charged.
 
 // detached is the context a streamed answer runs on: the caller carried across,
-// the request gone. cloud.Detach is what production uses at that seam.
+// the request gone. cloud.Detach is what production uses at that client.
 func detached(t *testing.T, org string) context.Context {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})

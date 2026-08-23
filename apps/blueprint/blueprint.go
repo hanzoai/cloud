@@ -158,7 +158,7 @@ type blueprintOps struct{ s *cloud.Service[state] }
 // query. GET carries no request body (zip's hasBody), so this publishes nothing.
 type noIn struct{}
 
-// ── in-process seam (deploy / metering / authors) ────────────────────────────
+// ── in-process client (deploy / metering / authors) ────────────────────────────
 
 // EstimateTemplate prices an embedded blueprint by id, returning ok=false for an
 // unknown id. This is the ONE in-process entrypoint the deploy path calls to learn

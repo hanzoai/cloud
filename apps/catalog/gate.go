@@ -158,7 +158,7 @@ func bodies(ctx context.Context, rows []Entry) map[string][]byte {
 	return out
 }
 
-// fetchBody is the read seam: the page a visitor would be served, or an error.
+// fetchBody is the read client: the page a visitor would be served, or an error.
 // A package var so the gate is testable without a live edge.
 var fetchBody = func(ctx context.Context, url string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, bodyWait)

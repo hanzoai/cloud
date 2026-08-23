@@ -77,7 +77,7 @@ func Deliver(ctx context.Context, org string, ev TriggerEvent) (started int, err
 	// Causation-depth guard: an event whose chain is already maxCausationDepth hops deep
 	// starts nothing, so an in-platform cycle (an action firing an event that re-enters
 	// here) terminates instead of amplifying. Depth rides TriggerEvent→FlowRunInput and is
-	// propagated by in-platform producers (the /hooks X-Causation-Depth header, the seam).
+	// propagated by in-platform producers (the /hooks X-Causation-Depth header, the client).
 	if ev.Depth >= maxCausationDepth {
 		return 0, nil
 	}

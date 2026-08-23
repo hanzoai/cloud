@@ -22,7 +22,7 @@ import (
 )
 
 // internalFaults are undecided errors — a handler returned a plain Go error, so
-// nobody chose a status OR a sentence. The seam must not invent one from the text.
+// nobody chose a status OR a sentence. The client must not invent one from the text.
 var internalFaults = []struct {
 	name    string
 	err     error
@@ -96,7 +96,7 @@ func TestAnUndecidedFaultStillSaysSomethingUseful(t *testing.T) {
 }
 
 // TestAuthoredMessagesSurvive holds the other half of the rule. A handler that
-// CHOSE a status and a sentence is making a decision, and the seam does not
+// CHOSE a status and a sentence is making a decision, and the client does not
 // second-guess it — otherwise "Billing temporarily unavailable" would render as
 // a generic fault and the console would lose the one 5xx a user can read.
 func TestAuthoredMessagesSurvive(t *testing.T) {

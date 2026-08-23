@@ -49,7 +49,7 @@
 # how a verifier comes to pass by accident, so they get separate codes and the
 # caller can tell an outage from a clean run.
 #
-# Test seams — set one to a file and that source is read from it instead of the
+# Test clients — set one to a file and that source is read from it instead of the
 # network, so the comparison can be exercised with no registry, no tokens and no
 # network at all:
 #   ORPHANS_IMAGES    published image tags, one per line

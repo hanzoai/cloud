@@ -428,7 +428,7 @@ func imagePullable(ctx context.Context, repository, tag string) error {
 	return nil
 }
 
-// ── the git seam ─────────────────────────────────────────────────────────────
+// ── the git client ─────────────────────────────────────────────────────────────
 
 // pinGitEnv is the environment every git subprocess on this path runs with. It is
 // built FROM SCRATCH and inherits nothing but PATH, which is what keeps the pin
@@ -501,7 +501,7 @@ func pushRaced(out string) bool {
 // pinToken reads the forge token that may push to universe. Fail-closed: an
 // unmounted KMS, a KMS that cannot answer, or an absent/empty secret each return an
 // error and NEVER a value, so a pin stops rather than attempting an anonymous push
-// that would fail deep in the git seam. The error names the REF, never the value —
+// that would fail deep in the git client. The error names the REF, never the value —
 // the ref is a path and is safe to log.
 func pinToken(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if s.KMS == nil {

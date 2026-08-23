@@ -59,7 +59,7 @@ var wantDoors = []door{
 // samePtr reports whether two func values are the SAME function, by code pointer.
 // It is the ONE mechanism in this package for asking that question — not "behaves
 // similarly on the inputs I thought to try", but "is the same function". Used for the
-// wire bindings (sameWire) and for the write path's seam defaults, whose signatures
+// wire bindings (sameWire) and for the write path's client defaults, whose signatures
 // differ, so the mechanism is untyped and each caller names its own question.
 func samePtr(a, b any) bool {
 	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
@@ -123,7 +123,7 @@ type warehouse struct {
 	facts []fact
 }
 
-// fakeWarehouse substitutes the write path's THREE seams for this test and restores
+// fakeWarehouse substitutes the write path's THREE clients for this test and restores
 // them after.
 //
 // It stops the SINK first. warehouseExec is a process-global var and the drain writes
@@ -154,10 +154,10 @@ func fakeWarehouse(t *testing.T) *warehouse {
 	return w
 }
 
-// TestWritePathSeamsDefaultToTheRealThing pins what fakeWarehouse and stubResolver
+// TestWritePathClientsDefaultToTheRealThing pins what fakeWarehouse and stubResolver
 // SUBSTITUTE: that in production each of these vars holds the real dependency.
 //
-// A seam is a var, so it is exactly as easy to rebind at the DECLARATION as it is in a
+// A client is a var, so it is exactly as easy to rebind at the DECLARATION as it is in a
 // test. Rebinding warehouseExec to a func returning nil discards every INSERT while
 // the caller still gets its 200 {accepted:N} receipt, and rebinding warehouseReady to
 // `true` removes the gate that would otherwise turn that into an honest 503 — silent
@@ -174,7 +174,7 @@ func fakeWarehouse(t *testing.T) *warehouse {
 // It also holds the fakes honest in the other direction: every substitution in this
 // package restores through t.Cleanup, so if one ever leaks past its test this
 // assertion is what notices.
-func TestWritePathSeamsDefaultToTheRealThing(t *testing.T) {
+func TestWritePathClientsDefaultToTheRealThing(t *testing.T) {
 	for _, s := range []struct {
 		name string
 		got  any
@@ -186,8 +186,8 @@ func TestWritePathSeamsDefaultToTheRealThing(t *testing.T) {
 		{"resolveKeyOrg", resolveKeyOrg, cloud.OrgForKey},
 	} {
 		if !samePtr(s.got, s.want) {
-			t.Errorf("%s does not default to the real dependency — a substituted write seam "+
-				"discards rows behind a 200 receipt, and a substituted key seam decides admission", s.name)
+			t.Errorf("%s does not default to the real dependency — a substituted write client "+
+				"discards rows behind a 200 receipt, and a substituted key client decides admission", s.name)
 		}
 	}
 }

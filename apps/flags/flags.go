@@ -45,7 +45,7 @@
 //
 // Every one is (Principal, context) -> verdict. Folding them onto this evaluator makes
 // Policy ONE composable primitive with one audit log and one hot-apply path. authz and
-// entitlements are NOT built on it yet — this note only names the target so the seam
+// entitlements are NOT built on it yet — this note only names the target so the client
 // stays visible; the launch waitlist (now external) is the first, proven composition.
 package flags
 
@@ -137,7 +137,7 @@ type snapshot struct {
 	ok       bool
 }
 
-// Client is the in-process evaluation seam: per-(org, project) SQLite definition
+// Client is the in-process evaluation client: per-(org, project) SQLite definition
 // stores + the embedded native evaluator, with the platform project's evaluation
 // cached for one TTL (the hot-apply bound).
 type Client struct {
@@ -361,7 +361,7 @@ func asString(raw json.RawMessage) (string, bool) {
 	return t, true
 }
 
-// ── typed live accessors (the in-process evaluation seam) ───────────────────────
+// ── typed live accessors (the in-process evaluation client) ───────────────────────
 
 // Bool returns the live boolean value of a registered switch (flags -> env -> default).
 func Bool(key string) bool {
@@ -481,7 +481,7 @@ type state struct {
 }
 
 // Mount opens the per-org definition stores, installs the process-wide evaluation
-// seam, and registers the /v1/flags surface. A store that cannot be opened
+// client, and registers the /v1/flags surface. A store that cannot be opened
 // degrades every switch to env/default and the HTTP surface reports it — never an
 // error at boot.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -499,7 +499,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Install this engine as the process-wide switch reader so the EDGE can read a
 	// platform switch. serve.go's middleware cannot import this package (flags
 	// imports the root package, root imports routers), so the root package holds the
-	// seam and this is the one call that fills it.
+	// client and this is the one call that fills it.
 	cloud.SetSwitchReader(Bool)
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)

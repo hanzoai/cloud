@@ -2,7 +2,7 @@ package agents
 
 // door_test.go — the tool plane, over the wire it actually uses.
 //
-// Nothing is stubbed at the seam under test. Every test here brings up real
+// Nothing is stubbed at the client under test. Every test here brings up real
 // subsystem apps on real ZAP sockets, composes the REAL fleet.Door over them,
 // publishes it on the router's socket exactly as cmd/cloud/wake.go does, and
 // then drives doorTools — so what is asserted is what a deployed agent gets.

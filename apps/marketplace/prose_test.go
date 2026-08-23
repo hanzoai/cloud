@@ -25,7 +25,7 @@ import (
 )
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// because the CLIENT they arrived through cannot carry one — not because nobody wrote
 // it. Every one of them is a field of tools.Tool, which marketItem EMBEDS
 // (marketplace.go), and each carries a doc comment on its own declaration
 // (apps/tools/tool.go). zipdoc files a field's prose under the type that DECLARES

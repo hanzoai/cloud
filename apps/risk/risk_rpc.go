@@ -3,7 +3,7 @@ package risk
 // risk_rpc.go — the scorer, for a gate in ANOTHER PROCESS.
 //
 // cloud.SetRiskScorer is an in-process handoff and it has never had a producer,
-// for a reason the seam states plainly: the model is in-process mutable state, so
+// for a reason the client states plainly: the model is in-process mutable state, so
 // one binary learns and scores, and a scorer installed here would arm this child
 // and nothing else. The pod forks one process per app — /cloud, /billing,
 // /commerce, /risk are separate pids — so every gate outside this one read nil,
@@ -298,7 +298,7 @@ func planeTenant(ctx context.Context, brandID string) (tenant, error) {
 }
 
 // knownStage reports whether the moment is one cloud declares. The set is read
-// from the seam rather than restated here, so a fourth stage is added in one
+// from the client rather than restated here, so a fourth stage is added in one
 // place.
 func knownStage(stage string) bool {
 	switch stage {

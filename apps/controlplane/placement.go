@@ -130,7 +130,7 @@ func (b *PlacementBlock) PayloadRoot() [48]byte {
 // blocks into, in Finalized() order, deterministically.
 // ----------------------------------------------------------------------------
 
-// ControlDB is the persistence seam for the RSM (the control.db backend).
+// ControlDB is the persistence client for the RSM (the control.db backend).
 // Stubbed in-memory here; the real backend is a later increment. Writes are
 // whole-state snapshots keyed by height so recovery is point-in-time.
 type ControlDB interface {

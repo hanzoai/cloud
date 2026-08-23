@@ -94,7 +94,7 @@ func fakeCF(rec *capture, resultFor func(path string) (int, string)) http.Handle
 // never exist in production. Same helper apps/integrations uses.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
-// harness mounts the subsystem against a fake CF and per-org token seam.
+// harness mounts the subsystem against a fake CF and per-org token client.
 func harness(t *testing.T, tokens map[string]string, rec *capture, resultFor func(string) (int, string)) *zip.App {
 	t.Helper()
 	srv := httptest.NewServer(fakeCF(rec, resultFor))
@@ -104,7 +104,7 @@ func harness(t *testing.T, tokens map[string]string, rec *capture, resultFor fun
 	prev := tokenFor
 	tokenFor = func(_ context.Context, org, provider, name string) ([]byte, error) {
 		if provider != providerCloudflare || name != secretAPIToken {
-			return nil, fmt.Errorf("seam called with unexpected coordinate %s/%s", provider, name)
+			return nil, fmt.Errorf("client called with unexpected coordinate %s/%s", provider, name)
 		}
 		tok, ok := tokens[org]
 		if !ok {

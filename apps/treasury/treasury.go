@@ -212,7 +212,7 @@ func planeReserve(ctx context.Context, _ *struct{}) (*plane.Reserved, error) {
 	if !cloud.Who(ctx).Admin {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
-	// A pure READ of the fund balance, inlined: the package-level payout seam it used
+	// A pure READ of the fund balance, inlined: the package-level payout client it used
 	// to share is gone, and a read has no business resurrecting it.
 	if mounted == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "treasury store not open")

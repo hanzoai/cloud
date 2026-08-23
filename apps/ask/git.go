@@ -72,7 +72,7 @@ func forgeRepos(ctx context.Context) ([]forge.Repo, error) {
 // gitFigures is the org's git rollup: how many repositories, their total
 // footprint, how many moved inside [activeWindow], and which one moved last.
 //
-// It carries the domain seam's signature ([plane.FiguresIn] is empty and stays
+// It carries the domain client's signature ([plane.FiguresIn] is empty and stays
 // empty) so the registry stays a value: there is nothing to ask for because
 // there is nothing a caller may choose, and the one field this struct might
 // plausibly grow is exactly the field that would let one tenant read another's.

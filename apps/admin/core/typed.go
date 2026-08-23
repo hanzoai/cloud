@@ -1,6 +1,6 @@
 package core
 
-// The GATE, at the typed-op seam.
+// The GATE, at the typed-op client.
 //
 // Every /v1/admin/* route is a zip typed op — `zip.Get[In, Out]` and friends — because
 // a typed op is what lands in zip's registry, and the registry is what the OpenAPI

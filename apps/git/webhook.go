@@ -12,7 +12,7 @@ import (
 // otherwise.
 //
 // git.hanzo.ai used to POST every push here; we HMAC-verified it and handed the
-// push to cloud.OnGitPush, the single-registrant push-to-deploy seam. That
+// push to cloud.OnGitPush, the single-registrant push-to-deploy client. That
 // registrant lives in apps/platform and cloud runs each app as its OWN OS
 // PROCESS, so in the git process the builder is nil FOREVER — and the handler
 // answered 204 whether or not it dispatched. Delivered, signature valid, green
@@ -65,13 +65,13 @@ const buildDoor = "https://platform.hanzo.ai/v1/git-webhook"
 //     names zip's typed fold ALREADY publishes as components off the /v1 ops —
 //     so reflecting them here a second time would put two derivations behind one
 //     schema name, which is the collision openapi.Compose exists to refuse. One
-//     name, one shape, one generator: the envelope waits until the two seams
+//     name, one shape, one generator: the envelope waits until the two clients
 //     agree on who owns a shared view type.
 //   - the pack responses and the twelve HTML pages have no declaration to make:
 //     openapi.Binary is request-only by design, and a text/html response is the
 //     second half it deliberately does not invent.
 //
-// The PROSE those same routes were also missing is a separate seam
+// The PROSE those same routes were also missing is a separate client
 // (openapi.Describe) and lives beside each route's own registration, not here:
 // the twelve smart-HTTP operations in smart_http.go, the five ZAP procedures in
 // zap.go, the twelve pages in ui.go. Only the webhook's prose is stated here,
@@ -86,7 +86,7 @@ func init() {
 		"Retired — forge pushes build via platform.hanzo.ai",
 		"GONE (410). This was the canonical forge's push-to-deploy door, and it never "+
 			"dispatched a build in its life.\n\n"+
-			"It handed each verified push to cloud.OnGitPush, a single-registrant seam "+
+			"It handed each verified push to cloud.OnGitPush, a single-registrant client "+
 			"whose only registrant lives in apps/platform. cloud runs each app as its own "+
 			"OS process, so in the git process that builder is nil forever — and this "+
 			"handler answered 204 either way. Delivered, signature valid, green on the "+

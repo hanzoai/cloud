@@ -15,7 +15,7 @@ import (
 	"sync"
 )
 
-// gitexec.go is the ONE seam in this package that shells out to the `git` CLI,
+// gitexec.go is the ONE client in this package that shells out to the `git` CLI,
 // and it carries the hardening that used to live beside the embedded git store.
 //
 // The store moved to the forge; the hardening could not move with it, because
@@ -356,7 +356,7 @@ func mirrorOutHostAllowed(host string) bool {
 // mirrorInHostAllowed reports whether host may be OFFERED the caller's own
 // credential on a fetch.
 //
-// The outbound half of this seam has always been allowlisted, because a host we
+// The outbound half of this client has always been allowlisted, because a host we
 // push tenant code to is an obvious question. The inbound half is the same
 // question and it was not asked: the credential a fetch carries is a live GitHub
 // App installation token, minted for the org, and the URL it travels to is an

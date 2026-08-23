@@ -232,7 +232,7 @@ func TestInstrumentUsedFailsClosed(t *testing.T) {
 	}
 }
 
-// ---- the exploit, at the HTTP seam ----
+// ---- the exploit, at the HTTP client ----
 //
 // These drive the SHIPPED route through the real router, because the hole was a
 // handler that trusted its input — a store-level test would have proved the

@@ -26,7 +26,7 @@ import (
 )
 
 // fakeCommerce is an in-memory stand-in for the ONE question this package asks the
-// money plane: how much has this org spent? It cannot deposit, because the seam it
+// money plane: how much has this org spent? It cannot deposit, because the client it
 // implements cannot deposit.
 type fakeCommerce struct {
 	mu     sync.Mutex
@@ -60,7 +60,7 @@ func (f *fakeCommerce) readCount() int {
 }
 
 // mount builds a referrals app backed by a fresh store + the injected commerce
-// seam, returning the app and the fake for assertions.
+// client, returning the app and the fake for assertions.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	t.Helper()
 	fc := newFakeCommerce()
@@ -68,7 +68,7 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	return app, s, fc
 }
 
-// mountWith is mount over an arbitrary commerce seam, so a test can drive the real
+// mountWith is mount over an arbitrary commerce client, so a test can drive the real
 // payout client at a stub server instead of the in-memory fake.
 func mountWith(t *testing.T, c commerce) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
@@ -396,24 +396,24 @@ func TestLedgerReceivesZeroDeposits(t *testing.T) {
 	}
 }
 
-// TestCommerceSeamIsReadOnly pins the SHAPE of the money seam. The mint existed
-// because the seam carried a deposit method; with no write method on the interface,
+// TestCommerceClientIsReadOnly pins the SHAPE of the money client. The mint existed
+// because the client carried a deposit method; with no write method on the interface,
 // reviving the mint cannot be a one-line call — it has to start by re-declaring the
 // capability here, in front of a test that says no.
-func TestCommerceSeamIsReadOnly(t *testing.T) {
+func TestCommerceClientIsReadOnly(t *testing.T) {
 	typ := reflect.TypeFor[commerce]()
 	banned := []string{"deposit", "credit", "grant", "mint", "transfer", "refund", "charge", "payout"}
 	for method := range typ.Methods() {
 		name := strings.ToLower(method.Name)
 		for _, b := range banned {
 			if strings.Contains(name, b) {
-				t.Fatalf("commerce seam grew a money-moving method %q — referrals issues no credit; a referral reward is an affiliate payable in commerce, settled by wire or wallet", method.Name)
+				t.Fatalf("commerce client grew a money-moving method %q — referrals issues no credit; a referral reward is an affiliate payable in commerce, settled by wire or wallet", method.Name)
 			}
 		}
 	}
 	// And it is exactly the read it claims to be.
 	if got := typ.NumMethod(); got != 1 {
-		t.Fatalf("commerce seam has %d methods, want 1 (spendCents). It asks ONE question", got)
+		t.Fatalf("commerce client has %d methods, want 1 (spendCents). It asks ONE question", got)
 	}
 }
 

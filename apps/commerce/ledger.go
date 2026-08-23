@@ -17,14 +17,14 @@ import (
 // reads and the edge meter debits. Injected at mountCommerce (EmbedConfig.Ledger),
 // it makes commerce's POST /v1/billing/credit mint into the ONE ledger: a granted
 // credit is immediately visible to the gate (one ledger, no split). This is the
-// cloud half of the one-ledger seam — commerce defines the interface, cloud
+// cloud half of the one-ledger client — commerce defines the interface, cloud
 // implements it once here, the compiler enforces the match.
 //
 // Fails closed when no finance ledger is co-resident; in the unified cloud binary
 // finance is always published, so Get() != nil ⇒ credit routes here.
 type ledger struct{}
 
-// compile-time proof the adapter satisfies commerce's exported seam.
+// compile-time proof the adapter satisfies commerce's exported client.
 var _ creditledger.CreditLedger = ledger{}
 
 // Credit posts a balanced deposit (funding:platform → wallet) to the ADDRESS the

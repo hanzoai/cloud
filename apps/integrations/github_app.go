@@ -23,12 +23,12 @@ import (
 // an installation grants, and serves the two authed sync routes — GET
 // /v1/integrations/github/repos and POST /v1/integrations/github/repos/import. The
 // actual git object work (create + mirror-in) crosses into clients/git via the
-// cloud.GitImporter seam, so this file never imports the git package.
+// cloud.GitImporter client, so this file never imports the git package.
 //
 // TOKENS ARE NEVER STORED. Only the installation_id is custodied (the connection
 // ExternalID). Every list/import mints a fresh 1-hour installation token via
 // ghinstallation (the same library the CI runner uses), cached per-installation
-// until ~10m before expiry, and hands it to git through the seam req — never a log,
+// until ~10m before expiry, and hands it to git through the client req — never a log,
 // never argv.
 
 // githubAPIBase is the GitHub API root (api.github.com, or a GitHub Enterprise host
