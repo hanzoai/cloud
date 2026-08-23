@@ -147,6 +147,12 @@ func init() {
 		},
 		Response: json.RawMessage(`{"id":"drop-a","name":"bot-a","status":"running","agent":"bot-a","binding":{"machineId":"drop-a","agentName":"bot-a","status":"running"}}`),
 	})
+	zip.Describe("GET /v1/visor/compute/regions", zip.Doc{
+		Description: "Regions lists the regions a machine can be launched in.\n\nThe catalog is GLOBAL — identical for every tenant — so no owner is forwarded\nupstream. It is still org-gated, because a catalog is a map of what this\ndeployment can spend money in and an anonymous caller has no business reading it.",
+	})
+	zip.Describe("GET /v1/visor/compute/sizes", zip.Doc{
+		Description: "Sizes lists the machine sizes available to launch, with their specifications.\n\nGlobal and org-gated, exactly as the region catalog is, and for the same reasons.",
+	})
 	zip.Describe("GET /v1/visor/fleet", zip.Doc{
 		Description: "Returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row. BYO GPU units also carry their gpu-jobs queue depth. Every source\nis folded in independently: a broken one costs its own rows and nothing else.",
 		Fields: map[string]string{

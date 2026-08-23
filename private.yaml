@@ -124695,31 +124695,44 @@ paths:
       x-public: true
   /v1/visor/compute/regions:
     get:
-      description: 'Lists the launch regions the compute catalog offers, passed through
-        verbatim from the provider so the shape stays the provider''s single source
-        of truth. The catalog is GLOBAL, not per-tenant: no owner is forwarded and
-        every org sees the same list. It is still gated — a validated principal is
-        required, 403 without one — because the catalog is what backs the launch drawer,
-        not public marketing copy.'
+      description: |-
+        Regions lists the regions a machine can be launched in.
+
+        The catalog is GLOBAL — identical for every tenant — so no owner is forwarded
+        upstream. It is still org-gated, because a catalog is a map of what this
+        deployment can spend money in and an anonymous caller has no business reading it.
       operationId: get_visor_compute_regions
-      summary: The regions a machine or GPU can be launched into
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Regions lists the regions a machine can be launched in.
       tags:
       - visor
       x-app: visor
       x-public: true
+      x-tool: true
   /v1/visor/compute/sizes:
     get:
-      description: 'Lists the instance sizes the compute catalog offers, passed through
-        verbatim from the provider so the shape stays the provider''s single source
-        of truth. These are the values `size` accepts on a launch. The catalog is
-        GLOBAL, not per-tenant: no owner is forwarded and every org sees the same
-        list. It is still gated — a validated principal is required, 403 without one.'
+      description: |-
+        Sizes lists the machine sizes available to launch, with their specifications.
+
+        Global and org-gated, exactly as the region catalog is, and for the same reasons.
       operationId: get_visor_compute_sizes
-      summary: The machine and GPU sizes that can be launched
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ok
+      summary: Sizes lists the machine sizes available to launch, with their specifications.
       tags:
       - visor
       x-app: visor
       x-public: true
+      x-tool: true
   /v1/visor/fleet:
     get:
       description: |-
