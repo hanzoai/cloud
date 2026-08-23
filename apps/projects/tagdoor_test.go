@@ -2,6 +2,7 @@ package projects
 
 import (
 	"encoding/json"
+	"github.com/zap-proto/zip"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -49,35 +50,53 @@ func TestBuildTags(t *testing.T) {
 }
 
 func TestTagsKeyHost(t *testing.T) {
-	mk := func(u, auth, origin, ref string) *http.Request {
+	// A real request through the real route, because that is the only way to hold
+	// a Ctx — and it is the better subject anyway: it exercises the address the
+	// door is registered at rather than a hand-made request the router never saw.
+	// The Ctx is request-scoped and released when the handler returns, so what
+	// travels back out is the ANSWER, not the context it was read from.
+	mk := func(u, auth, origin, ref string) (string, string) {
+		t.Helper()
+		app := zip.New(zip.Config{DisableStartupMessage: true})
+		var key, host string
+		reached := false
+		app.Get("/v1/projects/tags", func(c *zip.Ctx) error {
+			key, host, reached = tagsKey(c), tagsHost(c), true
+			return c.NoContent(http.StatusNoContent)
+		})
+		if err := app.Build(); err != nil {
+			t.Fatalf("build: %v", err)
+		}
 		r := httptest.NewRequest(http.MethodGet, u, nil)
-		if auth != "" {
-			r.Header.Set("Authorization", auth)
+		for k, v := range map[string]string{"Authorization": auth, "Origin": origin, "Referer": ref} {
+			if v != "" {
+				r.Header.Set(k, v)
+			}
 		}
-		if origin != "" {
-			r.Header.Set("Origin", origin)
+		if _, err := app.Fiber().Test(r); err != nil {
+			t.Fatalf("GET %s: %v", u, err)
 		}
-		if ref != "" {
-			r.Header.Set("Referer", ref)
+		if !reached {
+			t.Fatalf("GET %s never reached the handler", u)
 		}
-		return r
+		return key, host
 	}
-	if k := tagsKey(mk("/v1/projects/tags?key=pk-q", "", "", "")); k != "pk-q" {
+	if k, _ := mk("/v1/projects/tags?key=pk-q", "", "", ""); k != "pk-q" {
 		t.Errorf("?key= → %q", k)
 	}
-	if k := tagsKey(mk("/v1/projects/tags", "Bearer pk-b", "", "")); k != "pk-b" {
+	if k, _ := mk("/v1/projects/tags", "Bearer pk-b", "", ""); k != "pk-b" {
 		t.Errorf("Bearer → %q", k)
 	}
-	if k := tagsKey(mk("/v1/projects/tags?key=pk-q", "Bearer pk-b", "", "")); k != "pk-b" {
+	if k, _ := mk("/v1/projects/tags?key=pk-q", "Bearer pk-b", "", ""); k != "pk-b" {
 		t.Errorf("Bearer must win → %q", k)
 	}
-	if h := tagsHost(mk("/v1/projects/tags?host=hanzo.ai", "", "", "")); h != "hanzo.ai" {
+	if _, h := mk("/v1/projects/tags?host=hanzo.ai", "", "", ""); h != "hanzo.ai" {
 		t.Errorf("?host= → %q", h)
 	}
-	if h := tagsHost(mk("/v1/projects/tags", "", "https://hanzo.chat", "")); h != "hanzo.chat" {
+	if _, h := mk("/v1/projects/tags", "", "https://hanzo.chat", ""); h != "hanzo.chat" {
 		t.Errorf("Origin → %q", h)
 	}
-	if h := tagsHost(mk("/v1/projects/tags", "", "", "https://hanzo.app/x?y=1")); h != "hanzo.app" {
+	if _, h := mk("/v1/projects/tags", "", "", "https://hanzo.app/x?y=1"); h != "hanzo.app" {
 		t.Errorf("Referer → %q", h)
 	}
 }
@@ -86,11 +105,15 @@ func TestTagsKeyHost(t *testing.T) {
 // an empty set at 200 with permissive CORS, so a page never breaks on its tag config.
 func TestServeTagsFailSafe(t *testing.T) {
 	s := &cloud.Service[state]{}
-	req := httptest.NewRequest(http.MethodGet, "/v1/projects/tags", nil)
-	w := httptest.NewRecorder()
-	serveTags(s, w, req)
-
-	res := w.Result()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Get("/v1/projects/tags", func(c *zip.Ctx) error { return serveTags(s, c) })
+	if err := app.Build(); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	res, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/projects/tags", nil))
+	if err != nil {
+		t.Fatalf("GET /v1/projects/tags: %v", err)
+	}
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
