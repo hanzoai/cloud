@@ -7,6 +7,19 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/meet/record", zip.Doc{
+		Description: "Ends a room's recording — EVERY one of them.\n\nWhoever the room admits may stop it, including someone who did not start it:\na person being recorded has to be able to end it, and a rule that only the\nstarter may stop would deny exactly that. Stopping is free — a caller made to\npay to stop being recorded would be paying for the wrong thing.\n\n200 MEANS THE ROOM IS NOT BEING RECORDED, and that is why this ends all of them\nrather than the first. \"At most one per room\" is an invariant this surface wants\nand cannot impose: reading the list and starting are two calls, and two replicas\nracing through that window both start. When the list comes back holding two, two\nis the truth — and ending one while answering 200 tells the person withdrawing\nconsent that it stopped while a second worker keeps writing. A stop that cannot\nfinish the job says so instead.\n\nStopping a room that is not being recorded is not an error. The answer names the\nroom with no recording on it, which is the state the caller asked for.",
+		Fields: map[string]string{
+			"recordIn.room":     "Room is the LiveKit room, named the way the office client names one\n(`<workspace>_<name>_<id>`). Its leading segment is what binds the room to a\ntenant, and it is the segment the caller's membership is checked against.",
+			"recording.bucket":  "Bucket is the object store bucket the recording is written to. It is stated\nbeside the key rather than folded into one URI so a client reads two facts\ninstead of splitting a string.",
+			"recording.error":   "Error is the media server's reason when a recording failed, and empty\notherwise.",
+			"recording.id":      "ID is the media server's egress id — the handle a later read names.",
+			"recording.object":  "Object is the key inside that bucket. Empty only while the media server has\nnot named a file yet.\n\nIt says WHERE the recording is, not how to fetch it. Reading one back is a\nseparate decision this surface deliberately does not make: a link to a\nprivate conversation needs its own answer about who may follow it and for\nhow long, and inventing a short one here would be worse than not having it.",
+			"recording.room":    "Room is the room this recording is of.",
+			"recording.started": "Started is when the recording began, as the media server reports it: its\nown `started_at`, verbatim and unconverted. LiveKit's egress service sets\nthat field from UnixNano, and a conversion this side cannot check against\nthe running server would be a number that looks right and is wrong by a\nfactor of a billion. 0 means it has not started.",
+			"recording.status":  "Status is the media server's own state name: EGRESS_STARTING, EGRESS_ACTIVE,\nEGRESS_ENDING, EGRESS_COMPLETE, EGRESS_FAILED, EGRESS_ABORTED or\nEGRESS_LIMIT_REACHED. It is passed through rather than folded into a\nvocabulary of ours, so the answer cannot mean something the media server did\nnot say.",
+		},
+	})
 	zip.Describe("GET /v1/meet/health", zip.Doc{
 		Description: "Health reports whether the office can mint join tokens.\n\nIt reports whether this deployment holds the LiveKit key pair it needs:\nready:true with 200 when tokens can be minted, the SAME body with ready:false,\nstatus \"degraded\" and 503 when they cannot — so a probe and a dashboard both\nread the degraded state instead of someone grepping a boot log.\n\nIt takes no credential and is reachable on every public host, so it withholds\nboth the reason and the signing key's name on purpose: ready is the whole\ndashboard fact, and the reason — which names the key file and the Secret — is\nwritten to the boot log where an operator already is.",
 		Fields: map[string]string{
@@ -15,10 +28,36 @@ func init() {
 			"meetHealth.status":  "Status is \"ok\" when tokens can be minted and \"degraded\" when they cannot.",
 		},
 	})
+	zip.Describe("GET /v1/meet/record", zip.Doc{
+		Description: "Answers what is being recorded in a room, and where the file went.\n\nIt reports the recording that is RUNNING, and once none is, the most recent one\nthe media server still holds — with its final status and its object. That second\ncase is the one that matters for finding a file: the answer to a start is the\nonly other place the location appears, and a client that lost it, or a colleague\nwho was not the one to press record, has nowhere else to look.\n\nIt is behind the same door as starting one: where a recording of a private\nconversation is kept is a fact about that conversation, so it is told to the\npeople the room admits and to nobody else.",
+		Fields: map[string]string{
+			"recordIn.room":     "Room is the LiveKit room, named the way the office client names one\n(`<workspace>_<name>_<id>`). Its leading segment is what binds the room to a\ntenant, and it is the segment the caller's membership is checked against.",
+			"recording.bucket":  "Bucket is the object store bucket the recording is written to. It is stated\nbeside the key rather than folded into one URI so a client reads two facts\ninstead of splitting a string.",
+			"recording.error":   "Error is the media server's reason when a recording failed, and empty\notherwise.",
+			"recording.id":      "ID is the media server's egress id — the handle a later read names.",
+			"recording.object":  "Object is the key inside that bucket. Empty only while the media server has\nnot named a file yet.\n\nIt says WHERE the recording is, not how to fetch it. Reading one back is a\nseparate decision this surface deliberately does not make: a link to a\nprivate conversation needs its own answer about who may follow it and for\nhow long, and inventing a short one here would be worse than not having it.",
+			"recording.room":    "Room is the room this recording is of.",
+			"recording.started": "Started is when the recording began, as the media server reports it: its\nown `started_at`, verbatim and unconverted. LiveKit's egress service sets\nthat field from UnixNano, and a conversion this side cannot check against\nthe running server would be a number that looks right and is wrong by a\nfactor of a billion. 0 means it has not started.",
+			"recording.status":  "Status is the media server's own state name: EGRESS_STARTING, EGRESS_ACTIVE,\nEGRESS_ENDING, EGRESS_COMPLETE, EGRESS_FAILED, EGRESS_ABORTED or\nEGRESS_LIMIT_REACHED. It is passed through rather than folded into a\nvocabulary of ours, so the answer cannot mean something the media server did\nnot say.",
+		},
+	})
 	zip.Describe("GET /v1/meet/session", zip.Doc{
 		Description: "Answers GET /v1/meet/session. It admits on the SAME two lanes as mint\nand refuses on the same terms, so a caller that could not join anything is told\nso up front rather than after composing a room name.\n\nIt answers OUTSIDE ready(), deliberately, and for the same reason the bundle is\nserved outside it: an unconfigured deployment should render a client that states\nthe problem, not a 404 and a blank page. So a deploy whose key file is bad —\nwhich drops the whole state, leaving only a reason — still answers a lobby read\nwhile every mint is 503. The lobby never needed the signing key: it names\nworkspaces, and only the mint signs. That pair is honest rather than\ncontradictory: the workspaces someone belongs to do\nnot stop being true because this binary cannot sign, and the refusal they get on\njoining names the real fault instead of hiding it behind an empty list.",
 	})
 	zip.Describe("POST /v1/meet/getToken", zip.Doc{
 		Description: "Answers POST /v1/meet/getToken: verify the caller belongs to the room's\nworkspace, then hand back a join token for exactly that room.\n\nThe response is the RAW token as text/plain, not JSON. That is the caller's\ncontract — the office client reads it with res.text() — and it is also the honest\nshape: the body is one opaque string, so wrapping it in an object would add a\nenvelope neither side needs.",
+	})
+	zip.Describe("POST /v1/meet/record", zip.Doc{
+		Description: "Begins recording a room, or hands back the recording already running.\n\nA recording is a durable artifact of a conversation, so only someone this room\nwould admit may make one: the caller is authorized by the SAME decision\n/v1/meet/getToken makes about the same room, and refused with the same 401.\n\nA SECOND START RETURNS THE FIRST rather than refusing it. There is at most one\nrecording per room and this operation's job is to establish that there is one —\nwhich is already true when a colleague, or the caller's own double-click,\nstarted it a moment ago. The answer is the same shape either way, naming the\nrecording that is actually running, so a client never has to tell the two cases\napart to find the id.\n\nA deployment with no media server address or no object store answers 503 naming\nwhich, because a recording that silently does not happen is worse than one that\nis refused. The reason reaches only a caller this room already admits.",
+		Fields: map[string]string{
+			"recordIn.room":     "Room is the LiveKit room, named the way the office client names one\n(`<workspace>_<name>_<id>`). Its leading segment is what binds the room to a\ntenant, and it is the segment the caller's membership is checked against.",
+			"recording.bucket":  "Bucket is the object store bucket the recording is written to. It is stated\nbeside the key rather than folded into one URI so a client reads two facts\ninstead of splitting a string.",
+			"recording.error":   "Error is the media server's reason when a recording failed, and empty\notherwise.",
+			"recording.id":      "ID is the media server's egress id — the handle a later read names.",
+			"recording.object":  "Object is the key inside that bucket. Empty only while the media server has\nnot named a file yet.\n\nIt says WHERE the recording is, not how to fetch it. Reading one back is a\nseparate decision this surface deliberately does not make: a link to a\nprivate conversation needs its own answer about who may follow it and for\nhow long, and inventing a short one here would be worse than not having it.",
+			"recording.room":    "Room is the room this recording is of.",
+			"recording.started": "Started is when the recording began, as the media server reports it: its\nown `started_at`, verbatim and unconverted. LiveKit's egress service sets\nthat field from UnixNano, and a conversion this side cannot check against\nthe running server would be a number that looks right and is wrong by a\nfactor of a billion. 0 means it has not started.",
+			"recording.status":  "Status is the media server's own state name: EGRESS_STARTING, EGRESS_ACTIVE,\nEGRESS_ENDING, EGRESS_COMPLETE, EGRESS_FAILED, EGRESS_ABORTED or\nEGRESS_LIMIT_REACHED. It is passed through rather than folded into a\nvocabulary of ours, so the answer cannot mean something the media server did\nnot say.",
+		},
 	})
 }

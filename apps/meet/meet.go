@@ -113,6 +113,7 @@ type state struct {
 	ws        string // LIVEKIT_WS — where the browser dials; empty is legible, see wsEnv
 	reason    string // why this is unusable; empty means usable
 	authority roster // who owns the membership rows; nil means the real peer, see rows
+	egress    egress // where a recording is made and where it lands, see egress.go
 }
 
 // roster is the workspace-membership authority — the process that OWNS the rows,
@@ -174,11 +175,15 @@ func load() state {
 	if path == "" {
 		path = keyFile
 	}
+	ws := strings.TrimSpace(os.Getenv(wsEnv))
 	key, apiSecret, err := readKeys(path)
 	if err != nil {
-		return state{reason: err.Error()}
+		// The recording plane is still read on this path. It has its own reason and
+		// its own routes, and an operator fixing one fault should be told about the
+		// other in the same boot rather than after the first fix.
+		return state{reason: err.Error(), egress: egressOf(ws)}
 	}
-	return state{apiKey: key, apiSecret: apiSecret, ws: strings.TrimSpace(os.Getenv(wsEnv))}
+	return state{apiKey: key, apiSecret: apiSecret, ws: ws, egress: egressOf(ws)}
 }
 
 // readKeys parses a LiveKit key file: a YAML map of apiKey -> apiSecret, which is the
@@ -330,7 +335,12 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	// anti-CSRF check is written ONCE and cannot be forgotten by the next route
 	// added here — the same reason apps/todo puts it on its group rather than
 	// on each of its six writes.
-	g := app.Group("/v1/meet", requireCSRFOnWrites())
+	// cloud.DenyEnvelope beside the CSRF gate and BEFORE the leaves, since fiber
+	// runs middleware in registration order: starting a recording gates on the
+	// caller's balance, and a typed op's only refusal channel is an error, so the
+	// envelope is what turns cloud.Denied back into the same 402 body the mint
+	// answers with rather than a second vocabulary for it.
+	g := app.Group("/v1/meet", requireCSRFOnWrites(), cloud.DenyEnvelope())
 
 	g.Post("/getToken", cloud.Handle(s, mint))
 
@@ -352,8 +362,32 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	// StatusCode picks 200 or 503, so the degraded answer keeps carrying the same
 	// body the healthy one does — the pair that once kept this route raw, before
 	// zip could declare a non-2xx with a typed body.
-	zip.Get(g, "/health", ops{s}.health,
+	o := ops{s}
+	zip.Get(g, "/health", o.health,
 		zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
+
+	// ONE PATH, three methods, one input and one answer (record.go). A recording is
+	// a property of a room rather than a thing a caller names, so there is nothing
+	// to put in the path after /record: the room is the input, and the method says
+	// what to do about it.
+	//
+	// THE ANTI-CSRF GATE ON THESE IS NOT THE GROUP'S, and believing otherwise is how
+	// they shipped reachable from any origin. A typed op is not one entry point: zip
+	// records the route's handler and the op as two fields of one entry and wraps
+	// only the handler, so the REST route is gated by the group above and the other
+	// five doors onto the same op — MCP, the call plane, GraphQL, the CLI, Here —
+	// are not. The gate for these three lives in ops.ready, which every door passes
+	// through. The group gate stays for /getToken, which is a raw route and has no
+	// preamble of its own.
+	zip.Post(g, "/record", o.start,
+		zip.WithOperationID("meetRecordStart"),
+		zip.WithSummary("Start recording a room, or return the recording already running"))
+	zip.Delete(g, "/record", o.stop,
+		zip.WithOperationID("meetRecordStop"),
+		zip.WithSummary("Stop a room's recording"))
+	zip.Get(g, "/record", o.read,
+		zip.WithOperationID("meetRecordRead"),
+		zip.WithSummary("What is being recorded in a room, and where the file goes"))
 
 	// THE CLIENT IS NOT HERE. It is its own image (ghcr.io/hanzoai/meet, built from
 	// hanzoai/admin apps/meet at base '/') on its own host, meet.hanzo.ai — three
@@ -371,6 +405,15 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	// that holds one can name its API; a client that relies on a host-only cookie
 	// cannot, which is why tasks.hanzo.ai is split at the edge instead.
 
+	// The recording plane carries its own configuration and its own reason, so it
+	// gets its own line in BOTH branches below: a deployment can mint join tokens
+	// perfectly and still be unable to record, and an operator reading only
+	// "mounted" would not know which. WARN rather than ERROR because calls
+	// themselves are unaffected — only /v1/meet/record is.
+	if !s.State.egress.ready() {
+		s.Log.Warn("meet cannot record — POST /v1/meet/record will 503 on every call until this is fixed; joining calls is unaffected",
+			"reason", s.State.egress.reason, "prefix", "/v1/meet")
+	}
 	if !s.State.ready() {
 		// ERROR, not warn, and it names the file/Secret to fix. A subsystem that can
 		// never serve a single request is not a warning — and the previous version of
@@ -595,7 +638,7 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	// A seat on the media server is the one thing here that costs money, and this
 	// is where it is handed out. Authorized before the token exists, so a caller
 	// who cannot cover it never holds credentials to the room. See meter.go.
-	ch, err := afford(s, c)
+	ch, err := afford(s, c.Context(), seat, fee())
 	if err != nil {
 		return cloud.DenyResource(c, err)
 	}
@@ -604,7 +647,7 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "meet: mint failed")
 	}
-	charge(ch)
+	charge(ch, seat, fee())
 	return c.String(http.StatusOK, tok)
 }
 
@@ -709,6 +752,13 @@ type video struct {
 // LiveKit's grant object. The shape is LiveKit's, not ours — it must match what the
 // media server verifies, so the field set here mirrors livekit/protocol's
 // auth.tokenClaims (iss=apiKey, sub=identity, iat/nbf/exp, name, video).
+//
+// Video is `any` because the GRANT differs by what the token is for and the
+// narrowing is the whole point: a browser's token names roomJoin and one room
+// (video), and the token this binary presents to LiveKit's own API names
+// roomRecord (recorder, egress.go). Widening one struct to cover both would put
+// every field in every token, and a token that can express a privilege can leak
+// it. The registered claims are identical for both, so they are written once.
 type claims struct {
 	Iss   string `json:"iss"`
 	Sub   string `json:"sub"`
@@ -716,7 +766,7 @@ type claims struct {
 	Nbf   int64  `json:"nbf"`
 	Exp   int64  `json:"exp"`
 	Name  string `json:"name,omitempty"`
-	Video video  `json:"video"`
+	Video any    `json:"video"`
 }
 
 // header is the fixed JOSE header for every token this package mints. HS256 is not a
@@ -725,7 +775,12 @@ type claims struct {
 // there is no code path that could be talked into `alg: none`.
 var header = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 
-// grant mints the join token: a compact HS256 JWT over the claims above.
+// grant mints the join token: roomJoin into exactly one room, for ttl.
+func (s state) grant(room, identity, name string, now time.Time) (string, error) {
+	return s.sign(identity, name, video{RoomJoin: true, Room: room}, ttl, now)
+}
+
+// sign mints a LiveKit token over one grant: a compact HS256 JWT.
 //
 // This composes stdlib crypto/hmac + crypto/sha256 rather than taking a JWT library,
 // for two reasons. First, apps/team/token already establishes this exact idiom for
@@ -734,7 +789,12 @@ var header = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"
 // LiveKit server, so the whole class of bugs a JWT library earns its keep against —
 // alg confusion, `alg: none`, non-constant-time comparison — has no code path here.
 // The primitives themselves are stdlib; nothing cryptographic is hand-rolled.
-func (s state) grant(room, identity, name string, now time.Time) (string, error) {
+//
+// It is ONE signer for both tokens this package mints because the difference
+// between them is the GRANT and nothing else — same key, same algorithm, same
+// registered claims. Two copies of this would be two places for the empty-key
+// refusal below to be forgotten.
+func (s state) sign(identity, name string, grant any, life time.Duration, now time.Time) (string, error) {
 	// Defense in depth at the CRYPTO boundary, not just at the gate. crypto/hmac
 	// accepts an empty key and returns a perfectly well-formed MAC, so an empty
 	// signing key does not fail — it silently produces a token that verifies under
@@ -748,9 +808,9 @@ func (s state) grant(room, identity, name string, now time.Time) (string, error)
 		Sub:   identity,
 		Iat:   now.Unix(),
 		Nbf:   now.Unix(),
-		Exp:   now.Add(ttl).Unix(),
+		Exp:   now.Add(life).Unix(),
 		Name:  name,
-		Video: video{RoomJoin: true, Room: room},
+		Video: grant,
 	})
 	if err != nil {
 		return "", err
