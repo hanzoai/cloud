@@ -157,10 +157,17 @@ type resFrame struct {
 	ID      string      `json:"id"`
 	OK      bool        `json:"ok"`
 	Payload any         `json:"payload,omitempty"`
-	Error   *frameError `json:"error,omitempty"`
+	Error   *protoError `json:"error,omitempty"`
 }
 
-type frameError struct {
+// protoError is the {code, message} pair this protocol carries when something
+// failed. NOT a frame and not named like one: the three frames are reqFrame,
+// eventFrame and resFrame, and frameReq/frameRes/frameEvent are the string
+// constants naming their kinds — so a `frame`-prefixed TYPE reads as a fourth
+// kind that does not exist. It is nested inside two things that ARE frames
+// (resFrame.Error, invokeResultParams.Error), which is why it belongs to the
+// protocol rather than to either of them.
+type protoError struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
 }
@@ -170,7 +177,7 @@ func okRes(id string, payload any) resFrame {
 }
 
 func errRes(id, code, msg string) resFrame {
-	return resFrame{Type: frameRes, ID: id, OK: false, Error: &frameError{Code: code, Message: msg}}
+	return resFrame{Type: frameRes, ID: id, OK: false, Error: &protoError{Code: code, Message: msg}}
 }
 
 // connectParams is the handshake. Fields cloud does not act on (auth, scopes,
@@ -231,7 +238,7 @@ type invokeResultParams struct {
 	OK          bool            `json:"ok"`
 	Payload     json.RawMessage `json:"payload"`
 	PayloadJSON *string         `json:"payloadJSON"`
-	Error       *frameError     `json:"error"`
+	Error       *protoError     `json:"error"`
 }
 
 // result reduces a node's answer to what a caller can use. payloadJSON wins
@@ -443,25 +450,25 @@ func (t *wsTransport) serve(conn *wsx.Conn, org, remoteIP string) {
 // connect validates a handshake and shapes the session it describes. It is
 // pure — no registration, no writes — so serve keeps every side effect, and
 // therefore the teardown invariant, in one place.
-func (t *wsTransport) connect(org, remoteIP, connID string, f reqFrame) (*Session, *frameError) {
+func (t *wsTransport) connect(org, remoteIP, connID string, f reqFrame) (*Session, *protoError) {
 	if f.Method != methodConnect {
-		return nil, &frameError{Code: codeInvalidRequest, Message: "connect required"}
+		return nil, &protoError{Code: codeInvalidRequest, Message: "connect required"}
 	}
 	var p connectParams
 	if err := json.Unmarshal(f.Params, &p); err != nil {
-		return nil, &frameError{Code: codeInvalidRequest, Message: "malformed connect params"}
+		return nil, &protoError{Code: codeInvalidRequest, Message: "malformed connect params"}
 	}
 	if p.MaxProtocol < protocolVersion || p.MinProtocol > protocolVersion {
-		return nil, &frameError{Code: codeInvalidRequest, Message: "protocol mismatch"}
+		return nil, &protoError{Code: codeInvalidRequest, Message: "protocol mismatch"}
 	}
 	// bot treats a roleless connect as an operator. This route serves nodes, so
 	// anything else is a client on the wrong endpoint, not a node to register.
 	if p.Role != "node" {
-		return nil, &frameError{Code: codeInvalidRequest, Message: "this endpoint serves bot nodes"}
+		return nil, &protoError{Code: codeInvalidRequest, Message: "this endpoint serves bot nodes"}
 	}
 	nodeID := p.nodeID()
 	if nodeID == "" {
-		return nil, &frameError{Code: codeInvalidRequest, Message: "connect names no node"}
+		return nil, &protoError{Code: codeInvalidRequest, Message: "connect names no node"}
 	}
 	return &Session{
 		Key:         NodeKey{Org: org, NodeID: nodeID},

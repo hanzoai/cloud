@@ -217,12 +217,14 @@ func absSubject(org, rel string) (string, error) {
 	return subjectRoot(org) + rel, nil
 }
 
-// relSubject presents a wire subject caller-relative again.
-func relSubject(org, wire string) string {
-	if rel, ok := strings.CutPrefix(wire, subjectRoot(org)); ok {
+// relSubject presents an absolute subject caller-relative again — the inverse of
+// absSubject, and named against it rather than against a wire, because what it
+// takes is the same NATS subject absSubject produced.
+func relSubject(org, abs string) string {
+	if rel, ok := strings.CutPrefix(abs, subjectRoot(org)); ok {
 		return rel
 	}
-	return wire
+	return abs
 }
 
 // errHTTP maps a broker error onto the status the operation's contract names:
