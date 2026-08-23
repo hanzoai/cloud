@@ -787,6 +787,10 @@
             "description": "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
             "type": "string"
           },
+          "connectedAt": {
+            "description": "ConnectedAt is when somebody was last known to have this sandbox's project\nOPEN, Unix seconds. It is a fact with an EXPIRY rather than a flag: a\nwatcher restamps it every beat of its stream, and it goes stale on its own\nwhen the stream dies, so nothing has to be turned off by a process that may\nnot be there any more. The reaper reads it to choose WHICH idle allowance\napplies — see lifecycle.go.\n\nZero means nobody has said so, which puts the sandbox on the short clock.",
+            "type": "integer"
+          },
           "createdAt": {
             "description": "CreatedAt is when the lease was first taken, Unix seconds.",
             "type": "integer"

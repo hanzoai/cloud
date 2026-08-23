@@ -25,10 +25,12 @@ package sandbox
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/apps/principal"
+	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -72,6 +74,50 @@ func expose() {
 	zip.Post[plane.EndIn, struct{}](p, "/sandbox/end", planeEnd,
 		zip.WithOperationID(plane.SandboxEnd),
 		zip.WithSummary("End a sandbox's lease"))
+	zip.Post[plane.AttachIn, plane.Attached](p, "/sandbox/attach", planeAttach,
+		zip.WithOperationID(plane.SandboxAttach),
+		zip.WithSummary("Report that somebody is watching a project"))
+}
+
+// planeAttach stamps ATTENTION on the sandbox a project currently holds.
+//
+// It is the half of the idle clock this process cannot observe. A sandbox knows
+// when it was last CALLED, and that is a poor proxy for whether anyone is there:
+// reading a diff for twenty minutes touches nothing, and a tab closed twenty
+// minutes ago touches nothing either. Only the stream can tell those apart, and
+// the stream is in another process (see plane.SandboxAttach).
+//
+// KEYED ON THE PROJECT, not a sandbox id, because that is what the watcher holds
+// — an id changes when a lease is reaped and re-taken while the tab stays open,
+// so presence keyed on it would go stale at exactly the moment it decides a reap.
+//
+// A project with no live sandbox is a SUCCESSFUL empty answer, not an error: a
+// user who opened the page before anything was leased is the ordinary case, and
+// answering with an error would make an idle stream log a failure every beat.
+func planeAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, error) {
+	s, org, err := live(ctx)
+	if err != nil {
+		return nil, err
+	}
+	project := strings.TrimSpace(in.Project)
+	if project == "" {
+		return nil, zip.ErrBadRequest("attach: project required")
+	}
+	st, err := storeFor(s, org)
+	if err != nil {
+		return nil, err
+	}
+	m, err := st.Live(ctx, org, project)
+	if err != nil {
+		return nil, zip.Errorf(500, "attach: %v", err)
+	}
+	if m.ID == "" {
+		return &plane.Attached{}, nil
+	}
+	if err := st.Watched(ctx, org, m.ID, time.Now().Unix()); err != nil {
+		return nil, zip.Errorf(500, "attach: %v", err)
+	}
+	return &plane.Attached{ID: m.ID}, nil
 }
 
 // live resolves the caller's org and the mounted service together, because every
@@ -89,6 +135,7 @@ func expose() {
 // which nothing outside the process can write. What this op does with the answer
 // — open the org's store, lease a pod in its namespace — is the same either way,
 // so the tenant it acts on must be, too.
+//
 // THE TENANT IS ASKED FIRST. A caller with no tenant is told that and nothing
 // else — whether this process happens to mount sandbox is a fact about our
 // deployment, and answering it before deciding who is asking hands it to anyone.

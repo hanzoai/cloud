@@ -366,13 +366,13 @@ func TestSessionNameIsAnAllowlist(t *testing.T) {
 // second knob that could disagree with it.
 func TestTerminalEndsWithTheLease(t *testing.T) {
 	at := time.Now().Add(37 * time.Minute).Truncate(time.Second)
-	if got := leaseEnd(Sandbox{ExpiresAt: at.Unix()}); !got.Equal(at) {
+	if got := leaseEnd(Sandbox{ExpiresAt: at.Unix()}, absoluteDefault); !got.Equal(at) {
 		t.Errorf("leaseEnd = %v, want the row's own expiry %v", got, at)
 	}
 	// A row with no expiry is a row written before the lease was, not permission
 	// to hold a socket open forever.
-	got := leaseEnd(Sandbox{})
-	if bound := time.Now().Add(maxTTL * time.Second); got.After(bound.Add(time.Minute)) {
+	got := leaseEnd(Sandbox{}, absoluteDefault)
+	if bound := time.Now().Add(absoluteDefault); got.After(bound.Add(time.Minute)) {
 		t.Errorf("leaseEnd = %v for an expiry-less row, want no later than %v", got, bound)
 	}
 }

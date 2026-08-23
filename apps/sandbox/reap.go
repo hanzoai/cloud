@@ -4,7 +4,7 @@ package sandbox
 //
 // Everything needed for this already existed and nothing called it. `ExpiresAt`
 // was written on every create, `LastUsedAt` was stamped on every call,
-// `Store.Expired` was implemented, and `stop` was implemented — and a sandbox,
+// the lease was written on every create, and `stop` was implemented — and a sandbox,
 // once created, ran forever. Measured, not inferred: a proof pod from a test run
 // was still Running 64 minutes later and had to be deleted by hand.
 //
@@ -12,15 +12,11 @@ package sandbox
 // that bills forever, so the reaper is simultaneously the idle-sleep feature and
 // the honest meter. Neither is a separate component.
 //
-// TWO CLOCKS, because they answer different questions:
-//
-//	ExpiresAt   the LEASE. Set at create from ttlSec. When it passes the sandbox
-//	            is over — the caller said how long they wanted it and that is how
-//	            long they got.
-//	LastUsedAt  ATTENTION. Stamped by every fs and exec call. A sandbox nobody
-//	            has touched for `idle` is asleep even if its lease has hours left,
-//	            because holding a pod for a session someone walked away from is
-//	            the whole cost this exists to stop.
+// WHEN a lease ends is decided in lifecycle.go and nowhere else — the lease it
+// was sold, the attention it has had, and a ceiling over both. This file is the
+// LOOP: it lists, it asks, and it acts on the answer. Restating the policy here
+// is how the expiry ended up half in a WHERE clause and half in a Go loop, with
+// neither half naming the other.
 //
 // ONE ACTION, TWO TRIGGERS. Both end the pod and both keep the volume, because
 // `purge` is a separate opt-in and ending a lease must never destroy what the
@@ -48,10 +44,18 @@ import (
 // apiserver traffic one active sandbox makes.
 const reapEvery = time.Minute
 
-// idleAfter is how long a sandbox may go untouched before it sleeps. An hour,
-// because that is also the longest single command the runtime allows: a sandbox
-// quiet for longer than its own maximum command is not working, it is abandoned.
-const idleAfter = time.Hour
+// orphanGrace is how long a pod may exist with no row before this sweep presumes
+// it leaked. It is NOT a lifetime clock — those are in lifecycle.go and there are
+// three of them — and it does not become shorter when they do.
+//
+// It answers one narrow question: how wide is the window in which a pod
+// legitimately has no row? A create writes its row AFTER the pod exists, so a
+// sandbox mid-creation is exactly that, and the cost of the two mistakes is not
+// symmetric — a leaked pod costs an hour of a node, a pod deleted out from under
+// its owner costs their work. So it is an hour, not one interval, and it stays an
+// hour even where the disconnected clock reaps in fifteen minutes: those pods are
+// removed by name, through their row, and never reach this sweep at all.
+const orphanGrace = time.Hour
 
 // extendWhenUnder is how close to expiry a BUSY sandbox has to be before its
 // lease is pushed out. Ten minutes: comfortably more than one reap sweep, so a
@@ -60,15 +64,16 @@ const idleAfter = time.Hour
 const extendWhenUnder = int64(10 * 60)
 
 // extendBy is how much runway a busy sandbox is granted each time. One hour —
-// the same span as idleAfter, so the two rules read against the same clock: an
-// hour of silence ends a sandbox, an hour of runway is what work buys.
+// the same span as the watched idle allowance, so the two rules read against the
+// same clock: an hour of silence ends a sandbox, an hour of runway is what work
+// buys.
+//
+// The CEILING this is bounded by is not here. It is clocks.absolute
+// (lifecycle.go), the one number the create clamps to and the sweep ends past,
+// because without a ceiling extension is not a lease renewal but a lease
+// abolition — and a sandbox that has been working for a day is a job that wants
+// a Deployment, not a session that wants another hour.
 const extendBy = int64(60 * 60)
-
-// maxLifetime is the absolute ceiling from CREATION, whatever the activity. A
-// day. Without it, extension is not a lease renewal but a lease abolition — and
-// a sandbox that has been working for 24 hours is a job that wants a Deployment,
-// not a session that wants another hour.
-const maxLifetime = int64(24 * 60 * 60)
 
 // reap runs until ctx is done. It is started once by Mount and never returns a
 // value — a sweep that fails is logged and retried next minute, because the
@@ -104,33 +109,35 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 			s.Log.Warn("reap: open store", "namespace", ns, "err", openErr)
 			return
 		}
-		expired, err := st.Expired(ctx, ns.ID(), now.Unix())
-		if err != nil {
-			s.Log.Warn("reap: list expired", "namespace", ns, "err", err)
-			return
-		}
-		for _, m := range expired {
-			end(ctx, s, st, m, "expired")
-		}
-		// Idle is not a query the store answers, because "untouched for an hour"
-		// is a policy and the store holds facts. Listing the running ones and
-		// checking the stamp keeps the policy in one place — here — where the
-		// constant that defines it also lives.
+		// WHEN a sandbox ends is not a query the store answers. The store holds
+		// facts — the stamps — and lifecycle.go holds the policy that reads them,
+		// which is why there is one list here and not one per reason: the expiry
+		// used to be a WHERE clause and the idle check a loop, so half the rule
+		// lived in SQL and half in Go and neither half named the other.
+		//
+		// `over` is that rule, and it hands back which clock ran out. The string
+		// is what the row's last line says, and it is the only thing an operator
+		// has when asked why a sandbox went away.
 		running, err := st.List(ctx, ns.ID(), "", "running")
 		if err != nil {
 			s.Log.Warn("reap: list running", "namespace", ns, "err", err)
 			return
 		}
 		for _, m := range running {
-			if m.LastUsedAt > 0 && now.Sub(time.Unix(m.LastUsedAt, 0)) > idleAfter {
-				end(ctx, s, st, m, "idle")
+			// END IS ASKED FIRST, and `over` is the whole of it (lifecycle.go):
+			// the ceiling from creation, the lease, and the untouched-allowance
+			// that is a different length depending on whether anybody is watching.
+			// It hands back WHICH clock ran out, which is the string the row's
+			// last line carries.
+			if done, why := s.State.clk.over(m, now); done {
+				end(ctx, s, st, m, why)
 				continue
 			}
 			// A SANDBOX THAT IS WORKING KEEPS ITS COMPUTER.
 			//
 			// LastUsedAt already tells us the difference between a run that is
 			// progressing and one that is abandoned — it is stamped by every exec
-			// and every fs call, and the branch above already trusts it to kill.
+			// and every fs call, and the rule above already trusts it to kill.
 			// Trusting it in ONE direction only was the bug: activity could
 			// shorten a lease and never lengthen it, so a deep-research run or a
 			// long build that was demonstrably alive still died at its TTL. That
@@ -138,15 +145,16 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 			// on exactly the runs worth keeping.
 			//
 			// So a busy sandbox gets its lease pushed to now+extendBy, bounded by
-			// maxLifetime from CREATION. It stays a lease: the ceiling is absolute
-			// and measured from the start, so no amount of activity turns a
-			// sandbox into a permanent resident. The idle rule above still
-			// outranks this — untouched for an hour ends it whatever the lease
-			// says — and Extend only ever moves a lease FORWARD, so this can never
-			// cut one short.
+			// the SAME ceiling everything else reads (clk.absolute, from
+			// CREATION), so no amount of activity turns a sandbox into a permanent
+			// resident. It runs BEFORE the lease is actually up — extendWhenUnder
+			// is ten minutes and the sweep is every minute — so a busy sandbox is
+			// carried forward rather than reaped and re-leased. The idle rules
+			// above still outrank it, and Extend only ever moves a lease FORWARD,
+			// so this can never cut one short.
 			if m.ExpiresAt > 0 && m.ExpiresAt-now.Unix() < extendWhenUnder {
 				want := now.Unix() + extendBy
-				if ceiling := m.CreatedAt + maxLifetime; want > ceiling {
+				if ceiling := m.CreatedAt + int64(s.State.clk.absolute/time.Second); want > ceiling {
 					want = ceiling
 				}
 				if want > m.ExpiresAt {
@@ -191,12 +199,9 @@ func end(ctx context.Context, s *cloud.Service[state], st *Store, m Sandbox, why
 //   - and it deletes by NAME with a UID precondition, after checking the object it
 //     read back carries that label — never by handing a selector to a bulk delete.
 //
-// A pod younger than `idleAfter` is left alone. A create writes its row after the
-// pod exists, so a sandbox mid-creation legitimately has a pod and no row for a
-// moment — but the grace is an HOUR and not one interval, because the cost of the
-// two mistakes is not symmetric: a leaked pod costs an hour of a node, and a pod
-// deleted out from under its owner costs their work. The same hour the idle clock
-// uses, for the same reason.
+// A pod younger than `orphanGrace` is left alone — see the constant for why that
+// window is what it is, and why it is its own number rather than borrowed from a
+// lifetime clock.
 //
 // ONE DEPLOYMENT PER SANDBOX NAMESPACE. This sweep's whole claim is "no row of ours
 // names this pod", so a second cloud pointed at the same SANDBOX_NAMESPACE would
@@ -226,7 +231,7 @@ func orphans(ctx context.Context, s *cloud.Service[state]) {
 		if id == "" || claimed[id] {
 			continue
 		}
-		if age := time.Since(p.GetCreationTimestamp().Time); age < idleAfter {
+		if age := time.Since(p.GetCreationTimestamp().Time); age < orphanGrace {
 			continue
 		}
 		if !rt.bound.covers(p) {
