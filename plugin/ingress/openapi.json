@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package ingress is your front door: automatic TLS certificates and hostname routing to any backend, changed live.",
+    "description": "Package ingress is your edge: automatic TLS certificates and hostname routing to any backend, changed live.",
     "version": "v1"
   },
   "servers": [

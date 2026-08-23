@@ -47,7 +47,7 @@
       "post": {
         "operationId": "post_esign_documents",
         "summary": "Uploads a PDF and opens a draft ready for recipients and fields.",
-        "description": "Uploads a PDF and opens a draft ready for recipients and fields.\n\nIt answers 201 with the document in DRAFT — the state where recipients and\nfields may still be added, and the only state they may. The bytes go to object\nstorage rather than into the tenant database, and the original is kept under its\nown key so it survives sealing untouched: a completed document can always be\ncompared against what was uploaded. Creation is recorded on the audit trail.\n\nThis is the sender's door: a validated principal is required, and the document\nlands in that principal's OWN org. Isolation is physical rather than a filter —\neach tenant has its own store — so another org's document id is simply not\nthere. A body over 32 MiB is refused with 413.",
+        "description": "Uploads a PDF and opens a draft ready for recipients and fields.\n\nIt answers 201 with the document in DRAFT — the state where recipients and\nfields may still be added, and the only state they may. The bytes go to object\nstorage rather than into the tenant database, and the original is kept under its\nown key so it survives sealing untouched: a completed document can always be\ncompared against what was uploaded. Creation is recorded on the audit trail.\n\nThis is the sender's surface: a validated principal is required, and the document\nlands in that principal's OWN org. Isolation is physical rather than a filter —\neach tenant has its own store — so another org's document id is simply not\nthere. A body over 32 MiB is refused with 413.",
         "tags": [
           "esign"
         ],
@@ -242,7 +242,7 @@
       "post": {
         "operationId": "post_esign_documents_by_id_recipients",
         "summary": "Adds someone to a draft and mints their signing token.",
-        "description": "Adds someone to a draft and mints their signing token.\n\nIt answers 201 with the recipient's id and their signing TOKEN — the\ncrypto-random capability that is the only credential the signer's door accepts —\nso this response is where the signing link is built from. A CC recipient is\nrecorded as already complete, because they are never asked to sign.\n\nOnly while DRAFT: adding a recipient to a document already sent is a 409,\nbecause the field layout and the turn order were fixed when it went out. An\nunknown document is a 404. The addition is recorded on the audit trail.",
+        "description": "Adds someone to a draft and mints their signing token.\n\nIt answers 201 with the recipient's id and their signing TOKEN — the\ncrypto-random capability that is the only credential the signer's surface\naccepts — so this response is where the signing link is built from. A CC\nrecipient is recorded as already complete, because they are never asked to\nsign.\n\nOnly while DRAFT: adding a recipient to a document already sent is a 409,\nbecause the field layout and the turn order were fixed when it went out. An\nunknown document is a 404. The addition is recorded on the audit trail.",
         "tags": [
           "esign"
         ],
@@ -350,7 +350,7 @@
       "get": {
         "operationId": "get_esign_o_by_org_sign_by_token",
         "summary": "Opens a document you were asked to sign, using your signing link.",
-        "description": "Opens a document you were asked to sign, using your signing link.\n\nIt answers the document, the recipient the link identifies, the fields THAT\nrecipient must fill, and the PDF to display. The first open also marks the\nrecipient as having opened it and records that on the audit trail, so this read\nhas a side effect by design.\n\nThis door takes NO account: the signing token is the entire credential, and it\nnames the recipient, so a signer sees only their own fields and never the other\nrecipients' tokens. The token resolves to its owning tenant FIRST, before any\nper-tenant store is opened, and the org segment is only checked against that\nanswer. An unknown or wrong-org token is one and the same 404, never a hint that\nsome other document exists.",
+        "description": "Opens a document you were asked to sign, using your signing link.\n\nIt answers the document, the recipient the link identifies, the fields THAT\nrecipient must fill, and the PDF to display. The first open also marks the\nrecipient as having opened it and records that on the audit trail, so this read\nhas a side effect by design.\n\nThis surface takes NO account: the signing token is the entire credential, and\nit names the recipient, so a signer sees only their own fields and never the\nother recipients' tokens. The token resolves to its owning tenant FIRST, before\nany per-tenant store is opened, and the org segment is only checked against\nthat answer. An unknown or wrong-org token is one and the same 404, never a\nhint that some other document exists.",
         "tags": [
           "esign"
         ],
@@ -794,7 +794,7 @@
             "type": "string"
           },
           "token": {
-            "description": "Token is the crypto-random signing capability for this recipient. It is the\nentire credential their door accepts, so treat it as a secret and hand it\nonly to them: the signing link is built from it.",
+            "description": "Token is the crypto-random signing capability for this recipient. It is the\nentire credential their signing endpoint accepts, so treat it as a secret\nand hand it only to them: the signing link is built from it.",
             "type": "string"
           }
         },

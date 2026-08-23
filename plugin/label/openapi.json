@@ -576,7 +576,7 @@
             "type": "string"
           },
           "evidence": {
-            "description": "Evidence is the pointer to the record this conclusion came from: a dispute id,\na case id, a decision id. At most 512 bytes, required at the write, and opaque\nto this plane — stored and returned verbatim, never resolved. It is what an\nadverse action is defended with, which is why an assertion carrying none is\nrefused at the door.",
+            "description": "Evidence is the pointer to the record this conclusion came from: a dispute id,\na case id, a decision id. At most 512 bytes, required at the write, and opaque\nto this plane — stored and returned verbatim, never resolved. It is what an\nadverse action is defended with, which is why an assertion carrying none is\nrefused at the endpoint.",
             "type": "string"
           },
           "hold": {
@@ -641,7 +641,7 @@
             "type": "array"
           },
           "kinds": {
-            "description": "Kinds, Dispositions and Sources are the closed vocabularies. A value\noutside them is refused at the door.",
+            "description": "Kinds, Dispositions and Sources are the closed vocabularies. A value\noutside them is refused at the endpoint.",
             "items": {
               "type": "string"
             },
