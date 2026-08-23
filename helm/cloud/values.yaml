@@ -34,7 +34,7 @@ serviceAccount:
 # below ~40s risks SIGKILL before a pod ships its last writes.
 terminationGracePeriodSeconds: 60
 
-# Brand / domain / enabled subsystems mirror the binary's CLI flags
+# Brand / domain / data dir / issuer mirror the binary's CLI flags
 # (cmd/cloud/main.go).
 hanzo:
   # brand is the ONE value a white-label deployment states. domain and iamIssuer
@@ -56,17 +56,10 @@ hanzo:
   # every real token and anonymizes every principal — see brand/brand.go, which
   # spells out that exact failure for the near-miss spelling iam.hanzo.ai.
   iamIssuer: ""
-  # Comma-separated subsystem list (empty = all in manifest/apps.go).
-  # Payments + Vault are NEVER co-resident per HIP-0106 PCI isolation;
-  # leave them off unless you fully understand the implications.
-  #
-  # platform (/v1/platform, order 124) + git (/v1/git, order 132) are the PaaS
-  # control plane. A non-empty enable list mounts ONLY the named subsystems
-  # (config.go Enabled), so both must be listed explicitly or the PaaS never
-  # mounts. Their deps are already satisfied: platform seals secret env into the
-  # kms plane (kms listed) and meters via deps.Metering (HTTP to commerce, or a
-  # no-op when unset — commerce need NOT be co-resident); git needs none.
-  enable: "iam,base,kms,gateway,o11y,platform,git"
+  # The app set is NOT configured here. The binary knows which apps it was
+  # built with (manifest.Apps) and Listen sets it; a values file restating
+  # the set can only ever disagree with it, which is what config.go records
+  # two devnet outages for. There is no --enable flag to render into.
   # Which backend holds embedded IAM's identity records — users, orgs, applications,
   # signing certs, and the session revocation rows (apps/iam.openStore).
   #
