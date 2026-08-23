@@ -21,7 +21,7 @@ import (
 // caller can never spend it — which is exactly what shipped.
 func TestTheCeilingExceedsTheLongestCallerBudget(t *testing.T) {
 	const transportDefault = 30 * time.Second
-	const bridgeAgentTimeout = 110 * time.Second // apps/integrations/bridge.go
+	const bridgeAgentTimeout = 110 * time.Second // apps/integrations/channel.go
 
 	if planeReadTimeout <= transportDefault {
 		t.Fatalf("planeReadTimeout %v does not widen the %v default", planeReadTimeout, transportDefault)
