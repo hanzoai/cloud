@@ -9,40 +9,35 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// AN ORG REACHES AN OP TWO WAYS AND Acting IS THE ONE THING THAT TELLS THEM APART.
+// AN ORG IS A TENANT ONLY WHERE A TRUSTED DOOR PARKED IT, and this is the
+// property that makes that safe to rely on: the DEFAULT IS REFUSAL.
 //
-// zip.CallerOf returns a plain string either way: the request's X-Org-Id when a
-// request is bound, the stated caller when none is. The identity boundary
-// deliberately restores an unvalidated caller's own X-Org-Id for the data path,
-// so on the way IN that string is the client's own until something stands behind
-// it. Coming from INSIDE — cloud.For, or a peer on the plane's own socket —
-// nothing outside could have written it.
+// zip.CallerOf hands back a plain string whether it read the request's X-Org-Id
+// or a caller something stated in-process, and the identity boundary deliberately
+// restores an unvalidated caller's own X-Org-Id for the data path. So the caller
+// alone cannot be trusted, and nothing here tries: Acting reads the slot the
+// trusted writers park — the boundary for a validated request (WithOrg), and
+// WithActing for a call that states its own tenant in-process.
 //
-// WithEdge is what separates them, and cloud.Bridge parks it on every request.
-// These are the three shapes, and the middle one is the whole point.
-func TestActingSeparatesTheTwoWaysAnOrgArrives(t *testing.T) {
-	stated := func(org string) context.Context {
-		return zip.WithCaller(context.Background(), zip.Caller{Org: org})
-	}
+// The alternative was to mark the DOOR and admit a stated caller wherever the
+// mark was absent. That fails OPEN: an app that serves HTTP without installing
+// the boundary has no mark, and a forged header there reads exactly like an
+// in-process statement. This way round, a writer that forgets to park is refused.
+func TestActingTrustsOnlyAParkedTenant(t *testing.T) {
+	stated := zip.WithCaller(context.Background(), zip.Caller{Org: "acme"})
 	for _, tc := range []struct {
 		what     string
 		ctx      context.Context
 		resolved bool
 	}{
-		// From inside: a background job or a peer states the tenant it acts for.
-		// There is no user, and there does not need to be — nothing outside this
-		// process can put a value in that slot.
-		{"a caller stated off the edge", stated("acme"), true},
-		// The SAME value, arriving through the edge. Now it is a header, and a
-		// header with no validated principal behind it is nobody's claim but the
-		// client's own.
-		{"the same org, stated through the edge", WithEdge(stated("acme")), false},
-		// Nothing stated at all, either side.
-		{"nothing stated, off the edge", context.Background(), false},
-		{"nothing stated, through the edge", WithEdge(context.Background()), false},
-		// A validated principal wins on both sides — it is the first thing asked
-		// and the edge does not weaken it.
-		{"a validated org, through the edge", WithEdge(context.WithValue(context.Background(), orgKey{}, "acme")), true},
+		// The boundary parked it for a validated request.
+		{"a validated principal", context.WithValue(context.Background(), orgKey{}, "acme"), true},
+		// An in-process caller stated it AND parked it — what plane.For does.
+		{"a parked in-process tenant", WithActing(stated, "acme"), true},
+		// The same caller with nothing parked. This is the shape a forged header
+		// takes once zip has read it, so it must not resolve.
+		{"a caller with nothing parked", stated, false},
+		{"nothing at all", context.Background(), false},
 	} {
 		org, err := Acting(tc.ctx)
 		if (err == nil) != tc.resolved {
@@ -54,17 +49,18 @@ func TestActingSeparatesTheTwoWaysAnOrgArrives(t *testing.T) {
 	}
 }
 
-// A whitespace-bearing org grants NO scope rather than being trimmed onto a
-// neighbour's, and that has to hold on the stated path too — it is the same
-// injective boundary OrgOf keeps, and the stated path is the one that skips it.
-func TestActingWillNotFoldOneOrgOntoAnother(t *testing.T) {
-	for _, org := range []string{" acme", "acme ", "", "   "} {
-		got, err := Acting(zip.WithCaller(context.Background(), zip.Caller{Org: org}))
-		if err == nil && got != "acme" {
-			t.Errorf("a stated org %q resolved to %q", org, got)
+// WithActing refuses rather than trims, because trimming is how two distinct
+// orgs end up sharing one namespace. A refused park leaves the context alone —
+// it does not park a folded neighbour's name.
+func TestWithActingWillNotFoldOneOrgOntoAnother(t *testing.T) {
+	for _, org := range []string{" acme", "acme ", "", "   ", "AC ME"} {
+		got, err := Acting(WithActing(context.Background(), org))
+		if err == nil {
+			t.Errorf("a stated org %q was parked as %q, want refused", org, got)
 		}
-		if err == nil && got == "acme" && org != "acme" {
-			t.Errorf("a stated org %q was folded onto %q", org, got)
-		}
+	}
+	// The canonical name itself still parks.
+	if got, err := Acting(WithActing(context.Background(), "acme")); err != nil || got != "acme" {
+		t.Errorf("Acting = %q, %v — want acme", got, err)
 	}
 }
