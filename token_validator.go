@@ -16,6 +16,7 @@ package cloud
 
 import (
 	"fmt"
+	"github.com/hanzoai/cloud/apps/principal"
 	"strings"
 	"time"
 
@@ -127,7 +128,7 @@ func (t *TokenValidator) Validate(raw string) (VerifiedIdentity, error) {
 	// identifier — the identity boundary refuses to grant scoping from one
 	// (OrgHasUnsafeRune), so it must not be reported as a usable org here either,
 	// or a caller could compare a folded name against its admin org.
-	if OrgHasUnsafeRune(id.Owner) {
+	if principal.OrgHasUnsafeRune(id.Owner) {
 		return VerifiedIdentity{}, fmt.Errorf("owner claim carries an unsafe rune")
 	}
 	return id, nil
