@@ -35,7 +35,14 @@ func TestRetiredNamesStayRetired(t *testing.T) {
 
 	// Extensions worth policing: source and the prose that ships beside it. A name
 	// in a lockfile or a vendored tree is not this repository saying it.
-	watched := map[string]bool{".go": true, ".md": true}
+	//
+	// This list started as .go and .md and that was too narrow — the first sweep
+	// under it reported the tree clean while the word was still sitting in
+	// TypeScript. A guard is only as wide as the thing it walks.
+	watched := map[string]bool{
+		".go": true, ".md": true, ".ts": true, ".tsx": true,
+		".yaml": true, ".yml": true, ".json": true, ".sh": true,
+	}
 
 	skip := map[string]bool{
 		".git": true, "vendor": true, "node_modules": true, "dist": true,
@@ -58,6 +65,14 @@ func TestRetiredNamesStayRetired(t *testing.T) {
 		}
 		// This file names what it bans; it is the one place the word belongs.
 		if filepath.Base(path) == "retired_names_test.go" {
+			return nil
+		}
+		// NOTICE is exempt, and NOT as an oversight — deleting from it would be a
+		// license violation. The AI, RAG and search surfaces derive from an
+		// Apache-2.0 work, and §4(d) requires a derivative to carry the upstream's
+		// attribution. The entry goes when the derivation does, not before, and
+		// whoever removes one removes the other in the same change.
+		if filepath.Base(path) == "NOTICE" {
 			return nil
 		}
 		b, rerr := os.ReadFile(path)
