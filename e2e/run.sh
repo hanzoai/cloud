@@ -11,6 +11,7 @@
 #   make e2e                      # the full run
 #   make e2e E2E_ARGS=--headed    # watch the browser
 #   KEEP=1 make e2e               # leave the binary up for poking afterwards
+#   make boot                     # build and boot everything, no specs, stays up
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -24,6 +25,14 @@ ZAP_PORT="${ZAP_PORT:-19653}"
 # The cluster-reachable tasks listener. Isolated like every other port here so a
 # run does not collide with a dev stack — or another agent — already on this host.
 TASKS_GATED_PORT="${TASKS_GATED_PORT:-19998}"
+# The three brokers bind well-known ports — NATS 4222, Kafka 9092, AMQP 5672 —
+# and those are the ONLY listeners in the process that a second instance cannot
+# share. Left at their defaults, a run on a host that already has a cloud up
+# loses all three plugins to "address already in use", and the host reports it
+# as "exited before listening", which reads like the plugin is broken.
+PUBSUB_PORT="${PUBSUB_PORT:-14222}"
+KAFKA_PORT="${KAFKA_PORT:-19092}"
+AMQP_PORT="${AMQP_PORT:-15672}"
 
 DATA_DIR="${DATA_DIR:-$(mktemp -d -t hanzo-e2e.XXXXXX)}"
 LOG="$DATA_DIR/cloud.log"
@@ -83,7 +92,11 @@ for p in "$HTTP_PORT" "$HEALTH_PORT" "$ZAP_PORT" "$TASKS_GATED_PORT"; do
     fail "port $p is in use by pid ${holder:-?} — another cloud instance is up. Stop it (\`kill -9 ${holder:-<pid>}\`). The gated tasks port $TASKS_GATED_PORT is a compile-time constant, so two instances can never coexist on one host."
   fi
 done
-[ -d "$SUITE" ] || fail "Playwright suite not found at $SUITE — set SUITE=<path to universe/e2e>"
+# The suite is only needed by the half of this script that runs specs. A local
+# boot has no use for it, and refusing one for its absence is refusing the thing
+# that works because the thing beside it is missing.
+[ -n "${BOOT_ONLY:-}" ] || [ -d "$SUITE" ] ||
+  fail "Playwright suite not found at $SUITE — set SUITE=<path to universe/e2e>"
 
 # ── build ────────────────────────────────────────────────────────────────────
 # The host AND every app. `make build` is the light host alone, which loads apps
@@ -95,7 +108,10 @@ make -j"$(nproc 2>/dev/null || echo 4)" ship >/dev/null
 
 # The console bundle is go:embed'd at COMPILE time. A fresh clone carries only the
 # fallback shell, and the UI spec says so rather than pretending.
-if [ "$(wc -c < webui/dist/index.html)" -lt 20000 ]; then
+# A tree that has never built the console has NO FILE, not a small one, and the
+# redirection fails in the shell before wc runs — so the note below arrived after
+# two raw shell errors. Test for the file first.
+if [ ! -s webui/dist/index.html ] || [ "$(wc -c < webui/dist/index.html)" -lt 20000 ]; then
   say "note: webui/dist holds the FALLBACK shell — UI specs will skip."
   say "      build the real console first: make webui CONSOLE_DIR=../console"
 fi
@@ -109,6 +125,9 @@ export CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)"
 export CLOUD_DATA_DIR="$DATA_DIR"
 export CLOUD_ZAP_LISTEN=":$ZAP_PORT"
 export CLOUD_TASKS_GATED_PORT="$TASKS_GATED_PORT"
+export CLOUD_PUBSUB_PORT="$PUBSUB_PORT"
+export CLOUD_KAFKA_PORT="$KAFKA_PORT"
+export CLOUD_AMQP_PORT="$AMQP_PORT"
 export CLOUD_HEALTH_LISTEN=":$HEALTH_PORT"
 export initDataFile="$ROOT/e2e/init_data.json"   # camelCase: the key IAM reads
 export IAM_SERVICE_TOKEN="$SERVICE_TOKEN"
@@ -184,13 +203,29 @@ done
 # catalog before it listens, which takes longer than the host's start timeout, and
 # a spec that asks billing for a balance in that window gets "no such file or
 # directory" for a ledger that is merely still booting.
-for app in $WANT; do
-  for _ in $(seq 1 60); do
-    [ -S "$DATA_DIR/run/$app.sock" ] && break
-    sleep 1
+# ONE deadline for all of them, not sixty seconds each in turn. The apps come up
+# concurrently, so waiting on them serially costs the SUM of the misses: measured
+# on this repo, 124 apps of which most never bind a plane socket at all — they
+# are lazy and start on first use — which made this loop the longest thing in a
+# local boot by an order of magnitude, an hour of waiting for sockets that were
+# never coming.
+#
+# It also reported an app absent for the crime of being checked early. ai, base
+# and billing were each named here and each had a socket by the time the loop
+# reached the letter c.
+deadline=$(( $(date +%s) + 120 ))
+missing="$WANT"
+while [ -n "$missing" ] && [ "$(date +%s)" -lt "$deadline" ]; do
+  still=""
+  for app in $missing; do
+    [ -S "$DATA_DIR/run/$app.sock" ] || still="$still $app"
   done
-  [ -S "$DATA_DIR/run/$app.sock" ] || say "note: $app never served its socket — specs touching it will fail"
+  missing="$(echo $still)"
+  [ -n "$missing" ] && sleep 1
 done
+# An app with no socket after that is LAZY, not broken — it binds on first use.
+# Naming them is worth doing; calling it a failure is not.
+[ -n "$missing" ] && say "lazy (no socket until first use): $(echo $missing | wc -w) apps"
 say "up: $(ls "$DATA_DIR/run" 2>/dev/null | wc -l) sockets"
 
 # The seed is non-fatal inside cloud (a missing file only WARNS), so verify it
@@ -236,6 +271,21 @@ export E2E_TENANT_ORG="$ORG" E2E_OTHER_ORG="$OTHER_ORG"
 export E2E_TENANT_USER=z E2E_LOCAL_USER=z E2E_LOCAL_OTHER_USER=eve
 export E2E_TENANT_PASSWORD="$PASSWORD"
 export E2E_TENANT_CLIENT_ID="$CLIENT_ID" E2E_IAM_MINT_CLIENT_SECRET="$CLIENT_SECRET"
+
+# BOOT_ONLY stops here, with a fully built and seeded instance still up. It is
+# the "boot the whole thing locally" path: everything above — the binary, all
+# 125 apps, isolated ports, a fresh data dir, identity — is exactly what a local
+# run wants, and the specs below are the other half of e2e, needing the universe
+# suite that a plain local boot does not have.
+if [ -n "${BOOT_ONLY:-}" ]; then
+  KEEP=1
+  say "up:   $BASE"
+  say "      health :$HEALTH_PORT · zap :$ZAP_PORT · pubsub :$PUBSUB_PORT · kafka :$KAFKA_PORT · amqp :$AMQP_PORT"
+  say "      data $DATA_DIR · log $LOG"
+  say "sign in as z@hanzo.ai / $PASSWORD"
+  say "stop: kill $CLOUD_PID"
+  exit 0
+fi
 
 say "running the suite against $BASE"
 cd "$SUITE"
