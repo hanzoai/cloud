@@ -5,7 +5,7 @@ package reference
 //
 // The catalog is code, not configuration. A set that exists is a set someone
 // wrote a parser and a licence line for, and a set whose source we may not
-// redistribute is DECLARED here as a client rather than quietly omitted — an
+// redistribute is DECLARED here as a gap rather than quietly omitted — an
 // absent set and an unlicensed one look identical from the outside, and only one
 // of them is a decision.
 //
@@ -41,10 +41,10 @@ const (
 	// membership, because a second copy of a sanctions list is a second thing to
 	// keep current and the two would disagree on the day it mattered.
 	KindAttest Kind = "attest"
-	// KindClient is declared and NOT held: the source needs a licence we do not
-	// have. Every lookup against it refuses. A client is louder than an omission,
+	// KindGap is declared and NOT held: the source needs a licence we do not
+	// have. Every lookup against it refuses. A gap is louder than an omission,
 	// which is the whole reason it is in the catalog.
-	KindClient Kind = "client"
+	KindGap Kind = "gap"
 )
 
 // Match is how a key is tested against a set's entries. Five matchers, each a
@@ -88,9 +88,9 @@ type Set struct {
 	// list answers "not listed" for everything and reads exactly like a clean
 	// world, which is the failure this whole plane exists to make visible.
 	MaxAge time.Duration
-	// Sources are the publishers this set draws on. Empty for local and client sets.
+	// Sources are the publishers this set draws on. Empty for local and gap sets.
 	Sources []Source
-	// Refusal is why a client set cannot be consulted. Non-empty ONLY for KindClient,
+	// Refusal is why a gap set cannot be consulted. Non-empty ONLY for KindGap,
 	// and it names the licence we do not hold rather than saying "unavailable".
 	Refusal string
 }
@@ -103,7 +103,7 @@ type Set struct {
 // once: "CC0-1.0" (a licence) and "operator-published range list" (a description
 // of where a file came from). The gate over it could only ask whether the string
 // was non-empty, so an unlicensed source wearing a licence field passed — the
-// mirror image of the client argument this plane is built on, where an unlicensed
+// mirror image of the gap argument this plane is built on, where an unlicensed
 // set REFUSES precisely because an absent one and an unlicensed one look
 // identical from the outside.
 //
@@ -202,7 +202,7 @@ const (
 //
 // LAWFULNESS IS A FIELD, NOT A FOOTNOTE. Every fetched source states the terms
 // it is redistributed under, and every source we would want but may not have is
-// present as a client naming the licence we lack. The three clients below are the
+// present as a gap naming the licence we lack. The three gaps below are the
 // honest state of the art: politically-exposed-person listings, issuer
 // identification tables and commercial network reputation are all sold, and the
 // free copies in circulation are either non-commercial-only or of unstated
@@ -325,7 +325,7 @@ func Catalog() []Set {
 		},
 		{
 			Name:    "pep",
-			Kind:    KindClient,
+			Kind:    KindGap,
 			What:    "Politically exposed persons and their close associates.",
 			Match:   MatchExact,
 			MaxAge:  weekly,
@@ -333,7 +333,7 @@ func Catalog() []Set {
 		},
 		{
 			Name:    "issuer",
-			Kind:    KindClient,
+			Kind:    KindGap,
 			What:    "Card issuer identity behind an issuer identification number — institution, country, product and funding type.",
 			Match:   MatchDigits,
 			MaxAge:  monthly,
@@ -341,7 +341,7 @@ func Catalog() []Set {
 		},
 		{
 			Name:    "reputation",
-			Kind:    KindClient,
+			Kind:    KindGap,
 			What:    "Commercial network reputation — per-address and per-autonomous-system abuse scoring.",
 			Match:   MatchNet,
 			MaxAge:  daily,
