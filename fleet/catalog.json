@@ -212,7 +212,7 @@
   },
   {
    "id": "post_agents_coding",
-   "doc": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis door does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own."
+   "doc": "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis op does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own."
   },
   {
    "id": "post_agents_sessions",
@@ -224,7 +224,7 @@
   },
   {
    "id": "post_agents_sessions_by_id_message",
-   "doc": "Sends a steering message to a running session — the door a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not."
+   "doc": "Sends a steering message to a running session — the endpoint a\nhuman or another agent interrupts through. It requires a `message` or a\n`payload`; the other three commands do not."
   },
   {
    "id": "post_agents_sessions_by_id_pause",
@@ -258,7 +258,7 @@
  "ai": [
   {
    "id": "aiMCPTools",
-   "doc": "Tools reports what THIS PROCESS's MCP door carries: how many tools its own\nregistry projects, optionally their names, and which subsystems this process\ncomposed. It is the answer to \"is this door up and does it have anything behind\nit\" — a question a status code cannot answer, since an empty door and a full\none are both 200. What the FLEET's door carries is the fleet door's own answer:\nPOST /v1/mcp, tools/list, which asks every subsystem and names the ones that\ndid not reply.",
+   "doc": "Tools reports what THIS PROCESS's MCP server carries: how many tools its own\nregistry projects, optionally their names, and which subsystems this process\ncomposed. It is the answer to \"is this MCP server up and does it have anything\nbehind it\" — a question a status code cannot answer, since an empty server and\na full one are both 200. What the FLEET's server carries is the fleet server's\nown answer: POST /v1/mcp, tools/list, which asks every subsystem and names the\nones that did not reply.",
    "read": true
   }
  ],
@@ -580,7 +580,7 @@
   },
   {
    "id": "post_billing_topup",
-   "doc": "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token door; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one."
+   "doc": "Charges a card the caller already saved and credits the\nbalance. Same receipt and the same retry safety as the token endpoint; the only\ndifference is which card, so a caller topping up from a saved method never\nre-enters one."
   },
   {
    "id": "post_billing_topup_token",
@@ -1116,7 +1116,7 @@
   },
   {
    "id": "takePayment",
-   "doc": "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nA payment is RISK-SCREENED before the card is charged, so this can be refused\nwithout any money moving: 403 means the screen did not authorise it, and 503 means\nthe screen could not reach a decision — that one is worth retrying, and no charge\nwas attempted either way.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named builder, not a closure, so zipdoc can lift this prose into the registry.\n\nIt BUILDS the handler rather than being it, because the screen has to sit inside\nthe value every projection of this op dispatches to — see exposePayments. `charge`\nis the money move, `take` is the screened door onto it, and the only registrable\none is the second."
+   "doc": "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nA payment is RISK-SCREENED before the card is charged, so this can be refused\nwithout any money moving: 403 means the screen did not authorise it, and 503 means\nthe screen could not reach a decision — that one is worth retrying, and no charge\nwas attempted either way.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named builder, not a closure, so zipdoc can lift this prose into the registry.\n\nIt BUILDS the handler rather than being it, because the screen has to sit inside\nthe value every projection of this op dispatches to — see exposePayments. `charge`\nis the money move, `take` is the screened entry point onto it, and the only\nregistrable one is the second."
   }
  ],
  "company": [
@@ -1146,7 +1146,7 @@
   },
   {
    "id": "post_company_advance",
-   "doc": "Advance runs the ONE guarded transition of the formation machine. It is the\nonly door between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted."
+   "doc": "Advance runs the ONE guarded transition of the formation machine. It is the\nonly endpoint between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted."
   },
   {
    "id": "post_company_documents",
@@ -1488,7 +1488,7 @@
   },
   {
    "id": "post_dataroom_trust_center_by_slug_requests",
-   "doc": "Records a request to read what an independent auditor signed, and\nanswers with its id.\n\nThe org that owns the centre decides. Nothing is released here and no link is\nminted: this writes the ask down, which is the whole promise the form makes.\nThe write is the answer — a request that could not be stored is an error, never\na receipt, so a form can never appear to have been sent and be gone.\n\n`email` is required and is the ONLY address the eventual grant will admit, so an\naddress the asker cannot read is an ask that cannot be answered. Where the centre\nstates an NDA, `accept` must be true and the text in force is recorded verbatim\nagainst the request.\n\nAsking twice for the same thing from the same address is the SAME ask: the second\nanswers with the first's id rather than opening a second row, which is also what\nkeeps an anonymous door from filling a tenant's store."
+   "doc": "Records a request to read what an independent auditor signed, and\nanswers with its id.\n\nThe org that owns the centre decides. Nothing is released here and no link is\nminted: this writes the ask down, which is the whole promise the form makes.\nThe write is the answer — a request that could not be stored is an error, never\na receipt, so a form can never appear to have been sent and be gone.\n\n`email` is required and is the ONLY address the eventual grant will admit, so an\naddress the asker cannot read is an ask that cannot be answered. Where the centre\nstates an NDA, `accept` must be true and the text in force is recorded verbatim\nagainst the request.\n\nAsking twice for the same thing from the same address is the SAME ask: the second\nanswers with the first's id rather than opening a second row, which is also what\nkeeps an anonymous endpoint from filling a tenant's store."
   },
   {
    "id": "post_dataroom_trust_requests_by_id_grant",
@@ -1500,7 +1500,7 @@
   },
   {
    "id": "put_dataroom_trust",
-   "doc": "SetCenter opens, publishes or withdraws the caller org's trust centre and answers\nwith the centre as it now stands.\n\nPublishing requires a name and an address, and the address must be free: another\norg already answering there is a conflict, never a takeover. Withdrawing closes\nthe public door only — items, grants and the access record are untouched, so an\norg can go quiet and come back without losing anything.\n\nOnly an admin of the org may call it. The org is the caller's own, so there is no\nfield naming one and no way to point this at another tenant."
+   "doc": "SetCenter opens, publishes or withdraws the caller org's trust centre and answers\nwith the centre as it now stands.\n\nPublishing requires a name and an address, and the address must be free: another\norg already answering there is a conflict, never a takeover. Withdrawing closes\nthe public endpoint only — items, grants and the access record are untouched, so\nan org can go quiet and come back without losing anything.\n\nOnly an admin of the org may call it. The org is the caller's own, so there is no\nfield naming one and no way to point this at another tenant."
   }
  ],
  "dataset": [
@@ -1720,12 +1720,12 @@
   },
   {
    "id": "get_esign_o_by_org_sign_by_token",
-   "doc": "Opens a document you were asked to sign, using your signing link.\n\nIt answers the document, the recipient the link identifies, the fields THAT\nrecipient must fill, and the PDF to display. The first open also marks the\nrecipient as having opened it and records that on the audit trail, so this read\nhas a side effect by design.\n\nThis door takes NO account: the signing token is the entire credential, and it\nnames the recipient, so a signer sees only their own fields and never the other\nrecipients' tokens. The token resolves to its owning tenant FIRST, before any\nper-tenant store is opened, and the org segment is only checked against that\nanswer. An unknown or wrong-org token is one and the same 404, never a hint that\nsome other document exists.",
+   "doc": "Opens a document you were asked to sign, using your signing link.\n\nIt answers the document, the recipient the link identifies, the fields THAT\nrecipient must fill, and the PDF to display. The first open also marks the\nrecipient as having opened it and records that on the audit trail, so this read\nhas a side effect by design.\n\nThis surface takes NO account: the signing token is the entire credential, and\nit names the recipient, so a signer sees only their own fields and never the\nother recipients' tokens. The token resolves to its owning tenant FIRST, before\nany per-tenant store is opened, and the org segment is only checked against\nthat answer. An unknown or wrong-org token is one and the same 404, never a\nhint that some other document exists.",
    "read": true
   },
   {
    "id": "post_esign_documents",
-   "doc": "Uploads a PDF and opens a draft ready for recipients and fields.\n\nIt answers 201 with the document in DRAFT — the state where recipients and\nfields may still be added, and the only state they may. The bytes go to object\nstorage rather than into the tenant database, and the original is kept under its\nown key so it survives sealing untouched: a completed document can always be\ncompared against what was uploaded. Creation is recorded on the audit trail.\n\nThis is the sender's door: a validated principal is required, and the document\nlands in that principal's OWN org. Isolation is physical rather than a filter —\neach tenant has its own store — so another org's document id is simply not\nthere. A body over 32 MiB is refused with 413."
+   "doc": "Uploads a PDF and opens a draft ready for recipients and fields.\n\nIt answers 201 with the document in DRAFT — the state where recipients and\nfields may still be added, and the only state they may. The bytes go to object\nstorage rather than into the tenant database, and the original is kept under its\nown key so it survives sealing untouched: a completed document can always be\ncompared against what was uploaded. Creation is recorded on the audit trail.\n\nThis is the sender's surface: a validated principal is required, and the document\nlands in that principal's OWN org. Isolation is physical rather than a filter —\neach tenant has its own store — so another org's document id is simply not\nthere. A body over 32 MiB is refused with 413."
   },
   {
    "id": "post_esign_documents_by_id_fields",
@@ -1733,7 +1733,7 @@
   },
   {
    "id": "post_esign_documents_by_id_recipients",
-   "doc": "Adds someone to a draft and mints their signing token.\n\nIt answers 201 with the recipient's id and their signing TOKEN — the\ncrypto-random capability that is the only credential the signer's door accepts —\nso this response is where the signing link is built from. A CC recipient is\nrecorded as already complete, because they are never asked to sign.\n\nOnly while DRAFT: adding a recipient to a document already sent is a 409,\nbecause the field layout and the turn order were fixed when it went out. An\nunknown document is a 404. The addition is recorded on the audit trail."
+   "doc": "Adds someone to a draft and mints their signing token.\n\nIt answers 201 with the recipient's id and their signing TOKEN — the\ncrypto-random capability that is the only credential the signer's surface\naccepts — so this response is where the signing link is built from. A CC\nrecipient is recorded as already complete, because they are never asked to\nsign.\n\nOnly while DRAFT: adding a recipient to a document already sent is a 409,\nbecause the field layout and the turn order were fixed when it went out. An\nunknown document is a 404. The addition is recorded on the audit trail."
   },
   {
    "id": "post_esign_documents_by_id_send",
@@ -1840,7 +1840,7 @@
   },
   {
    "id": "get_event_insights_events",
-   "doc": "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture doors\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
+   "doc": "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture endpoints\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
    "read": true
   },
   {
@@ -1872,7 +1872,7 @@
   },
   {
    "id": "post_exec",
-   "doc": "Executes a program in a throwaway sandbox and answers with what it printed\nand what it left behind.\n\n`lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,\nphp, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a\nfragment: a compiled language is compiled and then run, an interpreted one is\ninterpreted, and `args` becomes the program's own argv either way. Nothing is\ninstalled for you; the image is the environment.\n\nA PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the\ndiagnostics on `stderr`, because \"the code threw\" and \"the interpreter is down\"\nare different facts a caller renders differently. Only the second is an error\nstatus.\n\nRuns are stateful through `session_id`. Omit it and the run gets a fresh sandbox\nwhose id comes back on the answer; pass that id again and the next run sees the\nsame filesystem, so a program can write a file one call and read it the next.\n`files` names bytes already uploaded to a session (POST /v1/exec/upload), copied in\nbefore the program starts. `files` on the ANSWER is what the program created or\nchanged, by comparison against a marker taken at start — so it is the run's real\noutput, not a listing of the directory — and each is fetched from\nGET /v1/exec/download/{session}/{name}.\n\nThe tenant is the caller's, never the body's, at every door. A typed op is also\nan MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no\nroute and therefore no middleware, so nothing there could have checked a\ncredential. tenantOf refuses a context carrying neither a validated principal nor\nexec's own admission marker, so those doors fail closed without a second gate to\nkeep in step."
+   "doc": "Executes a program in a throwaway sandbox and answers with what it printed\nand what it left behind.\n\n`lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,\nphp, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a\nfragment: a compiled language is compiled and then run, an interpreted one is\ninterpreted, and `args` becomes the program's own argv either way. Nothing is\ninstalled for you; the image is the environment.\n\nA PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the\ndiagnostics on `stderr`, because \"the code threw\" and \"the interpreter is down\"\nare different facts a caller renders differently. Only the second is an error\nstatus.\n\nRuns are stateful through `session_id`. Omit it and the run gets a fresh sandbox\nwhose id comes back on the answer; pass that id again and the next run sees the\nsame filesystem, so a program can write a file one call and read it the next.\n`files` names bytes already uploaded to a session (POST /v1/exec/upload), copied in\nbefore the program starts. `files` on the ANSWER is what the program created or\nchanged, by comparison against a marker taken at start — so it is the run's real\noutput, not a listing of the directory — and each is fetched from\nGET /v1/exec/download/{session}/{name}.\n\nThe tenant is the caller's, never the body's, at every entry point. A typed op is\nalso an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no\nroute and therefore no middleware, so nothing there could have checked a\ncredential. tenantOf refuses a context carrying neither a validated principal nor\nexec's own admission marker, so those entry points fail closed without a second\ngate to keep in step."
   }
  ],
  "experiment": [
@@ -2647,7 +2647,7 @@
   },
   {
    "id": "listOrganizations",
-   "doc": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.\n\nTHE SCOPE IS THE HANDLER'S OWN, so it holds at every door. The Guard refuses a\nbearerless request before this runs, but the agent door carries a typed op to\nits handler with no middleware in front of it — a handler that read no\nprincipal would answer such a caller with the whole registry. Reading the\nprincipal here is what makes the answer the same one over both.",
+   "doc": "Returns the organizations you can act in, the ones you belong to first\nand the rest after, newest first, narrowed by an optional query against the\nname or the display name.\n\nPlatform operators see every organization; everyone else sees their own. Pass\nthe cursor from the previous page to continue; an empty cursor in the answer\nmeans there is nothing more.\n\nTHE SCOPE IS THE HANDLER'S OWN, so it holds at every endpoint. The Guard refuses\na bearerless request before this runs, but the MCP server carries a typed op to\nits handler with no middleware in front of it — a handler that read no\nprincipal would answer such a caller with the whole registry. Reading the\nprincipal here is what makes the answer the same one over both.",
    "read": true
   },
   {
@@ -3086,7 +3086,7 @@
   },
   {
    "id": "post_kms_auth_login",
-   "doc": "Exchanges a machine credential for an IAM bearer token.\n\nTakes a tenant's machine credential — a client id and client secret — and\nreturns an owner-scoped IAM access token with its lifetime, which is the\nbearer the caller then carries on the org-scoped secret operations.\n\nIt is deliberately public and unauthenticated, because it IS the credential\nexchange and runs before any principal exists. That makes it the one route in\nthis subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather\nthan on any caller-supplied header, and body-capped at the same door.\n\nThe submitted secret is never logged and never echoed, and failures collapse\nto one clean status with no upstream detail: 401 when the credential does not\nauthenticate, 502 when the identity provider is unreachable, 503 when no\nissuer is configured. That is on purpose — a richer error would be a validity\noracle for guessed credentials."
+   "doc": "Exchanges a machine credential for an IAM bearer token.\n\nTakes a tenant's machine credential — a client id and client secret — and\nreturns an owner-scoped IAM access token with its lifetime, which is the\nbearer the caller then carries on the org-scoped secret operations.\n\nIt is deliberately public and unauthenticated, because it IS the credential\nexchange and runs before any principal exists. That makes it the one route in\nthis subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather\nthan on any caller-supplied header, and body-capped in the same place.\n\nThe submitted secret is never logged and never echoed, and failures collapse\nto one clean status with no upstream detail: 401 when the credential does not\nauthenticate, 502 when the identity provider is unreachable, 503 when no\nissuer is configured. That is on purpose — a richer error would be a validity\noracle for guessed credentials."
   },
   {
    "id": "post_kms_secrets",
@@ -5457,7 +5457,7 @@
   },
   {
    "id": "get_platform_cd",
-   "doc": "Answers every Application the delivery plane holds.\n\nScoped to the namespaces the caller's own validated org owns: the ROLE opens\nthe door and the tenant boundary is applied inside, so an admin of one org\nnever observes another's.",
+   "doc": "Answers every Application the delivery plane holds.\n\nScoped to the namespaces the caller's own validated org owns: the ROLE admits\nthe caller and the tenant boundary is applied inside, so an admin of one org\nnever observes another's.",
    "read": true
   },
   {
@@ -5834,7 +5834,7 @@
   },
   {
    "id": "post_projects_sites",
-   "doc": "Generates a self-contained, mobile-responsive static site from a\nnatural-language brief and deploys it live in one call.\n\nOne inference call turns `brief` (capped at 8 KiB) into a file manifest, which\nthen runs through the SAME validation, guards and viewport guarantee as a\nhand-supplied manifest: index.html required at the root, absolute and\ntraversal paths rejected, per-file and total size capped, and a mobile\nviewport meta tag injected into every HTML document that lacks one. The\ngenerated site is fully inline — no CDNs, no remote fonts or images — so it is\nCSP-safe. `slug` and `name` are optional: the model's own title is preferred,\nand a slug is derived or minted when none is given.\n\nIt writes into the SAME org-scoped store as /v1/projects — it ensures a\nproject (framework `static`) for the resolved slug and records a deployment —\nso this is a second door onto one publish pipeline, not a second copy of\nproject state. Ordering is the billing contract: the hosting gate runs BEFORE\nany inference or upload, so a denied gate generates and uploads NOTHING, and\nthe debit lands once, only after the site is actually live. The tokens are\nbilled to the same ledger the hosting fee was reserved against.\n\nAnswers 503 when object storage or inference is unconfigured, and 400 when the\nmodel's manifest cannot be parsed or fails the guards.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org."
+   "doc": "Generates a self-contained, mobile-responsive static site from a\nnatural-language brief and deploys it live in one call.\n\nOne inference call turns `brief` (capped at 8 KiB) into a file manifest, which\nthen runs through the SAME validation, guards and viewport guarantee as a\nhand-supplied manifest: index.html required at the root, absolute and\ntraversal paths rejected, per-file and total size capped, and a mobile\nviewport meta tag injected into every HTML document that lacks one. The\ngenerated site is fully inline — no CDNs, no remote fonts or images — so it is\nCSP-safe. `slug` and `name` are optional: the model's own title is preferred,\nand a slug is derived or minted when none is given.\n\nIt writes into the SAME org-scoped store as /v1/projects — it ensures a\nproject (framework `static`) for the resolved slug and records a deployment —\nso this is a second entry point to one publish pipeline, not a second copy of\nproject state. Ordering is the billing contract: the hosting gate runs BEFORE\nany inference or upload, so a denied gate generates and uploads NOTHING, and\nthe debit lands once, only after the site is actually live. The tokens are\nbilled to the same ledger the hosting fee was reserved against.\n\nAnswers 503 when object storage or inference is unconfigured, and 400 when the\nmodel's manifest cannot be parsed or fails the guards.\n\nScope: a validated principal is required (403 without one) and the site is\npublished into THAT principal's org."
   },
   {
    "id": "post_projects_sites_deploy",
@@ -6096,7 +6096,7 @@
   },
   {
    "id": "riskLearn",
-   "doc": "Learn records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them. It answers how many it learned from.\n\nIT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;\nlearning is a transformation over observations; a verdict is a query against the\nresult. This op is the first two. [ops.score] is the third, it is pure, and it\nis the ONE door to a verdict. They were one call, which meant you could not\nrecord without training and could not train without being answered — and the\nmodel ran twice over every event to produce a verdict the response carried and\nno caller read.\n\nTO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then\nlearn: the score is then the model's opinion of an event it has not yet learned\nfrom, which is the question worth asking. The other order answers for a model\nthat has already absorbed the event it is judging.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nA RETRY IS INERT. The record deduplicates on the event id you send, and an event\nalready in it moves nothing, costs nothing and is not counted — so a client that\ntimed out can send the same batch again and its model holds what it holds.\nWithout an id of your own there is nothing to converge on: two identical bodies\nare two events."
+   "doc": "Learn records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them. It answers how many it learned from.\n\nIT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;\nlearning is a transformation over observations; a verdict is a query against the\nresult. This op is the first two. [ops.score] is the third, it is pure, and it\nis the ONE entry point to a verdict. They were one call, which meant you could\nnot record without training and could not train without being answered — and the\nmodel ran twice over every event to produce a verdict the response carried and\nno caller read.\n\nTO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then\nlearn: the score is then the model's opinion of an event it has not yet learned\nfrom, which is the question worth asking. The other order answers for a model\nthat has already absorbed the event it is judging.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nA RETRY IS INERT. The record deduplicates on the event id you send, and an event\nalready in it moves nothing, costs nothing and is not counted — so a client that\ntimed out can send the same batch again and its model holds what it holds.\nWithout an id of your own there is nothing to converge on: two identical bodies\nare two events."
   },
   {
    "id": "riskPolicy",
@@ -6192,7 +6192,7 @@
   },
   {
    "id": "post_sandbox_by_id_screen_ticket",
-   "doc": "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other door."
+   "doc": "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other endpoint."
   },
   {
    "id": "post_sandbox_by_id_terminal_ticket",
@@ -6451,7 +6451,7 @@
   },
   {
    "id": "get_team_account_providers",
-   "doc": "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
+   "doc": "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that provider accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
    "read": true
   },
   {
@@ -6623,7 +6623,7 @@
   },
   {
    "id": "get_tools_catalog",
-   "doc": "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP door. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
+   "doc": "Lists the MCP servers the public registries publish, as we hold\nthem: our canonical copy of registry.modelcontextprotocol.io, plus what we\ndecided about each entry.\n\nThis is the SHELF an org picks from. A listing with a streamable-http endpoint\ncan be enabled as-is — POST /v1/tools/mcp/servers with its id — and its tools then\njoin the org's tool plane and the fleet's MCP server. A listing that only ships a\nstdio package needs a process to run it, which is why the transports are on\nevery entry rather than implied.\n\nHidden entries are absent: they are the ones we took off the shelf. A platform\nSuperAdmin sees them, because the same query answers \"what is on the shelf\" and\n\"what is in the catalog\" and two queries would drift apart.\n\nIt is PAGED — 50 by default, 200 at most. The public registry publishes tens of\nthousands of servers, so an unbounded answer is a twenty-megabyte response and a\nstorefront that renders in a minute. total is the whole match, not the page.",
    "read": true
   },
   {
@@ -6662,7 +6662,7 @@
   },
   {
    "id": "post_tools_call",
-   "doc": "Runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set."
+   "doc": "Runs one of the caller's activated tools and answers with its output.\n\nThis is the endpoint onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set."
   },
   {
    "id": "post_tools_catalog_sync",
@@ -6670,7 +6670,7 @@
   },
   {
    "id": "post_tools_mcp_servers",
-   "doc": "Gives the caller's org one more external MCP server, so its tools\njoin the org's tool plane and the fleet's MCP door. It is the ONE way an org\ngains a server, whether it typed the URL in or enabled a catalog listing: both\nwrite the SAME record, and `source` says which it was. A second registration\npath would be a second place for a server to exist, and then a second place to\nforget to check the credential.\n\nThe credential VALUE is sealed in KMS under a per-org ref; the row keeps only\nthe URL, the header name to inject it into, and a has-secret flag — so a secret\nwith no KMS configured is refused 503 rather than stored in the clear. The URL\nis SSRF-validated here and re-checked by the dialer at connect time, which is\nthe DNS-rebinding defense.\n\nEnabling a listing the org already enabled REVISES that server rather than\nadding a near-duplicate beside it, so a retried enable is the same one server.\nAnswers 201 with the stored record."
+   "doc": "Gives the caller's org one more external MCP server, so its tools\njoin the org's tool plane and the fleet's MCP server. It is the ONE way an org\ngains a server, whether it typed the URL in or enabled a catalog listing: both\nwrite the SAME record, and `source` says which it was. A second registration\npath would be a second place for a server to exist, and then a second place to\nforget to check the credential.\n\nThe credential VALUE is sealed in KMS under a per-org ref; the row keeps only\nthe URL, the header name to inject it into, and a has-secret flag — so a secret\nwith no KMS configured is refused 503 rather than stored in the clear. The URL\nis SSRF-validated here and re-checked by the dialer at connect time, which is\nthe DNS-rebinding defense.\n\nEnabling a listing the org already enabled REVISES that server rather than\nadding a near-duplicate beside it, so a retried enable is the same one server.\nAnswers 201 with the stored record."
   },
   {
    "id": "post_tools_plugins_build",
@@ -6715,7 +6715,7 @@
   },
   {
    "id": "get_trust",
-   "doc": "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published door; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
+   "doc": "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published endpoint; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
    "read": true
   },
   {
@@ -6740,7 +6740,7 @@
   },
   {
    "id": "get_trust_documents",
-   "doc": "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published door it does not.",
+   "doc": "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published endpoint it does not.",
    "read": true
   },
   {
@@ -6770,7 +6770,7 @@
   },
   {
    "id": "get_trust_published_by_org",
-   "doc": "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC door and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\ndoor.",
+   "doc": "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC endpoint and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\nendpoint.",
    "read": true
   },
   {
@@ -7082,13 +7082,13 @@
  "websearch": [
   {
    "id": "search_web",
-   "doc": "Searches the live web and answers with ranked results.\n\nThis is the fleet's path to what is happening RIGHT NOW — today's weather, an\noutage, a release that postdates any model's training. `q` is the query and\n`language` narrows it to a locale. The answer is `{query, number_of_results,\nresults:[{url, title, content, engine}]}`, where `content` is the ENGINE's\nsnippet and not the page: read a page with POST /v1/crawl.\n\nIt is served in-process by a Go meta-search over keyless public engines — never\na third-party search API and never a search key. The enabled engines run\nconcurrently and their hits are merged, deduplicated by normalised URL (host\nand path, trailing slash and fragment dropped, query kept, so distinct queries\nstay distinct results) and capped at 30. Ranking is deterministic rather than\nscored: the first configured engine's hits lead.\n\nIt fails SOFT on the engines. One that errors, times out or is served a\nbot-challenge page contributes zero results and never fails the call, so an\nempty `results` is a real answer — nothing was found — and not an outage. The\narray is always present, never null.\n\nA VALIDATED PRINCIPAL IS REQUIRED, and there is no tenant beyond that: the\nresults are public web pages, identical for every caller, so nothing here is\nscoped and nothing here can leak across orgs. A typed op is also an MCP tool\nand a CLI command, and tools/call invokes it with no route and therefore no\nmiddleware — so the gate is in the handler, where every door reaches it, rather\nthan in a middleware only one door passes through."
+   "doc": "Searches the live web and answers with ranked results.\n\nThis is the fleet's path to what is happening RIGHT NOW — today's weather, an\noutage, a release that postdates any model's training. `q` is the query and\n`language` narrows it to a locale. The answer is `{query, number_of_results,\nresults:[{url, title, content, engine}]}`, where `content` is the ENGINE's\nsnippet and not the page: read a page with POST /v1/crawl.\n\nIt is served in-process by a Go meta-search over keyless public engines — never\na third-party search API and never a search key. The enabled engines run\nconcurrently and their hits are merged, deduplicated by normalised URL (host\nand path, trailing slash and fragment dropped, query kept, so distinct queries\nstay distinct results) and capped at 30. Ranking is deterministic rather than\nscored: the first configured engine's hits lead.\n\nIt fails SOFT on the engines. One that errors, times out or is served a\nbot-challenge page contributes zero results and never fails the call, so an\nempty `results` is a real answer — nothing was found — and not an outage. The\narray is always present, never null.\n\nA VALIDATED PRINCIPAL IS REQUIRED, and there is no tenant beyond that: the\nresults are public web pages, identical for every caller, so nothing here is\nscoped and nothing here can leak across orgs. A typed op is also an MCP tool\nand a CLI command, and tools/call invokes it with no route and therefore no\nmiddleware — so the gate is in the handler, where every caller reaches it,\nrather than in a middleware only one caller passes through."
   }
  ],
  "world": [
   {
    "id": "get_world",
-   "doc": "Answers GET /v1/world — the product's front door, naming every wire this\nsurface answers on.\n\nIt exists because two of those wires are INVISIBLE to the generated document.\n/v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the\ningress and answered by world-gw, so the cloud router never serves them — and\nopenapi.Describe renders prose only for a route the router actually serves,\nwhich is the very property that keeps the document from being able to claim an\noperation nothing answers. Both addresses are real and public, so without this\nop the only way to learn they exist is to read the ingress config. This is\nwhere that fact lives, in the product's own surface.\n\nPublic on purpose: discovery precedes credentials. It reports addresses and\nprotocols only — never feed data, and never the caller's plan, which\nGET /v1/world/limits owns — so there is nothing here to leak.",
+   "doc": "Answers GET /v1/world — the product's public endpoint, naming every wire\nthis surface answers on.\n\nIt exists because two of those wires are INVISIBLE to the generated document.\n/v1/world/mcp and /v1/world/zap are carved off the cloud catch-all by the\ningress and answered by world-gw, so the cloud router never serves them — and\nopenapi.Describe renders prose only for a route the router actually serves,\nwhich is the very property that keeps the document from being able to claim an\noperation nothing answers. Both addresses are real and public, so without this\nop the only way to learn they exist is to read the ingress config. This is\nwhere that fact lives, in the product's own surface.\n\nPublic on purpose: discovery precedes credentials. It reports addresses and\nprotocols only — never feed data, and never the caller's plan, which\nGET /v1/world/limits owns — so there is nothing here to leak.",
    "read": true
   },
   {
