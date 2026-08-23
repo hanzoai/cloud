@@ -49,19 +49,42 @@
       },
       "post": {
         "operationId": "post_captable_classes",
-        "summary": "Define a share class",
-        "description": "Creates a class of stock — its authorized share count, votes per share, par and issue price, seniority, conversion rights and liquidation/participation multiples — which is what shares, priced rounds and equity plans are then issued against.\n\nTwo fields are the company's to assign, not the caller's: the class index auto-increments per company, and the certificate prefix is DERIVED from the class type (CS for COMMON, PS for anything else), so a prefix in the body is ignored.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Defines a new class of shares.",
+        "description": "Defines a new class of shares.\n\nEvery field but convertsToShareClassId is required — a class is the instrument\nevery later issuance prices against, so a partially-specified one would silently\nmis-value every share issued into it. `seniority` orders liquidation preference\nwith LOWER first.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableShareClassIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/classes/{id}": {
       "patch": {
         "operationId": "patch_captable_classes_by_id",
-        "summary": "Amend a share class",
-        "description": "Rewrites one share class — the amendment path for a class whose authorized count, price, seniority or preference terms have changed.\n\nIt REPLACES the class rather than merging into it: every field is taken from this body, so an omitted field resets to the create-time default instead of keeping its current value. Send the full class. The index and the derived prefix are unchanged by an amendment. An id that is not this company's is not found.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Replaces one share class's terms.",
+        "description": "Replaces one share class's terms.\n\nIt is a full REPLACE and not a merge, despite the PATCH: every field is written\nas sent, so a field omitted is written empty rather than left alone. Send the\nwhole class. The method is PATCH because the resource is addressed by id, not\nbecause the body is partial — and getting that backwards silently blanks terms\nevery later issuance prices against.",
         "tags": [
           "captable"
         ],
@@ -70,12 +93,36 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID addresses the resource. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich row is written whatever a body claims.",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableShareClassAmend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableUpdated"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/company": {
@@ -159,12 +206,35 @@
       },
       "post": {
         "operationId": "post_captable_convertibles",
-        "summary": "Record a convertible note",
-        "description": "Records a convertible note held by a stakeholder: the principal, the conversion cap, discount and interest rate, MFN, and the issue and board-approval dates.\n\nThe stakeholder must already exist in this company, and the note's public id must be unused there — a reused id is a conflict rather than an overwrite. Like a SAFE, this records the instrument only; conversion is not performed here.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Records a convertible note.",
+        "description": "Records a convertible note.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableConvertibleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/convertibles/{id}": {
@@ -251,12 +321,35 @@
       },
       "post": {
         "operationId": "post_captable_options",
-        "summary": "Grant options from an equity plan",
-        "description": "Records an option grant to a stakeholder under an equity plan — quantity, exercise price, ISO/NSO type, cliff and vesting years, and the issue, expiration, vesting-start, board-approval and Rule 144 dates.\n\nThe stakeholder and the equity plan must both already exist in this company, and the grant id must be unused there — a reused grant id is a conflict, so a grant can never be overwritten by a later one carrying the same number.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Grants options to a stakeholder from an equity plan.",
+        "description": "Grants options to a stakeholder from an equity plan.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableOptionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/options/{id}": {
@@ -319,12 +412,35 @@
       },
       "post": {
         "operationId": "post_captable_plans",
-        "summary": "Open an equity incentive plan",
-        "description": "Reserves a pool of shares out of a share class for option grants, with the board approval and effective dates and what happens to cancelled options.\n\nThe share class must already exist in this company — a plan cannot reserve out of nothing. Note the field name the bundle reads for the cancellation behaviour is `defaultCancellatonBehavior`; that spelling is the wire, and a correctly spelled key is simply not seen.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Opens an equity plan that options are granted from.",
+        "description": "Opens an equity plan that options are granted from.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableEquityPlanIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/rounds": {
@@ -352,12 +468,35 @@
       },
       "post": {
         "operationId": "post_captable_rounds",
-        "summary": "Open a funding round",
-        "description": "Opens a round with its name, type and target amount. It starts OPEN with nothing raised; investments are then added to it, and closing it is its own call.\n\nA PRICED round is the constrained case: it requires a share class that exists in this company and a price per share above zero, because that price is what converts each investment into issued shares. Its pre-money valuation is optional. A non-priced round carries none of the three.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Opens a priced round that investments can be added to.",
+        "description": "Opens a priced round that investments can be added to.\n\nThe round opens OPEN; investing into a closed one is refused.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableRoundIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/rounds/{id}": {
@@ -510,12 +649,35 @@
       },
       "post": {
         "operationId": "post_captable_safes",
-        "summary": "Record a SAFE",
-        "description": "Records a Simple Agreement for Future Equity held by a stakeholder: the capital in, the valuation cap and discount, MFN and pro-rata rights, pre- or post-money type, and the issue and board-approval dates.\n\nThe stakeholder must already exist in this company, and the SAFE's public id must be unused there — a reused id is a conflict rather than an overwrite. This records the instrument; it does not convert it, so nothing is issued against a share class until a round does that.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Records a SAFE — a simple agreement for future equity.",
+        "description": "Records a SAFE — a simple agreement for future equity.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableSafeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/safes/{id}": {
@@ -578,12 +740,35 @@
       },
       "post": {
         "operationId": "post_captable_shares",
-        "summary": "Issue a share certificate",
-        "description": "Issues shares of a class to a stakeholder as a certificate: quantity, price and capital contributed, the vesting cliff and term, the legends on the certificate, and the issue, Rule 144, vesting-start and board-approval dates.\n\nBoth the stakeholder and the share class must already exist in this company, and the certificate id must be unused there — a reused id is a conflict, never a silent overwrite of an existing certificate.\n\nWrites the caller's OWN cap table: the org resolved from the validated principal selects the tenant's store and scopes every row, so there is no field by which a caller can write into another company's table; a request with no validated org is refused. The whole write runs in one transaction, so a refusal leaves nothing behind. Validation is the cap-table bundle's and so is its refusal: a bad body comes back as {success:false, message, errors:[…]} with the failing fields listed, and numeric fields accept a number OR a numeric string. Bodies are capped at 1 MiB.",
+        "summary": "Issues a share certificate to a stakeholder.",
+        "description": "Issues a share certificate to a stakeholder.\n\nThe certificate id must be UNIQUE within the company — a duplicate is refused\n409, not silently merged — and both the stakeholder and the share class must\nbelong to this company, so an id from another tenant is a 400 rather than a\ncross-company issuance.",
         "tags": [
           "captable"
         ],
-        "x-public": true
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/captableShareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/captable/shares/transfer": {
@@ -875,6 +1060,44 @@
         },
         "type": "object"
       },
+      "captableConvertibleIn": {
+        "properties": {
+          "additionalTerms": {
+            "description": "AdditionalTerms is free text for anything the fields above do not carry. Optional."
+          },
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved it, YYYY-MM-DD."
+          },
+          "capital": {
+            "description": "Capital is the principal lent, in the company's currency."
+          },
+          "conversionCap": {
+            "description": "ConversionCap is the valuation the note converts at, at most. Optional."
+          },
+          "discountRate": {
+            "description": "DiscountRate is the discount to the next round's price, as a percentage. Optional."
+          },
+          "interestRate": {
+            "description": "InterestRate is the annual interest the principal accrues, as a percentage. Optional."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the note was issued, YYYY-MM-DD."
+          },
+          "publicId": {
+            "description": "PublicID is the note's identifier. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the lender. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is DRAFT, ACTIVE, PENDING, EXPIRED or CANCELLED."
+          },
+          "type": {
+            "description": "Type is CCD, OCD or NOTE."
+          }
+        },
+        "type": "object"
+      },
       "captableConvertibles": {
         "properties": {
           "notes": {
@@ -884,6 +1107,23 @@
           "safes": {
             "$ref": "#/components/schemas/captableInstrumentTotal",
             "description": "Safes is the SAFEs total."
+          }
+        },
+        "type": "object"
+      },
+      "captableCreated": {
+        "properties": {
+          "id": {
+            "description": "ID is the created row's id.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is the human sentence the cap table wrote, e.g. \"Share issued\".",
+            "type": "string"
+          },
+          "success": {
+            "description": "Success is true when the row was written.",
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -934,6 +1174,32 @@
           "shareClassId": {
             "description": "ShareClassID is the class the reserved shares come from.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "captableEquityPlanIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board adopted the plan, YYYY-MM-DD."
+          },
+          "comments": {
+            "description": "Comments is a free-text note kept with the plan. Optional."
+          },
+          "defaultCancellatonBehavior": {
+            "description": "DefaultCancellatonBehavior is what happens to cancelled grants: RETIRE, RETURN_TO_POOL, HOLD_AS_CAPITAL_STOCK or DEFINED_PER_PLAN_SECURITY.\n\nThe key is spelled `defaultCancellatonBehavior` — one `l` — because that is\nthe wire, and correcting it here would silently drop the field."
+          },
+          "initialSharesReserved": {
+            "description": "InitialSharesReserved is how many shares the plan may grant. A whole number."
+          },
+          "name": {
+            "description": "Name is the plan's name, e.g. \"2026 Stock Option Plan\"."
+          },
+          "planEffectiveDate": {
+            "description": "PlanEffectiveDate is when the plan takes effect, YYYY-MM-DD. Optional."
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class the plan grants from. It must name a class of THIS company."
           }
         },
         "type": "object"
@@ -1205,6 +1471,56 @@
         },
         "type": "object"
       },
+      "captableOptionIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the grant, YYYY-MM-DD."
+          },
+          "cliffYears": {
+            "description": "CliffYears is how long before ANY of the grant vests. A whole number; 0 for no cliff."
+          },
+          "equityPlanId": {
+            "description": "EquityPlanID is the plan the options come from. It must name a plan of THIS company."
+          },
+          "exercisePrice": {
+            "description": "ExercisePrice is the strike price per share, in the company's currency."
+          },
+          "expirationDate": {
+            "description": "ExpirationDate is when unexercised options lapse, YYYY-MM-DD."
+          },
+          "grantId": {
+            "description": "GrantID is the grant's identifier. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the grant was made, YYYY-MM-DD."
+          },
+          "notes": {
+            "description": "Notes is a free-text note kept with the grant. Optional."
+          },
+          "quantity": {
+            "description": "Quantity is how many options to grant. A whole number above 0."
+          },
+          "rule144Date": {
+            "description": "Rule144Date is when the Rule 144 holding period starts, YYYY-MM-DD."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is who receives the grant. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is DRAFT, ACTIVE, EXERCISED, EXPIRED or CANCELLED."
+          },
+          "type": {
+            "description": "Type is ISO, NSO or RSU."
+          },
+          "vestingStartDate": {
+            "description": "VestingStartDate is when vesting begins, YYYY-MM-DD."
+          },
+          "vestingYears": {
+            "description": "VestingYears is the total vesting period. A whole number."
+          }
+        },
+        "type": "object"
+      },
       "captableOptions": {
         "properties": {
           "data": {
@@ -1290,6 +1606,29 @@
           "round": {
             "$ref": "#/components/schemas/captableRound",
             "description": "Round is the round itself."
+          }
+        },
+        "type": "object"
+      },
+      "captableRoundIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the round's name, e.g. \"Series A\"."
+          },
+          "preMoneyValuation": {
+            "description": "PreMoneyValuation is the company's valuation before the new money. Optional."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the price investors pay per share. An investment into a round with a price ISSUES the shares it buys; one into a round priced later records the money alone."
+          },
+          "roundType": {
+            "description": "RoundType is PRICED, SAFE or CONVERTIBLE."
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class investors receive. It must name a class of THIS company."
+          },
+          "targetAmount": {
+            "description": "TargetAmount is how much the round aims to raise, in the company's currency."
           }
         },
         "type": "object"
@@ -1401,6 +1740,41 @@
           "valuationCap": {
             "description": "ValuationCap is the valuation cap, if any.",
             "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "captableSafeIn": {
+        "properties": {
+          "additionalTerms": {
+            "description": "AdditionalTerms is free text for anything the fields above do not carry. Optional."
+          },
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved it, YYYY-MM-DD."
+          },
+          "capital": {
+            "description": "Capital is the money invested, in the company's currency."
+          },
+          "discountRate": {
+            "description": "DiscountRate is the discount to the next round's price, as a percentage. Optional."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the SAFE was signed, YYYY-MM-DD."
+          },
+          "publicId": {
+            "description": "PublicID is the SAFE's identifier. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is DRAFT, ACTIVE, PENDING, EXPIRED or CANCELLED."
+          },
+          "type": {
+            "description": "Type is PRE_MONEY or POST_MONEY — which side of the new money the cap is measured on."
+          },
+          "valuationCap": {
+            "description": "ValuationCap is the valuation the SAFE converts at, at most. Optional; omit for an uncapped SAFE."
           }
         },
         "type": "object"
@@ -1534,6 +1908,156 @@
           "votesPerShare": {
             "description": "VotesPerShare is how many votes one share of this class carries.",
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "captableShareClassAmend": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the class, YYYY-MM-DD."
+          },
+          "classType": {
+            "description": "ClassType is COMMON or PREFERRED."
+          },
+          "conversionRights": {
+            "description": "ConversionRights is CONVERTS_TO_FUTURE_ROUND or CONVERTS_TO_SHARE_CLASS_ID. The second requires convertsToShareClassId."
+          },
+          "convertsToShareClassId": {
+            "description": "ConvertsToShareClassID names the class this one converts into. Required when conversionRights is CONVERTS_TO_SHARE_CLASS_ID, ignored otherwise."
+          },
+          "id": {
+            "description": "ID addresses the resource. The URL is the addressing authority — a path\nsegment binds after the body and after the query — so the address decides\nwhich row is written whatever a body claims.",
+            "type": "string"
+          },
+          "initialSharesAuthorized": {
+            "description": "InitialSharesAuthorized is how many shares this class may issue. A whole number."
+          },
+          "liquidationPreferenceMultiple": {
+            "description": "LiquidationPreferenceMultiple is the multiple of invested capital paid out before junior classes — 1 for a 1x preference."
+          },
+          "name": {
+            "description": "Name is the share class's name, e.g. \"Series A Preferred\"."
+          },
+          "parValue": {
+            "description": "ParValue is the nominal per-share value on the certificate, in the company's currency."
+          },
+          "participationCapMultiple": {
+            "description": "ParticipationCapMultiple caps participation after the preference is paid, as a multiple of invested capital. 0 for no cap."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the issue price for this class, in the company's currency."
+          },
+          "seniority": {
+            "description": "Seniority orders liquidation preference: LOWER is more senior, so 1 is paid before 2."
+          },
+          "stockholderApprovalDate": {
+            "description": "StockholderApprovalDate is when the stockholders approved it, YYYY-MM-DD."
+          },
+          "votesPerShare": {
+            "description": "VotesPerShare is how many votes one share of this class carries. A whole number; 0 for non-voting."
+          }
+        },
+        "type": "object"
+      },
+      "captableShareClassIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the class, YYYY-MM-DD."
+          },
+          "classType": {
+            "description": "ClassType is COMMON or PREFERRED."
+          },
+          "conversionRights": {
+            "description": "ConversionRights is CONVERTS_TO_FUTURE_ROUND or CONVERTS_TO_SHARE_CLASS_ID. The second requires convertsToShareClassId."
+          },
+          "convertsToShareClassId": {
+            "description": "ConvertsToShareClassID names the class this one converts into. Required when conversionRights is CONVERTS_TO_SHARE_CLASS_ID, ignored otherwise."
+          },
+          "initialSharesAuthorized": {
+            "description": "InitialSharesAuthorized is how many shares this class may issue. A whole number."
+          },
+          "liquidationPreferenceMultiple": {
+            "description": "LiquidationPreferenceMultiple is the multiple of invested capital paid out before junior classes — 1 for a 1x preference."
+          },
+          "name": {
+            "description": "Name is the share class's name, e.g. \"Series A Preferred\"."
+          },
+          "parValue": {
+            "description": "ParValue is the nominal per-share value on the certificate, in the company's currency."
+          },
+          "participationCapMultiple": {
+            "description": "ParticipationCapMultiple caps participation after the preference is paid, as a multiple of invested capital. 0 for no cap."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is the issue price for this class, in the company's currency."
+          },
+          "seniority": {
+            "description": "Seniority orders liquidation preference: LOWER is more senior, so 1 is paid before 2."
+          },
+          "stockholderApprovalDate": {
+            "description": "StockholderApprovalDate is when the stockholders approved it, YYYY-MM-DD."
+          },
+          "votesPerShare": {
+            "description": "VotesPerShare is how many votes one share of this class carries. A whole number; 0 for non-voting."
+          }
+        },
+        "type": "object"
+      },
+      "captableShareIn": {
+        "properties": {
+          "boardApprovalDate": {
+            "description": "BoardApprovalDate is when the board approved the issuance, YYYY-MM-DD."
+          },
+          "capitalContribution": {
+            "description": "CapitalContribution is cash paid for the shares. Optional."
+          },
+          "certificateId": {
+            "description": "CertificateID is the certificate number. It must be UNIQUE within the company; reusing one is refused 409."
+          },
+          "cliffYears": {
+            "description": "CliffYears is how long before ANY of the grant vests. A whole number; 0 for no cliff."
+          },
+          "companyLegends": {
+            "description": "CompanyLegends are the restrictive legends printed on the certificate.\n\nA LIST, and it must be sent as one: the bundle substitutes an EMPTY list for\nanything that is not an array, so a single string would be accepted and\nsilently discarded — the certificate issued with no legends and nothing\nreporting it.",
+            "items": {},
+            "type": "array"
+          },
+          "debtCancelled": {
+            "description": "DebtCancelled is debt forgiven as consideration. Optional."
+          },
+          "ipContribution": {
+            "description": "IPContribution is intellectual property assigned as consideration, valued in the company's currency. Optional."
+          },
+          "issueDate": {
+            "description": "IssueDate is when the shares were issued, YYYY-MM-DD."
+          },
+          "otherContributions": {
+            "description": "OtherContributions is any other consideration, valued in the company's currency. Optional."
+          },
+          "pricePerShare": {
+            "description": "PricePerShare is what was paid per share. Optional."
+          },
+          "quantity": {
+            "description": "Quantity is how many shares to issue. A whole number above 0."
+          },
+          "rule144Date": {
+            "description": "Rule144Date is when the Rule 144 holding period starts, YYYY-MM-DD. Optional."
+          },
+          "shareClassId": {
+            "description": "ShareClassID is the class being issued. It must name a class of THIS company."
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is who receives the shares. It must name a stakeholder of THIS company."
+          },
+          "status": {
+            "description": "Status is ACTIVE, DRAFT, SIGNED or PENDING."
+          },
+          "vestingStartDate": {
+            "description": "VestingStartDate is when vesting begins, YYYY-MM-DD. Optional; defaults to the issue date."
+          },
+          "vestingYears": {
+            "description": "VestingYears is the total vesting period. A whole number; 0 for fully vested at issue."
           }
         },
         "type": "object"

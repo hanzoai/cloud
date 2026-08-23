@@ -28,7 +28,15 @@ import (
 // typed op re-marshalling the same value is byte-identical, and a non-2xx comes
 // back as goja.BundleErr under the bundle's own status and bytes (run, typed.go).
 // That is exactly how the reads and the three existing writes work.
-var untypedByDesign = map[string]string{}
+var untypedByDesign = map[string]string{
+	"POST /v1/captable/stakeholders": "takes a single object OR an ARRAY — `const list = " +
+		"Array.isArray(raw) ? raw : [raw]` (stakeholders.ts), because the tRPC addStakeholders it " +
+		"mirrors takes an array. A typed op declares ONE In shape, and zip binds a body by " +
+		"unmarshalling into it, so neither half can be expressed alone: a struct In refuses the " +
+		"array a real client sends, and a slice In refuses the object. Same class as apps/index's " +
+		"three document writes.\n\n" +
+		"It was in typingOwed until the bundle's source was read, which is the whole argument for " +
+		"reading it: eight of the eleven were merely unwritten and this one never was."}
 
 // typingOwed is the ELEVEN cap-table writes that have no typed op yet.
 //
@@ -89,17 +97,7 @@ var untypedByDesign = map[string]string{}
 //
 // Read the bundle's route, mirror its inputs as goja.Scalar fields with prose, and
 // delete the entry. One op per line here is one op per line there.
-var typingOwed = map[string]string{
-	"POST /v1/captable/stakeholders":  "add a stakeholder",
-	"POST /v1/captable/classes":       "define a share class",
-	"PATCH /v1/captable/classes/{id}": "amend a share class (a full REPLACE, not a merge)",
-	"POST /v1/captable/plans":         "create an equity plan",
-	"POST /v1/captable/shares":        "issue shares",
-	"POST /v1/captable/options":       "grant options from a plan",
-	"POST /v1/captable/safes":         "record a SAFE",
-	"POST /v1/captable/convertibles":  "record a convertible note",
-	"POST /v1/captable/rounds":        "open a priced round",
-}
+var typingOwed = map[string]string{}
 
 // TestEveryRouteIsTypedOrAccountedFor requires the three ledgers to SUM to the
 // served surface, so a route added raw goes red without anyone remembering this

@@ -842,8 +842,32 @@
    "read": true
   },
   {
+   "id": "patch_captable_classes_by_id",
+   "doc": "Replaces one share class's terms.\n\nIt is a full REPLACE and not a merge, despite the PATCH: every field is written\nas sent, so a field omitted is written empty rather than left alone. Send the\nwhole class. The method is PATCH because the resource is addressed by id, not\nbecause the body is partial — and getting that backwards silently blanks terms\nevery later issuance prices against."
+  },
+  {
    "id": "patch_captable_stakeholders_by_id",
    "doc": "Changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected."
+  },
+  {
+   "id": "post_captable_classes",
+   "doc": "Defines a new class of shares.\n\nEvery field but convertsToShareClassId is required — a class is the instrument\nevery later issuance prices against, so a partially-specified one would silently\nmis-value every share issued into it. `seniority` orders liquidation preference\nwith LOWER first."
+  },
+  {
+   "id": "post_captable_convertibles",
+   "doc": "Records a convertible note."
+  },
+  {
+   "id": "post_captable_options",
+   "doc": "Grants options to a stakeholder from an equity plan."
+  },
+  {
+   "id": "post_captable_plans",
+   "doc": "Opens an equity plan that options are granted from."
+  },
+  {
+   "id": "post_captable_rounds",
+   "doc": "Opens a priced round that investments can be added to.\n\nThe round opens OPEN; investing into a closed one is refused."
   },
   {
    "id": "post_captable_rounds_by_id_close",
@@ -852,6 +876,14 @@
   {
    "id": "post_captable_rounds_by_id_investments",
    "doc": "Records one investor's money into an open round.\n\nThe round must be OPEN; investing into a closed one is refused. Where the round\ncarries a price per share, the investment also issues the shares it buys and the\nanswer names them."
+  },
+  {
+   "id": "post_captable_safes",
+   "doc": "Records a SAFE — a simple agreement for future equity."
+  },
+  {
+   "id": "post_captable_shares",
+   "doc": "Issues a share certificate to a stakeholder.\n\nThe certificate id must be UNIQUE within the company — a duplicate is refused\n409, not silently merged — and both the stakeholder and the share class must\nbelong to this company, so an id from another tenant is a 400 rather than a\ncross-company issuance."
   },
   {
    "id": "post_captable_shares_transfer",
