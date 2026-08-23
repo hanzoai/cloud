@@ -14,20 +14,21 @@ spec:
   # are checked, and each one that holds REFUSES TO RENDER, naming itself and its
   # remedy. Everything else honours the count as given.
   #
-  # This predicate MIRRORS Config.Enabled: iam is not staged, so an EMPTY enable
-  # list ("mount everything") enables it just as naming it does. Testing only for
-  # the name would leave an empty-list deployment unchecked, and the binary would
-  # then refuse to boot it — a chart that renders a pod that cannot start.
-  {{- $enable := splitList "," .Values.hanzo.enable }}
-  {{- $iamEnabled := or (empty (compact $enable)) (has "iam" $enable) }}
+  # IAM IS ALWAYS MOUNTED, so the embedded-store question is always asked. The
+  # binary knows which apps it was built with (manifest.Apps) and a deployment no
+  # longer restates the set — config.go says why, and names the two devnet
+  # outages a second source of truth caused. So this no longer reads an enable
+  # list to decide: reading one would let `enable: "base"` skip the check while
+  # the binary mounted iam regardless, which is the same disagreement in a
+  # quieter place.
   {{- $iamStore := .Values.hanzo.iamStore | default "" | trim }}
   {{- $iamShared := and (ne $iamStore "") (ne $iamStore "sqlite") }}
   {{- $replicas := int .Values.replicaCount }}
   {{- $max := int (default $replicas .Values.autoscaling.maxReplicas) }}
   {{- $peak := max $replicas $max }}
   {{- $rwo := and .Values.persistence.enabled (has "ReadWriteOnce" .Values.persistence.accessModes) }}
-  {{- if and (gt $peak 1) $iamEnabled (not $iamShared) }}
-    {{- fail (printf "cloud: %d replicas with embedded IAM on the per-pod store. hanzo.enable names iam and hanzo.iamStore is %q, so each replica opens its own %s/iam/iam.db and a user created on one cannot sign in on the next. Set hanzo.iamStore to a shared backend (\"sql\"), or drop iam from hanzo.enable and point CLOUD_IAM_ADDR at an instance that runs it, or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak $iamStore .Values.hanzo.dataDir) }}
+  {{- if and (gt $peak 1) (not $iamShared) }}
+    {{- fail (printf "cloud: %d replicas with embedded IAM on the per-pod store. iam is mounted and hanzo.iamStore is %q, so each replica opens its own %s/iam/iam.db and a user created on one cannot sign in on the next. Set hanzo.iamStore to a shared backend (\"sql\"), or point CLOUD_IAM_ADDR at an instance that runs it, or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak $iamStore .Values.hanzo.dataDir) }}
   {{- end }}
   {{- if and (gt $peak 1) $rwo }}
     {{- fail (printf "cloud: %d replicas on a ReadWriteOnce volume. A block volume attaches to ONE node, so the second pod never leaves ContainerCreating on Multi-Attach and a rolling update deadlocks against itself. Declare persistence.accessModes as ReadWriteMany on a filesystem that supports it, or set persistence.enabled=false and let the durable plane ship per-org state to object storage, or keep replicaCount (and autoscaling.maxReplicas) at 1." $peak) }}
@@ -78,7 +79,6 @@ spec:
             - "--domain={{ .Values.hanzo.domain }}"
             - "--data-dir={{ .Values.hanzo.dataDir }}"
             - "--iam-issuer={{ .Values.hanzo.iamIssuer }}"
-            - "--enable={{ .Values.hanzo.enable }}"
           # preStop belt-and-suspenders: give the endpoint controller a moment to remove
           # this pod before SIGTERM so no request is dialed to a tearing-down pod. The
           # in-process drain (drain.go) is the primary mechanism; this only sharpens it.
