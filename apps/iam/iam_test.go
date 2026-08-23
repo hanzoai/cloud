@@ -95,7 +95,7 @@ func TestAnEmptyStoreRefusesRatherThanServingAnEmptyKeyset(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(StorePath(dir)), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	db, err := store.Open("sqlite", StorePath(dir))
+	db, err := store.Open("sqlite", StorePath(dir), "")
 	if err != nil {
 		t.Fatalf("stand up an empty identity store: %v", err)
 	}
