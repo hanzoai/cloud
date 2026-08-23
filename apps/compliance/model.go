@@ -147,7 +147,13 @@ type Accreditation struct {
 	UpdatedAt     int64               `json:"updatedAt"`
 }
 
-// validAccMethod / validAccBasis / validAccStatus gate the enums at the boundary.
+// validAccMethod and validAccBasis gate their enums at the boundary.
+//
+// STATUS IS NOT GATED HERE, and that is not an omission. Each path admits a
+// narrower set than the enum: a create may only assert (the subject's own claim),
+// and a decision may only confirm, verify, reject or expire — a reviewer cannot
+// record an assertion. A shared validator would be wrong for both, which is why
+// there was one, unused, while both callers checked inline.
 func validAccMethod(m AccreditationMethod) bool {
 	switch m {
 	case MethodSelfAttested, MethodThirdPartyLetter, MethodProviderVerified:
@@ -159,14 +165,6 @@ func validAccMethod(m AccreditationMethod) bool {
 func validAccBasis(b AccreditationBasis) bool {
 	switch b {
 	case BasisIncome, BasisNetWorth, BasisLicense, BasisEntity:
-		return true
-	}
-	return false
-}
-
-func validAccStatus(s AccreditationStatus) bool {
-	switch s {
-	case AccAsserted, AccProviderVerified, AccReviewerConfirmed, AccRejected, AccExpired:
 		return true
 	}
 	return false
