@@ -150,3 +150,52 @@ func boolEnv(key string, def bool) bool {
 	}
 	return def
 }
+
+// Store is what a process that writes into the object store ITSELF needs: the
+// address, the region and the key pair, as a value.
+//
+// It is not a narrower credential than Client's and does not pretend to be. The
+// gateway exposes no STS endpoint — AssumeRole answers 405 — so there are no
+// scoped, expiring keys to mint, and a presigned URL cannot be handed to a writer
+// that names its own objects as it goes. The shared admin pair is the only
+// delegation this store has, so whoever takes one holds the whole store and the
+// call site is the place to say so.
+//
+// It exists so that a subsystem which cannot use hanzos3/go — because the writer
+// is another process with its own S3 client — still reads the deployment's ONE
+// configuration rather than the environment a second time. A second reader is how
+// a recording ends up in a bucket nothing else can find.
+type Store struct {
+	// URL carries the SCHEME, unlike the internal endpoint this is built from:
+	// hanzos3/go takes host[:port] plus a bool, and every other S3 client takes a
+	// URL, so the conversion belongs here rather than at each call site.
+	URL       string
+	Region    string
+	AccessKey string
+	Secret    string
+	// PathStyle addresses a bucket as the first path segment rather than as a DNS
+	// label. It is true because this store is always reached at an explicit
+	// endpoint and never at AWS's virtual-host DNS: a client that guesses
+	// `<bucket>.s3.hanzo.svc` resolves nothing, and the upload fails after the
+	// recording has already been made.
+	PathStyle bool
+}
+
+// Store returns the credential above, and false when none is configured — the
+// same fact Configured reports, in the shape a caller has to pass on.
+func (a Admin) Store() (Store, bool) {
+	if !a.Configured() {
+		return Store{}, false
+	}
+	scheme := "http://"
+	if a.secure {
+		scheme = "https://"
+	}
+	return Store{
+		URL:       scheme + a.endpoint,
+		Region:    a.region,
+		AccessKey: a.ak,
+		Secret:    a.sk,
+		PathStyle: true,
+	}, true
+}

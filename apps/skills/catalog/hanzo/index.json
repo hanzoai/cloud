@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 669,
+  "skill_count": 670,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -2882,6 +2882,13 @@
       "path": "meet_health/SKILL.md",
       "service": "meet",
       "sha256": "b073bf3de48b674b713bf618a567724448a3d07ee16b3bc139d05a0ddc204364"
+    },
+    {
+      "description": "Read meet record: What is being recorded in a room, and where the file goes.",
+      "name": "meet_record",
+      "path": "meet_record/SKILL.md",
+      "service": "meet",
+      "sha256": "84b06bb642ba2f8c64d93682ab6aa1e9d12e12627411f352b83eb0c22317a21c"
     },
     {
       "description": "Read meet session: What this caller may open a room in.",

@@ -21,9 +21,10 @@ package meet
 // cover a seat is told so, in the money wire's own words, before a token exists.
 
 import (
+	"context"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/zap-proto/zip"
 )
 
 // feeEnv is the operator knob for what one seat costs: MEET_FEE_CENTS_SEAT, or
@@ -32,6 +33,11 @@ const feeEnv = "MEET_FEE_CENTS"
 
 // seat is the billed act: one participant admitted to one room.
 const seat = "seat"
+
+// record is the other billed act: one recording started. Stopping and reading are
+// free — a caller made to pay to stop being recorded would be paying for the wrong
+// thing, and a read spends nothing.
+const record = "record"
 
 // defaultFeeCents is one cent per seat.
 //
@@ -44,6 +50,14 @@ const defaultFeeCents int64 = 1
 
 func fee() int64 { return cloud.FeeCents(feeEnv, seat, defaultFeeCents) }
 
+// recordFee is what starting one recording costs: the platform's provision fee
+// (MEET_FEE_CENTS_RECORD to move it), which is the default this estate charges for
+// CREATING a resource, and creating a resource is exactly what this is. A recording
+// stands up a dedicated egress worker — a browser and an encoder — and then writes
+// an object that is kept. That is a different class of thing from a seat, which is
+// why it is not priced like one.
+func recordFee() int64 { return cloud.ResourceFeeCents(feeEnv, record) }
+
 // afford authorizes one seat BEFORE a token is minted, so a caller who cannot
 // cover it never receives credentials to a room they cannot be billed for.
 //
@@ -51,14 +65,14 @@ func fee() int64 { return cloud.FeeCents(feeEnv, seat, defaultFeeCents) }
 // room gets 401 for that reason and not a bill they did not owe, and asking the
 // ledger about somebody we are going to refuse anyway is a balance read nobody
 // needed.
-func afford(s *cloud.Service[state], c *zip.Ctx) (*cloud.Charge, error) {
-	return s.Bill.Allow(c.Context(), cloud.PayerOf(c.Context()), seat, fee())
+func afford(s *cloud.Service[state], ctx context.Context, unit string, cents int64) (*cloud.Charge, error) {
+	return s.Bill.Allow(ctx, cloud.PayerOf(ctx), unit, cents)
 }
 
-// charge debits one seat, after the token exists. A mint that failed handed out
+// charge debits one act, after that act has happened. Work that failed handed out
 // nothing, so it bills nothing.
-func charge(ch *cloud.Charge) {
+func charge(ch *cloud.Charge, unit string, cents int64) {
 	// Ref is left unset so the meter mints one: it names an ACT, and rejoining a
 	// room is a second seat. Keyed on the room, a whole day's calls would be one.
-	ch.Debit(metering.Usage{Model: seat, AmountCents: fee()})
+	ch.Debit(metering.Usage{Model: unit, AmountCents: cents})
 }
