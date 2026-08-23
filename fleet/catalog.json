@@ -2541,11 +2541,6 @@
    "read": true
   },
   {
-   "id": "get_iam_get-app-login",
-   "doc": "Returns everything a login screen needs to draw itself for one\napplication: its branding, and each sign-in method it offers with the provider\ndetails that method needs.\n\nThe client secret is masked. Read before anyone has signed in, so it carries\nonly what is safe for a browser to see.",
-   "read": true
-  },
-  {
    "id": "get_iam_invitations",
    "doc": "Returns your organization's invitations, newest first — who has\nbeen asked to join, on what terms, and how many seats each invitation still\nhas left.\n\nYou see your own organization's invitations and no one else's; which organization that\nis comes from your credentials, not from the request.",
    "read": true

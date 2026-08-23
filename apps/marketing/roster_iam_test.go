@@ -56,7 +56,7 @@ func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	// certificate rather than answering an empty keyset, so an empty file is not a
 	// store this client can publish.
 	dir := t.TempDir()
-	seed, err := iamstore.Open("sqlite", iamclient.StorePath(dir))
+	seed, err := iamstore.Open("sqlite", iamclient.StorePath(dir), "")
 	if err != nil {
 		t.Fatalf("stand up the identity store: %v", err)
 	}
