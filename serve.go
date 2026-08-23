@@ -412,7 +412,15 @@ func Listen(plugins []Plugin, enable []string) error {
 	// handler — so it reaches nothing the MCP door does not already reach. Ops
 	// whose routed path carries a gated group keep their own authority check for
 	// exactly that reason: the group orders the refusal, the op decides it.
-	app.MountGraph("/v1/graphql")
+	//
+	// THIS PROCESS'S OPS, which in a plugin child means that child's own — the same
+	// scope its own OpenAPI document above describes, and the reason both are
+	// mounted here rather than in the host. The FLEET's schema at this address is
+	// the host's answer (cmd/cloud, fleet.MountGraph): a child cannot see past
+	// itself, and for a long time nobody claimed the address, so the app holding
+	// the /v1 remainder answered the fleet's callers with a schema of its own
+	// registry — one field, honestly rendered, about the wrong thing.
+	app.MountGraph(openapi.GraphPath)
 
 	// Unified console UI — the SAME binary serves the @hanzo/gui console at the web
 	// root. Mounted LAST, after every /v1 route + the /zap plane + the health

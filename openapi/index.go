@@ -173,7 +173,10 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 		Links: map[string]Link{
 			"self":        {Href: RootPath},
 			"describedby": {Href: Path},
-			"mcp":         {Href: door.Path},
+			// The same surface as a query language. A door nobody is told about is
+			// half-shipped, and this index is the one call a caller already makes.
+			"graphql": {Href: GraphPath},
+			"mcp":     {Href: door.Path},
 			// Where to knock, beside where to knock ON. The door 401s with a
 			// WWW-Authenticate naming this same document (RFC 9728), which is how a
 			// spec-following MCP client discovers it — but only AFTER being refused.

@@ -74,6 +74,11 @@ import (
 // and never a v2 — the document's own shape is versioned by its `openapi` field.
 const Path = "/v1/openapi.json"
 
+// GraphPath is the same surface as a QUERY LANGUAGE. Not /v1/graph: that is the
+// knowledge graph's own address — assertions, entities, neighbours — and the two
+// mean different things by the word.
+const GraphPath = "/v1/graphql"
+
 // WellKnown is where a client that has never seen this API looks first. RFC 8615
 // reserves /.well-known/ for exactly that, so every generator, IDE and crawler
 // probes it before it probes anything of ours.
