@@ -27,7 +27,7 @@ picks the repository, as a SUDOED read, so the forge's own ACL applied to the
 human is the answer; a run with no forge login is refused rather than falling
 back to the machine, which is a site administrator.
 
-Both doors take the actor — the sandbox one to be handed a key, the ROUTED one
+Both endpoints take the actor — the sandbox one to be handed a key, the ROUTED one
 because the machine it dispatches to holds credentials broader than the caller's,
 so an address resolved as a site admin is a repository the caller could not open
 themselves.
@@ -141,12 +141,12 @@ gives, is prose, an MCP tool and a CLI command.
    /v1 ops frame-for-frame (see zap.go's header comment); retiring these is a
    client migration, not a typing task.
 
-## The ref policy stands in NINE doors, not one
+## The ref policy stands in NINE endpoints, not one
 
 `refpolicy.go` used to say receive-pack was "the point every path that changes a
 ref passes through and no client can decline to". That was false, and it was the
 whole argument. It guarded **one** of eight ref writers into the same bare repo;
-a run refused at the front door walked in through any of the other seven with
+a run refused at the entry point walked in through any of the other seven with
 the same credential — most cheaply through `POST /repos/:name/push`, which lands
 a **fast-forward child** on the branch a reviewer just approved and so trips no
 "the branch was rewritten" signal anywhere.
@@ -167,9 +167,9 @@ that COMPARE-AND-SETS: it read base in order to judge the merge, so it hands
 that value back to go-git and the write fails rather than silently discarding a
 push that landed in between.
 
-**A tenth door is a change to that list, not just a new function.** The proof
+**A tenth endpoint is a change to that list, not just a new function.** The proof
 that each is closed is `refwriters_wire_test.go` — real git CLI, real SSH
-listener, real server, one test per door.
+listener, real server, one test per endpoint.
 
 ## The pull request is a native noun, not a GitHub round trip
 
@@ -177,7 +177,7 @@ listener, real server, one test per door.
 the repository). Before it, an agent could push a branch and had nowhere to
 propose it: `propose.go` answers "where do I read this" by opening a REAL pull
 request on GitHub when the repo mirrors there, and by returning a branch URL when
-it does not — so a repository living only in the forge had no door at all.
+it does not — so a repository living only in the forge had no endpoint at all.
 
 Four typed ops under the address shape every other repo op uses (org from the
 validated principal, repo from `:name`, never from a body field):
@@ -231,7 +231,7 @@ returns nil, no `X-User-Id` is minted, `principal.Validated` is false, and every
 `cloud.Guard` and every `tenantOf` refuses it **by default**. Nothing had to be
 told to say no.
 
-The one exception is `resolvePackRepo` (smart_http.go), so the set of doors a
+The one exception is `resolvePackRepo` (smart_http.go), so the set of endpoints a
 grant opens is the set of callers of that function: the three pack handlers, and
 nothing else in the binary. A principal always wins — the grant is consulted only
 where there is none, so it can never widen an authenticated caller.
@@ -500,7 +500,7 @@ same test found, one layer down.
 The forge is the authority and `apps/git` imports `forge` NOWHERE, so the obvious
 answer is to serve reads through it. The read client even exists and is clean:
 `Repository` (`repository.go`) with `openRepository` (`gitbackend.go`) as its ONE
-door, so a `forgeRepository` would move browse, the UI, the code index, the CI
+endpoint, so a `forgeRepository` would move browse, the UI, the code index, the CI
 config read and repo detail with no handler change.
 
 **What blocks it is addressing, not plumbing.** `forge.Owner` is a CLOSED table
@@ -528,8 +528,8 @@ Two supporting facts about how far the retirement has already gone, both
 measured: `apps/sync`'s importer answers the same `GitImporter` and
 `GitMirrorController` clients AGAINST THE FORGE and says so in its own header;
 `apps/deploy` and `apps/lsp` already read tree and rev from the forge; the live
-push door is `/v1/platform/hook` and `apps/git/webhook.go` is a 410 tombstone
-pointing at it. And the SSH front door is already dead: it binds `:2222`, no
+push endpoint is `/v1/platform/hook` and `apps/git/webhook.go` is a 410 tombstone
+pointing at it. And the SSH entry point is already dead: it binds `:2222`, no
 chart or compose exposes it, cloud's Service publishes no 22 or 2222, and
 `gitSSHHost` advertises `git@git.hanzo.ai:` — which resolves to the Forgejo
 Service, not to this listener.

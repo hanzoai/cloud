@@ -53,7 +53,7 @@ rpc() {
     ${AUTH:+-H "Authorization: $AUTH"} -d "$1"
 }
 
-echo "== the door is the host's =="
+echo "== the endpoint is the host's =="
 rpc '{"jsonrpc":"2.0","id":0,"method":"initialize"}' | tee "$CLOUD_DATA_DIR/init.json"; echo
 
 BEFORE=$(children)
@@ -64,7 +64,7 @@ COUNT=$(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1]))["resu
 echo "tools listed: $COUNT   children before=$BEFORE after=$AFTER"
 
 [ "$BEFORE" = "$AFTER" ] || { echo "FAIL: tools/list woke $((AFTER-BEFORE)) child process(es); it must wake ZERO"; exit 1; }
-[ "$COUNT" -gt 0 ] || { echo "FAIL: the door lists no tools"; exit 1; }
+[ "$COUNT" -gt 0 ] || { echo "FAIL: the endpoint lists no tools"; exit 1; }
 
 python3 - "$CLOUD_DATA_DIR/list.json" <<'PY'
 import json, sys
@@ -90,15 +90,15 @@ def enum_of(t):
     return t["inputSchema"].get("properties", {}).get("op", {}).get("enum", [])
 stray = [t["name"] for t in tools if t["name"] != "describe" and not enum_of(t)]
 if stray:
-    print("FAIL: the door published a flat operation:", ", ".join(stray[:10])); sys.exit(1)
+    print("FAIL: the endpoint published a flat operation:", ", ".join(stray[:10])); sys.exit(1)
 if not any(t["name"] == "describe" for t in tools):
-    print("FAIL: the door published no `describe`; the enums carry names only and cannot be read without it"); sys.exit(1)
+    print("FAIL: the endpoint published no `describe`; the enums carry names only and cannot be read without it"); sys.exit(1)
 ops = [op for t in tools for op in enum_of(t)]
 print("%d tools carrying %d operations (a client keeps 128)" % (len(tools), len(ops)))
 if len(tools) >= 128:
     print("FAIL: %d tools is back over the cap" % len(tools)); sys.exit(1)
 if not ops:
-    print("FAIL: the door published no operations at all"); sys.exit(1)
+    print("FAIL: the endpoint published no operations at all"); sys.exit(1)
 PY
 
 echo
@@ -143,4 +143,4 @@ echo "children before=$BEFORE after=$AFTER  (a cold owner wakes exactly one)"
 [ $((AFTER-BEFORE)) -le 1 ] || { echo "FAIL: tools/call woke $((AFTER-BEFORE)) children; it must wake at most ONE"; exit 1; }
 
 echo
-echo "OK — one door, zero wakes on list, one wake on call."
+echo "OK — one endpoint, zero wakes on list, one wake on call."

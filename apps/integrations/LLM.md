@@ -17,7 +17,7 @@ This is why `/v1/integrations/connectors` and `/v1/channels` are two surfaces ra
 /v1/channels     what HAVE I connected?  data, owned by an org or by a person
 ```
 
-An earlier pass here tried to fold them into one door and hit a wall: a test
+An earlier pass here tried to fold them into one endpoint and hit a wall: a test
 wanted `fake:work` and `fake:default` and the merged catalog had flattened them
 into a single card. Those are two channels through one connector, and a shape
 that cannot say that is the wrong shape.
@@ -75,7 +75,7 @@ pairing and allowlist gates never ran on real traffic. It now crosses as
 `plane.ChannelsIngest`, a typed op.
 
 **Still owed:** the turn itself. `bridge.go` should not exist — channels already
-carries the ingress, the policy gate, the inbox and all four egress doors
+carries the ingress, the policy gate, the inbox and all four egress endpoints
 (`slackDoor`/`teamsDoor`/`discordDoor`/`telegramDoor`), and its own code names
 the gap: *"Agent delivery is NOT built this pass."* Moving it means:
 
@@ -83,7 +83,7 @@ the gap: *"Agent delivery is NOT built this pass."* Moving it means:
   `bridgeReply`, the agent ref and the concurrency knobs
 - the adapters keep auth + parse + emit, and drop `bridgeSpawn`
 - integrations keeps what is genuinely its own: token custody, `OrgForExternalID`
-  (the isolation root), the account link, and the send doors
+  (the isolation root), the account link, and the send endpoints
 - one thing to design, not skip: adapters acquire a pool slot **synchronously**
   today so a capacity shed returns a retriable non-2xx *without burning the
   platform's event id*. Once the pool lives in channels, the client has to answer
@@ -117,7 +117,7 @@ to preserve.
   must not sign a person out of their own
 - a connect naming a scope the provider does not permit is refused
 
-`scope_test.go` pins the first four. What is not yet pinned is the door.
+`scope_test.go` pins the first four. What is not yet pinned is the endpoint.
 
 **And a test can pass while the thing it names is dead.** The three tests that
 guarded the ingress client registered a consumer in the same process and asserted

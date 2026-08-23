@@ -69,7 +69,7 @@ impl detail resolved inside the handlers, never leaked into a route:
 - `/v1/o11y/{services,dependency_graph,dashboards,rules,…}` — resolved by the
   upstream module's version-less alias (highest engine version wins).
 
-## The unified door: it was shut TWICE, and the locks were different
+## The unified endpoint: it was shut TWICE, and the locks were different
 
 `api.hanzo.ai/v1/o11y/version` answered `403 {"status":403,"error":"no validated
 principal"}` while `o11y.hanzo.ai` answered it 200. Fixing the obvious cause
@@ -148,7 +148,7 @@ must not be one: the module names all 367 routes precisely so an unconverted
 route 404s instead of falling through a wildcard, so `/v1/o11y/` is a 404 and
 every answer on the prefix is JSON. The console is `o11y-site` at
 `o11y.hanzo.ai` / `obs.hanzo.ai` behind `admin-guard`, which 302s a browser to
-hanzo.id PKCE and 401s a machine. One door per concern.
+hanzo.id PKCE and 401s a machine. One endpoint per concern.
 
 **The tests.** `red_forge_test.go` calls `gate()` directly against a backend that
 answers 200 to anything — it proves the predicate and CANNOT see the chain, which
@@ -170,12 +170,12 @@ production is not a test of production.
 > `sessions.go` (which sets `r.URL.Path = "/api/sessions"`) and `query.go` (which
 > forwards to `/api/v3/<resource>`) both name routes the runtime no longer
 > serves. Both are ORG-GATED, so neither can be probed anonymously and neither
-> showed up in the door work above — they need their own pass, and the fix is to
+> showed up in the endpoint work above — they need their own pass, and the fix is to
 > forward to the current spellings rather than to re-pin.
 >
 > A second reason they cannot be trusted as written: rewriting `r.URL.Path`
 > alone does not redirect anything at the EMBEDDED runtime. That backing is
-> `adaptor.FiberApp`, which routes on `RequestURI` — see the door section above —
+> `adaptor.FiberApp`, which routes on `RequestURI` — see the endpoint section above —
 > so a handler that edits `URL.Path` and leaves `RequestURI` pointing at the
 > original public path will be routed by the ORIGINAL path.
 
@@ -208,7 +208,7 @@ forwards, which name the internal spelling:
   addresses nothing served and the gate refused EVERY public op — `/version`,
   `/health`, the three probes, sign-in and the shared-dashboard reads all answered
   `403 {"status":403,"error":"no validated principal"}` at api.hanzo.ai while
-  o11y.hanzo.ai served them 200. That gap is the whole reason o11y still had a door
+  o11y.hanzo.ai served them 200. That gap is the whole reason o11y still had an endpoint
   of its own. FIXED by deleting the list: `gate()` asks `o11y.Anonymous(method, path)`,
   which lives beside the routes it describes, and `anonymous_test.go` there fails on
   any exemption that names a path Mount does not register.
@@ -265,7 +265,7 @@ Two facts the graft made local, both load-bearing:
 
 - **`ALL /v1/sentinel/*` is registered on the HOST, not on the child.**
   `zip.App.Declaration` drops HEAD and OPTIONS unconditionally — they are the
-  shadows fiber generates — so a door opened with `All` cannot cross a graft
+  shadows fiber generates — so an endpoint opened with `All` cannot cross a graft
   intact, and OPTIONS is a method that proxy genuinely answers and publishes. It
   stays at the same point in the same order, and costs nothing: a wildcard proxy
   declares no typed op and contributes no schema.
