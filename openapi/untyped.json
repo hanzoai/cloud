@@ -1,5 +1,5 @@
 {
-  "operations": 777,
+  "operations": 775,
   "products": {
     "account": 2,
     "ad": 1,
@@ -13,7 +13,7 @@
     "books": 5,
     "bot": 6,
     "campaign": 2,
-    "captable": 11,
+    "captable": 9,
     "channels": 1,
     "cloudflare": 6,
     "commerce": 176,
