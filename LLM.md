@@ -4422,7 +4422,7 @@ semantic is identical — fail closed once armed, allow before.
 - **vm speaks TWO wires, and a call site says which — `cl.call` or `cl.op`.**
   Visor (`hanzoai/visor`) is converting its routes to typed zip ops noun by noun,
   and a typed op has no envelope: the answer IS the value, the status IS the
-  outcome. Everything not yet converted still answers casibase's
+  outcome. Everything not yet converted still answers the legacy
   `{status,msg,data}` inside an HTTP 200, where a logical failure is a 200.
   `apps/visor/client.go` reads both, and the choice is per call site because the
   two CANNOT be told apart by looking — feeding a typed answer to `cl.call` reads

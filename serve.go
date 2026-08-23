@@ -198,12 +198,12 @@ func Listen(plugins []Plugin, enable []string) error {
 	// subsystem's name, or "cloud" when it carries several.
 	app := App(procName(plugins), cfg, deps, source)
 
-	// Console identity = the ONE validated principal, not the embedded casibase account
+	// Console identity = the ONE validated principal, not the embedded account surface
 	// model. When a principal is present, /v1/get-account reflects it so the operator
 	// UI's SuperAdmin gate sees the same owner+isAdmin every /v1/admin/* route already
-	// authorizes on (a PKCE session is not a casibase session — without this the UI
-	// bounced to login despite valid admin API access). No principal → casibase path
-	// unchanged. Runs BEFORE MountAll's casibase mount.
+	// authorizes on (a PKCE session is not one of its sessions — without this the UI
+	// bounced to login despite valid admin API access). No principal → that surface's path
+	// unchanged. Runs BEFORE MountAll mounts it.
 	app.Use(AccountFromPrincipal())
 
 	// Shard router (horizontal writer scale). Runs IMMEDIATELY after SanitizeIdentity

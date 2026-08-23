@@ -77,7 +77,7 @@ func OrgHasUnsafeRune(s string) bool { return s != "" && namespace.Sanitize(s) =
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access
 // token (mirrors edge.Cookie). hanzo_iam_token is the cookie the ai
-// (casibase) layer SETS after login (ai/controllers/account.go iamTokenCookieName)
+// the embedded account layer SETS after login (ai/controllers/account.go iamTokenCookieName)
 // — it MUST be read here too, or the embedded console (whose browser holds only
 // that httpOnly cookie, no Authorization header) resolves to no principal and
 // every org-scoped /v1 endpoint (agents/gpus/machines/platform/orgs/…) 403s
