@@ -136,7 +136,7 @@ func BenchmarkRED_UnauthenticatedHMACCost(b *testing.B) {
 //
 // NOT a defect, and stated so it is not rediscovered as one: the duplicate this
 // memory exists to stop is a redelivery of a request that timed out after the
-// seams ran, and that retry reaches whichever replica the Service sends it to. A
+// clients ran, and that retry reaches whichever replica the Service sends it to. A
 // cross-replica answer belongs to the build store, and giving it here would put
 // one question in two places.
 func TestRED_DedupIsPerReplica(t *testing.T) {

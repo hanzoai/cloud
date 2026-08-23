@@ -20,7 +20,7 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// studio_render.go is the ASSET half of the Generator seam: it turns a design + kind into
+// studio_render.go is the ASSET half of the Generator client: it turns a design + kind into
 // a real studio-rendered image via the PROVEN Qwen-Image-Edit-2511 ComfyUI graph, then
 // records it as an Asset document. It is the ONE place the ComfyUI submit→poll→fetch
 // protocol and the render graph live.
@@ -66,9 +66,9 @@ const (
 
 // assetNegative kills the two things the reference must NOT leak into the render: any text
 // (CAD annotations / labels / watermarks) and the CAD construction lines (art direction:
-// panels flatten to one fabric color, never reproduced as visible seams).
+// panels flatten to one fabric color, never reproduced as visible clients).
 const assetNegative = "text, watermark, logo, label, caption, typography, " +
-	"cad lines, construction lines, seam lines, panel lines, sketch outline, " +
+	"cad lines, construction lines, client lines, panel lines, sketch outline, " +
 	"extra garments, deformed, distorted, low quality, blurry"
 
 // assetScenes is the per-kind scene prose. Each is a complete photographic direction; the
@@ -555,7 +555,7 @@ func assetPrompt(kind string, in GenerateInput) string {
 	var b strings.Builder
 	b.WriteString(scene)
 	b.WriteString(" Preserve the exact garment design, cut, and color from the reference. ")
-	b.WriteString("Render every panel as one continuous fabric color — no construction lines, no seams, no text.")
+	b.WriteString("Render every panel as one continuous fabric color — no construction lines, no clients, no text.")
 	if brief := strings.TrimSpace(in.Brief); brief != "" {
 		b.WriteString(" ")
 		b.WriteString(brief)

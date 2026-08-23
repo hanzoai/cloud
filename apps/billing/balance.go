@@ -20,7 +20,7 @@ import (
 // which re-dispatches BY PATH. commerce's own billing routes are NOT registered in this
 // binary — api.Route(), which registers GET /v1/billing/balance, is called only from
 // commerce's mount.go, which is behind `//go:build cloud` and never compiled (cloud ships
-// -tags "libsqlite3 sqlite_fts5"). So a GET of "/v1/billing/balance" through the S2S seam
+// -tags "libsqlite3 sqlite_fts5"). So a GET of "/v1/billing/balance" through the S2S client
 // matches the ONLY registration of that path — the handler below — and re-enters it with
 // no principal, which answers "sign in to view billing". The proxy was calling itself.
 //

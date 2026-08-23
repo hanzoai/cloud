@@ -1,11 +1,11 @@
 package websearch
 
-// compose.go — the in-process seam the answer engine (clients/answer) composes to
+// compose.go — the in-process client the answer engine (clients/answer) composes to
 // use native meta-search as its GROUNDING source, one-way (answer imports
 // websearch; websearch imports none of them). It is the SAME engines, concurrency,
 // dedupe, and cap as GET /v1/websearch/search — not a second search stack and not
 // an HTTP loopback back through the router. metaSearch is a pure function over the
-// enabled engines, so this seam needs no mounted state and no Mount-order coupling.
+// enabled engines, so this client needs no mounted state and no Mount-order coupling.
 
 import "context"
 
@@ -20,7 +20,7 @@ type Result struct {
 }
 
 // Search runs native meta-search in-process for query (lang optional, BCP-47-ish)
-// and returns the merged, URL-deduped results — the ONE grounding seam the answer
+// and returns the merged, URL-deduped results — the ONE grounding client the answer
 // engine calls per sub-query. It never errors: a failing or bot-challenged engine
 // contributes zero results (search degrades to fewer sources, never to a 5xx), so
 // the caller always gets a usable slice and decides how to rank/cap it.

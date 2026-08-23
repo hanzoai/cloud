@@ -127,7 +127,7 @@ services:
 	}
 }
 
-// TestEstimateService proves the single-service seam the deploy-compute meter
+// TestEstimateService proves the single-service client the deploy-compute meter
 // uses: a running platform app is one image at N replicas, priced by the SAME
 // rate card + class inference as a compose template, so EstimateService and a
 // one-service EstimateCompose of the same image agree exactly. The per-hour

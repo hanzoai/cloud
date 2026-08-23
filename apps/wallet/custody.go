@@ -1,7 +1,7 @@
 // Package wallets is blockchain key custody: create wallets, rotate their keys, and
 // sign with them.
 //
-// It serves /v1/wallet/* over one custody seam with FOUR interchangeable signing
+// It serves /v1/wallet/* over one custody client with FOUR interchangeable signing
 // backends, selected PER WALLET by its Kind.
 //
 // TOPOLOGY (HIP-0106). Custody composes the canonical Hanzo key services without
@@ -23,7 +23,7 @@
 // It is the recipient side of x402: a priced resource's payee resolves through
 // ResolvePaymentTarget here, and x402 settles against that wallet's ledger account.
 //
-// The seam is the whole point: swapping a wallet's custody is a config value on
+// The client is the whole point: swapping a wallet's custody is a config value on
 // one row, not a code path. custody.go owns the interface + the four backends;
 // mpcclient.go + safeclient.go own the wire; store.go owns persistence; wallets.go
 // owns HTTP.
@@ -245,7 +245,7 @@ var (
 	ErrUnknownCustody   = errors.New("unknown custody kind")
 )
 
-// Custody is the ONE seam. Each backend creates signing material (Provision),
+// Custody is the ONE client. Each backend creates signing material (Provision),
 // signs a 32-byte digest (Sign), and rolls the material (Rotate). Provision and
 // Rotate return the resulting pubkey ADDRESS and set w.KeyRef to the backend's
 // handle for that material.
@@ -514,7 +514,7 @@ func (s safeCustody) ProposeTx(ctx context.Context, w *Wallet, tx SafeTx) (*Safe
 // safeProposer is the OPTIONAL capability a custody backend exposes when it can
 // propose (and MPC-sign) a Safe transaction. Only safeCustody implements it; the
 // /v1/wallet/:id/transactions handler type-asserts for it and 400s otherwise. This is
-// the "values, not places" seam: the HTTP layer asks the backend whether it can
+// the "values, not places" client: the HTTP layer asks the backend whether it can
 // propose, it does not switch on the Kind.
 type safeProposer interface {
 	ProposeTx(ctx context.Context, w *Wallet, tx SafeTx) (*SafeTxResult, error)

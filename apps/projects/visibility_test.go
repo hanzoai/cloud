@@ -25,7 +25,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// visibility_test.go proves the seam that decides who can read a project's
+// visibility_test.go proves the client that decides who can read a project's
 // source, and it is written from the RETRACTION side.
 //
 // The failure here is asymmetric. A publish that fails to reach the forge leaves
@@ -39,7 +39,7 @@ import (
 // ── a forge to publish into ──────────────────────────────────────────────────
 
 // forgery is a stand-in for the deployment's Forgejo, modelling the four things
-// this seam depends on: a repository is born private, its visibility is one
+// this client depends on: a repository is born private, its visibility is one
 // PATCHable bit, it can be deleted, and an anonymous reader sees a repository
 // only while it is public. The last one is the whole invariant, so it is
 // modelled rather than assumed — and confirmed against a real forge in
@@ -113,7 +113,7 @@ func (f *forgery) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		read(r, &body)
 		// A create that waits is how a test holds a run IN FLIGHT — the window in
-		// which a delete arrives beside a create, which is the race this seam has
+		// which a delete arrives beside a create, which is the race this client has
 		// to survive rather than merely be unlikely to meet.
 		f.mu.Lock()
 		gate := f.gate
@@ -281,7 +281,7 @@ func (f *forgery) mark(t *testing.T, name string) int {
 	return got.mark
 }
 
-// close shuts a repository behind the seam's back, to stage the failure the
+// close shuts a repository behind the client's back, to stage the failure the
 // audit must NOT fix.
 func (f *forgery) close(name string) {
 	f.mu.Lock()
@@ -328,7 +328,7 @@ func (f *forgery) asked() int {
 
 // ── the deployment ───────────────────────────────────────────────────────────
 
-// vault is the deployment's KMS, holding the one forge credential. The seam
+// vault is the deployment's KMS, holding the one forge credential. The client
 // reads it from here and never from a field, an env file or a request.
 type vault struct{ token string }
 
@@ -347,12 +347,12 @@ func (v vault) Sign(context.Context, string, []byte) ([]byte, error) {
 // ── the other two copies ─────────────────────────────────────────────────────
 
 // scribe is a stand-in for the GIT APP, which holds the two copies of a
-// project's source this seam does not write itself: the repository it serves and
+// project's source this client does not write itself: the repository it serves and
 // the real one at github.com/hanzo-community. It records what crossed.
 //
 // It exercises the REAL path — frames over a unix socket — because the failure
 // it guards against is precisely a call that resolves to nothing. That is not
-// hypothetical: the seam this replaced published in-process, projects and git
+// hypothetical: the client this replaced published in-process, projects and git
 // are separate processes, and every visibility change was dropped in silence.
 type scribe struct {
 	mu   sync.Mutex
@@ -374,7 +374,7 @@ type said struct {
 // It REFUSES an anonymous call, exactly as the real handler does (apps/git,
 // planePublish: "git publish: org required"). That refusal is the whole reason
 // the tenant has to be carried rather than inherited: a stand-in that accepted
-// an empty org would be green over a seam whose every retraction the real git
+// an empty org would be green over a client whose every retraction the real git
 // app throws away.
 // sockDir is a SHORT runtime dir for the unix socket. t.TempDir() carries the
 // whole test name, and on macOS a bind past sun_path's 104 bytes fails — the
@@ -449,7 +449,7 @@ func (sc *scribe) heard(slug, state string) bool {
 // something was stated at all.
 //
 // The org is not a field of the fact — the far side reads it off the caller — so
-// this is the only place the tenancy of this seam is visible, and it has to be
+// this is the only place the tenancy of this client is visible, and it has to be
 // asked on every path rather than on the one that happens to work. An empty org
 // is the git app's 403; another tenant's is that tenant's repositories.
 func (sc *scribe) forOrg(t *testing.T, slug, want string) {
@@ -527,7 +527,7 @@ func mountShared(t *testing.T) (*zip.App, *forgery, *scribe) {
 	return app, f, sc
 }
 
-// settled waits for the seam's off-thread reconcile. It polls rather than
+// settled waits for the client's off-thread reconcile. It polls rather than
 // synchronises because the production path is off-thread on purpose (a forge
 // must not be able to slow or fail a project write), so a test that could only
 // pass synchronously would be testing something we do not ship.
@@ -620,7 +620,7 @@ func TestPublishingReachesTheForge(t *testing.T) {
 	defer f.mu.Unlock()
 	for _, p := range f.seen {
 		if !strings.Contains(p, community) {
-			t.Fatalf("the seam touched %q, outside the community namespace", p)
+			t.Fatalf("the client touched %q, outside the community namespace", p)
 		}
 	}
 }
@@ -652,7 +652,7 @@ func TestRetractionClosesTheSource(t *testing.T) {
 
 		// Private is metered like every other paid surface. With no fee configured
 		// the gate is open, which is the free-tier operator default — so this
-		// asserts the SEAM, not the price.
+		// asserts the CLIENT, not the price.
 		code, body := do(t, app, http.MethodPatch, "/v1/projects/secret", "acme",
 			map[string]any{"visibility": "private"})
 		if code != http.StatusOK {
@@ -704,7 +704,7 @@ func TestARetractionSurvivesAForgeThatLies(t *testing.T) {
 // A repository that has been ARCHIVED on the forge can still be closed. Closing
 // needs neither the repository to be writable nor to exist, so it does not go
 // through the ensure — which refuses an archived repository, and would make an
-// archived one the only kind this seam could never retract.
+// archived one the only kind this client could never retract.
 func TestClosingIsNotGatedOnWritability(t *testing.T) {
 	app, f, _ := mountShared(t)
 	s := mounted
@@ -736,7 +736,7 @@ func TestClosingIsNotGatedOnWritability(t *testing.T) {
 // ── every copy, not just the forge ───────────────────────────────────────────
 
 // A project's source has THREE copies and a leak needs only one of them. The
-// forge is the one this seam writes; the git app serves another and pushes a
+// forge is the one this client writes; the git app serves another and pushes a
 // third to github.com/hanzo-community. A retraction that reached the forge alone
 // is a project its author believes is private, still readable at a link they
 // handed out — with nobody notified and no write coming that would notice,
@@ -877,7 +877,7 @@ func TestTheAuditClosesEveryCopy(t *testing.T) {
 	settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_secret") })
 	drained(t, s)
 
-	// The row goes private without the seam being told — the leak the audit is
+	// The row goes private without the client being told — the leak the audit is
 	// for.
 	visibilityOf(t, s, "acme", "secret", Private)
 	before := len(sc.states("secret"))
@@ -1117,7 +1117,7 @@ func TestADeleteThatRacesACreateLeavesNoOpenOrphan(t *testing.T) {
 	}
 }
 
-// ── the shape of the seam ────────────────────────────────────────────────────
+// ── the shape of the client ────────────────────────────────────────────────────
 
 // Firing on every write is only safe if a repeat is free: the repository is
 // ensured rather than created, so a project written twice has one repository and
@@ -1198,7 +1198,7 @@ func TestTheAuditClosesWhatWasLeftOpen(t *testing.T) {
 	settled(t, "the repository to be readable", func() bool { return f.readable(t, "acme_secret") })
 	drained(t, s)
 
-	// The row goes private without the seam being told — exactly what a process
+	// The row goes private without the client being told — exactly what a process
 	// that died between the two writes leaves behind.
 	visibilityOf(t, s, "acme", "secret", Private)
 	if !f.readable(t, "acme_secret") {
@@ -1268,7 +1268,7 @@ func TestTheAuditClosesARepositoryNoRowPermits(t *testing.T) {
 	}
 }
 
-// A repository named by nothing this seam could have minted is open with no row
+// A repository named by nothing this client could have minted is open with no row
 // that can ever speak for it, so it is closed too.
 func TestTheAuditClosesAnOpenRepositoryNothingPublished(t *testing.T) {
 	app, f, _ := mountShared(t)
@@ -1480,7 +1480,7 @@ func TestARepositoryNameReadsBackToItsProject(t *testing.T) {
 			t.Fatalf("parts(%q) = (%q, %q, %v), want (%q, %q, true)", name, org, slug, ok, tc.org, tc.slug)
 		}
 	}
-	// A name this seam could not have minted belongs to no project, so nothing in
+	// A name this client could not have minted belongs to no project, so nothing in
 	// the store can be permitting it: the audit closes it rather than guessing.
 	for _, name := range []string{"", "board", "a_b_c", "_board", "acme_", "Acme_board", "acme_Board"} {
 		if org, slug, ok := parts(name); ok {

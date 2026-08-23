@@ -26,7 +26,7 @@ import (
 //	  -args   # UNIVERSE_DRYRUN_REMOTE=<a bare clone of hanzo/universe>
 //
 // It writes to `deploy/acme/dryrun/<tag>` and NEVER to main. What it
-// proves that the fixtures cannot: the seam works against the real 105-file
+// proves that the fixtures cannot: the client works against the real 105-file
 // inventory, the real directory layout, and a real git history.
 func TestDryRunAgainstARealUniverse(t *testing.T) {
 	bare := strings.TrimSpace(os.Getenv("UNIVERSE_DRYRUN_REMOTE"))
@@ -34,7 +34,7 @@ func TestDryRunAgainstARealUniverse(t *testing.T) {
 		t.Skip("set UNIVERSE_DRYRUN_REMOTE to a scratch bare clone of hanzo/universe")
 	}
 	// Served over HTTP, not file://. pinGitEnv sets GIT_ALLOW_PROTOCOL=http:https
-	// — a real control, and the reason a local path cannot be handed to the seam.
+	// — a real control, and the reason a local path cannot be handed to the client.
 	remote := serveBare(t, bare)
 	defer swapUniverseRemote(remote)()
 
@@ -76,7 +76,7 @@ func TestDryRunAgainstARealUniverse(t *testing.T) {
 		t.Fatal("the dry run wrote main")
 	}
 
-	// Read the real inventory back through the same seam the board uses.
+	// Read the real inventory back through the same client the board uses.
 	got, err := declarations(s, context.Background(), "hanzo")
 	if err != nil {
 		t.Fatalf("inventory: %v", err)

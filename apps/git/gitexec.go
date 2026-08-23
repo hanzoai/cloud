@@ -16,7 +16,7 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// gitexec.go is the ONE seam that shells out to the streaming `git` CLI for the
+// gitexec.go is the ONE client that shells out to the streaming `git` CLI for the
 // heavy object-plane operations — clone/fetch serve (upload-pack), push receive
 // (receive-pack), and mirror-in (fetch). go-git's pure-Go server transport
 // buffered whole packs in RAM (a 3 GB clone = 3 GB), which OOM-killed the 1 Gi

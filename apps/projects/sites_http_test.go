@@ -406,7 +406,7 @@ func (o *capturingObserver) OnDeploy(_ context.Context, org, slug, url, deployme
 	o.mu.Unlock()
 }
 
-// TestDeployObserver: the session-event seam fires exactly once per /v1/projects/sites
+// TestDeployObserver: the session-event client fires exactly once per /v1/projects/sites
 // deploy with the canonical org/slug/url/deploymentId, and clearing it (nil) makes
 // notifyDeploy a safe no-op.
 func TestDeployObserver(t *testing.T) {

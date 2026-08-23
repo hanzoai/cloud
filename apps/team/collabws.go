@@ -562,7 +562,7 @@ func (cc *collabConn) frame(ctx context.Context, data []byte) {
 	}
 }
 
-// auth verifies the in-band credential exactly like the RPC lane (same seam, same
+// auth verifies the in-band credential exactly like the RPC lane (same client, same
 // workspace pin, same membership gate) and on success joins the room. The frame
 // carries the credential itself, so it resolves through identity.verified rather
 // than off the request's carriers — an IAM access token or team's HS256 token, the

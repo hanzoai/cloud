@@ -24,7 +24,7 @@ import (
 )
 
 // billingApp registers the billing plane directly (no Mount) with a fake
-// commerce + plan seam and an isolated store — the same harness shape as
+// commerce + plan client and an isolated store — the same harness shape as
 // gateApp (entitle_test.go).
 func billingApp(t *testing.T, commerce types.CommerceClient, planEnt func(context.Context, string) (map[string]any, error)) (*zip.App, *accountStore) {
 	t.Helper()
@@ -96,7 +96,7 @@ func TestBillingUIServesEmbeddedPage(t *testing.T) {
 }
 
 // TestBillingPlanOrgScoped: seats/guests count the caller's OWN org only, and
-// plan/cap flow through the commerce + plans seams. A nil commerce (not
+// plan/cap flow through the commerce + plans clients. A nil commerce (not
 // co-resident) leaves plan honestly empty rather than fabricating a tier.
 func TestBillingPlanOrgScoped(t *testing.T) {
 	entitled := &fakeCommerce{ent: &types.LicenseEntitlement{ProductID: productTeam, Active: true, Plan: "pro"}}

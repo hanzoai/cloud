@@ -6,14 +6,14 @@ package marketplace
 //
 //	registry  →  x402.Publish     the resource→Terms table x402 enforces against:
 //	                              what a listed tool costs and which wallet is paid.
-//	charger   →  tools.SetCharger the seam tools.Registry.Dispatch settles through,
+//	charger   →  tools.SetCharger the client tools.Registry.Dispatch settles through,
 //	                              which is x402.Settle on that same resource.
 //
 // ONE table, two doors onto it. The marketplace declares what is priced and who is
 // paid; x402 enforces it; the tool plane knows neither. Nothing else in the fleet
 // decides what a listed tool costs.
 //
-// CO-RESIDENCY. All three seams are process-globals (x402.reg, tools.std,
+// CO-RESIDENCY. All three clients are process-globals (x402.reg, tools.std,
 // wallets.mounted), so this wiring binds within ONE process — and the shipped fleet
 // runs one process per app, where it binds nothing. That is why the same table is
 // also published on the internal plane (rpc.go) and the same settlement is also
@@ -70,13 +70,13 @@ func (g *registry) Price(ctx context.Context, resource string) (x402.Terms, bool
 	}, true, nil
 }
 
-// charger is the tool plane's payment seam: it settles a tool call through the x402
+// charger is the tool plane's payment client: it settles a tool call through the x402
 // flow — challenge, verify, settle once — against the price table above.
 //
 // It holds NO state. Everything it needs is already somewhere authoritative: the
 // tool name arrives as the argument, the payer is the attested principal on the
 // context, and the price and payee are the registry's. That is the whole point of
-// the seam being this narrow.
+// the client being this narrow.
 type charger struct{}
 
 // Charge settles one tool call, or refuses it.

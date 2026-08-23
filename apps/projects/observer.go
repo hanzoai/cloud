@@ -6,7 +6,7 @@ import (
 )
 
 // DeployObserver receives one notification whenever a site goes live. It is the
-// seam the (separately-landed) agent-sessions lane hooks to record a "site
+// client the (separately-landed) agent-sessions lane hooks to record a "site
 // deployed + URL" session event, WITHOUT projects taking any hard dependency on
 // that lane: projects only ever calls this interface. The default is nil — a
 // no-op — so a deployment that never registers an observer is unaffected.

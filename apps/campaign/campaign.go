@@ -7,7 +7,7 @@
 // channels[], status} — that SPANS channels and fans out to orthogonal executors.
 // It is the capability layer that CONSUMES the connector plane: the campaign
 // object never touches a credential; each channel executor resolves the org's
-// connector token itself through the integrations.TokenFor custody seam.
+// connector token itself through the integrations.TokenFor custody client.
 //
 // THE DECOMPLECT (HIP-0126 — Integrations, Connectors & the Extension Runtime): a
 // Connector is a connection (credential custody + auth); a capability is what you
@@ -22,7 +22,7 @@
 //	organic → apps/social    (the social connectors — NO executor registered yet)
 //	email   → apps/marketing (sendgrid/mailchimp/… — NO executor registered yet)
 //
-// Only the paid executor is wired today (plugin/campaigns/seams.go). A campaign
+// Only the paid executor is wired today (plugin/campaigns/clients.go). A campaign
 // carrying an organic or email channel launches its paid channels and records the
 // others "unavailable" — honest, never a faked launch. Until those two executors
 // exist, /v1/social and /v1/marketing are the ONLY way to run those channels, and
@@ -30,7 +30,7 @@
 // from the ONE analytics plane (metrics.go: event.CampaignMetrics over the
 // utm_campaign-tagged events) plus each channel connector's reported spend. A
 // creative A/B is an experiment whose variant = creative and whose metric = the
-// campaign result from analytics; it composes the experiment seam (experiment.go),
+// campaign result from analytics; it composes the experiment client (experiment.go),
 // never a second assignment or evidence store.
 //
 // Tenant isolation is enforced SERVER-SIDE on every request: the org is

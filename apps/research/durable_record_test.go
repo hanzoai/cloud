@@ -5,7 +5,7 @@
 
 package research
 
-// durable_record_test.go is the H1 regression proof: the in-process Record() seam
+// durable_record_test.go is the H1 regression proof: the in-process Record() client
 // (experiments A/B evidence) must ship its write fenced before returning, exactly
 // like the HTTP ingest path, so a takeover keeps it and a non-owner fails closed.
 // It runs a durable research OrgStore over an in-process CAS (no live SeaweedFS) and

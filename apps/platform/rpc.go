@@ -13,13 +13,13 @@ import (
 // The fleet board is a READ of what the operator already reconciled, so it
 // crosses as the projection admin renders, not as the k8s client that produced
 // it. Reading it by import cost the caller client-go + apimachinery and still
-// returned nothing: the in-process seam it resolved is a package global that
+// returned nothing: the in-process client it resolved is a package global that
 // only exists in a binary which mounts platform.
 
 // exposeFleet publishes the observer's view, bound to the service that owns the
 // k8s client. fleetRoutes registers it, so the method is live exactly when the
 // board it mirrors is — and it reads s directly rather than a package global,
-// because that global IS the in-process seam the caller was just moved off.
+// because that global IS the in-process client the caller was just moved off.
 //
 // AUTHORIZATION IS listFleet's, NOT A SECOND COPY. The role gate (mayObserve)
 // and the tenant confinement (scopeNamespaces) are the ones the HTTP handler
@@ -36,7 +36,7 @@ import (
 // fleetReady already tells every HTTP route on this board. An unreachable estate
 // and an empty estate must never look alike; that is equally true when the
 // estate is merely unobservable, and a board reading "0 workloads, fleet ok"
-// because no kubeconfig resolved is the same lie as the nil seam this replaced,
+// because no kubeconfig resolved is the same lie as the nil client this replaced,
 // only narrower. Letting the plane call it empty while /v1/platform/fleet calls
 // it 503 would also be two answers to one fact. A REAL empty fleet — a client
 // that resolved and found nothing — still returns an empty list with no error,

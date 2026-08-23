@@ -87,7 +87,7 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 }
 
 // exposeFiles publishes the inventory read and the revision resolve on the
-// internal plane. Called from Mount, beside the other cross-app seams.
+// internal plane. Called from Mount, beside the other cross-app clients.
 //
 // The tenant comes from the CALLER, never the argument: the identity is what the
 // edge minted, so an argument cannot widen the org it is answered for. Anonymous

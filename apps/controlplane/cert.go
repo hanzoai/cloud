@@ -2,12 +2,12 @@
 
 package controlplane
 
-// cert.go — seam (c) crypto core: the REAL control-plane finality certificate.
+// cert.go — client (c) crypto core: the REAL control-plane finality certificate.
 //
 // This is the independent-signature weighted-quorum certificate the design
 // chose over the blocked threshold-Pulsar path (control-plane-increment-2.md
 // §2c). Each pod signs the canonical quorum message INDEPENDENTLY with its own
-// ML-DSA-65 identity key (seam a) under a DISTINCT cert context; the cert is a
+// ML-DSA-65 identity key (client a) under a DISTINCT cert context; the cert is a
 // quasar.ConsensusCert carrying one EvidenceWeightedSigSet leg (a
 // WeightedQuorumCert of N independent FIPS-204 signatures + a weighted-Merkle
 // quorum). Verification is quasar.VerifyConsensusCert under a control-plane
@@ -153,7 +153,7 @@ func bytesLessNode(a, b pulsar.NodeID) bool {
 
 // buildValidatorSet builds the weighted-validator-set commitment (the shipped
 // quasar.WeightedValidatorSet) from the pod key set. Unit weights; ML-DSA-65
-// parameter byte; key version 0 (rotation is seam-b's concern). Deterministic.
+// parameter byte; key version 0 (rotation is client-b's concern). Deterministic.
 func buildValidatorSet(epoch uint64, keys map[pulsar.NodeID]*mldsa.PublicKey) (*quasar.WeightedValidatorSet, error) {
 	if len(keys) == 0 {
 		return nil, ErrNoValidators

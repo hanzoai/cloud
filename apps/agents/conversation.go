@@ -5,7 +5,7 @@
 // /v1/agents/chat/presets, /v1/agents/chat/conversations). The orchestrator logic
 // and its per-org conversation history live in github.com/hanzoai/agent, which
 // imports NEITHER cloud NOR ai. Cloud is the composition root: it injects the two
-// seams —
+// clients —
 //   - Completer: the ai subsystem's /v1/chat/completions, replayed in-process (the
 //     one path that returns tool_calls AND carries per-org reserve/settle billing);
 //   - ToolPlane: the unified tool registry (tools.Default()), so the round's
@@ -61,19 +61,19 @@ const chat = "/v1/agents/chat"
 //     and replays the caller's own credential HEADERS into the in-process
 //     completion (credential, below). A typed op receives only a context, and
 //     hanzoai/agent deliberately imports neither cloud nor ai, so it cannot use
-//     cloud.Bridge — it needs a per-request seam of its own before any of its four
-//     handlers can lose its *zip.Ctx. The address moved and that seam did not: it
+//     cloud.Bridge — it needs a per-request client of its own before any of its four
+//     handlers can lose its *zip.Ctx. The address moved and that client did not: it
 //     is a per-REQUEST hole, indifferent to which path the request arrived on.
 //   - The round passes an upstream 4xx through VERBATIM — the completion's own
 //     status AND body, so a 402 insufficient_balance reaches the caller as itself
 //     rather than as a gateway 502 (round.go:104-110 upstream). A typed op's only
 //     way to answer non-2xx is to return an error, which zip renders as its flat
 //     {status,code,error}; that route is the apps/ml refusal class and stays
-//     untyped even after the seam lands.
+//     untyped even after the client lands.
 //
 // Until then these four remain untyped, and so carry no MCP tool, no CLI command
 // and no typed SDK method. What they DO carry is prose: openapi.Describe below
-// declares it beside the wire fact, which is the seam for exactly the operation a
+// declares it beside the wire fact, which is the client for exactly the operation a
 // typed op cannot lift a doc comment into. Describe is additive metadata keyed on
 // (method, path) and renders only while the router actually serves the route, so
 // declaring the prose here — for routes hz.Mount registers — cannot invent an
@@ -189,7 +189,7 @@ func (a aiCompleter) Complete(ctx context.Context, cred map[string]string, req o
 		// Carry the completion's OWN status + body so the round can pass a
 		// caller-facing refusal (402 insufficient_balance, 429, 403) straight
 		// through instead of masking it as a gateway 502. hz.UpstreamError is the
-		// agent's typed seam for exactly this.
+		// agent's typed client for exactly this.
 		return openai.ChatCompletionResponse{}, &hz.UpstreamError{Status: resp.StatusCode, Body: raw}
 	}
 	var out openai.ChatCompletionResponse

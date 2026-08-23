@@ -10,7 +10,7 @@ import (
 	"github.com/hanzoai/cloud/apps/goja"
 )
 
-// ingest.go is the in-process ingestion seam: it lets a sibling subsystem (Hanzo
+// ingest.go is the in-process ingestion client: it lets a sibling subsystem (Hanzo
 // Company's formation + import + fundraising flows) push a document into a tenant's
 // data room WITHOUT an HTTP hop, reusing the SAME object-storage + bundle path the
 // /v1/dataroom/documents upload handler uses (uploadDocument). The bytes go to the

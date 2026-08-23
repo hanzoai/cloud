@@ -55,7 +55,7 @@ func (d domain) Name() string { return d.name }
 
 // CanAnswer is the classifier: does this domain's vocabulary appear in the
 // question? Deterministic keyword match, first-match-wins in registry order. An
-// LLM classifier can replace this body without touching the seam or the router.
+// LLM classifier can replace this body without touching the client or the router.
 func (d domain) CanAnswer(question string) bool {
 	l := strings.ToLower(question)
 	for _, kw := range d.keywords {
@@ -71,7 +71,7 @@ func (d domain) CanAnswer(question string) bool {
 // cred is ignored, and its absence from this body is the point: the identity is
 // already on the context zip hands the peer, so a credential copied by hand here
 // would be a second, weaker answer to a question the transport has already
-// answered. The parameter stays because it is the seam's, not this domain's.
+// answered. The parameter stays because it is the client's, not this domain's.
 //
 // An empty org answers an empty figures slice — the domain read succeeded and
 // the org has nothing — which the advisor narrates honestly. A FAILURE returns

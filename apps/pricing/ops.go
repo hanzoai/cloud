@@ -1,6 +1,6 @@
 package pricing
 
-// The typed-op seam for the pricing surface.
+// The typed-op client for the pricing surface.
 //
 // A typed op (zip.Get[In, Out] and friends) is ONE registry entry with N
 // projections — the REST route, the OpenAPI operation's schema and prose, the

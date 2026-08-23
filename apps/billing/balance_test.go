@@ -15,7 +15,7 @@ import (
 	"github.com/hanzoai/cloud/types"
 )
 
-// fakeFinance is the co-resident finance ledger seam (types.FinanceClient). It records
+// fakeFinance is the co-resident finance ledger client (types.FinanceClient). It records
 // the exact (org, subject) the handler read so a test can prove WHICH wallet the console
 // shows, and can be made to fail so a test can prove an unreadable balance is never
 // rendered as zero.

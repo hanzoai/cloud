@@ -3,10 +3,10 @@ package ad
 // provider.go is the ad-network EXECUTION edge: the ONE place /v1/ad consumes the
 // connector plane. An ad campaign runs on a provider (Meta/Google/…) using the
 // ORG'S OWN connector token — resolved at call time from KMS through the
-// integrations.TokenFor custody seam, never held in this process, never in a
+// integrations.TokenFor custody client, never held in this process, never in a
 // manifest. This closes the gap the ads store left open: a stored AdCampaign is now
 // LAUNCHABLE against the real provider, and it is what the /v1/campaign paid
-// channel fans out to (plugin/campaigns/seams.go adapts LaunchPaid/PaidSpend/PausePaid
+// channel fans out to (plugin/campaigns/clients.go adapts LaunchPaid/PaidSpend/PausePaid
 // onto campaign.Channel).
 //
 // FAIL-CLOSED CUSTODY. Every operation resolves the org's token FIRST; any reason
@@ -70,7 +70,7 @@ var (
 	errUpstream = errors.New("ads: ad platform edge unavailable")
 )
 
-// tokenFor is the connector-custody seam. It defaults to integrations.TokenFor
+// tokenFor is the connector-custody client. It defaults to integrations.TokenFor
 // (the ONE KMS-backed token door) and is a package var ONLY so a test can exercise
 // the provider path — the same reason meta.go's endpoints are package vars. It is
 // never reassigned in production.
@@ -84,7 +84,7 @@ var metaAdsBase = "https://graph.facebook.com/v21.0"
 var adHTTP = &http.Client{Timeout: launchTimeout}
 
 // PaidPlan is the standalone contract for launching one ad campaign — the campaign
-// paid channel adapts campaign.Plan onto it (plugin/campaigns/seams.go). BudgetCents is
+// paid channel adapts campaign.Plan onto it (plugin/campaigns/clients.go). BudgetCents is
 // the org's own (connector-paid) budget; ScheduleAt an optional start time.
 type PaidPlan struct {
 	Platform    string

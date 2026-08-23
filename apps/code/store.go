@@ -565,7 +565,7 @@ func (s *Store) chunkForSymbol(ctx context.Context, sym Symbol) (chunkRow, bool)
 // loadVectors streams every (chunk_id, vec) for repo so the semantic tier can
 // brute-force cosine in Go. Bounded by max to cap memory; codebase-scale KNN over
 // float32 is a few ms and needs no ANN index for the MVP. The vectors table is a
-// schema-compatible seam for a future sqlite-vec `vec0` KNN.
+// schema-compatible client for a future sqlite-vec `vec0` KNN.
 func (s *Store) loadVectors(ctx context.Context, repo string, max int) ([]int64, [][]float32, error) {
 	q := `SELECT v.chunk_id,v.vec FROM vectors v`
 	var args []any

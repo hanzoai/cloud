@@ -21,7 +21,7 @@ import (
 // The old suite asserted that a signed push answered 204 and reached
 // cloud.OnGitPush. Both were true IN THE TEST, because the test registered a
 // builder in-process. Production never does: the only registrant lives in
-// apps/platform and cloud runs each app as its own OS process, so the seam was
+// apps/platform and cloud runs each app as its own OS process, so the client was
 // nil and 204 meant "received", never "built". A green suite over a dead door
 // for as long as it existed.
 //
@@ -115,7 +115,7 @@ func TestWebhookRefusalNamesTheDoorThatBuilds(t *testing.T) {
 	}
 }
 
-// TestWebhookDispatchesNothing: the door does not reach the push-to-deploy seam,
+// TestWebhookDispatchesNothing: the door does not reach the push-to-deploy client,
 // signed or not. This is the assertion the old suite inverted — it PROVED the
 // call happened, in a process where it never could — so it is stated here in the
 // direction that actually protects the estate.

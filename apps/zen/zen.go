@@ -36,7 +36,7 @@ import (
 // Mount mounts zen co-resident in the unified cloud binary. zen is the ONE
 // serving layer for the zen model family; it owns identity, routing, the 1M
 // context ladder, vision, tools, and the Anthropic↔OpenAI codec. ai stays the
-// auth+billing+discovery seam and the /v1/models authority; it no longer carries
+// auth+billing+discovery client and the /v1/models authority; it no longer carries
 // a parallel zen table or identity prompts. (See hip-00NN.)
 //
 // zen mounts as a MIDDLEWARE, not a route owner: Claim is scoped to /v1/* and
@@ -293,7 +293,7 @@ func meterUsage(u zen.Usage) metering.Usage {
 }
 
 // credit re-denominates a zen price into cloud's credit unit. It is the ONE
-// conversion at this seam — every site below goes through it, so the unit is
+// conversion at this client — every site below goes through it, so the unit is
 // decided once rather than re-derived per call site.
 //
 // zen prices every SKU as an exact 18-dp value tagged money.USD (meter.go:

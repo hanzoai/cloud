@@ -8,7 +8,7 @@
 // as bare registrations onto an existing handler — the same handler the verb
 // spelling already used — and a registration carries no comment of its own.
 //
-// openapi.Describe is the seam for exactly that: additive metadata on a route
+// openapi.Describe is the client for exactly that: additive metadata on a route
 // the router already carries, so this file cannot invent an operation, only
 // explain one that exists. The key is the fiber pattern VERBATIM.
 package iam

@@ -17,10 +17,10 @@ owner), `project` field = brand/site sub-scope.
 | `doctypes.go`  | module "marketing": `Campaign`, `SocialPost`, `Asset` fixtures |
 | `hooks.go`     | before_save gate enforcing status-edge legality on EVERY write |
 | `content.go`   | Mount + `/v1/content/*` handlers + exported `Transition` |
-| `generate.go`  | `Generator` seam (zen5 copy + studio assets) + `Generate` write path |
-| `publish.go`   | `Distributor` seam (hanzoai/social) + `Publish` |
+| `generate.go`  | `Generator` client (zen5 copy + studio assets) + `Generate` write path |
+| `publish.go`   | `Distributor` client (hanzoai/social) + `Publish` |
 | `channels.go`  | the REAL `Distributor` over hanzoai/social's Public API |
-| `storefront.go`| `Storefront` seam (Hanzo Commerce) + `StorefrontPublish`: a published catalog `Asset` → the storefront product image |
+| `storefront.go`| `Storefront` client (Hanzo Commerce) + `StorefrontPublish`: a published catalog `Asset` → the storefront product image |
 
 ## Lifecycle (one state machine, one place)
 
@@ -51,7 +51,7 @@ CRUD/tenancy/permissions/install are the framework's generic surface — content
 parallel CRUD. Raw content reads/writes go to `/v1/framework/<DocType>`; install the
 lane per-org with `POST /v1/framework/modules/marketing/install`.
 
-## In-process seam (the exported ops)
+## In-process client (the exported ops)
 
 `Generate`/`Publish`/`Transition` are the ONE implementation. The HTTP handlers AND the
 automations connector (`apps/automations/connector_content.go`) both call them, so a
@@ -121,7 +121,7 @@ The OLD image path was a BUILD-TIME batch: studio → S3 → `library.json` → 
 site build (`img/<slug>/<role>.webp`). That whole pipeline is replaced by ONE edge on
 the publish transition. karma.style already reads its product images at RUNTIME from
 Hanzo Commerce (`site/commerce.js`: `GET /v1/store/:store/listing` → `headerImage.url`),
-so the seam is: when a catalog `Asset` (kind ∈ {ecom,product,lifestyle}, non-empty
+so the client is: when a catalog `Asset` (kind ∈ {ecom,product,lifestyle}, non-empty
 `design`) transitions to `published`, `StorefrontPublish` upserts the org's commerce
 store **Listing** keyed by `design` (== product slug) so its `headerImage` points at the
 asset's **S3 URL** (`file` object key → `CONTENT_ASSET_PUBLIC_BASE`, default

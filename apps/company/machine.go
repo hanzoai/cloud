@@ -14,7 +14,7 @@
 // PURE transition logic. It performs no I/O — every guard is a total function of a
 // *Formation, so the whole lifecycle (legal transitions, the payment gate, the skip
 // path) is unit-testable without a store, a clock, or a network. company.go layers
-// the per-org SQLite store, the provider seams (KYC, billing, esign, dataroom,
+// the per-org SQLite store, the provider clients (KYC, billing, esign, dataroom,
 // captable, on-chain anchor, state filing), and the HTTP surface on top.
 package company
 
@@ -55,7 +55,7 @@ var validStructures = map[Structure]bool{
 }
 
 // Jurisdiction is the state of formation. Hanzo Company supports Delaware and
-// Wyoming — the two jurisdictions the state-filing partner seam targets.
+// Wyoming — the two jurisdictions the state-filing partner client targets.
 type Jurisdiction string
 
 const (

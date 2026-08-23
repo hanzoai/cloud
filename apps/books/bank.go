@@ -1,6 +1,6 @@
 package books
 
-// bank.go — the SHARED bank engine's vocabulary and the connector seam. This is the
+// bank.go — the SHARED bank engine's vocabulary and the connector client. This is the
 // ONE type every bank connector (OFX/CSV import, Plaid, Teller) normalizes into, and the
 // ONE interface the sync loop pulls through. It is deliberately connector-agnostic: a
 // connector's ONLY job is to authenticate against its source (its access_token lives in
@@ -56,7 +56,7 @@ type BankTxn struct {
 	Direction   Direction `json:"direction"`
 }
 
-// Connector is the pull seam to one bank source. Name is the stable connector id (the
+// Connector is the pull client to one bank source. Name is the stable connector id (the
 // bank_txn.connector / cursor key). Fetch returns the batch of transactions AFTER cursor
 // plus the nextCursor to persist; a connector resolves its own credentials from KMS
 // inside Fetch and NEVER returns or logs them. A returned nextCursor equal to the input

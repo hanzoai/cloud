@@ -15,7 +15,7 @@ import (
 // mock server pointed at through the same package vars the outbound adapters use,
 // and the warehouse is the two func vars record writes through.
 
-// ── seams ────────────────────────────────────────────────────────────────────
+// ── clients ────────────────────────────────────────────────────────────────────
 
 // warehouse captures what record wrote, so a test asserts the STATEMENT and the
 // bound values rather than a row it would need a columnar store to read back.

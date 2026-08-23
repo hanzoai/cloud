@@ -21,7 +21,7 @@ import (
 //
 // What is true HERE, and was not true before zip v1.27.0, is that a co-resident
 // call has no bytes to inspect at all. [zip.Serving] answers with the App bound
-// to a name in this process, and Ask hands the call to that op's own invoke seam
+// to a name in this process, and Ask hands the call to that op's own invoke client
 // instead of dialling its socket. Nothing about the call needed a wire; only the
 // addressing did.
 //
@@ -53,7 +53,7 @@ func TestCoresidentCallTakesNoWire(t *testing.T) {
 		t.Fatalf("call: %v", err)
 	}
 
-	// The answer is the op's answer, so the op ran — the seam is the same
+	// The answer is the op's answer, so the op ran — the client is the same
 	// validate → authorize → run core every other door lands on.
 	if out.Amount.Decimal != "50.00" {
 		t.Fatalf("reply lost its value: %+v", out)

@@ -316,7 +316,7 @@ var ceilingOf func(model string) int
 // SetCompletionCeiling installs the per-model completion-ceiling lookup the
 // prepaid gate reserves against. Called once at startup by the package that
 // links the model catalog (apps/ai), so package cloud states WHAT it needs
-// without importing where the answer lives — the same seam shape the AI module
+// without importing where the answer lives — the same client shape the AI module
 // uses for SetContextWindowResolver.
 func SetCompletionCeiling(f func(model string) int) { ceilingOf = f }
 

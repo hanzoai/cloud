@@ -21,7 +21,7 @@ import "context"
 // interface rather than being an internal detail. An edge with no credential is
 // not an error — it degrades to stale-until-TTL, which is a documented and
 // survivable posture — but it IS a thing an operator has to be able to see, so
-// the seam reports it rather than hiding it behind a purge that silently does
+// the client reports it rather than hiding it behind a purge that silently does
 // nothing.
 type Edge interface {
 	// PurgeTags invalidates every object stamped with any of these cache tags.
@@ -31,7 +31,7 @@ type Edge interface {
 
 	// Name is the provider behind this edge, lowercase, for an operator reading a
 	// status page. It is the ONE place a vendor name is allowed to reach an API
-	// response: everything else about the provider stays on its side of the seam,
+	// response: everything else about the provider stays on its side of the client,
 	// but "which CDN is in front of my site" is a fair question and the answer
 	// cannot come from anywhere else.
 	Name() string
@@ -89,6 +89,6 @@ func (NoEdge) EnsureVerbatim(context.Context)             {}
 // share rather than anything a provider decides: the server stamps the tag and
 // the edge purges it, and a tag format that lived with one of them would be a
 // contract only half the code could see. It followed the first provider into
-// its own package for a moment and the compiler caught it, which is the seam
-// doing its job — the shared word belongs to the seam.
+// its own package for a moment and the compiler caught it, which is the client
+// doing its job — the shared word belongs to the client.
 func CacheTag(org, slug string) string { return "site-" + org + "-" + slug }

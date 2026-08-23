@@ -101,7 +101,7 @@ type toolResult struct {
 // activation are all rows, not code, so they cannot be known until the caller is.
 //
 // One policy, the registry's: resolve by precedence, refuse an unactivated tool
-// 403, settle a priced one through the x402 seam or fail closed 402, then
+// 403, settle a priced one through the x402 client or fail closed 402, then
 // dispatch to the winning source bound to the caller's own (org, project). One
 // metered unit, one audit record. A caller can only ever dispatch its own tools.
 //
@@ -422,7 +422,7 @@ func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*noContent, e
 // It OVERWRITES rather than deletes, because types.KMSClient has GetSecret,
 // PutSecret and Sign and no removal at all. The KMS service itself has one
 // (apps/kms Client.Delete), so the gap is the interface and KMSPeer, not the
-// store; closing it properly is a fleet-wide change to a seam fifteen packages
+// store; closing it properly is a fleet-wide change to a client fifteen packages
 // implement, and it is written up in apps/tools/LLM.md rather than smuggled in
 // here. Overwriting destroys the credential material today, which is the part
 // that matters.

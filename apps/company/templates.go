@@ -10,7 +10,7 @@ import (
 // templates.go generates the formation documents from the formation record. These
 // are generated drafts rendered from the org's chosen structure, jurisdiction,
 // name, and founders — the instruments a founder reviews and signs, NOT filed
-// government records (the actual state filing is the FilingProvider seam). Each doc
+// government records (the actual state filing is the FilingProvider client). Each doc
 // is rendered to Markdown bytes and pushed into the tenant's data room; the doc set
 // depends on the entity type.
 

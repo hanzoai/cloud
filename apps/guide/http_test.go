@@ -264,7 +264,7 @@ func TestHTTPPerOrgIsolation(t *testing.T) {
 }
 
 // TestHTTPDoStepDelegatesToAgent: "do it for me" runs the Business AI through an
-// injected invoke seam AS THE CALLER'S ORG, records the action, and auto-completes
+// injected invoke client AS THE CALLER'S ORG, records the action, and auto-completes
 // the step — the acted signal then keeps it done.
 func TestHTTPDoStepDelegatesToAgent(t *testing.T) {
 	app := newApp(t)

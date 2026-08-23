@@ -120,14 +120,14 @@ func TestBootstrapReadsAreByteIdentical(t *testing.T) {
 }
 
 // TestRefusalIsA403AndANavigationIsBounced pins BOTH arms of the refusal across
-// the seam this pass moved it over. The DECISION is the typed op's returned 403;
+// the client this pass moved it over. The DECISION is the typed op's returned 403;
 // the SHAPE is bounce (scope.go). An API call must still get the 403 it always
 // got, and a browser navigation must still get the sign-in redirect — for a typed
 // op and for a raw handler alike.
 func TestRefusalIsA403AndANavigationIsBounced(t *testing.T) {
 	s := fakeService()
 	// One typed op (settings), one raw handler (the applications SSE stream), so
-	// the rule is proven on both sides of the seam.
+	// the rule is proven on both sides of the client.
 	for _, path := range []string{"/v1/deploy/settings", "/v1/deploy/applications", "/v1/deploy/stream/applications"} {
 		// An XHR keeps its 403, body included.
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -247,9 +247,9 @@ func TestPostsStayRawBecauseZipDecodesTheBodyFirst(t *testing.T) {
 // to assert that a deliberately-raw address carries NO description, because
 // before openapi.Describe existed the two were the same fact: prose reached the
 // document only by zipdoc lifting a typed op's doc comment, so "described" ⟺
-// "typed". Describe broke that equivalence on purpose — it is the seam that gives
+// "typed". Describe broke that equivalence on purpose — it is the client that gives
 // an untyped route prose WITHOUT typing it — and an assertion resting on the old
-// equivalence would now forbid exactly the thing the seam exists to do, failing
+// equivalence would now forbid exactly the thing the client exists to do, failing
 // on prose while a route that genuinely became typed slipped past unnoticed.
 // openapi.Typed is the honest signal: a typed op is one zip has in its registry.
 //
@@ -352,7 +352,7 @@ func TestEveryTypedOpIsInTheDocumentWithProse(t *testing.T) {
 }
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody
+// because the CLIENT they arrived through cannot carry one — not because nobody
 // wrote it. Both classes below already carry the doc comment in the Go source;
 // the pass that lifts prose files it under a name the published property does not
 // have. Line citations are against the pinned zip, v1.31.0.

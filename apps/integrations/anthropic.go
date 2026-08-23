@@ -53,7 +53,7 @@ const (
 	anthropicAccessTTL = time.Hour
 )
 
-// anthropicOAuthBase reads ANTHROPIC_OAUTH_BASE at call time (httptest seam),
+// anthropicOAuthBase reads ANTHROPIC_OAUTH_BASE at call time (httptest client),
 // defaulting to the production token origin. NOT anthropicBase(): the token
 // endpoint lives on the console origin, not the API origin.
 func anthropicOAuthBase() string {
@@ -63,7 +63,7 @@ func anthropicOAuthBase() string {
 	return "https://platform.claude.com"
 }
 
-// anthropicBase reads ANTHROPIC_API_BASE at call time (httptest seam),
+// anthropicBase reads ANTHROPIC_API_BASE at call time (httptest client),
 // defaulting to the production API origin.
 func anthropicBase() string {
 	if v := strings.TrimSpace(os.Getenv("ANTHROPIC_API_BASE")); v != "" {

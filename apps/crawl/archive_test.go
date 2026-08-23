@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// fakeVFS is an in-memory stand-in for the object seam. The archive's contract is
+// fakeVFS is an in-memory stand-in for the object client. The archive's contract is
 // "keys in, bytes out", so a map proves everything that matters here without an S3.
 type fakeVFS struct {
 	mu   sync.Mutex

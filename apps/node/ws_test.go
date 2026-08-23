@@ -387,7 +387,7 @@ func TestProtocolMismatchIsRefused(t *testing.T) {
 	}
 }
 
-// node.event is the node's unsolicited push; the hook is the seam other
+// node.event is the node's unsolicited push; the hook is the client other
 // subsystems fan it out from.
 func TestNodeEventReachesTheHook(t *testing.T) {
 	reg := NewRegistry()

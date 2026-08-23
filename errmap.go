@@ -13,7 +13,7 @@ package cloud
 // The status ALWAYS EXISTED. metering.ErrInsufficientBalance means 402 and
 // nothing else; a refusal that crossed the plane arrives as an *HTTPError
 // carrying the number the callee chose (zip's callFault preserves it precisely
-// so the crossing does not flatten it). What was missing is a seam that carries
+// so the crossing does not flatten it). What was missing is a client that carries
 // both to the wire — so about twenty handlers remembered to call Denied and every
 // other one 500'd. One fact decided in twenty places is a fact decided nowhere.
 //
@@ -109,7 +109,7 @@ func codeFor(code string, status int) string {
 //
 // The rule is provenance, not status. An *HTTPError or a *fiber.Error was
 // CONSTRUCTED by a handler that chose a status AND a sentence — a decision the
-// seam does not second-guess, which is what keeps "Billing temporarily
+// client does not second-guess, which is what keeps "Billing temporarily
 // unavailable" readable. An error that arrives having chosen neither gets this
 // sentence instead, and its detail goes to the log (ErrorHandler), keyed by the
 // X-Request-Id the response carries so support can find the one line that matters.

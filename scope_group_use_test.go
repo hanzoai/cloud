@@ -145,7 +145,7 @@ func TestGroupPrefixesTheRoutesRegisteredThroughIt(t *testing.T) {
 // unchanged by scoping. So `Use` before the routes guards them, and `Use` after
 // them guards nothing. It composes either way: zip's inert-middleware rule asks
 // whether the NODE has routes beneath it, and the root always does, so a
-// late Use is a seam no compose check can refuse.
+// late Use is a client no compose check can refuse.
 //
 // This is not a regression — a group whose subtree was empty gated nothing in
 // either order. It is the residue: the one dead-guard shape that survives, and

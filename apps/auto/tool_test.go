@@ -77,7 +77,7 @@ func TestConnectorToolUnknownName(t *testing.T) {
 	}
 }
 
-// TestInvokeToolRequiresAValidatedOrg: the in-process seam refuses a caller with
+// TestInvokeToolRequiresAValidatedOrg: the in-process client refuses a caller with
 // no validated org — the dispatch pins every credential to it, so an unnamed
 // caller has no scope to be confined to.
 func TestInvokeToolRequiresAValidatedOrg(t *testing.T) {

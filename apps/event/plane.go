@@ -19,7 +19,7 @@ import (
 //
 // It lives in this package rather than at the compose root because the root
 // cannot import it: analytics imports cloud, so cloud importing analytics is a
-// cycle. The seam belongs to the reader either way.
+// cycle. The client belongs to the reader either way.
 type planeKeys struct{}
 
 // Resolve answers which project minted the key. Not-found is a clean refusal; a

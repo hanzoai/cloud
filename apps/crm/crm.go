@@ -119,7 +119,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// ---- the typed-op seam ----
+// ---- the typed-op client ----
 //
 // A typed op (zip.Get[In, Out] and friends) is ONE registry entry with N
 // projections: the REST route, the schema in the OpenAPI document, the tool at
@@ -214,7 +214,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// a definition's middleware wraps the routes in its OWN subtree and nothing
 	// else — so the limiter silently narrowed to the single route chained onto it,
 	// and the three staff routes lost their cover with no error anywhere. That is
-	// the same "silently stops running" failure as an inert seam, wearing the shape
+	// the same "silently stops running" failure as an inert client, wearing the shape
 	// of an ordering convention that no longer holds.
 	//
 	// So the covered routes are now COMPOSED BENEATH the limiter, which is the only

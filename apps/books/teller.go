@@ -62,13 +62,13 @@ const (
 	tellerMaxRespBytes = 8 << 20 // 8 MiB ceiling on a single Teller response body
 )
 
-// tellerDoer is the HTTP seam: the production path uses an mTLS-configured *http.Client;
+// tellerDoer is the HTTP client: the production path uses an mTLS-configured *http.Client;
 // tests inject a mock so the connector is exercised with no network and no real cert.
 type tellerDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-// tellerConn is the Teller connector. Its three seams (kms, doer, base) default to
+// tellerConn is the Teller connector. Its three clients (kms, doer, base) default to
 // production values and are overridden only in tests — the zero value newTeller() returns is
 // the real connector.
 type tellerConn struct {

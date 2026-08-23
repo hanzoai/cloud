@@ -35,14 +35,14 @@ import (
 	commerceorg "github.com/hanzoai/commerce/pkg/org"
 )
 
-// Client is the in-process inter-subsystem seam cloud's licensing/entitlements tier
+// Client is the in-process inter-subsystem client cloud's licensing/entitlements tier
 // calls. It IS cloud's types.CommerceClient — one narrow interface (GetOrgConfig
 // + the real CheckEntitlement), not a second copy — kept as an alias so a value
 // satisfies both names with no adapter. Add methods here only when a consumer needs
 // them; keep it narrow.
 type Client = types.CommerceClient
 
-// inProcessClient answers the seam with direct Go calls. brand is surfaced in
+// inProcessClient answers the client with direct Go calls. brand is surfaced in
 // OrgConfig (known without the store); resolve returns the live *commercemod.Embedded — nil
 // when commerce is not co-resident, which makes CheckEntitlement fail closed.
 type inProcessClient struct {
@@ -51,7 +51,7 @@ type inProcessClient struct {
 }
 
 // published is the process-global Embedded the lazy InProcessClient resolves. Mount
-// sets it once (mirrors transport.SetHandler for the http seam) so the client
+// sets it once (mirrors transport.SetHandler for the http client) so the client
 // cloud builds in BuildDeps — BEFORE MountAll — still routes to the live datastore.
 var published atomic.Pointer[commercemod.Embedded]
 

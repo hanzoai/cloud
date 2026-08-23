@@ -34,8 +34,8 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires /v1/legal/* and opens the sealed store under DataDir. The
-// e-sign and filing seams default to the honest stubs; a real provider is a
-// config-driven swap (the seams are provider-agnostic).
+// e-sign and filing clients default to the honest stubs; a real provider is a
+// config-driven swap (the clients are provider-agnostic).
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("legal.Mount: nil app")

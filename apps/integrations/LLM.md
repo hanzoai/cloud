@@ -66,7 +66,7 @@ the line. Every adapter does **both**: `emitIngress` to the channels inbox, and
 `bridgeSpawn`/`runBridgeTurn` to answer inline. Two mechanisms, one message,
 four times over.
 
-**Fixed:** the inbox seam. It crossed on a package global —
+**Fixed:** the inbox client. It crossed on a package global —
 `integrations.RegisterIngress`, a consumer pointer channels installed at Mount —
 and a package global is per-process. `integrations`, `channels` and `agents` are
 three separate PIDs in one writer pod, so that pointer was nil on the emitting
@@ -86,7 +86,7 @@ the gap: *"Agent delivery is NOT built this pass."* Moving it means:
   (the isolation root), the account link, and the send doors
 - one thing to design, not skip: adapters acquire a pool slot **synchronously**
   today so a capacity shed returns a retriable non-2xx *without burning the
-  platform's event id*. Once the pool lives in channels, the seam has to answer
+  platform's event id*. Once the pool lives in channels, the client has to answer
   taken/refused — `ChannelsIngestOut.Taken` exists for this — and emitting stops
   being fire-and-forget.
 
@@ -120,7 +120,7 @@ to preserve.
 `scope_test.go` pins the first four. What is not yet pinned is the door.
 
 **And a test can pass while the thing it names is dead.** The three tests that
-guarded the ingress seam registered a consumer in the same process and asserted
+guarded the ingress client registered a consumer in the same process and asserted
 delivery. They were green on every run for as long as production dropped every
 event. A test that only ever builds the co-resident case says nothing about the
 deployed one.

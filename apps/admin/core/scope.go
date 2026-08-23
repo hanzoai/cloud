@@ -11,7 +11,7 @@ package core
 // handler re-derives it and the escalation line — a non-super caller reaching ANOTHER
 // tenant — cannot be crossed by any single panel.
 //
-// RECURSION SEAM (honest gap). The subtree is TODAY the singleton {org}: IAM's
+// RECURSION CLIENT (honest gap). The subtree is TODAY the singleton {org}: IAM's
 // Organization has NO parent-org / hierarchy field yet, so no tenant subtree exists to
 // walk. `Descendants` is the ONE function that becomes a parent-index BFS once IAM adds
 // the ParentOrg link — every scoped read composes over it, so recursion lands there and
@@ -62,7 +62,7 @@ func ResolveScope(s *cloud.Service[State], c *zip.Ctx) TenantScope {
 }
 
 // Descendants returns org + every sub-org it owns — the subtree the caller administers.
-// See the RECURSION SEAM note above: today the singleton {org}; the ONE place a future
+// See the RECURSION CLIENT note above: today the singleton {org}; the ONE place a future
 // IAM parent-org index is walked.
 func Descendants(s *cloud.Service[State], org string) []string {
 	org = strings.TrimSpace(org)

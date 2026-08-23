@@ -214,10 +214,10 @@ func TestSafety_RogueAndForgedLegs_Rejected(t *testing.T) {
 	// 2. Party-index spoof: honest author, wrong claimed index.
 	spoof := goodLeg
 	spoof.PartyID = honest.Index + 1
-	// 3. Correctly-DERIVED forgery (seam a): an attacker signs the SAME leg's TBS
+	// 3. Correctly-DERIVED forgery (client a): an attacker signs the SAME leg's TBS
 	// with a well-formed ML-DSA-65 key it generated itself. The signature is
 	// cryptographically valid — it simply is not cloud-3's registered key. This is
-	// the forgery a bit-flip could never exercise, and the whole point of seam (a):
+	// the forgery a bit-flip could never exercise, and the whole point of client (a):
 	// asymmetric identity keys reject it because the registry holds the honest
 	// PUBLIC key, not the attacker's.
 	attackerKey, err := mldsa.GenerateKey(rand.Reader, mldsa.MLDSA65)

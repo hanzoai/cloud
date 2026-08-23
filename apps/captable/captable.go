@@ -10,7 +10,7 @@
 // host a read-only @hanzo catalog in goja, captable hosts the tRPC
 // business LOGIC (ported to a self-contained goja bundle in github.com/hanzoai/
 // captable) and gives it PERSISTENCE over per-tenant Base/SQLite. The bundle
-// carries logic; the Go host carries storage. The seam between them is the
+// carries logic; the Go host carries storage. The client between them is the
 // REUSABLE apps/goja binding (the RW-Base goja host), which esign (#100)
 // and dataroom (#101) reuse unchanged — this leaf is just:
 //
@@ -215,7 +215,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // a dispatch closure over a bundle route name — so without this the document would
 // publish eleven operationIds and nothing else: eleven SDK methods that cannot say
 // what they write and eleven CLI commands with no help. openapi.Describe is the
-// seam for exactly the operations the wire refuses to type, and it cannot
+// client for exactly the operations the wire refuses to type, and it cannot
 // contradict the router: a description whose route is not registered never renders.
 func init() {
 	// True of all eleven, so it is stated once and appended rather than reworded

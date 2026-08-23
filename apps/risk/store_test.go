@@ -4,7 +4,7 @@ package risk
 // plane against, plus the package's own fixtures.
 //
 // It is installed ONCE, in TestMain, and never swapped afterwards. The plane runs
-// background folds, so a test that reassigned the seam mid-run would race a
+// background folds, so a test that reassigned the client mid-run would race a
 // goroutine reading it; the fake is therefore one value with its own lock, and a
 // test RESETS it rather than replacing it.
 
@@ -315,7 +315,7 @@ func baseAt(t *testing.T, dir string) cloud.Base {
 	return cloud.NewBase(cloud.Deps{Brand: brandA, DataDir: dir}, "risk")
 }
 
-// free is the money seam as a PLANE test sees it: every bound is granted and
+// free is the money client as a PLANE test sees it: every bound is granted and
 // every meter is a no-op, so these tests measure the plane and never the ledger.
 // The priced path has its own fixture ([mountBilled]) and its own tests, which is
 // where a gate that stopped gating would be caught — a plane test that also

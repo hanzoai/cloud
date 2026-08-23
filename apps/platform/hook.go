@@ -11,7 +11,7 @@
 // rename. apps/git's route is a 410 naming platform.hanzo.ai — a different
 // deployment, not this one (see [hookPath]).
 //
-// The forge and native pushes now travel the SAME two seams. apps/git's
+// The forge and native pushes now travel the SAME two clients. apps/git's
 // fireBranchBuild fires OnGitPush + EmitLifecycle for a push its own receive-pack
 // took; this fires the same pair for a push the forge took. One trigger, two
 // transports — the build decision stays downstream in buildFromPush, which is the
@@ -98,7 +98,7 @@ const (
 	// KMS read per window rather than one per request.
 	hookFresh = 5 * time.Minute
 	// hookWindow is how long a fired push is remembered for. It covers a replay of
-	// a delivery whose seams already ran and whose answer never arrived — which is
+	// a delivery whose clients already ran and whose answer never arrived — which is
 	// the only way one push arrives twice, since a delivery that FAILED is not
 	// remembered at all (seen.drop).
 	hookWindow = 30 * time.Minute
@@ -198,7 +198,7 @@ type push struct {
 // answered an empty 204 whether or not it dispatched, and the cost was eight
 // commits of drift behind a green hook page — the truth lived only in the
 // forge's hook_task rows, which nobody reads until something is already wrong.
-// Fired says whether the two seams ran; Reason says why not when they did not.
+// Fired says whether the two clients ran; Reason says why not when they did not.
 //
 // Builds is how many builds the push actually LAUNCHED, which is a different
 // fact from having fired: most pushes track no application, so zero is ordinary
@@ -217,7 +217,7 @@ type verdict struct {
 	Ref string `json:"ref,omitempty"`
 	// Commit is the commit the ref moved to — the `after` this acted on.
 	Commit string `json:"commit,omitempty"`
-	// Fired says the push reached BOTH seams: the deploy trigger and the lifecycle
+	// Fired says the push reached BOTH clients: the deploy trigger and the lifecycle
 	// stream. False is a delivery deliberately ignored, and Reason says which one.
 	Fired bool `json:"fired"`
 	// Builds is how many builds the push actually LAUNCHED. Zero is ordinary —
@@ -241,7 +241,7 @@ func init() {
 		"Receive a push from the forge and trigger its build",
 		"The forge's push-to-deploy door. git.hanzo.ai runs as a separate server, so its pushes "+
 			"never reach this fleet's own receive-pack; without this a push to the host we call "+
-			"canonical builds nothing. A verified push is handed to the SAME two seams a native "+
+			"canonical builds nothing. A verified push is handed to the SAME two clients a native "+
 			"push travels — the single-registrant deploy trigger, and the many-subscriber "+
 			"lifecycle stream that notifies and indexes — and the build decision itself stays "+
 			"downstream in the one place that knows what a push means.\n\n"+
@@ -253,7 +253,7 @@ func init() {
 			"declaring a Content-Encoding is refused 415 before it is touched, because decoding "+
 			"one is unbounded work bought with a few bytes and no credential. A bad signature is "+
 			"401, a payload over 8 MiB is 413, and a malformed one 400.\n\n"+
-			"A verified push that reaches both seams answers 200 with fired true and the NUMBER "+
+			"A verified push that reaches both clients answers 200 with fired true and the NUMBER "+
 			"OF BUILDS it launched — zero is ordinary, since most pushes track no application, "+
 			"and it is the answer 'fired' cannot give. A push that could not be dispatched "+
 			"answers 500: the delivery page shows it red, and the Replay that prompts reaches a "+
@@ -425,7 +425,7 @@ type seen struct {
 //
 // It is this process's memory, which is the whole of what it claims to be: the
 // duplicate it exists to stop is a redelivery of a request that timed out AFTER
-// the seams already ran, and that retry reaches the replica the load balancer
+// the clients already ran, and that retry reaches the replica the load balancer
 // sends it to. A cross-replica answer is the build store's to give, and giving it
 // here would put the same question in two places.
 func (k *seen) hold(key string, now time.Time) bool {
@@ -629,7 +629,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 		return ignored(c, "already landed")
 	}
 
-	// SEAM ONE: the deploy trigger. Single-registrant and synchronous, dispatching
+	// CLIENT ONE: the deploy trigger. Single-registrant and synchronous, dispatching
 	// in THIS process to buildFromPush.
 	//
 	// The clone URL is derived from the forge that delivered and the repository it
@@ -655,7 +655,7 @@ func hook(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "the push was verified but no build could be started; replay this delivery")
 	}
 
-	// SEAM TWO: the lifecycle stream. Many-subscriber and detached (notify, the
+	// CLIENT TWO: the lifecycle stream. Many-subscriber and detached (notify, the
 	// code index, the outbound mirror), and never able to perturb the deploy above.
 	//
 	// Branch, not the ref: every subscriber reads it as a branch NAME — the mirror

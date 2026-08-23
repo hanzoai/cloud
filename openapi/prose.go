@@ -48,7 +48,7 @@ type Owner func(path string) string
 //
 // # The remedy is always the same shape, and the message names it
 //
-// Prose reaches this document by exactly two seams, and both are already the
+// Prose reaches this document by exactly two clients, and both are already the
 // operation's own source: a typed op carries the Go doc comment on its handler
 // (zipdoc lifts it at build time), and a route the wire refuses to let become a
 // typed op declares it with [Describe] beside that route. Neither is a table of

@@ -358,7 +358,7 @@ func (p *producer) close() {
 	}
 }
 
-// produce is this door's ONE seam onto the broker, and the only way a recording
+// produce is this door's ONE client onto the broker, and the only way a recording
 // leaves this package. It is a package var for exactly the reason `publish` is
 // (bus.go): production is always produceSnapshot, and a test substitutes it to read
 // back the record a request actually produced — the headers and the double-encoded

@@ -12,7 +12,7 @@
 // a named campaign on an ad Platform (meta/google/tiktok/x), a lifecycle Status
 // (draft/active/paused/completed), an Objective, and Budget/Spend in minor units
 // (cents). The ad-set and ad legs of the hierarchy are follow-ups that hang off
-// this seam; this is the reviewable domain + campaign CRUD they attach to.
+// this client; this is the reviewable domain + campaign CRUD they attach to.
 //
 // Tenant isolation is enforced SERVER-SIDE on every request: the org is
 // principal.Org(c) — the value SanitizeIdentity minted from the VALIDATED bearer

@@ -36,7 +36,7 @@ const (
 )
 
 // Bot is the minimal projection of an org agent the roster reconcile needs. It is
-// the seam that keeps clients/team decoupled from clients/agents' concrete Agent
+// the client that keeps clients/team decoupled from clients/agents' concrete Agent
 // type — team names only what it projects (id, name, active).
 type Bot struct {
 	ID     string
@@ -46,14 +46,14 @@ type Bot struct {
 
 // BotLister sources an org's bots (the canonical in-process agents). It is
 // injected in Mount as an adapter over agents.ListForOrg — the ONE in-process
-// seam, replacing the removed IAM-SA HTTP enumeration. org is always a VERIFIED
+// client, replacing the removed IAM-SA HTTP enumeration. org is always a VERIFIED
 // tenant (the transactor token's extra.org), never a client header.
 type BotLister func(ctx context.Context, org string) ([]Bot, error)
 
 // transServer holds the transactor's shared, process-lifetime state: the per-
 // workspace SQLite docs store (the structured data plane — no KV, no Postgres),
 // the class hierarchy parsed from the embedded model, the live-broadcast hub, the
-// identity seam, and the two roster sources (the account store's members +
+// identity client, and the two roster sources (the account store's members +
 // the in-process agents lister).
 type transServer struct {
 	store    *docStore
@@ -62,7 +62,7 @@ type transServer struct {
 	ident    *identity     // who is calling, and what may they touch (account.go)
 	accounts *accountStore // human members (this deployment's workspaces)
 	bots     BotLister     // bot members (the org's in-process agents)
-	runAgent AgentRunner   // the Chunter responder's LLM seam (agents.RunOnBehalf); nil = responder OFF
+	runAgent AgentRunner   // the Chunter responder's LLM client (agents.RunOnBehalf); nil = responder OFF
 	log      luxlog.Logger // best-effort responder logging; nil-safe (tests leave it unset)
 
 	// Chunter responder bounds (chat.go). ALL zero-value-safe so a bare

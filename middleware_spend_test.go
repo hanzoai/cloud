@@ -3,7 +3,7 @@ package cloud
 // Tests for the ONE spend predicate and the gate that applies it.
 //
 // They drive real requests through the zip/fiber stack against a fake finance
-// ledger published on the SAME process-wide seam the ai gate and the edge meter
+// ledger published on the SAME process-wide client the ai gate and the edge meter
 // resolve through (finance.Publish), so the address the gate reads is the address a
 // debit would write. Nothing about the predicate is mocked.
 
@@ -53,7 +53,7 @@ func (f *spendLedger) SumUsageSince(context.Context, string, bool, int64) (int64
 	return 0, nil
 }
 
-// publishLedger installs a fake ledger as the process-wide money seam, restoring the
+// publishLedger installs a fake ledger as the process-wide money client, restoring the
 // prior one on cleanup. nil models a split deploy: no co-resident money layer.
 func publishLedger(t *testing.T, f *spendLedger) {
 	t.Helper()

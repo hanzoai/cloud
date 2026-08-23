@@ -35,7 +35,7 @@
 // Storage is bare git repos on a real filesystem (osfs) rooted under
 // {DataDir}/git; go-git initializes + reads them, while the heavy clone/push/
 // mirror paths stream through the `git` CLI (gitexec.go) so multi-GB packs stay
-// bounded in memory. See storage.go for the hanzoai/vfs (S3) storage seam.
+// bounded in memory. See storage.go for the hanzoai/vfs (S3) storage client.
 //
 // Billing: every repo tracks sizeBytes, re-measured on create and after each
 // push. /v1/git/usage exposes per-repo + total bytes per org, and each
@@ -241,16 +241,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	cloud.RegisterGitMirrorController(gitMirrorController{})
 	// Install the visibility subscriber so a project published on hanzo.app gets
 	// its canonical repo, world-readable exactly when the project is
-	// (community.go). Next to fall to the internal plane; until then the seam
+	// (community.go). Next to fall to the internal plane; until then the client
 	// stays registered — unregistered it is a silent no-op and public projects
 	// stop getting repos.
-	// Visibility on the internal plane (community.go), NOT a Register* seam: the
+	// Visibility on the internal plane (community.go), NOT a Register* client: the
 	// caller is projects, in its own process.
 	exposePublish()
 	// Publish the delivery inventory read on the internal plane, so apps/deploy
 	// renders from a tree read instead of cloning (files.go).
 	exposeFiles()
-	// Import, inbound sync AND repo status — one seam, three ops (import_plane.go).
+	// Import, inbound sync AND repo status — one client, three ops (import_plane.go).
 	exposeImport()
 	// The sync engine decides a mirror should exist; this app owns the repos and
 	// the reactor that pushes them. Registered above for the co-resident case, and

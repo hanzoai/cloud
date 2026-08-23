@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// catalog.go is projects' READ seam for the cross-org catalog (clients/catalog):
+// catalog.go is projects' READ client for the cross-org catalog (clients/catalog):
 // the live sites this deployment is serving, across every org.
 //
 // It is deliberately the ONLY cross-org read in this package, and it returns just

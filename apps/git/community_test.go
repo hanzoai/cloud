@@ -8,7 +8,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// community_test.go proves git's half of the visibility seam against the copy it
+// community_test.go proves git's half of the visibility client against the copy it
 // actually serves: the repo behind git.hanzo.ai.
 //
 // The GitHub replica's half is community_github_test.go. What is proven here is

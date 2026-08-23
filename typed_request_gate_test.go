@@ -10,7 +10,7 @@ import (
 )
 
 // cloud.Request hands a typed op the raw request its signature dropped. It is a
-// deliberate escape hatch and it is the seam that rots if nobody counts it:
+// deliberate escape hatch and it is the client that rots if nobody counts it:
 // every use gives back some of what typing bought, and nothing about the
 // signature stops the next one.
 //
@@ -115,7 +115,7 @@ var allowedRequestUses = map[string]string{
 		"org-admin-ness, the method, the path, the source IP, the request id) rides on the request, " +
 		"which principal.OrgFrom does not. The tenant itself is resolved with principal.OrgFrom " +
 		"(tenantOf, right beside it), never through the request. ONE function, so the two typed ops " +
-		"and the untyped CHANGE_STATUS operation share one seam; off the HTTP path there is no " +
+		"and the untyped CHANGE_STATUS operation share one client; off the HTTP path there is no " +
 		"request and no actor, and an unattributable audit record is worse than none, so it appends " +
 		"nothing.",
 	"apps/cloudflare/cloudflare.go": "authWrite / resolveAccount / the acting-org stamp. A mutation on the " +
@@ -155,7 +155,7 @@ var allowedRequestUses = map[string]string{
 		"(X-Project-Id, which the gateway and cloud.SanitizeIdentity bind from a validated claim after " +
 		"stripping any client copy) — it becomes a SEGMENT OF THE KMS KEY REF, so a caller-supplied one " +
 		"would address key material under a scope no minter ever validated. TWO functions in ONE file, so " +
-		"eight typed ops share one seam; the TENANT is resolved with principal.OrgFrom (tenant, right " +
+		"eight typed ops share one client; the TENANT is resolved with principal.OrgFrom (tenant, right " +
 		"beside them), never through the request. Both fail closed off the HTTP path: no request means an " +
 		"unattributed audit record (emitAudit falls back to the subsystem name, as it always did) and the " +
 		"org's default project scope.",
@@ -230,7 +230,7 @@ var allowedRequestUses = map[string]string{
 	"apps/agents/sessions_typed.go": "callerUser — the validated USER a session write is " +
 		"attributed to, which is not the tenant and not merely whether the caller is signed " +
 		"in. apps/principal carries org, validated, brand, ledger, project and payer across " +
-		"this seam and NOT the user id, so there is no ctx helper to read it from; adding one " +
+		"this client and NOT the user id, so there is no ctx helper to read it from; adding one " +
 		"is a change to shared identity plumbing rather than to this op. It fails soft on " +
 		"purpose: off the HTTP path there is no attested caller and the org alone names the " +
 		"actor, so the write is still recorded rather than refused.",
@@ -258,7 +258,7 @@ var allowedRequestUses = map[string]string{
 		"a tool on — and every fact an audit record carries beyond the org (the user, the email, admin-ness, " +
 		"the method, the path, the source IP, the request id) rides on the request too. The TENANT itself is " +
 		"resolved with principal.Acting, never through the request. THREE " +
-		"functions in ONE file, so fourteen typed ops share one seam; all fail closed off the HTTP path — no " +
+		"functions in ONE file, so fourteen typed ops share one client; all fail closed off the HTTP path — no " +
 		"request means the default project, no actor, and no audit record, since an unattributable record is " +
 		"worse than none, and principal.Acting refuses before any of them is reached.",
 	"apps/team/typed.go": "callerOf / sessionOf / admin / noStore / cookie — team authenticates its billing, " +
@@ -277,7 +277,7 @@ var allowedRequestUses = map[string]string{
 		"alone would turn that live admin bucket into a 403). ONE function, which every typed op asks, " +
 		"delegating to the same principal.Acting the untyped handlers beside them use; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no namespace to name.",
-	"apps/risk/typed.go": "gate / caller. gate is the ONE money seam for the model plane, and money is " +
+	"apps/risk/typed.go": "gate / caller. gate is the ONE money client for the model plane, and money is " +
 		"the reason it needs more of the principal than the org: the debit is keyed on the SELECTED billing " +
 		"ledger (principal.Ledger, which a SuperAdmin masquerade moves off the effective org), narrowed by " +
 		"the server-minted project (X-Project-Id, with its validated-ness), and attributed with the user, " +
@@ -288,11 +288,11 @@ var allowedRequestUses = map[string]string{
 		"attribution the caller chose is not attributable. It reads the SAME header gate already reads for " +
 		"the meter's actor, which is why it lives in this file rather than beside its one use in " +
 		"policy_wire.go: a second file would be this same hatch under a second justification. TWO functions " +
-		"in ONE file, so the whole package shares one seam. The TENANT is never read through either: " +
+		"in ONE file, so the whole package shares one client. The TENANT is never read through either: " +
 		"tenantFor uses principal.OrgFrom, right beside them. Off the HTTP path there is no ledger and the " +
 		"metering pair is a no-op — the rule the rest of the fleet applies — and no identity, which " +
 		"plane.enact refuses rather than recording an anonymous change.",
-	"apps/o11y/typed.go": "callerIsAdmin / callerProject — the o11y surface's ONE identity seam. The " +
+	"apps/o11y/typed.go": "callerIsAdmin / callerProject — the o11y surface's ONE identity client. The " +
 		"scoped reads switch on platform-sudo (X-User-IsAdmin: the infra-log god-view and the " +
 		"whole-product RED) and the annotation queues narrow by project (X-Project-Id); neither header " +
 		"rides on principal.OrgFrom. The status probe's weaker gate does NOT need the request — infra " +
@@ -326,7 +326,7 @@ var allowedRequestUses = map[string]string{
 		"moves off the effective org — so principal.OrgFrom would charge the org being INSPECTED for a " +
 		"platform admin's reading of its books. Empty off the HTTP path, where the meter no-ops rather " +
 		"than billing the wrong ledger.",
-	"apps/tools/charge_peer.go": "chargePeer — the tool plane's payment seam reaching the x402 " +
+	"apps/tools/charge_peer.go": "chargePeer — the tool plane's payment client reaching the x402 " +
 		"process, which is a PROXY that forwards the caller's identity and carries two facts of the " +
 		"request across the boundary with it. The payer is principal.Ledger, which folds in the " +
 		"SuperAdmin masquerade (X-User-IsAdmin plus the X-User-Owner home claim) that " +
@@ -359,7 +359,7 @@ var allowedRequestUses = map[string]string{
 		"tenant itself is read with principal.OrgFrom (tenant, right beside them), never through the " +
 		"request. All fail closed off the HTTP path: no request, no attested reviewer, no audit actor " +
 		"to invent, nothing cached.",
-	"apps/leaderboard/leaderboard.go": "requestOf — the leaderboard's ONE identity seam, asked by the " +
+	"apps/leaderboard/leaderboard.go": "requestOf — the leaderboard's ONE identity client, asked by the " +
 		"three readers beside it. A public board is a CONSENT surface, so it turns on facts " +
 		"principal.OrgFrom does not carry: the caller's own ledger row is keyed by the validated username " +
 		"(X-User-Name, selfLedgerID — without it a member cannot find or set their own opt-in), naming " +
@@ -368,7 +368,7 @@ var allowedRequestUses = map[string]string{
 		"not identity at all: per-tenant analytics must never be held by a browser or an intermediary, " +
 		"and only the request reaches the RESPONSE header. The tenant itself is read with " +
 		"principal.OrgFrom (tenantOf, in this same file), never through the request. ONE function, so " +
-		"six typed ops share one seam; every reader fails closed off the HTTP path — no request means no " +
+		"six typed ops share one client; every reader fails closed off the HTTP path — no request means no " +
 		"self, no admin and no elevation.",
 	"apps/marketplace/marketplace.go": "projectOf / callerOf / record. An install is scoped to (org, " +
 		"PROJECT) and the project is a server-minted header (X-Project-Id) that principal.OrgFrom does " +
@@ -398,7 +398,7 @@ var allowedRequestUses = map[string]string{
 		"it), never the request. Empty off the HTTP path, where there is no request and so no identity " +
 		"to forward — the upstream read then goes out unauthenticated, which is what a public ledger " +
 		"read already is.",
-	"apps/projects/typed.go": "callerOf — the projects plane's ONE identity seam, asked by every typed " +
+	"apps/projects/typed.go": "callerOf — the projects plane's ONE identity client, asked by every typed " +
 		"op through siteOf/releaseSite. It reads the request because THREE facts the ops turn on are not " +
 		"the org principal.OrgFrom carries. The TENANT itself: an org-less platform SuperAdmin is " +
 		"bucketed under the literal \"admin\" org (org(), projects.go), which OrgFrom cannot express — it " +
@@ -409,7 +409,7 @@ var allowedRequestUses = map[string]string{
 		"masquerade deliberately moves off the effective org — plus the validated project sub-scope, the " +
 		"request id and the client IP the meter attributes spend by. None may be an In field: a tenant " +
 		"key or a payer a caller states is a cross-tenant read, or a cross-tenant SPEND, it asserted for " +
-		"itself. ONE function, so all 37 typed ops share one seam, delegating to the same org() the " +
+		"itself. ONE function, so all 37 typed ops share one client, delegating to the same org() the " +
 		"untyped deploy handler beside them uses; it fails closed off the HTTP path, where there is no " +
 		"attested caller and therefore no tenant.",
 	"apps/allowance/allowance.go": "get — the allowance holder is a WALLET, not an org. The key is the " +
@@ -431,7 +431,7 @@ var allowedRequestUses = map[string]string{
 		"nothing else — it is not identity, and modeling it as a second In field would let a caller set " +
 		"the fallback, which is the one thing a fallback must not be. Empty off the HTTP path, which " +
 		"resolves to known=false: the same fail-open answer an unregistered host gets.",
-	"apps/gateway/gateway.go": "caller / target — the edge config plane's identity seam. The PLATFORM " +
+	"apps/gateway/gateway.go": "caller / target — the edge config plane's identity client. The PLATFORM " +
 		"scope (CORS allowlist, pre-auth per-IP cap) is SuperAdmin-only, which is X-User-IsAdmin, and every " +
 		"write is stamped with the validated user id (X-User-Id) — neither is what principal.OrgFrom carries. " +
 		"The ?org=<slug> a SuperAdmin targets another tenant with is read off the URL rather than modelled as " +
@@ -465,12 +465,12 @@ var allowedRequestUses = map[string]string{
 		"which tenant, not which person). It is an attribution and never an authority: the org gate above it " +
 		"already ran. Empty off the HTTP path, where the entry records no actor rather than inventing one — " +
 		"exactly how a pre-attribution row already reads.",
-	"apps/flags/routes.go": "callerOf — the flag plane's ONE identity seam. A flag is scoped to (org, " +
+	"apps/flags/routes.go": "callerOf — the flag plane's ONE identity client. A flag is scoped to (org, " +
 		"PROJECT) and an audited write records the ACTOR, so it needs two facts beyond the tenant: the " +
 		"project scope (X-Project-Id, principal.ProjectScope) and the validated user id, neither of " +
 		"which principal.OrgFrom carries. All three are request facts and none may be an In field — an " +
 		"In field is caller-supplied, so a scope key read from one is a cross-scope read the caller " +
-		"asserted for itself. ONE function, so every typed op shares one seam; it fails closed off the " +
+		"asserted for itself. ONE function, so every typed op shares one client; it fails closed off the " +
 		"HTTP path, where there is no principal and therefore no scope and no actor.",
 	"apps/treasury/treasury.go": "admin / myAccounts — the ledger's tenant boundary and the one way " +
 		"across it. Every ordinary caller sees only accounts under its own \"org:<tenant>:\" prefix; a " +
@@ -584,7 +584,7 @@ var allowedRequestUses = map[string]string{
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +
 		"other half of the same request — per-tenant MONEY must never be cached by a browser or an " +
 		"intermediary, and Cache-Control is a RESPONSE header only the request reaches. TWO functions in " +
-		"ONE file, so all five ops share one seam; the tenant-only read (orgOf, right beside them) goes " +
+		"ONE file, so all five ops share one client; the tenant-only read (orgOf, right beside them) goes " +
 		"through principal.OrgFrom and never through the request. Both fail closed off the HTTP path: no " +
 		"request, no subject, and no response to mark.",
 	"apps/world/news.go": "scopeOf — world is scoped to (org, PROJECT) and every store statement carries " +
@@ -595,7 +595,7 @@ var allowedRequestUses = map[string]string{
 		"start rejecting a body that named a project — a wire the route has never had. ONE function, which " +
 		"all four scoped ops ask, delegating to the same scope() the SSE handler beside them uses; fails " +
 		"closed off the HTTP path, where there is no principal and therefore no tenant.",
-	"apps/platform/ops.go": "caller / request / admit — the PaaS control plane's three identity seams, " +
+	"apps/platform/ops.go": "caller / request / admit — the PaaS control plane's three identity clients, " +
 		"in one file, which every one of its 32 typed ops goes through. caller resolves the tenant with " +
 		"platform's own principal.Acting, not principal.OrgFrom: this surface keys NAMESPACES and per-tenant image " +
 		"refs on the org, so it needs the injective namespace.Sanitize form and the \"admin\" bucket a " +
@@ -615,10 +615,10 @@ var allowedRequestUses = map[string]string{
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +
 		"principal.OrgFrom (tenantOf, right beside it), never through the request. ONE function, so the " +
-		"two mutating ops share one seam; it fails closed off the HTTP path: no request, no attested " +
+		"two mutating ops share one client; it fails closed off the HTTP path: no request, no attested " +
 		"caller, no mutation.",
 	"apps/security/security.go": "submitScan — a secret scan is a priced act and an audited one, and " +
-		"this is the op's ONE request seam. The prepaid gate and the meter need the payer " +
+		"this is the op's ONE request client. The prepaid gate and the meter need the payer " +
 		"(principal.Ledger), the validated project sub-scope (principal.ValidatedProject) and the request " +
 		"id + client IP the debit is attributed with; the audit record needs the caller's subject and " +
 		"email, admin-ness, and the method and path actually reached. None of those is the tenant, which " +
@@ -638,7 +638,7 @@ var allowedRequestUses = map[string]string{
 		"authority, so it can never be an In field a caller supplies for itself, and principal.OrgFrom " +
 		"does not carry it. The org every query keys on is authoritative from principal.OrgFrom (tenant, " +
 		"in eval.go). False off the HTTP path: no request, no attested caller, no cross-tenant board.",
-	"apps/experiment/experiments.go": "actorOf / orgAdmin — the experiment plane's two identity seams, " +
+	"apps/experiment/experiments.go": "actorOf / orgAdmin — the experiment plane's two identity clients, " +
 		"and neither of them is the tenant. actorOf is the credential's email (c.UserEmail()), what a " +
 		"create and a decision are STAMPED with — an attribution, never an authority. orgAdmin is the " +
 		"gate promoting a winner takes, org-admin-ness (principal.IsOrgAdmin, X-User-IsOrgAdmin), because " +

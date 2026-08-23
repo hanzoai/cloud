@@ -10,7 +10,7 @@ import (
 )
 
 // The BRAND, the PROJECT and the MINTED principal, read from both sides of the
-// seam — the request and the bare context.Context a typed op receives.
+// client — the request and the bare context.Context a typed op receives.
 //
 // These accessors had no coverage at all, and they are the ones whose mistakes do
 // not announce themselves: a brand that answers without a validated principal
@@ -82,7 +82,7 @@ func TestBrand_NeedsAValidatedPrincipalAndAnIssuer(t *testing.T) {
 // the same value on the far side. The pair exists so a typed op — which receives
 // a context and no request — reads ONE fact rather than a second copy of it, so
 // the round trip is the property worth pinning.
-func TestBrand_CrossesTheSeamOrParksNothing(t *testing.T) {
+func TestBrand_CrossesTheClientOrParksNothing(t *testing.T) {
 	t.Run("carried", func(t *testing.T) {
 		serve(t, validated(map[string]string{"X-User-Brand": "zoo.ngo"}), func(c *zip.Ctx) error {
 			ctx := principal.WithBrand(context.Background(), c)
@@ -368,12 +368,12 @@ func TestPayerFrom_NoCallerIsNoPayer(t *testing.T) {
 	}
 }
 
-// TestProjectScopeFromIsProjectScopeAcrossTheSeam is the reason that function
+// TestProjectScopeFromIsProjectScopeAcrossTheClient is the reason that function
 // exists rather than each plane applying its own default test. The storage key a
 // typed op derives and the one a request-side caller derives must be the same
 // key, or the same org's data lands in two places depending on which door it
 // came through.
-func TestProjectScopeFromIsProjectScopeAcrossTheSeam(t *testing.T) {
+func TestProjectScopeFromIsProjectScopeAcrossTheClient(t *testing.T) {
 	for header, want := range map[string]string{
 		"":        "", // names no project: the whole-org view
 		"default": "", // the literal default IS that same scope

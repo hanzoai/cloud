@@ -103,7 +103,7 @@ func tollApp(t *testing.T) *tollRig { return tollRigWith(t, true) }
 
 // tollRigWith composes the rig with or without the HTTP edge gate. edge=false is
 // not a variant anybody deploys — it is the question "what happens when the edge
-// gate is not there", and the answer has to be "the op seam charges", never
+// gate is not there", and the answer has to be "the op client charges", never
 // "nobody does".
 func tollRigWith(t *testing.T, edge bool) *tollRig {
 	t.Helper()
@@ -396,7 +396,7 @@ func TestTollChargesEveryDoorOnce(t *testing.T) {
 
 			// ── the books ───────────────────────────────────────────────────────
 			// One movement, one balanced entry: one deposit, one debit, at the
-			// DECLARED price. A second debit here is the double-charge this seam's
+			// DECLARED price. A second debit here is the double-charge this client's
 			// stand-down rule exists to prevent.
 			entries, err := r.led.fin.ListEntries(context.Background(), tollOrg, "", false, 0)
 			if err != nil {
@@ -490,16 +490,16 @@ func TestTollMovesNothingForUnpricedWork(t *testing.T) {
 }
 
 // TestTollTakesOverWhenTheEdgeIsGone pins the one property that makes two money
-// seams safe to have at all.
+// clients safe to have at all.
 //
-// The op seam stands down for a request the edge gate has CLAIMED, and the first
+// The op client stands down for a request the edge gate has CLAIMED, and the first
 // version of that check inferred the claim from the request's path: a path that
 // names a declared surface must be one the edge answered for. True — and the truth
 // of it depends on a line in a composition root two files away. Unmount BillingGate
-// and the inference still says yes, the op seam still stands down, and a priced
+// and the inference still says yes, the op client still stands down, and a priced
 // operation over REST becomes free with both gates present in the source. So the
 // claim is now MADE, and this is the test that would have caught the difference:
-// with no edge gate, REST must still be charged exactly once — by the op seam.
+// with no edge gate, REST must still be charged exactly once — by the op client.
 func TestTollTakesOverWhenTheEdgeIsGone(t *testing.T) {
 	r := tollRigWith(t, false)
 	r.fund(t, tollPrice, "fund-noedge")
@@ -526,7 +526,7 @@ func TestTollTakesOverWhenTheEdgeIsGone(t *testing.T) {
 	}
 }
 
-// ── the seam itself ─────────────────────────────────────────────────────────────
+// ── the client itself ─────────────────────────────────────────────────────────────
 
 // TestOperationIsTheSameValueAtEveryDoor is the measurement the whole design rests
 // on, pinned so it cannot quietly stop being true: the operation zip hands the
@@ -540,7 +540,7 @@ func TestOperationIsTheSameValueAtEveryDoor(t *testing.T) {
 	r.fund(t, tollFund, "fund-measure")
 	var ops, reqs []string
 	// The observer REPLACES Toll for this test on purpose: what is being measured
-	// is the VALUE zip hands the seam, not what cloud does with it.
+	// is the VALUE zip hands the client, not what cloud does with it.
 	r.app.Authorize(func(ctx context.Context, op zip.Op, _ any) error {
 		ops = append(ops, op.Method+" "+op.Path)
 		if c, live := Request(ctx); live {
@@ -557,7 +557,7 @@ func TestOperationIsTheSameValueAtEveryDoor(t *testing.T) {
 	}
 	for i, got := range ops {
 		if got != "POST /v1/probe/run" {
-			t.Errorf("door %d saw operation %q, want %q — the seam is not transport-agnostic",
+			t.Errorf("door %d saw operation %q, want %q — the client is not transport-agnostic",
 				i, got, "POST /v1/probe/run")
 		}
 	}
@@ -573,6 +573,6 @@ func TestOperationIsTheSameValueAtEveryDoor(t *testing.T) {
 	}
 	if envelopes != 3 {
 		t.Fatalf("requests seen = %v; %d of them name no declared surface, want 3 — if the "+
-			"edge can see every operation there is nothing for this seam to do", reqs, envelopes)
+			"edge can see every operation there is nothing for this client to do", reqs, envelopes)
 	}
 }

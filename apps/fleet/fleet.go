@@ -91,7 +91,7 @@ func New(brand string, log luxlog.Logger) *Registry {
 func (r *Registry) Enabled() bool { return r != nil && r.kms != nil }
 
 // scopeRef is the KMS key prefix for an org's fleet within a project — the ONE
-// backward-compat seam. The default project (principal.IsDefaultProject) keeps the
+// backward-compat client. The default project (principal.IsDefaultProject) keeps the
 // legacy org-only prefix so existing keys are byte-identical; a non-default project
 // shards under "<org>/<project>". Every fleet key (index, kubeconfig, cache) derives
 // from here, so there is exactly one place the project segment is added or omitted.
@@ -192,7 +192,7 @@ func (r *Registry) Deregister(org, project, name string) (bool, error) {
 // DynForOrg returns the k8s client the org+project's workloads should target: its
 // default registered cluster (KMS-loaded, cached) or nil when the shard has none
 // (the caller then falls back to the home in-cluster client). This is the ONE
-// federation seam.
+// federation client.
 func (r *Registry) DynForOrg(org, project string) dynamic.Interface {
 	if !r.Enabled() {
 		return nil

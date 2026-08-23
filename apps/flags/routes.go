@@ -86,7 +86,7 @@ type caller struct {
 const errNoTenant = "no tenant: present a signed-in principal, or a project key as ?api_key= / x-api-key"
 
 // resolveKeyOrg maps a presented project key to its org through the ONE IAM key
-// seam, exactly as the event door does. Package var ONLY so a test can substitute
+// client, exactly as the event door does. Package var ONLY so a test can substitute
 // a resolver without standing up IAM; production is always cloud.OrgForKey.
 var resolveKeyOrg = cloud.OrgForKey
 

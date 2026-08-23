@@ -1,6 +1,6 @@
 package link
 
-// router.go is the EXECUTION half of the redundancy seam route.go defines. route.go
+// router.go is the EXECUTION half of the redundancy client route.go defines. route.go
 // turns a user's linked accounts into an ordered list of candidates and says, in so
 // many words, that "actually dialing a provider, detecting a live 429, and advancing
 // to the next candidate is the gateway's job (the deferred failover-execution
@@ -50,7 +50,7 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// Links is the read seam over the linked-account registry the router routes across.
+// Links is the read client over the linked-account registry the router routes across.
 // *Store satisfies it; a unit test supplies a fake. The router depends on THIS, not
 // the concrete SQLite store, so its selection + cycling policy is proven without a
 // database or KMS — and the isolation guarantee is a deterministic assertion.
@@ -86,7 +86,7 @@ type Upstream interface {
 }
 
 // Meter records a served routed call to the per-account usage ledger. A nil Meter
-// disables metering (routing still works). It is a separate seam so the router's
+// disables metering (routing still works). It is a separate client so the router's
 // policy is tested without a warehouse or a billing client.
 type Meter interface {
 	RecordRouted(ctx context.Context, org, subject string, a Account, kind string, res Result)
@@ -212,7 +212,7 @@ type Router struct {
 }
 
 // NewRouter builds a Router from cfg. It returns an error only for a missing
-// required seam, so a misconfiguration fails at wiring time, never at request time.
+// required client, so a misconfiguration fails at wiring time, never at request time.
 func NewRouter(cfg Config) (*Router, error) {
 	if cfg.Links == nil {
 		return nil, fmt.Errorf("link: NewRouter requires Links")

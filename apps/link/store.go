@@ -25,7 +25,7 @@ var errNotFound = errors.New("link: not found")
 //
 // It also owns the account-usage SERIES in the datastore (datastore.go): the Link
 // row is an account's latest state, the series is its history. Both are the same
-// (org, subject) tenancy, so they live behind one store rather than two seams that
+// (org, subject) tenancy, so they live behind one store rather than two clients that
 // could drift apart on isolation. dsReady latches the idempotent warehouse DDL —
 // on success only, so a datastore still connecting at boot is retried, not
 // permanently written off.

@@ -7,11 +7,11 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 )
 
-// providers.go declares the two external seams a generated document rides to
+// providers.go declares the two external clients a generated document rides to
 // execution — e-signature and state/agency filing — plus the honest stubs used when
-// no real provider is wired. Both mirror the company formation seams exactly (ONE way
+// no real provider is wired. Both mirror the company formation clients exactly (ONE way
 // across the platform): a narrow interface, an honest default that fabricates nothing,
-// and a config-driven real provider as a swap. A seam with no real backend records an
+// and a config-driven real provider as a swap. A client with no real backend records an
 // honest state and never fakes a completed signature or a filed record.
 
 // Signer is one e-signature recipient.
@@ -25,7 +25,7 @@ type Signer struct {
 	Email string `json:"email"`
 }
 
-// Esign is the e-signature seam. Request opens a signature request over a document for
+// Esign is the e-signature client. Request opens a signature request over a document for
 // the given signers and returns a provider reference; Status reports completion. A
 // real provider (DocuSign, Dropbox Sign, or the in-house clients/esign bundle)
 // implements this; stubEsign is the honest default.
@@ -59,7 +59,7 @@ func (stubEsign) Status(_ context.Context, org, ref string) (bool, error) {
 	return false, nil
 }
 
-// Filer is the state/agency filing seam. Submit records a filing of the named
+// Filer is the state/agency filing client. Submit records a filing of the named
 // documents; a real partner (Clerky, Firstbase, CSC) returns the state file number.
 // stubFiler is the honest default: it records a "manual" status ("file through your
 // registered agent") and fabricates no filing id.

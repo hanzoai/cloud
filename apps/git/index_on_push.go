@@ -28,7 +28,7 @@ import (
 // the engine only upgrades it from best-effort-inline to durable-retryable.
 //
 // Orthogonality: the git object plane never imports clients/code. The indexer is a
-// func seam injected once at the composition root (SetIndexer), after both planes
+// func client injected once at the composition root (SetIndexer), after both planes
 // mount — git owns the reactor + the tree read (it holds the repo), code owns the
 // indexing (code.IndexFiles). Nil (unwired) leaves push-index inert.
 //
@@ -43,7 +43,7 @@ var indexQ = &queue{
 	acts: []any{IndexRepoActivity},
 }
 
-// IndexedFile is one text file handed across the seam to the code index: its
+// IndexedFile is one text file handed across the client to the code index: its
 // repo-relative path and content.
 type IndexedFile struct {
 	Path    string

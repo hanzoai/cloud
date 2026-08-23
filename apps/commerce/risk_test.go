@@ -230,7 +230,7 @@ func TestScoreOverPlane_AnUnusableSocketIsAnOutageRatherThanAnAbsence(t *testing
 		t.Fatalf("an undiallable socket probed clean (up=%v) — the fixture proves nothing", up)
 	}
 
-	// THE SHAPE. An outage is an ERROR out of this seam. Answering it as a verdict
+	// THE SHAPE. An outage is an ERROR out of this client. Answering it as a verdict
 	// at all would be this client deciding the fail policy for itself, and the only
 	// verdict it is entitled to state is the ABSENT one.
 	v, err := scoreOverPlane(context.Background(), luxlog.New("gatetest"), gateOrg, q)
@@ -243,7 +243,7 @@ func TestScoreOverPlane_AnUnusableSocketIsAnOutageRatherThanAnAbsence(t *testing
 	}
 
 	// AND THE POLICY'S ANSWER TO IT, which is the fact that decides whether money
-	// moves: the query is privileged, so the seam BLOCKS rather than allows.
+	// moves: the query is privileged, so the client BLOCKS rather than allows.
 	installRiskScorer(luxlog.New("gatetest"))
 	switch got := cloud.Decide(context.Background(), gateOrg, q); {
 	case got.Action == cloud.ActionAllow:

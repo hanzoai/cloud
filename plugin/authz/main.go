@@ -15,7 +15,7 @@ import (
 // The PROSE for authz's three routes, declared HERE for the same reason the Mount
 // adapter below is here: authz is a leaf that must never import cloud, so it cannot
 // reach openapi.Describe, and its handlers are untyped closures inside another
-// module, so zipdoc has nothing to lift either. Both seams a subsystem normally uses
+// module, so zipdoc has nothing to lift either. Both clients a subsystem normally uses
 // are closed to it — and the alternative is what the document said until now, three
 // operations published as an operationId and nothing else, which every generated SDK
 // offers as a method it cannot explain and a spec-derived CLI as a command with no
@@ -23,7 +23,7 @@ import (
 //
 // Describe is additive metadata on routes that EXIST: a description whose route the
 // router does not serve never renders, so this cannot invent an operation. If authz
-// ever grows its own prose seam upstream, delete this init — do not keep both, or
+// ever grows its own prose client upstream, delete this init — do not keep both, or
 // the two will drift and only one will be true.
 func init() {
 	openapi.Describe("/v1/authz/check", http.MethodPost,

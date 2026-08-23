@@ -4,7 +4,7 @@
 //
 // It is a LIBRARY, not a subsystem — it registers no route and has no manifest
 // row. It is also UNWIRED: the composition root that installed it
-// (apps/apps.go Wire, deleted at 22f4fc64) and the seam it installed through
+// (apps/apps.go Wire, deleted at 22f4fc64) and the client it installed through
 // (cloud.SetLiveSource) are both gone, and nothing in the tree calls K8s. Until
 // a caller returns, every deployment runs on its static peer set and the
 // outage below is NOT fixed.

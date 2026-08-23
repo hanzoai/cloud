@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// TestEmitLifecycleFanOut proves the seam's contract: one event reaches every
+// TestEmitLifecycleFanOut proves the client's contract: one event reaches every
 // registered subscriber, each on a cancel-immune context, a panicking subscriber
 // is contained (does not crash the process or starve the others), and a
 // no-subscriber emit is a silent no-op.

@@ -1,6 +1,6 @@
 package tools
 
-// typed.go is the ONE seam between a request and the tool plane's TYPED ops, and
+// typed.go is the ONE client between a request and the tool plane's TYPED ops, and
 // the ONE place this package reaches for the request at all.
 //
 // A typed op — func(context.Context, *In) (*Out, error) — receives a context and
@@ -24,7 +24,7 @@ package tools
 //     request facts.
 //
 // Concentrating those cloud.Request calls in this file is deliberate: the escape
-// hatch is pinned (cloud/typed_request_gate_test.go), and one seam file with one
+// hatch is pinned (cloud/typed_request_gate_test.go), and one client file with one
 // justification beats the same call scattered across eleven handlers.
 //
 // Every resolver FAILS CLOSED off the HTTP path — the CLI projection's

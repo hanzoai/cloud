@@ -266,7 +266,7 @@ func TestPinResolvesExactlyOneValuesFile(t *testing.T) {
 // ── the credential ───────────────────────────────────────────────────────────
 
 // Fail-closed. An unmounted KMS, a KMS that cannot answer, and an empty secret each
-// stop the release: an anonymous push would fail deep in the git seam, long after
+// stop the release: an anonymous push would fail deep in the git client, long after
 // the pipeline reported the tag minted.
 func TestPinTokenFailsClosed(t *testing.T) {
 	ctx := context.Background()

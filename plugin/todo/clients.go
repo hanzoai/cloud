@@ -17,7 +17,7 @@ import (
 // completed run logged "todo PR not created" and the branch it had just
 // pushed and verified reached no board.
 //
-// Declared at this app's composition root for the reason plugin/git/seams.go
+// Declared at this app's composition root for the reason plugin/git/clients.go
 // gives: the capability is todo's and already exported; what is being added
 // is the door.
 func init() {

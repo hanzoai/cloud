@@ -27,7 +27,7 @@ import (
 )
 
 // proseless is the CLOSED list of published properties that carry NO description
-// because the SEAM they arrived through cannot carry one — not because nobody wrote
+// because the CLIENT they arrived through cannot carry one — not because nobody wrote
 // it. Both causes are generator limitations, both are recorded upstream in
 // CLAUDE.md, and neither is worked around here: the workarounds available (writing a
 // schema by hand, or unrolling a shape into copies) each replace one true statement
@@ -37,7 +37,7 @@ import (
 // entry here that starts publishing prose goes red too — that is the day the
 // generator learns, and this ledger must shrink then rather than outlive the gap.
 var proseless = map[string]bool{
-	// REFLECTION SEAM. GET /v1/projects/tags is declared with openapi.Register (tagdoor.go)
+	// REFLECTION CLIENT. GET /v1/projects/tags is declared with openapi.Register (tagdoor.go)
 	// because it answers a hosted page's tag config rather than a typed op's Out.
 	// Register derives a schema by REFLECTION, and Go drops comments at compile
 	// time, so zipdoc — which walks zip's TYPED registrations — can never reach a

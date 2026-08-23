@@ -130,7 +130,7 @@ type webSearchResults struct {
 // query, parse the returned HTML into results. Pure functions — unit-testable
 // against fixture HTML with no network.
 //
-// `fetch` is the one variation, and it is a seam rather than an adapter: an
+// `fetch` is the one variation, and it is a client rather than an adapter: an
 // engine that is a JSON API instead of a page answers for itself. Brave sells
 // one, and reshaping JSON into an *html.Node so it could reach `parse` is
 // exactly the shim this package keeps deleting. When fetch is set, parse is
@@ -372,7 +372,7 @@ func fetchEngine(ctx context.Context, e engine, query, lang string) answer {
 	// NOTHING READABLE CAME BACK, and there is ONE remedy for that whichever way
 	// it happened: render the page in a real browser and read it again.
 	//
-	// This used to be two rules, and the seam between them cost us DuckDuckGo
+	// This used to be two rules, and the client between them cost us DuckDuckGo
 	// entirely. Escalation ran only when a 200 parsed to zero, so a bad status
 	// short-circuited to "failed" and never reached the browser. DDG's challenge
 	// is served as HTTP 202 — measured, three times over, 14,180 bytes of "Select

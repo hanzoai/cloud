@@ -38,7 +38,7 @@ import (
 // composes Validated). Every account-usage op and the summary's account block gate
 // on it — an off-gateway forge with no validated user is refused fail-closed.
 //
-// It is the ONE identity seam in this package, and it reaches the request because
+// It is the ONE identity client in this package, and it reaches the request because
 // the SUBJECT is not the org: principal.OrgFrom carries the tenant and nothing
 // else, while the account board is scoped to the caller's OWN linked accounts and
 // therefore needs the validated user id too. Off the HTTP path there is no request

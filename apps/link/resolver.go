@@ -10,7 +10,7 @@ package link
 // resolves the current sealed credential. Storage, sealing, and refresh stay the
 // connector's; selection, cycling, and metering are the router's. One concern each.
 //
-// WHY THE SEAM IS AN INTERFACE. The router is proven against a fake Resolver in a
+// WHY THE CLIENT IS AN INTERFACE. The router is proven against a fake Resolver in a
 // unit test — no KMS, no network — so the isolation guarantee (a request resolves
 // only its OWN org's accounts) is a deterministic assertion rather than an
 // integration hope. The live binary wires the KMS implementation below.
@@ -89,7 +89,7 @@ func (c Credential) empty() bool { return strings.TrimSpace(c.Token) == "" && le
 // expired reports whether an expiring credential is past its Expiry. A zero Expiry
 // (a raw api key) never expires. The router treats an expired credential as
 // unavailable and cycles past it — it does NOT itself refresh, because refresh is
-// the connector's job (it re-seals a fresh token before expiry, behind this seam).
+// the connector's job (it re-seals a fresh token before expiry, behind this client).
 func (c Credential) expired(now time.Time) bool {
 	return !c.Expiry.IsZero() && !now.Before(c.Expiry)
 }

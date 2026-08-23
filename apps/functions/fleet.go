@@ -38,7 +38,7 @@ const (
 
 var errFleetUnconfigured = errors.New("fleet executor: tasks engine not ready")
 
-// engineView is the seam tests replace: the org-scoped embedded-engine view.
+// engineView is the client tests replace: the org-scoped embedded-engine view.
 var engineView = func(org string) (fleetView, error) {
 	eng := cloud.EmbeddedTasks()
 	if eng == nil {

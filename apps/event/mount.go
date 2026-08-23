@@ -31,7 +31,7 @@
 //
 // The accepted batch is also handed to registered SINKS (forward.go) — apps/
 // destinations forwards it to the org's connected ad platforms. analytics never
-// imports a consumer; the seam is one-way and fail-soft.
+// imports a consumer; the client is one-way and fail-soft.
 //
 // ONE datastore client. This package does NOT open its own connection: it reads
 // through apps/datastore, the leaf that holds the warehouse connection for the
@@ -153,7 +153,7 @@ func startSink(log luxlog.Logger) {
 }
 
 // stopSink tears the drain down and forgets it. Idempotent, and the ONE way the sink
-// stops — a test that must be the only writer through the warehouse seam calls it for
+// stops — a test that must be the only writer through the warehouse client calls it for
 // the same reason Shutdown does, because a live consumer is a second writer through a
 // process-global var.
 func stopSink() {

@@ -82,7 +82,7 @@ func init() {
 // subdomain (VerifyInput.AccountID) on a FIXED suffix (".zendesk.com",
 // ".reamaze.io") — the sibling of payments.go's shopifyOrigin, generalized for the
 // providers whose API host is <account>.<vendor>. Env-overridable for the httptest
-// seam. It is the ONE subdomain-host normalizer for the key plane's multi-tenant
+// client. It is the ONE subdomain-host normalizer for the key plane's multi-tenant
 // SaaS hosts; shopify keeps its bespoke builder (its normalization messages are
 // load-bearing).
 func subdomainOrigin(envKey, suffix, provider string) func(VerifyInput) (string, error) {

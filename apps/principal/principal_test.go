@@ -110,7 +110,7 @@ func TestValidated_OnlyFromUserId(t *testing.T) {
 	}
 }
 
-// parked drives the TYPED seam: it parks both facts exactly as cloud.Bridge does
+// parked drives the TYPED client: it parks both facts exactly as cloud.Bridge does
 // — one expression, so they are always set together — and reads them back the way
 // a typed op does, off a context and nothing else.
 func parked(t *testing.T, headers map[string]string) (org string, orgOK, validated bool) {
@@ -142,7 +142,7 @@ func parked(t *testing.T, headers map[string]string) (org string, orgOK, validat
 	return out.Org, out.OK, out.Validated
 }
 
-// TestParked_TwoFactsNeverDisagree pins what the typed seam carries, because two
+// TestParked_TwoFactsNeverDisagree pins what the typed client carries, because two
 // planes read two different facts off it: a plane with org-scoped rows asks
 // OrgFrom, and a plane with none (engine's shared runtime, o11y's infra health)
 // asks ValidatedFrom. The forge is refused by BOTH — that is the isolation

@@ -125,7 +125,7 @@ func (c *Conflict) Error() string {
 // bytes are canonical.
 //
 // The canonical bytes are the COMPARISON only. What reaches the document is the
-// claimant's own value, because [Components] states which value each seam
+// claimant's own value, because [Components] states which value each client
 // contributes — Register a *Schema, the typed fold zip's decoded JSON — and a
 // re-decode here would flatten every one of them to map[string]any, silently
 // undoing [Fold] for a document that merely passed through [Project].

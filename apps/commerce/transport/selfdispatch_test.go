@@ -94,7 +94,7 @@ func TestSetAppSelfDispatch(t *testing.T) {
 //
 // The fix (apps/commerce/mount.go) registers commerce's own AuthorizeSpendCap co-resident, so the
 // specific route shadows the wildcard and the gate's dispatch hits the real handler at depth 1
-// — no loop. This test models both arrangements on the transport this seam owns and pins the
+// — no loop. This test models both arrangements on the transport this client owns and pins the
 // invariant.
 //
 // The bridge itself is RETIRED — that fix, applied to all seventeen of its forwardable
@@ -199,7 +199,7 @@ func TestSpendAlertsAuthorizeShadowsBridge(t *testing.T) {
 // broke console Billing → Credits belonged to. specificPattern is the route as registered
 // co-resident (may carry a :param); requestPath is the concrete path the browser POSTs.
 //
-// It models both arrangements on the POST transport this seam owns:
+// It models both arrangements on the POST transport this client owns:
 //   - build(false) registers ONLY a self-proxying POST /v1/billing/* wildcard standing in for
 //     the retired account bridge: its handler re-dialed COMMERCE_URL (the public edge = this
 //     binary) BY PATH through THIS transport, re-entering the wildcard until the depth-8 guard

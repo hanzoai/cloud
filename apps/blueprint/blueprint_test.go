@@ -70,9 +70,9 @@ func TestEmbeddedExactCosts(t *testing.T) {
 	}
 }
 
-// TestSeamEstimateTemplate proves the in-process seam the deploy/metering path
+// TestClientEstimateTemplate proves the in-process client the deploy/metering path
 // uses: a known id prices; an unknown id and a traversal attempt both fail closed.
-func TestSeamEstimateTemplate(t *testing.T) {
+func TestClientEstimateTemplate(t *testing.T) {
 	if _, ok := EstimateTemplate("postgres"); !ok {
 		t.Fatal("known blueprint must estimate")
 	}

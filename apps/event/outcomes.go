@@ -1,6 +1,6 @@
 package event
 
-// outcomes.go — the MEASUREMENT seam the experiments primitive composes. An
+// outcomes.go — the MEASUREMENT client the experiments primitive composes. An
 // experiment's per-variant metric is read from the ONE event plane (event.fact),
 // never a second event store: outcomes are already captured by distinct_id
 // (capture.go), so an experiment only needs to fold them per subject and join each
@@ -27,7 +27,7 @@ type SubjectOutcome struct {
 
 // Outcomes returns, for one org over [start,end), each subject's exposure +
 // conversion for an experiment's two event names, read from event.fact. It is the
-// measurement seam the experiments primitive composes: flags assignment joins to
+// measurement client the experiments primitive composes: flags assignment joins to
 // these outcomes by distinct_id. The plane is never created here — its DDL owner is
 // hanzoai/o11y — so a missing table surfaces as the query's own error.
 //

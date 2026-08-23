@@ -10,9 +10,9 @@ package esign
 // tenant's DB.
 // PDF BYTES do NOT live in this DB: document_data.data / initial_data hold the
 // opaque object-storage blob KEY (type 'BLOB_KEY'), and the bytes live on the
-// NewBase __blob seam (deps.VFS / S3). A 32 MiB base64 PDF in a TEXT column would
+// NewBase __blob client (deps.VFS / S3). A 32 MiB base64 PDF in a TEXT column would
 // bloat the per-tenant SQLite and be copied on every read — the same object-store
-// seam clients/dataroom uses for document bytes. `data` points at the current
+// client clients/dataroom uses for document bytes. `data` points at the current
 // (sealed once completed) PDF; `initial_data` keeps the original.
 const schema = `
 CREATE TABLE IF NOT EXISTS document_data (

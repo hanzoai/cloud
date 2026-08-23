@@ -13,7 +13,7 @@ import (
 // github_sink_test.go proves the external-issue mirror sink: a GitHub issue upserts
 // into the todo idempotently by ExtRef (create then update-in-place), the team is
 // auto-created, open/closed maps to todo/done, and orgs stay isolated. Exercised
-// through cloud.UpsertIssue (the registered seam), so it also proves the wiring.
+// through cloud.UpsertIssue (the registered client), so it also proves the wiring.
 
 func mountTodo(t *testing.T) {
 	t.Helper()

@@ -252,7 +252,7 @@ func (s *store) updateWalletKey(ctx context.Context, org, id, address, keyRef st
 }
 
 // walletForFinanceAccount resolves the wallet bound to a finance ledger account,
-// scoped to org. The seam by which a treasury reserve signer later BECOMES an MPC
+// scoped to org. The client by which a treasury reserve signer later BECOMES an MPC
 // treasury wallet. found=false when unbound.
 func (s *store) walletForFinanceAccount(ctx context.Context, org, financeAccount string) (*Wallet, bool, error) {
 	w, err := scanWallet(s.db.QueryRowContext(ctx,

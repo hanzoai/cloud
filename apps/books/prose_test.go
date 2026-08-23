@@ -26,7 +26,7 @@ import (
 )
 
 // proseless is the CLOSED list of published properties that carry NO description,
-// and it is a property of the SEAM they arrived through rather than of anyone's
+// and it is a property of the CLIENT they arrived through rather than of anyone's
 // diligence.
 //
 // ScanDraft reaches the document only through openapi.Register (scan.go), because

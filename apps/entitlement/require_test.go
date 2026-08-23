@@ -75,8 +75,8 @@ func (f *fakeLedger) SumUsageSince(context.Context, string, bool, int64) (int64,
 	return 0, nil
 }
 
-// publish installs a fake ledger as the process-wide money seam (finance.Current(),
-// the SAME seam the ai gate and the edge meter resolve through), restoring the prior
+// publish installs a fake ledger as the process-wide money client (finance.Current(),
+// the SAME client the ai gate and the edge meter resolve through), restoring the prior
 // one on cleanup. Passing nil models a split deploy: no co-resident money layer.
 func publish(t *testing.T, f *fakeLedger) {
 	t.Helper()

@@ -13,7 +13,7 @@ import (
 )
 
 // newTestClient builds a Client over a temp-dir store tree and installs it as the
-// process seam, restoring the prior seam on cleanup.
+// process client, restoring the prior client on cleanup.
 func newTestClient(t *testing.T) *Client {
 	t.Helper()
 	prev := mounted

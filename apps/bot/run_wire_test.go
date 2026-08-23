@@ -23,7 +23,7 @@ import (
 //     can only answer c.JSON(out) under the status it DECLARED, so both move.
 //
 // The five publish no MCP tool and no CLI command. They DO carry prose:
-// openapi.Describe declares it beside the wire fact in relay.go, which is the seam
+// openapi.Describe declares it beside the wire fact in relay.go, which is the client
 // for exactly an operation the wire refuses to type.
 const reasonProxy = "proxy. One All() registration for every method, over a greedy wildcard the proxy " +
 	"re-mounts on the runtime, relaying the runtime's own status code and Content-Type verbatim. zip has " +

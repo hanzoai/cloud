@@ -114,7 +114,7 @@ package commerce
 //
 // The credit is posted through finance's own Deposit rather than through commerce's
 // injected creditledger adapter (ledger.go) because of the ADDRESS, not the books:
-// the seam carries the test bit now, but it is commerce's door onto its own credit,
+// the client carries the test bit now, but it is commerce's door onto its own credit,
 // and the address this file deposits at is (p.ledger, p.subject) — the payer the
 // SCREEN resolved from the request's principal, which is a value commerce cannot
 // compute for itself. Going through the adapter would mean handing it back the
@@ -169,7 +169,7 @@ type settlement struct {
 //
 // It is held on the screen rather than called directly for the one thing that
 // buys: a door test can state what settled without standing up a commerce
-// datastore, exactly as the risk plane's [teach] seam lets one assert what leaves
+// datastore, exactly as the risk plane's [teach] client lets one assert what leaves
 // this process without a risk child to receive it. The production value is set
 // once, by [riskGate], and never varies.
 func receiptOf(ctx context.Context, org, id string) (settlement, error) {

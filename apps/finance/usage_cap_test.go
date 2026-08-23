@@ -56,7 +56,7 @@ func TestSumUsageSince_OrgTotal(t *testing.T) {
 	}
 }
 
-// The usage hook fires after a committed debit — the seam the cap's alert-fire rides,
+// The usage hook fires after a committed debit — the client the cap's alert-fire rides,
 // carrying org + test + scope, WITHOUT finance importing commerce.
 func TestUsageHook_FiresAfterDebit(t *testing.T) {
 	f := New(t.TempDir())

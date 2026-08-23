@@ -272,7 +272,7 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 // GET /v1/node explains itself. These three have no typed op to lift from, so
 // without this they publish an operationId and nothing else — three SDK methods
 // that cannot say what they do and three CLI commands with no help. Describe is the
-// seam for exactly the operations the wire refuses to type; keyed by the fiber
+// client for exactly the operations the wire refuses to type; keyed by the fiber
 // pattern verbatim, so prose renders only while the router serves the route.
 func init() {
 	openapi.Describe("/v1/node/connect", http.MethodGet,

@@ -1219,7 +1219,7 @@ func (o ops) search(ctx context.Context, in *riskSearchIn) (*riskSearchRun, erro
 	// BOTH HALVES, EACH BEFORE ITS OWN WORK. [plane.begin] prices the surface read
 	// from the window and the grid from the measured history, and meters each on
 	// what it actually did — see there for why one price would be wrong in both
-	// directions. This op hands it the seam and nothing else: the plane never
+	// directions. This op hands it the client and nothing else: the plane never
 	// reaches the request, the ledger or the rate.
 	//
 	// AND THE GRID'S METER RUNS IN THE RUN, not here. This op answers 202 and the
@@ -1309,7 +1309,7 @@ const defaultScreenUUSD int64 = 100
 // Indirected through a var so a test can price a screen at ZERO, which is a legal
 // price that makes the surface free — and the property that a free surface is
 // still not an ANONYMOUS one is the thing gate_order_test exists to hold. The env
-// var used to be that seam by accident; this is the same seam on purpose, and the
+// var used to be that client by accident; this is the same client on purpose, and the
 // same one callProvider uses a repo over.
 var screenRate = func(ctx context.Context) int64 {
 	return cloud.RateMicros(ctx, "risk", "screen", defaultScreenUUSD)
@@ -1404,7 +1404,7 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 // reads this exact header for the meter's actor, so a second file calling
 // cloud.Request for the same fact would be the same escape hatch under a second
 // justification — which is what allowedRequestUses (typed_request_gate_test.go)
-// exists to stop. Two functions, one seam, one pin.
+// exists to stop. Two functions, one client, one pin.
 func caller(ctx context.Context) string {
 	c, ok := cloud.Request(ctx)
 	if !ok {

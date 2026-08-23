@@ -279,10 +279,10 @@ func TestDetector_AsksNothingAboutAnotherOrganisation(t *testing.T) {
 		}
 	}
 	// SIX METHODS, discovered from what this plane already asks of a model rather than
-	// declared. The number is asserted because the seam's value is that it is the
+	// declared. The number is asserted because the client's value is that it is the
 	// smallest honest one: a seventh belongs here only after a call site needs it.
 	if d.NumMethod() != 6 {
-		t.Fatalf("the detector seam has %d methods; it was derived from six call-site groups — "+
+		t.Fatalf("the detector client has %d methods; it was derived from six call-site groups — "+
 			"observe, score, digest, snapshot, restore, state", d.NumMethod())
 	}
 }

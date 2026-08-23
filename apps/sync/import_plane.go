@@ -8,7 +8,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// import_plane.go carries the git seams across a PROCESS boundary.
+// import_plane.go carries the git clients across a PROCESS boundary.
 //
 // The app that DECIDES to import is integrations: it holds the provider
 // connection and can mint the credential. The app that answers for the sync — the
@@ -27,7 +27,7 @@ import (
 // none of the In shapes carries an org — so an app acting for one tenant cannot
 // import into another's.
 
-// exposeImport publishes the git seams on the internal plane. Mount calls it.
+// exposeImport publishes the git clients on the internal plane. Mount calls it.
 //
 // All four are published together because they are ONE boundary: the same split
 // answers import, inbound, status and the mirror declaration. Splitting them
@@ -83,7 +83,7 @@ func planeInbound(ctx context.Context, in *plane.InboundIn) (*plane.Synced, erro
 		return nil, err
 	}
 	// The local implementation directly, never cloud.InboundGitSync. That function
-	// falls through to the plane when the in-process seam is nil, so routing back
+	// falls through to the plane when the in-process client is nil, so routing back
 	// through it would let this process dial its own socket and answer itself. It
 	// happens to be non-nil here — Mount registers before it publishes — but
 	// relying on that ordering is how the loop gets introduced later.

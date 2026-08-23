@@ -79,7 +79,7 @@ func attr(in *contract.EventIn, name string) (string, bool) {
 // TestSendDefaultsToTheRealPeerCall pins what intercept SUBSTITUTES: in
 // production the emit is the generated client's call and nothing else.
 //
-// A seam is a var, so it is exactly as easy to rebind at the DECLARATION as in a
+// A client is a var, so it is exactly as easy to rebind at the DECLARATION as in a
 // test — and rebound to a func returning nil, every decision would go silently
 // unstated while every test that installs its own fake first kept passing. So the
 // default is asserted by code pointer: the point is the IDENTITY of the callee,

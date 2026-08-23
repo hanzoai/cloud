@@ -23,17 +23,17 @@ var rekeyContext = []byte("hanzo/controlplane/rekey/v1")
 // Share is a sealed per-pod signing share. Exactly one is issued per pod.
 //
 // The Index is the pod's 1-based party index. secret is the stub z-share source
-// (still seed-derived; replaced by KMS-sealed custody in seam b + the real cert
-// material in seam c). idKey is the pod's ML-DSA-65 identity keypair — a genuine
+// (still seed-derived; replaced by KMS-sealed custody in client b + the real cert
+// material in client c). idKey is the pod's ML-DSA-65 identity keypair — a genuine
 // asymmetric secret, NOT derived from any public value — used to prove
 // possession on every leg it emits. In the real ShareCustody the secret key is
 // KMS-sealed and the signer runs inside the custody boundary; here it is
-// in-memory but never seed-derived (seam a).
+// in-memory but never seed-derived (client a).
 type Share struct {
 	Index  uint32
 	Node   pulsar.NodeID
-	secret [32]byte          // stub z-share source (seed-derived; seam c replaces it)
-	idKey  *mldsa.PrivateKey // per-pod ML-DSA-65 identity key (seam a); becomes the cert-signing key (seam c)
+	secret [32]byte          // stub z-share source (seed-derived; client c replaces it)
+	idKey  *mldsa.PrivateKey // per-pod ML-DSA-65 identity key (client a); becomes the cert-signing key (client c)
 }
 
 // ShareCustody yields exactly ONE share for ONE pod. This is where "one pod =
@@ -62,10 +62,10 @@ func NodeIDFromName(name string) pulsar.NodeID {
 
 // NewMemCustody issues a single sealed share for pod `name` at party `index`.
 // The z-share `secret` is still derived from the cluster seed (stub threshold
-// material, replaced in seam c). The identity key is a FRESH, RANDOM ML-DSA-65
+// material, replaced in client c). The identity key is a FRESH, RANDOM ML-DSA-65
 // keypair (crypto/rand) — NEVER derived from the public seed — so no party's
 // proof-of-possession key can be reconstructed from public inputs. That single
-// property is the keystone of seam (a): it is exactly what makes the
+// property is the keystone of client (a): it is exactly what makes the
 // byzantine-safety suite meaningful (TestRed_B_* / TestSafety_RogueAndForgedLegs).
 //
 // Panics if key generation fails: an unusable RNG is a fatal harness/host

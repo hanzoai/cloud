@@ -72,7 +72,7 @@ func newProgress(org, channel, thread string) *progress {
 	return &progress{org: org, channel: channel, thread: thread}
 }
 
-// watch is the Dispatcher.Watch seam: it turns one mirrored session event into
+// watch is the Dispatcher.Watch client: it turns one mirrored session event into
 // the message's next state. It reads only the fields it needs and never the
 // whole payload, and it cannot see a credential because no payload the run
 // mirrors carries one.

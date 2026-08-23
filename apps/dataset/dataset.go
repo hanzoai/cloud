@@ -116,7 +116,7 @@ type plane struct {
 	schema bool
 }
 
-// meter is the plane's half of the fleet's billing seam: GATE before a priced act
+// meter is the plane's half of the fleet's billing client: GATE before a priced act
 // and DEBIT after it. *cloud.ResourceMeter is the production value.
 //
 // It is an interface for one reason a concrete meter cannot give: a gate can fail

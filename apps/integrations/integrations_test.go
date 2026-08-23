@@ -249,12 +249,12 @@ func TestIntegrationsCallbackHappyPath(t *testing.T) {
 		t.Fatalf("bot_user_id must be recorded (non-secret): %q", conn.BotUserID)
 	}
 
-	// Seam: external id → org.
+	// Client: external id → org.
 	if org, ok := OrgForExternalID("slack", "T0TEAM"); !ok || org != "acme" {
 		t.Fatalf("OrgForExternalID: org=%q ok=%v", org, ok)
 	}
 
-	// Seam: TokenFor (gated on connected) returns the sealed token.
+	// Client: TokenFor (gated on connected) returns the sealed token.
 	got, err := TokenFor(context.Background(), "acme", "slack", "bot_token")
 	if err != nil || string(got) != "xoxb-real-token" {
 		t.Fatalf("TokenFor: %q err=%v", got, err)
@@ -597,8 +597,8 @@ func TestIntegrationsCallbackOversizedCodeRejected(t *testing.T) {
 	}
 }
 
-func TestIntegrationsSeamUnmountedFailsClosed(t *testing.T) {
-	// Force the unmounted state and prove every seam fails closed.
+func TestIntegrationsClientUnmountedFailsClosed(t *testing.T) {
+	// Force the unmounted state and prove every client fails closed.
 	_ = Shutdown(context.Background())
 	if _, err := TokenFor(context.Background(), "acme", "slack", "bot_token"); err == nil {
 		t.Fatal("TokenFor must fail when not mounted")

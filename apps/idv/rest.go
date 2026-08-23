@@ -162,7 +162,7 @@ func (r *REST) do(ctx context.Context, method, path string, body []byte, out any
 }
 
 // classify maps a provider status token to our honest Status. It is the pure,
-// fail-closed core of the whole seam: a token is looked up (case-insensitively) in
+// fail-closed core of the whole client: a token is looked up (case-insensitively) in
 // the provider's table, and ANY miss — an unknown value, an empty string, a
 // provider-internal "processing"/"created" state — resolves to StatusPending. Only
 // an explicitly-tabled success token yields StatusVerified, so no ambiguity, typo,

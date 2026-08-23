@@ -140,7 +140,7 @@ type paymentOps struct{}
 // top-up, so it is a CREDIT DOOR and has to be screened by the same risk gate that
 // door is — but which gate that is belongs to the composition root, beside the other
 // registration, where both are visible as one decision (mount.go, risk.go). Taking it
-// as an argument is also what keeps this file from importing the risk seam to fetch a
+// as an argument is also what keeps this file from importing the risk client to fetch a
 // gate it does not own.
 //
 // AND IT IS COMPOSED ONTO THE HANDLER, which is the only place it reaches the whole

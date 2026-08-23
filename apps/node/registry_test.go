@@ -791,7 +791,7 @@ func TestTheTransportTakesTheOneRegistry(t *testing.T) {
 	_ = NodeWS(a.reg, WSOptions{}) // the socket layer holds exactly this value
 
 	key := NodeKey{Org: "acme", NodeID: "n1"}
-	attach(t, a, "acme", "n1", "c1", []byte("seam:"))
+	attach(t, a, "acme", "n1", "c1", []byte("client:"))
 	if v, ok := f.peek(presenceKey(key)); !ok || v != "cloud-0" {
 		t.Fatalf("presence is %q/%v after a registration; want cloud-0 — the claim was skipped", v, ok)
 	}
@@ -799,7 +799,7 @@ func TestTheTransportTakesTheOneRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a registered node is unreachable from its peer: %v", err)
 	}
-	if string(res.Payload) != "seam:ping" {
+	if string(res.Payload) != "client:ping" {
 		t.Fatalf("reached %q", res.Payload)
 	}
 

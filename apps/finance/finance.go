@@ -5,7 +5,7 @@
 // (apps/treasury/ledger, the same engine the platform reserve posts to). It
 // registers NO routes and NO ops — it is the in-process implementation of
 // cloud's types.FinanceClient (package alias finance.Client, mirroring commerce.Client),
-// the ONE money seam the ai prepaid gate, the admin grant, commerce's credit mint and
+// the ONE money client the ai prepaid gate, the admin grant, commerce's credit mint and
 // the edge meter all bill through; billing is the customer-facing door onto it.
 //
 // ONE LIGHTWEIGHT FILE PER ORG. Each org's books are an isolated Hanzo Base (SQLite)
@@ -49,7 +49,7 @@ import (
 	"github.com/hanzoai/namespace"
 )
 
-// Client is the in-process inter-subsystem seam cloud's money paths call. It IS cloud's
+// Client is the in-process inter-subsystem client cloud's money paths call. It IS cloud's
 // types.FinanceClient — one narrow interface (BalanceCents + Deposit + RecordUsage), kept
 // as an alias so a value satisfies both names with no adapter (mirrors commerce.Client).
 type Client = types.FinanceClient
@@ -116,7 +116,7 @@ type ledgerName struct {
 	subsystem string
 }
 
-// compile-time proof ledgerFinance is the money seam.
+// compile-time proof ledgerFinance is the money client.
 var _ types.FinanceClient = (*ledgerFinance)(nil)
 
 // New returns a finance client rooting each org's prepaid wallet ledger under
@@ -360,7 +360,7 @@ func creditedUnder(ctx context.Context, store *sqlstore.Store, in types.DepositI
 }
 
 // usageHook, when set, is called (async, best-effort) after a successful usage debit.
-// It is the dependency-inverted seam the usage-cap ALERT fires through WITHOUT finance
+// It is the dependency-inverted client the usage-cap ALERT fires through WITHOUT finance
 // importing commerce: the host (apps/commerce/mount.go) registers a hook that reads the org's
 // finance period spend and fires/debounces the alerts. Set once at boot.
 var usageHook atomic.Pointer[func(org string, test bool, project, service string)]

@@ -88,7 +88,7 @@ var calls = []struct{ by, path string }{
 	{"metering gate", "/v1/billing/alerts/authorize"},
 
 	// cloud's OWN billing app, reading and removing saved cards over the commerce
-	// S2S seam (apps/billing/billing.go paymentMethods + deletePaymentMethod). It
+	// S2S client (apps/billing/billing.go paymentMethods + deletePaymentMethod). It
 	// is a first-party client like any other and belongs here for exactly the
 	// reason the metering gate does: nobody watches an S2S call fail. This one
 	// failed silently for as long as it has existed — the card list came back 404

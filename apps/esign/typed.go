@@ -11,7 +11,7 @@ package esign
 // premise: every route is built by a handler FACTORY closing over a bundle route
 // name, and a closure has no doc comment for the registry to lift. That premise
 // is about the FACTORY, not about the routes — apps/dataroom retired the same
-// claim by writing the ops as methods over the same bundle seam, and this file is
+// claim by writing the ops as methods over the same bundle client, and this file is
 // that answer one subsystem over. The shared kit it runs on is apps/goja
 // (Scalar, ScalarList, Raw, SizedIn, BundleErr, Envelope), which is also where
 // captable's and dataroom's typed planes live.

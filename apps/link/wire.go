@@ -3,7 +3,7 @@ package link
 // wire.go is the composition root for the linked-account router: it builds a live
 // Router from cloud.Deps — the KMS-backed Resolver, the commerce Meter over the
 // routed-usage counter, and the mounted account registry — and provides the
-// reference Upstream over the platform AIClient. It is the ONE place the seams are
+// reference Upstream over the platform AIClient. It is the ONE place the clients are
 // joined for production; tests join fakes directly.
 //
 // INERT UNTIL CALLED. Building a Router wires nothing into the request path. The

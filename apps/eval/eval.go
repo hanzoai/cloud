@@ -1353,7 +1353,7 @@ type runAttribution struct {
 	apiKeyHash string
 }
 
-// runItem is the single per-item seam, run synchronously via the pluggable
+// runItem is the single per-item client, run synchronously via the pluggable
 // runner: (1) model-under-test (timed), (2) trace → telemetry, (3) LLM-as-judge,
 // (4) validate + record the score. Telemetry writes are best-effort when the
 // datastore is present; a persistence miss is recorded as the item error so the

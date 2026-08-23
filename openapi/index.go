@@ -30,7 +30,7 @@ package openapi
 // capability that claims its own root: /v1/kms is kms's.
 //
 // So these two doors are middleware on the front door rather than routes on it,
-// which is the same seam a co-resident app already uses to answer inside a
+// which is the same client a co-resident app already uses to answer inside a
 // sibling's subtree (apps/zen). What keeps that from SHADOWING anything is one
 // line rather than a policy: an address the document already carries an
 // operation at is the capability's own, and the index does not answer there —

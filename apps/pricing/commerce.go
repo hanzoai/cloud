@@ -2,7 +2,7 @@ package pricing
 
 // Where the published price of OUR OWN models comes from.
 //
-// The served catalog is assembled from two sources, and this file is the seam.
+// The served catalog is assembled from two sources, and this file is the client.
 // github.com/hanzoai/pricing ships the document's shape and the resold
 // third-party section; commerce owns the RETAIL NUMBER on the models we make.
 // One owner per fact, which is the whole point: the number a customer is quoted

@@ -151,7 +151,7 @@ func TestStated_DropsAnUnnamedPair(t *testing.T) {
 }
 
 // TestPlaneCapture_CarriesTheMoneyToTheFanOut is the whole of the commerce bridge,
-// read at the seam the conversion forwarders actually consume.
+// read at the client the conversion forwarders actually consume.
 //
 // A peer states a sale in the only shape this plane has — TEXT, because Signal is
 // its one name/value pair — and the sink must receive it with the money in the

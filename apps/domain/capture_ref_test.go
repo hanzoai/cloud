@@ -124,7 +124,7 @@ func TestReRegisteringALapsedDomainCharges(t *testing.T) {
 	}
 }
 
-// The seam itself carries no key any more, and that is what keeps the fix from being
+// The client itself carries no key any more, and that is what keeps the fix from being
 // undone by a well-meaning edit: there is no ref parameter to route back to the ledger.
 // Restoring the bug means restoring the parameter, at all three purchase sites, which is
 // a change nobody makes by accident.

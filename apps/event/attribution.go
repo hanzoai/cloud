@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// attribution.go — what a publishable key names, and the seam that answers
+// attribution.go — what a publishable key names, and the client that answers
 // which one.
 //
 // A key is minted with a project (apps/projects) and this is where a beacon
 // carrying it is turned back into (org, project). The projects app owns the row,
 // the ingest door reads it, and they are not the same process in production — the
-// pod boots one process per app — so this is the same two-resolver seam
+// pod boots one process per app — so this is the same two-resolver client
 // sites.SetResolver already uses: in-process when the store is here, over the
 // plane when it is not.
 

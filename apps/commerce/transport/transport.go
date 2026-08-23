@@ -1,4 +1,4 @@
-// Package transport is the ONE seam that lets every cloud subsystem that
+// Package transport is the ONE client that lets every cloud subsystem that
 // speaks the commerce billing S2S surface (clients/{billing,account,admin,
 // referrals,authors,affiliates,usage} + the request-edge metering gate in build.go)
 // reach the co-resident, in-process commerce handler with a DIRECT Go call instead
@@ -70,7 +70,7 @@ var handler atomic.Pointer[http.Handler]
 
 // SetApp publishes the co-resident app commerce's routes live on (the SharedApp
 // contract). The S2S dispatch enters the app's fasthttp pipeline directly; the
-// http.Handler shape survives only inside this seam for the bridge-building
+// http.Handler shape survives only inside this client for the bridge-building
 // subsystems that still speak *http.Request. Passing nil un-publishes.
 //
 // It takes the *fiber.App — cloud.Router.Fiber() — rather than the *zip.App: this
@@ -85,7 +85,7 @@ func SetApp(app *fiber.App) {
 }
 
 // SetHandler publishes the in-process commerce handler. SetApp is the
-// production path; this remains the seam tests stub. Passing nil
+// production path; this remains the client tests stub. Passing nil
 // un-publishes (used by tests).
 func SetHandler(h http.Handler) {
 	if h == nil {
@@ -127,7 +127,7 @@ func BaseURL(env string) string {
 // accumulates tens of thousands of goroutines parked in setRequestCancel and OOMs.
 // A legitimate flow nests at most a couple of reads (a debit that first checks a
 // balance), so a small cap admits every real path while turning the runaway into a
-// bounded, fail-safe refusal at the seam. Callers of the co-resident reads treat
+// bounded, fail-safe refusal at the client. Callers of the co-resident reads treat
 // the refusal as any transport error and fall safe (the tier gate ALLOWS, the
 // scope-rule fetch fails OPEN); the prepaid balance read is a direct in-process
 // ledger call, never this transport, so fail-closed billing is unaffected.
@@ -185,7 +185,7 @@ func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		// Callers build CLIENT-style requests (http.NewRequest → empty
 		// RequestURI); the in-process dispatch is SERVER-side, and the fiber
-		// pipeline routes on RequestURI. Normalize here — the one seam.
+		// pipeline routes on RequestURI. Normalize here — the one client.
 		if req.RequestURI == "" {
 			req.RequestURI = req.URL.RequestURI()
 		}

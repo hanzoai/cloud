@@ -8,7 +8,7 @@ package org
 // fence.go is the INTERIM round source: a monotone per-org writer lease over a
 // single linearizable register (the object store's compare-and-set). It is the
 // concrete ha.Leases the cloud wires today, before the Lux BFT round graduates —
-// and by design it sits BEHIND the ha.Leases seam, so swapping in the BFT round
+// and by design it sits BEHIND the ha.Leases client, so swapping in the BFT round
 // later changes this file and nothing at any call site.
 //
 // # How the three concerns compose (one lane each)
@@ -38,7 +38,7 @@ package org
 // linearizing dependency. The roadmap replaces readLease/claim's CAS with a read
 // of the quasar PQ-BFT RSM's agreed round (deterministic finality, 3/5 quorum), so
 // the round survives f faults with no single register to lose — same ha.Leases
-// seam, same FencedStore admission.
+// client, same FencedStore admission.
 
 import (
 	"context"

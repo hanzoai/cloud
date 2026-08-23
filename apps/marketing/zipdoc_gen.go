@@ -335,7 +335,7 @@ func init() {
 		Example: json.RawMessage(`{"title":"Launch day","body":"Hanzo Cloud is live.","channel":"x","scheduledAt":1780000000}`),
 	})
 	zip.Describe("POST /v1/marketing/calendar/:id/publish", zip.Doc{
-		Description: "Publishes a post NOW, synchronously, whatever its\nschedule. No social connector is wired today, so every channel answers an\nhonest 501 naming the seam a real one would plug into, and the post is\nrecorded failed with that exact reason — never a faked \"published\".",
+		Description: "Publishes a post NOW, synchronously, whatever its\nschedule. No social connector is wired today, so every channel answers an\nhonest 501 naming the client a real one would plug into, and the post is\nrecorded failed with that exact reason — never a faked \"published\".",
 		Fields: map[string]string{
 			"CalendarPost.body":        "Body is the post text. Required.",
 			"CalendarPost.channel":     "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",

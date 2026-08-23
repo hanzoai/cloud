@@ -247,7 +247,7 @@ const (
 
 	// PlatformPush turns a landed push into a build. The push lands on git's
 	// embedded server and the builder belongs to platform — the single most
-	// consequential split in this list, because the seam it replaces returned a
+	// consequential split in this list, because the client it replaces returned a
 	// NIL ERROR: every push in the split fleet triggered no build and said so to
 	// nobody.
 	PlatformPush = "platform_push"
@@ -512,7 +512,7 @@ const (
 	SandboxStop  = "sandbox_stop"
 	SandboxEnd   = "sandbox_end"
 
-	// The FIGURES seam: one question — "what are this org's headline numbers?" —
+	// The FIGURES client: one question — "what are this org's headline numbers?" —
 	// asked of every domain that can answer it, at one address each.
 	//
 	// It is one op repeated rather than one op shared because the answer is each
@@ -1166,7 +1166,7 @@ type Spaces struct {
 // ImportIn asks git to create a repo and mirror an upstream into it. It exists
 // because the app that decides to import (integrations, holding the provider
 // credential) and the app that owns the git store are DIFFERENT PROCESSES, so
-// the in-process importer seam is nil across that boundary — the request has to
+// the in-process importer client is nil across that boundary — the request has to
 // travel.
 type ImportIn struct {
 	// Repo is the repository name to create locally.
@@ -1278,7 +1278,7 @@ type Visibility struct {
 }
 
 // The three states a project's repository is asked to be in. They are the whole
-// vocabulary of the visibility seam, on both sides of it.
+// vocabulary of the visibility client, on both sides of it.
 const (
 	// Open: readable by anyone, including a reader with no credential.
 	Open = "open"
@@ -1693,7 +1693,7 @@ const (
 // and every model is trained on one organisation's own behaviour, so that choice
 // is a cross-tenant read of the only thing this plane holds.
 //
-// It does not carry the seam's Privileged bit either. Whether silence must deny
+// It does not carry the client's Privileged bit either. Whether silence must deny
 // is the ASKING gate's rule and cloud.Decide applies it on the caller's side; a
 // scorer that received it could only be tempted to answer differently for the
 // same evidence.
@@ -2630,7 +2630,7 @@ type EndIn struct {
 	Purge bool `json:"purge,omitempty"`
 }
 
-// ---- coding: every seam one autonomous coding run reaches across ------------
+// ---- coding: every client one autonomous coding run reaches across ------------
 //
 // A coding run (`@hanzo code: <repo> <task>`) is the most cross-app act in the
 // estate: it opens an agents SESSION, resolves and gates an agents TARGET, reads
@@ -2645,9 +2645,9 @@ type EndIn struct {
 // absent and the run failed CLOSED with no PR. The same shape that killed every
 // @hanzo chat turn until the on-behalf-of run moved onto this plane.
 //
-// So the seams travel. The orchestration itself (apps/coding) is unchanged and
+// So the clients travel. The orchestration itself (apps/coding) is unchanged and
 // stays ONE library — it always spoke to its collaborators through injected
-// seams, which is exactly what made this a re-binding rather than a rewrite.
+// clients, which is exactly what made this a re-binding rather than a rewrite.
 const (
 	// AgentsSessionOpen / Event / Close are the live agent session a coding run
 	// streams into: the durable record mission-control renders and the stream the
@@ -2744,7 +2744,7 @@ type SessionCloseIn struct {
 	Status    string `json:"status"`
 }
 
-// CodingAck is the answer of a coding seam that either worked or returned an
+// CodingAck is the answer of a coding client that either worked or returned an
 // error. It carries a field because a void op answers 204 and a caller cannot
 // tell 204 from "the op is not there".
 type CodingAck struct {

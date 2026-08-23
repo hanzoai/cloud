@@ -5,7 +5,7 @@ package admin
 // sees ONLY their own subtree's. "Base" is Hanzo's multi-tenant app engine (hanzoai/base —
 // a per-tenant DB store); an instance is one tenant's Base.
 //
-// SEAM (honest gap). The Base engine is being EMBEDDED into cloud (a /v1/base subsystem);
+// CLIENT (honest gap). The Base engine is being EMBEDDED into cloud (a /v1/base subsystem);
 // until it lands, this panel proxies a server-authed Base admin surface at BASE_ADMIN_URL
 // (secret from KMS via BASE_ADMIN_TOKEN — never a client claim, the SAME pattern
 // waitlist.go uses) and returns the HONEST empty state when unconfigured — never

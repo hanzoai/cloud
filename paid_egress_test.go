@@ -34,7 +34,7 @@ import (
 // IT FOLLOWS IMPORTS, through the same first-party walk coresidence_test.go
 // makes, because a plugin links a package GRAPH and the binary can spend whatever
 // any package in that graph can spend. Checking only the app named beside Mount
-// would miss a free surface that reaches a paid one through a composition seam —
+// would miss a free surface that reaches a paid one through a composition client —
 // which is how websearch's own engines are reached from the answer engine.
 //
 // WHAT IT DOES NOT SEE, stated because a green run is otherwise read as more

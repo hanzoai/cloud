@@ -47,7 +47,7 @@ func (f *fakeCommerce) checkCount() int {
 }
 
 // gateApp registers the account API directly (no Mount) with a fake commerce +
-// plan seam, an isolated store, and no route guard — the gate under test is
+// plan client, an isolated store, and no route guard — the gate under test is
 // entitle itself.
 func gateApp(t *testing.T, commerce types.CommerceClient, planEnt func(context.Context, string) (map[string]any, error)) (*zip.App, *accountStore) {
 	t.Helper()

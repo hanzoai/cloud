@@ -27,7 +27,7 @@ import (
 // stream through `git <service> --stateless-rpc` — request body → git stdin,
 // git stdout → HTTP response — so a multi-GB pack never lands in this process's
 // memory. This file is only the HTTP framing (pkt-line service header, content
-// types, gzip, Git-Protocol passthrough) around the ONE pack seam the SSH
+// types, gzip, Git-Protocol passthrough) around the ONE pack client the SSH
 // transport (ssh.go) also drives. Patterns ported from the upstream forge
 // (routers/web/repo/githttp.go).
 
@@ -446,7 +446,7 @@ func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project,
 	}
 	// Fan the same fact out to the lifecycle stream (best-effort, detached — never
 	// blocks the push). Origin is "" for a native push (the mirror-out reactor's
-	// loop-prevention seam; a future inbound sync stamps the source host).
+	// loop-prevention client; a future inbound sync stamps the source host).
 	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
 		Kind: cloud.LifecyclePushLanded,
 		Org:  org, Project: project, Repo: name,

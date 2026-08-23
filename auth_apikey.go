@@ -74,7 +74,7 @@ func newIAMKeys() *iamKeys {
 // binary. The identity boundary (SanitizeIdentity, via newIdentityValidator) and
 // any subsystem that must resolve a key OUT-OF-BAND of the Authorization header
 // (analytics capture: a project key posted in the SDK body/query) both go through
-// this ONE seam, so a key resolves to the SAME org either way and IAM sees one
+// this ONE client, so a key resolves to the SAME org either way and IAM sees one
 // warm cache — never a second, drifting resolver.
 var (
 	sharedKeysOnce sync.Once

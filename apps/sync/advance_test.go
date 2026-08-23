@@ -385,7 +385,7 @@ func TestAdvanceReadsTheDestinationForItself(t *testing.T) {
 
 // TestNothingHereForces reads the source of the advance itself.
 //
-// The refusal this seam depends on is the ABSENCE of a forcing refspec, and an
+// The refusal this client depends on is the ABSENCE of a forcing refspec, and an
 // absence is what a behavioural test cannot pin: a '+' added tomorrow would
 // leave every case above passing and every conflict silently gone. So the
 // property is asserted where it lives.

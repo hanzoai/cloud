@@ -110,7 +110,7 @@ func TestTypedOpRefusesAnonymousMCP(t *testing.T) {
 // TestTypedOpStatusCodes pins the two statuses a typed op does not write by
 // default. zip answers 200, or 204 for a nil Out; a creator says 201 through
 // cloud.Created, which the bridge applies after the handler returns. Converting
-// these routes without that seam would silently downgrade every create to 200,
+// these routes without that client would silently downgrade every create to 200,
 // which is a wire break for any client that checks — so this asserts the wire,
 // not the handler.
 func TestTypedOpStatusCodes(t *testing.T) {
@@ -130,7 +130,7 @@ func TestTypedOpStatusCodes(t *testing.T) {
 		t.Fatalf("delete campaign want 204, got %d", code)
 	}
 	// A second delete finds nothing — the 404 still comes from the error path,
-	// not from the status seam.
+	// not from the status client.
 	if code, _ := call(t, app, http.MethodDelete, "/v1/marketing/campaigns/"+id, "hanzo", ""); code != http.StatusNotFound {
 		t.Fatalf("delete twice want 404, got %d", code)
 	}

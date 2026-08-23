@@ -210,7 +210,7 @@ func expandBytes(n int, tag string, parts ...[]byte) []byte {
 }
 
 // ----------------------------------------------------------------------------
-// Cert composition seam.
+// Cert composition client.
 // ----------------------------------------------------------------------------
 
 // CertComposer turns the aggregated Pulsar leg (from the REAL Finalize) into a
@@ -219,7 +219,7 @@ func expandBytes(n int, tag string, parts ...[]byte) []byte {
 // MLDSARollup present, signer count consistent).
 //
 // Compose returns selfComposedCert, not a bare *quasar.QuasarCert — the typed
-// seam that makes verifyOwnCertStructure's input provably local (see driver.go).
+// client that makes verifyOwnCertStructure's input provably local (see driver.go).
 //
 // STUB BOUNDARY (increment 2+): the real composer runs the Corona / Magnetar /
 // BLS threshold ceremonies over the same round digest and calls

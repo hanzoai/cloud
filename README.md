@@ -144,7 +144,7 @@ cloud --brand=zoo    --domain=zoo.cloud
    replicate -> S3 (HIP-0107)  |   ZAP inter-subsystem RPC
 ```
 
-Every app is loaded through the same `Mount` seam and answers on its own prefix; the
+Every app is loaded through the same `Mount` client and answers on its own prefix; the
 host takes the first prefix that matches and starts the app if it is not up yet. The
 console is registered LAST so no app prefix can be shadowed. Cross-subsystem calls ride
 ZAP; no subsystem reaches into another's store.
@@ -228,7 +228,7 @@ Implements, by the filenames in [hanzoai/HIPs](https://github.com/hanzoai/HIPs/t
 In production. It serves `api.hanzo.ai` and the white-label cloud surfaces today, with
 per-org SQLite (HIP-0302) and the embedded console. `manifest/apps.go` is the one ordered
 list of everything mounted — every app, four of them eager. For repo-level engineering
-doctrine (module graph, route-table projections, cross-subsystem seams), see
+doctrine (module graph, route-table projections, cross-subsystem clients), see
 [`LLM.md`](./LLM.md).
 
 ## Hanzo — the Open AI Cloud

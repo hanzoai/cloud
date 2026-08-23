@@ -96,7 +96,7 @@ func launchStudio(dir string) (*exec.Cmd, error) {
 	// the fleet worker on this box and nothing else. The worker dials loopback
 	// (localComfyUI) so binding wider bought nothing but an open, unauthenticated
 	// /prompt — the hidden-run hole. --worker-mode makes the studio gate its submit
-	// seam (/v1/worker/execute + X-Worker-Token) so only the worker can start a render.
+	// client (/v1/worker/execute + X-Worker-Token) so only the worker can start a render.
 	// VRAM mode: default --normalvram (safe for smaller BYO GPUs); override with
 	// HANZO_STUDIO_VRAM (e.g. "--highvram") on big-memory boxes (GB10 128G unified) so
 	// the Qwen text-encoder stays resident on-GPU instead of non-deterministically

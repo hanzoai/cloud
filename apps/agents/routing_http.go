@@ -55,7 +55,7 @@ type routingOps struct{ s *cloud.Service[state] }
 // claimKeyOf reads the machine capability off the request. A typed op receives
 // only a context, and the claim key is a HEADER — the second of this plane's two
 // independent proofs, alongside the validated org — so it crosses the same
-// cloud.Bridge seam the request does. Empty off the HTTP path, which fails closed:
+// cloud.Bridge client the request does. Empty off the HTTP path, which fails closed:
 // verifyClaimKey refuses an empty key.
 func claimKeyOf(ctx context.Context) string {
 	if c, ok := cloud.Request(ctx); ok {

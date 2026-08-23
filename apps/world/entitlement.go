@@ -21,7 +21,7 @@
 //	world-team   30000     15000       -1   granted
 //	world-enter     -1        -1       -1   granted (contact sales)
 //
-// ENFORCEMENT SEAM. Two callers consume this contract:
+// ENFORCEMENT CLIENT. Two callers consume this contract:
 //   - this subsystem's /v1/world/{news,pipeline,stream} handlers (rate limiting +
 //     the SSE model_api gate), and
 //   - the /v1/world/model planet-scale engine (feat/world-model-engine), whose

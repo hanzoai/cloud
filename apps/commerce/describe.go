@@ -7,7 +7,7 @@
 // operationId and NOTHING else: an SDK method that cannot explain itself, an MCP
 // tool a model cannot pick, a CLI command with no help text.
 //
-// openapi.Describe is the seam for exactly that operation. It carries the same
+// openapi.Describe is the client for exactly that operation. It carries the same
 // drift-proof property Register has — a description whose route the router does
 // not carry never renders — so this file cannot add an operation, only explain
 // one that exists. The key is the fiber pattern VERBATIM, which is how the
@@ -65,7 +65,7 @@ func describeAdmin() {
 // The rest of what this function used to describe is gone from this file, not
 // deleted: the whole /v1/billing family is served by apps/billing now, as typed
 // ops whose prose is the doc comment zipdoc lifts. A Describe here for a route
-// this app no longer registers would render nothing anyway — the seam is
+// this app no longer registers would render nothing anyway — the client is
 // additive metadata on live routes — so what moved is the prose along with the
 // route it explains.
 func describeWebhooks() {
@@ -88,7 +88,7 @@ func describeCatalog() {
 	// THE RATE AUTHORITY'S CRUD (api/rate/handlers.go in hanzoai/commerce). Its
 	// handlers carry good doc comments, but zipdoc lifts prose only from source in
 	// THIS repo, so a comment one module over reaches no reader. These say the same
-	// thing at the seam that can be read.
+	// thing at the client that can be read.
 	openapi.Describe("/v1/commerce/rates/entries", http.MethodGet,
 		"List what one unit of each metered thing costs",
 		"Returns the rate authority's rows — the prices every metered charge resolves against. "+

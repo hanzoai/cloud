@@ -31,7 +31,7 @@ func init() {
 			"Tool.dispatchable":    "Dispatchable is whether the tool can be CALLED. False for a listing-only\nentry: a skill is activated and attached to an agent, never called.",
 			"Tool.inputSchema":     "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none.",
 			"Tool.name":            "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
-			"Tool.price":           "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration.",
+			"Tool.price":           "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement client; this is the declaration.",
 			"Tool.source":          "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
 			"marketCatalog.items":  "Items is every capability the caller can see in their own (org, project),\neach carrying any public listing's shop metadata and whether it is installed.",
 			"marketItem.category":  "Category is that same listing's grouping. Free text chosen by the publisher,\nabsent when there is no public listing or the publisher left it blank.",
@@ -73,7 +73,7 @@ func init() {
 		Example: json.RawMessage(`{"tool":"summarize"}`),
 	})
 	zip.Describe("POST /v1/marketplace/listings", zip.Doc{
-		Description: "Publish offers one tool on the marketplace, optionally monetized. The tool must\nalready resolve in the publisher's own scope, so a listing can never advertise a\ncapability that does not exist; a listing with a price must name the payout wallet\nthe x402 seam settles to, so a monetized offer is never unpayable. The price is\nexact to 18 decimal places, so a per-call price below a cent is a real price and\nnot a rounded-away zero. The listing is owned by the publishing org, paid into a\nwallet of that same org, and answers 201 with the created row.",
+		Description: "Publish offers one tool on the marketplace, optionally monetized. The tool must\nalready resolve in the publisher's own scope, so a listing can never advertise a\ncapability that does not exist; a listing with a price must name the payout wallet\nthe x402 client settles to, so a monetized offer is never unpayable. The price is\nexact to 18 decimal places, so a per-call price below a cent is a real price and\nnot a rounded-away zero. The listing is owned by the publishing org, paid into a\nwallet of that same org, and answers 201 with the created row.",
 		Fields: map[string]string{
 			"Currency.Code":          "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
 			"Currency.Decimals":      "fractional digits of the smallest unit",

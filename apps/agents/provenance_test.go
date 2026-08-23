@@ -271,7 +271,7 @@ func TestBuildsAreOrgKeyed(t *testing.T) {
 
 // ---- the deploy closes the story ----
 
-// TestDeployBecomesTheLastTurn proves the seam clients/projects left open is now
+// TestDeployBecomesTheLastTurn proves the client clients/projects left open is now
 // filled: a site going live appends the final turn to the session that built it,
 // so the published story ends at the live URL.
 func TestDeployBecomesTheLastTurn(t *testing.T) {

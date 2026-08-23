@@ -217,7 +217,7 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 	// member row and commits; a loser rolls back its unused ids and ADOPTS the winner,
 	// so concurrent logins converge to exactly ONE personal workspace.
 	//
-	// RAW, on two counts the builder has no seam for: DO NOTHING (dbx's Upsert only
+	// RAW, on two counts the builder has no client for: DO NOTHING (dbx's Upsert only
 	// ever emits DO UPDATE SET) and a conflict target carrying the partial index's
 	// WHERE. Written as a DO UPDATE it would invert the meaning — the loser would
 	// overwrite the winner's row instead of yielding to it.
