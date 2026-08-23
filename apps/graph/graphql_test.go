@@ -16,53 +16,15 @@ import (
 // carries the tenant into them.
 func ask(t *testing.T, app *zip.App, q string) map[string]any {
 	t.Helper()
-	body, _ := json.Marshal(map[string]any{"query": q})
-	req, err := http.NewRequest("POST", "http://cloud/v1/graph/graphql", strings.NewReader(string(body)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(zip.HeaderOrg, "acme")
-	req.Header.Set(zip.HeaderUser, "acme/z@acme.test")
-	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
-	if err != nil {
-		t.Fatalf("POST /v1/graph/graphql: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	_, b := call(t, app, http.MethodPost, "/v1/graph/graphql", "", map[string]any{"query": q})
 	var env map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
-		t.Fatalf("the door answered something that is not JSON: %v", err)
+	if err := json.Unmarshal(b, &env); err != nil {
+		t.Fatalf("the door answered something that is not JSON: %v: %s", err, b)
 	}
 	if errs, ok := env["errors"]; ok {
 		t.Fatalf("query failed: %v", errs)
 	}
 	return env
-}
-
-// assertFact files one assertion through the REST door, so the GraphQL reads
-// below are reading what the ordinary write path produced rather than a fixture
-// this test arranged behind it.
-func assertFact(t *testing.T, app *zip.App, entity, relation, value string, names bool) {
-	t.Helper()
-	body, _ := json.Marshal(map[string]any{"assertions": []map[string]any{{
-		"entity": entity, "relation": relation, "value": value,
-		"names": names, "at": "2026-01-01T00:00:00Z", "seen": "2026-01-01T00:00:00Z",
-		"source": "test", "evidence": "test://" + entity,
-	}}})
-	req, _ := http.NewRequest("POST", "http://cloud/v1/graph", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(zip.HeaderOrg, "acme")
-	req.Header.Set(zip.HeaderUser, "acme/z@acme.test")
-	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
-	if err != nil {
-		t.Fatalf("assert: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 300 {
-		b := make([]byte, 400)
-		n, _ := resp.Body.Read(b)
-		t.Fatalf("assert %s %s: status %d: %s", entity, relation, resp.StatusCode, b[:n])
-	}
 }
 
 // TestTheDoorTraversesInOneRequest is the whole reason this door exists. Over
@@ -71,8 +33,8 @@ func assertFact(t *testing.T, app *zip.App, entity, relation, value string, name
 // query, and the nesting is the answer's shape.
 func TestTheDoorTraversesInOneRequest(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/order/1", "placedBy", "acme/person/ada", true)
-	assertFact(t, app, "acme/person/ada", "worksFor", "acme/org/hanzo", true)
+	assertFact(t, app, "", "acme/order/1", "placedBy", "acme/person/ada", true)
+	assertFact(t, app, "", "acme/person/ada", "worksFor", "acme/org/hanzo", true)
 
 	env := ask(t, app, `{
 		entity(key: "acme/order/1") {
@@ -107,7 +69,7 @@ func TestTheDoorTraversesInOneRequest(t *testing.T) {
 // server-minted fields the write path stamps.
 func TestTheDoorReadsTheSameGraphTheOpsDo(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/thing/1", "colour", "blue", false)
+	assertFact(t, app, "", "acme/thing/1", "colour", "blue", false)
 
 	env := ask(t, app, `{
 		assertions(entity: "acme/thing/1") { entity relation value names by knowable }
@@ -135,8 +97,11 @@ func TestTheDoorReadsTheSameGraphTheOpsDo(t *testing.T) {
 // validated principal on the request context, so a second door cannot widen it.
 func TestTheDoorIsScopedToTheCallersOrg(t *testing.T) {
 	app := mountGraph(t)
-	assertFact(t, app, "acme/secret/1", "value", "acme-only", false)
+	assertFact(t, app, "", "acme/secret/1", "value", "acme-only", false)
 
+	// The one request here that does NOT go through call: what call supplies is
+	// exactly what this test varies, so routing it through the helper would hide
+	// the thing being proved.
 	body, _ := json.Marshal(map[string]any{
 		"query": `{ assertions(entity: "acme/secret/1") { value } }`,
 	})
@@ -164,21 +129,13 @@ func TestTheDoorIsScopedToTheCallersOrg(t *testing.T) {
 // instead reads as the server being down rather than the query being wrong.
 func TestAQueryThatCannotRunIsAGraphQLError(t *testing.T) {
 	app := mountGraph(t)
-	body, _ := json.Marshal(map[string]any{"query": `{ noSuchField }`})
-	req, _ := http.NewRequest("POST", "http://cloud/v1/graph/graphql", strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(zip.HeaderOrg, "acme")
-	req.Header.Set(zip.HeaderUser, "acme/z@acme.test")
-	resp, err := app.Test(req, zip.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != 200 {
-		t.Errorf("status = %d, want 200 carrying an error list", resp.StatusCode)
+
+	code, b := call(t, app, http.MethodPost, "/v1/graph/graphql", "", map[string]any{"query": `{ noSuchField }`})
+	if code != http.StatusOK {
+		t.Errorf("status = %d, want 200 carrying an error list", code)
 	}
 	var env map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&env)
+	_ = json.Unmarshal(b, &env)
 	if _, ok := env["errors"]; !ok {
 		t.Error("a query naming a field the schema does not have answered no errors")
 	}
