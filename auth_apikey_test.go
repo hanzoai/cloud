@@ -312,3 +312,53 @@ func TestKeyHint_NeverDisclosesTheKey(t *testing.T) {
 		}
 	}
 }
+
+// A KEY AND A TOKEN FOR ONE IDENTITY NAME THE SAME PAYER.
+//
+// IAM answers `billing_account` on the key door exactly as it answers it in a
+// token's claim — which ledger this credential spends from, decided where the
+// grant shape is visible. Dropping it here did not leave the payer unknown, it
+// left it WRONG: account.Payer falls out of its named-account arm to the shape
+// rule, which answers Person(org, name) and never pools the signup org. A
+// service account then names a wallet no funding path addresses — an admin grant
+// credits the pool, a deposit names a member — so a first-party key reads $0
+// beside the balance it is entitled to spend.
+//
+// It lands on the same authz.Claims field the token path fills, so
+// renderBillingAccount mints X-Billing-Account-Id identically either way.
+func TestIAMKeyCarriesThePayerItWasIssuedFor(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"hanzo","name":"svc","billing_account":"org:hanzo"}}`))
+	}))
+	defer srv.Close()
+
+	k := &iamKeys{base: srv.URL, auth: "Basic test", http: srv.Client(), cache: newCache[string, *idClaims](time.Minute)}
+	c := k.resolve(context.Background(), "sk-payer")
+	if c == nil {
+		t.Fatal("resolve returned nil for a valid key")
+	}
+	if c.BillingAccount != "org:hanzo" {
+		t.Errorf("BillingAccount = %q, want org:hanzo — a key that drops its payer is "+
+			"billed as a person against a wallet nothing funds", c.BillingAccount)
+	}
+}
+
+// An IAM that does not answer the field leaves it empty rather than inventing
+// one, which is exactly the behaviour that preceded reading it.
+func TestIAMKeyWithoutAPayerNamesNone(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"hanzo","name":"svc"}}`))
+	}))
+	defer srv.Close()
+
+	k := &iamKeys{base: srv.URL, auth: "Basic test", http: srv.Client(), cache: newCache[string, *idClaims](time.Minute)}
+	c := k.resolve(context.Background(), "sk-nopayer")
+	if c == nil {
+		t.Fatal("resolve returned nil for a valid key")
+	}
+	if c.BillingAccount != "" {
+		t.Errorf("BillingAccount = %q, want empty", c.BillingAccount)
+	}
+}
