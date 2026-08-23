@@ -22,9 +22,15 @@
 // the vocabulary, the bounds and the store — which is all a caller of that
 // algebra is meant to contribute.
 //
-// TENANCY is physical: one SQLite file per organization through cloud.OrgDB, so
-// another organization's assertions are not in the database being read and no
-// predicate can be forgotten. See HIP-1198.
+// TENANCY is physical: one SQLite file per (organization, project) through
+// cloud.OrgDB, so another organization's assertions are not in the database being
+// read and no predicate can be forgotten. See HIP-1198.
+//
+// That pair IS the graph database, which is why this plane holds no registry of
+// graphs. An org names one by carrying a project, its default project is the
+// whole-org view, and the files are made on first assertion and reclaimed when
+// idle. Nothing here would be gained by a second primitive: a graphs table would
+// be a name for a project, kept somewhere else, able to disagree with it.
 package graph
 
 import (
@@ -89,8 +95,17 @@ func Shutdown() error {
 	return mounted.stores.CloseAll()
 }
 
-// tenantOf resolves the organization from the VALIDATED principal and nothing
-// else. No caller value reaches the namespace or the path.
+// tenantOf resolves which graph database a request reads and writes, from the
+// VALIDATED principal and nothing else. No caller value reaches the namespace or
+// the path.
+//
+// The database is the (org, project) pair. An org's PROJECT is what names one
+// graph among its graphs, and it is safe to select a file with because it is
+// server-minted — IAM mints the project claim, and both minters bind the header
+// from it after stripping any client copy, so a caller cannot name a database by
+// asking for it. The default project is the whole-org view and renders the file
+// this plane has always opened, so an org that names no project still reads every
+// assertion it has ever made.
 func tenantOf(ctx context.Context, s *cloud.Service[*state]) (scope, *store, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
@@ -104,7 +119,7 @@ func tenantOf(ctx context.Context, s *cloud.Service[*state]) (scope, *store, err
 	if err != nil {
 		return scope{}, nil, err
 	}
-	ns, err := cloud.OrgNamespace(org, "")
+	ns, err := cloud.OrgNamespace(org, principal.ProjectScopeFrom(ctx))
 	if err != nil {
 		return scope{}, nil, err
 	}
