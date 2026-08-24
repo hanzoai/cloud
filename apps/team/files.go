@@ -218,8 +218,10 @@ func (s *filesService) download(c *zip.Ctx) error {
 	// nosniff on EVERY response so the browser never re-sniffs the declared type.
 	c.SetHeader("X-Content-Type-Options", "nosniff")
 	c.SetHeader("Cache-Control", "private, max-age=31536000, immutable")
-	if img := magic.Type(data); img != "" {
+	if img := magic.Type(data); strings.HasPrefix(img, "image/") {
 		// Recognized raster image → serve inline with its true (byte-derived) type.
+		// A picture is the only thing this route renders; magic names more than
+		// that, and everything else falls through to the inert branch.
 		c.SetHeader("Content-Type", img)
 	} else {
 		// Everything else is inert: no inline rendering, forced download.
