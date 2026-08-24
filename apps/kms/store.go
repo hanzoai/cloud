@@ -137,7 +137,8 @@ func namespaceFor(path string) (namespace.Namespace, error) {
 }
 
 // dbFor resolves (opening + migrating + caching on first use) the SQLite handle
-// for the org that owns path. When the file does not yet exist:
+// for the org that owns path, and the NAME of the file it opened — which is what a
+// write needs to ship the same file it just wrote. When the file does not yet exist:
 //   - create=true  (the Put path) → create it.
 //   - create=false (read/list/delete) → return (nil, nil); the caller treats
 //     absence as "no such secret" and NEVER litters an empty store shell for an
@@ -147,22 +148,51 @@ func namespaceFor(path string) (namespace.Namespace, error) {
 // DDL (the writer already migrated). The org is folded through the injective
 // slugger inside cloud.OrgDB, so a path can never traverse out of {DataDir}/orgs
 // or reach another tenant.
-func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
+func (s *secretStore) dbFor(path string, create bool) (*sql.DB, namespace.Namespace, error) {
 	if s.readOnly {
 		create = false
 	}
 	ns, err := namespaceFor(path)
 	if err != nil {
-		return nil, nil // unnameable org → not found (same 404 as any miss; no oracle)
+		return nil, ns, nil // unnameable org → not found (same 404 as any miss; no oracle)
 	}
 	if !create && !s.stores.Has(ns) {
-		return nil, nil // nothing to open; caller returns not-found / empty
+		return nil, ns, nil // nothing to open; caller returns not-found / empty
 	}
 	db, err := s.stores.For(ns)
 	if err != nil {
-		return nil, fmt.Errorf("kms: open org store %q: %w", path, err)
+		return nil, ns, fmt.Errorf("kms: open org store %q: %w", path, err)
 	}
-	return db, nil
+	return db, ns, nil
+}
+
+// ship makes a write durable before it is acknowledged: the org's file goes to its
+// durable object, fenced at the lease round, and only then does the write return.
+//
+// A SECRET STORE IS THE ONE THAT CANNOT DEFER THIS. Nothing here shipped at all, so a
+// secret reached the object store only when the store was evicted or the process shut
+// down — and a pod lost between the two took every secret written since with it. The
+// deploy path makes that ordinary rather than rare: the successor hydrates the durable
+// snapshot over the local file, so an unshipped secret is not merely at risk, it is
+// overwritten by an older copy of the same tenant's store.
+//
+// An unacked ship means this replica is not the org's elected writer, or was deposed
+// mid-request. That is a refusal and never a shrug: telling a caller its secret is
+// stored, on a pod whose file the next reader never opens, is how a credential comes
+// back missing. The caller retries against the new owner, and a Put is idempotent on
+// its coordinate. On a local-only deployment there is no Durability and Sync acks
+// trivially, so this is a no-op there rather than a second code path.
+//
+// Only a WRITE ships. A read opens the same file and touches this not at all.
+func (s *secretStore) ship(ns namespace.Namespace) error {
+	acked, err := s.stores.Sync(ns)
+	if err != nil {
+		return fmt.Errorf("kms: ship secret store: %w", err)
+	}
+	if !acked {
+		return fmt.Errorf("kms: this replica is not the elected writer for the tenant, so the secret is not acknowledged")
+	}
+	return nil
 }
 
 // migrateSecrets creates the sealed-secret table. Idempotent (IF NOT EXISTS), so
@@ -199,9 +229,12 @@ func (s *secretStore) put(sec *kmsstore.Secret) error {
 	if s.readOnly {
 		return errReadOnly
 	}
-	db, err := s.dbFor(sec.Path, true)
+	db, ns, err := s.dbFor(sec.Path, true)
 	if err != nil {
 		return err
+	}
+	if db == nil {
+		return fmt.Errorf("kms: write secret: %q names no org", sec.Path)
 	}
 	scheme := sec.Scheme
 	if scheme == "" {
@@ -220,14 +253,14 @@ func (s *secretStore) put(sec *kmsstore.Secret) error {
 	if err != nil {
 		return fmt.Errorf("kms: write secret: %w", err)
 	}
-	return nil
+	return s.ship(ns)
 }
 
 // get reads a sealed secret by its full coordinate. Returns ErrSecretNotFound
 // (verbatim, for a 404 mapping) when absent. The reconstructed Secret carries the
 // FULL stored path, so the Client's Open reproduces Seal's AAD exactly.
 func (s *secretStore) get(path, name, env string) (*kmsstore.Secret, error) {
-	db, err := s.dbFor(path, false)
+	db, _, err := s.dbFor(path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +313,7 @@ type findQuery struct {
 func (s *secretStore) find(q findQuery) ([]*kmsstore.Secret, error) {
 	// The store file is chosen by path, so an enumeration is always scoped to
 	// one org's store — a caller cannot widen its way into another tenant's.
-	db, err := s.dbFor(q.Path, false)
+	db, _, err := s.dbFor(q.Path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +369,7 @@ func likeLiteral(s string) string {
 // This is the credential broker's question; see [secretStore.find] for the
 // store-wide one.
 func (s *secretStore) list(path, env string) ([]*kmsstore.Secret, error) {
-	db, err := s.dbFor(path, false)
+	db, _, err := s.dbFor(path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +402,7 @@ func (s *secretStore) del(path, name, env string) error {
 	if s.readOnly {
 		return errReadOnly
 	}
-	db, err := s.dbFor(path, false)
+	db, ns, err := s.dbFor(path, false)
 	if err != nil {
 		return err
 	}
@@ -389,7 +422,7 @@ func (s *secretStore) del(path, name, env string) error {
 	if n == 0 {
 		return kmsstore.ErrSecretNotFound
 	}
-	return nil
+	return s.ship(ns)
 }
 
 // close closes every open per-entity handle (best-effort), returning the first

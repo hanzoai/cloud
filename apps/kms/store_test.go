@@ -28,11 +28,11 @@ func TestDBFor_TenantCannotSpellReservedPartition(t *testing.T) {
 	}
 	// The tenant _platform path opens a DISTINCT store (not PlatformDB) and its DB
 	// pointer differs from the real facade store — proof they never alias.
-	tenantDB, err := s.dbFor("/orgs/_platform/secrets/x", true)
+	tenantDB, _, err := s.dbFor("/orgs/_platform/secrets/x", true)
 	if err != nil || tenantDB == nil {
 		t.Fatalf("tenant _platform path must open its own store: db=%v err=%v", tenantDB, err)
 	}
-	facadeDB, err := s.dbFor("/facade-secret", true)
+	facadeDB, _, err := s.dbFor("/facade-secret", true)
 	if err != nil || facadeDB == nil {
 		t.Fatalf("facade route must open PlatformDB: db=%v err=%v", facadeDB, err)
 	}
@@ -60,7 +60,7 @@ func TestAStatementDoesNotWaitForeverOnTheSoleConnection(t *testing.T) {
 	storeOpTimeout = 150 * time.Millisecond
 
 	s := newSecretStore(cloud.Base{DataDir: t.TempDir()}, false)
-	db, err := s.dbFor("/facade-secret", true)
+	db, _, err := s.dbFor("/facade-secret", true)
 	if err != nil || db == nil {
 		t.Fatalf("open facade store: db=%v err=%v", db, err)
 	}

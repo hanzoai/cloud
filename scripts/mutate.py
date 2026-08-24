@@ -81,6 +81,8 @@ PML = "./apps/ml/"
 DUR = "internal/org/durable.go"
 CDC = "internal/org/snapshotcodec.go"
 PORG = "./internal/org/"
+KS = "apps/kms/store.go"
+PKS = "./apps/kms/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -831,6 +833,27 @@ MUTANTS = [
     ("fold: report every unfinished fold as a snapshot missing committed rows", [
         (CDC, '\tif checkpointed != logFrames {\n', '\tif true {\n')],
      "TestAFoldThatDidNotFinishSaysWhich", PORG),
+    # ── a secret is durable before its write returns ──
+    #
+    # Nothing here shipped, so a secret reached the object store only at eviction or
+    # shutdown and a pod lost in between took every secret written since with it. The
+    # third row is the other half of the bound: a read must not ship, or a store opened
+    # per request turns every secret read into a whole-file upload.
+
+    ("kms: acknowledge a secret that was never shipped to its durable object", [
+        (KS, '\tif err != nil {\n\t\treturn fmt.Errorf("kms: write secret: %w", err)\n\t}\n\treturn s.ship(ns)',
+             '\tif err != nil {\n\t\treturn fmt.Errorf("kms: write secret: %w", err)\n\t}\n\t_ = ns\n\treturn nil')],
+     "TestASecretIsDurableBeforeItsWriteReturns", PKS),
+
+    ("kms: acknowledge a revocation that was never shipped", [
+        (KS, '\tif n == 0 {\n\t\treturn kmsstore.ErrSecretNotFound\n\t}\n\treturn s.ship(ns)',
+             '\tif n == 0 {\n\t\treturn kmsstore.ErrSecretNotFound\n\t}\n\t_ = ns\n\treturn nil')],
+     "TestASecretIsDurableBeforeItsWriteReturns", PKS),
+
+    ("kms: ship the whole store on every secret READ", [
+        (KS, '\tdb, _, err := s.dbFor(path, false)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif db == nil {\n\t\treturn nil, kmsstore.ErrSecretNotFound // org has no store file yet\n\t}',
+             '\tdb, rns, err := s.dbFor(path, false)\n\tdefer func() { _ = s.ship(rns) }()\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif db == nil {\n\t\treturn nil, kmsstore.ErrSecretNotFound // org has no store file yet\n\t}')],
+     "TestReadingASecretShipsNothing", PKS),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)

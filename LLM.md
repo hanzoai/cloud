@@ -907,6 +907,21 @@ embedded underneath.
   against. Both refuse, so the message is all a reader gets, and the second was being
   reported as the first: `busy=1 log=41 ckpt=41` read as "a snapshot would miss committed
   WAL frames" when every one of those frames was already in the main file.
+- **A secret is durable before its write returns** (`apps/kms` `put`/`del` →
+  `secretStore.ship`). `apps/kms` called `Sync` nowhere, so a sealed secret reached the
+  object store only when its org store was evicted or the process shut down — and a pod
+  lost between the two took every secret written since with it, on a plane whose whole
+  job is custody. An unacked ship is a refusal, not a shrug, exactly as in `apps/label`.
+  Reads ship nothing (`TestReadingASecretShipsNothing`), which matters here more than
+  elsewhere: the store opens per request, so a read that shipped would put a whole-file
+  upload on every secret fetched.
+  KNOWN, SEPARATE, NOT CHANGED: `secretStore.dbFor(create=false)` answers a miss for a
+  namespace with no file on THIS pod's disk (`OrgStore.Has`, a local question by design —
+  it exists so a stranger cannot mint a directory per name they invent). So a secret that
+  exists durably and not locally reads as absent until something OPENS that org's store.
+  The RWO PVC survives a Recreate rollout, so this bites only where the volume does not —
+  which is the case the durable plane exists for. Asking the object store per read would
+  be a network call on every miss, so the fix is a design decision and not a patch.
 
 ## A capability answers at its own name (HIP-0139 §3), and ten came home
 
