@@ -1,24 +1,24 @@
 package cloud
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
 	sqlitedrv "github.com/hanzoai/sqlite"
 )
 
-// TestDurableCheckpointReEncryptsEnvelope proves durableCheckpoint makes the real
-// on-disk path reflect every committed write on the pure-Go codec ENVELOPE backend —
-// where encryption is deferred to Checkpoint/Close, so a raw wal_checkpoint alone
-// leaves the real path stale and a fenced ship would restore that stale snapshot,
-// silently losing an acked write on takeover (the HIGH-1 defect, PoC-confirmed).
+// TestShipSealReEncryptsEnvelope proves the seal the composition root wires
+// (org.WithSeal(sqlitedrv.Checkpoint)) makes the real on-disk path reflect every
+// committed write on the pure-Go codec ENVELOPE backend — where encryption is deferred
+// to Checkpoint/Close, so folding the WAL alone leaves the real path stale and a fenced
+// ship would restore that stale snapshot, silently losing an acked write on takeover.
 //
-// The store handle is kept OPEN across the checkpoint and the read: closing it would
-// itself re-encrypt (Close seals), masking whether durableCheckpoint did so. On the
-// write-time backends (cgo libsqlcipher, plaintext) the store persists per-commit and
-// the re-encrypt step is a no-op, so this passes on both lanes.
-func TestDurableCheckpointReEncryptsEnvelope(t *testing.T) {
+// The store handle is kept OPEN across the seal and the read: closing it would itself
+// re-encrypt (Close seals), masking whether the seal did so. On the write-time backends
+// (cgo libsqlcipher, plaintext) the store persists per-commit and the seal is a no-op,
+// so this passes on both lanes. Folding the WAL is the codec's own step and is proven
+// in internal/org (pin_test.go).
+func TestShipSealReEncryptsEnvelope(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "org.db")
 	key := make([]byte, 32)
 	for i := range key {
@@ -50,15 +50,15 @@ func TestDurableCheckpointReEncryptsEnvelope(t *testing.T) {
 		t.Fatalf("insert B: %v", err)
 	}
 
-	// The ship checkpoint. After it, the real-path bytes readFramed ships MUST include B.
-	if err := durableCheckpoint(context.Background(), handle); err != nil {
-		t.Fatalf("durableCheckpoint: %v", err)
+	// The ship's seal. After it, the real-path bytes the ship reads MUST include B.
+	if err := sqlitedrv.Checkpoint(handle); err != nil {
+		t.Fatalf("seal: %v", err)
 	}
 
 	// A fresh open reads the CURRENT real-path ciphertext — exactly what a successor
 	// CarryForward-restores on takeover. It must see both acked writes, not a stale {A}.
 	if got := realPathRows(t, path, key); got != 2 {
-		t.Fatalf("SILENT LOST WRITE: real path has %d row(s) after durableCheckpoint, want 2 "+
+		t.Fatalf("SILENT LOST WRITE: real path has %d row(s) after the seal, want 2 "+
 			"(acked write 'B' dropped → lost on takeover)", got)
 	}
 }

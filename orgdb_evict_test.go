@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/internal/org"
+	sqlitedrv "github.com/hanzoai/sqlite"
 	"github.com/hanzoai/vfs/replica"
 )
 
@@ -214,7 +215,7 @@ func TestEvictionShipsAndReleasesRatherThanClosing(t *testing.T) {
 	// WithCheckpoint is what buildDurability passes in production, and without it
 	// the ship reads a main database file whose rows are still in the WAL — the
 	// snapshot read simply fails. It is part of the mechanism, not a tuning option.
-	dur := org.NewDurability(cond, members, nil, org.WithCheckpoint(durableCheckpoint))
+	dur := org.NewDurability(cond, members, nil, org.WithSeal(sqlitedrv.Checkpoint), org.WithReader(orgReader))
 
 	store := NewOrgStore(Base{DataDir: t.TempDir(), Durable: dur}, "widget", openRows)
 	store.maxOpen = 1
