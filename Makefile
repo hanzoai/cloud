@@ -297,7 +297,8 @@ e2e-ui: ## Run e2e against a console release built for the local instance. E2E_C
 # every package — instead of each package carrying a copy. A key already in the
 # environment always wins, so CI's real key is never overridden.
 DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}"
+DEV_CSRF_KEY := ZGV2LWNzcmYta2V5LWZvci10ZXN0cy1vbmx5LTAwMDA=
+TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}" CONSOLE_CSRF_KEY="$${CONSOLE_CSRF_KEY:-$(DEV_CSRF_KEY)}"
 
 # The release image builds with -tags "libsqlite3 sqlite_fts5" (see Dockerfile).
 # libsqlite3 needs cgo and the C library, but sqlite_fts5 does not — and without it
