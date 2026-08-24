@@ -504,6 +504,7 @@ func viewerDownload(s *cloud.Service[state], c *zip.Ctx) error {
 // under an attachment disposition. nosniff keeps the declared type binding, so a PDF
 // that is also valid markup is still only a PDF.
 func streamFile(s *cloud.Service[state], c *zip.Ctx, resp *goja.Response) error {
+	held(c)
 	if resp.Status != http.StatusOK {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(resp.Status, resp.Body)
@@ -556,8 +557,26 @@ func write(s *cloud.Service[state], c *zip.Ctx, org, route string, params, query
 		s.Log.Error("dataroom dispatch failed", "route", route, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "dataroom dispatch failed")
 	}
+	held(c)
 	c.SetHeader("Content-Type", "application/json")
 	return c.Bytes(resp.Status, resp.Body)
+}
+
+// held says this answer is one reader's and is not to be kept. Every answer this
+// subsystem writes carries it, because every one of them is a tenant's own
+// material and all of them are authorised by state that MOVES: a link is revoked,
+// its password changed, a viewing session closed, a trust item retired, a centre
+// withdrawn. A copy held by a shared cache would go on answering under the
+// permission that has already been taken back, and the viewer routes are reached
+// with no principal at all — a link id is the whole of the caller's identity, so
+// the URL alone is enough for a cache to key on and hand to the next visitor.
+//
+// Vary names the credentials the SAME address answers differently under: an owner
+// reading /documents/:id/file and another org reading the identical URL get
+// different bytes, so a cache that stores anyway must still not cross them.
+func held(c *zip.Ctx) {
+	c.SetHeader("Cache-Control", "private, no-store")
+	c.SetHeader("Vary", "Authorization, Cookie")
 }
 
 // decodeBody decodes a JSON request body when readBody is set (bounded by maxBody).
