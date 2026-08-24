@@ -842,10 +842,24 @@ embedded underneath.
   `ConditionalStore` is constructed in `buildDurability`, so a KV read/write-through
   cache (L1 over the S3 L2) wraps it as a one-line decorator. The ship mechanism is a
   swappable `snapshotCodec` (default `wholeFile`), so WAL-frame delta shipping
-  replaces it without touching the fence/round. `WithCheckpoint` injects the ship
-  checkpoint (`durableCheckpoint`) — the crypto envelope's re-encrypt integration
-  point: on a defer-encryption-to-checkpoint backend it MUST route through the
-  driver's re-encrypting Checkpoint so ship-before-ack reads FRESH ciphertext (P5).
+  replaces it without touching the fence/round. `WithSeal` injects the crypto client
+  (`sqlitedrv.Checkpoint`): on a defer-encryption-to-checkpoint backend the ship MUST
+  route through the driver's re-encrypting Checkpoint so ship-before-ack reads FRESH
+  ciphertext; on the write-time backends it is a successful no-op.
+- **A ship does not cost the store its connection, and the file does not move under
+  the copy.** `wholeFile.produce` folds the WAL on the store's sole connection and,
+  STILL HOLDING IT, opens a read transaction on a second read-only handle
+  (`WithReader` → `orgReader` → `cek.OpenAt`), then gives the connection back. In WAL
+  mode only a checkpoint writes the main database file, and a reader that begins while
+  the WAL is empty holds the lock a checkpointer needs exclusively — so the copy reads
+  exactly what the fold left, while every statement on that org is served. The order is
+  the whole argument: a frame appended between the fold and the BEGIN puts the reader
+  on a different read mark and the file is free to move again, which is why the
+  connection is held across both statements. Pinned by `internal/org/pin_test.go`,
+  whose controls must FAIL to hold. The second handle opens only where
+  `sqlitedrv.CodecLinked()` — the envelope backend keeps one plaintext copy per handle
+  and last close wins, so it gets none. Every binary that opens an org file is a
+  `plugin/<name>` built CGO=1 against libsqlcipher; `cmd/cloud` reaches no org DB.
 
 ## A capability answers at its own name (HIP-0139 §3), and ten came home
 
