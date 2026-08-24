@@ -306,8 +306,8 @@ func rec(t *testing.T, app *zip.App, method, room, bearer string) (int, recordin
 // A recording is a durable artifact of other people's conversation, so the rule is
 // that only somebody the room would ADMIT may start, stop or read one — the same
 // decision /v1/meet/getToken makes. Every row below breaks exactly one thing that
-// decision turns on, and each is run against all three methods, because three doors
-// onto one rule is three chances to leave one open.
+// decision turns on, and each is run against all three methods, because three entry
+// points onto one rule is three chances to leave one open.
 //
 // THE MEDIA SERVER IS ASSERTED UNTOUCHED. Without that, a surface that authorized
 // AFTER starting a recording would pass every row here: the caller would still get
@@ -353,7 +353,7 @@ func TestRecordRefusesAnyoneTheRoomWouldNot(t *testing.T) {
 		{"not a member of anything", roomIn(workspaceA), holds(nil), member},
 		// The authority answered with a row that seats nobody. getToken refuses it
 		// because LiveKit cannot seat an empty identity; this refuses it because the
-		// two doors onto one room must not disagree about who is in it.
+		// two entry points onto one room must not disagree about who is in it.
 		{"the row names no account", roomIn(workspaceA), seats(""), member},
 	}
 	for _, c := range cases {
@@ -1006,7 +1006,7 @@ func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head 
 
 // TestTheMCPDoorIsNotAWayPastTheGate.
 //
-// A typed op is reachable by TWO doors and only one of them is a route. zip records
+// A typed op is reachable by TWO entry points and only one is a route. zip records
 // the route's handler and the op as two fields of one entry, and wraps only the
 // handler (typed.go, addRoute); the MCP server calls op.invoke directly (mcp.go). So
 // NO Use/Group/With reaches a tools/call — the identity middleware runs because it
@@ -1016,7 +1016,7 @@ func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head 
 // That is the whole attack: a signed-in tab's cookie is ambient, a cross-origin
 // POST with a CORS-simple content type needs no preflight, and the anti-CSRF token
 // a route would have demanded is never asked for. The gate therefore cannot live on
-// the group. It lives in ops.ready, which both doors go through.
+// the group. It lives in ops.ready, which both entry points go through.
 func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
 	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
 
@@ -1048,7 +1048,7 @@ func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
 // The anti-CSRF gate has to hold across THREE independent axes, and a test that
 // fixes two of them measures almost nothing:
 //
-//   - the DOOR. A typed op is not one entry point. zip wraps only the route's
+//   - the ENTRY POINT. A typed op is not one. zip wraps only the route's
 //     handler and calls the op directly over MCP, the call plane, GraphQL, the CLI
 //     and Here — so the gate lives in the op's own preamble, and every surface has to
 //     be shown to reach it.

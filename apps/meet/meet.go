@@ -375,9 +375,9 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	// they shipped reachable from any origin. A typed op is not one entry point: zip
 	// records the route's handler and the op as two fields of one entry and wraps
 	// only the handler, so the REST route is gated by the group above and the other
-	// five doors onto the same op — MCP, the call plane, GraphQL, the CLI, Here —
-	// are not. The gate for these three lives in ops.ready, which every door passes
-	// through. The group gate stays for /getToken, which is a raw route and has no
+	// five entry points onto the same op — MCP, the call plane, GraphQL, the CLI,
+	// Here — are not. The gate for these three lives in ops.ready, which every one
+	// of them passes through. The group gate stays for /getToken, which is a raw
 	// preamble of its own.
 	zip.Post(g, "/record", o.start,
 		zip.WithOperationID("meetRecordStart"),
