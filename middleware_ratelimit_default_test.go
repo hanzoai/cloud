@@ -67,6 +67,19 @@ func TestAudioHasNonZeroDefault(t *testing.T) {
 	}
 }
 
+// TestSbomHasNonZeroDefault: the same invariant for the other unpriced surface
+// whose miss reaches the network and writes the shared table.
+func TestSbomHasNonZeroDefault(t *testing.T) {
+	if defaultServiceRPM["sbom"] <= 0 {
+		t.Fatal(`defaultServiceRPM["sbom"] is not positive — a lookup that misses has no floor`)
+	}
+	for _, p := range []string{"/v1/sbom/ghcr.io/hanzoai/cloud:v1", "/v1/sbom/sha256:abc"} {
+		if svc := canonicalService(p); svc != "sbom" {
+			t.Errorf("canonicalService(%q) = %q, want \"sbom\" — the default would never bind", p, svc)
+		}
+	}
+}
+
 // TestDefaultRPMBindsUnconfigured drives the middleware with NO commerce and NO
 // gateway policy — the unconfigured deployment — and proves the floor throttles
 // /v1/audio/* anyway.
