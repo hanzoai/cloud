@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
 	"github.com/zap-proto/zip"
@@ -72,6 +73,9 @@ func (o ops) cryptoOptions(ctx context.Context, _ *noInput) (*plane.CryptoOption
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) mintCryptoDeposit(ctx context.Context, in *cryptoAsset) (*plane.CryptoDeposit, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err

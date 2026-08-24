@@ -198,8 +198,18 @@ var budget = 30 * time.Second
 // written in terms of this for the same reason every forge call is written in
 // terms of do() — a control that each call site has to remember is a control
 // that one of them will eventually be written without.
-func onForge[T any](o ops, ctx context.Context, fn func(context.Context, *forge.Client, string) (T, error)) (T, error) {
+func onForge[T any](o ops, ctx context.Context, act bool, fn func(context.Context, *forge.Client, string) (T, error)) (T, error) {
 	var zero T
+	// The anti-CSRF control, ahead of everything — before a credential is read,
+	// before the deadline starts, and before the forge hears anything. It is
+	// asked HERE rather than on the route group because the group's middleware
+	// reaches the route's handler and not the op, and MCP calls the op (todo.go
+	// says what that costs). act is what makes the question answerable at all:
+	// over MCP every operation is one POST, so the method cannot say which of
+	// these change a board.
+	if err := csrf(ctx, act); err != nil {
+		return zero, err
+	}
 	// Before scopeForge, not after: the credential read it makes is itself a
 	// call that can be slow, and a deadline that started after it would leave
 	// the one step nobody bounded.
@@ -579,7 +589,7 @@ func unix(s string) int64 {
 // The forge half is the FORGE's answer for your own account, so two people in
 // one org can legitimately see different boards.
 func (o ops) forgeProjects(ctx context.Context, _ *noInput) (*projectList, error) {
-	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, owner string) (*projectList, error) {
+	return onForge(o, ctx, reads, func(ctx context.Context, cl *forge.Client, owner string) (*projectList, error) {
 		// The board list is assembled from ISSUES, not from the org's repository
 		// inventory. Both can answer "which boards are there", but on this forge
 		// they do not cost remotely the same: the inventory charges per repository
@@ -637,7 +647,7 @@ func (o ops) forgeProjects(ctx context.Context, _ *noInput) (*projectList, error
 // 404 when your org has no repository under that key, or when your own forge
 // account cannot see it.
 func (o ops) forgeProject(ctx context.Context, in *projectRef) (*todoProject, error) {
-	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, owner string) (*todoProject, error) {
+	return onForge(o, ctx, reads, func(ctx context.Context, cl *forge.Client, owner string) (*todoProject, error) {
 		// ONE repository, read directly. Scanning the org's inventory to find a
 		// board whose name we already have is what made this page cost twenty
 		// seconds on a large org; the forge will simply hand it over for ~1s.
@@ -683,7 +693,7 @@ func (o ops) forgeProject(ctx context.Context, in *projectRef) (*todoProject, er
 // same object seen twice: relabelling in either moves the card in both. A closed
 // issue reads as done whatever its labels say.
 func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error) {
-	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*issueList, error) {
+	return onForge(o, ctx, reads, func(ctx context.Context, cl *forge.Client, org string) (*issueList, error) {
 		if in.Status != "" && !statuses[in.Status] {
 			return nil, zip.ErrBadRequest("unknown status")
 		}
@@ -799,7 +809,7 @@ func (o ops) forgeIssues(ctx context.Context, in *issueQuery) (*issueList, error
 // and the same reason, as GetProject: a row is one kind of thing however it came
 // to exist, so a caller does not have to know which store it is in to fetch it.
 func (o ops) forgeIssue(ctx context.Context, in *issueRef) (*issueView, error) {
-	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
+	return onForge(o, ctx, reads, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
 		if in.Num <= 0 {
 			return nil, zip.ErrBadRequest("bad issue number")
 		}
@@ -881,7 +891,7 @@ type newIssue struct {
 // and the forge issue the same object: someone relabelling in the forge web UI
 // has moved your card.
 func (o ops) forgeCreateIssue(ctx context.Context, in *newIssue) (*issueView, error) {
-	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
+	return onForge(o, ctx, changes, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
 		if strings.TrimSpace(in.Title) == "" {
 			return nil, zip.ErrBadRequest("title required")
 		}
@@ -930,7 +940,7 @@ type issueEdit struct {
 // forge-side change could contradict. Moving to `done` also CLOSES the issue on
 // the forge, because a done card and an open issue are a contradiction.
 func (o ops) forgePatchIssue(ctx context.Context, in *issueEdit) (*issueView, error) {
-	return onForge(o, ctx, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
+	return onForge(o, ctx, changes, func(ctx context.Context, cl *forge.Client, org string) (*issueView, error) {
 		if in.Num <= 0 {
 			return nil, zip.ErrBadRequest("bad issue number")
 		}

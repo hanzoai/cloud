@@ -128,6 +128,9 @@ func (o ops) rollup(ctx context.Context, _ *noInput) (*plane.Rollup, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) mode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
