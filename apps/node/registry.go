@@ -72,6 +72,7 @@ import (
 
 	kv "github.com/hanzokv/go/v9"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // Errors a caller is expected to handle.
@@ -210,8 +211,8 @@ type Cluster struct {
 	TTL   time.Duration
 	Renew time.Duration
 
-	// PeerToken authenticates a forward. Empty disables PeerHandler entirely —
-	// see PeerHandler for why that is the only safe default.
+	// PeerToken authenticates a forward. Empty disables PeerInvoke entirely —
+	// see PeerInvoke for why that is the only safe default.
 	PeerToken string
 
 	Logger luxlog.Logger
@@ -732,7 +733,7 @@ type Hop interface {
 
 // The peer hop's wire. Both ends are this file, in this binary.
 const (
-	// PeerInvokePath is where PeerHandler must be mounted for NewHTTPHop to find
+	// PeerInvokePath is where PeerInvoke must be mounted for NewHTTPHop to find
 	// it. One constant, both ends.
 	PeerInvokePath = "/v1/node/peer/invoke"
 
@@ -770,7 +771,7 @@ type peerAnswer struct {
 	Err     string `json:"err,omitempty"`
 }
 
-// PeerHandler serves a forwarded invocation against THIS replica's sockets.
+// PeerInvoke serves a forwarded invocation against THIS replica's sockets.
 //
 // # The one place an org arrives in a body
 //
@@ -790,57 +791,73 @@ type peerAnswer struct {
 // invocation is authorized by the replica that knows the node, exactly like a
 // local one.
 //
-// Mount it outside the user-identity middleware; on zip that is
-// zip.AdaptNetHTTP.
-func (r *Registry) PeerHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if len(r.token) == 0 || r.cfgErr != nil {
-			http.Error(w, "peer forwarding disabled", http.StatusServiceUnavailable)
-			return
-		}
-		if subtle.ConstantTimeCompare([]byte(req.Header.Get(peerTokenHeader)), r.token) != 1 {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		if req.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+// Mounted POST-only and OUTSIDE the user-identity middleware (node.go). It
+// writes every answer itself and returns nil, so nothing propagates — which is
+// why it needs no cloud.Terminal. A wrong method never arrives, the route being
+// registered for POST alone.
+func (r *Registry) PeerInvoke(c *zip.Ctx) error {
+	if len(r.token) == 0 || r.cfgErr != nil {
+		return peerRefuse(c, http.StatusServiceUnavailable, "peer forwarding disabled")
+	}
+	if subtle.ConstantTimeCompare([]byte(c.Header(peerTokenHeader)), r.token) != 1 {
+		return peerRefuse(c, http.StatusForbidden, "forbidden")
+	}
 
-		body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, peerMaxBody))
-		if err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
-		var in peerInvoke
-		if err := json.Unmarshal(body, &in); err != nil || in.Org == "" || in.NodeID == "" {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
+	// The same boundary http.MaxBytesReader drew: peerMaxBody bytes pass, one
+	// more is refused. It sits UNDER whatever ceiling the process gives fasthttp,
+	// so a deployment whose edge is narrower refuses first, with its own answer.
+	body := c.Body()
+	if int64(len(body)) > peerMaxBody {
+		return peerRefuse(c, http.StatusBadRequest, "bad request")
+	}
+	var in peerInvoke
+	if err := json.Unmarshal(body, &in); err != nil || in.Org == "" || in.NodeID == "" {
+		return peerRefuse(c, http.StatusBadRequest, "bad request")
+	}
 
-		key := NodeKey{Org: in.Org, NodeID: in.NodeID}
-		res, invErr := r.invokeLocal(req.Context(), key, func(corrID string) ([]byte, error) {
-			return stampInvoke(in.Frame, key, corrID)
-		}, time.Duration(in.TimeoutMS)*time.Millisecond)
+	key := NodeKey{Org: in.Org, NodeID: in.NodeID}
+	// The CONNECTION's context, which is the one the adapter carried: it built the
+	// net/http request and then did req.WithContext(c.Fiber().RequestCtx()), so
+	// naming it here is what keeps cancellation where it was. c.Context() is NOT
+	// the same value and would be a behaviour change — fiber answers it from a
+	// user-set slot that defaults to context.Background(), so a peer that hangs up
+	// would leave this replica waiting on the node's socket for the full timeout.
+	res, invErr := r.invokeLocal(c.Fiber().RequestCtx(), key, func(corrID string) ([]byte, error) {
+		return stampInvoke(in.Frame, key, corrID)
+	}, time.Duration(in.TimeoutMS)*time.Millisecond)
 
-		out := peerAnswer{OK: res.OK, Payload: res.Payload, Code: res.Code, Message: res.Message}
-		var denied *Denied
-		switch {
-		case invErr == nil:
-		case errors.Is(invErr, ErrNoSuchNode):
-			out = peerAnswer{Err: peerErrNoSuchNode}
-		case errors.Is(invErr, ErrInvokeTimeout):
-			out = peerAnswer{Err: peerErrTimeout}
-		case errors.Is(invErr, ErrNodeGone):
-			out = peerAnswer{Err: peerErrNodeGone}
-		case errors.As(invErr, &denied):
-			out = peerAnswer{Err: peerErrDenied, Code: denied.Code, Message: denied.Message}
-		default:
-			out = peerAnswer{Err: peerErrFailed, Message: invErr.Error()}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(out)
-	})
+	out := peerAnswer{OK: res.OK, Payload: res.Payload, Code: res.Code, Message: res.Message}
+	var denied *Denied
+	switch {
+	case invErr == nil:
+	case errors.Is(invErr, ErrNoSuchNode):
+		out = peerAnswer{Err: peerErrNoSuchNode}
+	case errors.Is(invErr, ErrInvokeTimeout):
+		out = peerAnswer{Err: peerErrTimeout}
+	case errors.Is(invErr, ErrNodeGone):
+		out = peerAnswer{Err: peerErrNodeGone}
+	case errors.As(invErr, &denied):
+		out = peerAnswer{Err: peerErrDenied, Code: denied.Code, Message: denied.Message}
+	default:
+		out = peerAnswer{Err: peerErrFailed, Message: invErr.Error()}
+	}
+	// The same encoder as before, so the trailing newline and the bare
+	// application/json both survive: c.JSON would send charset=utf-8 and no
+	// newline, and the answer is read by json.NewDecoder on the other side.
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(out)
+	c.SetHeader("Content-Type", "application/json")
+	return c.Bytes(http.StatusOK, buf.Bytes())
+}
+
+// peerRefuse writes what net/http's Error wrote: its two headers, the status,
+// and the message on a line of its own. This address is the one place in the
+// subsystem that answers text rather than JSON, and the hop reads a refusal by
+// status alone.
+func peerRefuse(c *zip.Ctx, status int, msg string) error {
+	c.SetHeader("Content-Type", "text/plain; charset=utf-8")
+	c.SetHeader("X-Content-Type-Options", "nosniff")
+	return c.Bytes(status, []byte(msg+"\n"))
 }
 
 type httpHop struct {

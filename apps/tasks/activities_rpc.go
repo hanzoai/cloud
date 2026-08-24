@@ -30,7 +30,9 @@ import (
 // where it is.
 
 // exposeActivities publishes the org-scoped engine read on the internal plane.
-// Mount calls it.
+// Mount calls it. planeActivities is a NAMED handler rather than a closure so
+// that zipdoc has a doc comment to lift (tasks.go carries the directive); a
+// closure is a call expression with nothing to read.
 func exposeActivities() {
 	zip.Post[plane.ActivitiesIn, plane.Activities](cloud.Plane(), "/tasks/activities", planeActivities,
 		zip.WithOperationID(plane.TasksActivities),
@@ -52,8 +54,6 @@ func exposeActivities() {
 //
 // A missing engine is an ERROR, never an empty page: answering "no activities"
 // from the process that owns the file is how an online fleet reads as no fleet.
-//
-// A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeActivities(ctx context.Context, in *plane.ActivitiesIn) (*plane.Activities, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {

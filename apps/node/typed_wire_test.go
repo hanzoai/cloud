@@ -48,12 +48,17 @@ var untypedByDesign = map[string]string{
 		"the domain's. It also reads the caller's X-Device-Id (callerOf), which no In field may carry: " +
 		"a caller that could name its own device could pre-approve its own system.run.",
 
-	"POST /v1/node/peer/invoke": "a replica-to-replica machine hop served by a net/http handler " +
-		"(Registry.PeerHandler, registry.go). Its refusals are text/plain — 503 \"peer forwarding " +
-		"disabled\", 403 \"forbidden\", 405, 400 — while every zip error is JSON; it caps the forwarded " +
-		"body with http.MaxBytesReader, a bound a typed op cannot see; and its ORG arrives in the body, " +
-		"which is correct for a hop authenticated by a shared token and is exactly what an In field must " +
-		"never be on a caller-facing route.",
+	"POST /v1/node/peer/invoke": "a replica-to-replica machine hop, served NATIVELY on the zip Ctx — " +
+		"the net/http handler this reason used to name is gone, and with it the adapter and its wildcard. " +
+		"Three wire facts keep it out of the registry. Its refusals are text/plain, each byte-for-byte what " +
+		"net/http's Error wrote — 503 \"peer forwarding disabled\", 403 \"forbidden\", 400 \"bad request\" — " +
+		"where a returned error renders as an RFC 9457 problem document. Its answer is BARE " +
+		"application/json terminated by a newline, and c.JSON sends charset=utf-8 and no newline. And its " +
+		"ORG arrives in the body, which is correct for a hop authenticated by a shared token and is exactly " +
+		"what an In field must never be — typing it would publish, as an MCP tool and a CLI command, a " +
+		"callable operation whose input names the tenant. The package-local body cap is a fourth, weaker " +
+		"one: op.invoke decodes before the handler is entered, so the bound could only run after the parse " +
+		"it exists to bound.",
 }
 
 // surface reads BOTH projections of the live router at their one shared address

@@ -6,11 +6,12 @@ package websearch
 // engine it could not afford, and the SearXNG endpoint bills the same caller the
 // typed endpoint does.
 //
-// That last one is not a formality. The net/http adaptor hands its handler a
-// request whose Context is the transport's, not the one cloud.Bridge parked the
-// caller in, so a search arriving by that endpoint used to reach metaSearch with no
-// principal at all. Nothing about a search LOOKS different when that happens —
-// the results are identical — and the only symptom is a debit that never lands.
+// That last one is not a formality, and it is the fact the compat endpoint is
+// easiest to lose. The payer is read off the CONTEXT, so an endpoint that answers
+// on any context but the one cloud.Bridge parked the caller in reaches metaSearch
+// with no principal at all. Nothing about a search LOOKS different when that
+// happens — the results are identical — and the only symptom is a debit that
+// never lands, which is why it is asserted here rather than assumed.
 
 import (
 	"context"
@@ -183,9 +184,9 @@ func TestServiceCallerGetsTheFreeTier(t *testing.T) {
 // The SearXNG-compatible endpoint bills the caller it admitted.
 //
 // It goes through Mount's real route rather than calling the handler, because
-// what is being asserted is the wiring between them: the adaptor's request does
-// not carry cloud.Bridge's context, and re-attaching it is the only reason the
-// meter downstream can find a payer.
+// what is being asserted is the wiring between them: the endpoint answers off the
+// zip Ctx, whose Context IS the one cloud.Bridge parked the caller in, and that is
+// the whole of why the meter downstream can find a payer.
 func TestSearXNGDoorBillsTheCaller(t *testing.T) {
 	l := planetest.Money(t, 100000)
 	braveAt(t, "brave")

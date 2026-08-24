@@ -48,7 +48,7 @@
 // The one exception is the peer hop, whose org DOES arrive in a body: it is a
 // machine call from another replica of this binary, which derived that org from
 // a validated header, and it authenticates with a shared token instead of a
-// user. See PeerHandler.
+// user. See PeerInvoke.
 //
 // # Where authorization happens
 //
@@ -198,11 +198,13 @@ func Shutdown(ctx context.Context) error {
 // form cmd/zipdoc can lift prose from. It carries STATE and no logic.
 type ops struct{ s *cloud.Service[state] }
 
-// routes registers the surface. The untyped handlers are wrapped in cloud.Terminal
-// because this subsystem mounts AFTER the commerce embed, whose /v1 error filter
-// rewrites any error a downstream handler PROPAGATES into a 500 — which would turn
-// every refusal here (the 403 that is the tenant boundary, the 404 that is a node in
-// another org) into an indistinguishable server error.
+// routes registers the surface. The untyped handlers that RETURN an error are
+// wrapped in cloud.Terminal because this subsystem mounts AFTER the commerce
+// embed, whose /v1 error filter rewrites any error a downstream handler
+// PROPAGATES into a 500 — which would turn every refusal here (the 403 that is
+// the tenant boundary, the 404 that is a node in another org) into an
+// indistinguishable server error. The peer hop needs no wrapper: it writes every
+// answer itself and returns nil, so nothing reaches that filter.
 //
 // THREE OF THE FOUR ROUTES STAY UNTYPED, each for a wire reason named at its
 // registration below. A typed op answers ONE marshalled value at ONE declared
@@ -255,14 +257,14 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// The machine hop. It carries no user identity and authenticates with its own
 	// token, so it is deliberately outside the principal gate the routes above use.
 	//
-	// UNTYPED BY DESIGN: it is a net/http handler (Registry.PeerHandler) whose
-	// refusals are text/plain — 503 "peer forwarding disabled", 403 "forbidden",
-	// 405, 400 — while every zip error is JSON, and it caps the forwarded body
-	// with http.MaxBytesReader, a bound a typed op cannot see. Its org also
-	// arrives IN THE BODY, which is correct for a replica-to-replica forward
-	// authenticated by a shared token but is exactly what an In field must never
-	// be for a caller-facing route.
-	app.Post(PeerInvokePath, zip.AdaptNetHTTP(s.State.reg.PeerHandler()))
+	// UNTYPED BY DESIGN, and NATIVE: Registry.PeerInvoke writes its own bytes on
+	// a zip Ctx, so there is no adapter here and no wildcard. Its refusals are
+	// text/plain — 503 "peer forwarding disabled", 403 "forbidden", 400 — where
+	// every propagated zip error is an RFC 9457 problem document; its success is
+	// bare application/json terminated by a newline, which c.JSON does not send;
+	// and its org arrives IN THE BODY, correct for a forward authenticated by a
+	// shared token and exactly what an In field must never be.
+	app.Post(PeerInvokePath, s.State.reg.PeerInvoke)
 }
 
 // The prose for the three raw routes above, declared beside the wire facts that
@@ -353,7 +355,7 @@ func init() {
 			"It fails closed on its own configuration: with no peer token set, or a half-wired "+
 			"cluster that has presence but no way to forward, it serves 503 and forwards nothing "+
 			"— an unauthenticated endpoint that takes an org from a body is precisely the hole. A "+
-			"missing or wrong token is 403, and the forwarded body is bounded on read.\n\n"+
+			"missing or wrong token is 403, and the forwarded body is bounded.\n\n"+
 
 			"Two things to get right. Its refusals are text/plain rather than the JSON every zip "+
 			"error uses, so a client decoding them as JSON will fail on the error path only. And "+

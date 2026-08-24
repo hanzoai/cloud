@@ -76,9 +76,10 @@
 //     (typed.go op.invoke) — so those arms cannot be typed even one at a time.
 //   - /v1/websearch/scrape deliberately answers 200 {"success":false,"error":"missing url"} to
 //     a malformed or oversized body (scrapeScoped, below): firecrawl clients read
-//     data.success, not the status line, and it caps the read at 1 MiB with an
-//     io.LimitReader rather than refusing. A typed op cannot express either — the
-//     400 is raised before the handler runs, and the cap is invisible to it.
+//     data.success, not the status line, and it caps the read at 1 MiB — a bound on
+//     the body it was handed — rather than refusing. A typed op cannot express
+//     either: the 400 is raised before the handler runs, and the cap is invisible
+//     to it.
 //
 // The route that unblocks the first is a typed `All` in zip; the second needs a
 // body-TOLERANT op. Neither is a reason to leave the CAPABILITY unreachable, which
@@ -91,11 +92,11 @@
 package websearch
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -119,10 +120,10 @@ func apiKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_API_KEY")) 
 // SearXNG /search?format=json envelope, so the LibreChat searxng client decodes
 // it verbatim — no SearXNG pod, no third-party search API. This replaces the
 // retired reverse proxy. Reads the SearXNG query params (q, language).
-func searchNative(w http.ResponseWriter, r *http.Request) {
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	lang := strings.TrimSpace(r.URL.Query().Get("language"))
-	writeJSON(w, http.StatusOK, metaSearch(r.Context(), q, lang))
+func searchNative(c *zip.Ctx) error {
+	q := strings.TrimSpace(c.Query("q"))
+	lang := strings.TrimSpace(c.Query("language"))
+	return writeJSON(c, http.StatusOK, metaSearch(c.Context(), q, lang))
 }
 
 // searchGuard REQUIRES the shared service key, fail-closed exactly like the
@@ -135,20 +136,30 @@ func searchNative(w http.ResponseWriter, r *http.Request) {
 // The LibreChat searxng client sends the configured searxngApiKey as X-API-Key
 // (universe chat configmap wires searxngApiKey=${WEBSEARCH_API_KEY}), so the
 // real caller is unaffected; only anonymous callers are turned away.
-func searchGuard(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+//
+// It WRAPS the leaf rather than sitting on the group, and that is the whole of
+// why /v1/websearch/search is not an open proxy while a signed-in console user
+// reaches it with no key: Mount branches per request on principal.Validated and
+// only the key arm passes through here. On the group it would refuse EVERY
+// signed-in caller on a deployment with no shared key, and it could not live on
+// the group this subsystem has anyway — /scrape hangs there too and gates a
+// different credential in a different header.
+//
+// A refusal WRITES its bytes rather than returning a zip error: the compat
+// contract is {"status":…,"error":…}, and a returned *zip.HTTPError renders as
+// RFC 9457 problem-details, which moves the sentence from `error` to `detail`.
+func searchGuard(next func(*zip.Ctx) error) func(*zip.Ctx) error {
+	return func(c *zip.Ctx) error {
 		want := apiKey()
 		if want == "" {
-			writeErr(w, http.StatusServiceUnavailable, "web search not configured")
-			return
+			return writeErr(c, http.StatusServiceUnavailable, "web search not configured")
 		}
-		got := strings.TrimSpace(r.Header.Get("X-API-Key"))
+		got := strings.TrimSpace(c.Header("X-API-Key"))
 		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			writeErr(w, http.StatusUnauthorized, "invalid api key")
-			return
+			return writeErr(c, http.StatusUnauthorized, "invalid api key")
 		}
-		next.ServeHTTP(w, r)
-	})
+		return next(c)
+	}
 }
 
 // ── The native endpoint: POST /v1/websearch, a typed op ─────────────────────
@@ -259,63 +270,73 @@ type firecrawlData struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-func scrapeHandler(w http.ResponseWriter, r *http.Request) {
-	scrapeScoped(w, r, crawl.Scope{})
-}
+// maxScrapeBody caps what a scrape will parse. A body past it is TRUNCATED and
+// therefore unparseable, which is the domain refusal below and not a status —
+// firecrawl clients read data.success, not the status line.
+const maxScrapeBody = 1 << 20
 
 // scrapeScoped serves one scrape under a caller scope, so scraped pages land in
 // the same corpus /v1/crawl fills — one crawl, one archive, whichever endpoint
 // was used.
-func scrapeScoped(w http.ResponseWriter, r *http.Request, s crawl.Scope) {
+func scrapeScoped(c *zip.Ctx, s crawl.Scope) error {
 	// Bearer auth (firecrawl always sends Authorization: Bearer <key>); fail
-	// closed if unconfigured.
+	// closed if unconfigured. Both refusals write their bytes for searchGuard's
+	// reason: the shape is the compat contract's, not problem-details'.
 	want := apiKey()
 	if want == "" {
-		writeErr(w, http.StatusServiceUnavailable, "web search not configured")
-		return
+		return writeErr(c, http.StatusServiceUnavailable, "web search not configured")
 	}
-	got := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	got := strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
 	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-		writeErr(w, http.StatusUnauthorized, "invalid api key")
-		return
+		return writeErr(c, http.StatusUnauthorized, "invalid api key")
 	}
 
+	// c.Body() hands back the whole body fasthttp already read, so the cap is
+	// applied to the slice where the io.LimitReader used to apply it to the
+	// stream. DECODE over a reader rather than json.Unmarshal: Decode stops at
+	// the first complete JSON value and ignores what follows, which is what a
+	// truncated body leaves and what the LimitReader has always accepted.
+	b := c.Body()
+	if len(b) > maxScrapeBody {
+		b = b[:maxScrapeBody]
+	}
 	var req firecrawlRequest
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil || req.URL == "" {
-		writeJSON(w, http.StatusOK, firecrawlResponse{Success: false, Error: "missing url"})
-		return
+	if err := json.NewDecoder(bytes.NewReader(b)).Decode(&req); err != nil || req.URL == "" {
+		return writeJSON(c, http.StatusOK, firecrawlResponse{Success: false, Error: "missing url"})
 	}
 
-	page, err := crawl.Read(r.Context(), s, req.URL)
+	page, err := crawl.Read(c.Context(), s, req.URL)
 	if err != nil {
-		writeJSON(w, http.StatusOK, firecrawlResponse{Success: false, Error: err.Error()})
-		return
+		return writeJSON(c, http.StatusOK, firecrawlResponse{Success: false, Error: err.Error()})
 	}
-	writeJSON(w, http.StatusOK, firecrawlResponse{
+	return writeJSON(c, http.StatusOK, firecrawlResponse{
 		Success: true,
 		Data:    &firecrawlData{Markdown: page.Markdown, Metadata: page.Metadata},
 	})
 }
 
 // ── shared JSON writers ─────────────────────────────────────────────────────
+//
+// c.Bytes over c.JSON, deliberately: fiber's JSON writes
+// `application/json; charset=utf-8` and these two contracts are read by clients
+// we do not own, so the header stays the bare `application/json` these
+// endpoints have always sent. Send touches no header, so SetHeader survives it.
 
-func writeErr(w http.ResponseWriter, status int, msg string) {
-	writeRaw(w, status, fmt.Sprintf(`{"status":%d,"error":%q}`, status, msg))
+func writeErr(c *zip.Ctx, status int, msg string) error {
+	return writeRaw(c, status, []byte(fmt.Sprintf(`{"status":%d,"error":%q}`, status, msg)))
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func writeJSON(c *zip.Ctx, status int, v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "encode error")
-		return
+		return writeErr(c, http.StatusInternalServerError, "encode error")
 	}
-	writeRaw(w, status, string(b))
+	return writeRaw(c, status, b)
 }
 
-func writeRaw(w http.ResponseWriter, status int, body string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = io.WriteString(w, body)
+func writeRaw(c *zip.Ctx, status int, body []byte) error {
+	c.SetHeader("Content-Type", "application/json")
+	return c.Bytes(status, body)
 }
 
 // Mount registers the web-search surface on app.
@@ -389,34 +410,26 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// preamble, which is the one place every seam passes through. One decision, two
 	// shapes, never two decisions.
 	g := app.Group("/v1/websearch", account.RequireCSRFOnSpend())
+	// Both arms are ONE handler and one context. There is no net/http adaptor
+	// here any more, and the re-attachment that used to sit in this leaf went
+	// with it: c.Context() IS the context cloud.Bridge parked the validated
+	// caller in, so the payer the paid engines bill is resolved by construction
+	// rather than by handing a rebuilt request back its own context. The adaptor
+	// overwrote it with the transport's, which is why a search arriving here
+	// once reached metaSearch with no principal and no ledger.
+	guarded := searchGuard(searchNative)
 	g.All("/search", func(c *zip.Ctx) error {
-		// The net/http adaptor hands the handler a request whose Context is the
-		// TRANSPORT's, not the one cloud.Bridge parked the validated caller in —
-		// so a search arriving by this endpoint reached metaSearch with no
-		// principal and no ledger, and the paid engines had nobody to bill.
-		// Re-attaching the request's own context here is what makes this endpoint
-		// resolve the same payer the typed op does. Same move, for the same
-		// reason, as scrape below: identity is resolved where the request is.
-		native := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			searchNative(w, r.WithContext(c.Context()))
-		})
 		if principal.Validated(c) {
-			return zip.AdaptNetHTTP(native)(c)
+			return searchNative(c)
 		}
-		return zip.AdaptNetHTTP(searchGuard(native))(c)
+		return guarded(c)
 	})
 
 	// Scope resolved at the zip layer where the verified principal lives; the
 	// service caller (chat) has none and lands in the shared prefix. See crawl.scope.
 	scrape := func(c *zip.Ctx) error {
 		org, _ := principal.Org(c)
-		s := crawl.Scope{Org: org, Project: principal.Project(c)}
-		return zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Carried for the reason the search endpoint above carries it: a page
-			// this fetch has to RENDER is billed, and the meter reads the payer
-			// off the request's own context, which the adaptor does not pass on.
-			scrapeScoped(w, r.WithContext(c.Context()), s)
-		}))(c)
+		return scrapeScoped(c, crawl.Scope{Org: org, Project: principal.Project(c)})
 	}
 	// On the group, so the fetch answers under the name of the capability that
 	// performs it. It sat at a top-level /v1/scrape to be reachable by a

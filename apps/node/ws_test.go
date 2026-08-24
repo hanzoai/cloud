@@ -34,13 +34,27 @@ func serveWS(t *testing.T, h zip.Handler) string {
 	t.Helper()
 	app := zip.New(zip.Config{})
 	app.Get("/nodes/ws", h)
+	return "ws://" + listen(t, app) + "/nodes/ws"
+}
 
+// listen serves app on a loopback port and returns its address once it accepts.
+// Both the socket tests and the peer-endpoint tests go through it, so there is
+// one account of how a zip app is put on a real port in this package.
+func listen(t *testing.T, app *zip.App) string {
+	t.Helper()
+	// App.Fiber BUILDS the router the first time it is asked, so resolve it once
+	// here rather than from both the serving goroutine and the cleanup — a
+	// replica nobody sends a request to would otherwise have those two racing the
+	// build itself.
+	f := app.Fiber()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	go func() { _ = app.Fiber().Listener(ln) }()
-	t.Cleanup(func() { _ = app.Fiber().Shutdown() })
+	go func() { _ = f.Listener(ln) }()
+	// Bounded: a peer may still hold an idle keep-alive connection, and a
+	// graceful drain would wait for it.
+	t.Cleanup(func() { _ = f.ShutdownWithTimeout(2 * time.Second) })
 
 	addr := ln.Addr().String()
 	deadline := time.Now().Add(5 * time.Second)
@@ -51,7 +65,7 @@ func serveWS(t *testing.T, h zip.Handler) string {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return "ws://" + addr + "/nodes/ws"
+	return addr
 }
 
 // node is a test double for a bot node: it speaks the same frames the real
