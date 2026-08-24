@@ -50,7 +50,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
+	"path"
+	"strings"
 
 	luxlog "github.com/luxfi/log"
 
@@ -59,6 +62,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/internal/magic"
 	"github.com/hanzoai/cloud/openapi"
 	dataroombundle "github.com/hanzoai/dataroom"
 	"github.com/zap-proto/zip"
@@ -293,7 +297,9 @@ func init() {
 		"Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — "+
 			"stores it on the object-storage client, and records the metadata row, answering with "+
 			"the new document. `?name=` names it (default \"document\"), the request's "+
-			"Content-Type becomes the recorded mime type, and `?numPages=` is optional.\n\n"+
+			"Content-Type is recorded as the document's mime type, and `?numPages=` is optional. "+
+			"That recorded type is metadata the owner sees; what the file is later SERVED as is "+
+			"read from the bytes.\n\n"+
 			"Requires a validated principal; 403 without one. An empty body is 400 and anything "+
 			"over 64 MiB is 413 — a data room holds decks and PDFs, not a media library.\n\n"+
 			"The storage key is 128 random bits under the tenant's own key prefix, minted before "+
@@ -304,8 +310,10 @@ func init() {
 
 	openapi.Describe("/v1/dataroom/documents/:id/file", http.MethodGet,
 		"Download a document's bytes as its owner",
-		"Streams the stored file back under its recorded content type, falling back to "+
-			"application/octet-stream when none was recorded.\n\n"+
+		"Streams the stored file back under the type read from its BYTES — a raster image or a "+
+			"PDF renders in place, and anything else is served as application/octet-stream with an "+
+			"attachment disposition, so a stored file never executes as markup in this origin. "+
+			"Every response carries nosniff, which keeps the declared type binding.\n\n"+
 			"Requires a validated principal; 403 without one, and the document is resolved in the "+
 			"caller's own tenant store, so another org's id is a 404. This is the OWNER's path and "+
 			"applies no link gate at all — the per-link password, email and download controls live "+
@@ -315,7 +323,8 @@ func init() {
 	openapi.Describe("/v1/dataroom/trust/center/:slug/file/:item", http.MethodGet,
 		"Read a public trust-centre item's bytes",
 		"Streams the file behind an item a trust centre publishes openly — a policy, a filled "+
-			"questionnaire, a knowledge-base attachment — under its recorded content type.\n\n"+
+			"questionnaire, a knowledge-base attachment — under the type read from its bytes: a "+
+			"picture or a PDF renders in place, anything else downloads inert.\n\n"+
 			"No principal and no link: these are the things an org states about itself, so they are "+
 			"served to anyone who asks. The narrowing is in the lookup rather than in a check: the "+
 			"item must be public, must not be retired, and must belong to a centre its owner has "+
@@ -369,8 +378,9 @@ func init() {
 
 	openapi.Describe("/v1/dataroom/view/:linkId/document/:documentId/file", http.MethodGet,
 		"Read a document's bytes as an authorised link visitor",
-		"Streams a document's bytes under its recorded content type to a visitor holding an open "+
-			"viewing session.\n\n"+
+		"Streams a document's bytes to a visitor holding an open viewing session, under the type "+
+			"read from those bytes: a picture or a PDF renders in place, anything else downloads "+
+			"inert.\n\n"+
 			"No principal: `?viewId=` from the authenticate step is the authorisation and must "+
 			"belong to this link, or the call is 403 — holding the link id alone gets no bytes. "+
 			"The document must be reachable THROUGH this link (a member of the room the link "+
@@ -483,17 +493,24 @@ func viewerDownload(s *cloud.Service[state], c *zip.Ctx) error {
 	return streamFile(s, c, resp)
 }
 
-// streamFile turns a {fileKey,contentType,name} bundle result into a byte stream
-// from object storage. A non-200 bundle result (404/403) passes through as JSON.
+// streamFile turns a {fileKey,name} bundle result into a byte stream from object
+// storage. A non-200 bundle result (404/403) passes through as JSON.
+//
+// The served type is the one magic reads out of the STORED BYTES, never the
+// contentType recorded at upload — that is the uploader's own word, and this origin
+// is api.hanzo.ai, where a response served as markup runs beside every console and
+// reads whatever that console holds. So a document renders in place only when its
+// bytes say picture or PDF; everything else leaves inert, as application/octet-stream
+// under an attachment disposition. nosniff keeps the declared type binding, so a PDF
+// that is also valid markup is still only a PDF.
 func streamFile(s *cloud.Service[state], c *zip.Ctx, resp *goja.Response) error {
 	if resp.Status != http.StatusOK {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(resp.Status, resp.Body)
 	}
 	var f struct {
-		FileKey     string `json:"fileKey"`
-		ContentType string `json:"contentType"`
-		Name        string `json:"name"`
+		FileKey string `json:"fileKey"`
+		Name    string `json:"name"`
 	}
 	if err := json.Unmarshal(resp.Body, &f); err != nil || f.FileKey == "" {
 		return zip.Errorf(http.StatusInternalServerError, "malformed file reference")
@@ -503,12 +520,30 @@ func streamFile(s *cloud.Service[state], c *zip.Ctx, resp *goja.Response) error 
 		s.Log.Error("dataroom storage get failed", "key", f.FileKey, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "document storage unavailable")
 	}
-	ct := f.ContentType
-	if ct == "" {
-		ct = "application/octet-stream"
+	c.SetHeader("X-Content-Type-Options", "nosniff")
+	if kind := magic.Type(data); kind != "" {
+		c.SetHeader("Content-Type", kind)
+	} else {
+		c.SetHeader("Content-Type", "application/octet-stream")
+		c.SetHeader("Content-Disposition", disposition(f.Name))
 	}
-	c.SetHeader("Content-Type", ct)
 	return c.Bytes(http.StatusOK, data)
+}
+
+// disposition names the download without letting the name reach the wire raw:
+// mime.FormatMediaType quotes and percent-encodes, so a name carrying a line break
+// or a quote becomes a parameter value rather than a second header. Only the last
+// path segment is offered, and a name that survives neither is simply omitted —
+// a bare attachment is complete on its own.
+func disposition(name string) string {
+	base := path.Base(strings.TrimSpace(name))
+	if base == "." || base == "/" {
+		return "attachment"
+	}
+	if d := mime.FormatMediaType("attachment", map[string]string{"filename": base}); d != "" {
+		return d
+	}
+	return "attachment"
 }
 
 // write dispatches one bundle route on the tenant's Base store (one transaction
