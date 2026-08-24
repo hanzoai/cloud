@@ -1,7 +1,7 @@
 ---
 name: exec_files
 version: "8.0.0"
-description: "Read exec files: Files lists what a session holds.."
+description: "Read exec files: Lists the files in an execution session.."
 ---
 
 # Hanzo · EXEC · files
@@ -14,7 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/exec/files/{sid}` — Files lists what a session holds.
+- `GET https://api.hanzo.ai/v1/exec/files/{sid}` — Lists the files in an execution session.
 
 ## Parameters
 

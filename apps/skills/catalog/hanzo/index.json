@@ -1960,11 +1960,11 @@
       "sha256": "1ac30c9412e064ace255f7d21e9d5a6a62a884b17a975c736222531f795fa20f"
     },
     {
-      "description": "Read exec files: Files lists what a session holds..",
+      "description": "Read exec files: Lists the files in an execution session..",
       "name": "exec_files",
       "path": "exec_files/SKILL.md",
       "service": "exec",
-      "sha256": "2b1cfe2be77496cf124ed1f3084fe1403d37c4e2102b17a76edf80a0dfba3be2"
+      "sha256": "44674741c20e91c8a0371263bbef864df40c4169d7239767150af856854e062b"
     },
     {
       "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
@@ -2643,7 +2643,7 @@
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "fd31cd71ceba1ac0d942d8a07ff59273d23c1049e3f54a6afccf01d35a7a7134"
+      "sha256": "ce519fd11b2a8294ec9fbc19c0f9aa0948b12634fb1d9049f8332315e2ffd2ed"
     },
     {
       "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",

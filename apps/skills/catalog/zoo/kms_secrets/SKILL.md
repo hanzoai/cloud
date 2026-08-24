@@ -22,10 +22,10 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
 | `wildcard1` | path | yes | string |  |
-| `env` | query | no | string |  |
-| `environment` | query | no | string |  |
-| `path` | query | no | string |  |
-| `secretPath` | query | no | string |  |
+| `env` | query | no | string | Env selects the environment, which is part of a secret's storage key. OMITTED means EVERY environment — this is the enumeration surface, so it must be able to answer "what is in here" without being told where to look. |
+| `environment` | query | no | string | Environment is the KMS operator's spelling of Env, accepted so one caller need not learn the other's vocabulary. Env wins when both are sent. |
+| `path` | query | no | string | Path narrows the listing to one subtree beneath the caller's org root, as a `/`-separated path such as `/ci`. OMITTED means the whole org. |
+| `secretPath` | query | no | string | SecretPath is the KMS operator's spelling of Path. Path wins when both are sent. |
 
 ## Response
 

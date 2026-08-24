@@ -1,7 +1,7 @@
 ---
 name: exec_files
 version: "8.0.0"
-description: "Read exec files: Files lists what a session holds.."
+description: "Read exec files: Lists the files in an execution session.."
 ---
 
 # Zoo · EXEC · files
@@ -14,7 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/exec/files/{sid}` — Files lists what a session holds.
+- `GET https://api.zoo.ngo/v1/exec/files/{sid}` — Lists the files in an execution session.
 
 ## Parameters
 
