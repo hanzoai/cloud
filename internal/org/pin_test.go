@@ -199,15 +199,7 @@ func TestShipUnderWritesRestoresAnIntactDatabase(t *testing.T) {
 	const orgID = "acme"
 	dbKey := replica.DBPath(orgID, "", "research")
 
-	dy := NewDurability(cs, &liveView{self: "solo", set: []Member{{ID: "solo"}}}, nil,
-		WithReader(func(_ namespace.Namespace, _, p string) (*sql.DB, error) {
-			h, err := sql.Open("sqlite", testDSN(p))
-			if err != nil {
-				return nil, err
-			}
-			sqlpool.Single(h)
-			return h, h.Ping()
-		}))
+	dy := NewDurability(cs, &liveView{self: "solo", set: []Member{{ID: "solo"}}}, nil, WithReader(second))
 	d := dy.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
 	if err := d.Hydrate(ctx); err != nil {
 		t.Fatalf("hydrate: %v", err)
@@ -272,4 +264,51 @@ func TestShipUnderWritesRestoresAnIntactDatabase(t *testing.T) {
 	if rows < 400 {
 		t.Fatalf("the shipped database holds %d rows, want at least the 400 committed before the ship", rows)
 	}
+}
+
+// second is the opener a ship pins with, in the shape the composition root supplies:
+// a read-only handle of its own on the same file, one per ship.
+func second(_ namespace.Namespace, _, path string) (*sql.DB, error) {
+	h, err := sql.Open("sqlite", testDSN(path))
+	if err != nil {
+		return nil, err
+	}
+	sqlpool.Single(h)
+	return h, h.Ping()
+}
+
+// A ship that gets no handle does not acknowledge the write.
+//
+// The opener is injected, so this asserts the CONTRACT and not one build's engine: an
+// opener answering (nil, nil) is exactly the shape cloud's org reader had wherever the
+// codec was not linked, and the ship read it as "no reader available", copied the file
+// with writers free to move it, and acked. The control is the same ship with a handle,
+// which must ack — without it this would pass against a ship that never works.
+func TestShipWithoutAHandleDoesNotAck(t *testing.T) {
+	ship := func(t *testing.T, open opener) (bool, error) {
+		t.Helper()
+		ctx := context.Background()
+		const orgID = "acme"
+		dy := NewDurability(newFakeCondStore(), &liveView{self: "solo", set: []Member{{ID: "solo"}}}, nil, WithReader(open))
+		d := dy.For(testNS(orgID), "research", replica.DBPath(orgID, "", "research"), filepath.Join(t.TempDir(), "research.db"))
+		if err := d.Hydrate(ctx); err != nil {
+			t.Fatalf("hydrate: %v", err)
+		}
+		fillRows(t, openBoundDB(t, d), 20)
+		return d.Sync(ctx)
+	}
+
+	t.Run("no handle", func(t *testing.T) {
+		acked, err := ship(t, func(namespace.Namespace, string, string) (*sql.DB, error) { return nil, nil })
+		if acked || err == nil {
+			t.Fatalf("a copy nothing held still was acknowledged: acked=%v err=%v", acked, err)
+		}
+	})
+
+	t.Run("a handle", func(t *testing.T) {
+		acked, err := ship(t, second)
+		if !acked || err != nil {
+			t.Fatalf("the control did not ship, so the arm above proves nothing: acked=%v err=%v", acked, err)
+		}
+	})
 }

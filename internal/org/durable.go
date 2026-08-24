@@ -67,9 +67,12 @@ type Durability struct {
 
 // opener opens a second, READ-ONLY handle on the database a Durable names. A snapshot
 // holds a read transaction on it while it copies the file, which is what lets the store
-// keep its own connection (see pin). It answers (nil, nil) on a backend that has no
-// second handle to give — the on-disk file is then not a database another handle could
-// open, and the snapshot copies it unpinned, as it always did.
+// keep its own connection (see pin).
+//
+// IT ANSWERS A HANDLE OR AN ERROR. A backend with no second handle to give says so; it
+// does not answer (nil, nil), because a ship reading that as "copy it unpinned" is the
+// property silently absent rather than the ship failing, and the difference is invisible
+// in a green run.
 //
 // It is a FUNCTION and not a handle because the snapshot opens one per ship and closes
 // it again: nothing else may hold it, nothing has to close it on a promotion or an
@@ -319,13 +322,16 @@ func (d *Durable) snapshot(ctx context.Context) (payload []byte, err error) {
 	if d.dy.reader != nil {
 		// A reader that cannot be opened fails the ship rather than falling back to an
 		// unpinned copy: the write is not acknowledged and the caller retries, where a
-		// fallback would ship a file writers were free to move under it.
+		// fallback would ship a file writers were free to move under it. An opener that
+		// answers neither a handle nor a reason asks for that same fallback without
+		// saying anything, so it is refused on the same ground.
 		if reader, err = d.dy.reader(d.ns, d.subsystem, d.dbPath); err != nil {
 			return nil, fmt.Errorf("org: durable reader %s: %w", d.dbKey, err)
 		}
-		if reader != nil {
-			defer reader.Close()
+		if reader == nil {
+			return nil, fmt.Errorf("org: durable reader %s: no handle and no reason — a ship does not copy a file it cannot hold still", d.dbKey)
 		}
+		defer reader.Close()
 	}
 	return d.dy.codec.produce(ctx, db, reader, d.dbPath)
 }

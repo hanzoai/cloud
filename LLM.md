@@ -860,6 +860,18 @@ embedded underneath.
   `sqlitedrv.CodecLinked()` — the envelope backend keeps one plaintext copy per handle
   and last close wins, so it gets none. Every binary that opens an org file is a
   `plugin/<name>` built CGO=1 against libsqlcipher; `cmd/cloud` reaches no org DB.
+- **A file that cannot be held still is never copied and acknowledged.** `orgReader`
+  answers a handle or it says why not; it has no third answer. It used to return
+  `(nil, nil)` wherever the codec was not linked, and `Durable.snapshot` read that as
+  "no reader available", copied the file with writers free to move it, and `Sync`
+  answered `acked=true` — so the property above rested on a cached runtime probe that
+  is also false when a temp directory cannot be made, and a link regression reverted
+  the fix with nothing said. Now the ship fails, the write is not acknowledged, and the
+  caller retries. `cloud.Held()` asks the same question at BOOT (`Listen`, right after
+  `BootMaster`, before any store opens), so a deployment that lost its codec refuses to
+  compose in one line instead of shipping torn copies for the life of the pod — the
+  shape `apps/account`'s anti-forgery check has, conditioned on the SAME `Deployed()`.
+  A laptop or a test binary on the envelope answers nil and comes up unchanged.
 
 ## A capability answers at its own name (HIP-0139 §3), and ten came home
 

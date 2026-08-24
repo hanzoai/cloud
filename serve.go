@@ -56,6 +56,16 @@ func Listen(plugins []Plugin, enable []string) error {
 	// for callers that skip Serve.
 	BootMaster(DataDir())
 
+	// The storage posture, before a single store opens. Whether a ship can hold an org
+	// file still while it copies it is a property of the ENGINE these bytes link, and a
+	// link regression says nothing: the ship would copy a file writers are free to move
+	// and acknowledge the write anyway. Asked once here, a deployment that lost its codec
+	// refuses to compose — one line at boot — instead of shipping torn copies for as long
+	// as the pod runs. A laptop or a test binary answers nil and comes up unchanged.
+	if err := Held(); err != nil {
+		return err
+	}
+
 	cfg := LoadConfig()
 	if enable != nil {
 		cfg.Enable = enable

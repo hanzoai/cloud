@@ -78,6 +78,8 @@ RG = "apps/risk/ring.go"
 PR = "./apps/risk/"
 ML = "apps/ml/ml.go"
 PML = "./apps/ml/"
+DUR = "internal/org/durable.go"
+PORG = "./internal/org/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -800,6 +802,26 @@ MUTANTS = [
         (CL, '\t\tif p := byPath[path]; p != nil {\n\t\t\tfor _, imp := range p.Imports {\n\t\t\t\twalk(imp)\n\t\t\t}\n\t\t}\n', '')],
      "TestReachWalksTransitivelyAndTerminates", PCL),
 
+    # ── the ship holds the file it copies ──
+    #
+    # A ship folds the WAL into the main file and copies that file whole. What keeps
+    # the copy from reading part of one state and part of another is a read
+    # transaction on a second handle: while it is open no checkpoint may move a byte
+    # of the main file. Each row takes that handle away by a different door.
+
+    ("ship: copy the org file with nothing holding it still", [
+        (DUR, '\t\tif reader == nil {\n\t\t\treturn nil, fmt.Errorf("org: durable reader %s: no handle and no reason — a ship does not copy a file it cannot hold still", d.dbKey)\n\t\t}\n\t\tdefer reader.Close()\n',
+              '\t\tif reader != nil {\n\t\t\tdefer reader.Close()\n\t\t}\n')],
+     "TestShipWithoutAHandleDoesNotAck", PORG),
+
+    ("reader: answer the ship nothing at all where the codec is not linked", [
+        (OD, '\t\treturn nil, fmt.Errorf("cloud: org reader %s/%s: %w", ns, subsystem, errEnvelope)',
+             '\t\treturn nil, nil')],
+     "TestOrgReaderAnswersAHandleOrWhyNot", PC),
+
+    ("boot: let a deployed process that cannot hold its files come up", [
+        (OD, '\tif linked || !deployed {', '\tif true {')],
+     "TestHeldRefusesADeployedProcessThatCannotHoldItsFiles", PC),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)

@@ -80,17 +80,16 @@ func openOrgDB(ns namespace.Namespace, subsystem, dir string) (*sql.DB, error) {
 // keeps its own connection and the copy reads a file nothing is moving (internal/org,
 // pin). It is opened per ship and closed with it; nothing else may hold it.
 //
-// It answers (nil, nil) when the codec is not linked. That build keeps a keyed database
-// as an envelope — one plaintext copy on tmpfs per handle, encrypted back to the real
-// path at checkpoint — so the real path is not a database a second handle could open, and
-// a second envelope open would be a second plaintext copy of which only the last to close
-// survives. The linked codec keeps the database live on disk in SQLCipher pages, where a
-// second connection is what SQLite is built for. Every binary that opens an org file is
-// built against it (the plugins; cmd/cloud opens none), so this is the shipped path and
-// the other answer is the honest one for a build that cannot take it.
+// IT ANSWERS A HANDLE OR IT SAYS WHY NOT, and it has no third answer. It used to
+// return (nil, nil) where the codec is not linked, and the ship read that as "no reader
+// available", copied the file with writers free to move it, and acknowledged the write.
+// So the whole property this handle exists to give rested on a cached runtime probe that
+// is also false when a temp directory cannot be made: a link or probe regression reverted
+// the copy to what it was before, with nothing said. Now the ship fails, the write is not
+// acknowledged, and the caller retries.
 func orgReader(ns namespace.Namespace, subsystem, path string) (*sql.DB, error) {
 	if !sqlitedrv.CodecLinked() {
-		return nil, nil
+		return nil, fmt.Errorf("cloud: org reader %s/%s: %w", ns, subsystem, errEnvelope)
 	}
 	db, err := cek.OpenAt(ns, subsystem, path)
 	if err != nil {
@@ -98,6 +97,38 @@ func orgReader(ns namespace.Namespace, subsystem, path string) (*sql.DB, error) 
 	}
 	sqlpool.Single(db)
 	return db, nil
+}
+
+// errEnvelope is why a build with no linked codec has no second handle to give. It keeps
+// a keyed database as an envelope — one plaintext copy on tmpfs per handle, encrypted
+// back to the real path at checkpoint — so the real path is not a database another handle
+// could open, and a second envelope open would be a second plaintext copy of which only
+// the last to close survives. The linked codec keeps the database live on disk in
+// SQLCipher pages, where a second connection is what SQLite is built for.
+var errEnvelope = errors.New("this build links no SQLCipher codec, so a keyed org file on disk is an envelope rather than a live database: nothing can hold it still while it is copied")
+
+// Held is the same question asked at BOOT, and it is why a broken link is one line in a
+// log rather than a failure on every write for as long as the pod runs. Nil when a ship
+// on this process can hold an org file still while it copies it, otherwise why it cannot.
+//
+// It is the shape apps/account's anti-forgery check has, for the same reason: a fact the
+// process can read about itself before a request arrives, asked once at the compose root,
+// where the answer fails the boot instead of being discovered the hard way. The per-ship
+// refusal in [orgReader] stays — it is the one that actually protects the bytes — and
+// this makes its cause visible at the moment it becomes true.
+//
+// The condition is [Deployed], the SAME laptop-or-deployment answer apps/account reads,
+// so no second notion of "production" is invented here. A deployment's image links the
+// codec and every process that opens an org file is built from that image, so a deployed
+// process that answers otherwise did not come from it. A laptop or a test binary running
+// the pure-Go envelope is honest about what it is and comes up.
+func Held() error { return held(Deployed(), sqlitedrv.CodecLinked()) }
+
+func held(deployed, linked bool) error {
+	if linked || !deployed {
+		return nil
+	}
+	return fmt.Errorf("org storage: %w; the image this deployment runs links it, so these bytes were not built from that image", errEnvelope)
 }
 
 // OrgStore is the lazily-opened, cached set of per-entity stores of type T for

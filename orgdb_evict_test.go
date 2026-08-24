@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/codec"
 	"github.com/hanzoai/cloud/internal/org"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	"github.com/hanzoai/vfs/replica"
@@ -207,14 +208,16 @@ func TestReclaimHoldsALiveStoreOverTheBound(t *testing.T) {
 // OBSERVABLE consequence of that: the object store received a write for the
 // evicted org, and re-opening it hydrates that state back.
 func TestEvictionShipsAndReleasesRatherThanClosing(t *testing.T) {
+	codec.Require(t, "the eviction under test ends in a ship, and a ship pins its file with a second handle")
 	cond := &recordingStore{objects: map[string]versioned{}}
 	members := org.NewMembership("pod-0", org.StaticSource(org.Member{ID: "pod-0", Addr: "pod-0"}), time.Minute)
 	if err := members.Start(context.Background()); err != nil {
 		t.Fatalf("membership: %v", err)
 	}
-	// WithCheckpoint is what buildDurability passes in production, and without it
-	// the ship reads a main database file whose rows are still in the WAL — the
-	// snapshot read simply fails. It is part of the mechanism, not a tuning option.
+	// The two the composition root passes in production: the crypto client the fold
+	// ends with, and the opener the ship pins its file with. Both are part of the
+	// mechanism rather than tuning — without the first a ship reads a main file whose
+	// rows are still in the WAL, and without the second nothing holds that file still.
 	dur := org.NewDurability(cond, members, nil, org.WithSeal(sqlitedrv.Checkpoint), org.WithReader(orgReader))
 
 	store := NewOrgStore(Base{DataDir: t.TempDir(), Durable: dur}, "widget", openRows)
