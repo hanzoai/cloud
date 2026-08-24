@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -21,6 +22,7 @@ import (
 // test without it measures a gate that can only ever refuse.
 func mounted(t *testing.T) *zip.App {
 	t.Helper()
+	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{}); err != nil {
