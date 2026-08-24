@@ -1894,7 +1894,18 @@ jobs:
               case " $started " in *" $repo "*) continue ;; esac
               S=$(curl -s -H "Authorization: token ${GIT_TOKEN}" \
                     "https://git.hanzo.ai/v1/repos/${repo}/actions/runs?limit=5" \
-                  | jq -r --arg t "$T0" '[.workflow_runs[]? | select(.event=="workflow_dispatch") | .status] | first // ""')
+                  | jq -r --arg t "$T0" '[.workflow_runs[]?
+                        | select(.event=="workflow_dispatch")
+                        | select(((.run_started_at // .created_at) // "") >= $t)
+                        | .status] | first // ""')
+              # $T0 IS STAMPED BEFORE THE DISPATCH AND IS WHAT MAKES THIS A TEST.
+              # It was passed to jq and never referenced, so the filter took the
+              # newest workflow_dispatch run of ANY age: a repo dispatched last week
+              # answered `completed` and satisfied the check without this release
+              # having reached it. Counting only runs at-or-after T0 asks whether
+              # THIS dispatch created a run, which is the question. Timestamps are
+              # UTC in one format at both ends, so a string compare is the right one.
+              #
               # A RUN ROW IS THE PROPERTY, NOT A RUNNER. What this catches is the
               # silent skip — Hanzo Git accepts the dispatch, the Actions unit is
               # off or the workflow does not resolve, and NOTHING is ever created
