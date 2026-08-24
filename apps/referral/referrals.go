@@ -90,6 +90,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("referral.Mount: empty DataDir")
 	}
+	// The redemption write asks account.CSRF, which verifies a MAC the account
+	// process minted; without the shared key it refuses every one of them.
+	if err := account.Shared(); err != nil {
+		return fmt.Errorf("referral.Mount: %w", err)
+	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("referral.Mount: open store: %w", err)
