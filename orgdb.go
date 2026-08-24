@@ -392,17 +392,32 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 		delete(c.durables, ns)
 		c.mu.Unlock()
 
+		// DEFERRED, so the record is retired and the channel closed on EVERY exit
+		// — a panic in promote included. Reached only by a normal return, a panic
+		// here leaves the in-flight entry in place with its channel never closed;
+		// and because byNS was just dropped above, every later caller for this
+		// namespace falls through to the durable path, finds that entry, and
+		// blocks on <-inf.done for the life of the process. One transient failure
+		// would wedge one tenant permanently, with nothing in the log to say so.
+		defer func() {
+			// A panic leaves inf zero-valued. Waiters must get an error rather
+			// than a nil store that reads as a successful open.
+			if inf.err == nil && inf.d == nil {
+				inf.err = fmt.Errorf("cloud: org store open abandoned: %s/%s", ns, c.subsystem)
+			}
+			c.mu.Lock()
+			delete(c.inflight, ns)
+			if inf.d != nil { // a usable store (promoted writer, or the kept read-only one)
+				c.byNS[ns] = inf.st
+				c.durables[ns] = inf.d
+				c.touch(ns)
+			}
+			c.mu.Unlock()
+			close(inf.done)
+		}()
+
 		st2, d2, err := c.promote(ns, path, st, d)
 		inf.st, inf.d, inf.err = st2, d2, err
-		c.mu.Lock()
-		delete(c.inflight, ns)
-		if d2 != nil { // a usable store (promoted writer, or the kept read-only one)
-			c.byNS[ns] = st2
-			c.durables[ns] = d2
-			c.touch(ns)
-		}
-		c.mu.Unlock()
-		close(inf.done)
 		if err != nil && d2 != nil && c.log != nil {
 			// Reopen degraded again (transient store/membership blip): still serving the
 			// prior read-only state, so log and keep availability rather than surface it.
@@ -441,17 +456,26 @@ func (c *OrgStore[T]) forNS(ns namespace.Namespace) (T, error) {
 	c.inflight[ns] = inf
 	c.mu.Unlock()
 
-	inf.st, inf.d, inf.err = c.openDurable(ns, path)
+	// Deferred for the same reason as the promotion path above: openDurable runs
+	// the object-store hydrate and the caller-supplied open, so a panic in either
+	// must still retire the record and close the channel. Otherwise every later
+	// caller for this namespace waits on a channel nobody will ever close.
+	defer func() {
+		if inf.err == nil && inf.d == nil {
+			inf.err = fmt.Errorf("cloud: org store open abandoned: %s/%s", ns, c.subsystem)
+		}
+		c.mu.Lock()
+		delete(c.inflight, ns)
+		if inf.err == nil {
+			c.byNS[ns] = inf.st
+			c.durables[ns] = inf.d
+			c.touch(ns)
+		}
+		c.mu.Unlock()
+		close(inf.done)
+	}()
 
-	c.mu.Lock()
-	delete(c.inflight, ns)
-	if inf.err == nil {
-		c.byNS[ns] = inf.st
-		c.durables[ns] = inf.d
-		c.touch(ns)
-	}
-	c.mu.Unlock()
-	close(inf.done)
+	inf.st, inf.d, inf.err = c.openDurable(ns, path)
 	return inf.st, inf.err
 }
 
