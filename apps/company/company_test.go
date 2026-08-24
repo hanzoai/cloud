@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
@@ -146,6 +147,9 @@ func fakes() providerSet {
 // app and the fakes for assertions.
 func mountFake(t *testing.T) (*zip.App, *fakeCharge, *fakeCapTable) {
 	t.Helper()
+	// The shared anti-forgery key this surface's changes verify against. A deployment
+	// takes it from KMS; the mount refuses without it (apps/account, Shared).
+	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
