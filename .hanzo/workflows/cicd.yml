@@ -1875,16 +1875,31 @@ jobs:
               S=$(curl -s -H "Authorization: token ${GIT_TOKEN}" \
                     "https://git.hanzo.ai/v1/repos/${repo}/actions/runs?limit=5" \
                   | jq -r --arg t "$T0" '[.workflow_runs[]? | select(.event=="workflow_dispatch") | .status] | first // ""')
+              # A RUN ROW IS THE PROPERTY, NOT A RUNNER. What this catches is the
+              # silent skip — Hanzo Git accepts the dispatch, the Actions unit is
+              # off or the workflow does not resolve, and NOTHING is ever created
+              # (forge-actions-guard finds the same class estate-wide). A run that
+              # exists proves the dispatch landed and the workflow resolved, which
+              # is the whole claim this release can make about a sibling repo.
+              #
+              # Waiting for a RUNNER asserted something cloud does not own: the
+              # projection's queue depth. Measured — a release burst puts seven
+              # trains times eight cars against thirty runners, so a projection
+              # queued past the deadline and `hanzo-docs/docs` was reported as
+              # "never ran" while its run sat queued and later completed green.
+              # That reds a release for a capacity fact about another repo, and it
+              # is the third bound in this file that was sized against a quiet
+              # fleet. Any non-empty status counts; empty means no run at all.
               case "$S" in
-                in_progress|completed|running) started="${started} ${repo}"; echo "  started   ${repo}" ;;
-                *)                             pending="${pending} ${repo}" ;;
+                "") pending="${pending} ${repo}" ;;
+                *)  started="${started} ${repo}"; echo "  started   ${repo} (${S})" ;;
               esac
             done
             [ -n "$pending" ] && sleep 20
           done
           echo "::endgroup::"
           if [ -n "$pending" ]; then
-            echo "::error::accepted but never ran:${pending}. Hanzo Git took the dispatch and no runner answered within 8 minutes — check the git-runner fleet and the labels in ConfigMap git-runner-config."
+            echo "::error::accepted and no run was created for:${pending}. Hanzo Git took the dispatch and produced no run row, so the workflow did not resolve or the repo's Actions unit is off — every push to it is discarded the same way. Check the unit and the labels in ConfigMap git-runner-config."
             exit 1
           fi
 
