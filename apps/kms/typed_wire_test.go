@@ -36,14 +36,21 @@ var untypedByDesign = map[string]string{
 // route is `/secrets/+`, fiber's one-or-more greedy segment.
 //
 // The two projections spell that segment differently and neither is wrong. zip's
-// own Template (address.go:61) rewrites only `:name` segments, so its registry
-// publishes the path VERBATIM as `/v1/kms/secrets/+`; cloud's router reading
-// (openapi/openapi.go:795-811) has to give the segment an OpenAPI name and calls
-// it `{wildcard1}`. Fold then looks the typed op up by its own spelling, finds
-// no live route at that key, and refuses — "the registry and the router disagree
-// about its path" (openapi/openapi.go:687). The result is not a mis-named
-// parameter: it is `make -C apps/kms describe` failing outright, and with it
-// every document this app publishes.
+// own Template (v1.36.3 address.go:61) rewrites only `:name` segments, so its
+// registry publishes the path VERBATIM as `/v1/kms/secrets/+`; cloud's router
+// reading has to give the segment an OpenAPI name and calls it `{wildcard1}`
+// (openapi/openapi.go:811, which names it at :823). Fold then looks the typed op
+// up by its own spelling, finds no live route at that key, and refuses — "the
+// registry and the router disagree about its path" (openapi/openapi.go:705). The
+// result is not a mis-named parameter: it is `make -C apps/kms describe` failing
+// outright, and with it every document this app publishes.
+//
+// Every citation here is re-derived at the CURRENT pin rather than inherited.
+// The three that stood before this pass all named the wrong line — the version
+// stamp said v1.31.0 against a go.mod reading v1.36.3, the refusal was cited at
+// :687 (a doc comment) rather than :705, and the wildcard naming at :795-811,
+// which is sortedKeys. A file:line nobody can land on is how a refusal stops
+// being re-checkable, which is the whole point of holding it in a test.
 //
 // So this is a stronger refusal than the wildcard entries elsewhere in the fleet
 // (apps/dns, apps/pricing, apps/account), which say a bound field and a
@@ -54,16 +61,24 @@ var untypedByDesign = map[string]string{
 // Changing cloud's spelling instead would move every `{wildcardN}` path already
 // published across five subsystems, so the yielding side is zip's.
 //
-// The cost of staying untyped is exactly three things — prose lifted from a doc
-// comment, an MCP tool, a CLI command — and NOT a fourth: both routes declare
-// the shape they answer with through openapi.Register, so an SDK generated off
-// the document has a return type. What Register cannot carry is FIELD prose, and
-// proseless below records that honestly rather than hiding it.
+// THE COST IS FOUR THINGS, AND THE FOURTH WAS UNCOUNTED. Three are what any
+// untyped route pays: prose lifted from a doc comment, an MCP tool, a CLI
+// command. This comment used to say "and NOT a fourth", on the strength of both
+// routes declaring their answer through openapi.Register — which is true, and an
+// SDK generated off the document does have a return type. But Register derives
+// that schema by REFLECTION, and Go has dropped the comments by then, so those
+// properties publish bare (proseless); and the `{wildcard1}` path parameter —
+// the ONE argument these two operations take — cannot be described at all, since
+// there is no typed In to lift a field's prose from and openapi.Describe carries
+// a summary and a description for the OPERATION with no parameter channel
+// (openapi/register.go:193). proselessParams records that half. Counting the
+// cost at three was not a small error: it is the half a reader of the document
+// meets first, because it is the argument they have to fill in.
 const reasonWildcard = "the secret is addressed by a SUB-PATH, so the route is fiber's greedy `+`. " +
-	"zip's Template (v1.31.0 address.go:61) rewrites only `:name` segments and publishes the path as " +
+	"zip's Template (v1.36.3 address.go:61) rewrites only `:name` segments and publishes the path as " +
 	"`/v1/kms/secrets/+`, while cloud's router reading names the segment `{wildcard1}` " +
-	"(openapi/openapi.go:795-811). Fold looks the typed op up by zip's spelling, finds no live route, " +
-	"and REFUSES the whole document (openapi/openapi.go:687) — not a mis-named parameter, no document."
+	"(openapi/openapi.go:811,823). Fold looks the typed op up by zip's spelling, finds no live route, " +
+	"and REFUSES the whole document (openapi/openapi.go:705) — not a mis-named parameter, no document."
 
 // proseless is the CLOSED list of published properties that carry no
 // description, and it may only SHRINK.
@@ -82,6 +97,30 @@ var proseless = map[string]bool{
 	"kmsRemoved.env":     true,
 	"kmsRemoved.name":    true,
 	"kmsRemoved.deleted": true,
+}
+
+// proselessParams is the same closed list for published PARAMETERS, and it is a
+// SECOND ledger rather than more keys in the first because the two carry
+// different reasons and one entry's reason must not stand in for the other's.
+//
+// A parameter is declared on the OPERATION and never enters components.schemas,
+// so the properties walk cannot see one — which is why these two sat bare while
+// the field gate passed. Neither can be described today: the address is a fiber
+// wildcard, so it carries no typed In whose field prose zip could lift
+// (zip/openapi.go:163 looks a parameter's description up under
+// `<In>.<name>`), and the client that DOES speak for these two routes,
+// openapi.Describe, takes a summary and a description for the operation and
+// nothing per-parameter (openapi/register.go:193).
+//
+// It may only SHRINK, in both directions: an entry that starts publishing prose
+// goes red, so the day either half lands the ledger empties instead of outliving
+// the gap. The four query parameters on the typed listing are NOT here — they
+// were bare for a reason that was ours rather than the generator's (kmsList's
+// fields declared no json name, so zipdoc filed their prose nowhere zip looks)
+// and they are described now.
+var proselessParams = map[string]bool{
+	"GET /v1/kms/secrets/{wildcard1} path:wildcard1":    true,
+	"DELETE /v1/kms/secrets/{wildcard1} path:wildcard1": true,
 }
 
 // broker mounts the REAL Mount on a bare app with a live master key, so every
@@ -267,44 +306,156 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // TestEveryPublishedFieldIsDescribed gates the RESPONSE side, which the op-level
 // gate cannot see: typing a route documents its ADDRESS and its SHAPE, never the
 // shape's FIELDS. proseless is the closed exemption and may only shrink.
+//
+// It asks openapi.Bare, the ONE walker, and that is not a style preference — it
+// is the fix for this gate having been BLIND to exactly the six properties its
+// ledger names. It used to walk the Go value and cast each schema to
+// map[string]any, which is the failure Bare's own doc comment describes:
+// Components.Schemas is open-typed, the typed fold contributes zip's map and
+// Register contributes a *Schema, so the cast skipped every Register-declared
+// component — kmsSecret and kmsRemoved, i.e. the whole of proseless. Measured by
+// emptying the ledger, which left the gate GREEN with six undescribed properties
+// in the document. A check that skips passes for the wrong reason, and this one
+// had been passing that way since it was written. Bare reads the MARSHALLED
+// document, so it cannot skip a half it did not expect, and it descends into
+// nested shapes, array items and each alternative of a oneOf as well.
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	doc, err := openapi.Spec(broker(t), openapi.Info{Title: "kms", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
-	if doc.Components == nil {
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
 		t.Fatal("no components — the gate is blind")
 	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	undescribed := map[string]bool{}
+	var unnamed []string
+	for _, key := range bare {
+		undescribed[key] = true
+		if !proseless[key] {
+			unnamed = append(unnamed, key)
+		}
+	}
+	for key := range proseless {
+		if !undescribed[key] {
+			t.Errorf("%s now publishes prose — remove it from proseless, which may only shrink", key)
+		}
+	}
+	if len(unnamed) > 0 {
+		sort.Strings(unnamed)
+		t.Errorf("%d published properties carry no description: %s\nThey reach openapi.yaml, every "+
+			"generated SDK and every MCP inputSchema bare. Describe the FIELD in the Go struct — "+
+			"zipdoc lifts it for a typed op.", len(unnamed), strings.Join(unnamed, ", "))
+	}
+}
+
+// TestEveryPublishedParameterIsDescribed gates the REQUEST side of the same
+// fact, and it is a SEPARATE walk because a parameter is not a schema.
+//
+// A parameter is declared on the OPERATION and never enters components.schemas,
+// so the properties walk above — the shape every field gate in this fleet takes
+// — reports a clean surface while the arguments an operation ACTUALLY TAKES
+// publish bare. Measured here before it was written: 6 of 6 said nothing, and
+// four of those were the filters on the one typed read in this subsystem.
+//
+// proselessParams is the closed exemption and may only shrink.
+func TestEveryPublishedParameterIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(broker(t), openapi.Info{Title: "kms", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
 	var bare []string
-	for name, raw := range doc.Components.Schemas {
-		def, ok := raw.(map[string]any)
-		if !ok {
+	seen := 0
+	for path, item := range doc.Paths {
+		if !strings.HasPrefix(path, "/v1/kms") {
 			continue
 		}
-		props, _ := def["properties"].(map[string]any)
-		for field, p := range props {
-			s, ok := p.(map[string]any)
-			if !ok {
+		for method, op := range item {
+			if op == nil {
 				continue
 			}
-			key := name + "." + field
-			described := false
-			if d, _ := s["description"].(string); strings.TrimSpace(d) != "" {
-				described = true
-			}
-			switch {
-			case described && proseless[key]:
-				t.Errorf("%s now publishes prose — remove it from proseless, which may only shrink", key)
-			case !described && !proseless[key]:
-				bare = append(bare, key)
+			for _, p := range op.Parameters {
+				seen++
+				key := strings.ToUpper(method) + " " + path + " " + p.In + ":" + p.Name
+				switch {
+				case strings.TrimSpace(p.Description) != "" && proselessParams[key]:
+					t.Errorf("%s now publishes prose — remove it from proselessParams, which may only shrink", key)
+				case strings.TrimSpace(p.Description) == "" && !proselessParams[key]:
+					bare = append(bare, key)
+				}
 			}
 		}
+	}
+	if seen == 0 {
+		t.Fatal("kms publishes no parameters at all — the router moved and this gate is now blind")
 	}
 	if len(bare) > 0 {
 		sort.Strings(bare)
-		t.Errorf("%d published properties carry no description: %s\nThey reach openapi.yaml, every "+
-			"generated SDK and every MCP inputSchema bare. Describe the FIELD in the Go struct — "+
-			"zipdoc lifts it for a typed op.", len(bare), strings.Join(bare, ", "))
+		t.Errorf("%d published parameters carry no description: %s\nA parameter is the argument a "+
+			"caller has to fill in, so it reaches openapi.yaml, every generated SDK and every MCP "+
+			"inputSchema as a name and a type and nothing else. Describe the FIELD it binds to and "+
+			"give that field a json name — zipdoc files prose under `<Type>.<json name>` and skips a "+
+			"field named `-`, while zip reads a parameter's description at `<In>.<url name>`.",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
+
+// TestTheListFiltersStayInTheURL is the wire half of giving kmsList's fields
+// their json names, and it is the assertion that makes the change safe rather
+// than merely tidy.
+//
+// A json name is how the prose reaches the published parameter (zipdoc files a
+// field's description under `<Type>.<json name>` and skips `-`), and it is ALSO
+// how zip's binder would fill a field from a request BODY. On this op there is
+// no body to fill from — hasBody says a GET carries none, so the handler never
+// reads one (zip/typed.go:517) and no requestBody is published — and this pins
+// both halves, because the day either moves the filters would start taking a
+// second source that the untyped handler this replaced never had.
+func TestTheListFiltersStayInTheURL(t *testing.T) {
+	app := broker(t)
+	if s, b := ask(t, app, http.MethodPost, "/v1/kms/secrets", "acme", true,
+		`{"path":"/ci","name":"a","env":"prod","value":"v"}`); s != http.StatusOK {
+		t.Fatalf("seed: %d %s", s, b)
+	}
+	// A GET body naming another subtree is not read: the answer is the URL's.
+	status, body := ask(t, app, http.MethodGet, "/v1/kms/secrets?path=/ci&env=prod", "acme", false,
+		`{"path":"/nowhere","env":"nope"}`)
+	if status != http.StatusOK {
+		t.Fatalf("status %d: %s", status, body)
+	}
+	var got kmsSecrets
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Total != 1 {
+		t.Errorf("total %d, want 1 — a GET body reached the filters (%s)", got.Total, body)
+	}
+
+	doc, err := openapi.Spec(app, openapi.Info{Title: "kms", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	op := doc.Paths["/v1/kms/secrets"]["get"]
+	if op == nil {
+		t.Fatal("the listing is not in the document")
+	}
+	if op.RequestBody != nil {
+		t.Error("the listing publishes a request body it has never read — every generated client " +
+			"gained an argument for a body a GET does not carry")
+	}
+	want := map[string]bool{"env": true, "environment": true, "path": true, "secretPath": true}
+	for _, p := range op.Parameters {
+		if p.In != "query" || !want[p.Name] {
+			t.Errorf("the listing publishes %s parameter %q — the filter set moved", p.In, p.Name)
+			continue
+		}
+		delete(want, p.Name)
+	}
+	if len(want) > 0 {
+		t.Errorf("the listing stopped publishing %v — both spellings of both filters are the wire", want)
 	}
 }
 

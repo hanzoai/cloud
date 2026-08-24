@@ -73,14 +73,6 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// zipdoc lifts the doc comment off each typed op and its In/Out fields into
-// zipdoc_gen.go, which is the ONLY way that prose reaches the published registry
-// and the MCP tool list — Go drops comments at compile time. The typed ops here
-// are the internal plane's three (secret_rpc.go); the /v1/kms REST surface is
-// untyped and declares its prose beside its route table.
-//
-//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
-
 // masterKeyLen is the AES-256 KEK size store.Seal/Open require (32 bytes).
 const masterKeyLen = 32
 

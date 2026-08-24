@@ -9,9 +9,13 @@
 // NOT the /v1/bot/runtime/* prefix — the edge strips it. So this face strips /v1/bot/runtime too:
 // /v1/bot/runtime/<rest> → {executor}/<rest> (e.g. /v1/bot/runtime/health → /health).
 //
-// Order 143 — binds /v1/bot/runtime/* before the AI subsystem's /v1/* catch-all (150).
+// It binds /v1/bot/runtime/* ahead of the AI subsystem's bare /v1 remainder, and
+// what puts it there is SLICE POSITION in manifest/apps.go — bot's row precedes
+// ai's, which is last. There is no Order field and no number to quote; the
+// ordering claim is checked by the router oracle (manifest.TestEveryServedPath-
+// ReachesTheAppThatServesIt), never by a constant written here.
 //
-// The package doc lives once, in node.go.
+// The package doc lives once, in run.go.
 
 package bot
 
@@ -30,14 +34,15 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The relay's prose, declared beside the wire fact that keeps it untyped (Mount).
-// This face is ONE All() registration, so there is no per-method registration
-// site and no typed op for zipdoc to lift a doc comment from; without this the
-// seven operations it publishes would carry an operationId and nothing else — a
-// generated SDK method that cannot explain itself and a CLI command with no help.
-// The loop covers exactly the methods the document renders (openapi.Methods), and
-// a description whose route is not in the router never renders, so this stays
-// additive metadata on operations that exist.
+// The relay's prose, declared beside the wire fact that keeps it untyped
+// (mountRelay). This face is ONE All() registration, so there is no per-method
+// registration site and no typed op for zipdoc to lift a doc comment from;
+// without this the five operations it publishes would carry an operationId and
+// nothing else — a generated SDK method that cannot explain itself and a CLI
+// command with no help. The loop covers every method the document CAN render
+// (openapi.Methods) and a description whose route is not in the router never
+// renders, so this stays additive metadata on operations that exist — five
+// today, since OPTIONS and TRACE are routed by All() and published by nobody.
 func init() {
 	const summary = "Relay one of the bot runtime's own operational paths"
 	const description = "Forwards a request to the bot runtime — the service that executes " +
@@ -76,7 +81,7 @@ type relay struct {
 }
 
 // mountRelay registers the /v1/bot/runtime/* surface on app per HIP-0106. Mount
-// (node.go) calls it last: one capability, one entry point, three families.
+// (run.go) calls it last: one capability, one entry point, two families.
 //
 // IT HAS ITS OWN SEGMENT, and that is what made the merge safe. The relay was
 // app.All("/v1/bot/*") in a separate app while the node plane served
@@ -94,21 +99,27 @@ func mountRelay(app cloud.Router, deps cloud.Deps) error {
 		log:    luxlog.Default().New("subsystem", "bot"),
 		cc:     &http.Client{Timeout: 60 * time.Second},
 	}
-	// UNTYPED BY DESIGN — and it is the only route here, so this whole subsystem
-	// publishes no MCP tool and no CLI command. Its PROSE is declared beside the
-	// wire fact instead (openapi.Describe, init above), so the document and the
-	// generated SDKs can still say what this face is. Three wire facts make it
-	// untypable as it stands, each on its own sufficient:
+	// UNTYPED BY DESIGN — the five operations it publishes reach no MCP tool and
+	// no CLI command. Its PROSE is declared beside the wire fact instead
+	// (openapi.Describe, init above), so the document and the generated SDKs can
+	// still say what this face is. TWO wire facts make it untypable, each on its
+	// own sufficient, both re-read against the PINNED zip (v1.36.3):
 	//
-	//   - it is ONE registration for EVERY method (All), including OPTIONS and
-	//     TRACE. zip's typed registrars are per-method and it has no All[In, Out].
 	//   - the path is a GREEDY wildcard whose value is a whole sub-path the proxy
-	//     re-mounts on the runtime (Params("*") below). fiber calls it `*1` and the
-	//     document calls it `{wildcard1}`; no typed In field can be both.
+	//     re-mounts on the runtime (Params("*") below). fiber calls it `*1`, the
+	//     registry publishes op.Path verbatim (`/v1/bot/runtime/*`) and cloud's
+	//     router reading calls it `{wildcard1}` — so Fold finds no live route at
+	//     the registry's key and refuses the WHOLE document, not merely this op.
+	//     Typing does not remove a wildcard; only real addresses do.
 	//   - the response is the runtime's own, verbatim: its status code
 	//     (c.Bytes(resp.StatusCode, rb), below) and its Content-Type, which is
-	//     frequently not JSON at all. A typed op answers its DECLARED status and
-	//     serialises its Out as JSON, so both move.
+	//     frequently not JSON at all. A typed op ends at c.JSON(out) under a
+	//     status it DECLARED (typed.go:563-567), and statusOf (typed.go:192-212)
+	//     refuses any code the op did not declare, so both move.
+	//
+	// "One All() for every method" is NOT a third fact. zip's per-method typed
+	// registrars are five lines, and All() is a convenience rather than a
+	// blocker; the two above carry the refusal alone.
 	//
 	// The tenant-actionable surface is native and typed elsewhere: /v1/bot/runs is the
 	// run control plane (run.go). This face is ops, and it stays a relay.

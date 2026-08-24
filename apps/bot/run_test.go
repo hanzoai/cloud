@@ -122,13 +122,24 @@ func runsOn(t *testing.T, app *zip.App, rt Runtime) {
 	}
 }
 
-// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
-// (mountRuns says why): the program's composer installs it once at the root,
-// after the identity check that mints the validated org and before any subsystem
-// registers a route. In production that composer is serve.go. In a test the test
-// IS the composer, so it owes the same thing — and a test that skips it does not
-// test a stricter program, it tests one where every org-scoped op answers 403 for
-// a reason that would never exist in production.
+// compose installs what a HOST installs: the program's composer installs
+// cloud.Bridge once at the root, after the identity check that mints the
+// validated org and before any subsystem registers a route. In production that
+// composer is serve.go. In a test the test IS the composer, so it owes the same
+// thing — and a test that skips it does not test a stricter program, it tests one
+// where every org-scoped op answers 403 for a reason that would never exist in
+// production.
+//
+// mountRuns installs a Bridge of its OWN as well, on the subsystem's router, and
+// the nesting is deliberate rather than redundant: the root install is the host's
+// and the inner one is what the handler sees (cloud/typed.go). Keeping BOTH here
+// is what makes this harness model production instead of modelling only the
+// subsystem.
+//
+// No test asserts the install, and that is deliberate: principal.OrgFrom falls
+// back to zip.CallerOf when the slot is empty, so an assertion that the org
+// resolves passes with either Bridge deleted. mountRuns says what the install
+// actually buys.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // mountAll builds the WHOLE capability on one router — the run plane and the

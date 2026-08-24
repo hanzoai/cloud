@@ -138,27 +138,33 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		planEnt:  plan.Entitlements,
 		degraded: degraded,
 	}
-	// Bridge FIRST, before any leaf AND before the group below: a typed op receives
-	// only a context, so the validated org reaches it by being parked there — never
-	// as an In field, which is caller-supplied and would be a cross-tenant read the
-	// caller asserted for itself. fiber runs middleware in registration order, so
-	// one installed after its leaves never runs — which is why this precedes tg
-	// rather than following it. Serve installs the same middleware for the whole
-	// binary; this one is what makes team's typed ops resolve their tenant under a
-	// BARE Mount too (the app's own tests, and any embedder that mounts without
-	// Serve). Nesting is harmless — the inner one is what the handler sees.
+	// THE BRIDGE IS TEAM'S OWN, AND IT GOES ON THE SUBSYSTEM ROUTER BEFORE ANY
+	// GROUP. A typed op receives only a context, so the validated org reaches it by
+	// being parked there — never as an In field, which is caller-supplied and would
+	// be a cross-tenant read the caller asserted for itself. cloud.Bridge does the
+	// parking.
 	//
+	// Serve installs the same middleware binary-wide, which is why production was
+	// never broken; but no package's own harness runs Serve, so every team test
+	// measured a posture Mount alone did not have, and any embedder that mounts
+	// team without Serve got 403 on all nine typed ops. Composed here, the two
+	// nest, which is harmless: both park the same values off the same request.
+	//
+	// app, not a group, and BEFORE the groups below, for two reasons that differ by
+	// what app IS. On cloud's scoped Router it installs ONCE at the root gated by
+	// team's declared prefixes (scope.Use), so a group would only narrow it. On a
+	// BARE *zip.App a group is a sub-app whose environment is anchored at its
+	// inclusion site, so middleware added after a Group never reaches it — and
+	// team builds five groups from teamPrefix, in five files, which a per-group
+	// install would cover one of.
+	app.Use(cloud.Bridge())
+
 	// One /v1/team group; every route below is a child of it. Each file that
 	// declares TYPED ops builds its own group from the same teamPrefix constant —
 	// a fiber group IS its prefix, so those are the same routing subtree, and it
 	// is what lets cmd/zipdoc resolve each op's path from the file it is declared
 	// in (see bots.go).
 	tg := app.Group(teamPrefix)
-	// A typed op receives only a context, so the validated org reaches it by
-	// being parked there — never as an In field, which is caller-supplied and
-	// would be a cross-tenant read the caller asserted for itself. cloud.Bridge
-	// does the parking, and the composer owns that install, once at its root;
-	// this group is a bare path prefix.
 	acct.register(app, guard)
 
 	// The front's workspace switcher polls this statistics endpoint on the
@@ -175,7 +181,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
 	// path segment — no slashes), decoded + VERIFIED before the upgrade. UNTYPED,
-	// and it cannot be otherwise: the response is a protocol upgrade, not a value.
+	// and it cannot be otherwise: the handler ends in an upgrade that hands the
+	// connection to a frame loop outliving it. untypedByDesign (typed_wire_test.go)
+	// cites the code on both sides.
 	tg.Get("/transactor/:token", guard(trans.serveWS))
 
 	bridge := &botsBridge{trans: trans, accounts: accounts, degraded: degraded}

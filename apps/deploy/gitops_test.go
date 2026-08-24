@@ -110,7 +110,6 @@ func TestGitOpsHistoryCap(t *testing.T) {
 func TestGitOpsGuarded(t *testing.T) {
 	s := fakeService()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	compose(app)
 	routes(app, s)
 	resp, err := app.Test(httptest.NewRequest("GET", "/v1/deploy/gitops", nil))
 	if err != nil {

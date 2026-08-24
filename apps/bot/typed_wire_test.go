@@ -30,28 +30,17 @@ import (
 // DIFFERENT wire as a typed op, and typing is a description task. Addresses are
 // written the way the DOCUMENT writes them, which is the identity every projection
 // keys on.
+//
+// THE LAUNCH IS NO LONGER HERE, and the reason it left is the reason this list is
+// a test. It was refused on two facts and ONE OF THEM HAD EXPIRED: "a typed op
+// publishes a SUCCESS response it can never send" was true at zip v1.18.x and is
+// false at the pin — WithStatus takes any code in 100–599 (typed.go:154-176) and
+// the document keys its responses on the declared set (openapi.go:222-252), so
+// an operation whose only answer is 501 declares exactly that. The surviving fact
+// (body tolerance) was a self-imposed tolerance rather than one of the wire
+// mechanisms this ledger exists for, and the delta it cost is measured in
+// run_wire_test.go rather than glossed.
 var untypedByDesign = map[string]string{
-	// The launch stub. Two facts, either one sufficient, and both re-read against
-	// the PINNED zip (v1.18.12) rather than inherited as prose.
-	//
-	//  1. IT HAS NO SUCCESS. zip publishes a response schema for every typed op
-	//     (typed.go registerTyped → responses keyed on cmp.Or(op.Status, 200)), so
-	//     typing this would declare a 200 body it can never send AND mint an MCP
-	//     tool plus a CLI command for an operation that cannot succeed — a model
-	//     reading the tool list would call it. apps/books/bank_api.go declines its
-	//     two 501 stubs on exactly this ground.
-	//  2. IT IS BODY-TOLERANT. The handler never reads the body, so ANY bytes —
-	//     malformed JSON included — answer 501 today; op.invoke decodes the body
-	//     before the handler runs and returns ErrBadRequest on any failure, so
-	//     typing it turns those 501s into 400s. TestRunToleratesAMalformedBody
-	//     (run_wire_test.go) is that measurement.
-	//
-	// It gets typed in the same change that gives the bot runtime a launch
-	// operation, and not before.
-	"POST /v1/bot/runs": "answers 501 unconditionally — a typed op publishes a SUCCESS response it can " +
-		"never send, and mints an MCP tool and CLI command for an operation that cannot succeed; it is also " +
-		"body-tolerant, which op.invoke's unconditional 400 on an unparseable body cannot express.",
-
 	// The relay face. All five ARE one registration —
 	// app.All("/v1/bot/runtime/*", s.proxy) in relay.go — so they share one reason.
 	//
@@ -145,14 +134,30 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
-// TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
-// cannot see. A typed op publishes its Out's whole schema, and a property that
-// reaches openapi.yaml with no description reaches every generated SDK and every MCP
-// inputSchema without one too — `caps` as a bare string list nowhere documented as
-// the node's own self-report rather than as what it is permitted to do.
-func TestEveryPublishedFieldIsDescribed(t *testing.T) {
-	app := mountAll(t)
-	doc, err := openapi.Spec(app, openapi.Info{Title: "bot", Version: "v1"})
+// published is the MARSHALLED document — the artifact, not the Go value. Walking
+// the value would silently skip whichever half of an open-typed field it did not
+// expect, and what a reader of openapi.yaml, a generated SDK or an MCP inputSchema
+// actually sees is these bytes.
+type published struct {
+	Paths map[string]map[string]struct {
+		Parameters []struct {
+			Name        string `json:"name"`
+			In          string `json:"in"`
+			Description string `json:"description"`
+		} `json:"parameters"`
+	} `json:"paths"`
+	Components struct {
+		Schemas map[string]struct {
+			Properties map[string]struct {
+				Description string `json:"description"`
+			} `json:"properties"`
+		} `json:"schemas"`
+	} `json:"components"`
+}
+
+func publishedDoc(t *testing.T) published {
+	t.Helper()
+	doc, err := openapi.Spec(mountAll(t), openapi.Info{Title: "bot", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
@@ -160,23 +165,25 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal doc: %v", err)
 	}
-	var published struct {
-		Components struct {
-			Schemas map[string]struct {
-				Properties map[string]struct {
-					Description string `json:"description"`
-				} `json:"properties"`
-			} `json:"schemas"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(raw, &published); err != nil {
+	var out published
+	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatalf("unmarshal doc: %v", err)
 	}
-	if len(published.Components.Schemas) == 0 {
+	return out
+}
+
+// TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
+// cannot see. A typed op publishes its Out's whole schema, and a property that
+// reaches openapi.yaml with no description reaches every generated SDK and every MCP
+// inputSchema without one too — `startedAt` as a bare string nowhere documented as
+// RFC 3339 stamped by the runtime rather than by cloud.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc := publishedDoc(t)
+	if len(doc.Components.Schemas) == 0 {
 		t.Fatal("no published schemas at all — a typed op must publish its In/Out")
 	}
 	var bare []string
-	for name, schema := range published.Components.Schemas {
+	for name, schema := range doc.Components.Schemas {
 		for field, prop := range schema.Properties {
 			if strings.TrimSpace(prop.Description) == "" {
 				bare = append(bare, name+"."+field)
@@ -188,5 +195,76 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
 			"Write the field's doc comment and run: go generate -run zipdoc ./apps/bot/...",
 			len(bare), strings.Join(bare, ", "))
+	}
+}
+
+// proselessParams names every published PARAMETER that structurally cannot carry
+// prose, with the reason. It may only SHRINK: a parameter that starts publishing a
+// description goes red here, so the day the generator learns this ledger empties
+// instead of outliving the gap.
+//
+// A parameter is the half of the published surface a components.schemas walk cannot
+// see, which is why it needs its own list: a schema property and a path parameter
+// are both "a field a caller has to fill in", and only one of them was gated. All
+// five entries are one address — the relay's greedy wildcard — and the reason is
+// the wildcard itself: fiber captures the whole remaining sub-path positionally and
+// cloud's router reading names the segment `{wildcard1}`, so there is no Go field
+// declaring it and therefore nothing a doc comment can be written on.
+var proselessParams = map[string]string{
+	"DELETE /v1/bot/runtime/{wildcard1} :: path/wildcard1": reasonWildcardParam,
+	"GET /v1/bot/runtime/{wildcard1} :: path/wildcard1":    reasonWildcardParam,
+	"PATCH /v1/bot/runtime/{wildcard1} :: path/wildcard1":  reasonWildcardParam,
+	"POST /v1/bot/runtime/{wildcard1} :: path/wildcard1":   reasonWildcardParam,
+	"PUT /v1/bot/runtime/{wildcard1} :: path/wildcard1":    reasonWildcardParam,
+}
+
+const reasonWildcardParam = "a greedy wildcard is a POSITIONAL capture, not a declared field: fiber binds " +
+	"it as `*1` and cloud's router reading publishes it as {wildcard1}, so no Go struct field declares it " +
+	"and there is no doc comment for zipdoc to lift. It goes away when the address does, not before."
+
+// TestEveryPublishedParameterIsDescribed is the gate that closes the other half of
+// the published surface.
+//
+// The one entry that LEFT this list is the reason it is written both ways. `runId`
+// on the stop op published bare because the field carried `json:"-" url:"runId"`,
+// and zipdoc skips a field whose json name is "-" (internal/zipdoc/extract.go:669),
+// so the description zip looks up as `stopBotIn.runId` (openapi.go:162-167) was
+// never emitted. The same tag made the op UNCALLABLE as an MCP tool — a tools/call
+// reaches op.invoke with a nil path map (mcp.go:654) and zip's schema builder skips
+// the field (openapi.go:719-722), so the tool published an empty input schema and
+// could not name the run to stop. Both were one tag.
+func TestEveryPublishedParameterIsDescribed(t *testing.T) {
+	doc := publishedDoc(t)
+	seen := map[string]bool{}
+	var bare []string
+	for path, item := range doc.Paths {
+		for method, op := range item {
+			for _, p := range op.Parameters {
+				key := strings.ToUpper(method) + " " + path + " :: " + p.In + "/" + p.Name
+				described := strings.TrimSpace(p.Description) != ""
+				if _, named := proselessParams[key]; named {
+					seen[key] = true
+					if described {
+						t.Errorf("proselessParams names %q, which now publishes prose — delete the entry", key)
+					}
+					continue
+				}
+				if !described {
+					bare = append(bare, key)
+				}
+			}
+		}
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("%d published parameter(s) with no description: %s\n"+
+			"A parameter's prose is the doc comment on the In field it binds to, lifted by zipdoc under "+
+			"<Type>.<jsonName> — so the field needs a `json:` name zipdoc can key on AND a comment. "+
+			"Write it and run: go generate -run zipdoc ./apps/bot/...", len(bare), strings.Join(bare, ", "))
+	}
+	for key := range proselessParams {
+		if !seen[key] {
+			t.Errorf("proselessParams names %q, which bot no longer publishes", key)
+		}
 	}
 }

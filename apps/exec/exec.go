@@ -135,36 +135,54 @@ var langs = map[string]struct{ file, run string }{
 // CodeRun is what the code tool posts. Every field is one the client actually
 // sends: lang/code/args from the model's tool call, files/session_id/user_id from
 // the host's injection, runtime_session_hint from the stateful-session path.
+//
+// EVERY FIELD IS BODY-ONLY, and `url:"-"` is what says so. zip binds an input from
+// three sources in INCREASING authority — body, then query, then path (typed.go
+// invoke) — and bindURL matches a query key case-insensitively against each
+// field's url name, so a field left unmarked gains a `?field=` twin that OUTRANKS
+// the body. On this operation that is not cosmetic. Measured against the live
+// route before the tags existed, with a complete and valid body:
+//
+//	?code=            → 400 "field \"code\" is required"   the program was BLANKED
+//	?code=<anything>  → the substituted program is what RUNS
+//	?lang=zzz         → 400, the query beating a valid body
+//	?session_id=X     → the run is redirected into a different sandbox
+//
+// None of it crosses a tenant — the org comes from tenantOf and the peer is scoped
+// by it — but it silently substitutes what executes, on a parameter no caller
+// means as input. The URL carries no part of this operation's input, so the whole
+// struct declines it; the slices are declined too, because setScalar leaving them
+// alone today is a property of their KIND rather than a decision anybody made.
 type CodeRun struct {
 	// Lang selects the toolchain, and with it the filename the code is written to
 	// and the line that runs it: py, js, ts, bash, r, php, go, rs, c, cpp, java, d,
 	// f90. Anything else is refused rather than guessed at — a run in the wrong
 	// language fails somewhere deep in a compiler, which reads as an outage.
-	Lang string `json:"lang" validate:"required"`
+	Lang string `json:"lang" url:"-" validate:"required"`
 	// Code is the WHOLE program, not a fragment: it is written to a single file and
 	// that file is what runs, so a compiled language needs its entry point and an
 	// interpreted one runs top to bottom.
-	Code string `json:"code" validate:"required"`
+	Code string `json:"code" url:"-" validate:"required"`
 	// Args become the PROGRAM's argv, never the compiler's. For the compiled
 	// languages the toolchain builds first and these are passed to the binary it
 	// produced.
-	Args []string `json:"args,omitempty"`
+	Args []string `json:"args,omitempty" url:"-"`
 	// Files are inputs the host already put in some session. Each names the session
 	// its bytes live in, which is usually — and ideally — the session this run wants.
-	Files []CodeFile `json:"files,omitempty"`
+	Files []CodeFile `json:"files,omitempty" url:"-"`
 	// SessionID continues an EXISTING sandbox, which is what makes runs stateful:
 	// the same filesystem, so one run's output file is the next run's input. Empty
 	// leases a fresh sandbox and the id it got comes back on the result.
-	SessionID string `json:"session_id,omitempty"`
+	SessionID string `json:"session_id,omitempty" url:"-"`
 	// UserID attributes the run inside the caller's org. It is a label, never a
 	// tenant: the org is resolved from the validated principal and a value here
 	// cannot widen what the run may reach.
-	UserID string `json:"user_id,omitempty"`
+	UserID string `json:"user_id,omitempty" url:"-"`
 	// RuntimeSessionHint is the stateful-session hint. It is carried so a client
 	// that sends it is not silently misread, and it selects nothing here: every
 	// session in this implementation is already a warm sandbox, so there is no
 	// second kind of runtime for a hint to choose between.
-	RuntimeSessionHint string `json:"runtime_session_hint,omitempty"`
+	RuntimeSessionHint string `json:"runtime_session_hint,omitempty" url:"-"`
 }
 
 // CodeFile is one file in a session. ID is its path RELATIVE to the session's
@@ -222,7 +240,18 @@ type CodeResult struct {
 // the `{session}/{id}` identifier as a PREFIX, so `name` carries that identifier
 // whole rather than the bare filename.
 type listing struct {
-	Name         string `json:"name"`
+	// Name is the file's IDENTIFIER, `{session_id}/{fileId}` whole — never the bare
+	// filename, and never URL-escaped. It is exactly what GET /v1/exec/download
+	// takes after its prefix, and hanzo.chat matches it as a PREFIX
+	// (`name.startsWith(session + "/")`) to decide which rows belong to a session
+	// it is holding. `fileId` is the path RELATIVE to the session's artifact
+	// directory, so it carries `/` for anything the run wrote in a sub-directory.
+	Name string `json:"name"`
+	// LastModified is when the BYTES last changed, as RFC 3339 in UTC to the
+	// second — `2026-01-02T03:04:05Z`, the sandbox's own `date -u -r` on the file.
+	// It is an mtime and not a creation time, so a file a later run overwrote
+	// carries that run's clock. Never empty: a row exists only because `find`
+	// stat-ed the file.
 	LastModified string `json:"lastModified"`
 }
 
@@ -520,7 +549,13 @@ func storageSession(fs []CodeFile) string {
 
 func Languages() []string { return slices.Sorted(maps.Keys(langs)) }
 
-// ---- the three routes that cannot be typed ops -----------------------------
+// ---- the two routes that cannot be typed ops -------------------------------
+//
+// TWO, and the count is a TEST rather than this line: typed_wire_test.go reads the
+// live router and requires the typed ops and the named refusals to SUM to the
+// served surface. That header said THREE while it sat above four handlers, one of
+// which was already typed — which is what a count in a comment always eventually
+// says, because a comment cannot fail.
 
 // upload puts a multipart file into a session and answers the identifier the client
 // will address it by. It is a zip.Ctx handler and not a typed op because zip decodes
@@ -612,7 +647,24 @@ type sessionRef struct {
 // an array and marshals to one.
 type listings []listing
 
-// Files lists what a session holds.
+// listFiles lists the files in an execution session.
+//
+// Everything the session's sandbox holds — the uploads a run can read and the
+// artifacts it produced — each then fetched from GET /v1/exec/download.
+//
+// The answer is a BARE JSON ARRAY of {name, lastModified}, where `name` is the
+// same {session_id}/{fileId} identifier download takes, because that is what the
+// client matches on. The obvious typed shape, `{files: […]}`, would have been a
+// silent wire change: the request still succeeds and `response.data.find(...)`
+// finds nothing, which reads as a session holding no files.
+//
+// The NAME of this handler is what the published summary is cut from, and it used
+// to leak: the comment opened "Files lists …", which is not this function's
+// identifier, so zipdoc's exact-match strip left it and every SDK, tool list and
+// CLI help line opened with a Go symbol no caller can see. An openapi.Describe
+// stated a better summary beside the route and was DISCARDED — Fold replaces a
+// structural operation with the typed one — so the declaration read as landed and
+// rendered nowhere. The comment is the one home for this sentence.
 //
 // One recursive `find`, the same traversal the artifact sweep makes. It used to be
 // `ls -1A` — top level only — while the sweep collected with `find`, so a run that
@@ -659,7 +711,23 @@ func listFiles(ctx context.Context, in *sessionRef) (*listings, error) {
 	return &out, nil
 }
 
-// programmatic refuses, and names what it would take to stop refusing.
+// noInput is the In of an operation that reads nothing off the wire. NAMED, and
+// empty: hasRequestBody skips an input with no field the URL does not already
+// carry, so it publishes no request body — which is the honest document for a
+// route that takes no argument.
+type noInput struct{}
+
+// noContent is the Out of an operation that sends no body at all. An ALIAS for the
+// unnamed empty struct rather than a definition, because zip publishes a response
+// SCHEMA only for an Out whose type has a NAME — a defined type here would
+// document a body this route has never sent.
+type noContent = struct{}
+
+// programmatic answers 501 — this deployment does not serve programmatic tool calling.
+//
+// That sentence is the SUMMARY every projection shows, so it says what a caller
+// gets rather than what the code does; the rest names what it would take to stop
+// refusing.
 //
 // /exec/programmatic is NOT this contract's sibling — it is a different protocol on
 // an adjacent path: a multi-round-trip loop where the server suspends a Python
@@ -671,8 +739,37 @@ func listFiles(ctx context.Context, in *sessionRef) (*listings, error) {
 // So it answers 501 with that fact rather than being routed into `run`, which would
 // hand the caller a CodeResult its parser cannot read — a wrong answer, where this is a
 // refusal a client can act on.
-func programmatic(c *zip.Ctx) error {
-	return zip.Errorf(http.StatusNotImplemented,
+//
+// IT IS A TYPED OP, and the refusal for keeping it raw did not survive reading. It
+// binds no body, opens no stream, relays no other process and sits on no wildcard,
+// so none of the four wire facts that keep a route raw applies to it; what was
+// cited instead was that a permanent stub should declare nothing. That argues for
+// silence in the DOCUMENT and buys the silence everywhere else too — no MCP tool,
+// no CLI command, no SDK method — so a caller could read this address and reach it
+// by no projection but REST, and learn only by calling it that the protocol is not
+// served. Declaring `zip.WithStatus(501)` is what makes typing honest: the document
+// publishes the ONE status this route sends, over an Out with no schema, rather
+// than the 204 a void op would otherwise have invented.
+//
+// ONE delta, pinned by TestProgrammaticRefusesEveryBody: a body that is not JSON
+// now answers 400 rather than 501, because op.invoke decodes before the handler is
+// entered. Both are refusals of a protocol this deployment does not serve, no real
+// caller sends one, and 400 is what the rest of the fleet answers to bytes it
+// cannot parse.
+//
+// It asks tenantOf for the reason every other operation here does, and the answer
+// is the same on the wire it was: over HTTP the credential middleware has already
+// run, so an admitted caller still reads 501. What the call closes is the entry
+// point a route table cannot see — typing an operation makes it an MCP tool, which
+// zip dispatches straight into the handler with no route and therefore no
+// middleware. Uniformity is the whole property: every path into this subsystem
+// reads the admission marker, so there is no operation anybody has to remember is
+// the exception.
+func programmatic(ctx context.Context, _ *noInput) (*noContent, error) {
+	if _, err := tenantOf(ctx); err != nil {
+		return nil, err
+	}
+	return nil, zip.Errorf(http.StatusNotImplemented,
 		"programmatic tool calling is a different protocol from /v1/exec: it suspends a "+
 			"run on each tool call and resumes it from a continuation token. This deployment "+
 			"serves /v1/exec only")
@@ -727,7 +824,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The meter that pays for a run. Bound here because this subsystem's handlers
 	// are free functions with no service value to hang it off. See meter.go.
 	bindMeter(cloud.NewResourceMeter(deps, "exec"))
-	// The credential check, and the two facts it produces.
+
+	// The identity a typed op reads, parked on the request AHEAD of the leaves.
+	//
+	// A typed op receives a context and never a request, so the validated principal
+	// has to be put there by middleware; fiber runs middleware in registration
+	// order, so one installed after its leaves never runs. cloud.Serve installs
+	// this app-wide and that is why nothing was live-broken — but no package test
+	// runs Serve, so exec's own suite proved the org path with the org absent, and
+	// meter_test.go had to add a Bridge by hand to resolve a payer at all.
+	//
+	// It also retires a copy. exec's credential middleware below called
+	// principal.WithOrg itself — Bridge's org half, restated — while parking none of
+	// Bridge's other facts. Two partial implementations of one fact on one request
+	// is the drift; there is one now, and what the middleware below adds is visibly
+	// the ADMISSION and nothing else.
+	app.Use(cloud.Bridge())
+
+	// The credential check, and the fact it produces.
 	//
 	// cloud.RoutePath, not c.Path(): fiber routes case-insensitively and ignores a
 	// trailing slash, so the raw spelling is what the CLIENT sent and RoutePath is
@@ -736,11 +850,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// this repo already normalizes here (middleware_abuse.go:160,
 	// middleware_ratelimit.go:100); this one did not.
 	//
-	// It parks BOTH facts on the request context, which is what makes the check
-	// reach past the router: principal.WithOrg carries the VALIDATED org so a typed
-	// op can resolve it (typed.go:82 rebuilds from c.Context(), so this is inherited),
-	// and admit records that the service key checked out. Nothing downstream re-reads
-	// a header or a path to decide either one.
+	// It parks its fact on the request context, which is what makes the check reach
+	// past the router: admit records that the service key checked out, and a typed
+	// op reads it back because zip rebuilds from c.Context(). The VALIDATED org is
+	// Bridge's, above — one owner for one fact. Nothing downstream re-reads a header
+	// or a path to decide either.
 	app.Use(zip.H(func(c *zip.Ctx) error {
 		if !owned(cloud.RoutePath(c.Path())) {
 			return c.Continue()
@@ -748,7 +862,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		if err := checkKey(c); err != nil {
 			return err
 		}
-		c.SetContext(principal.WithOrg(admit(c.Context()), c))
+		c.SetContext(admit(c.Context()))
 		return c.Continue()
 	}))
 
@@ -768,7 +882,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	zip.Post[CodeRun, CodeResult](reg, Path, run,
 		zip.WithSummary("Run a code snippet in a sandboxed interpreter"))
-	app.Post(Path+"/programmatic", programmatic)
+	// 501 is DECLARED, not merely sent. An Out with no name publishes no schema, so
+	// without this the document would say 204 — a status this address has never
+	// answered — and every generated client would branch on it.
+	zip.Post(reg, Path+"/programmatic", programmatic,
+		zip.WithStatus(http.StatusNotImplemented))
 	app.Post(Path+"/upload", upload)
 	app.Get(Path+"/download/*", download)
 	zip.Get(reg, Path+"/files/:sid", listFiles)
@@ -792,18 +910,21 @@ func owned(p string) bool {
 	return p == Path || strings.HasPrefix(p, Path+"/")
 }
 
-// Prose for the four untyped routes, declared beside the wire facts that keep them
-// untyped. POST /v1/exec is a typed op and carries its own doc comment; these four
-// have no comment for zipdoc to lift, so they would otherwise publish an
-// operationId and nothing else.
+// Prose for the two untyped routes, declared beside the wire facts that keep them
+// untyped. A typed op carries its own doc comment, which zipdoc lifts; these two
+// have no comment to lift from, so they would otherwise publish an operationId and
+// nothing else.
+//
+// A DECLARATION FOR A TYPED OP IS DEAD, and two used to sit here saying so nowhere.
+// Describe writes a structural operation and Fold then REPLACES it with the typed
+// one (openapi/openapi.go), so the prose was written, reviewed and discarded — the
+// published summary for the file listing was its Go identifier, "Files lists what a
+// session holds.", while the sentence declared here rendered nowhere.
+// openapi.Complete cannot catch it either: its orphan check asks only whether the
+// ADDRESS is served, and it is. So the rule is the shape of the route, not a
+// preference — a typed op is described by its comment, and only a raw route is
+// described here.
 func init() {
-	openapi.Describe(Path+"/programmatic", http.MethodPost,
-		"Programmatic tool calling (not served here)",
-		"Answers 501. This address belongs to a DIFFERENT protocol from /v1/exec: the "+
-			"server suspends a program on each tool call, returns the pending calls with a "+
-			"continuation token, and resumes when the client posts results back. Serving it "+
-			"means implementing suspension and resumption, so it refuses in the open rather "+
-			"than answering with a shape the caller's parser cannot read.")
 	openapi.Describe(Path+"/upload", http.MethodPost,
 		"Upload a file into an execution session",
 		"Takes a multipart upload and writes the file into the session's sandbox, so a "+
@@ -818,11 +939,4 @@ func init() {
 			"name and defaults to application/octet-stream.\n\nThis is the one address whose "+
 			"success body is not JSON, which is why it is not a typed operation: a typed "+
 			"operation always marshals a Go value.")
-	openapi.Describe(Path+"/files/:sid", http.MethodGet,
-		"List the files in an execution session",
-		"Lists what a session's sandbox holds — the uploads a run can read and the "+
-			"artifacts it produced — each then fetched from /v1/exec/download.\n\nIt answers a BARE "+
-			"JSON ARRAY of {name, lastModified}, where `name` is the same {session_id}/{fileId} "+
-			"identifier download takes, because that is what the client matches on. An object "+
-			"wrapper would be a wire change, which is why this is not a typed operation.")
 }

@@ -19,7 +19,10 @@
 // stream) resolve the request's scope (resolveScope) — a SuperAdmin sees the whole
 // fleet, a validated org member sees ONLY its own org's apps (hanzo.ai/org label,
 // tenant-<org> namespace), anyone else 403s. The WRITE actions (sync/rollback) and
-// the argocd bootstrap (settings/version/can-i) stay SuperAdmin-only (guard). The
+// the argocd bootstrap (settings/version/can-i) stay SuperAdmin-only — the typed
+// ops ask superAdminOf INSIDE the op, so the gate holds on every projection and
+// not only on the REST route; can-i, the one raw handler left here, keeps the
+// guard() middleware, which is all a raw handler can have. The
 // argocd UI's own auth is disabled because IAM owns identity at the edge (the SPA is
 // public static assets, the data is scoped). AppProject → IAM/Org (no argocd RBAC):
 // projects are REFLECTED read-only from the IAM-owned (org,name) Project resource.
@@ -83,13 +86,17 @@ func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/version", o.version)
 	// can-i stays a RAW handler, and the reason is zip's path templating, not this
 	// plane's: its route is a fiber WILDCARD (argocd asks about a
-	// resource/action/subresource triple, which is several segments), and zip
-	// renders a typed op's path with closeColonParams (openapi.go:407), which
-	// converts ":name" and leaves "*" alone — while cloud's translate
-	// (openapi/openapi.go:556) renders the LIVE route as "{wildcard1}". The two
+	// resource/action/subresource triple, which is several segments), and zip's
+	// Template returns a pattern holding no ':' UNCHANGED (address.go:61-64), so a
+	// typed op would publish "/v1/deploy/account/can-i/*" while cloud's translate
+	// renders the LIVE route as "{wildcard1}" (openapi/openapi.go:807-823). The two
 	// readings then name different paths and openapi.Fold refuses the whole
-	// document ("typed op ... has no live route"). Typable the day zip templates a
-	// wildcard the way the document does.
+	// document (openapi/openapi.go:699-705, "has no live route") — so this app
+	// would publish NOTHING, not merely lose one operation. Typable the day zip
+	// templates a wildcard the way the document does, which is one function: ID()
+	// already spells '*' as "wildcardN" (zip openapi.go:328-330) and Template does
+	// not. Naming three params instead is not the remedy — the subresource argocd
+	// asks about is routinely two segments.
 	g.Get("/account/can-i/*", guard(s, cloud.Handle(s, dashCanI)))
 
 	// Applications projection (read). TENANT-SCOPED: each op resolves the caller's
@@ -122,19 +129,24 @@ func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
 	// dimension, so SuperAdmin-only rather than scope-resolved.
 	zip.Get(g, "/gitops", o.gitops)
 
-	// Actions → App-CR reconcile ops. STILL SuperAdmin-only (guard): write-back to the
-	// fleet is a follow-on; this plane's tenant surface is read-only reflection for now.
+	// Actions → App-CR reconcile ops. STILL SuperAdmin-only: write-back to the fleet
+	// is a follow-on; this plane's tenant surface is read-only reflection for now.
 	//
-	// They stay RAW, and so does POST /v1/deploy/{logout,reconcile}, for ONE
-	// measured wire fact: zip decodes the request body BEFORE the handler runs and
-	// 400s any body it cannot parse (typed.go:243-247), while these routes read no
-	// body at all. Typing them turns today's answer to a malformed body — 200 with
-	// a SuperAdmin, 403 without one — into a 400, which for the gated ones also
-	// puts the parse error AHEAD of the authorization refusal. zip has no
-	// body-tolerant op and no bodyless POST to declare (hasBody, openapi.go:270, is
-	// method-only), so the fix is in zip, not here.
-	g.Post("/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))
-	g.Post("/applications/:name/rollback", guard(s, cloud.Handle(s, dashSync)))
+	// They are TYPED ops, and the gate moved INSIDE them (superAdminOf) rather than
+	// staying the guard() middleware that wrapped the raw handlers. That move is the
+	// whole reason typing them is safe: a typed op is also reached by POST /mcp and
+	// by the by-name call plane, and zip dispatches both straight into op.invoke,
+	// where no route middleware runs — so converting these while leaving the gate in
+	// middleware would have published an unguarded alias of two fleet-mutating
+	// admin writes. superAdminOf additionally refuses off the HTTP path entirely, so
+	// a CLI LocalInvoke with no attested caller cannot reach them either.
+	//
+	// Both publish NO request body: their whole input is the {name} the URL already
+	// carries, which hasRequestBody (zip openapi.go:405-433) reads and declines to
+	// declare — so no generated SDK gains a phantom argument for a body neither
+	// route has ever read.
+	zip.Post(g, "/applications/:name/sync", o.sync)
+	zip.Post(g, "/applications/:name/rollback", o.rollback)
 }
 
 // ── clusters + projects projection ───────────────────────────────────────────
@@ -555,37 +567,81 @@ func (o ops) resourceTree(ctx context.Context, in *appRef) (*argoTree, error) {
 // requests a second apart are two reconciles and two in the same second are one.
 const syncAnnotation = "gitops.hanzo.ai/sync-requested-at"
 
-// dashSync requests an operator reconcile of the App CR (the sync + rollback UI
-// actions both map to "reconcile this App now" — the App CR is the source of
-// truth; rollback-by-revision is the image-pin follow-on). Returns the projected
-// Application (the UI only checks for a non-error response).
-func dashSync(s *cloud.Service[state], c *zip.Ctx) error {
-	// Reached only through guard() (SuperAdmin-only), so the scope is always whole-fleet;
-	// resolving it keeps ONE namespace-resolution path (findNamespace) across the plane.
-	sc, ok := resolveScope(c)
-	if !ok {
-		return forbidden()
-	}
-	if err := ready(s); err != nil {
-		return err
-	}
-	name, err := appName(c.Param("name"))
+// SyncDeployApplication asks the operator to reconcile ONE application now.
+//
+// It stamps a sync-requested timestamp onto the application's App CR, which the
+// operator's watch observes, and answers the application re-projected. It ASKS,
+// it does not apply: the operator reconciles on its own clock, so a 200 means the
+// request landed, not that the rollout finished — the returned row's running
+// version still lags until it does.
+//
+// SuperAdmin-only and fail-closed, and the gate is INSIDE the op rather than in
+// middleware wrapped around the route. That is a correctness requirement, not a
+// preference: this op is also reached by POST /mcp and by the by-name call plane,
+// neither of which runs route middleware, so a gate that only the REST projection
+// runs would publish an unguarded alias of a fleet-mutating write. It reads no
+// request body — the URL names the application and nothing else does. An unknown
+// name is a 404 (never a 403, which would confirm the application exists), a name
+// that is not a DNS-1123 label is a 400, and no cluster client is a 503.
+func (o ops) sync(ctx context.Context, in *appRef) (*argoApp, error) {
+	return o.requestReconcile(ctx, in, "sync")
+}
+
+// RollbackDeployApplication serves the console's rollback control, and today it
+// requests a reconcile and nothing more.
+//
+// The opening verb is not style. zipdoc drops a leading CamelCase symbol only
+// when a plain verb follows it and never before a copula (internal/zipdoc/
+// extract.go:811-824, "CompleteDeployment IS the CI completion hook" would
+// otherwise become "Is the CI completion hook") — so "RollbackDeployApplication
+// is …" would publish a Go symbol no caller can see into the summary an SDK
+// docstring, an MCP tool list and a CLI help line all show.
+//
+// It performs exactly what the sync action performs — the same stamp on the same
+// App CR, the same application re-projected — and it does NOT select, pin or
+// revert to a prior image tag. That is the one thing to know before wiring
+// anything to it: the name is the console's, the behaviour is the sync. Pinning a
+// previous release rides the release client, which this address does not call yet.
+//
+// Same gate, same refusals and the same absent request body as the sync it shares
+// a core with.
+func (o ops) rollback(ctx context.Context, in *appRef) (*argoApp, error) {
+	return o.requestReconcile(ctx, in, "rollback")
+}
+
+// requestReconcile is the ONE core both write actions run, so the two addresses
+// cannot drift about what they do to a CR. `action` is the word the audit line
+// records and reaches no caller.
+func (o ops) requestReconcile(ctx context.Context, in *appRef, action string) (*argoApp, error) {
+	// SuperAdmin-only, so the scope is always whole-fleet; resolving it keeps ONE
+	// namespace-resolution path (findNamespace) across the plane, and it refuses off
+	// the HTTP path where there is no attested caller at all.
+	sc, err := superAdminOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ns, err := sc.findNamespace(s, c.Context(), name)
-	if err != nil {
-		return err
+	if err := ready(o.s); err != nil {
+		return nil, err
 	}
-	cr, gvr, err := getAppCR(s, c.Context(), ns, name)
+	name, err := appName(in.Name)
 	if err != nil {
-		return k8sErr(s, "get", err)
+		return nil, err
+	}
+	ns, err := sc.findNamespace(o.s, ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	cr, gvr, err := getAppCR(o.s, ctx, ns, name)
+	if err != nil {
+		return nil, k8sErr(o.s, "get", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	patch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"annotations": map[string]any{syncAnnotation: now}}})
-	if _, err := s.State.dyn.Resource(gvr).Namespace(ns).Patch(c.Context(), name, k8stypes.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
-		return k8sErr(s, "patch", err)
+	if _, err := o.s.State.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, k8stypes.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+		return nil, k8sErr(o.s, "patch", err)
 	}
-	s.Log.Info("dashboard sync requested", "app", name, "namespace", ns, "actor", c.User())
-	return c.JSON(http.StatusOK, projectApp(cr, ns, runningVersions(s, c.Context(), ns)[name]))
+	actor, _ := consoleUser(ctx)
+	o.s.Log.Info("dashboard reconcile requested", "action", action, "app", name, "namespace", ns, "actor", actor)
+	app := projectApp(cr, ns, runningVersions(o.s, ctx, ns)[name])
+	return &app, nil
 }

@@ -149,10 +149,22 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	// A typed op receives only a context, so the validated org — and the request
 	// the admin gate reads X-User-IsAdmin off — reach it by being parked there by
-	// cloud.Bridge. This subsystem does not install the bridge: the program's
-	// composer does, once at the root, after the identity check that mints the org
-	// and before any subsystem registers a route — an order only the composer can
-	// hold.
+	// cloud.Bridge, installed HERE, on this subsystem's own router and ahead of
+	// every leaf below (fiber runs middleware in registration order, so one
+	// installed after its leaves never runs).
+	//
+	// The composer installs one too, app-wide, and this is deliberately not a
+	// substitute for that: the composer's runs after the identity check that mints
+	// the org, an order only the composer can hold, and it covers every app in the
+	// binary. What a subsystem cannot borrow is a composer that is not there —
+	// this package's own tests mount Mount on a bare app, and so does anything
+	// else that composes pricing without cloud.Serve. Without a local install a
+	// typed op resolves no org THERE and only there, which is a failure that
+	// exists in tests and never in production: the worst shape a gap can take.
+	// Bridge derives everything it parks from the request, so the second pass over
+	// the same request parks the same values.
+	app.Use(cloud.Bridge())
+
 	o := ops{log: logger}
 	zip.Get(zapp, "/v1/pricing/health", o.health)
 
@@ -178,16 +190,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(zapp, "/v1/pricing/summary", o.summary)
 	zip.Get(zapp, "/v1/pricing/model/:name", o.getModel)
 
-	// Admin write surface for the overlay (SuperAdmin only; see admin.go). These
-	// two PATCHes are the ONLY untyped routes left on this surface: the model id
-	// routes through a greedy wildcard, and typing that turns the WHOLE document
-	// red (zip keys the op at `/…/models/*`, the document at `/…/models/{wildcard1}`,
-	// and openapi.Fold refuses a registry entry whose route it cannot find); the
-	// shared `overrides` field is an RFC 7386 merge patch stored and echoed
-	// VERBATIM, which pins it to json.RawMessage — published as an array of
-	// integers (it is []byte) — while map[string]any would reorder it. ops.go
-	// carries the full reasoning and typed_wire_test.go PROVES both, so a fix
-	// upstream shows up as a red test rather than as stale prose.
+	// Admin write surface for the overlay (SuperAdmin only; see admin.go). The
+	// models PATCH is the ONE untyped route left on this surface, and the reason
+	// is the greedy wildcard alone: zip keys a typed op at the fiber pattern
+	// `/…/models/*` (Template rewrites `:name` segments and leaves `*` verbatim,
+	// zip@v1.36.3/address.go:61) while this document keys the route at
+	// `/…/models/{wildcard1}` (openapi/openapi.go:811), so openapi.Fold finds no
+	// live route for the op and refuses (openapi/openapi.go:705) — and Spec builds
+	// ONE document, so every other pricing operation goes down with it.
+	//
+	// Its BODIES are declared even so (admin.go's init): the wildcard blocks
+	// typing, not describing. `overrides` was a second reason and is not one any
+	// more — zip publishes a json.RawMessage as the unconstrained value it is —
+	// which is why PATCH providers/:name below is an op. typed_wire_test.go proves
+	// both against the toolchain in go.mod, so a fix upstream shows up as a red
+	// test rather than as stale prose.
 	zip.Get(zapp, "/v1/admin/pricing/catalog", o.adminCatalog)
 	app.Patch("/v1/admin/pricing/catalog/models/*", adminPatchModel)
 	zip.Patch(zapp, "/v1/admin/pricing/catalog/providers/:name", adminPatchProvider)

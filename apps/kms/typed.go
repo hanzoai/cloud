@@ -28,6 +28,12 @@ package kms
 // secret material turns up anywhere but the one response body that exists to
 // carry it.
 
+// The package's ONE zipdoc directive. It covers BOTH typed planes — the REST
+// ops here and the internal plane's four in secret_rpc.go — because the
+// generator walks the whole package, not the file it was triggered from. A
+// second directive elsewhere would link and run the generator twice for one
+// identical result.
+//
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
@@ -200,19 +206,37 @@ type kmsRemoved struct {
 // kmsList narrows a secret listing. Both spellings of each parameter are
 // accepted because two callers already use two: this plane's own clients say
 // `env` and `path`, the KMS operator says `environment` and `secretPath`.
+//
+// Every field carries a json name AS WELL AS its url name, and the json half is
+// what carries the PROSE. zipdoc files a field's description under
+// `<Type>.<json name>` and skips a field whose json name is `-`
+// (zipdoc/extract.go:670,678), while zip looks a published parameter's
+// description up under `<In>.<url name>` (zip/openapi.go:163) — so under
+// `json:"-"` the four query parameters this op publishes reached openapi.yaml,
+// every generated SDK and the MCP inputSchema saying nothing about themselves,
+// with the prose written here and dropped in between.
+//
+// It cannot widen the REST wire. This is a GET, and the handler reads no body
+// for a method hasBody says carries none (zip/typed.go:517), so there is no
+// body for a json name to bind from and no requestBody is published
+// (hasRequestBody, zip/openapi.go:405). What it does reach is the other two
+// projections: MCP and the CLI pass their arguments AS the body with no query
+// (zip/typed.go:485-489), so an agent calling this op could name no filter at
+// all and every argument it sent was silently discarded.
 type kmsList struct {
-	// Env selects the environment. OMITTED means every environment — this is
-	// the enumeration surface, so it must be able to answer "what is in here".
-	Env string `json:"-" url:"env"`
-	// Environment is the operator's spelling of Env. Env wins when both are
+	// Env selects the environment, which is part of a secret's storage key.
+	// OMITTED means EVERY environment — this is the enumeration surface, so it
+	// must be able to answer "what is in here" without being told where to look.
+	Env string `json:"env" url:"env"`
+	// Environment is the KMS operator's spelling of Env, accepted so one caller
+	// need not learn the other's vocabulary. Env wins when both are sent.
+	Environment string `json:"environment" url:"environment"`
+	// Path narrows the listing to one subtree beneath the caller's org root, as
+	// a `/`-separated path such as `/ci`. OMITTED means the whole org.
+	Path string `json:"path" url:"path"`
+	// SecretPath is the KMS operator's spelling of Path. Path wins when both are
 	// sent.
-	Environment string `json:"-" url:"environment"`
-	// Path narrows to a subtree beneath the org root. Omitted means the whole
-	// org.
-	Path string `json:"-" url:"path"`
-	// SecretPath is the operator's spelling of Path. Path wins when both are
-	// sent.
-	SecretPath string `json:"-" url:"secretPath"`
+	SecretPath string `json:"secretPath" url:"secretPath"`
 }
 
 // kmsPut is one secret to seal and store. Every field carries url:"-" because

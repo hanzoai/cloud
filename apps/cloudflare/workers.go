@@ -20,29 +20,45 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// WorkerScriptPut is the upload request for a Workers module script. Script is the
-// ES-module source; MainModule names the entry file (default "worker.js").
-// CompatibilityDate/Flags and Bindings ride the multipart metadata part. It is the
-// struct the handler binds AND what the document declares for the route
-// (openapi.Register, cloudflare.go), so the published contract follows the code.
+// WorkerScriptPut is the upload request for a Workers module script: the script's
+// NAME from the path, its SOURCE and settings from the body.
+//
+// The route means two different things by one word, so the two halves say which
+// half of the request each rides. `url:"script"` binds the path segment and
+// `json:"-"` keeps that field out of the published body; `json:"script"` carries
+// the module source and `url:"-"` keeps a `?script=` from reaching it. Without the
+// split, zip's binder gives the URL the last word — right for addressing, and it
+// would have deployed a Worker whose code was its own name.
+//
+// That collision is also why the op carries no Example line: zip splits an example
+// across the parameters that carry its keys, so an example naming `script` would
+// advertise a module's source as a path segment.
 type WorkerScriptPut struct {
-	// Script is the ES-module SOURCE — the code itself, not a name or a URL. It
-	// shares a name with the `:script` path segment, which names the Worker; those
-	// are two different things, and keeping them apart is why this route cannot be a
-	// typed op.
-	Script string `json:"script"`
-	// MainModule is the module file the runtime starts at. Empty means "worker.js".
-	MainModule string `json:"mainModule,omitempty"`
+	// Name is the Worker script to publish, from the path. The URL is the addressing
+	// authority: no body field can redirect an upload to another script. It carries
+	// no prose of its own — zipdoc lifts a field's comment under its JSON name and
+	// this one has none, so the path parameter's sentence is Script's, below.
+	Name string `json:"-" url:"script"`
+	// Script means two things on this route, and the document says so in both places
+	// it appears: the PATH segment names the Worker to publish, and the BODY field
+	// carries that Worker's ES-module source — the code itself, never a name or a
+	// URL. A blank or absent source is refused; there is no empty Worker.
+	Script string `json:"script" url:"-"`
+	// MainModule is the module file the runtime starts at. Absent means "worker.js".
+	MainModule string `json:"mainModule,omitempty" url:"-"`
 	// CompatibilityDate pins which Workers runtime behaviour the script runs under,
-	// as a date ("2024-01-01").
-	CompatibilityDate string `json:"compatibilityDate,omitempty"`
+	// as a plain calendar date ("2024-01-01"). Absent leaves the account's own
+	// default in force.
+	CompatibilityDate string `json:"compatibilityDate,omitempty" url:"-"`
 	// CompatibilityFlags turn individual runtime behaviours on or off around that
-	// date ("nodejs_compat").
-	CompatibilityFlags []string `json:"compatibilityFlags,omitempty"`
+	// date ("nodejs_compat"), in Cloudflare's own flag vocabulary. Absent means the
+	// date alone decides.
+	CompatibilityFlags []string `json:"compatibilityFlags,omitempty" url:"-"`
 	// Bindings are the resources the script can reach (KV, D1, R2, secrets, …), in
-	// Cloudflare's own binding vocabulary. Passed through as written: this plane
-	// deliberately does not model Cloudflare's shapes.
-	Bindings json.RawMessage `json:"bindings,omitempty"`
+	// Cloudflare's own binding vocabulary, passed through as written: this plane
+	// deliberately does not model Cloudflare's shapes. Absent uploads a script with
+	// NO bindings, which replaces whatever the previous version had.
+	Bindings json.RawMessage `json:"bindings,omitempty" url:"-"`
 }
 
 // ── scripts ─────────────────────────────────────────────────────────────────────
@@ -57,38 +73,37 @@ func (o ops) workersScriptList(ctx context.Context, _ *noInput) (*cfResult, erro
 	return cl.relay(ctx, http.MethodGet, "/accounts/"+acct+"/workers/scripts", nil)
 }
 
-// workersScriptPut uploads (or replaces) a module Worker script. Requires org admin.
+// WorkersScriptPut uploads or replaces a module Worker script. It publishes to the
+// org's OWN Cloudflare account under the name in the path, replacing whatever was
+// there, and relays Cloudflare's result. The compatibility date, compatibility
+// flags and bindings are packed into the multipart upload Cloudflare expects,
+// beside the module source.
 //
-// NOT a typed op: the path names the script (`:script`) and the body field `script`
-// carries the module SOURCE. zip's URL binder matches a path param to the In field
-// of the same name and gives the URL the last word, so a typed In would overwrite
-// the source with the script name. Renaming either side would move the wire.
-func (o ops) workersScriptPut(c *zip.Ctx) error {
-	ctx := c.Context()
+// Requires ORG ADMIN — a Worker is arbitrary code on the org's own account and
+// domains — so a caller who is only an org member is refused 403. An empty source
+// is 400, as is a `mainModule` that is not a plain file name; 503 if the org has
+// never connected a Cloudflare token.
+func (o ops) workersScriptPut(ctx context.Context, in *WorkerScriptPut) (*cfResult, error) {
 	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	name, err := pathSeg(c, "script", nameRE)
+	name, err := seg("script", in.Name, nameRE)
 	if err != nil {
-		return err
-	}
-	var in WorkerScriptPut
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid request body")
+		return nil, err
 	}
 	if strings.TrimSpace(in.Script) == "" {
-		return zip.ErrBadRequest("script source is required")
+		return nil, zip.ErrBadRequest("script source is required")
 	}
-	body, contentType, err := buildWorkerUpload(in)
+	body, contentType, err := buildWorkerUpload(*in)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	var out json.RawMessage
 	if err := cl.cfUpload(ctx, http.MethodPut, "/accounts/"+acct+"/workers/scripts/"+name, contentType, body, &out); err != nil {
-		return cfErr(err)
+		return nil, cfErr(err)
 	}
-	return writeResult(c, out)
+	return &cfResult{raw: out}, nil
 }
 
 // scriptRef addresses one Worker script by name, from the path.

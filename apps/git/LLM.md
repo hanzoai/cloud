@@ -86,60 +86,112 @@ partition, and prose cannot fail — that is the whole reason it moved.
 
 Every route with a JSON request/response shape is a typed op (ops.go states the
 client; routes() in git.go registers them on the /v1/git group behind
-bridgePrincipal). The four refusal families below were re-verified against the
-handlers and against zip v1.18.15 itself, not against this file. Do not re-type
-them; run the gate before believing any route counter that says git has untyped
-work left.
+`cloud.Bridge` and `bridgePrincipal`). The four refusal families below were
+re-derived against the handlers and against **zip v1.36.3**, the go.mod pin, not
+inherited from this file — and TWO of the four had a reason that had EXPIRED, one
+of them twice over. A version in prose is a claim about a dependency and it
+expires; re-read the pin, not this paragraph. Do not re-type these; run the gate
+before believing any route counter that says git has untyped work left.
 
 **A refusal is still DESCRIBED.** Seven of the 18 read a request body, and each
-declares it through `openapi.Register` (webhook.go's init) without becoming a
-typed op: the three ZAP procedures that bind one, and the four pack POSTs as
-`openapi.Binary`. They previously published an operationId, tags and nothing
-else — which no SDK generator can tell apart from a route that takes no body.
-`declaredBodies` + `TestRefusedRoutesDeclareTheBodyTheyRead` pin it both ways: a
-declared body that vanishes fails, and a body declared for one of the eleven
-that read none fails too. What a refusal still cannot have, and only a typed op
-gives, is prose, an MCP tool and a CLI command.
+declares it through `openapi.Register` without becoming a typed op: the three ZAP
+procedures that bind one (zap.go's init), and the four pack POSTs as
+`openapi.Binary` (smart_http.go's init). They previously published an operationId,
+tags and nothing else — which no SDK generator can tell apart from a route that
+takes no body. `declaredBodies` + `TestRefusedRoutesDeclareTheBodyTheyRead` pin it
+both ways: a declared body that vanishes fails, and a body declared for one of the
+eleven that read none fails too. What a refusal still cannot have, and only a
+typed op gives, is prose, an MCP tool and a CLI command.
+
+**Each family's declarations live WITH the family**, read off the same table its
+prose is. They used to sit together in webhook.go's init, one hand-written list
+beside a loop, and that is exactly how four of them came to name the root-host
+addresses `routes()` had already deleted — six `Describe` calls and four
+`Register` calls for patterns nothing registers, rendering NOTHING. Prose written,
+reviewed and silently dropped is the class `openapi.Complete` exists to catch, and
+it cannot: it judges an orphan only inside the products the app publishes
+(openapi/prose.go), and `manifest.OwnerOf("/:org/:repo/info/refs")` names none.
+Deleting all ten moved the published subset by zero bytes, which is the proof they
+had never rendered.
 
 ## The four refusal families
 
-1. **POST /v1/git/webhook** (git.go:315, handler webhook.go:159) — 1 route.
-   Auth IS the HMAC over the RAW received bytes, verified before parse
-   (webhook.go:165); zip's `invoke` unmarshals BEFORE the handler (typed.go),
-   so a typed In destroys the exact bytes the signature covers. It also
-   answers a benign 204 to deliveries it ignores (non-push, ref delete, bot)
-   where a typed op's decode failure would 400 and retry-storm the forge, and
-   it is wrapped in cloud.Terminal so its 401/400 cannot be flattened by the
-   co-mounted /v1 error handler.
+1. **POST /v1/git/webhook** (git.go:336, handler webhook.go:107) — 1 route, and
+   its recorded reason was WRONG TWICE. It is no longer an HMAC-verifying
+   handler — webhook.go is a 113-line tombstone that reads no body, holds no
+   secret and answers 410 to everything — so the "the signature covers the raw
+   bytes" reason described code that is gone. The reason that replaced it, "a
+   typed op needs an In or an Out; a tombstone has neither", was false too:
+   `noInput` and `noContent` are this package's own and six typed ops use them.
+
+   What holds is ORDER. **ANY bytes answer 410**, which is what retired MEANS and
+   what `TestWebhookIsGoneForEveryDelivery` drives with a real push, an empty body
+   and `{not json`. `op.invoke` json-decodes a non-empty body BEFORE the handler
+   is entered (zip typed.go:485-490) and answers an undecodable one 400, so a
+   typed op would tell a malformed delivery its body is bad instead of where the
+   delivery belongs. Measured on a typed prototype of this exact route: an empty
+   body and a real JSON delivery answered 410 byte-for-byte, a JSON array and a
+   non-JSON body answered 400. It is not one flag away either — `encoding/json`
+   validates the whole document before invoking any custom unmarshaler, so an In
+   that tolerates every SHAPE still cannot tolerate bytes that are not JSON. The
+   refusal is RUN rather than asserted:
+   `TestATypedTombstoneWouldRefuseABodyItAnswersToday`.
 
 2. **Smart-HTTP git protocol** (routes() in git.go, under /v1/git) — 6 routes:
    the org/repo trio and the project-scoped org/project/repo trio. The git pack
    wire: request bodies are `application/x-git-*-request` pack streams,
-   responses are `application/x-git-*-advertisement|result`, the packfile
-   streamed via SendStream (smart_http.go:151,180) — not JSON in either
-   direction.
+   responses are `application/x-git-*-advertisement|result`, answered with
+   `c.Bytes` (smart_http.go:176) and the packfile STREAMED with `c.SendStream`
+   (smart_http.go:206) — not JSON in either direction, and both of those live on
+   `*zip.Ctx`, which a typed handler never receives.
 
-3. **Browser UI** (uiRoutes in ui.go) — 6 routes, under /v1/git beside the JSON
-   ops. Server-rendered text/html (html/template); a typed dispatch ends in
-   c.JSON(out).
+3. **Browser UI** (uiRoutes, ui.go:143-148) — 6 routes, under /v1/git beside the
+   JSON ops. Server-rendered text/html (html/template): ui_templates.go:96 sets
+   `Content-Type: text/html; charset=utf-8` and :98 answers `c.Bytes`, where a
+   typed dispatch ends in `c.JSON(out)`.
 
-4. **ZAP procedure adapters** (zap.go:120-124) — 5 routes. The published
-   envelope contract: success is the cloud.OK envelope, failure is a non-2xx
-   `{status:"error", msg}` body (zap.go:138), while a typed op's returned error
-   renders zip's `HTTPError` — `{status:<int>, code, error:<msg>}`
-   (zip/ctx.go:200-206, written by `errorHandler` at ctx.go:222) — so typing
-   both RENAMES the message field (`msg`→`error`) and changes the TYPE of
-   `status` (string→int) on a wire the bridge's clients parse. `msg` is
-   LOAD-BEARING, not cosmetic: `zapface/dispatch.go:89-91` unmarshals the
-   non-2xx envelope and forwards `env.Msg` to the ZAP client as its error text,
-   so a typed op's `{..., error}` body decodes to an empty `Msg` and every ZAP
-   failure arrives with no message at all. There is no shim:
-   `cloud.Bridge` applies a handler-set status only when the handler returned
-   `err == nil` (typed.go:78), and the only exported setters are
-   `Created`/`Accepted`, so nothing lets a typed op answer a 4xx with a body of
-   its own. Expected to shrink: the shared /zap plane already replays the typed
-   /v1 ops frame-for-frame (see zap.go's header comment); retiring these is a
-   client migration, not a typing task.
+   **Two of the six carry a SECOND, independent mechanism that nothing recorded
+   until it was measured.** The tree and blob pages address a path INSIDE a
+   repository, so their routes end in fiber's greedy `*` (ui.go:146-147) and the
+   handlers read it back with `c.Fiber().Params("*")` (ui.go:299,321). zip's
+   `Template` (zip address.go:61) rewrites only `:name`, so a typed registry
+   would publish the path VERBATIM as `…/tree/*` while cloud's router reading
+   names the segment `{wildcard1}` (openapi/openapi.go:808-823); `Fold` then finds
+   no live route at the registry's key and refuses (openapi/openapi.go:705) — not
+   one mis-named parameter but the WHOLE document, i.e. `make -C apps/git
+   describe` failing and git publishing nothing at all. Run it:
+   `TestThePageWildcardCannotBeATypedOp`.
+
+   These two are also the only addresses git publishes that reach NO generated
+   client: `openapi/public.go` drops any path containing `{wildcard`, so
+   `openapi.yaml` carries 37 of git's 39 paths.
+
+4. **ZAP procedure adapters** (zap.go:144-148) — 5 routes, and this reason had
+   EXPIRED twice over. It said a typed op's returned error renders
+   `{status:<int>, code, error:<msg>}` and that nothing lets one answer a 4xx with
+   a body of its own. Neither holds at the pin: a refusal renders RFC 9457
+   problem-details — `{type, title, status, detail, code}`, with no `error` key
+   written at all (zip problem.go:39-77) — and `WithStatus` is variadic over any
+   status with `StatusCoder` picking one (zip typed.go:154, 189), so the success
+   envelope and a 400/404/409/500 carrying `{status:"error", msg}` are both an
+   ordinary typed Out today.
+
+   What still holds is ORDER, and it is a fact no op can reach from inside itself.
+   `op.invoke` decodes the body BEFORE the handler is entered (zip
+   typed.go:485-490) and answers an undecodable one with that problem document —
+   whose `status` member is a NUMBER. The bridge unmarshals every non-2xx body
+   into its own envelope, whose `status` is a STRING
+   (zapface/dispatch.go:35-40), so the unmarshal FAILS and the ZAP client is told
+   `INVALID_RESPONSE — non-envelope response (HTTP 400)` (dispatch.go:82-86)
+   instead of the sentence the handler wrote; today that same body answers
+   `{status:"error", msg:"invalid body"}` and the bridge forwards the msg
+   (dispatch.go:88-91). The 403 leg is NOT what holds them, and the old reason
+   implied it did: dispatch short-circuits 401/403 before it parses anything
+   (dispatch.go:76-80).
+
+   Expected to shrink: the shared /zap plane already replays the typed /v1 ops
+   frame-for-frame (see zap.go's header comment); retiring these is a client
+   migration, not a typing task.
 
 ## The ref policy stands in NINE endpoints, not one
 
@@ -250,28 +302,48 @@ unused, because a constant naming a secret is an instruction to seal one.
 
 ## Internal plane ops
 
-`POST /git/files` (files.go) and `POST /git/publish` (community.go) are typed
-ops on `cloud.Plane()` — the in-fleet call plane, not the public app, so they
-never appear in plugin/git/openapi.json. Their handlers are NAMED
-(`planeFiles`, `planePublish`) on purpose: zipdoc lifts prose only from a
-named function or method — a closure is a call expression with nothing to
-read. They were first registered as closures and committed WITHOUT
+**EIGHT** typed ops sit on `cloud.Plane()` — the in-fleet call plane, not the
+public app, so none appears in plugin/git/openapi.json. This section said TWO for
+months, which is the count going stale the way every count in prose does; read it
+off the source instead: `grep -n 'cloud.Plane()' apps/git/*.go`.
+
+    /git/import  /git/inbound  /git/status   import_plane.go:31,35,39
+    /git/mirror                              mirror_control.go:90
+    /git/files   /git/rev                    files.go:97,100
+    /git/figures                             figures_rpc.go:37
+    /git/publish                             community.go:159
+
+Their handlers are NAMED (`planeFiles`, `planePublish`, …) on purpose: zipdoc
+lifts prose only from a named function or method — a closure is a call expression
+with nothing to read. They were first registered as closures and committed WITHOUT
 regenerating zipdoc_gen.go, which left `zipdoc -check` red for this package on
 main; if you add a plane op, name the handler, write the doc comment, and run
 `go generate -run zipdoc ./...` here before committing.
 
-## Why the principal bridge is git-local
+## Two bridges on one group, and each carries what the other cannot
 
-Twenty apps install `cloud.Bridge()` on their group; git is the only one that
-parks its own value (`bridgePrincipal` + `tenantOf`, ops.go). That is not a
-divergence for its own sake: `cloud.Bridge` parks the ORG and nothing else
-(`principal.WithOrg` → `principal.OrgFrom`), and git's typed ops need two more
-facts off the validated request — the `X-Project-Id` sub-scope every repo row is
-keyed by, and the acting user an SSH key is owned by (keys.go). `principal` has
-no context form for either, so an app needing them has exactly one option today,
-which is the one this package took. The way to make it ONE bridge again is to
-widen the shared one — park the whole principal, not just the org — and delete
-this copy; typing more apps that carry a project scope will keep re-finding it.
+git installs `cloud.Bridge()` — the fleet's ONE client for the facts a typed
+signature drops (the validated org, validated-ness itself, the brand, the project)
+— and `bridgePrincipal` beside it, on the same `/v1/git` group ahead of every leaf
+(git.go). Nesting is harmless by design: the inner one is what the handler sees
+and the outer finds nothing to apply.
+
+It carried only its own for a long time, and the recorded reason for that is now
+half stale. It said `cloud.Bridge` "parks the ORG and nothing else"; it parks the
+project too (`principal.WithProject`). But `principal.ProjectFrom` answers the
+header VERBATIM, and git's `tenant.project` is the FOLDED scope — `projectScope`
+degrades `default`, an over-long value and one that fails `projectRE` to `""`,
+because that string is a physical key every repo row is stored under. So the two
+facts git's own bridge carries are the folded project and the ACTING USER, the
+owner a per-member SSH key row is written under (keys.go), which `principal` has
+no context form for at all. Both ride ONE `tenant` value with the org, so a
+handler cannot hold one and forget the others (ops.go).
+
+So `bridgePrincipal` is no longer a second implementation of the shared client;
+it is the one fact the shared client does not carry. The cost of the old
+arrangement was real and worth stating: a fleet-wide change to `cloud.Bridge`
+did not reach git at all. The way to delete git's copy entirely is to widen the
+shared one to park the whole principal.
 
 ## Known class instances (blocked on zip, counted not prosed)
 
@@ -283,7 +355,7 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
   one schema name, which is exactly what `openapi.Weave` refuses ("every
   generated SDK would bind whichever it read last"). So the request halves are
   declared and the response halves wait on the two clients agreeing who owns a
-  shared view type. The pack responses and the twelve HTML pages have no client at
+  shared view type. The pack responses and the six HTML pages have no client at
   all: `openapi.Binary` is request-only by design, and a text/html response is
   the second half it deliberately does not invent.
 - Bodyless POST (playbook #7 in the root LLM.md): **0** — `POST

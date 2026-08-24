@@ -10,7 +10,7 @@ import (
 // of them); how the bytes get there is runtime's problem.
 //
 // This file is the ONE place in this package that knows the runtime exists. The
-// handlers (bots.go) never see it: they hold the Runtime client, which a test fills
+// handlers (run.go) never see it: they hold the Runtime client, which a test fills
 // with a fake.
 //
 // The id space is the RUNTIME'S. A run id here is whatever the runtime named its

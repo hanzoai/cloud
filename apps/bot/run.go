@@ -1,4 +1,4 @@
-// Package bots is a bot doing your work on a real desktop, live, while you watch.
+// Package bot is a bot doing your work on a real desktop, live, while you watch.
 //
 // It is the whole cloud side of the headless bot: the CONTROL PLANE for a bot run
 // — a task executed on a surface (a desktop or terminal sandbox the bot drives)
@@ -31,7 +31,9 @@
 // Two faces, and the split between them is what a tenant can ACT on:
 //
 //   - NATIVE + TYPED, the run control plane (org-scoped; the console BotsApi and
-//     the CLI `hanzo bot run` call it):
+//     the CLI `hanzo bot run` call it). All three are typed ops, so each is one
+//     registry entry with five projections — the REST route, the OpenAPI
+//     operation with its schema, an MCP tool, a CLI command and an SDK method:
 //
 //     GET  /v1/bot/runs              -> {bots:[{runId,task,surface,status,sessionUrl,startedAt}]}
 //     POST /v1/bot/runs              -> 501: no executor launch operation exists yet
@@ -65,14 +67,13 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
 // and the MCP tool list — Go drops comments at compile time. Run by
-// `make -C apps/bot openapi` and by the Dockerfile before every build.
+// `make -C apps/bot describe` and by the Dockerfile before every build.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
@@ -164,11 +165,26 @@ type BotStopped struct {
 	Status string `json:"status"`
 }
 
-// stopBotIn addresses one run. The id is URL-borne only: `json:"-"` keeps it out of
-// the published request body (the route has never accepted a run id there), and
-// `url:"runId"` binds it from the path segment the router matched on.
+// stopBotIn addresses one run.
+//
+// BOTH TAGS NAME THE SAME SEGMENT, and the pair is what makes the op reachable on
+// every projection. `url:"runId"` binds it from the path segment the router
+// matched on, which is the addressing authority — zip binds body, then query,
+// then path, so a body naming another run cannot redirect the stop
+// (TestStopIsAddressedByTheURLAlone). `json:"runId"` is what lets the OTHER
+// projections name the target at all: an MCP tools/call reaches op.invoke with a
+// NIL path map and the arguments as the body (zip v1.36.3 mcp.go:654), and zip's
+// schema builder skips a field whose json name is "-" (openapi.go:719-722). With
+// `json:"-"` the MCP tool published an EMPTY input schema and answered "runId is
+// required" to every call — measured, and the reason this tag changed.
+//
+// It costs no request body: hasRequestBody (openapi.go:405-435) publishes one only
+// for a field the URL does not already carry, and this one is `:runId`.
 type stopBotIn struct {
-	RunID string `json:"-" url:"runId"`
+	// RunID is the run to stop, as the bot runtime named it. It is read from the
+	// URL — the `{runId}` segment the router matched on — and a body carrying a
+	// different id cannot redirect the stop.
+	RunID string `json:"runId" url:"runId"`
 }
 
 // noArgs is the input of an op that takes none: no body, no query, no path param.
@@ -188,8 +204,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return mountRelay(app, deps)
 }
 
-// mountRunPlane wires the run control plane onto app. Mount (node.go) calls it:
-// one capability, three families, one entry point.
+// mountRunPlane wires the run control plane onto app. Mount calls it: one
+// capability, two families, one entry point.
 func mountRunPlane(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("bot.Mount: nil app")
@@ -215,13 +231,28 @@ type runOps struct{ s *cloud.Service[executor] }
 // param sibling or bind as a run id. Under /v1/bot/runs the verb is the method
 // (HIP-0128 §1): GET lists, POST launches, and there is no literal to shadow.
 //
-// The list and the stop are TYPED ops — one registry entry from which the REST
-// route, the OpenAPI operation, the MCP tool, the CLI command and every generated
-// SDK method follow. POST /v1/bot/runs stays a raw handler; see run for why.
+// ALL THREE ARE TYPED OPS — one registry entry each, from which the REST route,
+// the OpenAPI operation, the MCP tool, the CLI command and every generated SDK
+// method follow. The launch answers 501 and says so in the document: zip declares
+// a status rather than assuming 200 (zip.WithStatus, typed.go:154-176), so an
+// operation whose only answer is a refusal is describable like any other.
 func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
-	// The composer owns cloud.Bridge: the fused host installs it once at its root
-	// and the plugin constructor does the same for a plugin program, so no
-	// subsystem installs it.
+	// cloud.Bridge parks the request facts a typed op's signature drops — the
+	// validated org, validated-ness itself, the brand and the project — on the
+	// subsystem's own router, ahead of the leaves, because fiber runs middleware in
+	// registration order and one installed after them never runs. Serve installs it
+	// at the binary's root as well and the nesting is harmless (cloud/typed.go: the
+	// inner one is the one the handler sees, the outer finds nothing to apply).
+	//
+	// MEASURED, so nobody writes a test that cannot fail: removing this line changes
+	// NOTHING either of today's org-scoped ops answers, because both ask
+	// principal.Acting, and principal.OrgFrom falls back to zip.CallerOf — the
+	// request's own identity headers — when the slot is empty. So this install is
+	// not what makes the two reads work; what it buys is that the package does not
+	// DEPEND on its host for them, and that the next op here can read
+	// principal.ProjectFrom or the brand, which have no such fallback. Do not add a
+	// test asserting the org resolves: it passes with the line deleted.
+	app.Use(cloud.Bridge())
 
 	// UNIFIED PAYWALL (server-side enforcement). To hold this surface to the
 	// caller's plan, ask entitlement in each operation's PREAMBLE. Not on the
@@ -242,56 +273,32 @@ func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 	g := app.Group("/v1/bot/runs")
 	o := runOps{s: s}
 	zip.Get(parent, "/runs", o.list)
-	parent.Post("/runs", cloud.Handle(s, run))
+	// The declared status is the whole of what this op answers: 501, never 200.
+	// zip publishes the SET an op declared and sends nothing outside it
+	// (statusOf, typed.go:192-212), so the document, the SDKs and the tool list
+	// all say up front that this address refuses.
+	zip.Post(parent, "/runs", o.run, zip.WithStatus(http.StatusNotImplemented))
 	zip.Post(g, "/:runId/stop", o.stop)
 }
 
-// The prose for the one operation here that cannot be a typed op. The list and the
-// stop are typed and zipdoc lifts their doc comments into zipdoc_gen.go; the launch
-// stays a raw handler (run says why — a typed op publishes a success this route has
-// none of), so there is no comment for anything to lift and the published document
-// would carry an operationId and nothing else. That is the worst case for exactly
-// this route: an SDK method and a CLI command with no help text, for an operation
-// whose whole content is a refusal a caller must be told about up front. Declared
-// through the same registry Register uses, so it renders only while the router
-// actually serves the route.
-func init() {
-	openapi.Describe("/v1/bot/runs", http.MethodPost,
-		"Reserved address for launching a bot run — not implemented, always 501",
-		"Answers 501 to every call. The bot runtime exposes no launch operation, so nothing "+
-			"here can start a sandbox, and this address is published rather than dropped because "+
-			"it is the collection every run is created in: GET lists them, POST would launch "+
-			"one.\n\n"+
-			"The refusal is total and takes no input. The handler never reads the body, so any "+
-			"bytes at all — malformed JSON included — get the same 501; no run id is minted, no "+
-			"session URL is handed back, and no per-run fee is charged. That is the point: the "+
-			"earlier version minted an id the runtime had never heard of, pointed it at a VNC "+
-			"node that did not exist, and took real money for it.\n\n"+
-			"Listing and stopping runs are live and org-scoped. Only the launch is missing, and "+
-			"it returns in the same change that can prove a bot boots.")
-}
-
-// run reports that launching is not implemented.
+// run answers 501 to every call: launching a bot run is not implemented.
 //
-// There is no launch operation on the bot runtime, so nothing in cloud can start a
-// sandbox. This endpoint used to mint a run id, charge a flat per-run fee, and hand
-// back a sessionUrl for a bot that never booted — an id the runtime had never heard
-// of, pointing at a VNC node that did not exist, for money that was really taken.
-// 501 is the truth, and the truth is cheaper than a plausible lie.
+// The bot runtime exposes no launch operation, so nothing here can start a sandbox.
+// This address is published rather than dropped because it is the collection every
+// run is created in: GET lists them, POST would launch one.
 //
-// Restoring it needs a runtime-side launch operation first (TS, cross-repo); the
-// gate and the meter belong in the same change that can prove a bot boots.
+// The refusal is total and takes no input. No run id is minted, no session URL is
+// handed back, and no per-run fee is charged. That is the point: the earlier version
+// minted an id the runtime had never heard of, pointed it at a VNC node that did not
+// exist, and took real money for it. 501 is the truth, and the truth is cheaper than
+// a plausible lie.
 //
-// UNTYPED BY DESIGN, for the reason apps/books gives for its two bank stubs: a typed
-// op publishes a SUCCESS response, and this route has no success. Typing it would
-// declare a 200 body it can never send, and mint an MCP tool and a CLI command for
-// an operation that cannot succeed — a model reading the tool list would call it.
-// It is also BODY-TOLERANT today, which zip cannot express: the handler never reads
-// the body, so any bytes at all — malformed JSON included — answer 501, while
-// op.invoke 400s on an unparseable non-empty body before the handler runs. It gets
-// typed in the same change that can prove a bot boots, and not before.
-func run(_ *cloud.Service[executor], _ *zip.Ctx) error {
-	return zip.Errorf(http.StatusNotImplemented,
+// Listing and stopping runs are live and org-scoped. Only the launch is missing, and
+// it returns in the same change that can prove a bot boots — a runtime-side launch
+// operation first (TS, cross-repo), with the entitlement gate and the meter beside
+// it.
+func (o runOps) run(context.Context, *noArgs) (*struct{}, error) {
+	return nil, zip.Errorf(http.StatusNotImplemented,
 		"launching a bot is not implemented: the bot runtime exposes no launch operation, so cloud cannot start one")
 }
 

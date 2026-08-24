@@ -308,6 +308,14 @@ func init() {
 			"EVERY failure is a redirect, not a status: a denied consent, a missing code, a "+
 			"failed exchange, an unreadable userinfo, an unverifiable org and a token-mint "+
 			"failure each bounce to the login page with an ?error code naming the step.")
+	// The PUT and the typed DELETE beside it answer the SAME acknowledgement, so
+	// the PUT declares that component rather than a second one of its own shape —
+	// which is also why it publishes no bare property: cookieAck's prose is lifted
+	// off the typed DELETE's Out, and Register attaches to the component by name.
+	// Its REQUEST stays undeclared: `token` is optional (absent falls back to the
+	// bearer) and a component for it would publish a property no reflection client
+	// can describe at this pin, which is the one thing this app has never shipped.
+	openapi.Register("/v1/team/account/cookie", http.MethodPut, nil, cookieAck{})
 	openapi.Describe("/v1/team/account/cookie", http.MethodPut,
 		"Store the session token as this browser's cookie",
 		"Writes the team session token into the HttpOnly `account-token` cookie — Secure, "+
@@ -332,27 +340,26 @@ func (g *api) register(app cloud.Router, guard guardFn) {
 	// The group is built HERE so cmd/zipdoc can resolve the typed op's prefix from
 	// this file — see bots.go for why.
 	r := app.Group(teamPrefix)
-	// UNTYPED, and it cannot be otherwise: this is a JSON-RPC envelope. The verb
-	// is a body field, the `result` is a different shape per verb, a refusal is
-	// HTTP 200 carrying {error: Status} — including for an unparseable body — and
-	// the entitlement arm answers 402 with a second key. A typed In turns that 200
-	// into a 400 and a typed Out can only say `any`, so typing it would move the
-	// wire and describe nothing.
+	// UNTYPED: a JSON-RPC envelope, blocked three independent ways — error ORDER,
+	// a per-verb `result` SHAPE, and a SECOND KEY on the entitlement refusal.
+	// untypedByDesign (typed_wire_test.go) carries the mechanism and cites the code
+	// for each; a second copy here is a second thing to keep true.
 	r.Post("/account", guard(g.rpc))
 	// TYPED: /providers takes nothing and answers a fixed list, so it is the one
 	// account route that is a whole op rather than one verb of the RPC or a
 	// browser redirect. A typed op is not a zip.Handler and cannot be wrapped by
 	// guard, so it carries the degraded refusal itself (g.degraded, typed.go).
 	zip.Get(r, "/account/providers", g.listProviders)
-	// UNTYPED: both are browser REDIRECTS — 302 + Location + Set-Cookie, no body
-	// at all. A typed op answers a JSON value under a 2xx, which is a different
-	// response.
+	// UNTYPED: browser REDIRECTS, and the blocker is NOT the status — zip.WithStatus
+	// takes any code in 100..599, so a declared 302 is legal. What blocks them is
+	// that a typed op cannot emit a HEADER without also emitting a BODY, and the
+	// callback additionally writes TWO Set-Cookie headers where zip's HeaderCoder
+	// holds one value per key. untypedByDesign cites both.
 	r.Get("/account/auth/:provider", guard(g.authStart))
 	r.Get("/account/auth/:provider/callback", guard(g.authCallback))
 	// UNTYPED: an unparseable body is IGNORED here — the token falls back to the
-	// Authorization bearer, and the request succeeds. zip decodes a typed In
-	// before the handler runs and answers 400, so typing this one would refuse a
-	// request it has always served.
+	// Authorization bearer and the request SUCCEEDS, where a typed In answers 400
+	// before the handler is entered.
 	r.Put("/account/cookie", guard(g.setCookie))
 	// TYPED: a DELETE addresses what it deletes with its URL and reads no body,
 	// which is exactly what this one already did.

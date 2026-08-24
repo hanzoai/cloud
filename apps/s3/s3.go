@@ -123,9 +123,11 @@ type state struct {
 	admin s3admin.Admin
 }
 
-// metered is the sentence the seven data-plane operations share. Each is read
+// metered is the sentence the two raw object operations share. Each is read
 // alone in the document, so the gate that refuses before anything is touched has
 // to appear on each of them rather than once at the top of a file no consumer sees.
+// The five typed operations state the same fact in their own doc comments, which
+// is the only channel that reaches the document for them (see init below).
 const metered = "\n\nA validated principal is required, and every bucket and key is resolved inside the " +
 	"caller's own org: physical bucket names are derived from the org, so a tenant cannot " +
 	"name another's storage. The operation is billed per call — the balance is checked " +
@@ -133,56 +135,24 @@ const metered = "\n\nA validated principal is required, and every bucket and key
 	"debit happens only after the work succeeds. Object storage that is not configured " +
 	"answers 503 under this subsystem's own name rather than falling through to another."
 
-// The prose for this subsystem's eight operations. Every route here is untyped —
-// the seven metered ones because a refused balance answers the fleet's nested
-// error contract in band, which a typed op cannot write, and health because it
-// answers one object under two statuses (see each note above). So there is no doc
-// comment for zipdoc to lift, and the prose is declared beside the route table.
+// The prose for the two operations a typed op cannot carry, and the shape one of
+// them answers with.
+//
+// EVERY OTHER ROUTE HERE IS A TYPED OP and states its prose in its own doc
+// comment, which zipdoc lifts into the registry: openapi.Fold then lays the whole
+// typed operation over the structural one, keeping only the router's tag. So a
+// Describe declared for a TYPED address is prose that is written, reviewed and
+// then silently DROPPED — six of these eight declarations were exactly that,
+// outranked and published nowhere, and they are gone. What each of those six
+// publishes is the doc comment beside its handler in typed.go.
+//
+// Register states the one half a raw route can still declare. Without it the
+// download rendered as an operationId and a tag and NOTHING else, which no
+// consumer of the document can tell from a route that answers nothing — so every
+// generated SDK offered "get a URL to download one object" with no return type.
+// The delete declares neither half on purpose: it reads no body and answers 204
+// with none, so a declaration would be inventing something.
 func init() {
-	openapi.Describe("/v1/s3/buckets", http.MethodGet,
-		"List your org's buckets",
-		"Returns the caller's own buckets under the friendly names they were created with, "+
-			"each with its creation time.\n\n"+
-			"Another tenant's bucket is not refused, it is INVISIBLE — a bucket outside the "+
-			"caller's namespace is skipped during the listing rather than reported, so the "+
-			"operation cannot be used to discover that a name is taken elsewhere."+metered)
-	openapi.Describe("/v1/s3/buckets", http.MethodPost,
-		"Create a bucket in your org",
-		"Creates a new bucket in the caller's own namespace and answers 201 with its "+
-			"friendly name and creation time.\n\n"+
-			"The name is validated exactly as sent and never quietly normalised: it must "+
-			"match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, so a mixed-case name is a clean "+
-			"400 rather than a bucket created as `photos` that the caller keeps asking for "+
-			"as `Photos`. A name already in use in the caller's own namespace is 409."+metered)
-	openapi.Describe("/v1/s3/buckets/:bucket", http.MethodDelete,
-		"Delete an empty bucket",
-		"Removes one of the caller's buckets, and only when it is already EMPTY — a bucket "+
-			"with objects in it answers 409 instead.\n\n"+
-			"That refusal is deliberate rather than a limitation: this API does not cascade "+
-			"a delete of a tenant's objects behind a single bucket call, so emptying the "+
-			"bucket stays an explicit act. A bucket that does not exist is 404, and a "+
-			"successful delete answers 204 with no body."+metered)
-	openapi.Describe("/v1/s3/buckets/:bucket/objects", http.MethodGet,
-		"Browse one level of a bucket",
-		"Lists one folder level of a bucket: each entry's key, whether it is a folder, its "+
-			"size, last-modified time and ETag. `prefix` scopes the read to a sub-folder.\n\n"+
-			"Keys come back RELATIVE to the requested prefix, not absolute, which is what "+
-			"lets a client render a breadcrumb without re-deriving it. The default is the "+
-			"folder view — sub-prefixes are returned as directory entries — and "+
-			"`recursive=true` flattens it to every key beneath the prefix instead.\n\n"+
-			"The listing is bounded at 1000 entries so a large bucket cannot exhaust memory; "+
-			"treat a full page as \"there may be more\" rather than as the whole bucket."+metered)
-	openapi.Describe("/v1/s3/buckets/:bucket/objects", http.MethodPost,
-		"Get a URL to upload one object directly",
-		"Returns a short-lived presigned PUT URL, with the method, the cleaned key and the "+
-			"seconds until it expires. The client uploads to that URL DIRECTLY — the bytes "+
-			"never pass through this API, and the storage credential never leaves the "+
-			"server.\n\n"+
-			"The URL is signed against the public storage host and scoped to exactly one "+
-			"bucket and key, and it expires five minutes after it is issued. The key is "+
-			"path-cleaned before signing, so a traversal cannot escape the bucket. A "+
-			"deployment with no public storage endpoint answers 503, because there is no "+
-			"host to sign a browser-followable URL against."+metered)
 	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodGet,
 		"Get a URL to download one object directly",
 		"Returns a short-lived presigned GET URL for the object at the trailing path, with "+
@@ -194,6 +164,7 @@ func init() {
 			"in place. Signed against the public host, scoped to the one bucket and key, and "+
 			"good for five minutes; a deployment with no public storage endpoint answers "+
 			"503."+metered)
+	openapi.Register("/v1/s3/buckets/:bucket/objects/*", http.MethodGet, nil, presignResponse{})
 	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodDelete,
 		"Delete one object",
 		"Removes the single object at the trailing path from one of the caller's buckets "+
@@ -201,16 +172,6 @@ func init() {
 			"cannot reach outside the bucket it names.\n\n"+
 			"It removes one object and never a prefix: a trailing path that looks like a "+
 			"folder deletes the placeholder at that key, not the objects beneath it."+metered)
-	openapi.Describe("/v1/s3/health", http.MethodGet,
-		"Whether object storage is usable here",
-		"A real readiness probe rather than a liveness stub: 200 only when the storage "+
-			"credentials are present, and it additionally reports whether presigning is "+
-			"available — the capability the two URL-issuing operations need and refuse "+
-			"without.\n\n"+
-			"An unconfigured deployment answers 503 with `ready:false` and the reason, which "+
-			"is the same state in which every data-plane operation here refuses. Not "+
-			"token-gated, so the platform can probe it without a credential, and it carries "+
-			"no credential, bucket or tenant detail.")
 }
 
 // Mount wires /v1/s3/* onto app. The unconditional route set, each operation
@@ -242,11 +203,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// fiber's `*` has no typed-op spelling. zip's closeColonParams leaves the `*` in
 	// the op path while cloud's openapi.translate renders the ROUTE as {wildcard1},
 	// so openapi.Fold would fail with "typed op has no live route" and the app would
-	// publish nothing at all. It is the last such refusal here — the two that stood
-	// beside it expired, and the operations that were waiting on them are typed: a
-	// balance denial travels as cloud.Denied, which serve.go's app-wide DenyEnvelope
-	// writes back as the money wire's own nested {"error":{"code","message"}} bytes,
-	// and zip v1.31.0's variadic WithStatus lets /health declare both of its statuses.
+	// publish nothing at all — which typed_wire_test.go RUNS rather than asserts, so
+	// the reason goes red the day it expires. It is the last such refusal here — the
+	// two that stood beside it expired, and the operations that were waiting on them
+	// are typed: a balance denial travels as cloud.Denied, which serve.go's app-wide
+	// DenyEnvelope writes back as the money wire's own nested
+	// {"error":{"code","message"}} bytes, and zip v1.31.0's variadic WithStatus lets
+	// /health declare both of its statuses.
 	//
 	// Routes go on the concrete app so zip's typed registrars and cmd/zipdoc can
 	// both resolve the prefix; the scoped Router still owns any middleware, which
@@ -255,6 +218,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zapp := cloud.ZipApp(app)
 	g := zapp.Group("/v1/s3")
 	o := ops{s: s}
+
+	// Bridge is this subsystem's OWN, on its own group and ahead of every leaf: a
+	// typed op is handed a context, and the request its gate reads is what this
+	// parks there. Serve installs one app-wide, which is what carries the arms that
+	// never touch a route — MCP, the call plane — and no package's test harness runs
+	// Serve, so an app that does not install its own resolves no request on its own
+	// routes and 403s in tests alone. It gates nothing, so /health, registered on
+	// this group below and deliberately ungated, is unaffected.
+	g.Use(cloud.Bridge())
 
 	// The probe is NOT gated — liveness has to be probe-able without a token — and
 	// it declares BOTH of its statuses, so the answer says which one it is.
@@ -503,12 +475,22 @@ type objectItem struct {
 	IsDir        bool   `json:"isDir"`        // true for a folder (common prefix)
 	Size         int64  `json:"size"`         // bytes (0 for a folder)
 	LastModified int64  `json:"lastModified"` // unix seconds (0 for a folder)
-	ETag         string `json:"etag,omitempty"`
+	// ETag is the store's entity tag for the bytes currently at this key, with the
+	// quotes the store wraps it in stripped. It is an opaque VERSION and not a
+	// checksum to verify against: a single-part upload's tag happens to be the MD5
+	// of the content and a multipart upload's is not, and nothing here says which
+	// this was. Compare two reads of one key to learn whether the object changed;
+	// absent for a folder entry, and for an object the store reports none for.
+	ETag string `json:"etag,omitempty"`
 }
 
 type presignResponse struct {
 	URL    string `json:"url"`    // presigned URL the browser follows directly
 	Method string `json:"method"` // "PUT" (upload) or "GET" (download)
+	// Key is the object key the URL was signed for, relative to the bucket root
+	// and path-cleaned — so it is what the store will actually read or write, which
+	// is not always the string the caller sent. The signature covers this one bucket
+	// and this one key: a URL minted here reaches nothing else.
 	Key    string `json:"key"`
 	Expiry int64  `json:"expiresIn"` // seconds until the URL expires
 }

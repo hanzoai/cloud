@@ -130,6 +130,7 @@
             "name": "env",
             "in": "query",
             "required": false,
+            "description": "Env selects the environment, which is part of a secret's storage key.\nOMITTED means EVERY environment — this is the enumeration surface, so it\nmust be able to answer \"what is in here\" without being told where to look.",
             "schema": {
               "type": "string"
             }
@@ -138,6 +139,7 @@
             "name": "environment",
             "in": "query",
             "required": false,
+            "description": "Environment is the KMS operator's spelling of Env, accepted so one caller\nneed not learn the other's vocabulary. Env wins when both are sent.",
             "schema": {
               "type": "string"
             }
@@ -146,6 +148,7 @@
             "name": "path",
             "in": "query",
             "required": false,
+            "description": "Path narrows the listing to one subtree beneath the caller's org root, as\na `/`-separated path such as `/ci`. OMITTED means the whole org.",
             "schema": {
               "type": "string"
             }
@@ -154,6 +157,7 @@
             "name": "secretPath",
             "in": "query",
             "required": false,
+            "description": "SecretPath is the KMS operator's spelling of Path. Path wins when both are\nsent.",
             "schema": {
               "type": "string"
             }

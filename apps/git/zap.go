@@ -56,19 +56,31 @@ import (
 // adapters over one core each with one identical preamble. Stated once.
 const zapProcedure = "\n\nA ZAP PROCEDURE, not a REST resource. It answers the " +
 	"bridge's {status, msg, data} envelope rather than the raw view the /v1 route " +
-	"returns — which is a wire shape a typed op cannot produce, and the reason this " +
-	"stays a raw handler — and it calls the SAME core function the REST route " +
-	"calls, so the two transports cannot diverge in behaviour. Org and project " +
-	"scope come from the request identity and NEVER from the body: the body cannot " +
-	"widen the caller's scope. Without a validated org the answer is a 403 envelope."
+	"returns, and it calls the SAME core function the REST route calls, so the two " +
+	"transports cannot diverge in behaviour. Org and project scope come from the " +
+	"request identity and NEVER from the body: the body cannot widen the caller's " +
+	"scope. Without a validated org the answer is a 403 envelope."
 
-// The prose for git's five ZAP procedures. Three of them state the body they read
-// through openapi.Register (webhook.go); none can state what it DOES that way,
-// because reflection reads Go types and not comments, so all five published a
-// name and nothing a caller could act on. Kept together here, beside the
-// registration that creates them, rather than split by which ones happen to have
-// a body worth declaring — the family is one thing and reads as one.
+// The prose AND the request bodies for git's five ZAP procedures, in one place
+// beside the registration that creates them.
+//
+// Three of the five bind [zapProcReq] and state it through openapi.Register; two
+// (listRepos, usage) read NO body at all, and declaring one for them would put a
+// payload parameter in every generated SDK for a call that ignores it. None can
+// state what it DOES through Register, because reflection reads Go types and not
+// comments — which is why the prose is here too rather than split by which half
+// of the family happens to have a declarable body. No RESPONSE is declared: the
+// envelope's `data` is repoView / []repoView / usageView, names zip's typed fold
+// ALREADY publishes off the /v1 ops, and a second derivation behind one schema
+// name is the collision openapi.Compose refuses.
+//
+// init, not mountZAP(): Register and Describe both panic on a duplicate
+// declaration and mountZAP runs once per Mount.
 func init() {
+	openapi.Register("/v1/git/zap/createRepo", http.MethodPost, zapProcReq{}, nil)
+	openapi.Register("/v1/git/zap/getRepo", http.MethodPost, zapProcReq{}, nil)
+	openapi.Register("/v1/git/zap/deleteRepo", http.MethodPost, zapProcReq{}, nil)
+
 	openapi.Describe("/v1/git/zap/createRepo", http.MethodPost,
 		"Create a repository over the ZAP transport",
 		"Creates a repository in the caller's org and project scope and answers with "+
@@ -106,11 +118,22 @@ func init() {
 // procedures are ordinary /v1 routes; the shared /zap plane turns them into ZAP
 // procedures for the browser/service ZAP client.
 //
-// These stay RAW handlers, unlike the control plane they wrap. A typed op
-// answers a failure by RETURNING an error, which zip renders as its own
-// {status, code, error} body; the envelope contract here is a non-2xx status
-// carrying a {status:"error", msg} body instead. That is a wire shape a typed
-// op cannot produce, so typing these would break the bridge's clients.
+// These stay RAW handlers, unlike the control plane they wrap, and the reason is
+// ORDER rather than shape. The shape is expressible: zip declares a set of
+// statuses (WithStatus, typed.go:154) and an answer states which one it is
+// (StatusCoder, typed.go:189), so the success envelope and a 400/404/409/500
+// carrying {status:"error", msg} are both an ordinary typed Out today.
+//
+// What no op can reach is what happens BEFORE it is entered. op.invoke decodes
+// the request body first (typed.go:485-490) and answers an undecodable one with
+// zip's RFC 9457 problem document at 400 — and that document's `status` is a
+// NUMBER, while the bridge unmarshals every non-2xx body into its own envelope
+// whose `status` is a STRING (zapface/dispatch.go:35-40, :82-86). So the
+// unmarshal fails and the ZAP client is told `INVALID_RESPONSE — non-envelope
+// response (HTTP 400)` instead of the sentence the handler wrote. Today that same
+// body answers `{status:"error", msg:"invalid body"}` and the bridge forwards the
+// msg (dispatch.go:88-91). The 403 leg is not what holds them: dispatch
+// short-circuits 401/403 before it parses anything (dispatch.go:76-80).
 //
 // They are also the surface a reader should expect to shrink. The /v1 routes
 // they adapt are now typed ops (ops.go), so the shared /zap plane already

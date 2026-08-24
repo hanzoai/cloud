@@ -164,18 +164,27 @@ type ops struct{ s *cloud.Service[state] }
 // with its leaf — the same composition the router does, and the identity every
 // projection (document, MCP tool, CLI command, SDK method) keys on.
 //
-// SIX routes are deliberately NOT typed ops, because a typed op decodes its input
-// from JSON and writes its output as JSON, and these six carry bytes that are
+// FOUR routes are deliberately NOT typed ops, because a typed op decodes its input
+// from JSON and writes its output as JSON, and these four carry bytes that are
 // neither. Each is named where it is registered; the reason is on the handler.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/cloudflare")
 	o := ops{s: s}
 
-	// A typed op receives only a context, so the validated org reaches it by
-	// being parked there — never as an In field, which is caller-supplied and
-	// would be a cross-tenant read the caller asserted for itself. cloud.Bridge
-	// does the parking, and the composer owns that install, once at its root;
-	// this group is a bare path prefix.
+	// A typed op receives only a context, so what it may act on has to be parked
+	// there — never taken from an In field, which is caller-supplied and would be a
+	// cross-tenant read the caller asserted for itself. cloud.Bridge does the
+	// parking, and it is installed HERE, on this plane's own group and ahead of its
+	// leaves, rather than left to the composer's app-wide one: a package's own tests
+	// mount without a composer, so relying on that alone breaks in tests and nowhere
+	// else.
+	//
+	// The org is the lesser half of what it parks — principal.OrgFrom falls back to
+	// the caller zip already carries, so a READ resolves either way. The half only
+	// the Bridge can supply is the REQUEST itself (cloud.Request), which authWrite
+	// reads for the org-admin header and resolveAccount for `?account=`. Without it
+	// every mutation on this plane refuses a genuine org admin.
+	g.Use(cloud.Bridge())
 
 	// Zones + Analytics (read) — enumerate the org's zones and read a zone's traffic
 	// analytics; the zone ids feed Workers routes and analytics. Zone/record
@@ -200,10 +209,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Workers — scripts + workers.dev subdomain are account-scoped; routes are
 	// zone-scoped.
 	zip.Get(g, "/workers/scripts", o.workersScriptList)
-	// UNTYPED: the path param `script` (the script NAME) and the body field `script`
-	// (the module SOURCE) share a name, and zip's URL binder gives the path the last
-	// word — a typed In would overwrite the source with the name. See workersScriptPut.
-	g.Put("/workers/scripts/:script", o.workersScriptPut)
+	zip.Put(g, "/workers/scripts/:script", o.workersScriptPut)
 	zip.Delete(g, "/workers/scripts/:script", o.workersScriptDelete)
 	zip.Post(g, "/workers/scripts/:script/subdomain", o.workersScriptSubdomainSet)
 	zip.Get(g, "/workers/subdomain", o.workersSubdomainGet)
@@ -238,26 +244,22 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/d1/databases", o.d1DatabaseList)
 	zip.Post(g, "/d1/databases", o.d1DatabaseCreate)
 	zip.Delete(g, "/d1/databases/:database", o.d1DatabaseDelete)
-	// UNTYPED: the query body is forwarded to D1 VERBATIM so params and batch fields
-	// survive; a typed In would drop every field it does not model. See d1Query.
-	g.Post("/d1/databases/:database/query", o.d1Query)
+	zip.Post(g, "/d1/databases/:database/query", o.d1Query)
 }
 
-// The six routes above cannot be typed ops — each carries a wire fact the
-// declaration cannot express, and relay_wire_test.go names all six with the reason.
-// But "cannot be a typed op" is not "must be undocumented". Three of them still take
+// The four routes above cannot be typed ops — each carries a wire fact the
+// declaration cannot express, and relay_wire_test.go names all four with the reason.
+// But "cannot be a typed op" is not "must be undocumented". ONE of them still takes
 // ordinary JSON, and openapi.Register is the client for exactly that case: it declares
 // the body off the very struct the handler binds, so the published contract follows
 // the code, and it is pure DESCRIPTION — no route, status, field or byte moves.
-// Without it those three reach every generated SDK with no request shape at all,
+// Without it that route reaches every generated SDK with no request shape at all,
 // indistinguishable from a route that takes no body.
 //
 // The other three have nothing to declare because they are not JSON on the wire: the
 // two KV value routes carry opaque bytes under the caller's own content type, and an
 // /ai/run body is whatever the chosen model takes.
 //
-// D1Query is the one declaration the handler does not bind, and says so on itself:
-// that route forwards the body VERBATIM, so no struct it binds could state the shape.
 // The response side is cfResult, whose custom marshaler makes it honestly
 // UNCONSTRAINED (openapi/register.go) — the payload is Cloudflare's, and this plane
 // deliberately does not model Cloudflare's shapes.
@@ -265,10 +267,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // init, not routes: Register panics on a duplicate declaration, and routes runs once
 // per Mount.
 // The same argument applies to the PROSE, and with none of the "nothing to
-// declare" exceptions: a body a route does not take is a fact only three of them
-// have, but "what this does, who may call it, what it costs" is a fact all six
+// declare" exceptions: a body a route does not take is a fact only one of them
+// has, but "what this does, who may call it, what it costs" is a fact all four
 // have. Left bare they reached every SDK and the MCP tool list as an operationId
-// and a tag — six Cloudflare calls a caller could not tell apart, on a plane whose
+// and a tag — four Cloudflare calls a caller could not tell apart, on a plane whose
 // whole point is that the org's OWN token is what moves. openapi.Describe is that
 // prose's client, keyed exactly like Register and just as unable to invent a route.
 //
@@ -287,34 +289,6 @@ func init() {
 			"the reason this is not a typed op: a typed request would answer 400 where "+
 			"this deploys. Requires ORG ADMIN (403 otherwise), and 503 if the org has "+
 			"never connected a Cloudflare token.")
-	openapi.Register("/v1/cloudflare/workers/scripts/:script", "PUT", WorkerScriptPut{}, cfResult{})
-	openapi.Describe("/v1/cloudflare/workers/scripts/:script", "PUT",
-		"Upload or replace a module Worker script",
-		"Publishes a module Worker to the org's OWN Cloudflare account under the name "+
-			"in the path, replacing whatever was there, and relays Cloudflare's result. "+
-			"`script` carries the module SOURCE; the optional compatibility date, "+
-			"compatibility flags and bindings are packed into the multipart upload "+
-			"Cloudflare expects.\n\n"+
-			"The path names the script and the body field named `script` is its source — "+
-			"two different things that share a name, which is exactly why this cannot be "+
-			"a typed op: a binder that gives the URL the last word would overwrite the "+
-			"source with the script's name. Requires ORG ADMIN (403 otherwise); an "+
-			"unparseable body or empty source is 400; 503 if the org has never connected "+
-			"a Cloudflare token.")
-	openapi.Register("/v1/cloudflare/d1/databases/:database/query", "POST", D1Query{}, cfResult{})
-	openapi.Describe("/v1/cloudflare/d1/databases/:database/query", "POST",
-		"Run a SQL statement against a D1 database",
-		"Executes a statement on one D1 database on the org's OWN Cloudflare account "+
-			"and relays D1's result set. `sql` is required and `params` carries the bound "+
-			"values in placeholder order — use them rather than interpolating values into "+
-			"the statement.\n\n"+
-			"The body is checked for a non-empty `sql` and then forwarded VERBATIM, so "+
-			"every field D1 accepts reaches D1 even though only two are named here; the "+
-			"declared schema is open for that reason. That verbatim forward is why this is "+
-			"not a typed op — decoding and re-encoding the body would drop `params`, where "+
-			"the query's bound values live. Requires ORG ADMIN (403 otherwise); a "+
-			"malformed body or missing `sql` is 400; 503 if the org has never connected a "+
-			"Cloudflare token.")
 
 	// The three with no body to declare still have prose to state, and these are the
 	// ones a caller most needs it for: two carry OPAQUE BYTES rather than JSON, and

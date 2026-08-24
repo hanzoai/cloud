@@ -15,7 +15,7 @@
 // HTTP; per HIP-0106/HIP-0120 they should move over ZAP, and that swap is meant
 // to be a change to THIS FILE plus each caller's one stub, not a rewrite.
 //
-// The package doc lives once, in node.go.
+// The package doc lives once, in run.go.
 
 package bot
 
@@ -35,8 +35,9 @@ import (
 
 const (
 	// urlEnv is the runtime base — the in-cluster service the control plane calls
-	// server-side AND the target the /v1/bot/* ops face relays to. ONE knob: a
-	// second would let the two disagree about which runtime is "the" runtime.
+	// server-side AND the target the /v1/bot/runtime/* ops face relays to. ONE
+	// knob: a second would let the two disagree about which runtime is "the"
+	// runtime.
 	urlEnv     = "BOT_GATEWAY_URL"
 	defaultURL = "http://bot-gateway.hanzo.svc"
 

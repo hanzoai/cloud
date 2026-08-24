@@ -34,13 +34,17 @@ func init() {
 	zip.Describe("GET /v1/kms/secrets", zip.Doc{
 		Description: "Lists the secrets your org holds, without their values.\n\nReturns the METADATA of the caller's own secrets: each one's name, path,\nenvironment and sealing scheme. No value and no ciphertext is included — this\noperation exists to enumerate what is held, and reading a value is a separate,\nper-secret call.\n\nScoped to the caller's own org and nothing else, structurally: there is no org\nin the path, the store root is derived from the validated org claim, and a\ncaller therefore has no way to name another tenant's namespace. `path` narrows\nto a subpath and `env` selects the environment; both are also accepted under\nthe operator's spellings, `secretPath` and `environment`. An omitted `env`\nmeans every environment and an omitted `path` means the whole org, because a\ndefault here reported a populated store as empty.\n\nAdmission is fail-closed and in order: a validated member, an org that is a\nDNS-1123 label, and a store holding a master key — 403, 400 and 503\nrespectively, all decided before any record is touched.",
 		Fields: map[string]string{
-			"SecretMeta.env":     "Env is the environment the secret belongs to. It is part of the storage\nkey, so the same name in two environments is two secrets.",
-			"SecretMeta.name":    "Name is the secret's name within its path and environment.",
-			"SecretMeta.path":    "Path is the subpath the secret is stored under, beneath the org root.",
-			"SecretMeta.scheme":  "Scheme names how the value is sealed at rest, so a caller can tell a\nmigrated record from a current one without opening it.",
-			"kmsSecrets.names":   "Names is the same listing reduced to bare names, which is the shape the\nKMS operator reads. Both are emitted so either consumer keeps working.",
-			"kmsSecrets.secrets": "Secrets are the descriptors: name, path, environment and sealing scheme.\nNo value and no ciphertext appears here.",
-			"kmsSecrets.total":   "Total is how many descriptors this listing carries.",
+			"SecretMeta.env":      "Env is the environment the secret belongs to. It is part of the storage\nkey, so the same name in two environments is two secrets.",
+			"SecretMeta.name":     "Name is the secret's name within its path and environment.",
+			"SecretMeta.path":     "Path is the subpath the secret is stored under, beneath the org root.",
+			"SecretMeta.scheme":   "Scheme names how the value is sealed at rest, so a caller can tell a\nmigrated record from a current one without opening it.",
+			"kmsList.env":         "Env selects the environment, which is part of a secret's storage key.\nOMITTED means EVERY environment — this is the enumeration surface, so it\nmust be able to answer \"what is in here\" without being told where to look.",
+			"kmsList.environment": "Environment is the KMS operator's spelling of Env, accepted so one caller\nneed not learn the other's vocabulary. Env wins when both are sent.",
+			"kmsList.path":        "Path narrows the listing to one subtree beneath the caller's org root, as\na `/`-separated path such as `/ci`. OMITTED means the whole org.",
+			"kmsList.secretPath":  "SecretPath is the KMS operator's spelling of Path. Path wins when both are\nsent.",
+			"kmsSecrets.names":    "Names is the same listing reduced to bare names, which is the shape the\nKMS operator reads. Both are emitted so either consumer keeps working.",
+			"kmsSecrets.secrets":  "Secrets are the descriptors: name, path, environment and sealing scheme.\nNo value and no ciphertext appears here.",
+			"kmsSecrets.total":    "Total is how many descriptors this listing carries.",
 		},
 	})
 	zip.Describe("GET /v1/kms/secrets/+", zip.Doc{

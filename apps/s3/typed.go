@@ -140,7 +140,13 @@ type bucketList struct {
 //
 // Only the caller's: every bucket is physically named under a per-org prefix and
 // the listing strips that prefix, so a tenant sees friendly names and another
-// tenant's buckets are not in the answer at all.
+// tenant's buckets are not in the answer at all. Another org's bucket is not
+// refused but INVISIBLE, so this cannot be used to learn that a name is taken
+// elsewhere.
+//
+// Billed per call: the balance is checked BEFORE anything is touched, so an
+// unfunded org is refused with nothing done, and the debit lands only once the
+// work has succeeded.
 func (o ops) listBuckets(ctx context.Context, _ *noInput) (*bucketList, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
@@ -179,6 +185,10 @@ type bucketIn struct {
 // The physical name is derived from the caller's validated org, so a tenant can
 // only ever create inside its own namespace and no request field can redirect
 // that. A name already taken in the org is 409.
+//
+// Billed per call: the balance is checked BEFORE anything is touched, so an
+// unfunded org is refused with nothing created, and the debit lands only once the
+// bucket exists.
 func (o ops) createBucket(ctx context.Context, in *bucketIn) (*bucketItem, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
@@ -218,6 +228,10 @@ type bucketRef struct {
 // A non-empty bucket is 409 rather than a cascade: deleting a tenant's objects
 // behind a single bucket call is not a thing this surface will do silently. A
 // bucket the caller's org does not own is the same 404 an unknown name gives.
+//
+// Billed per call: the balance is checked BEFORE anything is touched, so an
+// unfunded org is refused with nothing deleted, and the debit lands only once the
+// bucket is gone.
 func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*struct{}, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
@@ -280,6 +294,10 @@ type objectList struct {
 // instead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge
 // bucket cannot exhaust memory — Total is what came back, not what the bucket
 // holds.
+//
+// Billed per call: the balance is checked BEFORE anything is touched, so an
+// unfunded org is refused with nothing read, and the debit lands only once the
+// listing has succeeded.
 func (o ops) listObjects(ctx context.Context, in *listIn) (*objectList, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
@@ -336,6 +354,11 @@ type uploadIn struct {
 // the server: the URL is signed against the PUBLIC host, scoped to exactly this
 // bucket and key, and expires. A deployment with no public endpoint configured
 // cannot mint one and answers 503 rather than a URL that will not work.
+//
+// Billed per call — for MINTING the URL, which is the work this operation does;
+// the upload that follows it goes straight to the store and is not seen here. The
+// balance is checked BEFORE anything is touched, so an unfunded org is refused
+// with no URL issued.
 func (o ops) presignUpload(ctx context.Context, in *uploadIn) (*presignResponse, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
