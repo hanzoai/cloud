@@ -89,7 +89,7 @@ var allowedTokenPrimitives = map[string]string{
 	"apps/destination/x.go": "OAuth 1.0a request signing — HMAC-SHA1 over the " +
 		"method+URL+params base string under consumerSecret&accessSecret, X's contract. It " +
 		"signs an OUTBOUND call under credentials the tenant configured; it mints nothing " +
-		"this deployment would honour, exactly like venue/aws_sigv4.go.",
+		"this deployment would honour.",
 	"apps/idv/webhook.go": "provider webhook verification — HMAC-SHA256 over the raw body under the " +
 		"provider's signing secret (sha256= scheme). Verifies THEIR signature; grants nothing here.",
 	"apps/integrations/github_webhook.go": "GitHub webhook verification — X-Hub-Signature-256 over " +
