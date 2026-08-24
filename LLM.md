@@ -301,8 +301,8 @@ generate` runs `plugin/gen-app-cmds`, which reads `manifest.Apps` ONCE and
 scaffolds a `plugin/<app>/main.go` for any app missing one, validating the two
 are in bijection (every app has a main, every main is an app) so neither drifts.
 Prefixes
-come from, in order: the `PluginSpec` call's own arguments, a declared
-`Prefixes:` field, then the absolute paths the app's package registers — read by
+come from, in order: the manifest row's own `Prefixes`, a declared `Prefixes:` on
+the app's `cloud.Plugin`, then the absolute paths the app's package registers — read by
 walking the call graph from the entry's Mount function (per FUNCTION, not per
 package: one package may back two entries — `apps/account` did until the
 `account-bridge` retirement — and a package-wide scan gives each the other's
@@ -484,11 +484,13 @@ for the credentials of the app it is.**
   launcher stamps `CREDZ_TOKEN=<app>:<hex hmac-sha256(secret, app)>` into that
   ONE child's `zip.Plugin.Env` at spawn; the child presents it; the broker opens
   it with the secret it holds and gates the result on `manifest.Apps`. Claim and
-  proof are one variable, so neither half can be recombined with another's. Two
-  spawn sites, both per-plugin and never `os.Environ()`: `cloud.PluginSpec` (the
-  launcher *is* the broker, secret minted in-process and never emitted) and
-  `cmd/cloud` (mints it, stamps every child, hands `CREDZ_LAUNCH_SECRET` AND the
-  root key to the `kms` child alone). `credz.Boot` reads the token once and unsets it.
+  proof are one variable, so neither half can be recombined with another's. ONE
+  spawn site, per-plugin and never `os.Environ()`: `cmd/cloud`, which mints the
+  secret in-process, stamps every child, and hands `CREDZ_LAUNCH_SECRET` AND the
+  root key to the `kms` child alone. It used to be two, the second being
+  `cloud.PluginSpec` — where the launcher was itself the broker — and that went
+  with `apps.Wire()`: one host loads every child now, so there is one minter.
+  `credz.Boot` reads the token once and unsets it.
 
   This replaces reading the peer's argv out of `/proc` (#51). `SO_PEERCRED` is
   kernel-authenticated for pid/uid but **argv is not** — a process picks its own
@@ -655,9 +657,10 @@ package under `apps/<name>` that obeys these clients — nothing more.
 
 - **Subsystem shape.** A subsystem exposes
   `func Mount(app cloud.Router, deps cloud.Deps) error` — `MountFunc`
-  (build.go:1002) — and is listed in `apps.Wire()` as
-  `cloud.MountSpec{Name, Price, Mount}` (plus `Shutdown`/`OwnsHealth`/`Prefixes`
-  where it owns them). `app` is a **Router, not the concrete `*zip.App`**, and
+  (build.go:1002) — and its own `plugin/<name>/main.go` states it as
+  `cloud.Plugin{Name, Price, Mount}` (plus `Shutdown`/`OwnsHealth`/`Prefixes`/`Global`
+  where it owns them). The manifest row beside it carries only what the HOST needs:
+  name, prefixes, and the start/readiness flags. `app` is a **Router, not the concrete `*zip.App`**, and
   that is the whole safety property: middleware a subsystem installs lands on the
   subtrees its spec declares, never over the binary. Routes still register at
   absolute paths with the same precedence. `cloud.Deps` carries the process-wide
@@ -681,38 +684,42 @@ package under `apps/<name>` that obeys these clients — nothing more.
   `Undeclared` and `apps.TestPriceDeclared` fails on it, so a new subsystem
   cannot reach main until someone answers the question in the same diff that adds
   its routes. `DefaultPrice` reads this and keeps NO table of its own.
-- **Out-of-process variant.** A subsystem may run as its OWN binary without
-  changing anything about it:
-  `cloud.PluginSpec(name, price, zip.Plugin{…}, prefixes…)` (plugin_spec.go:40)
-  returns an ordinary `MountSpec`, so where a subsystem runs stops being a
-  property of its source and becomes one line at the composition root. `zip.Load`
-  returns a `zip.Service` — the same type a linked-in service is — so nothing
-  downstream (routing, health, shutdown ordering) can tell the difference. zip
-  starts the child on a private unix socket and forwards the path UNCHANGED.
-  Today `o11y` is the only one — the heaviest graph in the tree (otel-collector,
-  prometheus, gonum), imported by nothing else, so unlinking it is pure
-  subtraction. **Unlinking means deleting the IMPORT, not just the mount**:
-  `apps/apps.go` carries a standing comment where `apps/o11y` would be
-  imported, because an import there would keep its 2.7k-package graph linked
-  whether or not any Wire entry referenced it.
-  - `price` is POSITIONAL, ahead of the variadic prefixes, and that placement is
-    forced rather than chosen. A plugin serves its prefixes from another process
-    and NOTHING downstream of the spec can see what happens in there, so what the
-    surface costs has to be stated by whoever decides to mount it — exactly as
-    for a linked-in subsystem.
+- **Every subsystem is its own binary.** There is no in-process variant left to
+  choose between: a row in `manifest.Apps` plus a `plugin/<name>/main.go` IS the
+  subsystem, and `App.Plugin()` (manifest/plugin.go:192) resolves the name to
+  `<dir>/<name>` or to nothing — "there is ONE way a name resolves to a binary:
+  its own". `zip.Load` returns a `zip.Service`, the same type a linked-in service
+  was, so nothing downstream (routing, health, shutdown ordering) can tell the
+  difference. zip starts the child on a private unix socket and forwards the path
+  UNCHANGED. The `cloud.PluginSpec` that used to make this a per-subsystem
+  decision is gone with `apps.Wire()` (22f4fc64), and so is the fallback ladder
+  that resolved an app with no binary to `/cloud --enable=<name>`.
+  Every app is one now — 130 binaries under `plugin/<app>/`, against 144 packages
+  in `apps/`. That is what retired the hazard this paragraph used to describe. The
+  concern was real while one binary linked the fleet: `o11y` carries the heaviest
+  graph in the tree (otel-collector, prometheus, gonum), and an IMPORT left behind
+  after a mount was deleted kept those 2.7k packages linked anyway, so unlinking
+  meant deleting the import and a standing comment held the spot. With one binary
+  per app the isolation is structural instead of remembered — `apps/o11y` is
+  imported by `plugin/o11y/main.go` and nothing else, and no other binary can pick
+  it up by forgetting something.
+  - **Price is declared, never inferred.** A plugin serves its prefixes from
+    another process and NOTHING downstream can see what happens in there, so what
+    the surface costs is stated on the app's own `cloud.Plugin` and read from
+    there. `Undeclared` is the zero value and `TestPriceDeclared` fails on it.
   - `prefixes` is variadic because ONE service commonly owns several route
     subtrees (`o11y` answers `/v1/o11y` AND `/v1/sentinel`, both registered by the
     same `MountO11y` the child runs). Naming only the first 404s the rest AT THE
     HOST — the request never reaches the child — while the host starts and
     reports healthy. **The plugin is the unit of deployment; the subtrees it owns
-    are a property of it, not a reason to declare it twice.** Nothing is
-    defaulted or validated in `PluginSpec`: `zip.Load` already rejects an empty
-    list by name, and restating that would put one rule in two places.
-  - `PluginSpec` sets `App`, not `Mount`, because `zip.Load` registers under the
-    prefixes it was given — handing it a scoped Router would nest them under the
-    subsystem name and the routes would answer somewhere nobody is asking. The
-    consequence: it does NOT narrow middleware, since `MountAll` builds a scope
-    only for a spec that supplies `Mount`.
+    are a property of it, not a reason to declare it twice.** Nothing defaults or
+    validates the list a second time: `zip.Load` already rejects an empty one by
+    name, and restating that would put one rule in two places.
+  - A loaded child registers under the prefixes it was GIVEN, not under a scoped
+    Router — scoping would nest them beneath the subsystem name and the routes
+    would answer somewhere nobody is asking. The consequence: loading does NOT
+    narrow middleware, since `MountAll` builds a scope only for a spec that
+    supplies its own `Mount`.
   - `Prefixes` is still stated on the spec, and reaches both readers from one
     place: zip routes on it, and `Declare` reads it for the boot inventory
     (`/v1/admin/subsystems`) and the per-request subsystem attribution tracing
@@ -721,37 +728,40 @@ package under `apps/<name>` that obeys these clients — nothing more.
     attributed to NOBODY.
   - The image must actually CONTAIN the binary: `zip.Load` fork/execs a sibling
     of `/cloud`, so a missing one aborts the mount and cloud never listens
-    (`fork/exec /o11y: no such file`). The Dockerfile DERIVES the list by grepping
-    `PluginSpec("…"` out of `apps/apps.go` rather than keeping a second copy —
-    unlinking o11y without adding a build step once cost five consecutive
-    releases — and FAILS the build if a declared plugin has no `plugin/<name>`,
-    rather than at a pod's first boot. **Unlinking a subsystem means building it
-    somewhere else, not just deleting the import.** This is only for `PluginSpec`
-    apps: under `cmd/cloud`, every OTHER app has no dedicated binary in the image
-    and resolves down the ladder to `/cloud --enable=<name>`, which is why that
-    path needs no per-app build step at all.
+    (`fork/exec /o11y: no such file`). The Dockerfile DERIVES the list from
+    `manifest/apps.go` — the SAME hand-authored source the host reads and
+    `gen-app-cmds` validates `plugin/<app>` against — rather than keeping a second
+    copy, so adding an app is a one-line manifest edit and the Dockerfile does not
+    change. Unlinking o11y without adding a build step once cost five consecutive
+    releases. A declared app with no `plugin/<name>` FAILS the build here rather
+    than at a pod's first boot. **Unlinking a subsystem means building it
+    somewhere else, not just deleting the import.** That now holds for EVERY app,
+    because every app is its own binary and no name falls back to the host.
 - **Client clients.** Cross-subsystem calls go through a narrow in-process interface
   published in `types` and aliased at the provider, e.g. `commerce.Client =
   types.CommerceClient` (`GetOrgConfig` + `CheckEntitlement`). Consumers depend on
   the interface, never the implementation; the client rides zap-proto/zip. Keep each
   interface minimal — add a method only when a consumer needs it.
-- **Composition root.** `apps/apps.go:Wire()` returns `[]cloud.MountSpec` — every
-  linked subsystem, in mount order, as ONE explicit slice read top-to-bottom.
-  Slice position IS the order: there is no `Order` field and `MountAll`
-  (build.go) does NOT sort; it iterates as-given and mounts each ENABLED spec
-  (`cfg.Enabled`). To add a subsystem you add one line to `Wire()`, and teardown
-  needs no separate gate: `MountAll` registers each `Shutdown` via
-  `app.OnShutdown` right after that subsystem mounts, and zip drains hooks LIFO
-  after the listeners stop — so registration-at-mount yields reverse-mount
-  teardown with nothing torn down while a request still uses it.
-  `apps/wire_test.go` freezes the sequence (name, `OwnsHealth`, has-`Shutdown`,
-  global), so a reorder/drop/add fails there. **That test is a FROZEN GOLDEN, not
-  an invariant: when `Wire()` legitimately changes, the fix is to update `frozen`
-  in the same diff.** `meet` was added RED and then frozen. Each row carries the
-  deleted order-int as provenance, and a deliberate flag change is annotated in place
-  rather than silently edited — o11y's `hasShutdown` flipped true→false when it
-  became a plugin, and the row explains that the host no longer owns any o11y
-  resource to close.
+- **Composition root.** `apps.Wire()` is GONE. `manifest.Apps` (manifest/apps.go)
+  is the hand-authored source now — a 125-entry literal of name plus routing
+  prefixes, read top-to-bottom, and slice position IS the mount order:
+  `MountAll` (build.go:1425) does not sort, it iterates as-given and mounts each
+  ENABLED spec (`cfg.Enabled`). Teardown needs no separate gate: `MountAll`
+  registers each `Shutdown` via `app.OnShutdown` right after that subsystem
+  mounts, and zip drains hooks LIFO after the listeners stop — so
+  registration-at-mount yields reverse-mount teardown with nothing torn down
+  while a request still uses it.
+  What each subsystem IS travels as `cloud.Plugin` (build.go:1326) — `Mount`,
+  optional `Shutdown`, `OwnsHealth`, `Prefixes`, `Global`, and a REQUIRED
+  `Price`, whose zero value is Undeclared and fails `TestPriceDeclared`, so a new
+  subsystem cannot reach main until someone writes down what one request costs.
+  Those per-app facts live in that app's own `plugin/<app>/main.go` with its
+  composition root, where a change is a one-line diff reviewed in context.
+  **`manifest/order_test.go` is the SOLE guardian of mount order** — its `frozen`
+  list must reproduce `manifest.Apps` exactly, so a reorder, drop or add fails
+  there rather than slipping through on one line of a long literal. It is a
+  FROZEN GOLDEN, not an invariant: when the order legitimately changes, update
+  `frozen` in the same diff.
 - **Route precedence.** The router is zap-proto/fiber (zip v1.8.3). Most-specific
   route wins regardless of mount order, so subsystems may mount in any order and
   still compose deterministically. But precedence is NOT a conflict guard: two
@@ -2774,21 +2784,28 @@ cloud-side route for a cloud-side gate to hold.
 3 refused, out of 11 operations that published NOTHING.** Small subsets, and the
 finding is not in the count:
 
-- **Five apps have a `plugin/<app>/main.go` and NO `apps/<app>/Makefile`, and
-  `mk/fleet.mk` reads `APPDIRS := $(wildcard apps/*/Makefile)` — so `openapi-check`,
-  the gate that regenerates the document from source and fails on drift, has never
-  regenerated `plugin/{meet,bot,catalog,crawl,zen}/openapi.json`.** Five published
-  subsets sit OUTSIDE the only gate that can catch failure mode #1, which is the
-  eight-path ingress loss. `apps/meet/Makefile` is added here (its subset
-  regenerated clean, so no drift had accumulated yet); `bot`, `catalog`, `crawl`
-  and `zen` are still outside. The claim in each generated Makefile's own header —
-  "Written from the same apps.Wire() parse that writes plugin/<app>/main.go, so an
-  app cannot have a main and no Makefile" — is false today: `plugin/gen-app-cmds`
-  scaffolds the main and writes no Makefile at all (`grep -c Makefile
-  plugin/gen-app-cmds/main.go` → 0). Find them with:
+- **Five apps published a subset that `openapi-check` could not regenerate — CLOSED.**
+  `mk/fleet.mk` reads `APPDIRS := $(wildcard apps/*/Makefile)`, so an app with a
+  `plugin/<app>/main.go` and no Makefile in its backing package had no `describe`
+  rule, and its `openapi.json` sat outside the only gate that catches failure mode
+  #1 (the eight-path ingress loss). `meet`, `bot`, `catalog`, `crawl` and `zen`
+  were all outside; all five are in now. The generator writes the third leg
+  itself: `plugin/gen-app-cmds` emits `apps/<pkg>/Makefile` beside the main, from
+  the SAME manifest row, so the header's claim — that an app cannot have a main
+  and no Makefile — is true rather than aspirational.
+  **Check it the gate's way, not by name.** An app is covered when SOME package
+  names it, and the mapping is deliberately not a bijection: one package backs
+  several apps (`apps/auditlog` → `APPS := audit`, `apps/plugin` → `APPS :=
+  plugins`), and three apps live in other modules entirely
+  (`EXTERNAL := authz licensing metrics`). A sweep keyed on `apps/<app>/Makefile`
+  existing reports five false gaps, which is how this paragraph read before.
 
-      for p in plugin/*/main.go; do a=$(basename $(dirname $p)); \
-        [ -d apps/$a ] && [ ! -f apps/$a/Makefile ] && echo "$a"; done
+      covered=$( { for m in apps/*/Makefile; do sed -n 's/^APPS := //p' "$m"; done; \
+        echo "authz licensing metrics"; } | tr ' ' '\n' | sed '/^$/d' | sort -u )
+      for p in plugin/*/openapi.json; do a=$(basename $(dirname $p)); \
+        echo "$covered" | grep -qx "$a" || echo "UNCOVERED: $a"; done
+
+  Measured: 125 apps covered, zero published subsets outside the gate.
 
 - **Failure mode #9 (the empty leaf) was live in two more places, and fixing it
   cost nothing.** `prefs` and `share` each declared their collection root as
@@ -5694,11 +5711,11 @@ touches a credential:
   fail-closed when the org has not connected (424). This is the ONLY place `/v1/ads`
   touches the connector plane.
 - **organic → `/v1/publish`** (rename of `apps/social`) and **email → `/v1/marketing`**
-  are DESIGNED follow-ons: register their executors the same way in `apps/wire_clients.go`
+  are DESIGNED follow-ons: register their executors the same way in `plugin/campaign/clients.go`
   (`campaign.RegisterChannel(campaign.NewChannel(kind, launch, spend, pause))`). Until
   wired, a fan-out records that channel "unavailable" (honest), never fabricated.
 
-Channels are injected at the composition root (`apps/wire_clients.go`), the SAME
+Channels are injected at the composition root (`plugin/campaign/clients.go`), the SAME
 injected-function decoupling the coding dispatcher uses — `campaign` never imports
 `ads`, `ads` never imports `campaign`. Fan-out (`launch.go` `fanOut`) is best-effort
 per channel; the org (the ONLY tenant key) is passed verbatim to every executor, so a
@@ -5847,7 +5864,7 @@ has one, on the money path, with no stated precedence.
 
 ## The money plane runs locally, and `make e2e` proves the prepaid cycle
 
-`commerce` is co-resident (`apps/commerce.go` → `commercemod.Embed` on cloud's own zip
+`commerce` is co-resident (`apps/commerce/mount.go` → `commercemod.Embed` on cloud's own zip
 app), so the billing surface, the ledger, and the gate are all one process. Two facts
 about running it that are easy to get wrong in opposite directions:
 
@@ -5885,10 +5902,14 @@ split-deploy case belongs to `apps/commerce/transport`, whose RoundTripper dispa
 in-process when commerce is co-resident and falls back to plain HTTP when it is not —
 under the native handler's own subject-pinning, with no admin token in the browser path.
 
-`COMMERCE_SERVICE_TOKEN` is NOT dead: `apps/account/topup.go` still forwards it on the one
-outbound S2S call (the HUSD wallet credit), and `IsServiceToken` compares against it to
-recognise a trusted in-process caller. It is no longer attached to anything a browser can
-address.
+`COMMERCE_SERVICE_TOKEN` is NOT dead — but `apps/account` no longer forwards it anywhere.
+Its last outbound use was the HUSD wallet credit in `apps/account/topup.go`, and that went
+with the file (the surface was deleted, not renamed: it posted to `/v1/billing/payment`,
+an address no app in either repo has ever registered, and `TOPUP_RAILS` was configured in
+no environment). What account does with the token now is COMPARE it — `IsServiceToken`,
+constant-time — to recognise a trusted in-process caller. The packages that still DIAL
+commerce with it read the env themselves: `apps/admin`, `apps/billing`, `apps/content`,
+`apps/metering`. It is attached to nothing a browser can address.
 
 **At-rest posture is a CAPABILITY question, answered once.** commerce's per-tenant money
 stores open a concurrent read pool AND a serialized write pool on the same file, which

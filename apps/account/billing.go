@@ -97,8 +97,9 @@ func scopedBillingBody(raw []byte, subject string) []byte {
 // commerceServiceToken reads the admin S2S token from server-only env
 // (COMMERCE_SERVICE_TOKEN, sourced from KMS — never a browser value). It is no longer
 // forwarded anywhere from this package; it is only ever COMPARED against, to recognise a
-// trusted in-process caller. topup.go resolves its own base+token for the one remaining
-// outbound S2S call (the HUSD credit).
+// trusted in-process caller. The one outbound use that remained was topup.go's HUSD
+// credit, and that went with the file. Packages that DO dial commerce with it read the
+// env themselves (apps/admin, apps/billing, apps/content, apps/metering).
 func commerceServiceToken() string { return environ.Or("COMMERCE_SERVICE_TOKEN", "") }
 
 // s2sBillingCall reports whether the request carries the verified COMMERCE_SERVICE_TOKEN
