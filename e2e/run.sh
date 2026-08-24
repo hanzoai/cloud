@@ -48,8 +48,13 @@ ORG=hanzo
 OTHER_ORG=acme
 PASSWORD='***REMOVED***'
 CLIENT_ID=hanzo-console
-SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64 | tr -d '=+/')"
-CLIENT_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '=+/')"
+# Fresh per run, unless the caller already has one. BOOT_ONLY leaves the instance
+# up for somebody else to talk to, and talking to it needs the credential it was
+# seeded with — a caller that cannot know it can only reach the unauthenticated
+# surface. `:-` and not an override: a suite that sets nothing still gets a
+# random secret that exists only inside a data dir deleted on exit.
+SERVICE_TOKEN="${SERVICE_TOKEN:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
+CLIENT_SECRET="${CLIENT_SECRET:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
 
 say()  { printf '\033[36m>> %s\033[0m\n' "$*"; }
 fail() { printf '\033[31m!! %s\033[0m\n' "$*" >&2; exit 1; }

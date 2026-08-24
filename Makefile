@@ -261,6 +261,9 @@ run: cloud ## Run the host, building the plugins in RUN_PLUGINS (iam,base,kms,ga
 # those two things still has exactly one recipe.
 dev: run ## Alias for run.
 
+up: ## Bring the whole cloud up for the project in hanzo.config.js. CONFIG=<path>.
+	@./dev/up.sh $(CONFIG)
+
 smoke: ## Build and run the smoke prober (mount-time integration check).
 	$(GO) run ./plugin/smoke
 
