@@ -172,6 +172,18 @@ func init() {
 //
 // Apply it ONLY to route groups whose routes are ALL authenticated: step (3) refuses
 // an unvalidated caller, so a genuinely public route must never be wrapped.
+//
+// IT COVERS A ROUTE, AND ONLY A ROUTE. zip records a typed operation and its
+// route's handler as two fields of one entry and wraps only the handler, so an
+// operation is still reached — over MCP, the call plane, the graph and the CLI —
+// having met nothing installed here, with the caller already authenticated. Wrapping
+// a group of TYPED operations in this therefore paywalls the browser and nobody
+// else, which is worse than no paywall, because the surface reads as gated.
+//
+// So this is for a group of RAW routes. To paywall an operation, ask the question
+// in its preamble, which is the one place every seam passes through — the shape
+// apps/account's CSRF and cloud.AuthorityIn already use, and the shape the money
+// rule itself uses (cloud.Toll at zip's op-invoke seam, installed once in serve.go).
 func RequireProduct(commerce cloud.CommerceClient, product string) zip.Handler {
 	allow, _ := commerce.(cloud.AllowanceChecker)
 	return func(c *zip.Ctx) error {
