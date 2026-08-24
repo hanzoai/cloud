@@ -11,7 +11,7 @@ package admission
 //     service whose switch governs it, and carries display metadata.
 //
 // The decide is WaitlistModeForHost(host) → (mode, service, known): resolve host→svc,
-// then read waitlist.<svc>. Enforce (middleware.go) consumes this decide; the admin
+// then read waitlist.<svc>. The ingress guard consumes this decide; the admin
 // board (/v1/admin/services) and the guard's runtime mode read (/v1/admission/waitlist,
 // served here) read it too. Per-user approval (pending|approved) is the second,
 // orthogonal axis — IAM's, in approval.go.
@@ -144,7 +144,7 @@ func requireRegistry() (*waitlistStore, error) {
 	return mounted.store.For(ns)
 }
 
-// WaitlistModeForHost is THE decide the Enforce consumer, /v1/admission/waitlist, and
+// WaitlistModeForHost is THE decide the public read /v1/admission/waitlist and
 // the admin board call: resolve host→service, then read the waitlist.<svc> switch
 // through the flag engine. FAIL-OPEN by construction — an unmounted registry, a store
 // error, or an un-governed host all return known=false, so a request is NEVER gated
@@ -350,8 +350,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	n := seedRegistry(deps.Brand, log)
 	// The guard's public runtime mode read (host→service→waitlist.<svc>), one namespace
-	// under /v1/flags. Exempt from the Enforce gate (see defaultExemptPrefixes) so a
-	// gated user can still resolve mode.
+	// under /v1/flags. It is what the ingress guard asks, and it is exempt from the
+	// guard's own gating so a user on the waitlist can still resolve mode.
 	//
 	// A typed op receives only a context, so the request the ?host= default falls
 	// back to reaches it from that context. Whoever composes the app parks it there,
