@@ -167,7 +167,10 @@ func TestUnmatchedAPIPath_Is404_NotSPA(t *testing.T) {
 	app := newConsoleApp(t)
 	// NOTE: /metrics is intentionally a console page (dropped from apiPrefixes), so
 	// it is NOT an API-namespace 404 — it serves the SPA like any console route.
-	for _, p := range []string{"/v1/does-not-exist", "/v1/models/extra/typo", "/healthz"} {
+	// "/health" is in the list because it was NOT in apiPrefixes, and the
+	// catch-all answered it with 241 KB of console index.html on the live API —
+	// a monitor asking whether the product is up was told about a static bundle.
+	for _, p := range []string{"/v1/does-not-exist", "/v1/models/extra/typo", "/health", "/healthz"} {
 		status, body, _ := do(t, app, http.MethodGet, p, nil)
 		if status != http.StatusNotFound {
 			t.Errorf("GET %s status = %d, want 404 (API namespace, not SPA)", p, status)
