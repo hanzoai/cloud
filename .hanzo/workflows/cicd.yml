@@ -1463,7 +1463,9 @@ jobs:
     needs: image
     if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
     runs-on: [hanzo-build-linux-amd64]
-    timeout-minutes: 100
+    # 20 minutes waiting for a build slot plus 90 polling for the index it produces,
+    # so the job's own bound has to clear their sum rather than either one.
+    timeout-minutes: 120
     steps:
       - name: Publish the plugin set for this release
         env:
@@ -1542,9 +1544,27 @@ jobs:
             '{repo:$repo, sha:$sha, tag:$tag, bucket:"plugins",
               binaries:[{name:"plugins", run:"make -f mk/fleet.mk dist", out:"dist/*"}]}')
 
-          resp=$(curl -sS -X POST "${CLOUD_API}/v1/platform/runner" \
-            -H "Authorization: Bearer ${BUILD_TOKEN}" \
-            -H 'Content-Type: application/json' -d "$body")
+          # A 429 IS A QUEUE, NOT A REFUSAL. The build door caps concurrent builds
+          # PER ORG, and a release burst puts one plugin build per train against that
+          # cap, so the door answers exactly what it should:
+          #   {"detail":"launch build: platform: too many concurrent builds for this
+          #    org","status":429,"title":"Too Many Requests"}
+          # Failing there reports a capacity MOMENT as a broken release — the same
+          # mistake the waits in this file made against a quiet fleet. So wait for a
+          # slot, and refuse anything else AT ONCE: a 400 does not become valid by
+          # being asked again. A build takes ~39 minutes, so a slot frees on that
+          # timescale; twenty minutes buys one without holding the runner all night.
+          ENQ_DEADLINE=$(( $(date +%s) + 1200 ))
+          while :; do
+            code=$(curl -sS -o /tmp/enq.json -w '%{http_code}' -X POST "${CLOUD_API}/v1/platform/runner" \
+              -H "Authorization: Bearer ${BUILD_TOKEN}" \
+              -H 'Content-Type: application/json' -d "$body" || echo 000)
+            resp=$(cat /tmp/enq.json 2>/dev/null || true)
+            [ "$code" = 429 ] || break
+            [ "$(date +%s)" -lt "$ENQ_DEADLINE" ] || break
+            echo "the build door is at its per-org concurrency cap; waiting for a slot"
+            sleep 30
+          done
           # The reply is READ before it is trusted to be JSON, the same way the KMS
           # body above is. A refusal from an address that does not route this comes
           # back as prose, and jq meeting prose under `set -e` ends the step on its
