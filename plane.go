@@ -206,6 +206,9 @@ func ServePlane(name string, log luxlog.Logger) (func() error, error) {
 	bindRuntimeDir()
 	path := zip.SocketPath(name)
 	app := Plane()
+	if err := unpriced(app); err != nil {
+		return nil, fmt.Errorf("plane %s: %w", name, err)
+	}
 	errs := make(chan error, 1)
 	go func() { errs <- app.Listen(path) }()
 	if err := awaitSocket(path, errs, planeBindWait); err != nil {
@@ -230,6 +233,34 @@ func ServePlane(name string, log luxlog.Logger) (func() error, error) {
 			return nil
 		}
 	}, nil
+}
+
+// unpriced keeps the internal plane outside the money rule by keeping it outside
+// the PRICED SURFACE, which is the fact that makes leaving it ungated right.
+//
+// An operation here is the implementation of an operation the edge already priced
+// and already answered standing for. Pricing the inner hop bills one act twice;
+// gating it on standing refuses the machinery that computes standing. So the
+// program's rule covers the app the world calls and not this one — and the whole of
+// what that rests on is that no address registered here is one the money rules have
+// an opinion about.
+//
+// An address is a thing somebody chooses, so it is asked rather than assumed, at the
+// moment the socket is bound and in every process that binds one. Refusing here is
+// the same shape of answer the plane already gives a socket it cannot bind: the app
+// does not come up, and it says which operation and what it would have cost.
+func unpriced(app *zip.App) error {
+	for _, op := range app.Registry() {
+		if cents := DefaultPrice(op.Method, op.Path); cents != 0 {
+			return fmt.Errorf("%s (%s %s) prices at %dc — the edge already charged for the operation "+
+				"this implements, so the inner hop would bill it twice", op.OperationID, op.Method, op.Path, cents)
+		}
+		if Billable(op.Method, op.Path) {
+			return fmt.Errorf("%s (%s %s) is a billable address — standing would be asked of the "+
+				"machinery that computes standing", op.OperationID, op.Method, op.Path)
+		}
+	}
+	return nil
 }
 
 const (
