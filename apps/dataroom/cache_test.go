@@ -176,3 +176,53 @@ func TestVaryIsAddedToWhatIsAlreadyThere(t *testing.T) {
 	}
 	t.Logf("Vary composed with the edge: %q", v)
 }
+
+// TestATypedAnswerIsNotKeptEither. The byte streams and the untyped relay write
+// their own response, so a header set on that path reaches them and nothing else
+// — while the typed ops answer through ops.call and ops.run, which return an Out
+// and touch no response at all. /links carries the link ids, which are the whole
+// of a visitor's credential on the viewer surface, so that is the answer that
+// must least be kept.
+//
+// PAIRED with the status on every row: an answer that 404'd would carry no
+// headers and prove nothing.
+func TestATypedAnswerIsNotKeptEither(t *testing.T) {
+	app, _ := mountFlowApp(t)
+	const org = "acme"
+
+	for _, path := range []string{
+		"/v1/dataroom/documents",
+		"/v1/dataroom/datarooms",
+		"/v1/dataroom/links",
+		"/v1/dataroom/trust",
+	} {
+		st, h := headers(t, app, http.MethodGet, path, org, nil)
+		if st != http.StatusOK {
+			t.Fatalf("GET %s: %d, want 200 — the row below would measure a refusal", path, st)
+		}
+		notKept(t, "GET "+path, h)
+		t.Logf("GET %s: Cache-Control=%q Vary=%q", path, h.Get("Cache-Control"), h.Get("Vary"))
+	}
+}
+
+// TestThePlatformRosterIsNotKept. The one cross-tenant read sits on its own group
+// at the operator's depth, so nothing installed on the subsystem's group reaches
+// it — and it answers with every org's trust centre, which is the least storable
+// answer here.
+func TestThePlatformRosterIsNotKept(t *testing.T) {
+	app, _ := mountFlowApp(t)
+	rq := httptest.NewRequest(http.MethodGet, "/v1/admin/dataroom/trust", nil)
+	rq.Header.Set("X-Org-Id", "admin")
+	rq.Header.Set("X-User-Id", "u_admin")
+	rq.Header.Set("X-User-IsAdmin", "true")
+	resp, err := app.Test(rq)
+	if err != nil {
+		t.Fatalf("roster: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("roster: %d, want 200 — the row below would measure a refusal", resp.StatusCode)
+	}
+	notKept(t, "GET /v1/admin/dataroom/trust", resp.Header)
+}
