@@ -712,9 +712,22 @@ var draining atomic.Bool
 // shape in the registry like any other op, and the same answer is reachable
 // over native ZAP typed Call on :9653 as over the kubelet's GET.
 func health(app *zip.App, absent map[string]string) {
-	zip.Get(app, "/healthz", func(context.Context, *probeIn) (*probeOut, error) {
+	alive := func(context.Context, *probeIn) (*probeOut, error) {
 		return &probeOut{Status: "ok", Absent: stillAbsent(app, absent)}, nil
-	}, zip.WithStatus(200),
+	}
+	zip.Get(app, "/healthz", alive, zip.WithStatus(200),
+		zip.WithSummary("Report whether this host process is alive"))
+
+	// /health IS a liveness probe, and until this line it was a console page.
+	// The name is the one every monitor reaches for first, and nothing claimed
+	// it here, so the SPA catch-all did: api.hanzo.ai/health served 241 KB of
+	// console index.html. That is a wrong answer in both directions — 200 while
+	// the API is unreachable, and 503 when only a static bundle is, which is a
+	// sentence about a asset that reads as a sentence about the product.
+	//
+	// One handler at two addresses, not two handlers: a second body is how two
+	// spellings of one question come to give different answers.
+	zip.Get(app, "/health", alive, zip.WithStatus(200),
 		zip.WithSummary("Report whether this host process is alive"))
 
 	zip.Get(app, "/readyz", func(context.Context, *probeIn) (*probeOut, error) {

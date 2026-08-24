@@ -160,7 +160,7 @@ func TestADeadSubsystemDoesNotTakeTheHostDown(t *testing.T) {
 //
 // The host owns "/" (the white-labelled console) and registers it LAST, so a
 // prefix that was never registered reaches the SPA. webui only refuses the
-// namespaces in its apiPrefixes list — /v1/, /api/, /zap, /healthz, /readyz —
+// namespaces in its apiPrefixes list — /v1/, /api/, /zap, /health, /healthz, /readyz —
 // which is the fix that stopped /v1/meet/health answering 200 text/html. SEVEN
 // prefixes across FIVE apps escape that list and are still answered by the shell:
 //
@@ -244,6 +244,15 @@ func TestAbsenceIsObservable(t *testing.T) {
 	if got.Status != "ok" {
 		t.Errorf(`/healthz status = %q, want "ok" — the field is about THIS PROCESS, which is up and routing`, got.Status)
 	}
+	// /health IS /healthz, byte for byte. It is the name a monitor reaches for
+	// first, and until it was registered the console catch-all owned it: the live
+	// API served 241 KB of index.html there, which meant 200 while the API was
+	// unreachable and 503 when only the static bundle was. Two spellings of one
+	// question have to give one answer, so this reads the second one back.
+	if code2, ctype2, body2 := do(t, app, "/health"); code2 != code || body2 != body {
+		t.Fatalf("GET /health = %d %q, want the same as /healthz (%d %q) — one probe, two names, one answer\ncontent-type %q", code2, body2, code, body, ctype2)
+	}
+
 	why, named := got.Absent["pubsub"]
 	if !named {
 		t.Fatalf("/healthz does not name the absent subsystem: %q\n"+
