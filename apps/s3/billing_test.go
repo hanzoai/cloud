@@ -79,8 +79,11 @@ func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 func callGuard(t *testing.T, s *cloud.Service[state], org string, hErr error) (status int, ran *int32) {
 	t.Helper()
 	var calls int32
-	h := guard(s, func(c *zip.Ctx) error {
+	h := guard(s, func(_ *cloud.Service[state], c *zip.Ctx, org string) error {
 		atomic.AddInt32(&calls, 1)
+		if org == "" {
+			t.Error("guard ran a handler with no org — admission hands the tenant down")
+		}
 		if hErr != nil {
 			return hErr
 		}
