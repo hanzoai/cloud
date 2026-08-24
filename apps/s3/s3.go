@@ -45,10 +45,10 @@
 //   - Single S3 identity: the SeaweedFS gateway uses ONE admin identity
 //     (universe infra/k8s/storage/s3.yaml) for the whole binary. So the S3 LAYER
 //     enforces no tenant boundary — isolation is 100% this subsystem's
-//     org-prefixed naming + the guard. The correct hardening is per-request
+//     org-prefixed naming + admit. The correct hardening is per-request
 //     STS/session-policy or per-identity bucket-prefix restriction so the store
 //     independently enforces the org boundary (defense in depth). Until then,
-//     the guard's cloud.Member gate + the by-construction naming is the sole
+//     admit's cloud.Member check + the by-construction naming is the sole
 //     boundary — kept minimal and auditable for that reason.
 //   - Presign has no rate limit: minting is unthrottled (zip/middleware/ratelimit
 //     is unwired in serve.go, platform-wide). The 5-minute TTL bounds a minted
@@ -57,6 +57,7 @@
 package s3
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -211,8 +212,9 @@ func init() {
 			"no credential, bucket or tenant detail.")
 }
 
-// Mount wires /v1/s3/* onto app. The guard-wrapped, unconditional route set
-// makes this a direct construction (cloud.NewBase), not cloud.Mount.
+// Mount wires /v1/s3/* onto app. The unconditional route set, each operation
+// carrying its own preamble, makes this a direct construction (cloud.NewBase),
+// not cloud.Mount.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("s3.Mount: nil app")
@@ -220,37 +222,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "s3"), State: state{admin: s3admin.New()}}
 
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
-	// The guard fails each op closed with 503 (s.State.admin.Configured() is false),
-	// so the s3 subsystem always OWNS its route space. If the routes were mounted only
-	// when configured, an unconfigured deployment would leak /v1/s3/buckets and
-	// /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404 "resource not
-	// found") instead of the honest 503 — the file-manager surface must fail closed
-	// under its own name, never fall through to a different subsystem's handler.
-	// EVERY ROUTE ON THIS SURFACE STAYS UNTYPED, and none of it is for want of
-	// effort — each refusal is a wire this stack cannot yet describe. Recorded here
-	// so the next engineer re-checks the blocker instead of re-deriving it:
+	// admit fails each operation closed with 503 (s.State.admin.Configured() is
+	// false), so the s3 subsystem always OWNS its route space. If the routes were
+	// mounted only when configured, an unconfigured deployment would leak
+	// /v1/s3/buckets and /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404
+	// "resource not found") instead of the honest 503 — the file-manager surface
+	// must fail closed under its own name, never fall through to a different
+	// subsystem's handler.
 	//
-	//  1. THE MONEY WIRE (the seven data-plane ops). Every one runs through guard →
-	//     ResourceMeter.Gate, and a refused balance answers through
-	//     cloud.DenyResource, which writes the fleet's NESTED
-	//     {"error":{"code","message"}} 402/503 contract IN BAND on the response
-	//     (resource_billing.go:224). A typed op's only refusal channel is a returned
-	//     error, which zip renders as the FLAT {"status","code","error"} HTTPError —
-	//     a different body for the same denial, silently reshaped for every metered
-	//     client that reads error.code across Hanzo. Writing in band from inside a
-	//     typed op does not help either: zip stamps 204 over the status after a nil
-	//     Out (zip typed.go), so the client would get a 204 carrying a 402 body.
-	//     Same refusal apps/ml (ml.go:218) and apps/company (company.go:200) file.
+	// TWO ROUTES STAY UNTYPED, and it is a wire fact rather than want of effort:
+	// fiber's `*` has no typed-op spelling. zip's closeColonParams leaves the `*` in
+	// the op path while cloud's openapi.translate renders the ROUTE as {wildcard1},
+	// so openapi.Fold would fail with "typed op has no live route" and the app would
+	// publish nothing at all. It is the last such refusal here — the two that stood
+	// beside it expired, and the operations that were waiting on them are typed: a
+	// balance denial travels as cloud.Denied, which serve.go's app-wide DenyEnvelope
+	// writes back as the money wire's own nested {"error":{"code","message"}} bytes,
+	// and zip v1.31.0's variadic WithStatus lets /health declare both of its statuses.
 	//
-	//  2. THE WILDCARD (the two /objects/* ops, refused twice over). fiber's `*` has
-	//     no typed-op spelling: zip's closeColonParams leaves the `*` in the op path
-	//     while cloud's openapi.translate renders the ROUTE as {wildcard1}, so
-	//     openapi.Fold would fail with "typed op has no live route".
-	//
-	//  3. TWO STATUSES, ONE OBJECT (/health). See the handler's own note.
-	//
-	// All three clear on the same zip change: an error that can carry a body, and a
-	// second declarable success status.
 	// Routes go on the concrete app so zip's typed registrars and cmd/zipdoc can
 	// both resolve the prefix; the scoped Router still owns any middleware, which
 	// is where the ownership guard applies. Same shape apps/meet and apps/blueprint
@@ -263,22 +252,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// it declares BOTH of its statuses, so the answer says which one it is.
 	zip.Get(g, "/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
-	// Everything else is gated. guard is a MIDDLEWARE, so the platform check, the
-	// org resolution and the balance gate all run before an op is entered — which
-	// is why a denial never passes through a typed handler and why these convert
-	// without touching the money wire at all.
-	// With WRAPS the leaves it registers and installs nothing at the prefix, so the
-	// probe above — registered on the bare group at the same address — stays
-	// ungated. Two scopes, one prefix, which is the split this surface has always
-	// had; it was per-route decoration before and is per-group now.
-	gd := zapp.With(guardMW(s)).Group("/v1/s3")
-	zip.Get(gd, "/buckets", o.listBuckets)
-	zip.Post(gd, "/buckets", o.createBucket, zip.WithStatus(http.StatusCreated))
-	zip.Delete(gd, "/buckets/:bucket", o.deleteBucket)
-	zip.Get(gd, "/buckets/:bucket/objects", o.listObjects)
-	zip.Post(gd, "/buckets/:bucket/objects", o.presignUpload)
-	g.Get("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, presignDownload)))
-	g.Delete("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, deleteObject)))
+	// Everything else opens with admit and closes with settle, composed onto the
+	// HANDLER — paid for a typed operation, guard for a raw one. Nothing is
+	// installed at the prefix, so the probe registered above at the same address
+	// stays ungated without a second scope to keep the two apart.
+	zip.Get(g, "/buckets", paid(s, o.listBuckets))
+	zip.Post(g, "/buckets", paid(s, o.createBucket), zip.WithStatus(http.StatusCreated))
+	zip.Delete(g, "/buckets/:bucket", paid(s, o.deleteBucket))
+	zip.Get(g, "/buckets/:bucket/objects", paid(s, o.listObjects))
+	zip.Post(g, "/buckets/:bucket/objects", paid(s, o.presignUpload))
+	g.Get("/buckets/:bucket/objects/*", guard(s, presignDownload))
+	g.Delete("/buckets/:bucket/objects/*", guard(s, deleteObject))
 
 	if !s.State.admin.Configured() {
 		s.Log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
@@ -293,75 +277,127 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// guard wraps a handler with the org gate + fail-closed check, and is the ONE
-// place the s3 data plane meters per-org spend. A request with no resolvable org
-// is refused 403 before S3 is touched; an unconfigured admin is 503. The resolved
-// org is stashed in Locals so handlers read it once.
+// fee is what one object-storage operation costs, from operator config. Read per
+// call rather than once at mount, so the knob takes effect without a restart.
+func fee() int64 { return cloud.ResourceFeeCents(opFeeEnvPrefix, "op") }
+
+// admit is the sentence every data-plane operation opens with, and it answers the
+// caller's org so the operation can address storage inside it.
 //
-// Billing (fail-closed, per-org, single place): every guarded data-plane op is a
-// billable object-storage operation. Before the handler runs, Gate checks the
-// caller's balance — an unfunded org (402) or, in the default fail-closed
-// posture, an unreachable commerce (503) is refused with NOTHING touched (no free
-// storage op). After the handler SUCCEEDS, Meter debits the caller's org ledger
-// (per-op fee, product "s3", async best-effort so the debit never blocks the
-// response). A handler error is surfaced and NOT billed — mirrors the edge gate
-// ("do not bill failed work"). fee==0 or unconfigured billing makes both no-ops.
-// guardMW is guard as the middleware form zip.App.With takes — the same gate, bound
-// to the service, so a typed op is wrapped by exactly what an untyped handler was.
-// One gate, two call shapes, never two gates.
-func guardMW(s *cloud.Service[state]) func(zip.Handler) zip.Handler {
-	return func(h zip.Handler) zip.Handler { return guard(s, h) }
+// Three refusals in the order they have to be asked. A subsystem that cannot
+// serve anyone says so before it says who it serves, so the readiness check comes
+// first. Then the tenant boundary — cloud.Member (a validated principal,
+// HIP-0519's one predicate set) and an org to act for — because billing an
+// unauthenticated caller would read an empty ledger and answer a money question
+// about nobody. Then the balance: an unfunded org is 402 and, in the fail-closed
+// posture, an unreachable commerce is 503, both with NOTHING touched.
+//
+// The denial travels as an ERROR (cloud.Denied), which is the one refusal channel
+// every shape here shares — serve.go installs DenyEnvelope app-wide, so a REST
+// caller reads the money wire's own nested {"error":{"code","message"}} bytes, and
+// off the HTTP path deniedErr.Unwrap keeps the same status and sentence.
+func admit(s *cloud.Service[state], c *zip.Ctx) (string, error) {
+	if !s.State.admin.Configured() {
+		return "", zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
+	}
+	if !cloud.Member.Admits(cloud.AuthorityOf(c)) {
+		return "", cloud.Member.Refusal()
+	}
+	org, ok := tenant(c)
+	if !ok {
+		return "", principal.Refused(c)
+	}
+	project, projectValidated := principal.ValidatedProject(c)
+	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, "op", fee()); err != nil {
+		return "", cloud.Denied(err)
+	}
+	return org, nil
 }
 
-func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
-	// The platform gate (cloud.Member — a validated principal, HIP-0519's one
-	// predicate set) wraps the org resolution and the meter, and is built once:
-	// only the readiness check precedes it, because a subsystem that cannot serve
-	// anyone says so before it says who it serves.
-	gated := cloud.Guard(cloud.Member, func(ctx *zip.Ctx) error {
-		org, ok := tenant(ctx)
+// settle debits the caller's ledger for one operation, and runs only after the
+// work succeeded — a failed operation is surfaced and not billed, which is the
+// edge gate's rule ("do not bill failed work"). The debit is async best-effort, so
+// it never blocks the answer; fee==0 or unconfigured billing makes it a no-op.
+func settle(s *cloud.Service[state], c *zip.Ctx) {
+	s.Bill.Meter(principal.Ledger(c), principal.Project(c), "op", fee(), c.RequestID(), cloud.ClientIP(c))
+}
+
+// paid composes admit and settle onto a TYPED operation, and guard composes them
+// onto a RAW one. One decision, two shapes, never two decisions.
+//
+// BOTH WRAP THE HANDLER, WHICH IS THE WHOLE POINT. zip records a typed op and its
+// route's fiber handler as two fields of one entry and wraps only the second, so a
+// gate handed to Group or composed through With runs for REST and for nothing
+// else — while MCP, the call plane, the graph and the CLI invoke the op directly
+// and the depth-0 identity middleware has already authenticated whoever is
+// calling. The handler is the one value every way in dispatches to, so an
+// operation that costs money asks for it there.
+//
+// The org travels DOWN in the context, put there by the same call that took the
+// money, which is what makes [orgOf] the only way an operation here learns one: an
+// operation registered without paid can name no tenant and so can touch nothing.
+func paid[In, Out any](s *cloud.Service[state], core zip.TypedHandler[In, Out]) zip.TypedHandler[In, Out] {
+	return func(ctx context.Context, in *In) (*Out, error) {
+		c, ok := cloud.Request(ctx)
 		if !ok {
-			return principal.Refused(ctx)
+			return nil, principal.RefusedFrom(ctx) // no request: no credential, no tenant
 		}
-		ctx.Locals(orgKey, org)
-
-		fee := cloud.ResourceFeeCents(opFeeEnvPrefix, "op")
-		project, projectValidated := principal.ValidatedProject(ctx)
-		if err := s.Bill.Gate(ctx.Context(), principal.Ledger(ctx), project, projectValidated, "op", fee); err != nil {
-			return cloud.DenyResource(ctx, err)
+		org, err := admit(s, c)
+		if err != nil {
+			return nil, err
 		}
-		if err := h(ctx); err != nil {
-			return err // handler failed — surface it; do not bill failed work.
+		out, err := core(context.WithValue(ctx, orgKey{}, org), in)
+		if err != nil {
+			return nil, err
 		}
-		s.Bill.Meter(principal.Ledger(ctx), principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
-		return nil
-	})
-	return func(ctx *zip.Ctx) error {
-		if !s.State.admin.Configured() {
-			return zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
-		}
-		return gated(ctx)
+		settle(s, c)
+		return out, nil
 	}
 }
 
-// orgKey is the Locals key the guard uses to hand the resolved org to handlers.
-type ctxKey string
-
-const orgKey ctxKey = "s3.org"
-
-func reqOrg(ctx *zip.Ctx) string {
-	if v, ok := ctx.Locals(orgKey).(string); ok {
-		return v
+// guard is paid for the two object routes fiber's wildcard keeps raw. It hands the
+// org down as a PARAMETER for the same reason paid hands it down in the context:
+// the value comes from the call that admitted the request, so there is no arrangement
+// of these registrations in which a handler runs without one.
+func guard(s *cloud.Service[state], h func(*cloud.Service[state], *zip.Ctx, string) error) zip.Handler {
+	return func(c *zip.Ctx) error {
+		org, err := admit(s, c)
+		if err != nil {
+			return err
+		}
+		if err := h(s, c, org); err != nil {
+			return err
+		}
+		settle(s, c)
+		return nil
 	}
-	return ""
+}
+
+// orgKey names the request-scoped slot the admitted org travels in. Unexported
+// zero-size type: unforgeable from another package.
+type orgKey struct{}
+
+// orgOf is the caller's org as [admit] resolved it, and the ONLY way a typed
+// operation here learns one. It is not a second resolution — it reads the value
+// [paid] carried down, so the org an operation addresses storage under is by
+// construction the org whose balance was checked and whose ledger is debited.
+//
+// FAILS CLOSED. An operation reached with no admission — off the HTTP path, or
+// registered without paid — has no org and refuses rather than defaulting to one.
+func orgOf(ctx context.Context) (string, error) {
+	org, _ := ctx.Value(orgKey{}).(string)
+	if org == "" {
+		return "", principal.RefusedFrom(ctx)
+	}
+	return org, nil
 }
 
 // tenant resolves the caller's org exactly as clients/provisioning does — the
 // SAME sanitized slug the control plane keys on, so buckets allocated there and
 // operated on here share one org tag.
 //
-// A VALIDATED PRINCIPAL IS ALREADY ESTABLISHED (RED HIGH): guard runs this behind
-// cloud.Guard(cloud.Member), so the forgeable data path is closed before the org
+// A VALIDATED PRINCIPAL IS ALREADY ESTABLISHED (RED HIGH): admit asks
+// cloud.Member before this, so the forgeable data path is closed before the org
 // is read. SanitizeIdentity sets X-User-Id ONLY when it validated a bearer/cookie;
 // on the no-principal "Phase-1 data" path it RESTORES the client's raw X-Org-Id
 // but leaves X-User-Id empty. A pure data plane that trusted X-Org-Id alone would
@@ -457,8 +493,7 @@ type presignResponse struct {
 // wildcard path. Same properties as upload: public host, exact key, time-boxed.
 // The Content-Disposition is set to attachment(filename) so a browser downloads
 // rather than renders.
-func presignDownload(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
+func presignDownload(s *cloud.Service[state], ctx *zip.Ctx, org string) error {
 	bname, ok := friendlyParam(ctx.Param("bucket"))
 	if !ok {
 		return zip.ErrBadRequest("invalid bucket name")
@@ -487,8 +522,7 @@ func presignDownload(s *cloud.Service[state], ctx *zip.Ctx) error {
 }
 
 // deleteObject removes one object at the trailing wildcard path.
-func deleteObject(s *cloud.Service[state], ctx *zip.Ctx) error {
-	org := reqOrg(ctx)
+func deleteObject(s *cloud.Service[state], ctx *zip.Ctx, org string) error {
 	bname, ok := friendlyParam(ctx.Param("bucket"))
 	if !ok {
 		return zip.ErrBadRequest("invalid bucket name")

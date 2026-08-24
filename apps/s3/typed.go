@@ -46,27 +46,6 @@ import (
 // returned by a factory is a call expression with no doc comment to read.
 type ops struct{ s *cloud.Service[state] }
 
-// orgOf is the caller's org as guard resolved it. It comes off the REQUEST rather
-// than through principal.OrgFrom for the reason tenant() exists: this surface
-// keys on the SAME sanitized slug the control plane allocates buckets under, and
-// it buckets an org-less SuperAdmin under the literal "admin" org, which OrgFrom
-// refuses outright. guard parks that value; reading it here is what keeps one
-// resolution for both halves of the surface.
-//
-// FAILS CLOSED off the HTTP path: a CLI LocalInvoke has no request, so there is
-// no validated principal and no org to name.
-func orgOf(ctx context.Context) (string, error) {
-	c, ok := cloud.Request(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	org := reqOrg(c)
-	if org == "" {
-		return "", zip.ErrForbidden("a validated principal is required")
-	}
-	return org, nil
-}
-
 // client is the admin S3 client, or the honest 503 every op answers without one.
 func (o ops) client() (*s3.Client, error) {
 	cli, err := o.s.State.admin.Client()
