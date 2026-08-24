@@ -169,7 +169,7 @@ var allowedRequestUses = map[string]string{
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
 		"and principal.Acting has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
-	"apps/s3/typed.go":      "orgOf — the one resolution both halves of the surface read, so a bucket is named in exactly one tenant's space whether it is reached as an op or as a tool. It reads the org off the validated principal and FAILS CLOSED where there is no request at all: a CLI LocalInvoke has no principal to name a tenant with, and answering with an unscoped bucket list would be worse than refusing.",
+	"apps/s3/s3.go":         "paid — the preamble every object-storage operation opens with, composed onto the HANDLER so it runs on every way in rather than on the route alone. It reads the request to admit the caller, name their tenant and take the fee, and FAILS CLOSED where there is no request at all: a CLI LocalInvoke has no principal to name a tenant with, and answering with an unscoped bucket list would be worse than refusing.",
 	"apps/graph/graph.go": "actor — every assertion records WHO asserted it, and that identity is " +
 		"the caller's home org plus their user name (principal.Owner + c.User), strictly more than " +
 		"the tenant OrgFrom carries. The org itself still resolves through principal.OrgFrom beside " +

@@ -103,6 +103,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/crawl"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -317,6 +318,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// engines are asked from metaSearch, which every caller reaches and none of
 	// them can hand a meter to. See meter.go.
 	bindMeter(cloud.NewResourceMeter(deps, "websearch"))
+	// This surface verifies MACs another process mints, so a key it invented itself
+	// would refuse every ambient-cookie call for as long as the pod ran. Asked at
+	// boot rather than discovered on the wire.
+	if err := account.Shared(); err != nil {
+		return fmt.Errorf("websearch.Mount: %w", err)
+	}
 
 	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
 	// the zip layer so the same request either reaches native meta-search or is
@@ -350,7 +357,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		zip.WithOperationID("search_web"),
 		zip.WithSummary("Search the live web"))
 
-	g := app.Group("/v1/websearch")
+	// /v1/websearch/search is named in cloud's paidReads: one debit per answer a
+	// bought engine served, so this surface's READ is what spends. account's control
+	// asks the same money rule the balance gate does, and is a no-op for a caller
+	// that presented any credential — which is every service and console caller here.
+	g := app.Group("/v1/websearch", account.RequireCSRFOnSpend())
 	g.All("/search", func(c *zip.Ctx) error {
 		// The net/http adaptor hands the handler a request whose Context is the
 		// TRANSPORT's, not the one cloud.Bridge parked the validated caller in —
