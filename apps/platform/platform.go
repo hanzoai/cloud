@@ -155,10 +155,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("platform.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
-	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
-	// behind the caller's plan, wrap it with entitlement.RequireProduct(deps.Commerce,
-	// "platform") — note routes() registers FLAT absolute paths (not a group), so
-	// enabling means converting them to app.Group("/v1/platform", mw) or wrapping each.
+	// UNIFIED PAYWALL (server-side enforcement). To hold the /v1/platform surface to
+	// the caller's plan, ask entitlement in each operation's PREAMBLE. Wrapping the
+	// routes would cover the REST route and nothing else: MCP, the call plane, the
+	// graph and the CLI reach a typed operation directly, with the caller already
+	// authenticated.
 	// DEFERRED — DO NOT ENABLE YET: the "platform" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "platform" to a tier. See clients/entitlements.

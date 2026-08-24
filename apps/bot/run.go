@@ -223,9 +223,12 @@ func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 	// and the plugin constructor does the same for a plugin program, so no
 	// subsystem installs it.
 
-	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
-	// caller's plan, prepend the middleware to the group:
-	//   g := app.Group("/v1/bot", entitlement.RequireProduct(deps.Commerce, "bot"))
+	// UNIFIED PAYWALL (server-side enforcement). To hold this surface to the
+	// caller's plan, ask entitlement in each operation's PREAMBLE. Not on the
+	// group: these are typed operations, and a group's middleware reaches the REST
+	// route only — MCP, the call plane, the graph and the CLI reach the operation
+	// with the caller already authenticated, so a group-wrapped paywall bills the
+	// browser and nobody else.
 	// DEFERRED — DO NOT ENABLE YET: the "bot" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "bot" to a tier. See clients/entitlements.
