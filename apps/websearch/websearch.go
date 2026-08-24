@@ -200,15 +200,36 @@ type webSearchQuery struct {
 // empty `results` is a real answer — nothing was found — and not an outage. The
 // array is always present, never null.
 //
+// Two refusals in the order they have to be asked, both in the PREAMBLE. A typed
+// op is also an MCP tool, a call-plane operation, a graph field and a CLI
+// command, and every one of those invokes it with no route and therefore no
+// middleware — so what admits a caller here is asked where every caller reaches
+// it rather than in a middleware only one of them passes through.
+//
 // A VALIDATED PRINCIPAL IS REQUIRED, and there is no tenant beyond that: the
 // results are public web pages, identical for every caller, so nothing here is
-// scoped and nothing here can leak across orgs. A typed op is also an MCP tool
-// and a CLI command, and tools/call invokes it with no route and therefore no
-// middleware — so the gate is in the handler, where every caller reaches it,
-// rather than in a middleware only one caller passes through.
+// scoped and nothing here can leak across orgs.
+//
+// THEN THE ANTI-FORGERY TOKEN, immediately before the money, because that is
+// what it is about. This search is the SAME bought meta-search the compat
+// endpoint runs — the engines cost, and account.Shared/meter.go bills the
+// caller's ledger for the answer — so a page the caller never visited must not
+// be able to spend for them by sending their browser here with a cookie they
+// already hold. Nothing leaks; the answer is unreadable cross-origin. What
+// moves is money.
+//
+// It is account's control, the one every operation in this estate asks, and it
+// is a no-op the moment a caller PRESENTS a credential (Bearer, gateway, API
+// key) — which is every service and console caller here — so it costs a CLI, an
+// agent and an API client nothing. Only the ambient-cookie path is asked for the
+// echoed token. The raw /v1/websearch/search route asks the same control on its
+// group (see Mount), so the two addresses of one search are admitted alike.
 func webSearch(ctx context.Context, in *webSearchQuery) (*webSearchResults, error) {
 	if !principal.ValidatedFrom(ctx) {
 		return nil, zip.ErrUnauthorized("sign in to search the web")
+	}
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
 	}
 	q := strings.TrimSpace(in.Q)
 	if q == "" {
@@ -361,6 +382,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// bought engine served, so this surface's READ is what spends. account's control
 	// asks the same money rule the balance gate does, and is a no-op for a caller
 	// that presented any credential — which is every service and console caller here.
+	//
+	// A GROUP REACHES A ROUTE AND NOTHING ELSE, so this covers the raw registrations
+	// below and only those. The typed op above is reachable by NAME as well — MCP,
+	// the call plane, the graph, the CLI — and asks the same control in its own
+	// preamble, which is the one place every seam passes through. One decision, two
+	// shapes, never two decisions.
 	g := app.Group("/v1/websearch", account.RequireCSRFOnSpend())
 	g.All("/search", func(c *zip.Ctx) error {
 		// The net/http adaptor hands the handler a request whose Context is the
