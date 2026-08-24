@@ -31,6 +31,7 @@ package kms
 // defense is preserved, the store merely shards WHERE the row lives.
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -41,6 +42,36 @@ import (
 	"github.com/hanzoai/namespace"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 )
+
+// storeOpTimeout bounds one statement's wait for its org file's SOLE connection.
+//
+// WHY A NUMBER AND NOT ZERO. cloud.OrgDB pins each org file to one connection
+// (sqlpool.Single), which is what makes a read-modify-write a safe transaction —
+// and it means every concurrent statement against one file queues behind the
+// holder. database/sql waits for that connection until its CONTEXT is done, so
+// the context-free db.QueryRow/Exec/Query these methods used waited forever.
+//
+// The platform's own secrets make this the common path rather than a corner: a
+// path outside orgs/<slug>/ resolves to namespace.System(), so HANZO_DEPLOY_TOKEN,
+// NPM_TOKEN and every other CI credential live in ONE file behind ONE connection.
+//
+// Unbounded, the only ceiling was the caller's: cmd/cloud's plugin transport gives
+// up at fifteen minutes, and reads were measured completing at duration_ms 900002
+// — the cap, not the work. Nothing waits that long: curl gives up, the publish
+// step gives up, and the answer arrives for nobody. Ten seconds is longer than any
+// healthy statement on a file this size and short enough that a caller learns the
+// store is busy while it still cares.
+// A var, not a const, only so the test below can narrow it: a test that proved
+// the bound by waiting ten real seconds would be paid for on every run forever.
+// Nothing else writes it — there is no flag, no env and no config for it.
+var storeOpTimeout = 10 * time.Second
+
+// bounded is the deadline every statement below runs under. Stated once, because
+// a method that forgot it would reintroduce the unbounded wait with nothing to
+// show for it.
+func bounded() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), storeOpTimeout)
+}
 
 // errReadOnly is returned by a reader-mode store when a mutation is attempted. A
 // reader must never fork the authoritative writer's state.
@@ -153,7 +184,9 @@ CREATE TABLE IF NOT EXISTS kms_secrets (
   updated_at  INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (path, env, name)
 );`
-	if _, err := db.Exec(ddl); err != nil {
+	ctx, cancel := bounded()
+	defer cancel()
+	if _, err := db.ExecContext(ctx, ddl); err != nil {
 		return err
 	}
 	return nil
@@ -175,7 +208,9 @@ func (s *secretStore) put(sec *kmsstore.Secret) error {
 		scheme = kmsstore.ModeStandard
 	}
 	now := time.Now().Unix()
-	_, err = db.Exec(
+	ctx, cancel := bounded()
+	defer cancel()
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO kms_secrets (path,env,name,scheme,ciphertext,wrapped_dek,key_handle,policy_id,created_at,updated_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(path,env,name) DO UPDATE SET
@@ -200,7 +235,9 @@ func (s *secretStore) get(path, name, env string) (*kmsstore.Secret, error) {
 		return nil, kmsstore.ErrSecretNotFound // org has no store file yet
 	}
 	sec := &kmsstore.Secret{Path: path, Name: name, Env: env}
-	err = db.QueryRow(
+	ctx, cancel := bounded()
+	defer cancel()
+	err = db.QueryRowContext(ctx,
 		`SELECT scheme, ciphertext, wrapped_dek, key_handle, policy_id FROM kms_secrets
 		 WHERE path=? AND env=? AND name=?`, path, env, name).
 		Scan(&sec.Scheme, &sec.Ciphertext, &sec.WrappedDEK, &sec.KeyHandle, &sec.PolicyID)
@@ -265,7 +302,9 @@ func (s *secretStore) find(q findQuery) ([]*kmsstore.Secret, error) {
 		args = append(args, q.Env)
 	}
 
-	rows, err := db.Query(
+	ctx, cancel := bounded()
+	defer cancel()
+	rows, err := db.QueryContext(ctx,
 		`SELECT path, env, name, scheme, key_handle, policy_id FROM kms_secrets
 		 WHERE `+strings.Join(where, " AND ")+` ORDER BY path, env, name`, args...)
 	if err != nil {
@@ -304,7 +343,9 @@ func (s *secretStore) list(path, env string) ([]*kmsstore.Secret, error) {
 	if db == nil {
 		return nil, nil // org has no store file yet → no secrets
 	}
-	rows, err := db.Query(
+	ctx, cancel := bounded()
+	defer cancel()
+	rows, err := db.QueryContext(ctx,
 		`SELECT name, scheme, key_handle, policy_id FROM kms_secrets
 		 WHERE path=? AND env=? ORDER BY name`, path, env)
 	if err != nil {
@@ -335,7 +376,9 @@ func (s *secretStore) del(path, name, env string) error {
 	if db == nil {
 		return kmsstore.ErrSecretNotFound // org has no store file yet
 	}
-	res, err := db.Exec(`DELETE FROM kms_secrets WHERE path=? AND env=? AND name=?`, path, env, name)
+	ctx, cancel := bounded()
+	defer cancel()
+	res, err := db.ExecContext(ctx, `DELETE FROM kms_secrets WHERE path=? AND env=? AND name=?`, path, env, name)
 	if err != nil {
 		return fmt.Errorf("kms: delete secret: %w", err)
 	}
