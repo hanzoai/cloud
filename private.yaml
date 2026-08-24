@@ -81014,7 +81014,7 @@ paths:
       x-tool: true
     post:
       description: |-
-        Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — stores it on the object-storage client, and records the metadata row, answering with the new document. `?name=` names it (default "document"), the request's Content-Type becomes the recorded mime type, and `?numPages=` is optional.
+        Takes the file ITSELF as the raw request body — not a JSON envelope, not multipart — stores it on the object-storage client, and records the metadata row, answering with the new document. `?name=` names it (default "document"), the request's Content-Type is recorded as the document's mime type, and `?numPages=` is optional. That recorded type is metadata the owner sees; what the file is later SERVED as is read from the bytes.
 
         Requires a validated principal; 403 without one. An empty body is 400 and anything over 64 MiB is 413 — a data room holds decks and PDFs, not a media library.
 
@@ -81062,7 +81062,7 @@ paths:
   /v1/dataroom/documents/{id}/file:
     get:
       description: |-
-        Streams the stored file back under its recorded content type, falling back to application/octet-stream when none was recorded.
+        Streams the stored file back under the type read from its BYTES — a raster image or a PDF renders in place, and anything else is served as application/octet-stream with an attachment disposition, so a stored file never executes as markup in this origin. Every response carries nosniff, which keeps the declared type binding.
 
         Requires a validated principal; 403 without one, and the document is resolved in the caller's own tenant store, so another org's id is a 404. This is the OWNER's path and applies no link gate at all — the per-link password, email and download controls live on the viewer surface, not here. Bytes that cannot be fetched from object storage are 502, never a truncated or empty file.
       operationId: get_dataroom_documents_by_id_file
@@ -81360,7 +81360,7 @@ paths:
   /v1/dataroom/trust/center/{slug}/file/{item}:
     get:
       description: |-
-        Streams the file behind an item a trust centre publishes openly — a policy, a filled questionnaire, a knowledge-base attachment — under its recorded content type.
+        Streams the file behind an item a trust centre publishes openly — a policy, a filled questionnaire, a knowledge-base attachment — under the type read from its bytes: a picture or a PDF renders in place, anything else downloads inert.
 
         No principal and no link: these are the things an org states about itself, so they are served to anyone who asks. The narrowing is in the lookup rather than in a check: the item must be public, must not be retired, and must belong to a centre its owner has published, so an item released only on request is NOT FOUND here rather than refused — the same answer an id that never existed gets, which is what stops this reporting what the released-on-request tier holds.
 
@@ -81563,7 +81563,7 @@ paths:
   /v1/dataroom/view/{linkId}/document/{documentId}/file:
     get:
       description: |-
-        Streams a document's bytes under its recorded content type to a visitor holding an open viewing session.
+        Streams a document's bytes to a visitor holding an open viewing session, under the type read from those bytes: a picture or a PDF renders in place, anything else downloads inert.
 
         No principal: `?viewId=` from the authenticate step is the authorisation and must belong to this link, or the call is 403 — holding the link id alone gets no bytes. The document must be reachable THROUGH this link (a member of the room the link opens, or the single document the link names), so a visitor cannot walk to an unrelated document by guessing an id; anything else is a 404, as is an unknown or archived link. Bytes that cannot be fetched from object storage are 502.
 
@@ -120035,9 +120035,9 @@ paths:
       description: |-
         Answers with the component set of one container image — each component's name, version, type, package URL and license — addressed by either the image digest or the image ref. The captured segment is greedy and percent-decoded, so a ref carrying slashes and a tag is passed whole.
 
-        This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials belongs to a content-addressed digest rather than to an org, so every caller deploying the same image resolves the same components, and nothing tenant-owned is exposed by it. Ingest is the gated half of the pair.
+        This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials belongs to a content-addressed digest rather than to an org, so every caller deploying the same image resolves the same components, and nothing tenant-owned is exposed by it. It still requires an attested caller — global is not public — and answers 403 without one. Ingest is the gated half of the pair.
 
-        A miss is not the end of the lookup. The registry is the source of truth, so an unmaterialized ref is pulled from the SBOM attached to that image, persisted, and answered from the store — the first read of a freshly built image pays for the pull, later ones do not. A bare digest with no repository is not pullable and answers an honest 404, as does a ref with no attached document. Repeated ingests collapse to the latest, components come back ordered by type then name, and a result over 5000 components is capped with `truncated` set. When the datastore is not connected the answer is 503 rather than a fabricated empty image.
+        A miss is not the end of the lookup. The registry is the source of truth, so an unmaterialized ref is pulled from the SBOM attached to that image, persisted, and answered from the store — the first read of a freshly built image pays for the pull, later ones do not. The pull reads OUR registries and nothing else, which is what makes one shared answer trustworthy for every tenant: an attached document is whoever controls that repository speaking, so a ref outside them answers 404 rather than a stranger's account of what is in their image. A bare digest with no repository is not pullable and answers an honest 404, as does a ref with no attached document. Repeated ingests collapse to the latest, components come back ordered by type then name, and a result over 5000 components is capped with `truncated` set. When the datastore is not connected the answer is 503 rather than a fabricated empty image.
       operationId: get_sbom_by_wildcard1
       parameters:
       - in: path
