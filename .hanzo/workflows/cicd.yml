@@ -841,10 +841,9 @@ jobs:
           # direction to fail (a hole is inert; a reused number serves wrong
           # bytes). They are not carried over, because a name nothing published
           # is not a release.
-          # Kept WHOLE — sha AND ref — because two questions are answered from it
-          # and the second needs the half this line used to discard: GIT is the
-          # highest number ANYONE has, MINE (below) is the number THIS COMMIT
-          # already owns. One fetch, two readings.
+
+          # Sha AND ref, because both halves are read: GIT is the highest number
+          # anyone holds, CLAIMED below is the number this commit already holds.
           TAGS=$(git ls-remote --tags "https://x:${GIT_TOKEN}@${remote#https://}" || true)
           GIT=$(printf '%s\n' "$TAGS" \
             | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' \
@@ -908,26 +907,14 @@ jobs:
           # (pin.sh refuses a tag that does not resolve), whereas a reused
           # number is invisible and serves the wrong bytes.
 
-          # RESUMING IS ASKED FIRST, because the loop below cannot ask it.
+          # A commit's version is the tag already at its sha, so ask before minting
+          # and a re-run adopts instead of taking a second number. The loop below
+          # increments before its first probe, so it can only recognise LAST+1.
           #
-          # A retry of THIS commit must adopt the number it already owns rather
-          # than mint a second one for the same bytes. The loop increments BEFORE
-          # its first probe, so its "already claimed at our sha" arm can only ever
-          # fire for LAST+1 — and a commit that is not currently the highest is
-          # never LAST+1. So every retry of an older commit took a fresh number:
-          # v1.801.514 and v1.801.515 are this pipeline claiming twice for one
-          # build, which is how a version came to name bytes nobody smoked.
-          #
-          # Adoption is safe for the same reason the claim is: a tag is created
-          # at a sha under the server's lock and never moved, so a v* tag AT our
-          # sha can only have been put there by a run of this same commit. It
-          # takes the HIGHEST such tag, so a commit that somehow holds two names
-          # resumes as the later one rather than reviving a number the register
-          # has already moved past.
-          #
-          # Annotated tags answer with the TAG object's sha on the bare line and
-          # the commit's on the `^{}` line; both spellings are stripped so either
-          # match adopts.
+          # Safe for the same reason the claim is: a tag is created at a sha under
+          # the server's lock and never moved, so a v* tag at our sha is this
+          # commit's own. Highest wins; `^{}` is stripped so an annotated tag
+          # matches on either spelling.
           CLAIMED=$(printf '%s\n' "$TAGS" | awk -v sha="$SHA" '$1 == sha {print $2}' \
             | sed 's|refs/tags/||; s|\^{}$||' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' \
