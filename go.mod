@@ -51,7 +51,7 @@ require (
 	github.com/zap-proto/http v0.3.5
 	github.com/zap-proto/mcp v1.0.5
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.34.2
+	github.com/zap-proto/zip v1.36.3
 	golang.org/x/term v0.45.0
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
@@ -79,7 +79,6 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -736,7 +735,7 @@ exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
 require (
 	github.com/hanzoai/cd/gitops-engine v0.7.3
 	github.com/hanzoai/doctype v0.1.0
-	github.com/hanzoai/framework v0.1.0
+	github.com/hanzoai/framework v0.1.1
 	k8s.io/kubernetes v1.36.1 // indirect
 )
 
