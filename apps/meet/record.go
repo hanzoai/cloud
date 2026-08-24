@@ -354,16 +354,16 @@ func (o ops) ready(ctx context.Context, name string, act bool) (principal.Princi
 		// caller at all. A recording is not something an unattributable caller makes.
 		return no(zip.Errorf(http.StatusUnauthorized, "not admitted to this room"))
 	}
-	// THE ANTI-CSRF GATE IS HERE, not on the route group, because a typed op has TWO
-	// doors and only one of them is a route. zip wraps the route's handler and calls
-	// the op DIRECTLY over MCP, so no group middleware reaches a tools/call — while
-	// the depth-0 identity middleware still authenticates the caller, which leaves a
-	// signed-in tab's ambient cookie able to start a recording from any origin.
-	// Asked inside the op, both doors pass it. The group still carries the same
-	// predicate for /getToken, which has no preamble of its own; one rule, two call
-	// sites, never two rules.
+	// THE ANTI-CSRF CONTROL IS HERE, not on the route group, because a route is one
+	// of the seams that reach a typed op and not the only one. zip wraps the route's
+	// handler and MCP, the call plane, the graph and the CLI call the op directly, so
+	// no group middleware reaches a tools/call — while the identity boundary still
+	// authenticates the caller, which would leave a signed-in tab's ambient cookie
+	// able to start a recording from any origin. Asked in the preamble, every seam
+	// passes it. The group still carries the same control for /getToken, which has no
+	// preamble of its own; one rule, two call sites, never two rules.
 	if act == changes {
-		if err := accountapp.CSRF(c); err != nil {
+		if err := accountapp.CSRF(ctx); err != nil {
 			return no(err)
 		}
 	}

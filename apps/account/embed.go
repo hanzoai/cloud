@@ -116,9 +116,10 @@ var reachProbe = liveReachProbe
 //
 // Example: {"app": "cms"}
 func (o ops) embedStatus(ctx context.Context, in *embedStatusReq) (*embedStatusResp, error) {
-	cr, c, ok := requestCaller(ctx, false) // validated; a customer org (owner set) is fine
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to continue")
+	// unscoped: validated is enough; a customer org (owner set) is fine.
+	cr, c, err := o.requestCaller(ctx, reads, unscoped, "continue")
+	if err != nil {
+		return nil, err
 	}
 	app := strings.ToLower(strings.TrimSpace(in.App))
 	landing, known := embedApps[app]

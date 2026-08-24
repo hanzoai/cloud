@@ -187,6 +187,13 @@ type issueClaim struct {
 // silently taken — two agents on one issue is the failure this prevents, and a
 // claim that quietly wins a race is worse than one that says no.
 func (o ops) claimIssue(ctx context.Context, in *issueClaim) (*issueHit, error) {
+	// Taking work is a WRITE and this is the only preamble it has: the forge ops
+	// share onForge, and a claim reads the local index instead. Same control,
+	// asked the same way, because the seam it covers is the same one — a group
+	// gate reaches the route's handler and MCP calls the op (todo.go).
+	if err := csrf(ctx, changes); err != nil {
+		return nil, err
+	}
 	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("a validated principal is required")

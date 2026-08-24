@@ -199,6 +199,14 @@ var allowedRequestUses = map[string]string{
 		"without the request could not name an actor — and an actorless forge call would fall back to the " +
 		"deployment's machine credential, reading every repository that token can see. Fails closed off the " +
 		"HTTP path with the same 403.",
+	"apps/account/csrf.go": "CSRF — the estate's ONE anti-CSRF control, in the shape a typed op holds. " +
+		"It decides on the credentials the REQUEST carries: which headers hold a credential the caller " +
+		"PRESENTED (a Bearer/gateway/API caller cannot be CSRF'd) versus an AMBIENT cookie, which any " +
+		"origin's request to us carries too. principal.OrgFrom carries neither, and it must never be an " +
+		"In field — a caller that could declare itself exempt would. Asked from the preamble because a " +
+		"route is one of the seams that reach an operation: MCP, the call plane, the graph and the CLI " +
+		"call the op directly with the caller already authenticated. Every write in the estate asks THIS " +
+		"one function; none of them reaches for the request itself. Fails closed off the HTTP path.",
 	"apps/framework/framework.go": "callerOf — the caller an operation acts AS, which is more of the " +
 		"validated principal than the tenant: the user id (X-User-Id) and the platform SuperAdmin bit " +
 		"(X-User-IsAdmin), neither of which principal.OrgFrom carries. The engine keys role grants by " +

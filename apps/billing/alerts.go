@@ -36,16 +36,15 @@ func mountAlerts(app cloud.Router, o ops) {
 	zip.Post(zapp, "/v1/billing/alerts", o.raiseAlert,
 		zip.WithStatus(http.StatusCreated))
 	zip.Patch(zapp, "/v1/billing/alerts/:id", o.amendAlert)
-	// The delete stays RAW, and the reason is its body. This address answers 204
-	// carrying commerce's `null`, and a typed op writes either a value or an
-	// empty 204 — neither of which is that. A relay that tidied it would be
-	// changing a wire while claiming to preserve one.
+	// Registered on the app rather than beside its siblings because it answers
+	// commerce's own 204: a typed op declaring `*struct{}` writes the empty body
+	// this address has always written, and the prose the document carries for it
+	// is declared below rather than lifted off the handler.
 	zip.Delete(cloud.ZipApp(app), "/v1/billing/alerts/:id", o.dropAlert)
 }
 
-// The delete is the one route in this family the wire keeps untyped, so its
-// prose is declared beside the route rather than lifted off a typed handler.
-// Declared through the same registry Register uses, so it renders only while the
+// The delete's prose is declared beside the route rather than lifted off the
+// handler, through the same registry Register uses, so it renders only while the
 // router actually serves the route.
 func init() {
 	openapi.Describe("/v1/billing/alerts/:id", http.MethodDelete,
@@ -134,6 +133,9 @@ func (o ops) alerts(ctx context.Context, _ *noInput) (*caps, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	if err := capAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -160,6 +162,9 @@ func (o ops) raiseAlert(ctx context.Context, in *plane.AlertSpec) (*plane.Alert,
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (o ops) amendAlert(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	if err := capAdmin(ctx); err != nil {
 		return nil, err
 	}
