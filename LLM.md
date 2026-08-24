@@ -250,6 +250,22 @@ The fix is one of two shapes and both are policy: give CI the dev key, or route
 the step through the Makefile so the posture is declared once. Copying the key
 into `hanzo.yml` would make it two declarations, which is the drift above again.
 
+**`go-unit` links a different database engine than production has.** `CGO_ENABLED=1`
+with no `libsqlite3` tag links hanzoai/sqlite's VENDORED plain SQLite, so
+`CodecLinked()` is false, cek keeps a keyed store as an envelope, and every test whose
+subject is the shipped storage — a store shareable by a second opener, a file a ship
+can hold still while it copies it — stands down and reads green. `hanzo.yml`'s
+`go-engine` step is where that stops: it calls `make test-codec PKGS=…` (the ONE place
+the lane's flags live — the same three tags plus the two `CGO_*` lines the Dockerfile
+sets), naming the planes whose subject is the file on disk rather than the whole tree,
+which would be a second half-hour on a gate the release already waits ~50 minutes for.
+`make test-codec` alone is still the whole-tree form. `SQLITE_REQUIRE_CODEC=1` is what
+makes the run SAY so: `internal/codec.Require` fails on it instead of standing down, so
+a runner missing libsqlcipher or a link that fell back to plain SQLite is red and never
+quietly green. That env name has been in this repo's Makefile and Dockerfile for as
+long as the claim has, and until now no Go code read it — the assertion those comments
+described was never made anywhere.
+
 Store-heavy subsystem tests are fsync-bound, not CPU-bound. A mount opens its own
 SQLite stores, so a test that mounts several subsystems commits many times, and
 `t.TempDir()` under `/tmp` puts every commit behind the ext4 journal — on a box with

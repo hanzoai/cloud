@@ -439,3 +439,38 @@ test:
       go test -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
         -skip 'TestRecord_DebitsFinanceInProcess|TestIndexerUnreachableHonestEmpty' \
         ./...
+
+  - name: go-engine
+    # THE SHIPPED ENGINE, which nothing above this line has ever exercised.
+    #
+    # go-unit builds CGO_ENABLED=1 with no `libsqlite3`, so hanzoai/sqlite links its
+    # VENDORED plain SQLite. That engine has no codec: CodecLinked() is false, cek keeps
+    # a keyed store as an envelope, and every test whose subject is the storage the image
+    # actually ships stands down — including the ones holding the ship that copies an
+    # org file. They read green having run against a different database engine than
+    # production has ever had. The image links libsqlcipher; this is where that is true
+    # of a test run too.
+    #
+    # NOT the whole tree, and not a second definition of the lane. `make test-codec` owns
+    # the flags — the same three tags and the same two CGO lines the Dockerfile sets — and
+    # PKGS names the planes whose subject is the file on disk. The whole-tree form of this
+    # target is what a release proves locally; here it would be a second half-hour on a
+    # gate the release already waits ~50 minutes for.
+    #
+    # SQLITE_REQUIRE_CODEC=1 (set by the target) is what makes the run say so: with it,
+    # a test that would stand down for want of the codec FAILS instead. So a runner
+    # missing libsqlcipher, or a link that silently resolved to plain SQLite, is a red
+    # step and never a quiet green one.
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      export GOCACHE=${GOCACHE:-/var/tmp/hanzo-go/build} GOMODCACHE=${GOMODCACHE:-/var/tmp/hanzo-go/mod}
+      mkdir -p "$GOCACHE" "$GOMODCACHE"
+      # The C library the tag resolves to. Absent, nothing below can link the codec, so
+      # say the package name once rather than let the link fall back to plain SQLite.
+      if ! pkg-config --exists sqlcipher 2>/dev/null && [ ! -f /usr/include/sqlcipher/sqlite3.h ]; then
+        (command -v apt-get >/dev/null && apt-get install -y --no-install-recommends libsqlcipher-dev) \
+          || (command -v apk >/dev/null && apk add --no-cache sqlcipher-dev) \
+          || { echo "no libsqlcipher: install libsqlcipher-dev (apk: sqlcipher-dev) — this step exists to run against it"; exit 1; }
+      fi
+      make test-codec PKGS='./internal/org/... . ./sqlpool/... ./apps/kms/... ./apps/label/... ./apps/research/...'

@@ -486,20 +486,35 @@ test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend
 	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "sqlite_purego $(TEST_TAGS)" ./...
 
 # The only target that builds what the image builds (Dockerfile: CGO_ENABLED=1,
-# -tags "libsqlite3 sqlite_fts5"). The other two link no codec, so cek falls back to
-# the pure-Go envelope and the tests pinning the shipped storage posture — a store
-# shareable by a second opener, durable per-commit rather than at close — skip
-# instead of running.
+# -tags "libsqlite3 sqlite_fts5 sqlite_math_functions"). The other two link no codec,
+# so cek falls back to the pure-Go envelope and the tests pinning the shipped storage
+# posture — a store shareable by a second opener, a file a ship can hold still while
+# it copies it, durability per-commit rather than at close — skip instead of running.
 #
 # The tag alone is not enough: it selects the C engine, but the codec is a RUNTIME
 # probe of the libsqlcipher that engine links. A csqlite built against plain SQLite
 # compiles and passes the one-engine guard while CodecLinked() stays false, so the
-# storage tests would still quietly skip. SQLITE_REQUIRE_CODEC=1 — the same
-# assertion the Dockerfile makes before it builds /cloud — turns that into a
-# failure, so this target either exercises the shipped engine or says it cannot.
-# It therefore FAILS on a machine without SQLCipher, which is the honest result.
-test-codec: ## Run the suite against the engine the image ships (cgo + a real libsqlcipher).
-	SQLITE_REQUIRE_CODEC=1 $(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "libsqlite3 $(TEST_TAGS)" ./...
+# storage tests would still quietly skip. SQLITE_REQUIRE_CODEC=1 turns that into a
+# failure (internal/codec.Require reads it), so this target either exercises the
+# shipped engine or says it cannot. It therefore FAILS on a machine without
+# SQLCipher, which is the honest result.
+#
+# CODEC_CC names WHICH system sqlite the tag resolves to — the two lines the
+# Dockerfile sets before it builds /cloud. The image also symlinks libsqlite3.so to
+# libsqlcipher, so a plain -lsqlite3 finds the codec there; nowhere else does, and
+# without these the target links plain SQLite and reports the failure above on a box
+# that has SQLCipher installed. Both are ?= so an environment that already names its
+# own resolves it and this changes nothing.
+CODEC_CC = CGO_CFLAGS="$${CGO_CFLAGS:--DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher}" CGO_LDFLAGS="$${CGO_LDFLAGS:--lsqlcipher}"
+
+# WHICH packages. The whole module by default — what a release proves locally — and a
+# named subset for a caller that wants one plane's worth in minutes rather than the
+# tree's in half an hour. One definition of the lane either way, so the subset cannot
+# drift from the flags the image builds with.
+PKGS ?= ./...
+
+test-codec: ## Run the suite against the engine the image ships (cgo + a real libsqlcipher). PKGS= narrows it.
+	SQLITE_REQUIRE_CODEC=1 $(CODEC_CC) $(TEST_ENV) CGO_ENABLED=1 $(GO) test -count=1 -tags "libsqlite3 $(TEST_TAGS) sqlite_math_functions" $(PKGS)
 
 vet: ## go vet across the module.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
