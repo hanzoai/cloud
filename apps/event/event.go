@@ -462,11 +462,10 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, refused r
 // accepts, posted with no resolvable tenant, answered 200 {"accepted":0,"dropped":1}:
 // the projection refuses a kind it cannot name (publicKinds — the anonymous lane stores
 // pageviews and errors, and a log, a span and an exception envelope are none of those),
-// and the receipt said so in a field nobody parses. A client whose key was absent,
-// revoked or mistyped therefore lost 100% of what it sent while every status check it
-// had stayed green — which is how an 88% log loss, a span outage that ran for four and a
-// half months, and a day of missing Sentry traffic all went unnoticed. The counts were
-// never wrong. The STATUS was, and the status is what clients and probes actually read.
+// and the receipt said so in a field nobody parses. A client whose key is absent,
+// revoked or mistyped therefore loses 100% of what it sends while every status check
+// it has stays green, for as long as nobody reads the body. The counts were never
+// wrong. The STATUS was, and the status is what clients and probes actually read.
 //
 // So the receipt now says what happened in the one field every HTTP client already
 // understands, and the rule is exactly "did anything land":

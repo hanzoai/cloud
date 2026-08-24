@@ -41,9 +41,9 @@
 // DEGRADATION IS THE CONTRACT. Every response names every backend it consulted
 // and that backend's status. A leg that is down produces results from the
 // surviving legs plus an explicit `degraded` entry carrying the error — never a
-// silent empty. This is not a nicety: a silent empty is exactly how a vector-store
-// credential drift went unnoticed for five days behind a fail-empty
-// /v1/knowledge/search.
+// silent empty. This is not a nicety: a silent empty is indistinguishable from a
+// query the corpus genuinely has no answer for, so a leg that stops working is
+// invisible for exactly as long as nobody thinks to ask it directly.
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 package search

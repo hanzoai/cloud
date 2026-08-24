@@ -815,16 +815,13 @@ func planeOrg(attrs map[string]string) string {
 // attributes, so the column and the attribute are ONE fact rather than two
 // spellings of it.
 //
-// They were two. This path wrote the tenant to the org COLUMN and never set the
-// attribute, while every llmobs view filters on the ATTRIBUTE
-// (llmobstypes.GenAIHanzoOrgID, impllmobs/views.go) — so a span whose tenant was
-// perfectly well known was invisible to every org that could have read it. It
-// went unnoticed because the failure is silent and selective: the majority of
-// gen_ai spans arrive through spansink, which has always stamped it
-// (spansink.go), so the views were populated and merely incomplete. Measured
-// before this change: 76 spans carried hanzo.org and no attribute, and ALL 76
-// were error spans from the agents and channels emitters — the ones a customer
-// most needs to see.
+// Both are load-bearing and different consumers read them: the column scopes the
+// row, while every llmobs view filters on the ATTRIBUTE
+// (llmobstypes.GenAIHanzoOrgID, impllmobs/views.go). Writing only the column
+// leaves a span whose tenant is perfectly well known invisible to the one org
+// entitled to read it — and invisibly so, because the majority of gen_ai spans
+// arrive through spansink, which stamps the attribute (spansink.go), so the
+// views stay populated and are merely incomplete.
 //
 // Stamped unconditionally and last, for the reason spansink states in full: the
 // key is the tenant boundary of every llmobs read, so it is never taken from the
