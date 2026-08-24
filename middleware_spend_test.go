@@ -14,6 +14,9 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/finance"
@@ -180,6 +183,24 @@ func TestBillable(t *testing.T) {
 		{"GET", "/v1/chat/completions", false, "a read never spends"},
 		{"HEAD", "/v1/ml/train", false, "a read never spends"},
 		{"OPTIONS", "/v1/chat/completions", false, "CORS preflight must never 402"},
+
+		// Except where the READ IS the paid unit. These four spend a provider's money
+		// on GET, so the verb says nothing and the operation says everything.
+		{"GET", "/v1/code/ask", true, "the answer is synthesized through the metered AI client"},
+		{"GET", "/v1/code/search", true, "the semantic tier embeds the query"},
+		{"GET", "/v1/websearch/search", true, "a bought engine's answer is debited"},
+		{"GET", "/v1/s3/buckets", true, "the object plane's guard meters every request it wraps"},
+		{"GET", "/v1/s3/buckets/acme/objects/deck.pdf", true, "the same guard, deeper in the tree"},
+		{"HEAD", "/v1/s3/buckets/acme/objects/deck.pdf", true, "a HEAD reaches the same guard"},
+		{"GET", "/V1/CODE/ASK", true, "the router serves it, so the money rule reaches it"},
+
+		// And only there. The neighbours on the same metered surfaces are ordinary
+		// reads and stay free, which is what keeps the exception an exception.
+		{"GET", "/v1/code/tree", false, "reading the index spends nothing"},
+		{"GET", "/v1/code/file", false, "reading a file spends nothing"},
+		{"GET", "/v1/s3/health", false, "a probe is never billed"},
+		{"GET", "/v1/agents/runs", false, "reading a run back spends nothing"},
+		{"GET", "/v1/codex/ask", false, "a neighbour of the name, not the name"},
 
 		// The path to payment, and the surfaces that render it.
 		{"POST", "/v1/billing/credit", false, "topping up must not require credit"},
@@ -501,5 +522,71 @@ func TestAllowanceOnlyEverRemovesAnAdmission(t *testing.T) {
 				t.Fatalf("Stand(%v, %v) = %v, want %v", tc.lic, tc.allow, got, tc.want)
 			}
 		})
+	}
+}
+
+// ── the paid reads ──────────────────────────────────────────────────────────────
+
+// TestAPaidReadAsksForStanding holds price.go's exception to its promise. An entry
+// there says "this READ spends", and the whole point of saying so is that the money
+// path then asks the caller for standing before the meter runs.
+//
+// The third assertion is the one that keeps the two halves from drifting: the edge
+// must still charge NOTHING. The downstream meter owns the charge — that is what
+// Metered means — so an edge price on top of it would bill the same work twice, and
+// this change was about authorization, never about a second charge.
+func TestAPaidReadAsksForStanding(t *testing.T) {
+	if len(paidReads) == 0 {
+		t.Fatal("no paid reads declared — asserting nothing")
+	}
+	for _, p := range paidReads {
+		probe := p
+		if probe != "/" {
+			probe = strings.TrimSuffix(probe, "/")
+		}
+		if !Consumes(http.MethodGet, probe) {
+			t.Errorf("Consumes(GET %s) = false — it is declared as a read that spends", probe)
+		}
+		if !Billable(http.MethodGet, probe) {
+			t.Errorf("Billable(GET %s) = false. The entry is inert: the surface it names does not "+
+				"declare Metered, so nothing asks the caller for standing and the meter runs on "+
+				"whatever they have. Declare the surface Metered and name it in meteredApps.", probe)
+		}
+		if cents := DefaultPrice(http.MethodGet, probe); cents != 0 {
+			t.Errorf("DefaultPrice(GET %s) = %d, want 0 — the downstream meter owns the charge, "+
+				"and an edge price on top of it bills the same work twice", probe, cents)
+		}
+	}
+}
+
+// TestAPaidReadNamesAnOperationTheFleetServes reads the routers' own documents. A
+// name here that no surface answers to is not inert: it makes standing a condition
+// of a path nobody charges for, which is a 402 in front of free work. spend.go has
+// carried that failure twice under other names; this is the same check for this list.
+func TestAPaidReadNamesAnOperationTheFleetServes(t *testing.T) {
+	for _, root := range paidReads {
+		app := strings.Split(strings.TrimPrefix(root, "/v1/"), "/")[0]
+		doc := filepath.Join("plugin", app, "openapi.json")
+		raw, err := os.ReadFile(doc)
+		if err != nil {
+			t.Fatalf("%s names app %q, which publishes no document at %s: %v", root, app, doc, err)
+		}
+		var spec struct {
+			Paths map[string]map[string]json.RawMessage `json:"paths"`
+		}
+		if err := json.Unmarshal(raw, &spec); err != nil {
+			t.Fatalf("%s: %v", doc, err)
+		}
+		var served bool
+		for path, ops := range spec.Paths {
+			if _, ok := ops["get"]; ok && under(path, root) {
+				served = true
+				break
+			}
+		}
+		if !served {
+			t.Errorf("%s is declared a paid read, but %s publishes no GET at or beneath it. "+
+				"Requiring standing for an address nobody serves refuses free work.", root, doc)
+		}
 	}
 }
