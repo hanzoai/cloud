@@ -18,7 +18,7 @@ import (
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "code",
-		Price:    cloud.Free,
+		Price:    cloud.Metered,
 		Mount:    code.Mount,
 		Shutdown: code.Shutdown,
 	}}, []string{"code"}); err != nil {
