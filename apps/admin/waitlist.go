@@ -155,7 +155,7 @@ type waitlistBoostRequest struct {
 // Example: {"waitlist":"chat","email":"ada@acme.com","points":50,"reason":"design partner"}
 // Response: {"status":"ok","msg":"","data":{"email":"ada@acme.com","points":170,"position":3}}
 func (o ops) waitlistBoost(ctx context.Context, in *waitlistBoostRequest) (*rawOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}

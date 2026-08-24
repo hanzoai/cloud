@@ -21,6 +21,11 @@
 // bases) call core.AdmitScoped: a SuperAdmin sees EVERY tenant; any other validated admin
 // caller is HARD-limited to their OWN org subtree by core.ResolveScope/ScopedOrgs.
 //
+// An operation that CHANGES something asks core.Change / core.ChangeScoped instead —
+// the same admission plus the estate's anti-forgery control, because this board is
+// driven from a browser session cookie that any origin's request to us carries, and
+// admission alone cannot tell an operator's click from a page they merely visited.
+//
 // SHAPE — every route is a zip TYPED op (zip.Get[In, Out]), so the /v1/admin surface is
 // ONE registry with N projections: REST, the OpenAPI document, the MCP tool list and the
 // CLI all derive from these declarations. Out is the /v1 envelope as a Go type, so the
@@ -42,6 +47,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/admin/audit"
 	"github.com/hanzoai/cloud/apps/admin/commerce"
 	"github.com/hanzoai/cloud/apps/admin/core"
@@ -61,7 +67,8 @@ import (
 )
 
 // Mount registers the /v1/admin/* surface on app. Every handler gates on the validated
-// identity first (via core.Admit/AdmitScoped), then aggregates real upstream data.
+// identity first — core.Admit/AdmitScoped for a read, core.Change/ChangeScoped for an
+// operation that changes something — then aggregates real upstream data.
 //
 // The state is built from Deps fields NOT on cloud.Base (deps.Audit, deps.IAMIssuer), so
 // it constructs the cloud.Service value directly (cloud.NewBase + &cloud.Service[core.State]{…})
@@ -69,6 +76,11 @@ import (
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("admin.Mount: nil app")
+	}
+	// The change gate verifies a token the account process minted, so this process
+	// must hold the same key; without it every operator write here is refused.
+	if err := account.Shared(); err != nil {
+		return fmt.Errorf("admin.Mount: %w", err)
 	}
 	// Every route here is a typed op, and the op registry lives on the App. A Router
 	// that is not one cannot carry this surface, so the mount fails rather than
@@ -656,7 +668,7 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 //
 // Response: {"status":"ok","msg":"","data":{"started":true}}
 func syncNow(ctx context.Context, _ *core.None) (*syncOut, error) {
-	if _, err := core.Admit(ctx); err != nil {
+	if _, err := core.Change(ctx); err != nil {
 		return nil, err
 	}
 	return &syncOut{Status: core.OK, Data: &syncStarted{Started: true}}, nil

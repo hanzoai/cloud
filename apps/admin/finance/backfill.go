@@ -57,7 +57,7 @@ type BackfillOut struct {
 // Example: {"org":"acme"}
 // Response: {"status":"ok","msg":"","data":{"org":"acme","migratedCents":50000,"entryId":"fe_01J"}}
 func Backfill(ctx context.Context, in *BackfillIn) (*BackfillOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}

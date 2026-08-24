@@ -93,7 +93,7 @@ type serviceModeIn struct {
 // Response: {"status":"ok","msg":"","data":{"service":{"service":"chat","displayName":"Chat",
 // "description":"Hanzo Chat","hosts":["chat.hanzo.ai"],"waitlistMode":true}}}
 func upsertService(ctx context.Context, in *admission.ServiceInput) (*serviceOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func upsertService(ctx context.Context, in *admission.ServiceInput) (*serviceOut
 // Response: {"status":"ok","msg":"","data":{"service":{"service":"chat","displayName":"Chat",
 // "description":"Hanzo Chat","hosts":["chat.hanzo.ai"],"waitlistMode":false}}}
 func setServiceMode(ctx context.Context, in *serviceModeIn) (*serviceOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}

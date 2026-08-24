@@ -30,6 +30,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -77,6 +78,33 @@ func Admit(ctx context.Context) (*zip.Ctx, error) {
 	return c, nil
 }
 
+// Change is [Admit] for an operation that CHANGES something, and every platform write
+// calls it where a read calls Admit.
+//
+// The extra question is the estate's anti-forgery control (apps/account). Admit
+// establishes WHO is calling; this also asks whether the CALL was meant. A browser
+// authenticates this board from an httpOnly session cookie, which is ambient — any
+// origin's request to us carries it — so an operator merely reading a page elsewhere
+// is enough for that page to raise a spend ceiling, flip a platform switch or open a
+// gated service as them. Admit cannot see that: the caller really is the SuperAdmin,
+// and it is the request they did not make.
+//
+// It runs BEFORE Admit. The refusal then says which control answered whoever is
+// calling, rather than hiding behind an authorization refusal an unattested caller
+// would have got anyway — which is also what makes it measurable (limits_test.go).
+//
+// A caller who PRESENTED a credential — Bearer, the service token, the gateway —
+// passes it untouched: they cannot be forged into, so an API client pays nothing.
+//
+// READ vs CHANGE is the distinction, and each has ONE gate. An operation reaching for
+// Admit when it changes something is then a visible choice rather than an omission.
+func Change(ctx context.Context) (*zip.Ctx, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
+	return Admit(ctx)
+}
+
 // AdmitScoped is the gate for the ORG-SCOPED panels, called once at the top of each.
 // It admits a SuperAdmin (principal.IsSuperAdmin) OR an admin of an ENABLED
 // WHITE-LABEL TENANT org — three facts, ALL required for that second tier:
@@ -104,4 +132,15 @@ func AdmitScoped(ctx context.Context, s *cloud.Service[State]) (*zip.Ctx, error)
 		return c, nil
 	}
 	return nil, zip.ErrForbidden("admin required")
+}
+
+// ChangeScoped is [AdmitScoped] for an operation that CHANGES something. Same pairing,
+// same order, same reasons as [Change] — and the org-scoped tier needs it MORE, because
+// the caller it admits is an ordinary customer's own org admin rather than a SuperAdmin,
+// so the ambient session it rides is a customer's browser on the open web.
+func ChangeScoped(ctx context.Context, s *cloud.Service[State]) (*zip.Ctx, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
+	return AdmitScoped(ctx, s)
 }
