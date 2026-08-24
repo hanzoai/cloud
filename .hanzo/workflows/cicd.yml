@@ -1463,7 +1463,9 @@ jobs:
     needs: image
     if: github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/tags/')
     runs-on: [hanzo-build-linux-amd64]
-    timeout-minutes: 100
+    # 20 minutes waiting for a build slot plus 90 polling for the index it produces,
+    # so the job's own bound has to clear their sum rather than either one.
+    timeout-minutes: 120
     steps:
       - name: Publish the plugin set for this release
         env:
@@ -1542,9 +1544,27 @@ jobs:
             '{repo:$repo, sha:$sha, tag:$tag, bucket:"plugins",
               binaries:[{name:"plugins", run:"make -f mk/fleet.mk dist", out:"dist/*"}]}')
 
-          resp=$(curl -sS -X POST "${CLOUD_API}/v1/platform/runner" \
-            -H "Authorization: Bearer ${BUILD_TOKEN}" \
-            -H 'Content-Type: application/json' -d "$body")
+          # A 429 IS A QUEUE, NOT A REFUSAL. The build door caps concurrent builds
+          # PER ORG, and a release burst puts one plugin build per train against that
+          # cap, so the door answers exactly what it should:
+          #   {"detail":"launch build: platform: too many concurrent builds for this
+          #    org","status":429,"title":"Too Many Requests"}
+          # Failing there reports a capacity MOMENT as a broken release — the same
+          # mistake the waits in this file made against a quiet fleet. So wait for a
+          # slot, and refuse anything else AT ONCE: a 400 does not become valid by
+          # being asked again. A build takes ~39 minutes, so a slot frees on that
+          # timescale; twenty minutes buys one without holding the runner all night.
+          ENQ_DEADLINE=$(( $(date +%s) + 1200 ))
+          while :; do
+            code=$(curl -sS -o /tmp/enq.json -w '%{http_code}' -X POST "${CLOUD_API}/v1/platform/runner" \
+              -H "Authorization: Bearer ${BUILD_TOKEN}" \
+              -H 'Content-Type: application/json' -d "$body" || echo 000)
+            resp=$(cat /tmp/enq.json 2>/dev/null || true)
+            [ "$code" = 429 ] || break
+            [ "$(date +%s)" -lt "$ENQ_DEADLINE" ] || break
+            echo "the build door is at its per-org concurrency cap; waiting for a slot"
+            sleep 30
+          done
           # The reply is READ before it is trusted to be JSON, the same way the KMS
           # body above is. A refusal from an address that does not route this comes
           # back as prose, and jq meeting prose under `set -e` ends the step on its
@@ -1874,17 +1894,43 @@ jobs:
               case " $started " in *" $repo "*) continue ;; esac
               S=$(curl -s -H "Authorization: token ${GIT_TOKEN}" \
                     "https://git.hanzo.ai/v1/repos/${repo}/actions/runs?limit=5" \
-                  | jq -r --arg t "$T0" '[.workflow_runs[]? | select(.event=="workflow_dispatch") | .status] | first // ""')
+                  | jq -r --arg t "$T0" '[.workflow_runs[]?
+                        | select(.event=="workflow_dispatch")
+                        | select(((.run_started_at // .created_at) // "") >= $t)
+                        | .status] | first // ""')
+              # $T0 IS STAMPED BEFORE THE DISPATCH AND IS WHAT MAKES THIS A TEST.
+              # It was passed to jq and never referenced, so the filter took the
+              # newest workflow_dispatch run of ANY age: a repo dispatched last week
+              # answered `completed` and satisfied the check without this release
+              # having reached it. Counting only runs at-or-after T0 asks whether
+              # THIS dispatch created a run, which is the question. Timestamps are
+              # UTC in one format at both ends, so a string compare is the right one.
+              #
+              # A RUN ROW IS THE PROPERTY, NOT A RUNNER. What this catches is the
+              # silent skip — Hanzo Git accepts the dispatch, the Actions unit is
+              # off or the workflow does not resolve, and NOTHING is ever created
+              # (forge-actions-guard finds the same class estate-wide). A run that
+              # exists proves the dispatch landed and the workflow resolved, which
+              # is the whole claim this release can make about a sibling repo.
+              #
+              # Waiting for a RUNNER asserted something cloud does not own: the
+              # projection's queue depth. Measured — a release burst puts seven
+              # trains times eight cars against thirty runners, so a projection
+              # queued past the deadline and `hanzo-docs/docs` was reported as
+              # "never ran" while its run sat queued and later completed green.
+              # That reds a release for a capacity fact about another repo, and it
+              # is the third bound in this file that was sized against a quiet
+              # fleet. Any non-empty status counts; empty means no run at all.
               case "$S" in
-                in_progress|completed|running) started="${started} ${repo}"; echo "  started   ${repo}" ;;
-                *)                             pending="${pending} ${repo}" ;;
+                "") pending="${pending} ${repo}" ;;
+                *)  started="${started} ${repo}"; echo "  started   ${repo} (${S})" ;;
               esac
             done
             [ -n "$pending" ] && sleep 20
           done
           echo "::endgroup::"
           if [ -n "$pending" ]; then
-            echo "::error::accepted but never ran:${pending}. Hanzo Git took the dispatch and no runner answered within 8 minutes — check the git-runner fleet and the labels in ConfigMap git-runner-config."
+            echo "::error::accepted and no run was created for:${pending}. Hanzo Git took the dispatch and produced no run row, so the workflow did not resolve or the repo's Actions unit is off — every push to it is discarded the same way. Check the unit and the labels in ConfigMap git-runner-config."
             exit 1
           fi
 

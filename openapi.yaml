@@ -88755,7 +88755,7 @@ paths:
         only other place the location appears, and a client that lost it, or a colleague
         who was not the one to press record, has nowhere else to look.
 
-        It is behind the same door as starting one: where a recording of a private
+        It is behind the same check as starting one: where a recording of a private
         conversation is kept is a fact about that conversation, so it is told to the
         people the room admits and to nobody else.
       operationId: meetRecordRead
