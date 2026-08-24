@@ -78,13 +78,17 @@ type SbomIngest struct {
 
 // SbomView is the GET /v1/sbom/{ref} response the console renders.
 type SbomView struct {
-	// ImageDigest is the content-addressed digest the components are keyed under.
+	// ImageDigest is the content-addressed digest the components are keyed under,
+	// and is what identifies this bill of materials however it was asked for.
 	ImageDigest string `json:"imageDigest"`
-	// ImageRef is the image reference recorded alongside the digest.
+	// ImageRef is the image reference recorded alongside the digest. Empty when
+	// the components were ingested against a digest with no ref.
 	ImageRef string `json:"imageRef"`
-	// SourceRepo is the repository the image was built from.
+	// SourceRepo is the repository the image was built from. Empty unless the
+	// ingest declared it — a pull from the registry does not learn it.
 	SourceRepo string `json:"sourceRepo"`
-	// GitSha is the commit the image was built from.
+	// GitSha is the commit the image was built from. Empty on the same terms as
+	// sourceRepo.
 	GitSha string `json:"gitSha"`
 	// IngestedAt is when the bill of materials was recorded, RFC 3339.
 	IngestedAt string `json:"ingestedAt"`

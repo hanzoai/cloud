@@ -159,7 +159,7 @@ func TestVector2b_NoAPIControlledPathSplit(t *testing.T) {
 	app, deps := newApp(t, baseCfg(t, masterKeyB64(t)))
 
 	// Attacker in org "b" tries to smuggle a Path field pointing at org "a".
-	// secretPutRequest has Path — but putSecret folds it under orgPath(org, req.Path)
+	// kmsPut has Path — but putSecret folds it under orgPath(org, in.Path)
 	// AND validSubpath rejects "..", so the climb is refused outright (400).
 	body, _ := json.Marshal(map[string]any{
 		"name":  "PWN",

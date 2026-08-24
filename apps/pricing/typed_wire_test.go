@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -20,9 +22,9 @@ import (
 )
 
 // This file is the GATE on the typed/raw partition of the pricing surface: the
-// 1 raw route is a CLOSED list, each named with the wire fact that keeps it
-// raw, and any route that is neither a typed op nor on that list fails the
-// suite — so the next pricing route is typed by default, and dropping one out
+// raw routes are a CLOSED list — EMPTY today — each named with the wire fact that
+// keeps it raw, and any route that is neither a typed op nor on that list fails
+// the suite — so the next pricing route is typed by default, and dropping one out
 // of the registry takes a deliberate edit with a reason. Same shape as
 // apps/team/typed_wire_test.go, which is the worked example of pinning a split
 // tranche with a test instead of prose.
@@ -31,7 +33,7 @@ import (
 // ops, each with the reason it cannot be one. A typed op is a route PLUS a
 // registry entry — the one value the OpenAPI operation, the MCP tool, the CLI
 // command and the SDK method all come from — so an operation missing from that
-// registry is invisible to all four. This 1 is missing on purpose. Addresses
+// registry is invisible to all four. Addresses
 // are written the way the DOCUMENT writes them, which is the identity every
 // projection keys on. "Cannot be typed" is a claim about a DEPENDENCY, and a
 // dependency moves, so the reason is not asserted from prose: the tests below
@@ -40,7 +42,7 @@ import (
 // suite RED and names the route that just became convertible, instead of leaving
 // a stale reason standing.
 //
-// It was 17, then 2, and is 1. The fifteen fixed sections came off it once the
+// It was 17, then 2, then 1, and is 0. The fifteen fixed sections came off it once the
 // premise was re-checked: they were held to be verbatim byte proxies of the
 // @hanzo/pricing bundle, but apps/goja re-marshals the bundle's answer through
 // Go's encoding/json (Host.DispatchWith) before any handler sees it, so a typed
@@ -50,24 +52,12 @@ import (
 // condition and got it: zip publishes a json.RawMessage as the unconstrained
 // value it is, so the merge patch stopped being a blocker and the route is an op.
 var untypedByDesign = map[string]string{
-	"PATCH /v1/admin/pricing/catalog/models/{wildcard1}": "GREEDY FIBER WILDCARD — the registry " +
-		"and the router spell the path differently, so Fold refuses the whole document. The model " +
-		"id may contain '/' (anthropic/claude-opus-4.6), so it is addressed by a greedy wildcard: " +
-		"registered at apps/pricing/pricing.go:209 as `.../models/*` and read back at " +
-		"apps/pricing/admin.go:196 with c.Param(\"*\"). zip keys a typed op by that fiber pattern " +
-		"verbatim — Template rewrites `:name` segments and passes `*` through " +
-		"(zip@v1.36.3/address.go:61) — while this document keys the same route by its URI template " +
-		"`.../models/{wildcard1}` (openapi/openapi.go:811, because fiber's own capture name `*1` " +
-		"is not a legal template name). openapi.Fold looks the op up under zip's spelling, finds " +
-		"no live route, and errors (openapi/openapi.go:705) — and Spec builds ONE document, so " +
-		"every other pricing operation goes down with it. " +
-		"TWO CLAUSES THAT ARE NO LONGER REASONS, recorded so nobody re-derives them as blockers: " +
-		"(1) the In does NOT need a field tagged json:\"*1\" — urlFieldName reads the `url:` tag " +
-		"ahead of `json:` (zip@v1.36.3/openapi.go:884), so `json:\"-\" url:\"*1\"` binds the " +
-		"capture and publishes nothing; (2) `overrides` is not a blocker either — zip publishes a " +
-		"json.RawMessage as the unconstrained value it is, which is why PATCH providers/{name} is " +
-		"an op. The wildcard alone holds this one. Its bodies ARE declared regardless " +
-		"(apps/pricing/admin.go:165, openapi.Register): the wildcard blocks TYPING, not DESCRIBING.",
+	// EMPTY, and the gate still runs — which is what makes a route added here
+	// tomorrow owe a reason. The last entry was the models PATCH, held raw because
+	// its greedy wildcard was spelled one way by zip's registry and another by this
+	// document, so Fold found no live route and refused the WHOLE document. zip's
+	// builder asks Template for every path now and Template names a wildcard
+	// {wildcardN}, so the two agree and the route is an op.
 }
 
 // pricingSpec mounts the REAL subsystem and projects its live router, which is
@@ -246,32 +236,28 @@ type (
 	}
 )
 
-// TestTypingTheWildcardRefusesTheWholeDocument proves the WHOLE of the
-// models/{wildcard1} reason, and proves it is stronger than an unreadable
-// parameter name: zip keys a typed op by the fiber pattern while this package's
-// document keys the route by its URI template, so Fold cannot find the op's route
-// and refuses — and Spec builds one document, so the refusal takes every other
-// pricing operation with it.
+// TestTheWildcardIsPublishedAtItsTemplateName records what let the models PATCH
+// become an op, so it cannot quietly come back.
 //
-// It used to prove the "first half" of a two-clause reason whose second clause
-// was already false (a field tagged `url:"*1"` binds the capture and publishes
-// nothing). The clause is gone from the ledger, so this is the only thing
-// standing between that route and a conversion — which is why its failure says
-// convert, without a second condition to check first.
-func TestTypingTheWildcardRefusesTheWholeDocument(t *testing.T) {
+// zip keys a typed op by the path its document builder writes, and this package's
+// reading of the router writes the same one, so Fold finds the route and the
+// operation is published at {wildcard1}. When those two disagreed, Fold refused —
+// and Spec builds ONE document, so the refusal took every other pricing operation
+// with it. A regression here is not one unreadable parameter; it is this app
+// publishing nothing at all.
+func TestTheWildcardIsPublishedAtItsTemplateName(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	zip.Patch(app, "/v1/admin/pricing/catalog/models/*", func(context.Context, *probeIn) (*probeOut, error) {
 		return &probeOut{OK: true}, nil
 	})
-	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
-	if err == nil {
-		t.Fatal("openapi.Spec now accepts a typed op on a greedy wildcard — the " +
-			"models/{wildcard1} reason has expired. Convert the route: bind the capture " +
-			"with `json:\"-\" url:\"*1\"`, delete the untypedByDesign entry and the " +
-			"openapi.Register/Describe pair the raw route needed.")
+	doc, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
+	if err != nil {
+		t.Fatalf("a typed op on a greedy wildcard refused the document again: %v — every pricing "+
+			"operation goes down with it, so this is the whole surface, not one parameter", err)
 	}
-	if !strings.Contains(err.Error(), "has no live route") {
-		t.Fatalf("the wildcard refusal moved: %v — the reason names the mechanism, re-read it", err)
+	if _, ok := doc.Paths["/v1/admin/pricing/catalog/models/{wildcard1}"]; !ok {
+		t.Fatalf("the operation is not published at its template name; the document carries %v",
+			slices.Sorted(maps.Keys(doc.Paths)))
 	}
 }
 
@@ -307,24 +293,24 @@ func TestMergePatchPublishesAnyJSON(t *testing.T) {
 	}
 }
 
-// TestTheUntypedRouteDeclaresItsBodies is the half of the raw route's cost that
-// the op-level gate above cannot see. Prose alone left it publishing an
-// operationId, a summary and a description and NO requestBody and NO responses —
-// which is exactly what a route that takes nothing and returns nothing publishes,
-// so every SDK generated off this document offered a model-overlay patch with
-// nowhere to put the patch, and no reader could tell the two cases apart.
+// TestTheModelPatchDeclaresItsBodies is the half of this route's surface the
+// op-level gate above cannot see: whether a caller can tell what to SEND and what
+// comes back.
 //
-// The wildcard blocks TYPING, not DECLARING: openapi.Register states the shapes
-// the handler actually binds. This asserts the $refs rather than the shapes,
-// because the shapes are the Go types' business and naming them twice here is the
-// drift Register exists to prevent.
+// It is worth a gate of its own because this route has published three different
+// answers to that question. Raw with prose alone it published an operationId, a
+// summary and NO requestBody and NO responses — indistinguishable from a route
+// that takes nothing and returns nothing, so every generated SDK offered a
+// model-overlay patch with nowhere to put the patch. Raw with openapi.Register it
+// published the shapes under `overlayPatch` and a `2XX` success, which is the
+// widest key that client can write. Typed, it publishes its own input component
+// and the status it actually answers.
 //
 // It reads the MARSHALLED document for the reason openapi.Bare does: an
-// Operation's RequestBody and Responses are open-typed (`any`), because Register
-// contributes cloud's own structs there and the typed fold contributes zip's
-// maps, so walking the Go value would assert against whichever half this route
-// happens to arrive through. The bytes are the artifact.
-func TestTheUntypedRouteDeclaresItsBodies(t *testing.T) {
+// Operation's RequestBody and Responses are open-typed (`any`), so walking the Go
+// value would assert against whichever half a route happens to arrive through.
+// The bytes are the artifact.
+func TestTheModelPatchDeclaresItsBodies(t *testing.T) {
 	_, doc := pricingSpec(t)
 	raw, err := json.Marshal(doc)
 	if err != nil {
@@ -347,16 +333,22 @@ func TestTheUntypedRouteDeclaresItsBodies(t *testing.T) {
 	}
 	if op.RequestBody == nil {
 		t.Fatal("PATCH models/{wildcard1} declares NO request body — indistinguishable from a " +
-			"route that takes none, so an SDK offers the patch with nowhere to put it. " +
-			"openapi.Register in admin.go's init is what states it.")
+			"route that takes none, so an SDK offers the patch with nowhere to put it.")
 	}
-	if got := op.RequestBody.ref(); got != "#/components/schemas/overlayPatch" {
-		t.Errorf("request body is %q, want the overlayPatch component — the raw route and the "+
-			"typed providers op must declare ONE patch shape", got)
+	// modelPatchIn, not overlayPatch: the op's input is the patch PLUS the id it
+	// binds from the URL, and the id is `json:"-"` so the published body is the
+	// five patch fields promoted out of the embedded overlayPatch. The provider op
+	// declares its own twin the same way, so the two still describe one patch shape
+	// without either naming the other's type.
+	if got := op.RequestBody.ref(); got != "#/components/schemas/modelPatchIn" {
+		t.Errorf("request body is %q, want the modelPatchIn component", got)
 	}
-	resp, answered := op.Responses["2XX"]
+	// 200, not the 2XX range openapi.Register writes: a typed op declares the
+	// status it answers, so a client knows which one to expect rather than which
+	// family.
+	resp, answered := op.Responses["200"]
 	if !answered {
-		t.Fatalf("PATCH models/{wildcard1} declares no success response; got %v", statusKeys(op.Responses))
+		t.Fatalf("PATCH models/{wildcard1} declares no 200; got %v", statusKeys(op.Responses))
 	}
 	if got := resp.ref(); got != "#/components/schemas/Overlay" {
 		t.Errorf("success response is %q, want the Overlay component — the route answers the "+
@@ -422,18 +414,21 @@ var proseless = map[string]bool{
 	"providerPatchIn.overrides": true,
 	"providerPatchIn.state":     true,
 
-	// REFLECTION CLIENT. The same five fields again, published a second time under
-	// their own name because the models PATCH declares its body with
-	// openapi.Register (admin.go's init) — the only client a route the wildcard
-	// keeps raw has. Register derives a schema by REFLECTION and Go drops comments
-	// at compile time, so zipdoc — which walks zip's TYPED registrations — can
-	// never reach a type that arrives this way. Publishing the shape bare is still
-	// strictly better than publishing no body at all, which is what this route did.
-	"overlayPatch.beta":      true,
-	"overlayPatch.betaOrgs":  true,
-	"overlayPatch.enabled":   true,
-	"overlayPatch.overrides": true,
-	"overlayPatch.state":     true,
+	// The same five once more, promoted into the models patch, for the SAME reason
+	// one line up: modelPatchIn embeds overlayPatch too.
+	//
+	// They used to be here under a different and worse cause. While the wildcard
+	// kept that route raw, its body could only be declared with openapi.Register,
+	// which derives a schema by REFLECTION — and Go drops comments, so zipdoc could
+	// never reach the type at all and `overlayPatch` published five bare properties
+	// under its own name. Typing the route retired that client, so the count is
+	// unchanged and the cause is not: these five are now one change in zip away
+	// from carrying their prose, where before they were unreachable by any.
+	"modelPatchIn.beta":      true,
+	"modelPatchIn.betaOrgs":  true,
+	"modelPatchIn.enabled":   true,
+	"modelPatchIn.overrides": true,
+	"modelPatchIn.state":     true,
 }
 
 // TestEveryPublishedFieldIsDescribed gates the FIELD half of this surface, which

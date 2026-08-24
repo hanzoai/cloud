@@ -14,7 +14,11 @@ func init() {
 		},
 	})
 	zip.Describe("DELETE /v1/s3/buckets/:bucket/objects/*", zip.Doc{
-		Description: "Removes one object at the trailing wildcard path.",
+		Description: "Removes one object and answers 204.\n\nIt removes ONE object and never a prefix: a key that looks like a folder deletes\nthe placeholder at that key, not the objects beneath it. The key is path-cleaned\nfirst, so the delete cannot reach outside the bucket it names, and a bucket the\ncaller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nobject is gone.",
+		Fields: map[string]string{
+			"objectRef.bucket": "Bucket is the bucket's friendly name, from the path.",
+			"objectRef.key":    "Key is the object's key within the bucket — everything after that bucket's\n/objects/. It MAY contain \"/\", because a key is a path and this segment is\ncaptured whole: \"2019/summer/a.jpg\" is one key, not three. It is\npath-cleaned before use, so \"../\" reaches nothing outside the bucket, and a\nkey that is empty, absolute or a bare folder marker is refused 400.",
+		},
 	})
 	zip.Describe("GET /v1/s3/buckets", zip.Doc{
 		Description: "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all. Another org's bucket is not\nrefused but INVISIBLE, so this cannot be used to learn that a name is taken\nelsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
@@ -41,7 +45,15 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/s3/buckets/:bucket/objects/*", zip.Doc{
-		Description: "Returns a presigned GET URL for the object at the trailing\nwildcard path. Same properties as upload: public host, exact key, time-boxed.\nThe Content-Disposition is set to attachment(filename) so a browser downloads\nrather than renders.",
+		Description: "Mints a presigned GET URL the caller downloads from DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. It carries a content disposition of attachment\nnaming the object's file name, so a browser following it saves the object rather\nthan rendering it in place. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe download that follows it comes straight from the store and is not seen here.\nThe balance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
+		Fields: map[string]string{
+			"objectRef.bucket":          "Bucket is the bucket's friendly name, from the path.",
+			"objectRef.key":             "Key is the object's key within the bucket — everything after that bucket's\n/objects/. It MAY contain \"/\", because a key is a path and this segment is\ncaptured whole: \"2019/summer/a.jpg\" is one key, not three. It is\npath-cleaned before use, so \"../\" reaches nothing outside the bucket, and a\nkey that is empty, absolute or a bare folder marker is refused 400.",
+			"presignResponse.expiresIn": "seconds until the URL expires",
+			"presignResponse.key":       "Key is the object key the URL was signed for, relative to the bucket root\nand path-cleaned — so it is what the store will actually read or write, which\nis not always the string the caller sent. The signature covers this one bucket\nand this one key: a URL minted here reaches nothing else.",
+			"presignResponse.method":    "\"PUT\" (upload) or \"GET\" (download)",
+			"presignResponse.url":       "presigned URL the browser follows directly",
+		},
 	})
 	zip.Describe("GET /v1/s3/health", zip.Doc{
 		Description: "Health reports whether this deployment can serve object storage.\n\nIt is a REAL probe rather than a constant: 200 when admin credentials are\npresent, so the store is reachable in principle, and 503 with the reason when\nthey are not. It is deliberately NOT gated — liveness has to be probe-able\nwithout a token — so it is the one operation here that names no bucket and\nbills nothing.",

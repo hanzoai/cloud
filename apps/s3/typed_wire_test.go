@@ -1,17 +1,26 @@
 package s3_test
 
 import (
-	"context"
+	"encoding/json"
+	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/s3"
+	"github.com/hanzoai/cloud/fleet"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
+	"github.com/valyala/fasthttp"
 	"github.com/zap-proto/zip"
 )
 
@@ -19,37 +28,17 @@ import (
 // typed ops, each with the wire fact that keeps it raw. The address is written
 // the way the DOCUMENT writes it, which is the identity every projection keys on.
 //
-// This package recorded THREE blockers and two of them have expired, which is
-// why the gate is a test rather than a comment: a refusal in prose cannot notice
-// that its reason stopped being true.
+// It is EMPTY, and that is the whole surface's state rather than a gap: all eight
+// operations are typed. It stays because the sum below is what a ninth route added
+// untyped would violate, and because a genuine refusal needs somewhere to be
+// written down with its reason.
 //
-//   - THE MONEY WIRE said a balance denial must be written IN BAND, because a
-//     typed op refuses only by RETURNING an error and zip renders that flat.
-//     cloud.Denied carries the fleet's nested {"error":{"code","message"}} off a
-//     returned error and serve.go installs DenyEnvelope app-wide. It never even
-//     applied here: the gate is in guard, a MIDDLEWARE, so a denial is written
-//     before an op is entered.
-//   - TWO STATUSES, ONE OBJECT said /health cannot declare both. zip v1.31.0 made
-//     WithStatus variadic and added StatusCoder, so the op declares the set and
-//     the ANSWER says which one it is.
-//
-// What is left is the wildcard, and it is the same refusal apps/pricing and
-// apps/kms hold: fiber binds `*` as a greedy capture, the typed registry
-// publishes op.Path VERBATIM while the router reading renders {wildcardN}, and
-// openapi.Fold then refuses the whole document because the two spellings of one
-// route do not match. It is not a description that would be wrong — the app
-// publishes NOTHING until it is resolved.
-//
-// That one is RUN rather than believed: TestTheWildcardCannotBeATypedOp below
-// registers a typed op at the same `*` and requires the refusal, so the reason
-// that survived the other two goes red the day IT stops being true.
-var untypedByDesign = map[string]string{
-	"GET /v1/s3/buckets/{bucket}/objects/{wildcard1}": "the object key is a fiber greedy wildcard: the typed " +
-		"registry publishes the path verbatim (`*`) while the router reading renders {wildcard1}, so " +
-		"openapi.Fold refuses with \"typed op has no live route\" and the app publishes nothing at all.",
-	"DELETE /v1/s3/buckets/{bucket}/objects/{wildcard1}": "the object key is a fiber greedy wildcard; same " +
-		"two spellings of one route, same refusal from openapi.Fold.",
-}
+// FOUR refusals were recorded here over time and all four expired — each named a
+// capability zip did not have and now has. A refusal is kept as an entry rather
+// than as prose for exactly that reason: a sentence cannot notice that its reason
+// stopped being true, and three of the four were found by re-reading rather than
+// by anything going red. The fourth was, which is what the entries are for.
+var untypedByDesign = map[string]string{}
 
 // TestEveryRouteIsTypedOrNamed reads BOTH projections of the live router at their
 // one shared address form — what the document says is served, and which of those
@@ -141,45 +130,6 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
-// TestTheWildcardCannotBeATypedOp is untypedByDesign's reason RUN rather than
-// believed. It registers a typed op at the same greedy `*` the two object routes
-// use and requires openapi.Spec to refuse a document for it — which is the whole
-// of why those two are not typed ops.
-//
-// It is the half a ledger cannot hold: an entry names an address and a sentence,
-// and a sentence cannot notice that its reason stopped being true. This package
-// has been burned by exactly that twice (the money wire and two-statuses-one-object
-// both outlived their causes and were found by re-reading, not by a red test), so
-// the surviving reason is the one that fails when it expires. The day zip's
-// Template names a wildcard the way cloud's router reading does, this goes green
-// and says what to do about it.
-func TestTheWildcardCannotBeATypedOp(t *testing.T) {
-	app := zip.New(zip.Config{Logger: luxlog.New("probe"), DisableStartupMessage: true})
-	g := app.Group("/v1/probe")
-	zip.Get(g, "/buckets/:bucket/objects/*", func(context.Context, *probeIn) (*probeOut, error) {
-		return &probeOut{}, nil
-	})
-	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
-	if err == nil {
-		t.Fatal("openapi.Spec accepted a typed op on a `*` wildcard — zip's registry and cloud's " +
-			"router reading now agree about how that segment is named, so untypedByDesign has " +
-			"stopped being true. Type GET and DELETE /v1/s3/buckets/:bucket/objects/* and delete " +
-			"both entries.")
-	}
-	if !strings.Contains(err.Error(), "no live route") {
-		t.Fatalf("the document was refused for a different reason than the one recorded: %v", err)
-	}
-}
-
-// probeIn and probeOut are the shapes the refusal above needs and nothing else
-// does. They never reach a document — Spec refuses before one exists, which is
-// the assertion.
-type probeIn struct{}
-
-type probeOut struct {
-	OK bool `json:"ok"`
-}
-
 // TestEveryPublishedFieldIsDescribed gates the half neither gate above can see.
 // Typing a route documents its ADDRESS and its SHAPE; it says nothing about what
 // the shape's FIELDS mean, and those come from a different comment — one per
@@ -213,41 +163,254 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 }
 
-// TestTheUntypedRoutesDeclareWhatTheyCan measures what staying raw costs, and
-// what it does NOT cost. A refusal buys three things nothing else can supply —
-// prose lifted from a doc comment, an MCP tool, a CLI command — and it must not
-// additionally cost a SHAPE: openapi.Register declares the download's answer, so
-// an SDK generated off this document has a return type for it.
+// deep is a key with separators in it, which is the ONLY reason the two object
+// addresses end in a greedy capture rather than a `:key` segment. A router
+// parameter matches one segment; this is three.
+const deep = "2019/summer/a.jpg"
+
+// live mounts the real surface with credentials and presigning, against a store
+// that records what it was asked. Presigning is arithmetic on a URL and reaches
+// no network, so the download answers for real; the delete has to travel, and
+// what arrives at the store is the object it addressed.
+func live(t *testing.T) (*zip.App, *string) {
+	t.Helper()
+	var asked string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("CLOUD_S3_FEE_CENTS", "0")
+	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
+	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
+	t.Setenv("S3_ADMIN_ENDPOINT", srv.Listener.Addr().String())
+	// ABSENT, not empty: set-and-empty is how an operator says "no public host",
+	// which turns presigning off — and the download would then answer 503 for a
+	// reason that has nothing to do with the key.
+	t.Setenv("S3_PUBLIC_ENDPOINT", "")
+	if err := os.Unsetenv("S3_PUBLIC_ENDPOINT"); err != nil {
+		t.Fatalf("unset S3_PUBLIC_ENDPOINT: %v", err)
+	}
+	app := zip.New(zip.Config{Logger: luxlog.New("s3-live"), DisableStartupMessage: true})
+	app.Use(cloud.Bridge())
+	if err := s3.Mount(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	return app, &asked
+}
+
+// ask drives one request as a validated principal of org "acme". body is sent
+// only when non-empty, so a bodyless method is driven exactly as a client sends it.
+func ask(t *testing.T, app *zip.App, method, path, body string) (int, string) {
+	t.Helper()
+	var rdr io.Reader
+	if body != "" {
+		rdr = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(method, path, rdr)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Authorization", "Bearer t")
+	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "u-acme")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+// answered reports whether an MCP frame carries the operation's answer rather
+// than a refusal. tools/call always answers 200; the error lives in the envelope.
+func answered(body string) bool {
+	var f struct {
+		Result struct {
+			IsError bool `json:"isError"`
+		} `json:"result"`
+		Error json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(body), &f); err != nil {
+		return false
+	}
+	return len(f.Error) == 0 && !f.Result.IsError
+}
+
+// signedKey drives the download and answers the key the URL was signed for.
+func signedKey(t *testing.T, app *zip.App, at string) string {
+	t.Helper()
+	st, body := ask(t, app, http.MethodGet, at, "")
+	if st != http.StatusOK {
+		t.Fatalf("GET %s = %d %s, want 200", at, st, body)
+	}
+	var signed struct{ URL, Key string }
+	if err := json.Unmarshal([]byte(body), &signed); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	if !strings.Contains(signed.URL, signed.Key) {
+		t.Errorf("the signed URL does not address the key it reports (%q): %s", signed.Key, signed.URL)
+	}
+	return signed.Key
+}
+
+// TestTheCaptureIsTheWholeKey. The trailing capture is the object key, and a key
+// with separators in it reaches the store intact — which is the whole reason
+// these two addresses end in `*` rather than a `:key` segment. Nothing else here
+// drives a key with a separator in it, so without this the surface could stop
+// carrying one and every other check would stay green.
 //
-// The delete is the opposite assertion and just as deliberate. It reads no body
-// and answers 204 with none, so it declares neither half; a declaration there
-// would be a shape this route has never carried.
-func TestTheUntypedRoutesDeclareWhatTheyCan(t *testing.T) {
-	doc, err := openapi.Spec(alone(t), openapi.Info{Title: "s3", Version: "v1"})
+// Both tags on objectRef.Key are exercised, because each can be lost without the
+// other noticing. `url:"*1"` is what the ROUTE binds through; `json:"key"` is what
+// a caller addressing the operation BY NAME supplies, and MCP hands its arguments
+// across as one JSON object with no path to read.
+//
+// It also pins the leading-separator trim: fiber hands back "/2019/…" for a URL
+// with a doubled separator, and the key is read past it.
+func TestTheCaptureIsTheWholeKey(t *testing.T) {
+	app, asked := live(t)
+
+	for _, at := range []string{
+		"/v1/s3/buckets/photos/objects/" + deep,
+		"/v1/s3/buckets/photos/objects//" + deep,
+	} {
+		if got := signedKey(t, app, at); got != deep {
+			t.Errorf("GET %s signed key %q, want %q — the capture is the WHOLE trailing path",
+				at, got, deep)
+		}
+	}
+
+	if st, body := ask(t, app, http.MethodDelete, "/v1/s3/buckets/photos/objects/"+deep, ""); st != http.StatusNoContent {
+		t.Fatalf("DELETE a key with separators = %d %s, want 204", st, body)
+	}
+	if !strings.HasSuffix(*asked, "/"+deep) {
+		t.Errorf("the store was asked to remove %q, which does not end in %q", *asked, deep)
+	}
+
+	// By name, whose whole input is a JSON object.
+	*asked = ""
+	frame := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{` +
+		`"name":"delete_s3_buckets_by_bucket_objects_by_wildcard1",` +
+		`"arguments":{"bucket":"photos","key":"` + deep + `"}}}`
+	if _, body := ask(t, app, http.MethodPost, "/mcp", frame); !answered(body) {
+		t.Fatalf("delete by name was refused: %s", body)
+	}
+	if !strings.HasSuffix(*asked, "/"+deep) {
+		t.Errorf("by name the store was asked to remove %q, which does not end in %q — a caller "+
+			"with no URL to carry the key named an object and a different one was addressed",
+			*asked, deep)
+	}
+}
+
+// TestTheAddressBeatsADecoy. zip binds body, then query, then path, so the URL is
+// the addressing authority: whatever else a request carries, the operation acts on
+// what the address named — which is also what admit checked and whose ledger is
+// debited. A request that could redirect itself past that would be a caller
+// spending one tenant's balance on another tenant's object.
+//
+// The decoy rides the QUERY rather than the body, because that is what these two
+// methods can actually carry: zip reads no body for a GET or a DELETE, so a decoy
+// there is refused by the transport rather than by the binding order, which would
+// prove nothing about the order.
+func TestTheAddressBeatsADecoy(t *testing.T) {
+	app, asked := live(t)
+	const decoy = "victim/secret.pdf"
+
+	at := "/v1/s3/buckets/photos/objects/" + deep + "?bucket=victim&key=" + decoy + "&%2A1=" + decoy
+	if got := signedKey(t, app, at); got != deep {
+		t.Errorf("a query decoy redirected the download to %q, want %q — the URL is the "+
+			"addressing authority and the path binds last", got, deep)
+	}
+
+	if st, body := ask(t, app, http.MethodDelete, at, ""); st != http.StatusNoContent {
+		t.Fatalf("DELETE with a query decoy = %d %s, want 204", st, body)
+	}
+	if !strings.HasSuffix(*asked, "/"+deep) {
+		t.Errorf("a query decoy redirected the delete: the store was asked to remove %q, want a "+
+			"key ending %q", *asked, deep)
+	}
+	if strings.Contains(*asked, "victim") {
+		t.Errorf("the delete reached a bucket or key the address never named: %q", *asked)
+	}
+}
+
+// TestTheGraphCanAimTheDelete drives the fleet's GraphQL field end to end — the
+// document, the field built from it, the transport the host dials, the operation,
+// and the object store — and requires the key to ARRIVE.
+//
+// It exists because this is where typing a greedy address goes wrong, and where it
+// went wrong before. A GraphQL field is built out of an operation's declared
+// PARAMETERS (openapi.Fields), and the address a request is sent to is built by
+// substituting them (fleet's address). A greedy segment that is templated in the
+// path and declared under no name yields a field with no argument for the object,
+// and the substitution then sends the template through as written: the delete
+// answers 204 having removed an object literally named "{wildcard1}". Nothing in
+// that path errors — a caller reads success — so it is invisible to every check
+// that reads a status code.
+//
+// The whole chain is here on purpose. Asserting on the field's argument list alone
+// would pass while the substitution or the transport dropped the key, and asserting
+// on the operation alone says nothing about what the graph can aim at it. What the
+// STORE was asked is the only fact that covers all of it.
+func TestTheGraphCanAimTheDelete(t *testing.T) {
+	app, asked := live(t)
+
+	// The child speaks the transport the fleet dials, on its own socket, exactly as
+	// the host starts one.
+	sock := filepath.Join(planetest.Dir(t), "s3.sock")
+	go func() { _ = app.Listen(sock) }()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if c, err := net.Dial("unix", sock); err == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	doc, err := openapi.Spec(app, openapi.Info{Title: "s3", Version: "v1"})
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
-	const wildcard = "/v1/s3/buckets/{bucket}/objects/{wildcard1}"
-	download := doc.Paths[wildcard][strings.ToLower(http.MethodGet)]
-	if download == nil {
-		t.Fatalf("GET %s is not in the document", wildcard)
+	// Whose app answers is stamped by the compose, which is the only reader that
+	// knows; this app describing itself does not. Standing in for it is what lets
+	// one app's document be driven without composing the fleet around it.
+	for _, item := range doc.Paths {
+		for _, op := range item {
+			op.App = "s3"
+		}
 	}
-	if download.Responses == nil {
-		t.Errorf("GET %s declares no response — the URL it answers with is invisible to every "+
-			"generated SDK, which is a cost the wildcard refusal does not have to carry", wildcard)
+
+	// The identity the host established, forwarded — this endpoint establishes none
+	// of its own, so without it the child refuses before it reads an address.
+	from := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(from)
+	from.Header.Set("Authorization", "Bearer t")
+	from.Header.Set("X-Org-Id", "acme")
+	from.Header.Set("X-User-Id", "u-acme")
+
+	graph := fleet.NewGraph(doc, func(string) (string, string, error) { return sock, "/", nil })
+	answer := graph.Run(fleet.Request{Query: `{ ` + graphDelete + `(bucket: "photos", wildcard1: "` + deep + `") }`}, from)
+	if len(answer.Errors) > 0 {
+		t.Fatalf("the graph could not run the delete: %+v", answer.Errors)
 	}
-	if download.RequestBody != nil {
-		t.Errorf("GET %s declares a request body it has never read", wildcard)
+	if _, ran := answer.Data[graphDelete]; !ran {
+		t.Fatalf("the graph answered without the field: %+v", answer.Data)
 	}
-	remove := doc.Paths[wildcard][strings.ToLower(http.MethodDelete)]
-	if remove == nil {
-		t.Fatalf("DELETE %s is not in the document", wildcard)
+	if !strings.HasSuffix(*asked, "/"+deep) {
+		t.Errorf("the graph asked the store to remove %q, which does not end in %q — the field "+
+			"reported success about an object the caller never named", *asked, deep)
 	}
-	if remove.RequestBody != nil || remove.Responses != nil {
-		t.Errorf("DELETE %s declares a body: it reads none and answers 204 with none, so a "+
-			"declaration states something the route does not do", wildcard)
+	if strings.Contains(*asked, "wildcard") {
+		t.Errorf("the graph sent its own path template through as the key: %q", *asked)
 	}
 }
+
+// graphDelete is the field name the delete is published under, which is its
+// operationId — one token across the document, the tool list and the graph.
+const graphDelete = "delete_s3_buckets_by_bucket_objects_by_wildcard1"
 
 // alone mounts s3 and nothing else, which is the document this app PUBLISHES:
 // `make -C apps/s3 describe` runs the app's own binary over its own router. The

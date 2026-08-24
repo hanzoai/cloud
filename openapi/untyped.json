@@ -1,5 +1,5 @@
 {
-  "operations": 751,
+  "operations": 745,
   "products": {
     "account": 2,
     "ad": 1,
@@ -33,7 +33,6 @@
     "iam": 62,
     "index": 3,
     "integrations": 21,
-    "kms": 2,
     "knowledge": 1,
     "legal": 1,
     "meet": 2,
@@ -44,13 +43,10 @@
     "openapi": 6,
     "platform": 3,
     "pref": 1,
-    "pricing": 1,
     "projects": 3,
     "research": 1,
     "risk": 1,
-    "s3": 2,
     "sandbox": 6,
-    "sbom": 1,
     "skills": 2,
     "tasks": 10,
     "team": 10,

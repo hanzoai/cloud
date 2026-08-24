@@ -202,8 +202,8 @@
     "/v1/s3/buckets/{bucket}/objects/{wildcard1}": {
       "delete": {
         "operationId": "delete_s3_buckets_by_bucket_objects_by_wildcard1",
-        "summary": "Delete one object",
-        "description": "Removes the single object at the trailing path from one of the caller's buckets and answers 204 with no body. The key is path-cleaned first, so the delete cannot reach outside the bucket it names.\n\nIt removes one object and never a prefix: a trailing path that looks like a folder deletes the placeholder at that key, not the objects beneath it.\n\nA validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.",
+        "summary": "Removes one object and answers 204.",
+        "description": "Removes one object and answers 204.\n\nIt removes ONE object and never a prefix: a key that looks like a folder deletes\nthe placeholder at that key, not the objects beneath it. The key is path-cleaned\nfirst, so the delete cannot reach outside the bucket it names, and a bucket the\ncaller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nobject is gone.",
         "tags": [
           "s3"
         ],
@@ -212,6 +212,7 @@
             "name": "bucket",
             "in": "path",
             "required": true,
+            "description": "Bucket is the bucket's friendly name, from the path.",
             "schema": {
               "type": "string"
             }
@@ -220,49 +221,59 @@
             "name": "wildcard1",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "get": {
-        "operationId": "get_s3_buckets_by_bucket_objects_by_wildcard1",
-        "summary": "Get a URL to download one object directly",
-        "description": "Returns a short-lived presigned GET URL for the object at the trailing path, with the method, the key and its remaining lifetime. As with upload, the client fetches from that URL directly and the storage credential stays on the server.\n\nThe URL carries a content disposition of attachment with the object's file name, so a browser following it downloads the object rather than rendering it in place. Signed against the public host, scoped to the one bucket and key, and good for five minutes; a deployment with no public storage endpoint answers 503.\n\nA validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.",
-        "tags": [
-          "s3"
-        ],
-        "parameters": [
-          {
-            "name": "bucket",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
+            "description": "Key is the object's key within the bucket — everything after that bucket's\n/objects/. It MAY contain \"/\", because a key is a path and this segment is\ncaptured whole: \"2019/summer/a.jpg\" is one key, not three. It is\npath-cleaned before use, so \"../\" reaches nothing outside the bucket, and a\nkey that is empty, absolute or a bare folder marker is refused 400.",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_s3_buckets_by_bucket_objects_by_wildcard1",
+        "summary": "Mints a presigned GET URL the caller downloads from DIRECTLY.",
+        "description": "Mints a presigned GET URL the caller downloads from DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. It carries a content disposition of attachment\nnaming the object's file name, so a browser following it saves the object rather\nthan rendering it in place. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe download that follows it comes straight from the store and is not seen here.\nThe balance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "description": "Bucket is the bucket's friendly name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "Key is the object's key within the bucket — everything after that bucket's\n/objects/. It MAY contain \"/\", because a key is a path and this segment is\ncaptured whole: \"2019/summer/a.jpg\" is one key, not three. It is\npath-cleaned before use, so \"../\" reaches nothing outside the bucket, and a\nkey that is empty, absolute or a bare folder marker is refused 400.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/presignResponse"
                 }
               }
-            }
+            },
+            "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     },
     "/v1/s3/health": {

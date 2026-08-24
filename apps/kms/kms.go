@@ -46,8 +46,11 @@
 // CLOUD_KMS_MPC_VAULT_ID unset). A signature is NEVER fabricated.
 //
 // SECURITY — the REST surface (mount.go) reuses cloud's ONE auth boundary
-// (SanitizeIdentity in serve.go establishes the validated principal; handlers
-// read c.Org()/c.IsAdmin()) rather than a parallel JWT stack.
+// (SanitizeIdentity in serve.go establishes the validated principal; each op
+// reads it through principal.OrgFrom and cloud.AuthorityOf) rather than a
+// parallel JWT stack. The admission is inside the operation, not around the
+// route, because an operation is also an MCP tool and a call-plane op and those
+// reach it without one.
 //
 // LAYERING — the library face (Client/New here in kms.go) is the cloud-free CLIENT
 // core: the types.KMSClient impl + sealed store access, importing only cloud/types.

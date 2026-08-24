@@ -61,7 +61,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -74,7 +73,6 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/s3admin"
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -123,57 +121,6 @@ type state struct {
 	admin s3admin.Admin
 }
 
-// metered is the sentence the two raw object operations share. Each is read
-// alone in the document, so the gate that refuses before anything is touched has
-// to appear on each of them rather than once at the top of a file no consumer sees.
-// The five typed operations state the same fact in their own doc comments, which
-// is the only channel that reaches the document for them (see init below).
-const metered = "\n\nA validated principal is required, and every bucket and key is resolved inside the " +
-	"caller's own org: physical bucket names are derived from the org, so a tenant cannot " +
-	"name another's storage. The operation is billed per call — the balance is checked " +
-	"BEFORE anything is touched, so an unfunded org is refused with nothing done, and the " +
-	"debit happens only after the work succeeds. Object storage that is not configured " +
-	"answers 503 under this subsystem's own name rather than falling through to another."
-
-// The prose for the two operations a typed op cannot carry, and the shape one of
-// them answers with.
-//
-// EVERY OTHER ROUTE HERE IS A TYPED OP and states its prose in its own doc
-// comment, which zipdoc lifts into the registry: openapi.Fold then lays the whole
-// typed operation over the structural one, keeping only the router's tag. So a
-// Describe declared for a TYPED address is prose that is written, reviewed and
-// then silently DROPPED — six of these eight declarations were exactly that,
-// outranked and published nowhere, and they are gone. What each of those six
-// publishes is the doc comment beside its handler in typed.go.
-//
-// Register states the one half a raw route can still declare. Without it the
-// download rendered as an operationId and a tag and NOTHING else, which no
-// consumer of the document can tell from a route that answers nothing — so every
-// generated SDK offered "get a URL to download one object" with no return type.
-// The delete declares neither half on purpose: it reads no body and answers 204
-// with none, so a declaration would be inventing something.
-func init() {
-	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodGet,
-		"Get a URL to download one object directly",
-		"Returns a short-lived presigned GET URL for the object at the trailing path, with "+
-			"the method, the key and its remaining lifetime. As with upload, the client "+
-			"fetches from that URL directly and the storage credential stays on the "+
-			"server.\n\n"+
-			"The URL carries a content disposition of attachment with the object's file "+
-			"name, so a browser following it downloads the object rather than rendering it "+
-			"in place. Signed against the public host, scoped to the one bucket and key, and "+
-			"good for five minutes; a deployment with no public storage endpoint answers "+
-			"503."+metered)
-	openapi.Register("/v1/s3/buckets/:bucket/objects/*", http.MethodGet, nil, presignResponse{})
-	openapi.Describe("/v1/s3/buckets/:bucket/objects/*", http.MethodDelete,
-		"Delete one object",
-		"Removes the single object at the trailing path from one of the caller's buckets "+
-			"and answers 204 with no body. The key is path-cleaned first, so the delete "+
-			"cannot reach outside the bucket it names.\n\n"+
-			"It removes one object and never a prefix: a trailing path that looks like a "+
-			"folder deletes the placeholder at that key, not the objects beneath it."+metered)
-}
-
 // Mount wires /v1/s3/* onto app. The unconditional route set, each operation
 // carrying its own preamble, makes this a direct construction (cloud.NewBase),
 // not cloud.Mount.
@@ -199,18 +146,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// must fail closed under its own name, never fall through to a different
 	// subsystem's handler.
 	//
-	// TWO ROUTES STAY UNTYPED, and it is a wire fact rather than want of effort:
-	// fiber's `*` has no typed-op spelling. zip's closeColonParams leaves the `*` in
-	// the op path while cloud's openapi.translate renders the ROUTE as {wildcard1},
-	// so openapi.Fold would fail with "typed op has no live route" and the app would
-	// publish nothing at all — which typed_wire_test.go RUNS rather than asserts, so
-	// the reason goes red the day it expires. It is the last such refusal here — the
-	// two that stood beside it expired, and the operations that were waiting on them
-	// are typed: a balance denial travels as cloud.Denied, which serve.go's app-wide
-	// DenyEnvelope writes back as the money wire's own nested
-	// {"error":{"code","message"}} bytes, and zip v1.31.0's variadic WithStatus lets
-	// /health declare both of its statuses.
-	//
 	// Routes go on the concrete app so zip's typed registrars and cmd/zipdoc can
 	// both resolve the prefix; the scoped Router still owns any middleware, which
 	// is where the ownership guard applies. Same shape apps/meet and apps/blueprint
@@ -233,16 +168,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(g, "/health", o.health, zip.WithStatus(http.StatusOK, http.StatusServiceUnavailable))
 
 	// Everything else opens with admit and closes with settle, composed onto the
-	// HANDLER — paid for a typed operation, guard for a raw one. Nothing is
-	// installed at the prefix, so the probe registered above at the same address
-	// stays ungated without a second scope to keep the two apart.
+	// HANDLER. Nothing is installed at the prefix, so the probe registered above at
+	// the same address stays ungated without a second scope to keep the two apart.
+	//
+	// THE LAST TWO SHADOW THE LISTING ABOVE THEM. fiber's `*` matches the EMPTY
+	// remainder, so GET /v1/s3/buckets/photos/objects is answered by the download
+	// rather than by listObjects and reads as 400 "object key is required" — with a
+	// query string, with a trailing separator, every spelling. listObjects is
+	// reachable only BY NAME, where dispatch is on the operation id and no route is
+	// consulted.
+	//
+	// It is a property of the greedy capture and NOT of this order: the listing is
+	// registered first and still loses, measured, on this exact route set. Nor is it
+	// a cost of typing these two — the same requests answer the same way with them
+	// raw. The narrowing fix is `+`, which is greedy but demands at least one
+	// segment, and it is a WIRE change (that address would begin listing) plus a
+	// change of fiber's key from "*1" to "+1", so it is a decision rather than a
+	// tidy-up. Written down because the registration order reads as though the more
+	// specific address wins, and it does not.
 	zip.Get(g, "/buckets", paid(s, o.listBuckets))
 	zip.Post(g, "/buckets", paid(s, o.createBucket), zip.WithStatus(http.StatusCreated))
 	zip.Delete(g, "/buckets/:bucket", paid(s, o.deleteBucket))
 	zip.Get(g, "/buckets/:bucket/objects", paid(s, o.listObjects))
 	zip.Post(g, "/buckets/:bucket/objects", paid(s, o.presignUpload))
-	g.Get("/buckets/:bucket/objects/*", guard(s, presignDownload))
-	g.Delete("/buckets/:bucket/objects/*", guard(s, deleteObject))
+	zip.Get(g, "/buckets/:bucket/objects/*", paid(s, o.presignDownload))
+	zip.Delete(g, "/buckets/:bucket/objects/*", paid(s, o.deleteObject))
 
 	if !s.State.admin.Configured() {
 		s.Log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
@@ -318,10 +268,11 @@ func settle(s *cloud.Service[state], c *zip.Ctx) {
 	s.Bill.Meter(principal.Ledger(c), principal.Project(c), "op", fee(), c.RequestID(), cloud.ClientIP(c))
 }
 
-// paid composes admit and settle onto a TYPED operation, and guard composes them
-// onto a RAW one. One decision, two shapes, never two decisions.
+// paid composes admit and settle onto an operation. Every operation on this
+// surface but the probe is registered through it, so there is one decision about
+// money and tenancy and no second place to keep in step with it.
 //
-// BOTH WRAP THE HANDLER, WHICH IS THE WHOLE POINT. zip records a typed op and its
+// IT WRAPS THE HANDLER, WHICH IS THE WHOLE POINT. zip records a typed op and its
 // route's fiber handler as two fields of one entry and wraps only the second, so a
 // gate handed to Group or composed through With runs for REST and for nothing
 // else — while MCP, the call plane, the graph and the CLI invoke the op directly
@@ -348,24 +299,6 @@ func paid[In, Out any](s *cloud.Service[state], core zip.TypedHandler[In, Out]) 
 		}
 		settle(s, c)
 		return out, nil
-	}
-}
-
-// guard is paid for the two object routes fiber's wildcard keeps raw. It hands the
-// org down as a PARAMETER for the same reason paid hands it down in the context:
-// the value comes from the call that admitted the request, so there is no arrangement
-// of these registrations in which a handler runs without one.
-func guard(s *cloud.Service[state], h func(*cloud.Service[state], *zip.Ctx, string) error) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, err := admit(s, c)
-		if err != nil {
-			return err
-		}
-		if err := h(s, c, org); err != nil {
-			return err
-		}
-		settle(s, c)
-		return nil
 	}
 }
 
@@ -495,62 +428,6 @@ type presignResponse struct {
 	Expiry int64  `json:"expiresIn"` // seconds until the URL expires
 }
 
-// presignDownload returns a presigned GET URL for the object at the trailing
-// wildcard path. Same properties as upload: public host, exact key, time-boxed.
-// The Content-Disposition is set to attachment(filename) so a browser downloads
-// rather than renders.
-func presignDownload(s *cloud.Service[state], ctx *zip.Ctx, org string) error {
-	bname, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
-	}
-	key, ok := cleanKey(reqWildcard(ctx))
-	if !ok {
-		return zip.ErrBadRequest("object key is required and must be a clean path")
-	}
-	if !s.State.admin.PresignConfigured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "presigned download is not available (no public endpoint configured)")
-	}
-	pub, err := s.State.admin.PublicClient()
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
-	}
-	physical := physicalBucket(org, bname)
-	params := url.Values{}
-	params.Set("response-content-disposition", "attachment; filename=\""+path.Base(key)+"\"")
-	u, err := pub.PresignedGetObject(ctx.Context(), physical, key, presignTTL, params)
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "presign download: %v", err)
-	}
-	return ctx.JSON(http.StatusOK, presignResponse{
-		URL: u.String(), Method: http.MethodGet, Key: key, Expiry: int64(presignTTL.Seconds()),
-	})
-}
-
-// deleteObject removes one object at the trailing wildcard path.
-func deleteObject(s *cloud.Service[state], ctx *zip.Ctx, org string) error {
-	bname, ok := friendlyParam(ctx.Param("bucket"))
-	if !ok {
-		return zip.ErrBadRequest("invalid bucket name")
-	}
-	key, ok := cleanKey(reqWildcard(ctx))
-	if !ok {
-		return zip.ErrBadRequest("object key is required and must be a clean path")
-	}
-	cli, err := s.State.admin.Client()
-	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
-	}
-	physical := physicalBucket(org, bname)
-	if err := cli.RemoveObject(ctx.Context(), physical, key, s3.RemoveObjectOptions{}); err != nil {
-		if isNoSuchBucket(err) {
-			return zip.ErrNotFound("bucket not found")
-		}
-		return zip.Errorf(http.StatusBadGateway, "delete object: %v", err)
-	}
-	return ctx.NoContent(http.StatusNoContent)
-}
-
 // ── validation + helpers ────────────────────────────────────────────────────
 
 // friendlyParam validates a bucket path param against the friendly-name shape.
@@ -567,10 +444,18 @@ func friendlyParam(raw string) (string, bool) {
 	return name, true
 }
 
-// reqWildcard returns the trailing "*" segment of an /objects/* route, trimmed of
-// a leading slash. This is the object key (may contain "/"—a nested path).
-func reqWildcard(ctx *zip.Ctx) string {
-	return strings.TrimPrefix(strings.TrimSpace(ctx.Param("*")), "/")
+// remainder is the trailing path of an /objects/* address as an object key: the
+// greedy capture with a leading separator taken off, so a doubled separator in
+// the URL (…/objects//a.txt) addresses the same key one separator does. It runs
+// before cleanKey and NOT inside it, because a leading separator reaching cleanKey
+// by any other route — an upload naming "/a.txt" in its body — is a caller writing
+// an absolute key, which is a 400.
+//
+// It is applied to the BOUND FIELD rather than read off the request, so a caller
+// that addresses the operation by name is normalized by the same rule as one that
+// addresses it by URL.
+func remainder(raw string) string {
+	return strings.TrimPrefix(strings.TrimSpace(raw), "/")
 }
 
 // cleanKey normalizes an object key and rejects any traversal or unsafe byte. An

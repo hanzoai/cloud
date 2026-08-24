@@ -220,8 +220,8 @@
     "/v1/kms/secrets/{wildcard1}": {
       "delete": {
         "operationId": "delete_kms_secrets_by_wildcard1",
-        "summary": "Delete one secret from your org",
-        "description": "Removes one secret from the caller's own org and confirms the name and environment that were removed. Deleting a secret that is not there is a 404, not a silent success, so a caller can tell a real deletion from a typo.\n\nThe trailing path is the secret's subpath and name beneath the caller's org root, and `env` selects the environment, defaulting when omitted. Scoped to the caller's own org — the store root comes from the validated claim, never from the request.\n\nRequires ADMIN authority over the org, like the write: destroying a secret is an administrative act, and a credential distributed to read one must not be able to remove it.",
+        "summary": "Removes one secret from your org.",
+        "description": "Removes one secret from your org.\n\nForgets one secret belonging to the caller's own org and confirms the name and\nenvironment that were removed. Deleting a secret that is not there is a 404,\nnot a silent success, so a caller can tell a real deletion from a typo.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. The org comes from the\nvalidated claim, never from the request.\n\nRequires ADMIN authority over the org, like the write: destroying a secret is\nan administrative act, and a credential distributed to READ one must not be\nable to remove it. A machine credential holds no membership and so is never an\norg admin. Fail-closed admission, in order: admin of the org, well-formed org,\nmaster key present — 403, 400 and 503, all decided before any record is\ntouched.",
         "tags": [
           "kms"
         ],
@@ -230,28 +230,40 @@
             "name": "wildcard1",
             "in": "path",
             "required": true,
+            "description": "Secret is the coordinate beneath the caller's own org root: an optional\n`/`-separated subpath and then the name, such as `ci/deploy/token`. Over\nHTTP it is the trailing path itself, and the trailing path WINS over any\nother spelling sent with it. There is no org in it — the tenant comes from\nthe validated claim — so another tenant's secret is not merely refused, it\nis unnameable. OMITTED is refused with a 400: there is no secret named\n\"everything\", and a blank address must not read as one.",
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "env",
+            "in": "query",
+            "required": false,
+            "description": "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "prod"
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/kmsRemoved"
                 }
               }
-            }
+            },
+            "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       },
       "get": {
         "operationId": "get_kms_secrets_by_wildcard1",
-        "summary": "Read one secret's value",
-        "description": "Opens one sealed secret belonging to the caller's own org and returns its value in the response body, with the name and environment it was resolved under. This is the broker's purpose, and the response body is the ONLY place the value appears — it is not logged, and it is never carried in an error.\n\nThe trailing path is the secret's subpath and name beneath the caller's org root; `env` selects the environment and falls back to the default when omitted. A secret that is not there is a plain 404 that names nothing about the store.\n\nScoped to the caller's own org and nothing else: there is no org in the path, so another tenant's secret is not merely refused, it is unnameable. Admission is fail-closed — validated member, well-formed org, master key present — and an unconfigured master key is 503 rather than an empty read.",
+        "summary": "Reads one secret's value from your org.",
+        "description": "Reads one secret's value from your org.\n\nOpens one sealed secret belonging to the caller's own org and returns its\nvalue, with the name and environment it was resolved under. This is the\nbroker's purpose, and the response body is the ONLY place the value appears —\nit is not logged, and it is never carried in an error.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. A secret that is not\nthere is a plain 404 that names nothing about the store.\n\nScoped to the caller's own org and nothing else: there is no org in the\naddress, so another tenant's secret is not merely refused, it is unnameable.\nAdmission is fail-closed and in order — a validated member, an org that is a\nDNS-1123 label, and a store holding a master key — 403, 400 and 503, all\ndecided before any record is touched, so an unconfigured master key is a 503\nrather than an empty read.",
         "tags": [
           "kms"
         ],
@@ -260,23 +272,35 @@
             "name": "wildcard1",
             "in": "path",
             "required": true,
+            "description": "Secret is the coordinate beneath the caller's own org root: an optional\n`/`-separated subpath and then the name, such as `ci/deploy/token`. Over\nHTTP it is the trailing path itself, and the trailing path WINS over any\nother spelling sent with it. There is no org in it — the tenant comes from\nthe validated claim — so another tenant's secret is not merely refused, it\nis unnameable. OMITTED is refused with a 400: there is no secret named\n\"everything\", and a blank address must not read as one.",
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "env",
+            "in": "query",
+            "required": false,
+            "description": "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "prod"
           }
         ],
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/kmsSecret"
                 }
               }
-            }
+            },
+            "description": "ok"
           }
-        }
+        },
+        "x-tool": true
       }
     }
   },
@@ -384,32 +408,38 @@
         "type": "object"
       },
       "kmsRemoved": {
-        "type": "object",
         "properties": {
           "deleted": {
+            "description": "Deleted is true; a delete confirms by not failing.",
             "type": "boolean"
           },
           "env": {
+            "description": "Env is the environment the secret was removed from.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the secret's name.",
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "kmsSecret": {
-        "type": "object",
         "properties": {
           "env": {
+            "description": "Env is the environment the value was resolved under.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the secret's name.",
             "type": "string"
           },
           "value": {
+            "description": "Value is the opened plaintext. This body is the ONLY place it appears.",
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "kmsSecrets": {
         "properties": {

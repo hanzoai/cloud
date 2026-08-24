@@ -2639,11 +2639,11 @@
       "sha256": "732cd95308404bf2720a92f024f6714cf7f9d0cc5a4689bee0a46bc03c2be7ae"
     },
     {
-      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Read one secret's value.",
+      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Reads one secret's value from your org..",
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "ce519fd11b2a8294ec9fbc19c0f9aa0948b12634fb1d9049f8332315e2ffd2ed"
+      "sha256": "fdbf1edb1b70c78d44ce6626ba443140082a0bcc581973ec6846abadf67fc7e7"
     },
     {
       "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",
@@ -4109,11 +4109,11 @@
       "sha256": "e0e48a358ce749039926bb19939130857658596eb0edce26d0697260a6bbbde6"
     },
     {
-      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly.",
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Mints a presigned GET URL the caller downloads from DIRECTLY..",
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "9183222b52f2cf85081002eeb7b508dedf1f95873997102a1ef739197bb10970"
+      "sha256": "f11702ab50d69bc42d231e8a9ae0015b1c2fa3eb3967db32bf55c4caf329a7de"
     },
     {
       "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
@@ -4158,11 +4158,11 @@
       "sha256": "94fe4f75177fb3bf072e25f72b872ec8af2a5a8f9093da1650aaf9c739068db9"
     },
     {
-      "description": "Read sbom sbom: Resolve everything inside a container image.",
+      "description": "Read sbom sbom: Resolve returns everything inside one container image, addressed by its digest or by its image ref..",
       "name": "sbom_sbom",
       "path": "sbom_sbom/SKILL.md",
       "service": "sbom",
-      "sha256": "acb22c1d09d3c20af13c437ed235aff9b2d418394e154c37fdb5c5f399176248"
+      "sha256": "2f1dabdeca019ee04ce334d5e825d673efc303614bd002621377d0e37bb95505"
     },
     {
       "description": "Read security findings: Is the org's findings — rule, severity, path, line, masked preview and fingerprint — newest first, across scans or within one., Returns a single finding: which rule fired, where (path and line), the masked preview and the SHA-256 fingerprint of the secret ",

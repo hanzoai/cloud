@@ -268,3 +268,48 @@ func TestMount_EmptyDataDir_FailsClosed(t *testing.T) {
 		t.Fatal("Mount with empty DataDir must fail closed (got nil error)")
 	}
 }
+
+// TestTheURLOutranksABodyID is what makes the model id safe to carry a wire name.
+//
+// The id binds from the greedy capture AND is a body field, because a typed op is
+// reached off HTTP too — the call plane hands arguments across as the body with no
+// path map, so a URL-only id would leave those callers unable to name a model. The
+// cost of that is a second place a caller could put one, and the whole safety of it
+// rests on which place wins: bindURL binds path LAST, so the address decides.
+//
+// Driven rather than argued, because the ordering is a property of the binder and
+// binders change. A body id that could redirect the write would let a caller patch
+// a model they did not address — which reads as success and moves the wrong row.
+func TestTheURLOutranksABodyID(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	compose(app)
+	if err := Mount(app, cloud.Deps{Brand: "hanzo", DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	defer func() { _ = Shutdown(context.Background()) }()
+
+	const addressed, decoy = "acme/addressed-model", "acme/decoy-model"
+	req := httptest.NewRequest(http.MethodPatch,
+		"/v1/admin/pricing/catalog/models/"+addressed,
+		strings.NewReader(`{"id":"`+decoy+`","enabled":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-IsAdmin", "true")
+
+	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("patch: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch: %d %s", resp.StatusCode, body)
+	}
+	var got Overlay
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode overlay: %v (%s)", err, body)
+	}
+	if got.ID != addressed {
+		t.Fatalf("the write landed on %q, want %q — a body id outranked the address, so a caller "+
+			"can patch a model they did not name", got.ID, addressed)
+	}
+}

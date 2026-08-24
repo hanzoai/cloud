@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -78,8 +80,8 @@ var untypedByDesign = map[string]string{
 	"GET /v1/git":                               "server-rendered text/html (the repo list page); a typed Out answers JSON.",
 	"GET /v1/git/explore":                       "server-rendered text/html (the public explore page); a typed Out answers JSON.",
 	"GET /v1/git/{org}/{repo}":                  "server-rendered text/html (the repo page); a typed Out answers JSON.",
-	"GET /v1/git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out answers JSON." + reasonWildcard,
-	"GET /v1/git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out answers JSON." + reasonWildcard,
+	"GET /v1/git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out answers JSON.",
+	"GET /v1/git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out answers JSON.",
 	"GET /v1/git/{org}/{repo}/commits":          "server-rendered text/html (the commit log); a typed Out answers JSON.",
 
 	// 4. The ZAP procedure adapters (zap.go). One fact, five addresses — see
@@ -90,24 +92,6 @@ var untypedByDesign = map[string]string{
 	"POST /v1/git/zap/deleteRepo": reasonZAP,
 	"POST /v1/git/zap/usage":      reasonZAP,
 }
-
-// reasonWildcard is the SECOND, independent mechanism the tree and blob pages
-// carry, and it is stronger than the text/html one they share with their four
-// siblings: those would publish a wrong CONTENT TYPE, this publishes NO DOCUMENT.
-//
-// Both address a path INSIDE a repository, so the route ends in fiber's greedy
-// `*` and the handler reads it back with c.Fiber().Params("*") (ui.go:299,321).
-// The two projections spell that segment differently and neither is wrong: zip's
-// own Template (zip address.go:61) rewrites only `:name`, so a typed registry
-// publishes the path VERBATIM as `…/tree/*`, while cloud's router reading has to
-// give the segment an OpenAPI name and calls it `{wildcard1}`
-// (openapi/openapi.go:808-823). Fold then looks the op up by the registry's
-// spelling, finds no live route at that key, and refuses (openapi/openapi.go:705)
-// — so `make -C apps/git describe` fails outright and git publishes nothing at
-// all. Run it: TestThePageWildcardCannotBeATypedOp.
-const reasonWildcard = " AND its captured segment is a greedy fiber wildcard, which zip's registry " +
-	"and cloud's router spell differently — so Fold refuses the WHOLE document rather than " +
-	"mis-naming one parameter."
 
 // reasonZAP is the fact the five ZAP procedure adapters share, and the recorded
 // version of it had EXPIRED twice over.
@@ -574,30 +558,65 @@ func TestATypedTombstoneWouldRefuseABodyItAnswersToday(t *testing.T) {
 	}
 }
 
-// TestThePageWildcardCannotBeATypedOp RUNS the SECOND mechanism behind the tree
-// and blob pages — the one their entries carry beyond text/html, and the one the
-// ledger did not state until it was measured.
+// TestTheHTMLPagesCannotBeTypedOps RUNS the reason SIX entries share — every
+// page this app renders for a browser — instead of asserting it six times.
 //
-// Both address a path inside a repository, so the route ends in fiber's greedy
-// `*`. zip's registry publishes that path verbatim while cloud's router reading
-// names the segment `{wildcard1}`, so Fold finds no live route at the registry's
-// key and refuses — not one mis-named parameter but the WHOLE document, which is
-// every address this app publishes.
+// Whatever a typed op returns, the answer is application/json: its only response
+// path is c.JSON(out), and fiber stamps that content type over anything set
+// earlier. A route that renders html/template therefore cannot be one, and the
+// reason is a property of the framework rather than a claim about this package.
+// The day a typed op can answer under a content type of its own, this goes red
+// and all six entries want re-reading.
 //
-// Green means zip and cloud have agreed on a spelling: drop reasonWildcard from
-// the two entries, and re-read whether text/html alone still keeps them raw.
-func TestThePageWildcardCannotBeATypedOp(t *testing.T) {
+// It replaced a test that ran a DIFFERENT mechanism the tree and blob pages once
+// carried on top of this one: their captured segment is a greedy wildcard, and
+// zip's registry used to publish it verbatim while cloud's router reading named
+// it {wildcard1}, so Fold found no live route and refused the whole document.
+// zip's document builder asks Template for every path now, and Template names a
+// wildcard {wildcardN}, so the two agree and that mechanism is gone. The two
+// entries read exactly like their four siblings, which is what they always were.
+func TestTheHTMLPagesCannotBeTypedOps(t *testing.T) {
+	app := probeApp(t)
+	type page struct {
+		HTML string `json:"html"`
+	}
+	zip.Get(app.Group("/v1/probe"), "/:org/:repo/tree/*", func(context.Context, *noInput) (*page, error) {
+		return &page{HTML: "<!doctype html><title>tree</title>"}, nil
+	})
+
+	res, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/probe/acme/repo/tree/src/main.go", nil))
+	if err != nil {
+		t.Fatalf("drive the typed op: %v", err)
+	}
+	defer res.Body.Close()
+	// Status first: a refusal answers application/problem+json, which is also not
+	// text/html, so a request that never reached the op must report as that rather
+	// than as a discovery about what an op can answer.
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("the request did not reach the typed op: status %d", res.StatusCode)
+	}
+	if got := res.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Fatalf("a typed op answered %q — it can carry a content type of its own now, so the "+
+			"six server-rendered entries in untypedByDesign want re-reading.", got)
+	}
+}
+
+// TestTheWildcardNoLongerRefusesTheDocument records what CHANGED, so the
+// mechanism the previous test ran cannot quietly come back. A typed op on a
+// greedy wildcard produces a document, and it is published at the name the router
+// reading gives that segment; if this ever refuses again, every wildcard-addressed
+// op in the fleet is unpublishable and this app publishes nothing at all.
+func TestTheWildcardNoLongerRefusesTheDocument(t *testing.T) {
 	app := probeApp(t)
 	zip.Get(app.Group("/v1/probe"), "/:org/:repo/tree/*", func(context.Context, *noInput) (*noContent, error) {
 		return nil, nil
 	})
-	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
-	if err == nil {
-		t.Fatal("openapi.Spec accepted a typed op on a greedy wildcard — zip's Template and " +
-			"cloud's router reading now name that segment the same way, so reasonWildcard has " +
-			"stopped being true for the tree and blob pages.")
+	doc, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
+	if err != nil {
+		t.Fatalf("a typed op on a greedy wildcard refused the document again: %v", err)
 	}
-	if !strings.Contains(err.Error(), "no live route") {
-		t.Fatalf("refused for a different reason than the one recorded: %v", err)
+	if _, ok := doc.Paths["/v1/probe/{org}/{repo}/tree/{wildcard1}"]; !ok {
+		t.Fatalf("the document does not carry the wildcard at its published name; it carries %v",
+			slices.Sorted(maps.Keys(doc.Paths)))
 	}
 }

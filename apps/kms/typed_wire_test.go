@@ -1,18 +1,34 @@
 package kms
 
-// This file makes the KMS broker's typed partition a GATE rather than a
-// paragraph, and its two refusals a MEASUREMENT rather than an assertion.
+// This file makes the KMS broker's typed partition a MEASUREMENT rather than a
+// paragraph. Every operation this subsystem serves is now a typed op, so the
+// partition is one-sided — and it is still asked, because the next route added
+// here must be typed by default rather than by anyone remembering.
 //
-// The refusal here is unusual and worth the extra test: it is not that a typed
-// op would answer differently, it is that a typed op at a fiber `+` cannot be
-// PROJECTED at all. TestTheWildcardCannotBeATypedOp registers one and watches
-// the document generator refuse, so the reason in untypedByDesign is something
-// anyone can re-run rather than something they have to believe.
+// The two that arrived last are the ones addressed by a greedy fiber segment.
+// They were held out while the registry and the router spelled that segment
+// differently, because the fold matches an op to its route by that spelling and
+// refused the whole document when the two disagreed. TestTheWildcardAddress
+// measures what is true of that address now, one fact at a time.
+//
+// THE ONE RESIDUAL, recorded here because a reader of the document will not see
+// it and could reasonably assume the opposite. The tail IS declared as a path
+// parameter now, and the document is self-consistent — but an OpenAPI path
+// parameter matches ONE segment, so a client generated from that document fills
+// `{wildcard1}` with the slashes percent-encoded, and no greedy segment matches
+// that: the route answers 404 for a secret that is there. Measured, and pinned as
+// fact FOUR. So a secret under a subpath is reachable by a caller that builds the
+// path itself — the console, the operator, curl — and not by a generated SDK
+// method. Declaring the parameter did not change that and cannot: it is a
+// property of the address, not of the declaration. Closing it means addressing a
+// secret by something OpenAPI can carry in one segment, which is a decision about
+// the API rather than a gap in the generator.
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -26,102 +42,39 @@ import (
 // untypedByDesign is the CLOSED list of KMS operations that are NOT typed ops,
 // each with the WIRE FACT that typing it would move. Keyed the way the DOCUMENT
 // writes an address, which is the identity every projection reads.
-var untypedByDesign = map[string]string{
-	"GET /v1/kms/secrets/{wildcard1}":    reasonWildcard,
-	"DELETE /v1/kms/secrets/{wildcard1}": reasonWildcard,
-}
-
-// reasonWildcard is the reason both share, because both ARE one address: a
-// secret is named by a SUB-PATH (`/v1/kms/secrets/ci/deploy/token`), so the
-// route is `/secrets/+`, fiber's one-or-more greedy segment.
 //
-// The two projections spell that segment differently and neither is wrong. zip's
-// own Template (v1.36.3 address.go:61) rewrites only `:name` segments, so its
-// registry publishes the path VERBATIM as `/v1/kms/secrets/+`; cloud's router
-// reading has to give the segment an OpenAPI name and calls it `{wildcard1}`
-// (openapi/openapi.go:811, which names it at :823). Fold then looks the typed op
-// up by its own spelling, finds no live route at that key, and refuses — "the
-// registry and the router disagree about its path" (openapi/openapi.go:705). The
-// result is not a mis-named parameter: it is `make -C apps/kms describe` failing
-// outright, and with it every document this app publishes.
-//
-// Every citation here is re-derived at the CURRENT pin rather than inherited.
-// The three that stood before this pass all named the wrong line — the version
-// stamp said v1.31.0 against a go.mod reading v1.36.3, the refusal was cited at
-// :687 (a doc comment) rather than :705, and the wildcard naming at :795-811,
-// which is sortedKeys. A file:line nobody can land on is how a refusal stops
-// being re-checkable, which is the whole point of holding it in a test.
-//
-// So this is a stronger refusal than the wildcard entries elsewhere in the fleet
-// (apps/dns, apps/pricing, apps/account), which say a bound field and a
-// published parameter cannot agree. Here there is no document at all.
-//
-// The cure is upstream and mechanical — zip's Template would have to name a
-// wildcard the way cloud's reading already does — and it is one function.
-// Changing cloud's spelling instead would move every `{wildcardN}` path already
-// published across five subsystems, so the yielding side is zip's.
-//
-// THE COST IS FOUR THINGS, AND THE FOURTH WAS UNCOUNTED. Three are what any
-// untyped route pays: prose lifted from a doc comment, an MCP tool, a CLI
-// command. This comment used to say "and NOT a fourth", on the strength of both
-// routes declaring their answer through openapi.Register — which is true, and an
-// SDK generated off the document does have a return type. But Register derives
-// that schema by REFLECTION, and Go has dropped the comments by then, so those
-// properties publish bare (proseless); and the `{wildcard1}` path parameter —
-// the ONE argument these two operations take — cannot be described at all, since
-// there is no typed In to lift a field's prose from and openapi.Describe carries
-// a summary and a description for the OPERATION with no parameter channel
-// (openapi/register.go:193). proselessParams records that half. Counting the
-// cost at three was not a small error: it is the half a reader of the document
-// meets first, because it is the argument they have to fill in.
-const reasonWildcard = "the secret is addressed by a SUB-PATH, so the route is fiber's greedy `+`. " +
-	"zip's Template (v1.36.3 address.go:61) rewrites only `:name` segments and publishes the path as " +
-	"`/v1/kms/secrets/+`, while cloud's router reading names the segment `{wildcard1}` " +
-	"(openapi/openapi.go:811,823). Fold looks the typed op up by zip's spelling, finds no live route, " +
-	"and REFUSES the whole document (openapi/openapi.go:705) — not a mis-named parameter, no document."
+// It is EMPTY, and that is the whole of the subsystem's current answer: every
+// operation the broker serves carries an In and an Out. It stays declared
+// because TestEveryRouteIsTypedOrNamed reads it, so the next route added here is
+// typed by default and an exception has to be written down with its reason.
+var untypedByDesign = map[string]string{}
 
 // proseless is the CLOSED list of published properties that carry no
 // description, and it may only SHRINK.
 //
-// Every one belongs to a component declared through openapi.Register, which
-// derives a schema by REFLECTION — and Go drops comments, while zipdoc (the pass
-// that lifts field prose) walks zip's TYPED registrations and can never reach a
-// type that arrives this way. It is a generator gap, not a diligence gap: the
-// fix is for cloud to learn to lift comments for Register, at which point this
-// ledger empties. Do NOT "fix" it by hand-writing schemas beside the structs,
-// which is the drift Register exists to prevent.
-var proseless = map[string]bool{
-	"kmsSecret.env":      true,
-	"kmsSecret.name":     true,
-	"kmsSecret.value":    true,
-	"kmsRemoved.env":     true,
-	"kmsRemoved.name":    true,
-	"kmsRemoved.deleted": true,
-}
+// It is EMPTY. Its six entries were the fields of kmsSecret and kmsRemoved,
+// which reached the document through openapi.Register — a client that derives a
+// schema by REFLECTION, after Go has dropped the comments. Both are an op's Out
+// now, so zipdoc lifts each field's prose from the struct itself and the gap
+// closed by removing the client rather than by working around it. Do NOT re-open
+// it by hand-writing schemas beside the structs.
+var proseless = map[string]bool{}
 
 // proselessParams is the same closed list for published PARAMETERS, and it is a
-// SECOND ledger rather than more keys in the first because the two carry
-// different reasons and one entry's reason must not stand in for the other's.
+// SECOND ledger rather than more keys in the first because a parameter is
+// declared on the OPERATION and never enters components.schemas, so the
+// properties walk cannot see one.
 //
-// A parameter is declared on the OPERATION and never enters components.schemas,
-// so the properties walk cannot see one — which is why these two sat bare while
-// the field gate passed. Neither can be described today: the address is a fiber
-// wildcard, so it carries no typed In whose field prose zip could lift
-// (zip/openapi.go:163 looks a parameter's description up under
-// `<In>.<name>`), and the client that DOES speak for these two routes,
-// openapi.Describe, takes a summary and a description for the operation and
-// nothing per-parameter (openapi/register.go:193).
+// It is EMPTY. It held the greedy tail that names a secret, on both value
+// routes, through two separate gaps: the tail was not declared as a parameter at
+// all, and then it was declared but its prose was looked up under a router key
+// fiber does not use for a REQUIRED greedy segment. Both are closed, so ONE
+// field — kmsRef.Secret, tagged with the key the router actually matched on —
+// carries the binding, the schema and the description together.
 //
 // It may only SHRINK, in both directions: an entry that starts publishing prose
-// goes red, so the day either half lands the ledger empties instead of outliving
-// the gap. The four query parameters on the typed listing are NOT here — they
-// were bare for a reason that was ours rather than the generator's (kmsList's
-// fields declared no json name, so zipdoc filed their prose nowhere zip looks)
-// and they are described now.
-var proselessParams = map[string]bool{
-	"GET /v1/kms/secrets/{wildcard1} path:wildcard1":    true,
-	"DELETE /v1/kms/secrets/{wildcard1} path:wildcard1": true,
-}
+// goes red too, so a gap that closes empties the ledger instead of outliving it.
+var proselessParams = map[string]bool{}
 
 // broker mounts the REAL Mount on a bare app with a live master key, so every
 // gate below reads the router the binary serves.
@@ -247,33 +200,90 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	if len(typed)+len(untypedByDesign) != len(served) {
 		t.Errorf("%d typed + %d named != %d served", len(typed), len(untypedByDesign), len(served))
 	}
-	if len(typed) != 5 || len(untypedByDesign) != 2 {
-		t.Errorf("the partition moved: %d typed, %d named (was 5 + 2)", len(typed), len(untypedByDesign))
+	if len(typed) != 7 || len(untypedByDesign) != 0 {
+		t.Errorf("the partition moved: %d typed, %d named (was 7 + 0)", len(typed), len(untypedByDesign))
 	}
 }
 
-// TestTheWildcardCannotBeATypedOp is the refusal above, RUN rather than
-// asserted. It registers a typed op at the same `+` address the two secret
-// routes use and watches openapi.Spec refuse to produce a document — which is
-// the whole reason those two are not typed ops.
+// TestTheWildcardAddress measures the facts a greedy address turns on, on a
+// THROWAWAY app carrying the shape rather than on the broker's own router: each
+// is a claim about a DEPENDENCY, and a dependency moves.
 //
-// A test that PROVES a refusal is what stops one outliving its cause: the day
-// zip's Template names a wildcard the way cloud's reading does, this goes green
-// and says so.
-func TestTheWildcardCannotBeATypedOp(t *testing.T) {
+// ONE — the registry and the router spell the ADDRESS the same. While they did
+// not, the fold refused the whole document ("no live route"), which is why these
+// two routes stayed untyped for as long as they did. This goes red if that
+// returns, and it is then every kms operation gone, not one.
+//
+// TWO — the tail is DECLARED as a path parameter. It comes from the pattern, not
+// from any field, which is why the probe's In can take nothing and the parameter
+// is there anyway.
+//
+// THREE — fiber's key for that capture is `+1`, and the marker is part of it: a
+// REQUIRED greedy segment is `+N` and an OPTIONAL one is `*N`, counted on their
+// own sequences. That key is what kmsRef.Secret carries, and a field tagged with
+// the other marker binds NOTHING while still publishing a clean document — the
+// worst shape available, because the op then reads an empty address and the
+// document says it is fine. So the tag is measured here, not assumed.
+//
+// FOUR — the residual, which declaring the parameter does NOT fix. An OpenAPI
+// path parameter is one segment: a generated client fills `{wildcard1}` with the
+// slashes percent-encoded, no greedy segment matches that, and the route answers
+// 404. So a subpath'd secret is reachable by a client that builds the path
+// itself and not by one generated from this document. The declaration makes the
+// document self-consistent; it does not make the SDK able to call it.
+func TestTheWildcardAddress(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	g := app.Group("/v1/probe")
 	zip.Get(g, "/secrets/+", func(context.Context, *noInput) (*kmsSecret, error) {
 		return &kmsSecret{}, nil
 	})
-	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
-	if err == nil {
-		t.Fatal("openapi.Spec accepted a typed op on a `+` wildcard — zip and cloud now agree about " +
-			"how to name that segment, so untypedByDesign's reasonWildcard has stopped being true. " +
-			"Type GET and DELETE /v1/kms/secrets/+ and delete the entries.")
+	var captured []string
+	g.Get("/raw/+", func(c *zip.Ctx) error {
+		captured = c.Fiber().Route().Params
+		return c.JSON(http.StatusOK, map[string]string{"tail": c.Param("+")})
+	})
+
+	doc, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
+	if err != nil {
+		t.Fatalf("openapi.Spec refused a typed op on a `+`: %v\nThe registry and the router have "+
+			"gone back to spelling that segment differently, and Spec builds ONE document — so this "+
+			"is every kms operation gone, not one.", err)
 	}
-	if !strings.Contains(err.Error(), "no live route") {
-		t.Fatalf("refused for a different reason than the one recorded: %v", err)
+	const at = "/v1/probe/secrets/{wildcard1}"
+	op := doc.Paths[at]["get"]
+	if op == nil {
+		t.Fatalf("the typed op is not at %s — the two spellings moved", at)
+	}
+
+	// TWO. The probe's In takes nothing, so this parameter can only have come
+	// from the pattern.
+	if len(op.Parameters) != 1 || op.Parameters[0].In != "path" || op.Parameters[0].Name != "wildcard1" {
+		t.Errorf("%s publishes %+v — the tail is the ONE argument these operations take, and a "+
+			"document that does not declare it describes a call nobody can make", at, op.Parameters)
+	}
+
+	// THREE.
+	if status, _ := ask(t, app, http.MethodGet, "/v1/probe/raw/ci/deploy/token", "", false, ""); status != http.StatusOK {
+		t.Fatalf("the raw probe route did not match: %d", status)
+	}
+	if len(captured) != 1 || captured[0] != "+1" {
+		t.Errorf("fiber keys the capture %v, not [+1] — that key is kmsRef.Secret's `url:` tag, and a "+
+			"tag naming any other key binds nothing while the document stays clean, so the op would "+
+			"read an EMPTY address and say so nowhere", captured)
+	}
+
+	// FOUR, on the broker's own router because it needs a real record to miss.
+	live := broker(t)
+	if s, b := ask(t, live, http.MethodPost, "/v1/kms/secrets", "acme", true,
+		`{"path":"/ci/deploy","name":"token","env":"prod","value":"v"}`); s != http.StatusOK {
+		t.Fatalf("seed: %d %s", s, b)
+	}
+	if s, _ := ask(t, live, http.MethodGet, "/v1/kms/secrets/ci/deploy/token?env=prod", "acme", false, ""); s != http.StatusOK {
+		t.Fatalf("the raw multi-segment address stopped reaching the record: %d", s)
+	}
+	if s, _ := ask(t, live, http.MethodGet, "/v1/kms/secrets/ci%2Fdeploy%2Ftoken?env=prod", "acme", false, ""); s != http.StatusNotFound {
+		t.Errorf("a percent-encoded single segment now reaches the record (%d) — the residual in "+
+			"proselessParams has closed and a generated client can address a subpath'd secret", s)
 	}
 }
 
@@ -459,28 +469,187 @@ func TestTheListFiltersStayInTheURL(t *testing.T) {
 	}
 }
 
-// TestTheUntypedReadsStillDeclareTheirBodies proves the two refusals cost three
-// things and not a fourth. Without the Register declarations each renders as an
-// operationId and a tag and nothing else — indistinguishable from a route that
-// returns nothing — so every SDK offered a secret read with no return type.
-func TestTheUntypedReadsStillDeclareTheirBodies(t *testing.T) {
-	doc, err := openapi.Spec(broker(t), openapi.Info{Title: "kms", Version: "v1"})
-	if err != nil {
-		t.Fatalf("spec: %v", err)
+// TestASecretIsAddressedBySubPath is the wire the greedy route exists for, and
+// the assertion that makes typing it safe rather than merely richer.
+//
+// A secret is named by a SUB-PATH, so the address is a multi-segment tail. The
+// untyped handler read that tail off the request and nothing else; the typed op
+// must reach the same record from the same URL, and must still refuse to take
+// the address from anywhere a caller could also name. Seeded twice on purpose:
+// if the address ever came from the body or the query, the answer would be the
+// OTHER secret rather than an error, which is a silent cross-read within the
+// org and the sharpest thing a wire test here can catch.
+func TestASecretIsAddressedBySubPath(t *testing.T) {
+	app := broker(t)
+	for _, seed := range []string{
+		`{"path":"/ci/deploy","name":"token","env":"prod","value":"deep"}`,
+		`{"name":"other","env":"prod","value":"shallow"}`,
+	} {
+		if s, b := ask(t, app, http.MethodPost, "/v1/kms/secrets", "acme", true, seed); s != http.StatusOK {
+			t.Fatalf("seed: %d %s", s, b)
+		}
 	}
-	for key := range untypedByDesign {
-		method, path, _ := strings.Cut(key, " ")
-		op := doc.Paths[path][strings.ToLower(method)]
-		if op == nil {
-			t.Fatalf("%s is not in the document", key)
+
+	read := func(t *testing.T, path, body string) kmsSecret {
+		t.Helper()
+		status, raw := ask(t, app, http.MethodGet, path, "acme", false, body)
+		if status != http.StatusOK {
+			t.Fatalf("GET %s: %d %s", path, status, raw)
 		}
-		if op.Responses == nil {
-			t.Errorf("%s declares no response — the value it answers with is invisible to every SDK", key)
+		var got kmsSecret
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("decode: %v", err)
 		}
-		if op.RequestBody != nil {
-			t.Errorf("%s declares a request body it has never read — both read their whole input "+
-				"from the URL", key)
+		return got
+	}
+
+	t.Run("multi-segment", func(t *testing.T) {
+		got := read(t, "/v1/kms/secrets/ci/deploy/token?env=prod", "")
+		if got.Name != "token" || got.Value != "deep" {
+			t.Errorf("the tail no longer addresses the record it names: %+v", got)
 		}
+	})
+	// THE DECOY. Every spelling a caller could reach for, against a REAL other
+	// record, so a decoy that won would be a silent read of the wrong secret
+	// rather than an error. zip binds body, then query, then path, and the path's
+	// key is the one kmsRef.Secret carries — so the matched tail overwrites all of
+	// them. Untag that field and the decoy wins.
+	for _, decoy := range []struct{ name, query, body string }{
+		{"query names the wire field", "&secret=other", ""},
+		{"query names the router key", "&%2B1=other", ""},
+		{"query names the document's parameter", "&wildcard1=other", ""},
+		{"body names the wire field", "", `{"secret":"other"}`},
+		{"both at once", "&secret=other&%2B1=other", `{"secret":"other"}`},
+	} {
+		t.Run("decoy: "+decoy.name, func(t *testing.T) {
+			got := read(t, "/v1/kms/secrets/ci/deploy/token?env=prod"+decoy.query, decoy.body)
+			if got.Name != "token" || got.Value != "deep" {
+				t.Errorf("the decoy won: %+v\nThe address is the segment the ROUTER matched. zip binds "+
+					"body, then query, then path, and kmsRef.Secret is tagged with the path's own key, "+
+					"so nothing a caller sends can name a second address.", got)
+			}
+		})
+	}
+	t.Run("env defaults", func(t *testing.T) {
+		if s, b := ask(t, app, http.MethodPost, "/v1/kms/secrets", "acme", true,
+			`{"name":"plain","env":"default","value":"v"}`); s != http.StatusOK {
+			t.Fatalf("seed: %d %s", s, b)
+		}
+		got := read(t, "/v1/kms/secrets/plain", "")
+		if got.Env != defaultEnv || got.Value != "v" {
+			t.Errorf("an omitted env stopped falling back to %q: %+v", defaultEnv, got)
+		}
+	})
+	t.Run("delete reaches the same record", func(t *testing.T) {
+		status, raw := ask(t, app, http.MethodDelete, "/v1/kms/secrets/ci/deploy/token?env=prod", "acme", true, "")
+		if status != http.StatusOK {
+			t.Fatalf("delete: %d %s", status, raw)
+		}
+		var gone kmsRemoved
+		if err := json.Unmarshal(raw, &gone); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if !gone.Deleted || gone.Name != "token" || gone.Env != "prod" {
+			t.Errorf("the receipt names another record: %+v", gone)
+		}
+		if s, b := ask(t, app, http.MethodGet, "/v1/kms/secrets/ci/deploy/token?env=prod", "acme", false, ""); s != http.StatusNotFound {
+			t.Errorf("the record survived the delete: %d %s", s, b)
+		}
+		if s, _ := ask(t, app, http.MethodGet, "/v1/kms/secrets/other?env=prod", "acme", false, ""); s != http.StatusOK {
+			t.Error("the delete took a neighbouring record with it")
+		}
+	})
+	t.Run("the document offers no second address", func(t *testing.T) {
+		doc, err := openapi.Spec(app, openapi.Info{Title: "kms", Version: "v1"})
+		if err != nil {
+			t.Fatalf("spec: %v", err)
+		}
+		for _, method := range []string{"get", "delete"} {
+			op := doc.Paths["/v1/kms/secrets/{wildcard1}"][method]
+			if op == nil {
+				t.Fatalf("%s is not in the document", method)
+			}
+			want := map[string]string{"wildcard1": "path", "env": "query"}
+			for _, p := range op.Parameters {
+				at, ok := want[p.Name]
+				if !ok || at != p.In {
+					t.Errorf("%s publishes a %s parameter %q — these two take the address and the "+
+						"environment, and a third URL-borne name is a second way to say one of them",
+						method, p.In, p.Name)
+					continue
+				}
+				delete(want, p.Name)
+			}
+			if len(want) > 0 {
+				t.Errorf("%s stopped publishing %v", method, want)
+			}
+			if op.RequestBody != nil {
+				t.Errorf("%s publishes a request body it never reads", method)
+			}
+		}
+	})
+}
+
+// TestNoInputNamesATenant is the tenant boundary asserted where it actually
+// lives: in the SHAPE of what a caller may send.
+//
+// The org is server-minted — principal.OrgFrom, off the claim cloud.Bridge
+// parked — and an In field is caller-supplied, so a tenant read from one is a
+// cross-tenant read the caller asserted for itself. A behaviour test can only
+// catch the spelling it drives: a query name is refused by the route test below,
+// but a field tagged `url:"-"` is invisible to every REST probe and still
+// arrives as an MCP argument or a call-plane field, which is the same read
+// through a quieter transport.
+//
+// So this walks the four inputs and fails on a field that names a tenant at all,
+// under any tag. It is the check that cannot be satisfied by moving the field
+// out of the URL.
+func TestNoInputNamesATenant(t *testing.T) {
+	tenant := map[string]bool{"org": true, "owner": true, "tenant": true, "account": true, "namespace": true}
+	seen := 0
+	for _, in := range []any{kmsRef{}, kmsPut{}, kmsList{}, kmsLogin{}} {
+		rt := reflect.TypeOf(in)
+		for i := range rt.NumField() {
+			seen++
+			f := rt.Field(i)
+			for _, name := range []string{f.Name, f.Tag.Get("json"), f.Tag.Get("url")} {
+				name, _, _ = strings.Cut(name, ",")
+				if tenant[strings.ToLower(strings.TrimSpace(name))] {
+					t.Errorf("%s.%s names a tenant — the org is minted from the validated claim and "+
+						"never sent, so a caller that could name one would be reading somebody "+
+						"else's secrets with its own credential", rt.Name(), f.Name)
+				}
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no input fields were walked — the inputs moved and this check is now blind")
+	}
+}
+
+// TestACallerCannotNameAnotherTenant is the same rule driven through the live
+// router, which is what catches a tenant that arrives as a URL name rather than
+// as a struct field.
+func TestACallerCannotNameAnotherTenant(t *testing.T) {
+	app := broker(t)
+	if s, b := ask(t, app, http.MethodPost, "/v1/kms/secrets", "other", true,
+		`{"name":"shared","env":"prod","value":"theirs"}`); s != http.StatusOK {
+		t.Fatalf("seed: %d %s", s, b)
+	}
+	for _, q := range []string{"", "&org=other", "&owner=other", "&tenant=other", "&account=other"} {
+		t.Run("query"+q, func(t *testing.T) {
+			status, body := ask(t, app, http.MethodGet, "/v1/kms/secrets/shared?env=prod"+q, "acme", false, "")
+			if status != http.StatusNotFound {
+				t.Fatalf("status %d, want 404 — acme reached another tenant's record: %s", status, body)
+			}
+		})
+	}
+	status, body := ask(t, app, http.MethodDelete, "/v1/kms/secrets/shared?env=prod&org=other", "acme", true, "")
+	if status != http.StatusNotFound {
+		t.Fatalf("delete status %d, want 404 — acme reached another tenant's record: %s", status, body)
+	}
+	if s, _ := ask(t, app, http.MethodGet, "/v1/kms/secrets/shared?env=prod", "other", false, ""); s != http.StatusOK {
+		t.Error("the other tenant's record went missing — the refusals above proved nothing")
 	}
 }
 
