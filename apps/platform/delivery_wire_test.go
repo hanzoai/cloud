@@ -132,7 +132,7 @@ func TestEveryDeliveryRouteIsTypedOrNamed(t *testing.T) {
 // it was would have published an unguarded alias of an admin surface the moment
 // these four were typed. That is the apps/exec incident precisely: "a bespoke
 // credential checked in middleware covers exactly one of a typed op's three
-// doors." This drives the transport a route test cannot see.
+// entry points." This drives the transport a route test cannot see.
 func TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor(t *testing.T) {
 	app := mountDelivery(t)
 	for _, op := range []string{

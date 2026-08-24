@@ -278,7 +278,7 @@ var allowedRequestUses = map[string]string{
 		"hand-written plugin main, which is exactly what this app runs and exactly the forgeable signal " +
 		"admits was fixed to stop selecting on; reading the weaker one here would let a client-set header " +
 		"start a recording of a colleague's call. It lifts the ORG off that same attestation too, because " +
-		"the org is the object key's prefix and reading it through a second door is how one tenant's " +
+		"the org is the object key's prefix and reading it from a second place is how one tenant's " +
 		"recordings land under another's. Neither may be an In field — a caller that could name its own " +
 		"tenant would write there. ONE function, which all three ops ask; it fails closed off the HTTP " +
 		"path, where there is no attested caller and therefore nobody who is in the room.",

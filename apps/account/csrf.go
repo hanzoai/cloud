@@ -200,17 +200,17 @@ func checkCSRF(s *cloud.Service[state], c *zip.Ctx) error {
 // CSRF is the same gate as a PREDICATE, for a write that cannot be reached by a
 // middleware at all.
 //
-// A typed op has TWO doors and only one of them is a route. zip records the route's
-// handler and the op as two fields of one entry and wraps only the handler, while
-// the MCP door calls the op directly — so no Use, Group or With reaches a
+// A typed op has TWO entry points and only one of them is a route. zip records the
+// route's handler and the op as two fields of one entry and wraps only the handler,
+// while the MCP server calls the op directly — so no Use, Group or With reaches a
 // tools/call, and a prefix-scoped gate is skipped there by construction while the
 // depth-0 identity middleware still authenticates the caller. An op that must not
 // be reachable cross-site therefore asks this itself, inside the op, where both
-// doors pass.
+// entry points pass.
 //
 // The general repair is a gate zip applies to the OP rather than the route
-// (App.Authorize); until that exists this is how a surface covers both doors
-// without inventing a second anti-CSRF token.
+// (App.Authorize); until that exists this is how a surface covers both entry
+// points without inventing a second anti-CSRF token.
 func CSRF(c *zip.Ctx) error {
 	return checkCSRF(&cloud.Service[state]{State: state{csrfKey: sharedCSRFKey(nil)}}, c)
 }
