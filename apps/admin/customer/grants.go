@@ -240,7 +240,7 @@ func (in *GrantIn) credit() core.CreditRequest {
 // "currency":"usd","source":"trial","balanceCents":10000,
 // "balanceExact":"100.000000000000000000","transactionId":"tx_01J"}}
 func (o ops) IssueGrant(ctx context.Context, in *GrantIn) (*core.GrantOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}

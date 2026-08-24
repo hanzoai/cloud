@@ -21,9 +21,13 @@ import (
 //	caps        → commerce's spend-alert ops, BY NAME over the internal plane
 //
 // so admin.hanzo.ai configures the 50%-off promo and oversees/overrides any org's
-// caps without a parallel model. Promo ops are platform-only (core.Admit); cap
-// ops are org-scoped (core.AdmitScoped) so a SuperAdmin targets any org via org=
-// while a lesser admin is hard-pinned to their own.
+// caps without a parallel model. Reading a cap is platform-scoped (core.AdmitScoped);
+// every operation here that CHANGES one asks core.Change/ChangeScoped, which is the
+// same admission plus the estate's anti-forgery control — these are the same three
+// commerce operations /v1/billing/alerts serves, reached from the same ambient
+// browser session, and a ceiling raised by a page the operator merely visited is the
+// one that stops bounding anything. Promos are platform-only; caps are org-scoped, so
+// a SuperAdmin targets any org via org= while a lesser admin is pinned to their own.
 //
 // THE CAPS HALF NO LONGER FORWARDS, and it could not have gone on doing so. The
 // forward re-entered this binary's own router at /v1/billing/alerts, and that
@@ -86,7 +90,7 @@ func (o ops) getPromo(ctx context.Context, _ *core.None) (*rawOut, error) {
 // Response: {"status":"ok","msg":"","data":{"percentOff":50,"start":"2026-07-01T00:00:00Z",
 // "end":"2026-09-01T00:00:00Z","plans":["pro"],"active":true},"total":0}
 func (o ops) putPromo(ctx context.Context, _ *promoIn) (*rawOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +150,7 @@ func (o ops) listCaps(ctx context.Context, in *capIn) (*rawOut, error) {
 // Response: {"status":"ok","msg":"","data":{"id":"cap_1","limitCents":100000,
 // "enforce":true},"total":0}
 func (o ops) createCap(ctx context.Context, in *capIn) (*rawOut, error) {
-	c, err := core.AdmitScoped(ctx, o.s)
+	c, err := core.ChangeScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +180,7 @@ func (o ops) createCap(ctx context.Context, in *capIn) (*rawOut, error) {
 // Response: {"status":"ok","msg":"","data":{"id":"cap_1","limitCents":250000,
 // "enforce":false},"total":0}
 func (o ops) updateCap(ctx context.Context, in *capIn) (*rawOut, error) {
-	c, err := core.AdmitScoped(ctx, o.s)
+	c, err := core.ChangeScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +212,7 @@ func (o ops) updateCap(ctx context.Context, in *capIn) (*rawOut, error) {
 // Example: {"org":"acme","id":"cap_1"}
 // Response: {"status":"ok","msg":"","data":{"ok":true}}
 func (o ops) deleteCap(ctx context.Context, in *capIn) (*rawOut, error) {
-	c, err := core.AdmitScoped(ctx, o.s)
+	c, err := core.ChangeScoped(ctx, o.s)
 	if err != nil {
 		return nil, err
 	}

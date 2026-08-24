@@ -341,7 +341,7 @@ func (o ops) CustomerDetail(ctx context.Context, in *OrgIn) (*CustomerDetailOut,
 // "currency":"usd","source":"trial","balanceCents":10000,
 // "balanceExact":"100.000000000000000000","transactionId":"tx_01J"}}
 func (o ops) GrantCredit(ctx context.Context, in *GrantIn) (*core.GrantOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +430,7 @@ func (o ops) ReactivateCustomer(ctx context.Context, in *OrgIn) (*AccessOut, err
 // result: a partial failure is reported honestly (affected vs failed), never masked as a
 // clean success. The action is recorded with a redacted before/after user tally.
 func (o ops) setForbidden(ctx context.Context, want string, forbidden bool) (*AccessOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
