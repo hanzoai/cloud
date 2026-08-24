@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	accountapp "github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/internal/iamtest"
@@ -96,6 +97,7 @@ func mountWith(t *testing.T, path string, rows roster) *zip.App {
 	t.Setenv(keyFileEnv, path)
 	st := load()
 	st.authority = rows
+	sharedKey(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
 	app.Use(cloud.Bridge())
@@ -1099,4 +1101,12 @@ func admitsWithPrincipal(t *testing.T, st state, room string, p principal.Princi
 		t.Fatalf("probe: %v", err)
 	}
 	return j, ok
+}
+
+// sharedKey provisions the anti-forgery key this package's mount requires: the group
+// gate verifies a token the account process minted, so a deployment carries the one
+// value from KMS and a mount without it refuses (apps/account, Shared).
+func sharedKey(t *testing.T) {
+	t.Helper()
+	t.Setenv(accountapp.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 }
