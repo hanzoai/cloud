@@ -92,7 +92,8 @@ export GOFLAGS ?= -p=$(NPROC)
 # test run has no boot, so the suite declares its dev posture once here. A key
 # already in the environment always wins, so CI's real key is never overridden.
 DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-TEST_ENV     = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}"
+DEV_CSRF_KEY := ZGV2LWNzcmYta2V5LWZvci10ZXN0cy1vbmx5LTAwMDA=
+TEST_ENV     = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}" CONSOLE_CSRF_KEY="$${CONSOLE_CSRF_KEY:-$(DEV_CSRF_KEY)}"
 
 # Carry the tags the SHIPPED build carries. The release image builds and tests
 # with -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" (Dockerfile:213), and
