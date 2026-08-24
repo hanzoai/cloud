@@ -127059,8 +127059,8 @@ tags:
 - description: 'Package admin is the operator''s view of the fleet: orgs, users, roles,
     spend and system health.'
   name: admin
-- description: Package admission is the launch-control GATE for Hanzo's hosted services
-    — the COMPLETE waitlist feature, COMPOSING the ONE flag engine (apps/flags) one-way.
+- description: Package admission is launch control for Hanzo's hosted services — the
+    waitlist DECIDE, COMPOSING the ONE flag engine (apps/flags) one-way.
   name: admission
 - description: Package affiliates is a partner program that pays commission on what
     your referrals spend.
