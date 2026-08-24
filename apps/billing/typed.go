@@ -148,6 +148,9 @@ type topupIn struct {
 // Retry-safe on X-Idempotency-Key: the same key settles one charge and returns
 // the first receipt.
 func (o ops) topupToken(ctx context.Context, in *topupIn) (*plane.Charged, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	c, err := requestOf(ctx)
 	if err != nil {
 		return nil, err
@@ -172,6 +175,9 @@ func (o ops) topupToken(ctx context.Context, in *topupIn) (*plane.Charged, error
 // difference is which card, so a caller topping up from a saved method never
 // re-enters one.
 func (o ops) topupSaved(ctx context.Context, in *topupIn) (*plane.Charged, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	c, err := requestOf(ctx)
 	if err != nil {
 		return nil, err
@@ -203,6 +209,9 @@ type alertRef struct {
 // setting one does. The caps that remain still bind: this drops one, never the
 // whole policy.
 func (o ops) dropAlert(ctx context.Context, in *alertRef) (*struct{}, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	if err := capAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -232,6 +241,9 @@ func (o ops) dropAlert(ctx context.Context, in *alertRef) (*struct{}, error) {
 // charged: it names how many orgs were considered and how many needed charging,
 // with a row each.
 func (o ops) rechargeAll(ctx context.Context, _ *noInput) (*plane.Recharge, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
@@ -261,6 +273,9 @@ type methodRef struct {
 //
 // The card is vaulted at the processor, so what goes is our token for it.
 func (o ops) detachMethod(ctx context.Context, in *methodRef) (*plane.Detachment, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	c, err := requestOf(ctx)
 	if err != nil {
 		return nil, err

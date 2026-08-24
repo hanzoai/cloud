@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
@@ -54,10 +55,11 @@ func mountCards(app cloud.Router, o ops) {
 	zip.Post(zapp, "/v1/billing/recharge/run-all", o.rechargeAll)
 }
 
-// All four are RAW, and for one reason each rather than a shared one: the two
-// top-ups and the sweep answer the store's own receipt, and the sale answers TWO
-// shapes — a fresh receipt at 201, or the sealed body of an identical earlier
-// sale replayed verbatim at 200, which no single declared response can be.
+// The prose for all four is declared here rather than lifted off the handlers:
+// the two top-ups and the sweep answer the store's own receipt, and the sale is
+// the one that stays RAW, because it answers TWO shapes — a fresh receipt at 201,
+// or the sealed body of an identical earlier sale replayed verbatim at 200, which
+// no single declared response can be.
 func init() {
 	openapi.Describe("/v1/billing/topup/token", http.MethodPost,
 		"Add funds with a single-use card token",
@@ -117,6 +119,9 @@ func init() {
 // sale's sealed body verbatim. Re-rendering that body would hand a retrying
 // client different bytes for the same completed act.
 func subscribeWithCard(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := account.CSRF(c.Context()); err != nil {
+		return err
+	}
 	org, subject, err := payerOf(c)
 	if err != nil {
 		return err

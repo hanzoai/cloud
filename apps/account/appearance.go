@@ -80,9 +80,9 @@ func cleanAppearance(in appearance) appearance {
 // a surface applies its published default and never error-toasts on load — the
 // same fail-soft the key read uses.
 func (o ops) getAppearance(ctx context.Context, _ *noInput) (*appearance, error) {
-	cr, c, ok := requestCaller(ctx, false)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to read your appearance")
+	cr, c, err := o.requestCaller(ctx, reads, unscoped, "read your appearance")
+	if err != nil {
+		return nil, err
 	}
 	if !o.s.State.iam.configured() {
 		return nil, notConfigured("appearance")
@@ -103,9 +103,11 @@ func (o ops) getAppearance(ctx context.Context, _ *noInput) (*appearance, error)
 //
 // Example: {"type": 1.15, "density": "compact", "accent": "#8b5cf6"}
 func (o ops) setAppearance(ctx context.Context, in *appearance) (*appearance, error) {
-	cr, c, ok := requestCaller(ctx, false)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to save your appearance")
+	// changes, not rotates: a person dragging the size or density steps writes
+	// faster than the credential cap allows, and no credential is at stake.
+	cr, c, err := o.requestCaller(ctx, changes, unscoped, "save your appearance")
+	if err != nil {
+		return nil, err
 	}
 	if !o.s.State.iam.configured() {
 		return nil, notConfigured("appearance")

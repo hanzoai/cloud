@@ -20,6 +20,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
@@ -106,6 +107,9 @@ func listMethods(s *cloud.Service[state], c *zip.Ctx) error {
 // produced, and re-shaping it here would be this endpoint deciding which
 // processor details are worth keeping.
 func saveMethod(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := account.CSRF(c.Context()); err != nil {
+		return err
+	}
 	org, subject, err := payerOf(c)
 	if err != nil {
 		return err

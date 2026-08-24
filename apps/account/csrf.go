@@ -166,9 +166,12 @@ func ambientCookieAuth(c *zip.Ctx) bool {
 // the ambient path to mean anything; the gated handler still does its own
 // resolveCaller, so this only ADDS the anti-CSRF gate.
 //
-// It is a zip.Middleware so ONE definition serves both the typed ops (through With,
-// which carries it into the registration — a decorator that dropped it there would
-// register the op UNGATED) and the raw handlers the untyped routes still use.
+// It is a zip.Middleware, which reaches a ROUTE. `With` composes it around the
+// leaf handler at registration time and around nothing else: a typed op's invoke
+// and direct seams are built before the wrap, so MCP, the call plane, the graph
+// and the CLI never meet it. The typed writes therefore ask checkCSRF in their own
+// preamble (account.go's requestCaller); this stays for the raw handlers the
+// untyped routes use — one decision, two ways to ask it.
 func requireCSRF(s *cloud.Service[state]) zip.Middleware {
 	return func(next zip.Handler) zip.Handler {
 		return func(c *zip.Ctx) error {
@@ -197,36 +200,60 @@ func checkCSRF(s *cloud.Service[state], c *zip.Ctx) error {
 	return nil
 }
 
-// CSRF is the same gate as a PREDICATE, for a write that cannot be reached by a
-// middleware at all.
+// CSRF is the anti-CSRF control as a PREDICATE, in the shape a typed op holds: a
+// context. It is THE way an operation anywhere in this estate asks it, and the
+// only exported one — apps/billing, apps/todo and apps/referral all call this and
+// none of them carries a copy.
 //
-// A typed op has TWO doors and only one of them is a route. zip records the route's
-// handler and the op as two fields of one entry and wraps only the handler, while
-// the MCP door calls the op directly — so no Use, Group or With reaches a
-// tools/call, and a prefix-scoped gate is skipped there by construction while the
-// depth-0 identity middleware still authenticates the caller. An op that must not
-// be reachable cross-site therefore asks this itself, inside the op, where both
-// doors pass.
+// IN THE OPERATION, because a route is one of the seams that reach it and not the
+// only one. zip records the route's handler and the op as two fields of one entry
+// and wraps only the handler, while MCP, the call plane, the graph and the CLI
+// call the op directly — so no Use, Group or With reaches a tools/call, while the
+// depth-0 identity middleware still authenticates whoever is calling. The
+// preamble is the one place every seam passes through.
 //
-// The general repair is a gate zip applies to the OP rather than the route
-// (App.Authorize); until that exists this is how a surface covers both doors
-// without inventing a second anti-CSRF token.
-func CSRF(c *zip.Ctx) error {
+// zip's own op-level rule, App.Authorize, answers a different question: it decides
+// on the decoded INPUT and this decides on the REQUEST's credentials, which are
+// not part of any op's In and must never be — a caller that could declare itself
+// exempt in a body field would.
+//
+// A caller who presented a credential (Bearer, Basic, gateway, API key) passes
+// untouched: they cannot be CSRF'd, so this costs an API client nothing. Only the
+// ambient-cookie path is asked for the echoed token.
+//
+// FAIL CLOSED off the HTTP path. There is no request there to judge and no
+// ambient credential to abuse, and it refuses anyway, so "this write is
+// controlled" is a property of the control rather than of whichever check happens
+// to run after it.
+func CSRF(ctx context.Context) error {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return zip.ErrForbidden(Unattested)
+	}
 	return checkCSRF(&cloud.Service[state]{State: state{csrfKey: sharedCSRFKey(nil)}}, c)
 }
 
-// RequireCSRF exposes the ambient-cookie anti-CSRF gate as a STANDALONE middleware for a
-// co-resident money-WRITE route registered OUTSIDE this package — specifically
-// apps/commerce/mount.go's POST /v1/billing/topup/token. That write used to be wrapped in
-// requireCSRF by the /v1/billing/* forwarder this package once mounted; moving it
-// co-resident (to break the commerce transport self-dispatch loop) must NOT silently
-// drop the gate, so the identical enforcement rides along as its own handler — and it
-// is now the ONLY thing enforcing it, the forwarder being gone. It binds to the SAME
-// process-wide key (sharedCSRFKey) the issuer uses, so a token minted at
-// GET /v1/account/csrf verifies here byte-identically. Enforces ONLY on the ambient-cookie path (a
-// Bearer/gateway/API caller is not CSRF-able); on success it c.Next()s into the rest of
-// the chain. The minimal Service carries only the shared key — requireCSRF/verifyCSRF
-// read nothing else off it.
+// Unattested is what the off-the-HTTP-path refusal SAYS. Exported because a test
+// has to tell it apart from the other refusals a write meets: every one of them
+// is a 403 an unattested caller would get anyway, so a suite that only asked
+// whether something refused would pass with this control removed. One string, so
+// the words a test asserts are the words the control speaks.
+const Unattested = "a change is made by an attested caller"
+
+// RequireCSRF is the same control as a STANDALONE ROUTE HANDLER, for a raw route
+// registered outside this package that has no op preamble to put it in —
+// apps/meet's recording write and apps/todo's repository lifecycle routes.
+//
+// IT IS NOT WHAT CONTROLS A TYPED OP. A route is one of the seams that reach an
+// operation and not the only one, so an op asks [CSRF] itself; this covers the
+// handlers that have no other way to ask. One decision, two shapes, never two
+// decisions.
+//
+// It binds to the SAME process-wide key (sharedCSRFKey) the issuer uses, so a
+// token minted at GET /v1/account/csrf verifies here byte-identically. It applies
+// ONLY on the ambient-cookie path — a Bearer/gateway/API caller cannot be CSRF'd —
+// and on success continues into the rest of the chain. The minimal Service carries
+// only the shared key; requireCSRF and verifyCSRF read nothing else off it.
 func RequireCSRF() zip.Handler {
 	s := &cloud.Service[state]{State: state{csrfKey: sharedCSRFKey(nil)}}
 	return requireCSRF(s)(func(c *zip.Ctx) error { return c.Next() })
@@ -251,9 +278,12 @@ type csrfResp struct {
 // same-origin endpoint the embedded console reads — the Same-Origin Policy is what
 // stops a cross-site page from reading the response and forging a write.
 func (o ops) issueCSRFToken(ctx context.Context, _ *noInput) (*csrfResp, error) {
-	cr, c, ok := requestCaller(ctx, false) // a zero-org (first-run) user may still need a token
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to obtain a CSRF token")
+	// reads: this is the endpoint that ISSUES the token, so requiring one here
+	// would leave a browser no way to obtain its first. unscoped: a zero-org
+	// (first-run) user still needs one to onboard.
+	cr, c, err := o.requestCaller(ctx, reads, unscoped, "obtain a CSRF token")
+	if err != nil {
+		return nil, err
 	}
 	token, ttl := issueCSRF(o.s, cr.name, cr.owner)
 	c.Fiber().Set("Cache-Control", "no-store")
