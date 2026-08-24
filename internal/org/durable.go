@@ -141,7 +141,7 @@ func WithReader(open opener) DurabilityOption {
 // (ns, subsystem). dbKey is the durable object location (replica.DBPath). dbPath
 // is the local SQLite file.
 func (dy *Durability) For(ns namespace.Namespace, subsystem, dbKey, dbPath string) *Durable {
-	return &Durable{dy: dy, ns: ns, subsystem: subsystem, dbKey: dbKey, dbPath: dbPath}
+	return &Durable{dy: dy, ns: ns, subsystem: subsystem, dbKey: dbKey, dbPath: dbPath, turn: make(chan struct{}, 1)}
 }
 
 // Durable binds one org's local SQLite file to its fenced durable object slot,
@@ -154,6 +154,22 @@ type Durable struct {
 	subsystem string              // which database of that entity — bound into the snapshot key
 	dbKey     string              // durable object key (replica.DBPath)
 	dbPath    string              // local SQLite file path
+
+	// turn admits ONE ship at a time on this file. A ship folds the WAL and then holds
+	// a read transaction on a second handle for the length of the copy, and that
+	// transaction is exactly what a second ship's fold needs and cannot have: it waits
+	// out its busy timeout on the store's sole connection and refuses, taking every
+	// statement queued behind that connection with it. Apps that ship per write can have
+	// two in flight on one file whenever two writes land together, so this is the
+	// ordinary case rather than a corner. Serialized, the second ship runs on a file the
+	// first has let go of.
+	//
+	// A channel and not a Mutex because a waiting ship keeps its own deadline: it takes
+	// its turn or it gives up when the caller does, and never sits past the point where
+	// the answer still matters. Nothing is held across it in the other direction — the
+	// store's map lock is released before Sync is called from anywhere — so waiting here
+	// can only be waiting for a ship that is running.
+	turn chan struct{}
 
 	mu    sync.Mutex
 	owned bool     // true iff we hold the lease as the elected writer
@@ -258,7 +274,18 @@ func (d *Durable) TryClaim(ctx context.Context) (bool, error) {
 // retries on the new owner. A non-owner returns (false, ErrNotOwner). Call AFTER the
 // write transaction commits and OUTSIDE any open transaction (Sync takes the sole
 // connection for the two statements that fold the WAL and pin the file).
+//
+// ONE SHIP AT A TIME ON ONE FILE (turn). A second ship arriving while one is copying
+// waits for it and then runs, rather than meeting the first one's read transaction on
+// the store's sole connection and refusing. It waits no longer than its caller's
+// deadline.
 func (d *Durable) Sync(ctx context.Context) (acked bool, err error) {
+	select {
+	case d.turn <- struct{}{}:
+		defer func() { <-d.turn }()
+	case <-ctx.Done():
+		return false, fmt.Errorf("org: durable ship %s: waiting for the ship in front of it: %w", d.dbKey, ctx.Err())
+	}
 	d.mu.Lock()
 	owned, lease := d.owned, d.lease
 	d.mu.Unlock()

@@ -132,15 +132,12 @@ func pin(ctx context.Context, db, reader *sql.DB) (release func(), err error) {
 	}
 	defer wconn.Close()
 
-	// busy!=0 means the fold could not take every frame back, so the main file is MISSING
-	// committed rows — fail closed, because a partial snapshot shipped as complete is a
-	// silent lost write. (busy, logFrames, checkpointed) is the row.
 	var busy, logFrames, checkpointed int
 	if err = wconn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
 		return nothing, fmt.Errorf("fold: %w", err)
 	}
-	if busy != 0 {
-		return nothing, fmt.Errorf("fold did not complete (busy=%d, log=%d, checkpointed=%d) — a snapshot would miss committed WAL frames", busy, logFrames, checkpointed)
+	if err = folded(busy, logFrames, checkpointed); err != nil {
+		return nothing, err
 	}
 	if rconn == nil {
 		return nothing, nil
@@ -165,6 +162,28 @@ func pin(ctx context.Context, db, reader *sql.DB) (release func(), err error) {
 		tx.Rollback()
 		rconn.Close()
 	}, nil
+}
+
+// folded reads the row PRAGMA wal_checkpoint(TRUNCATE) answers with — (busy, log,
+// checkpointed) — and says what a fold that did not finish left behind.
+//
+// There are two ways not to finish and they are different facts. Frames left in the WAL
+// means the main file is MISSING committed rows, so a copy of it would be a partial
+// snapshot shipped as a whole one. Every frame moved and a WAL still standing means the
+// file is complete and only the reset lost the race — but the read transaction the copy
+// is about to open takes the lock a checkpointer needs ONLY while the WAL is empty, so
+// with one standing there is nothing holding the file still.
+//
+// Both fail closed. Reporting the first for the second is what makes it worth separating:
+// it sends a reader hunting for lost writes that are all present.
+func folded(busy, logFrames, checkpointed int) error {
+	if busy == 0 {
+		return nil
+	}
+	if checkpointed != logFrames {
+		return fmt.Errorf("fold moved %d of %d WAL frames — the main file is missing committed rows", checkpointed, logFrames)
+	}
+	return fmt.Errorf("fold left a WAL of %d frames standing, every one of them already in the main file — something else is reading this database, so a read transaction here would not hold the file still", logFrames)
 }
 
 // readSnapshot reads the main-path database bytes — the durable payload, entire — and

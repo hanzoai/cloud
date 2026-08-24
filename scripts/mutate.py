@@ -79,6 +79,7 @@ PR = "./apps/risk/"
 ML = "apps/ml/ml.go"
 PML = "./apps/ml/"
 DUR = "internal/org/durable.go"
+CDC = "internal/org/snapshotcodec.go"
 PORG = "./internal/org/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
@@ -822,6 +823,14 @@ MUTANTS = [
     ("boot: let a deployed process that cannot hold its files come up", [
         (OD, '\tif linked || !deployed {', '\tif true {')],
      "TestHeldRefusesADeployedProcessThatCannotHoldItsFiles", PC),
+    ("ship: let two ships collide on one file instead of taking turns", [
+        (DUR, '\tselect {\n\tcase d.turn <- struct{}{}:\n\t\tdefer func() { <-d.turn }()\n\tcase <-ctx.Done():\n\t\treturn false, fmt.Errorf("org: durable ship %s: waiting for the ship in front of it: %w", d.dbKey, ctx.Err())\n\t}\n',
+              '')],
+     "TestTwoShipsOnOneFileTakeTurns", PORG),
+
+    ("fold: report every unfinished fold as a snapshot missing committed rows", [
+        (CDC, '\tif checkpointed != logFrames {\n', '\tif true {\n')],
+     "TestAFoldThatDidNotFinishSaysWhich", PORG),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)

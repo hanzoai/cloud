@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -311,4 +313,143 @@ func TestShipWithoutAHandleDoesNotAck(t *testing.T) {
 			t.Fatalf("the control did not ship, so the arm above proves nothing: acked=%v err=%v", acked, err)
 		}
 	})
+}
+
+// Two ships on one file take turns, and the store keeps answering while they do.
+//
+// The collision is not a corner: a plane that ships per write has two in flight
+// whenever two writes land together. The first ship holds a read transaction on its
+// second handle for the length of the copy, and that is exactly the lock the second
+// ship's fold needs. Unserialized, the second takes the store's sole connection and
+// then sits inside PRAGMA wal_checkpoint for its whole busy timeout — so the pin's own
+// property, that a ship costs the store two short statements and not the copy, is gone:
+// everything queued behind that connection waits for the copy after all. Which is why
+// the reading below is the assertion and not the acknowledgements: unserialized, the
+// second ship's fold eventually wins the lock and both still ack, having stalled every
+// statement on that org for seconds on the way.
+//
+// The seal runs INSIDE the copy, after the fold and with the pin open, so blocking it
+// holds the first ship in precisely that state for as long as the test wants.
+func TestTwoShipsOnOneFileTakeTurns(t *testing.T) {
+	ctx := context.Background()
+	cs := newFakeCondStore()
+	const orgID = "acme"
+	dbKey := replica.DBPath(orgID, "", "research")
+
+	copying := make(chan struct{}) // closed once the first ship is inside the copy
+	release := make(chan struct{}) // closed to let it out
+	var once sync.Once
+	dy := NewDurability(cs, &liveView{self: "solo", set: []Member{{ID: "solo"}}}, nil,
+		WithReader(second),
+		WithSeal(func(*sql.DB) error {
+			first := false
+			once.Do(func() { first = true })
+			if first {
+				close(copying)
+				<-release
+			}
+			return nil
+		}))
+	d := dy.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
+	if err := d.Hydrate(ctx); err != nil {
+		t.Fatalf("hydrate: %v", err)
+	}
+	db := openBoundDB(t, d)
+	fillRows(t, db, 100)
+
+	type outcome struct {
+		acked bool
+		err   error
+	}
+	out := make(chan outcome, 2)
+	ship := func() {
+		c, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		acked, err := d.Sync(c)
+		out <- outcome{acked, err}
+	}
+
+	go ship()
+	<-copying
+	// Writes between the two ships, which is what makes them two ships: a plane that
+	// ships per write is shipping BECAUSE something was written. They land in the WAL,
+	// and moving them back into the main file is what the second ship's fold has to do
+	// and what the first ship's open read transaction will not let it do.
+	fillRows(t, db, 200)
+	go ship()
+	time.Sleep(200 * time.Millisecond) // long enough for the second ship to get wherever it goes
+
+	// THE ASSERTION. The first ship is inside its copy and the second is behind it, so
+	// nothing should be holding the store's connection. A second ship parked inside a
+	// fold is holding it, and this waits out the DSN's busy timeout and fails.
+	quick, cancel := context.WithTimeout(ctx, 2*time.Second)
+	var n int
+	err := db.QueryRowContext(quick, `SELECT COUNT(*) FROM kv`).Scan(&n)
+	cancel()
+	if err != nil {
+		t.Fatalf("a read waited on the second ship instead of being served: %v", err)
+	}
+
+	close(release)
+
+	for i := 0; i < 2; i++ {
+		select {
+		case o := <-out:
+			if !o.acked || o.err != nil {
+				t.Fatalf("ship %d did not acknowledge: acked=%v err=%v", i, o.acked, o.err)
+			}
+		case <-time.After(time.Minute):
+			t.Fatal("a ship never returned")
+		}
+	}
+
+	payload, _, err := replica.NewFencedStore(cs).Get(ctx, dbKey)
+	if err != nil {
+		t.Fatalf("read durable object: %v", err)
+	}
+	scratch := filepath.Join(t.TempDir(), "scratch.db")
+	if err := replica.RestoreFile(scratch, payload); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	sd, err := sql.Open("sqlite", testDSN(scratch))
+	if err != nil {
+		t.Fatalf("open restored: %v", err)
+	}
+	defer sd.Close()
+	var verdict string
+	if err := sd.QueryRow(`PRAGMA integrity_check`).Scan(&verdict); err != nil {
+		t.Fatalf("the shipped database could not be checked: %v", err)
+	}
+	if verdict != "ok" {
+		t.Fatalf("the shipped database is not intact: %s", verdict)
+	}
+}
+
+// A fold that did not finish says which of the two things happened.
+//
+// Both refuse, so the outcome alone cannot tell them apart, and the message is the whole
+// of what a reader gets. `busy=1 log=41 ckpt=41` was reported as a snapshot that would
+// miss committed WAL frames when every one of those frames was already in the main file
+// and only the reset had lost a race — a reader following that goes looking for lost
+// writes that are all present.
+func TestAFoldThatDidNotFinishSaysWhich(t *testing.T) {
+	if err := folded(0, 41, 41); err != nil {
+		t.Fatalf("a finished fold is not a fault: %v", err)
+	}
+	if err := folded(0, 0, 0); err != nil {
+		t.Fatalf("an empty WAL is not a fault: %v", err)
+	}
+
+	short := folded(1, 842, 0)
+	if short == nil || !strings.Contains(short.Error(), "missing committed rows") {
+		t.Fatalf("frames left in the WAL must report the main file incomplete: %v", short)
+	}
+
+	standing := folded(1, 41, 41)
+	if standing == nil || strings.Contains(standing.Error(), "missing committed rows") {
+		t.Fatalf("every frame moved, so nothing is missing; the WAL that would not reset is the fact: %v", standing)
+	}
+	if !strings.Contains(standing.Error(), "hold the file still") {
+		t.Fatalf("the message does not say what a standing WAL costs: %v", standing)
+	}
 }

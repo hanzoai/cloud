@@ -888,6 +888,25 @@ embedded underneath.
   compose in one line instead of shipping torn copies for the life of the pod — the
   shape `apps/account`'s anti-forgery check has, conditioned on the SAME `Deployed()`.
   A laptop or a test binary on the envelope answers nil and comes up unchanged.
+- **One ship at a time on one file** (`Durable.turn`). The pin a ship holds is exactly
+  what a SECOND ship's fold needs and cannot have: unserialized it takes the store's
+  sole connection and sits inside `PRAGMA wal_checkpoint` for its whole busy timeout, so
+  every statement on that org waits for the copy after all — the pin's own property,
+  undone. Two in flight on one file is ordinary rather than a corner: `apps/label`,
+  `apps/books`, `apps/research` and `apps/kms` ship per write. `turn` is a
+  one-token channel and not a `sync.Mutex` so a waiting ship keeps its own deadline.
+  Nothing is held across it the other way — `OrgStore.mu` is released before `Sync` and
+  before `Durable.Close` at every call site — so waiting on it is only ever waiting for
+  a ship that is running. `TestTwoShipsOnOneFileTakeTurns` asserts the READING, not the
+  acknowledgements: unserialized, the second ship's fold eventually wins the lock and
+  both still ack, having stalled every statement on that org for seconds on the way.
+- **A fold that did not finish says which of the two things happened** (`folded`).
+  `busy=1` with frames left behind means the main file is missing committed rows;
+  `busy=1` with every frame moved means the file is whole and only the WAL reset lost the
+  race — and a standing WAL is what the read transaction below cannot hold the file still
+  against. Both refuse, so the message is all a reader gets, and the second was being
+  reported as the first: `busy=1 log=41 ckpt=41` read as "a snapshot would miss committed
+  WAL frames" when every one of those frames was already in the main file.
 
 ## A capability answers at its own name (HIP-0139 §3), and ten came home
 
