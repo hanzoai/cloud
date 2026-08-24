@@ -49,10 +49,7 @@ import (
 // Fail-closed off the HTTP path: with no request there is no verified claim to
 // read, so the internal plane and the MCP server get the refusal rather than a
 // default.
-func sudo(ctx context.Context) bool {
-	c, ok := cloud.Request(ctx)
-	return ok && principal.IsSuperAdmin(c)
-}
+func sudo(ctx context.Context) bool { return cloud.AuthorityIn(ctx).Super }
 
 // orgAdmin reports that the caller may change what their OWN org releases. A
 // SuperAdmin also passes — while acting in an org, they are that org's admin too —
