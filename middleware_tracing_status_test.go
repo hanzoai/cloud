@@ -23,19 +23,10 @@ import (
 )
 
 // A RETURNED error and a WRITTEN response reach the tracing middleware in
-// different states, and only one of them used to be recorded correctly.
-//
-// When a handler writes its own response, the response object holds the real
-// status by the time the middleware reads it. When a handler RETURNS an error,
-// fiber unwinds the chain first and calls ErrorHandler afterwards — so at the
-// moment the middleware reads it, the response still holds its default 200 and
-// the status the caller will actually get does not exist yet.
-//
-// Live before the fix: a refused PATCH /v1/agents/sessions/:id went out 403 and
-// recorded `http.response.status_code: 200`, 956 times in six hours. The span
-// contradicted itself — status_code 200 beside an error status reading "a
-// validated principal is required" — and observeRequest counted the same request
-// as a 200 in hanzo_http_requests_total.
+// different states. A written response holds its real status by the time the
+// middleware reads it; a returned error has not been rendered yet, because fiber
+// unwinds the chain and calls ErrorHandler afterwards — so the response still
+// carries its default 200 and the caller's status lives only in the error.
 //
 // Every case below is a status a handler RETURNS rather than writes.
 func TestSpanRecordsTheStatusTheCallerGot(t *testing.T) {
