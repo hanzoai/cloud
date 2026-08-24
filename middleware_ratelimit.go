@@ -75,6 +75,12 @@ var defaultServiceRPM = map[string]int{
 	// separately. The two compose: this bounds how OFTEN one org may ask, that
 	// bounds how MUCH work can be running at once.
 	"audio": 60,
+	// /v1/sbom/* — the bill of materials of an image. Unpriced by design, and a
+	// LOOKUP THAT MISSES is not a lookup: it opens a connection to the registry,
+	// reads the attached document and writes the shared table, all on the asking.
+	// A console renders one image at a time, so one per second sustained is far
+	// above what the surface is for and is the only thing that says stop.
+	"sbom": 60,
 }
 
 // ScopeRateLimit returns the per-scope rate-limit middleware. It caps an
