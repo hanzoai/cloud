@@ -1462,7 +1462,7 @@ func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 		}
 		logger.Info("mounted subsystem", "name", spec.Name)
 	}
-	return nil
+	return keyed(app, Deployed())
 }
 
 // logMaster states how this process resolved its data-plane key. Nothing

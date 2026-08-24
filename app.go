@@ -185,8 +185,10 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 
 	Identify(app, cfg)
 
-	// The money rule, for the reason identity is here: a program is either holding
-	// an app that prices its operations or it is holding nothing.
+	// The rule, for the reason identity is here: a program is either holding an app
+	// whose operations answer to it or it is holding nothing. It asks two questions
+	// — was this change asked for, and does this operation cost — in that order and
+	// in one place (Rule, intent.go).
 	//
 	// It used to be two lines in Listen, and one of them named an app with no
 	// operations in it — App.Peer(), which nothing in this estate registers on —
@@ -209,7 +211,7 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	// the inner hop would bill one act twice, and gating it on standing would refuse
 	// the machinery that computes standing. That its addresses are outside the
 	// priced surface is asked at every bind rather than assumed — plane.go, unpriced.
-	rule := Toll(deps.Metering, deps.Commerce)
+	rule := Rule(deps.Metering, deps.Commerce)
 	app.Authorize(rule)
 	app.Peer().Authorize(rule)
 	return app

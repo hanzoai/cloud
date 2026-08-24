@@ -1,0 +1,153 @@
+// Package attest holds the token a browser echoes to show that a change was
+// asked for, and nothing else.
+//
+// It is a LEAF so that both halves of the control can reach it. The DECISION
+// (which requests must show one) belongs to the request tier, because that is
+// where the caller's credentials are read; the ROUTE that hands a browser its
+// first token belongs to the account surface, because that is the caller's own
+// surface. Those two live in packages that import each other's direction, so
+// the value they share cannot live in either — it lives here, where both already
+// look.
+//
+// TOKEN — base64url( ts_be64(8) || mac(16) ), where
+//
+//	mac = KeyedBLAKE3(key, domain \x00 uid \x00 org \x00 ts)[:16]  (luxfi/crypto).
+//
+// It is BOUND to the validated principal (X-User-Id + X-Org-Id) so a token minted
+// for one identity cannot authorize a change as another, and it EXPIRES after TTL.
+//
+// THE KEY IS SHARED, AND THAT IS A DEPLOYMENT FACT. One address MINTS a token and
+// every process that serves a change VERIFIES one, each of them its own process. A
+// MAC verifies against the key that wrote it, so they hold ONE key or no token ever
+// verifies. That key is KeyEnv, from KMS, on the pod — a child inherits the host's
+// environment whole, so one value reaches every process. [Shared] is how a process
+// asks at boot whether it holds it, before a request can find out the hard way.
+package attest
+
+import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/luxfi/crypto/blake3"
+)
+
+const (
+	domain   = "hanzo-console-csrf-v1"
+	macLen   = 16             // 128-bit truncated BLAKE3 MAC — ample for a bound, expiring token
+	TTL      = 12 * time.Hour // token lifetime; a client re-fetches on expiry/403
+	skew     = 120            // seconds of future tolerance
+	tokenLen = 8 + macLen     // ts || mac
+
+	// Header is where a token rides. One name, so the client that stamps it and
+	// the control that reads it cannot mean different headers.
+	Header = "X-CSRF-Token"
+)
+
+// KeyEnv names the shared MAC key. KMS holds the value; the pod carries it; a
+// plugin child inherits it. It is the ONE name, so an operator provisioning it and
+// an error telling them to say the same word.
+const KeyEnv = "CONSOLE_CSRF_KEY"
+
+// Shared is nil when this process holds the key every other process holds, and
+// otherwise says why it does not. A PURE READ of the environment, so it can be
+// asked whenever and asking cannot change the answer.
+func Shared() error {
+	_, err := decodeKey()
+	return err
+}
+
+func decodeKey() ([]byte, error) {
+	raw := strings.TrimSpace(os.Getenv(KeyEnv))
+	if raw == "" {
+		return nil, fmt.Errorf("%s is unset, so this process holds a key nobody else does", KeyEnv)
+	}
+	if b, err := hex.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+	if b, err := base64.StdEncoding.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+	return nil, fmt.Errorf("%s is set but does not decode to 32 bytes of hex or base64", KeyEnv)
+}
+
+// Key mints and checks tokens. Two processes holding different keys accept none
+// of each other's, which is the whole reason [Shared] is asked at boot.
+type Key [32]byte
+
+// The process-wide key, resolved once: a token is minted and checked by several
+// registrations in one process, and a key per registration would leave a token
+// minted by one unverifiable by the next.
+var (
+	once sync.Once
+	held Key
+)
+
+// Process returns the key this process holds — the shared one when there is one,
+// else a random key it alone holds. Which of the two is a BOOT question, answered
+// by [Shared] before a request ever arrives.
+func Process() Key {
+	once.Do(func() {
+		if k, err := decodeKey(); err == nil {
+			copy(held[:], k)
+			return
+		}
+		if _, err := rand.Read(held[:]); err != nil {
+			// crypto/rand failure is catastrophic; a zero key would be forgeable.
+			panic("attest: cannot generate key: " + err.Error())
+		}
+	})
+	return held
+}
+
+// mac computes the bound, truncated keyed-BLAKE3 MAC for (uid, org, ts).
+func (k Key) mac(uid, org string, ts int64) []byte {
+	var msg []byte
+	msg = append(msg, domain...)
+	msg = append(msg, 0)
+	msg = append(msg, uid...)
+	msg = append(msg, 0)
+	msg = append(msg, org...)
+	msg = append(msg, 0)
+	var t [8]byte
+	binary.BigEndian.PutUint64(t[:], uint64(ts))
+	msg = append(msg, t[:]...)
+	sum, err := blake3.KeyedHash(k[:], msg)
+	if err != nil {
+		// Only errors on a bad key length; Key is 32 bytes by construction.
+		panic("attest: MAC: " + err.Error())
+	}
+	return sum[:macLen]
+}
+
+// Mint issues a token bound to (uid, org), valid for [TTL]. Returns the token and
+// its lifetime in seconds.
+func (k Key) Mint(uid, org string) (string, int64) {
+	ts := time.Now().Unix()
+	var out [tokenLen]byte
+	binary.BigEndian.PutUint64(out[:8], uint64(ts))
+	copy(out[8:], k.mac(uid, org, ts))
+	return base64.RawURLEncoding.EncodeToString(out[:]), int64(TTL / time.Second)
+}
+
+// Valid checks a token against the CURRENT request's validated (uid, org) and its
+// expiry, in constant time.
+func (k Key) Valid(token, uid, org string) bool {
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(token))
+	if err != nil || len(raw) != tokenLen {
+		return false
+	}
+	ts := int64(binary.BigEndian.Uint64(raw[:8]))
+	now := time.Now().Unix()
+	if ts > now+skew || now-ts > int64(TTL/time.Second) {
+		return false
+	}
+	return subtle.ConstantTimeCompare(raw[8:], k.mac(uid, org, ts)) == 1
+}
