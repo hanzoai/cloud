@@ -199,6 +199,14 @@ var allowedRequestUses = map[string]string{
 		"without the request could not name an actor — and an actorless forge call would fall back to the " +
 		"deployment's machine credential, reading every repository that token can see. Fails closed off the " +
 		"HTTP path with the same 403.",
+	"apps/framework/framework.go": "callerOf — the caller an operation acts AS, which is more of the " +
+		"validated principal than the tenant: the user id (X-User-Id) and the platform SuperAdmin bit " +
+		"(X-User-IsAdmin), neither of which principal.OrgFrom carries. The engine keys role grants by " +
+		"USER and claims an unowned org for its first caller, so an operation running with an org and no " +
+		"name would take that one-shot claim for the empty string — which nobody holds and nobody can " +
+		"revoke, since revoking takes the very role the row absorbed. Read from the request because that " +
+		"is what every seam carries; identity parked by a route can only be read back on that one seam. " +
+		"ONE function, which every op here asks. Fails closed off the HTTP path.",
 	"apps/campaign/typed.go": "requireBody — the three writes that bind a body (create, update, addChannel) " +
 		"have always refused a request with none, or with a content type this service does not parse, with " +
 		"c.Bind's own 400. zip's typed decode is TOLERANT by construction (it skips an empty body and leaves " +
