@@ -1,7 +1,7 @@
 ---
 name: exec_files
 version: "8.0.0"
-description: "Read exec files: Files lists what a session holds.."
+description: "Read exec files: Lists the files in an execution session.."
 ---
 
 # Lux · EXEC · files
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/exec/files/{sid}` — Files lists what a session holds.
+- `GET https://api.lux.network/v1/exec/files/{sid}` — Lists the files in an execution session.
 
 ## Parameters
 

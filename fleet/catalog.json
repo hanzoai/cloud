@@ -714,6 +714,10 @@
    "read": true
   },
   {
+   "id": "post_bot_runs",
+   "doc": "Answers 501 to every call: launching a bot run is not implemented.\n\nThe bot runtime exposes no launch operation, so nothing here can start a sandbox.\nThis address is published rather than dropped because it is the collection every\nrun is created in: GET lists them, POST would launch one.\n\nThe refusal is total and takes no input. No run id is minted, no session URL is\nhanded back, and no per-run fee is charged. That is the point: the earlier version\nminted an id the runtime had never heard of, pointed it at a VNC node that did not\nexist, and took real money for it. 501 is the truth, and the truth is cheaper than\na plausible lie.\n\nListing and stopping runs are live and org-scoped. Only the launch is missing, and\nit returns in the same change that can prove a bot boots — a runtime-side launch\noperation first (TS, cross-repo), with the entitlement gate and the meter beside\nit."
+  },
+  {
    "id": "post_bot_runs_by_runid_stop",
    "doc": "Stop terminates one of the caller org's own bot runs and reports its terminal state.\n\nThe own-key guard is the org: it is the caller's validated org, never theirs to\nchoose, and the runtime resolves the run id UNDER it. A run belonging to another\ntenant is not among this org's runs, so it answers absent — the same 404 a\nnonexistent id gets, which is what keeps this from being an oracle.\n\nAbsence is honoured ONLY when the runtime answers it. A runtime that does not\nserve stop reports nothing about the run, and reporting \"stopped\" on that basis\nwould be a stop that cannot fail — so it is a 502."
   }
@@ -1024,6 +1028,10 @@
    "doc": "Creates a D1 database on the org's Cloudflare account.\nRequires org admin."
   },
   {
+   "id": "post_cloudflare_d1_databases_by_database_query",
+   "doc": "Runs one SQL statement against a D1 database. It executes on the org's\nOWN Cloudflare account and relays D1's result set. The body is checked for a\nnon-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1\neven though only two are named here.\n\nRequires ORG ADMIN — a statement may INSERT, UPDATE or DROP, so a query takes the\nwrite gate rather than the read one — and a caller who is only an org member is\nrefused 403. A missing `sql` is 400; 503 if the org has never connected a\nCloudflare token."
+  },
+  {
    "id": "post_cloudflare_kv_namespaces",
    "doc": "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount. Requires org admin. Cloudflare mints the namespace id the value routes\naddress."
   },
@@ -1050,6 +1058,10 @@
   {
    "id": "post_cloudflare_zones_by_zone_purge",
    "doc": "Drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through."
+  },
+  {
+   "id": "put_cloudflare_workers_scripts_by_script",
+   "doc": "Uploads or replaces a module Worker script. It publishes to the\norg's OWN Cloudflare account under the name in the path, replacing whatever was\nthere, and relays Cloudflare's result. The compatibility date, compatibility\nflags and bindings are packed into the multipart upload Cloudflare expects,\nbeside the module source.\n\nRequires ORG ADMIN — a Worker is arbitrary code on the org's own account and\ndomains — so a caller who is only an org member is refused 403. An empty source\nis 400, as is a `mainModule` that is not a plain file name; 503 if the org has\nnever connected a Cloudflare token."
   }
  ],
  "code": [
@@ -1597,6 +1609,22 @@
    "id": "get_deploy_version",
    "doc": "Returns the argocd VersionMessage the dashboard SPA reads at\nbootstrap. There is no argocd binary behind this plane — it is a projection\nover operator App CRs — so the fields say so rather than describing a build:\nVersion names the projection, BuildDate is the moment this response was\ngenerated, and Compiler/Platform/GoVersion are the constants the SPA tolerates\nrather than facts about this process. Platform SuperAdmin only.",
    "read": true
+  },
+  {
+   "id": "post_deploy_applications_by_name_rollback",
+   "doc": "Serves the console's rollback control, and today it\nrequests a reconcile and nothing more.\n\nThe opening verb is not style. zipdoc drops a leading CamelCase symbol only\nwhen a plain verb follows it and never before a copula (internal/zipdoc/\nextract.go:811-824, \"CompleteDeployment IS the CI completion hook\" would\notherwise become \"Is the CI completion hook\") — so \"RollbackDeployApplication\nis …\" would publish a Go symbol no caller can see into the summary an SDK\ndocstring, an MCP tool list and a CLI help line all show.\n\nIt performs exactly what the sync action performs — the same stamp on the same\nApp CR, the same application re-projected — and it does NOT select, pin or\nrevert to a prior image tag. That is the one thing to know before wiring\nanything to it: the name is the console's, the behaviour is the sync. Pinning a\nprevious release rides the release client, which this address does not call yet.\n\nSame gate, same refusals and the same absent request body as the sync it shares\na core with."
+  },
+  {
+   "id": "post_deploy_applications_by_name_sync",
+   "doc": "Asks the operator to reconcile ONE application now.\n\nIt stamps a sync-requested timestamp onto the application's App CR, which the\noperator's watch observes, and answers the application re-projected. It ASKS,\nit does not apply: the operator reconciles on its own clock, so a 200 means the\nrequest landed, not that the rollout finished — the returned row's running\nversion still lags until it does.\n\nSuperAdmin-only and fail-closed, and the gate is INSIDE the op rather than in\nmiddleware wrapped around the route. That is a correctness requirement, not a\npreference: this op is also reached by POST /mcp and by the by-name call plane,\nneither of which runs route middleware, so a gate that only the REST projection\nruns would publish an unguarded alias of a fleet-mutating write. It reads no\nrequest body — the URL names the application and nothing else does. An unknown\nname is a 404 (never a 403, which would confirm the application exists), a name\nthat is not a DNS-1123 label is a 400, and no cluster client is a 503."
+  },
+  {
+   "id": "post_deploy_logout",
+   "doc": "Ends the console session on this host.\n\nIt clears this console's session cookie and answers the signed-out state with\nthe sign-in URL to start again. IAM's own session is untouched — this ends the\nconsole session only, so signing back in may not prompt for credentials.\n\nIt is a POST because it CHANGES STATE. As a GET it was reachable by a\ncross-site top-level navigation, which a SameSite=Lax cookie still rides, so\nany page could sign a SuperAdmin out; a POST is not carried cross-site by that\ncookie. It reads no request body and takes no argument: the session it ends is\nthe one the request already carries."
+  },
+  {
+   "id": "post_deploy_reconcile",
+   "doc": "Renders the configured git source and applies it to the\ncluster, once.\n\nIt runs one full GitOps sync through the embedded engine — render the\nconfigured repo, ref and path, then three-way server-side apply with scoped\nprune — and answers the revision it applied, the source it came from, the\ndeclared/synced/pruned/failed counts and a per-resource result. This is the\nWRITE half of the plane: it mutates live cluster objects and, with prune\nenabled, deletes objects the source no longer declares.\n\nSuperAdmin-only and fail-closed, with the gate INSIDE the op because a typed op\nis also reached by POST /mcp and by the by-name call plane, where no route\nmiddleware runs. The git source is read AS THE PLATFORM, not as the caller: the\ncoordinate is this deployment's own configuration and never a parameter, which\nis why the op reads no request body at all. A deployment with the engine\nswitched off, or with no usable cluster config, answers 503; a failure to\nstart, render or sync is a 502."
   }
  ],
  "destination": [
@@ -1867,12 +1895,16 @@
  "exec": [
   {
    "id": "get_exec_files_by_sid",
-   "doc": "Files lists what a session holds.\n\nOne recursive `find`, the same traversal the artifact sweep makes. It used to be\n`ls -1A` — top level only — while the sweep collected with `find`, so a run that\nwrote a nested artifact reported it in its reply and then omitted it here, and\nthe client's prefix match read the file as expired. Two traversals of one\ndirectory is two answers about what a session holds; there is one now.",
+   "doc": "Lists the files in an execution session.\n\nEverything the session's sandbox holds — the uploads a run can read and the\nartifacts it produced — each then fetched from GET /v1/exec/download.\n\nThe answer is a BARE JSON ARRAY of {name, lastModified}, where `name` is the\nsame {session_id}/{fileId} identifier download takes, because that is what the\nclient matches on. The obvious typed shape, `{files: […]}`, would have been a\nsilent wire change: the request still succeeds and `response.data.find(...)`\nfinds nothing, which reads as a session holding no files.\n\nThe NAME of this handler is what the published summary is cut from, and it used\nto leak: the comment opened \"Files lists …\", which is not this function's\nidentifier, so zipdoc's exact-match strip left it and every SDK, tool list and\nCLI help line opened with a Go symbol no caller can see. An openapi.Describe\nstated a better summary beside the route and was DISCARDED — Fold replaces a\nstructural operation with the typed one — so the declaration read as landed and\nrendered nowhere. The comment is the one home for this sentence.\n\nOne recursive `find`, the same traversal the artifact sweep makes. It used to be\n`ls -1A` — top level only — while the sweep collected with `find`, so a run that\nwrote a nested artifact reported it in its reply and then omitted it here, and\nthe client's prefix match read the file as expired. Two traversals of one\ndirectory is two answers about what a session holds; there is one now.",
    "read": true
   },
   {
    "id": "post_exec",
    "doc": "Executes a program in a throwaway sandbox and answers with what it printed\nand what it left behind.\n\n`lang` names one of the thirteen the sandbox image carries — py, js, ts, bash, r,\nphp, go, rs, c, cpp, java, d, f90 — and `code` is the whole program, not a\nfragment: a compiled language is compiled and then run, an interpreted one is\ninterpreted, and `args` becomes the program's own argv either way. Nothing is\ninstalled for you; the image is the environment.\n\nA PROGRAM THAT FAILS IS A SUCCESSFUL CALL. A non-zero exit answers 200 with the\ndiagnostics on `stderr`, because \"the code threw\" and \"the interpreter is down\"\nare different facts a caller renders differently. Only the second is an error\nstatus.\n\nRuns are stateful through `session_id`. Omit it and the run gets a fresh sandbox\nwhose id comes back on the answer; pass that id again and the next run sees the\nsame filesystem, so a program can write a file one call and read it the next.\n`files` names bytes already uploaded to a session (POST /v1/exec/upload), copied in\nbefore the program starts. `files` on the ANSWER is what the program created or\nchanged, by comparison against a marker taken at start — so it is the run's real\noutput, not a listing of the directory — and each is fetched from\nGET /v1/exec/download/{session}/{name}.\n\nThe tenant is the caller's, never the body's, at every entry point. A typed op is\nalso an MCP tool and an op-plane op; MCP's tools/call invokes it directly, with no\nroute and therefore no middleware, so nothing there could have checked a\ncredential. tenantOf refuses a context carrying neither a validated principal nor\nexec's own admission marker, so those entry points fail closed without a second\ngate to keep in step."
+  },
+  {
+   "id": "post_exec_programmatic",
+   "doc": "Answers 501 — this deployment does not serve programmatic tool calling.\n\nThat sentence is the SUMMARY every projection shows, so it says what a caller\ngets rather than what the code does; the rest names what it would take to stop\nrefusing.\n\n/exec/programmatic is NOT this contract's sibling — it is a different protocol on\nan adjacent path: a multi-round-trip loop where the server suspends a Python\nprogram on a tool call, returns the pending calls with a continuation_token, and\nresumes when the client posts the results back (@hanzochat/agents\nProgrammaticToolCalling). Implementing it means implementing suspension and\nresumption, which is a program, not an endpoint.\n\nSo it answers 501 with that fact rather than being routed into `run`, which would\nhand the caller a CodeResult its parser cannot read — a wrong answer, where this is a\nrefusal a client can act on.\n\nIT IS A TYPED OP, and the refusal for keeping it raw did not survive reading. It\nbinds no body, opens no stream, relays no other process and sits on no wildcard,\nso none of the four wire facts that keep a route raw applies to it; what was\ncited instead was that a permanent stub should declare nothing. That argues for\nsilence in the DOCUMENT and buys the silence everywhere else too — no MCP tool,\nno CLI command, no SDK method — so a caller could read this address and reach it\nby no projection but REST, and learn only by calling it that the protocol is not\nserved. Declaring `zip.WithStatus(501)` is what makes typing honest: the document\npublishes the ONE status this route sends, over an Out with no schema, rather\nthan the 204 a void op would otherwise have invented.\n\nONE delta, pinned by TestProgrammaticRefusesEveryBody: a body that is not JSON\nnow answers 400 rather than 501, because op.invoke decodes before the handler is\nentered. Both are refusals of a protocol this deployment does not serve, no real\ncaller sends one, and 400 is what the rest of the fleet answers to bytes it\ncannot parse.\n\nIt asks tenantOf for the reason every other operation here does, and the answer\nis the same on the wire it was: over HTTP the credential middleware has already\nrun, so an admitted caller still reads 501. What the call closes is the entry\npoint a route table cannot see — typing an operation makes it an MCP tool, which\nzip dispatches straight into the handler with no route and therefore no\nmiddleware. Uniformity is the whole property: every path into this subsystem\nreads the admission marker, so there is no operation anybody has to remember is\nthe exception."
   }
  ],
  "experiment": [
@@ -6146,16 +6178,16 @@
  "s3": [
   {
    "id": "delete_s3_buckets_by_bucket",
-   "doc": "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives."
+   "doc": "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nbucket is gone."
   },
   {
    "id": "get_s3_buckets",
-   "doc": "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all.",
+   "doc": "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all. Another org's bucket is not\nrefused but INVISIBLE, so this cannot be used to learn that a name is taken\nelsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
    "read": true
   },
   {
    "id": "get_s3_buckets_by_bucket_objects",
-   "doc": "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.",
+   "doc": "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
    "read": true
   },
   {
@@ -6165,11 +6197,11 @@
   },
   {
    "id": "post_s3_buckets",
-   "doc": "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409."
+   "doc": "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nbucket exists."
   },
   {
    "id": "post_s3_buckets_by_bucket_objects",
-   "doc": "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work."
+   "doc": "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe upload that follows it goes straight to the store and is not seen here. The\nbalance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued."
   }
  ],
  "sandbox": [
