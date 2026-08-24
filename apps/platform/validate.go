@@ -309,8 +309,8 @@ func validateGitRef(raw string) (string, error) {
 // general — it just cannot build. buildkit resolves a git source by exact object, so
 // a short sha dies nine seconds in with "repository does not contain ref"; and
 // REVISION is stamped only for a full commit, so an image built from one could never
-// name itself and /v1/health would answer revision "unknown" forever. That is how a
-// rollback went unnoticed here.
+// name itself and /v1/health would answer revision "unknown" forever — which makes
+// the deployed commit unreadable at exactly the moment it is worth reading.
 //
 // A BRANCH NAME IS NOT CAUGHT. A branch is a legitimate build context and its image
 // honestly reports no revision; only a value that looks like a commit and is not one

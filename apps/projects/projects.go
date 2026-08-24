@@ -420,7 +420,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// (visibility.go). Off-thread and read-only in the steady state, so a forge
 	// that is down delays no mount and changes nothing; it keeps trying until it
 	// lands, because boot is the least reliable moment to ask the forge anything
-	// and this is the only thing that recovers a close nobody noticed missing.
+	// and this is the only thing that recovers a close that never landed.
 	audited, stop := context.WithCancel(context.Background())
 	s.State.stop = stop
 	go audit(s, audited)
