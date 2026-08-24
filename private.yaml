@@ -10892,6 +10892,30 @@ components:
             none and loses everything outside /mnt/data when the lease ends.
           type: string
       type: object
+    SbomComponent:
+      properties:
+        license:
+          description: |-
+            License is the FIRST license fact found for the component: its SPDX id, else
+            its name, else the expression. Empty when the document declares none.
+          type: string
+        name:
+          description: Name is the dependency's package name as CycloneDX records
+            it.
+          type: string
+        purl:
+          description: |-
+            Purl is the package URL — the ecosystem-qualified identity a vulnerability
+            feed can be joined on.
+          type: string
+        type:
+          description: 'Type is the CycloneDX component type: library, application,
+            framework, …'
+          type: string
+        version:
+          description: Version is the resolved version of that package.
+          type: string
+      type: object
     SbomHealth:
       properties:
         datastore:
@@ -10950,6 +10974,48 @@ components:
           description: ImageDigest is the content-addressed digest the components
             were keyed under.
           type: string
+      type: object
+    SbomView:
+      properties:
+        componentCount:
+          description: |-
+            ComponentCount is how many components this response carries — after the cap,
+            so it matches components exactly rather than the image's true total.
+          type: integer
+        components:
+          description: Components is the flattened dependency set, ordered by type
+            then name.
+          items:
+            $ref: '#/components/schemas/SbomComponent'
+          type: array
+        gitSha:
+          description: |-
+            GitSha is the commit the image was built from. Empty on the same terms as
+            sourceRepo.
+          type: string
+        imageDigest:
+          description: |-
+            ImageDigest is the content-addressed digest the components are keyed under,
+            and is what identifies this bill of materials however it was asked for.
+          type: string
+        imageRef:
+          description: |-
+            ImageRef is the image reference recorded alongside the digest. Empty when
+            the components were ingested against a digest with no ref.
+          type: string
+        ingestedAt:
+          description: IngestedAt is when the bill of materials was recorded, RFC
+            3339.
+          type: string
+        sourceRepo:
+          description: |-
+            SourceRepo is the repository the image was built from. Empty unless the
+            ingest declared it — a pull from the registry does not learn it.
+          type: string
+        truncated:
+          description: Truncated is true when the image has MORE components than the
+            cap returns.
+          type: boolean
       type: object
     ScaleIn:
       properties:
@@ -30385,19 +30451,26 @@ components:
     kmsRemoved:
       properties:
         deleted:
+          description: Deleted is true; a delete confirms by not failing.
           type: boolean
         env:
+          description: Env is the environment the secret was removed from.
           type: string
         name:
+          description: Name is the secret's name.
           type: string
       type: object
     kmsSecret:
       properties:
         env:
+          description: Env is the environment the value was resolved under.
           type: string
         name:
+          description: Name is the secret's name.
           type: string
         value:
+          description: Value is the opened plaintext. This body is the ONLY place
+            it appears.
           type: string
       type: object
     kmsSecrets:
@@ -31793,6 +31866,26 @@ components:
           items:
             $ref: '#/components/schemas/mlResource'
           type: array
+      type: object
+    modelPatchIn:
+      properties:
+        beta:
+          type: boolean
+        betaOrgs:
+          items:
+            type: string
+          type: array
+        enabled:
+          type: boolean
+        id:
+          description: |-
+            ID is the model the overlay belongs to. Over HTTP it is the whole remaining
+            path, so a slashed id (acme/some-model-1) addresses intact, and the path
+            wins over anything sent in the body.
+          type: string
+        overrides: {}
+        state:
+          type: string
       type: object
     moduleList:
       properties:
@@ -45004,20 +45097,6 @@ components:
             Total is the whole directory's row count BEFORE paging, so a console can page
             against it. Absent when the read failed, since there is then nothing to count.
           type: integer
-      type: object
-    overlayPatch:
-      properties:
-        beta:
-          type: boolean
-        betaOrgs:
-          items:
-            type: string
-          type: array
-        enabled:
-          type: boolean
-        overrides: {}
-        state:
-          type: string
       type: object
     overviewData:
       properties:
@@ -60148,18 +60227,39 @@ paths:
   /v1/admin/pricing/catalog/models/{wildcard1}:
     patch:
       description: |-
-        Sets one model's availability overlay — and the price overrides applied on top of the catalog — then answers the new effective overlay, so a console needs no second read. The model id is the whole remaining path, so a slashed id like `acme/some-model-1` addresses intact.
+        Turns one model off, into beta for named orgs, or generally available.
 
-        SuperAdmin only; every other caller is 403, decided before the body is read. The overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a per-org setting — and `betaOrgs` is what narrows a beta to named orgs.
+        Sets one model's availability overlay — and the price overrides applied on top
+        of the catalog — then answers the new effective overlay, so a console needs no
+        second read. The model id is the whole remaining path, so a slashed id like
+        `acme/some-model-1` addresses intact.
 
-        Only the fields the patch names change; an entry with no overlay yet starts from the catalog default, which is enabled. `state` is the coherent tri-state setter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied AFTER it, so they win where both are sent; anything else in `state` is 400. A field sent as an explicit `null` arrives indistinguishable from an absent one, so null does not clear anything.
+        SuperAdmin only; every other caller is 403. The overlay is PLATFORM-WIDE —
+        this is the catalog every org prices against, not a per-org setting — and
+        `betaOrgs` is what narrows a beta to named orgs.
 
-        The rule worth reading twice: a disabled entry that still carries beta orgs IS a beta — `{"enabled":false,"betaOrgs":["acme"]}` leaves acme seeing the model. Only an explicit `off` (or `beta:false`) with an empty list is the absolute kill switch that a user's own beta opt-in can never re-open.
+        Only the fields the patch names change; an entry with no overlay yet starts
+        from the catalog default, which is enabled. `state` is the coherent tri-state
+        setter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied
+        AFTER it, so they win where both are sent; anything else in `state` is 400. A
+        field sent as an explicit `null` arrives indistinguishable from an absent one,
+        so null does not clear anything.
 
-        `overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it must be a JSON object or null — an array or a scalar is refused — and is bounded in size and nesting depth. An uninitialised overlay store answers 503.
+        The rule worth reading twice: a disabled entry that still carries beta orgs IS
+        a beta — `{"enabled":false,"betaOrgs":["acme"]}` leaves acme seeing the model.
+        Only an explicit `off` (or `beta:false`) with an empty list is the absolute
+        kill switch that a user's own beta opt-in can never re-open.
+
+        `overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it
+        must be a JSON object or null — an array or a scalar is refused — and is
+        bounded in size and nesting depth. An uninitialised overlay store answers 503.
       operationId: patch_admin_pricing_catalog_models_by_wildcard1
       parameters:
-      - in: path
+      - description: |-
+          ID is the model the overlay belongs to. Over HTTP it is the whole remaining
+          path, so a slashed id (acme/some-model-1) addresses intact, and the path
+          wins over anything sent in the body.
+        in: path
         name: wildcard1
         required: true
         schema:
@@ -60168,18 +60268,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/overlayPatch'
+              $ref: '#/components/schemas/modelPatchIn'
+        required: true
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Overlay'
-          description: Success
-      summary: Turn one model off, into beta for named orgs, or generally available
+          description: ok
+      summary: Turns one model off, into beta for named orgs, or generally available.
       tags:
       - pricing
       x-app: pricing
+      x-tool: true
   /v1/admin/pricing/catalog/providers/{name}:
     patch:
       description: |-
@@ -96502,54 +96604,121 @@ paths:
   /v1/kms/secrets/{wildcard1}:
     delete:
       description: |-
-        Removes one secret from the caller's own org and confirms the name and environment that were removed. Deleting a secret that is not there is a 404, not a silent success, so a caller can tell a real deletion from a typo.
+        Removes one secret from your org.
 
-        The trailing path is the secret's subpath and name beneath the caller's org root, and `env` selects the environment, defaulting when omitted. Scoped to the caller's own org — the store root comes from the validated claim, never from the request.
+        Forgets one secret belonging to the caller's own org and confirms the name and
+        environment that were removed. Deleting a secret that is not there is a 404,
+        not a silent success, so a caller can tell a real deletion from a typo.
 
-        Requires ADMIN authority over the org, like the write: destroying a secret is an administrative act, and a credential distributed to read one must not be able to remove it.
+        `secret` is the coordinate beneath the caller's org root, subpath and name
+        together, and over HTTP it is the trailing path itself. `env` selects the
+        environment and falls back to the default when omitted. The org comes from the
+        validated claim, never from the request.
+
+        Requires ADMIN authority over the org, like the write: destroying a secret is
+        an administrative act, and a credential distributed to READ one must not be
+        able to remove it. A machine credential holds no membership and so is never an
+        org admin. Fail-closed admission, in order: admin of the org, well-formed org,
+        master key present — 403, 400 and 503, all decided before any record is
+        touched.
       operationId: delete_kms_secrets_by_wildcard1
       parameters:
-      - in: path
+      - description: |-
+          Secret is the coordinate beneath the caller's own org root: an optional
+          `/`-separated subpath and then the name, such as `ci/deploy/token`. Over
+          HTTP it is the trailing path itself, and the trailing path WINS over any
+          other spelling sent with it. There is no org in it — the tenant comes from
+          the validated claim — so another tenant's secret is not merely refused, it
+          is unnameable. OMITTED is refused with a 400: there is no secret named
+          "everything", and a blank address must not read as one.
+        in: path
         name: wildcard1
         required: true
         schema:
           type: string
+      - description: |-
+          Env selects the environment to resolve the secret in. It is part of the
+          storage key, so one name in two environments is two secrets. OMITTED means
+          the `default` environment — where a WRITE refuses to default, because a
+          misplaced write strands a value no reader looks for, a read or a delete
+          aimed at the wrong environment simply answers 404 and the caller learns.
+        example: prod
+        in: query
+        name: env
+        required: false
+        schema:
+          type: string
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/kmsRemoved'
-          description: Success
-      summary: Delete one secret from your org
+          description: ok
+      summary: Removes one secret from your org.
       tags:
       - kms
       x-app: kms
+      x-tool: true
     get:
       description: |-
-        Opens one sealed secret belonging to the caller's own org and returns its value in the response body, with the name and environment it was resolved under. This is the broker's purpose, and the response body is the ONLY place the value appears — it is not logged, and it is never carried in an error.
+        Reads one secret's value from your org.
 
-        The trailing path is the secret's subpath and name beneath the caller's org root; `env` selects the environment and falls back to the default when omitted. A secret that is not there is a plain 404 that names nothing about the store.
+        Opens one sealed secret belonging to the caller's own org and returns its
+        value, with the name and environment it was resolved under. This is the
+        broker's purpose, and the response body is the ONLY place the value appears —
+        it is not logged, and it is never carried in an error.
 
-        Scoped to the caller's own org and nothing else: there is no org in the path, so another tenant's secret is not merely refused, it is unnameable. Admission is fail-closed — validated member, well-formed org, master key present — and an unconfigured master key is 503 rather than an empty read.
+        `secret` is the coordinate beneath the caller's org root, subpath and name
+        together, and over HTTP it is the trailing path itself. `env` selects the
+        environment and falls back to the default when omitted. A secret that is not
+        there is a plain 404 that names nothing about the store.
+
+        Scoped to the caller's own org and nothing else: there is no org in the
+        address, so another tenant's secret is not merely refused, it is unnameable.
+        Admission is fail-closed and in order — a validated member, an org that is a
+        DNS-1123 label, and a store holding a master key — 403, 400 and 503, all
+        decided before any record is touched, so an unconfigured master key is a 503
+        rather than an empty read.
       operationId: get_kms_secrets_by_wildcard1
       parameters:
-      - in: path
+      - description: |-
+          Secret is the coordinate beneath the caller's own org root: an optional
+          `/`-separated subpath and then the name, such as `ci/deploy/token`. Over
+          HTTP it is the trailing path itself, and the trailing path WINS over any
+          other spelling sent with it. There is no org in it — the tenant comes from
+          the validated claim — so another tenant's secret is not merely refused, it
+          is unnameable. OMITTED is refused with a 400: there is no secret named
+          "everything", and a blank address must not read as one.
+        in: path
         name: wildcard1
         required: true
         schema:
           type: string
+      - description: |-
+          Env selects the environment to resolve the secret in. It is part of the
+          storage key, so one name in two environments is two secrets. OMITTED means
+          the `default` environment — where a WRITE refuses to default, because a
+          misplaced write strands a value no reader looks for, a read or a delete
+          aimed at the wrong environment simply answers 404 and the caller learns.
+        example: prod
+        in: query
+        name: env
+        required: false
+        schema:
+          type: string
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/kmsSecret'
-          description: Success
-      summary: Read one secret's value
+          description: ok
+      summary: Reads one secret's value from your org.
       tags:
       - kms
       x-app: kms
+      x-tool: true
   /v1/knowledge/connectors:
     get:
       description: |-
@@ -119898,57 +120067,89 @@ paths:
   /v1/s3/buckets/{bucket}/objects/{wildcard1}:
     delete:
       description: |-
-        Removes the single object at the trailing path from one of the caller's buckets and answers 204 with no body. The key is path-cleaned first, so the delete cannot reach outside the bucket it names.
+        Removes one object and answers 204.
 
-        It removes one object and never a prefix: a trailing path that looks like a folder deletes the placeholder at that key, not the objects beneath it.
+        It removes ONE object and never a prefix: a key that looks like a folder deletes
+        the placeholder at that key, not the objects beneath it. The key is path-cleaned
+        first, so the delete cannot reach outside the bucket it names, and a bucket the
+        caller's org does not own is the same 404 an unknown name gives.
 
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing deleted, and the debit lands only once the
+        object is gone.
       operationId: delete_s3_buckets_by_bucket_objects_by_wildcard1
       parameters:
-      - in: path
+      - description: Bucket is the bucket's friendly name, from the path.
+        in: path
         name: bucket
         required: true
         schema:
           type: string
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Delete one object
-      tags:
-      - s3
-      x-app: s3
-    get:
-      description: |-
-        Returns a short-lived presigned GET URL for the object at the trailing path, with the method, the key and its remaining lifetime. As with upload, the client fetches from that URL directly and the storage credential stays on the server.
-
-        The URL carries a content disposition of attachment with the object's file name, so a browser following it downloads the object rather than rendering it in place. Signed against the public host, scoped to the one bucket and key, and good for five minutes; a deployment with no public storage endpoint answers 503.
-
-        A validated principal is required, and every bucket and key is resolved inside the caller's own org: physical bucket names are derived from the org, so a tenant cannot name another's storage. The operation is billed per call — the balance is checked BEFORE anything is touched, so an unfunded org is refused with nothing done, and the debit happens only after the work succeeds. Object storage that is not configured answers 503 under this subsystem's own name rather than falling through to another.
-      operationId: get_s3_buckets_by_bucket_objects_by_wildcard1
-      parameters:
-      - in: path
-        name: bucket
-        required: true
-        schema:
-          type: string
-      - in: path
+      - description: |-
+          Key is the object's key within the bucket — everything after that bucket's
+          /objects/. It MAY contain "/", because a key is a path and this segment is
+          captured whole: "2019/summer/a.jpg" is one key, not three. It is
+          path-cleaned before use, so "../" reaches nothing outside the bucket, and a
+          key that is empty, absolute or a bare folder marker is refused 400.
+        in: path
         name: wildcard1
         required: true
         schema:
           type: string
       responses:
-        2XX:
+        "204":
+          description: no content
+      summary: Removes one object and answers 204.
+      tags:
+      - s3
+      x-app: s3
+      x-tool: true
+    get:
+      description: |-
+        Mints a presigned GET URL the caller downloads from DIRECTLY.
+
+        The bytes never pass through this binary and the admin credential never leaves
+        the server: the URL is signed against the PUBLIC host, scoped to exactly this
+        bucket and key, and expires. It carries a content disposition of attachment
+        naming the object's file name, so a browser following it saves the object rather
+        than rendering it in place. A deployment with no public endpoint configured
+        cannot mint one and answers 503 rather than a URL that will not work.
+
+        Billed per call — for MINTING the URL, which is the work this operation does;
+        the download that follows it comes straight from the store and is not seen here.
+        The balance is checked BEFORE anything is touched, so an unfunded org is refused
+        with no URL issued.
+      operationId: get_s3_buckets_by_bucket_objects_by_wildcard1
+      parameters:
+      - description: Bucket is the bucket's friendly name, from the path.
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - description: |-
+          Key is the object's key within the bucket — everything after that bucket's
+          /objects/. It MAY contain "/", because a key is a path and this segment is
+          captured whole: "2019/summer/a.jpg" is one key, not three. It is
+          path-cleaned before use, so "../" reaches nothing outside the bucket, and a
+          key that is empty, absolute or a bare folder marker is refused 400.
+        in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/presignResponse'
-          description: Success
-      summary: Get a URL to download one object directly
+          description: ok
+      summary: Mints a presigned GET URL the caller downloads from DIRECTLY.
       tags:
       - s3
       x-app: s3
+      x-tool: true
   /v1/s3/health:
     get:
       description: |-
@@ -120519,22 +120720,56 @@ paths:
   /v1/sbom/{wildcard1}:
     get:
       description: |-
-        Answers with the component set of one container image — each component's name, version, type, package URL and license — addressed by either the image digest or the image ref. The captured segment is greedy and percent-decoded, so a ref carrying slashes and a tag is passed whole.
+        Resolve returns everything inside one container image, addressed by its digest
+        or by its image ref.
 
-        This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials belongs to a content-addressed digest rather than to an org, so every caller deploying the same image resolves the same components, and nothing tenant-owned is exposed by it. It still requires an attested caller — global is not public — and answers 403 without one. Ingest is the gated half of the pair.
+        Each component comes back with its name, version, type, package URL and license.
 
-        A miss is not the end of the lookup. The registry is the source of truth, so an unmaterialized ref is pulled from the SBOM attached to that image, persisted, and answered from the store — the first read of a freshly built image pays for the pull, later ones do not. The pull reads OUR registries and nothing else, which is what makes one shared answer trustworthy for every tenant: an attached document is whoever controls that repository speaking, so a ref outside them answers 404 rather than a stranger's account of what is in their image. A bare digest with no repository is not pullable and answers an honest 404, as does a ref with no attached document. Repeated ingests collapse to the latest, components come back ordered by type then name, and a result over 5000 components is capped with `truncated` set. When the datastore is not connected the answer is 503 rather than a fabricated empty image.
+        This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials
+        belongs to a content-addressed digest rather than to an org, so every caller
+        deploying the same image resolves the same components, and nothing tenant-owned
+        is exposed by it. It still requires an attested caller — global is not public —
+        and answers 403 without one. Ingest is the closed half of the pair.
+
+        A miss is not the end of the lookup. The registry is the source of truth, so an
+        unmaterialized ref is pulled from the SBOM attached to that image, persisted, and
+        answered from the store — the first read of a freshly built image pays for the
+        pull, later ones do not. The pull reads OUR registries and nothing else, which is
+        what makes one shared answer trustworthy for every tenant: an attached document
+        is whoever controls that repository speaking, so a ref outside them answers 404
+        rather than a stranger's account of what is in their image. A bare digest with no
+        repository is not pullable and answers an honest 404, as does a ref with no
+        attached document. Repeated ingests collapse to the latest, components come back
+        ordered by type then name, and a result over 5000 components is capped with
+        `truncated` set. When the datastore is not connected the answer is 503 rather
+        than a fabricated empty image.
       operationId: get_sbom_by_wildcard1
       parameters:
-      - in: path
+      - description: |-
+          Ref is the image to resolve, either its content-addressed digest
+          (`sha256:…`) or its full reference (`oci.hanzo.ai/hanzo/cloud:v1`). Both are
+          matched, so either spelling of one image answers the same components. It is
+          the greedy tail of the address, so slashes, a tag and a digest all travel in
+          it whole, and a percent-encoded ref is decoded before it is looked up. Empty
+          is a 400, never a scan of the store.
+        in: path
         name: wildcard1
         required: true
         schema:
           type: string
-      summary: Resolve everything inside a container image
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SbomView'
+          description: ok
+      summary: Resolve returns everything inside one container image, addressed by
+        its digest or by its image ref.
       tags:
       - sbom
       x-app: sbom
+      x-tool: true
   /v1/sbom/health:
     get:
       description: |-

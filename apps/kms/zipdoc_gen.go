@@ -10,7 +10,15 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/kms/secrets/+", zip.Doc{
-		Description: "Removes one secret. The trailing wildcard is the sub-path + name.",
+		Description: "Removes one secret from your org.\n\nForgets one secret belonging to the caller's own org and confirms the name and\nenvironment that were removed. Deleting a secret that is not there is a 404,\nnot a silent success, so a caller can tell a real deletion from a typo.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. The org comes from the\nvalidated claim, never from the request.\n\nRequires ADMIN authority over the org, like the write: destroying a secret is\nan administrative act, and a credential distributed to READ one must not be\nable to remove it. A machine credential holds no membership and so is never an\norg admin. Fail-closed admission, in order: admin of the org, well-formed org,\nmaster key present — 403, 400 and 503, all decided before any record is\ntouched.",
+		Fields: map[string]string{
+			"kmsRef.env":         "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
+			"kmsRef.secret":      "Secret is the coordinate beneath the caller's own org root: an optional\n`/`-separated subpath and then the name, such as `ci/deploy/token`. Over\nHTTP it is the trailing path itself, and the trailing path WINS over any\nother spelling sent with it. There is no org in it — the tenant comes from\nthe validated claim — so another tenant's secret is not merely refused, it\nis unnameable. OMITTED is refused with a 400: there is no secret named\n\"everything\", and a blank address must not read as one.",
+			"kmsRemoved.deleted": "Deleted is true; a delete confirms by not failing.",
+			"kmsRemoved.env":     "Env is the environment the secret was removed from.",
+			"kmsRemoved.name":    "Name is the secret's name.",
+		},
+		Example: json.RawMessage(`{"secret":"ci/deploy/token","env":"prod"}`),
 	})
 	zip.Describe("GET /v1/kms/config", zip.Doc{
 		Description: "Returns the runtime configuration for the KMS console.\n\nWhat the console needs before anyone has signed in: the brand, the OIDC issuer\nit authenticates against, the API base for this subsystem and the path of the\nlogin exchange.\n\nPublic on purpose, and it holds nothing sensitive — it is deliberately kept\nunder this subsystem's own namespace rather than under an admin prefix, so a\ngateway that admin-gates the admin routes cannot break the console's\nlegitimate pre-login fetch.",
@@ -48,7 +56,15 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/kms/secrets/+", zip.Doc{
-		Description: "Reads one secret value. The trailing wildcard is the sub-path + name\nunder the org; ?env= selects the environment. Returns the opened plaintext.",
+		Description: "Reads one secret's value from your org.\n\nOpens one sealed secret belonging to the caller's own org and returns its\nvalue, with the name and environment it was resolved under. This is the\nbroker's purpose, and the response body is the ONLY place the value appears —\nit is not logged, and it is never carried in an error.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. A secret that is not\nthere is a plain 404 that names nothing about the store.\n\nScoped to the caller's own org and nothing else: there is no org in the\naddress, so another tenant's secret is not merely refused, it is unnameable.\nAdmission is fail-closed and in order — a validated member, an org that is a\nDNS-1123 label, and a store holding a master key — 403, 400 and 503, all\ndecided before any record is touched, so an unconfigured master key is a 503\nrather than an empty read.",
+		Fields: map[string]string{
+			"kmsRef.env":      "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
+			"kmsRef.secret":   "Secret is the coordinate beneath the caller's own org root: an optional\n`/`-separated subpath and then the name, such as `ci/deploy/token`. Over\nHTTP it is the trailing path itself, and the trailing path WINS over any\nother spelling sent with it. There is no org in it — the tenant comes from\nthe validated claim — so another tenant's secret is not merely refused, it\nis unnameable. OMITTED is refused with a 400: there is no secret named\n\"everything\", and a blank address must not read as one.",
+			"kmsSecret.env":   "Env is the environment the value was resolved under.",
+			"kmsSecret.name":  "Name is the secret's name.",
+			"kmsSecret.value": "Value is the opened plaintext. This body is the ONLY place it appears.",
+		},
+		Example: json.RawMessage(`{"secret":"ci/deploy/token","env":"prod"}`),
 	})
 	zip.Describe("POST /kms/delete", zip.Doc{
 		Description: "Delete forgets one secret. It is here for the same reason put is: exactly one\nprocess holds the store, so an app that custodies a credential on a customer's\nbehalf must be able to REMOVE it when that customer disconnects — otherwise\ndisconnecting leaves the material behind and the connection row is the only\nthing that goes.\n\nIt widens no boundary. The surface is deliberately narrow because material\nLEAVING is the risk, and delete moves nothing outward; a caller that can put can\nalready overwrite a secret into uselessness, so this adds no destructive power\neither. The same ref rule as every other op applies, so a tenant's material is\nremovable only by a call acting for that tenant.",

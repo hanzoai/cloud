@@ -206,7 +206,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// both against the toolchain in go.mod, so a fix upstream shows up as a red
 	// test rather than as stale prose.
 	zip.Get(zapp, "/v1/admin/pricing/catalog", o.adminCatalog)
-	app.Patch("/v1/admin/pricing/catalog/models/*", adminPatchModel)
+	zip.Patch(zapp, "/v1/admin/pricing/catalog/models/*", adminPatchModel)
 	zip.Patch(zapp, "/v1/admin/pricing/catalog/providers/:name", adminPatchProvider)
 
 	// Enablement registry (#30/#31) over the SAME overlay store (see enablement.go):

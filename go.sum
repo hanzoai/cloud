@@ -2069,6 +2069,16 @@ github.com/zap-proto/zap2pb v0.2.0 h1:sos6HnayhGMGLRO54px1InzimDzTZ2o5TSMEatYBjz
 github.com/zap-proto/zap2pb v0.2.0/go.mod h1:wD97Z2VTPabDq/4AMNL++PWnQ0YwEtajiuNkLGg3/18=
 github.com/zap-proto/zip v1.36.3 h1:cPa7SfpcfX6I3ZQH0yUH/P0lb5/iBLLRMjbzX2ELiLQ=
 github.com/zap-proto/zip v1.36.3/go.mod h1:k0CQcj6Ro+gfNdREF3WOc9/KeXidzI0WPVnzxUjVR/s=
+github.com/zap-proto/zip v1.36.4 h1:uI/iNX+YxsqSIfjx/cMNdOIqL4Bg4ouM9iUx1EGzAV0=
+github.com/zap-proto/zip v1.36.4/go.mod h1:k0CQcj6Ro+gfNdREF3WOc9/KeXidzI0WPVnzxUjVR/s=
+github.com/zap-proto/zip v1.36.5 h1:LTznuDNg+QikFgjuO20jFFdWQS0aVmfT72BtvRnivlw=
+github.com/zap-proto/zip v1.36.5/go.mod h1:k0CQcj6Ro+gfNdREF3WOc9/KeXidzI0WPVnzxUjVR/s=
+github.com/zap-proto/zip v1.36.6 h1:q9qGJO/7ibI9JxhG76uTVyBK63p9rH7jVFY2l0Rz+8g=
+github.com/zap-proto/zip v1.36.6/go.mod h1:k0CQcj6Ro+gfNdREF3WOc9/KeXidzI0WPVnzxUjVR/s=
+github.com/zap-proto/zip v1.36.7 h1:xJWwq1Wvs47CbLjyxJpCmIq6F7gTPw6BOFy1v+CnmgU=
+github.com/zap-proto/zip v1.36.7/go.mod h1:k0CQcj6Ro+gfNdREF3WOc9/KeXidzI0WPVnzxUjVR/s=
+github.com/zap-proto/zip v1.36.8 h1:kdsHKcsaEOuVSfH4JJiTKZ7esCf4wOGhnnrQvcEniaA=
+github.com/zap-proto/zip v1.36.8/go.mod h1:k0CQcj6Ro+gfNdREF3WOc9/KeXidzI0WPVnzxUjVR/s=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
 github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/blake3 v0.2.4 h1:KYQPkhpRtcqh0ssGYcKLG1JYvddkEA8QwCM/yBqhaZI=

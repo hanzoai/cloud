@@ -52,7 +52,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -124,9 +123,9 @@ type ops struct{ s *cloud.Service[state] }
 // greedy resolve wildcard so it is never captured by it. Health is not JWT-gated
 // (liveness must be probe-able).
 //
-// Two of the three are TYPED ops — one registry entry from which the REST route, the
+// All three are TYPED ops — one registry entry from which the REST route, the
 // OpenAPI operation, the MCP tool, the CLI command and every generated SDK method
-// follow. `GET /v1/sbom/*` stays a raw handler; see resolve for why.
+// follow.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The composer owns cloud.Bridge: the fused host installs it once at its root
 	// and the plugin constructor does the same for a plugin program, so no
@@ -140,38 +139,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// keys on, so the document, the operationId, the MCP tool and every generated SDK
 	// would carry a trailing slash for a path this API has never served.
 	zip.Post(app.Group("/v1"), "/sbom", o.ingest, zip.WithStatus(http.StatusCreated))
-	g.Get("/*", cloud.Handle(s, resolve))
-}
-
-// The resolve route is the one operation here that cannot be a typed op — see
-// resolve for the three published facts a typed op would have to change. zipdoc
-// lifts prose from the two typed ops beside it and has nothing to lift from a raw
-// handler, so this route's prose is declared next to the route table instead, and
-// reaches the document, the generated SDKs and the spec-derived CLI the same way.
-func init() {
-	openapi.Describe("/v1/sbom/*", http.MethodGet,
-		"Resolve everything inside a container image",
-		"Answers with the component set of one container image — each component's name, "+
-			"version, type, package URL and license — addressed by either the image digest "+
-			"or the image ref. The captured segment is greedy and percent-decoded, so a ref "+
-			"carrying slashes and a tag is passed whole.\n\n"+
-			"This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials "+
-			"belongs to a content-addressed digest rather than to an org, so every caller "+
-			"deploying the same image resolves the same components, and nothing tenant-owned "+
-			"is exposed by it. It still requires an attested caller — global is not public — "+
-			"and answers 403 without one. Ingest is the gated half of the pair.\n\n"+
-			"A miss is not the end of the lookup. The registry is the source of truth, so an "+
-			"unmaterialized ref is pulled from the SBOM attached to that image, persisted, and "+
-			"answered from the store — the first read of a freshly built image pays for the "+
-			"pull, later ones do not. The pull reads OUR registries and nothing else, which is "+
-			"what makes one shared answer trustworthy for every tenant: an attached document "+
-			"is whoever controls that repository speaking, so a ref outside them answers 404 "+
-			"rather than a stranger's account of what is in their image. A bare digest with no "+
-			"repository is not pullable and answers an honest 404, as does a ref with no "+
-			"attached document. Repeated ingests "+
-			"collapse to the latest, components come back ordered by type then name, and a "+
-			"result over 5000 components is capped with `truncated` set. When the datastore "+
-			"is not connected the answer is 503 rather than a fabricated empty image.")
+	// The greedy `*` is the address, not a shortcut: an image reference carries
+	// slashes and a tag or a digest, and no named fiber segment matches across a
+	// slash. zip declares that segment as the path parameter `wildcard1` and binds
+	// it to the In field tagged with the router's own key for it, `url:"*1"`.
+	zip.Get(g, "/*", o.resolve)
 }
 
 // requireDatastore returns the honest 503 when the datastore store is not
@@ -274,23 +246,50 @@ func (o ops) ingest(ctx context.Context, in *SbomIngest) (*SbomIngested, error) 
 
 // ── GET /v1/sbom/{ref} — resolve (console) ───────────────────────────────────
 
-// resolve returns the SBOM for an image digest OR image ref. The greedy `*` param
-// carries the (possibly slash-bearing, possibly percent-encoded) ref; we decode it
-// and bind it to BOTH columns. FINAL collapses ReplacingMergeTree duplicates from
-// repeated ingests. 404 when nothing matches (honest empty, never fabricated).
+// SbomRef names the image a resolve is asking about: the whole remainder of the
+// path, as one value.
 //
-// UNTYPED BY DESIGN — the greedy wildcard. zip's Template (address.go:61-73)
-// rewrites only `:name` segments, so a typed op here publishes the key
-// `/v1/sbom/*`, while cloud's router reading names that segment `{wildcard1}`
-// (openapi/openapi.go:811-829). openapi.Fold (openapi/openapi.go:699) looks the
-// op up by zip's spelling, finds no live route, and REFUSES at :705 — so the
-// cost is not a mis-named parameter, it is `make -C apps/sbom describe` failing
-// and this app publishing NO DOCUMENT AT ALL.
+// The two tags on Ref are two ways in, and the pairing is deliberate. `url:"*1"`
+// is the router's own key for the first greedy capture, which is what an HTTP
+// caller fills. The wire name beside it is what a caller with no URL supplies
+// instead — the op-call plane and an MCP tools/call both hand their arguments
+// across as a body — and without it this operation would be a tool that cannot say
+// which image it means. Where both arrive the address wins, because bindURL binds
+// the body first, then the query, then the path.
+type SbomRef struct {
+	// Ref is the image to resolve, either its content-addressed digest
+	// (`sha256:…`) or its full reference (`oci.hanzo.ai/hanzo/cloud:v1`). Both are
+	// matched, so either spelling of one image answers the same components. It is
+	// the greedy tail of the address, so slashes, a tag and a digest all travel in
+	// it whole, and a percent-encoded ref is decoded before it is looked up. Empty
+	// is a 400, never a scan of the store.
+	Ref string `json:"ref" url:"*1"`
+}
+
+// Resolve returns everything inside one container image, addressed by its digest
+// or by its image ref.
 //
-// untypedByDesign (typed_wire_test.go) is where that refusal is RECORDED, and
-// TestTheWildcardCannotBeATypedOp is where it is RUN: the day zip names a
-// wildcard the way cloud's reading does, the test goes green and says so.
-func resolve(s *cloud.Service[state], c *zip.Ctx) error {
+// Each component comes back with its name, version, type, package URL and license.
+//
+// This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials
+// belongs to a content-addressed digest rather than to an org, so every caller
+// deploying the same image resolves the same components, and nothing tenant-owned
+// is exposed by it. It still requires an attested caller — global is not public —
+// and answers 403 without one. Ingest is the closed half of the pair.
+//
+// A miss is not the end of the lookup. The registry is the source of truth, so an
+// unmaterialized ref is pulled from the SBOM attached to that image, persisted, and
+// answered from the store — the first read of a freshly built image pays for the
+// pull, later ones do not. The pull reads OUR registries and nothing else, which is
+// what makes one shared answer trustworthy for every tenant: an attached document
+// is whoever controls that repository speaking, so a ref outside them answers 404
+// rather than a stranger's account of what is in their image. A bare digest with no
+// repository is not pullable and answers an honest 404, as does a ref with no
+// attached document. Repeated ingests collapse to the latest, components come back
+// ordered by type then name, and a result over 5000 components is capped with
+// `truncated` set. When the datastore is not connected the answer is 503 rather
+// than a fabricated empty image.
+func (o ops) resolve(ctx context.Context, in *SbomRef) (*SbomView, error) {
 	// An attested caller, before anything else. GLOBAL is not PUBLIC: the read is
 	// cross-tenant because a bill of materials belongs to a digest rather than to an
 	// org, which says nothing about who may ask. And a miss does not merely read —
@@ -299,23 +298,22 @@ func resolve(s *cloud.Service[state], c *zip.Ctx) error {
 	// the answer is the same for every tenant; only the question needs an owner.
 	//
 	// The check is HERE and not on the group: the probe beside it shares that group
-	// and has to stay answerable without a credential, and this is a raw handler, so
-	// its route is the only seam that reaches it.
-	if !principal.Validated(c) {
-		return principal.Refused(c)
+	// and has to stay answerable without a credential.
+	if !principal.ValidatedFrom(ctx) {
+		return nil, principal.RefusedFrom(ctx)
 	}
-	ref := strings.Trim(strings.TrimSpace(c.Fiber().Params("*")), "/")
+	ref := strings.Trim(strings.TrimSpace(in.Ref), "/")
 	if dec, err := url.PathUnescape(ref); err == nil {
 		ref = dec
 	}
 	if ref == "" {
-		return zip.ErrBadRequest("image digest or ref is required")
+		return nil, zip.ErrBadRequest("image digest or ref is required")
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return nil, err
 	}
-	if err := ensureTable(c.Context()); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
+	if err := ensureTable(ctx); err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
 	}
 
 	// component identity is the ORDER BY, so FINAL dedupes; type,name is the stable
@@ -325,23 +323,24 @@ func resolve(s *cloud.Service[state], c *zip.Ctx) error {
 		"component_name, component_version, component_type, purl, license, ingested_at " +
 		"FROM " + sbomTable + " FINAL WHERE image_digest = ? OR image_ref = ? " +
 		"ORDER BY component_type, component_name LIMIT " + fmt.Sprint(maxComponents+1)
-	rows, err := datastore.Query(c.Context(), q, ref, ref)
+	rows, err := datastore.Query(ctx, q, ref, ref)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "sbom query: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "sbom query: %v", err)
 	}
 	if len(rows) == 0 {
 		// Pull-on-miss: the registry is the source of truth. CI `cosign attach`es the
 		// CycloneDX SBOM to the image digest; if this ref is a real image we haven't
 		// materialized yet, pull the attached artifact, persist it, and re-read. A
 		// pull failure is NON-FATAL — we fall through to the honest 404.
-		if view, perr := pullAndStore(s, c.Context(), ref); perr == nil && view != nil {
-			return c.JSON(http.StatusOK, *view)
+		if view, perr := pullAndStore(o.s, ctx, ref); perr == nil && view != nil {
+			return view, nil
 		} else if perr != nil {
-			s.Log.Debug("sbom pull-on-miss failed", "ref", ref, "err", perr)
+			o.s.Log.Debug("sbom pull-on-miss failed", "ref", ref, "err", perr)
 		}
-		return zip.ErrNotFound("no SBOM for " + ref)
+		return nil, zip.ErrNotFound("no SBOM for " + ref)
 	}
-	return c.JSON(http.StatusOK, buildView(rows))
+	view := buildView(rows)
+	return &view, nil
 }
 
 // ── registry pull-on-miss (materialize) ──────────────────────────────────────

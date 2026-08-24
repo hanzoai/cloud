@@ -1,7 +1,7 @@
 ---
 name: sbom_sbom
 version: "8.0.0"
-description: "Read sbom sbom: Resolve everything inside a container image."
+description: "Read sbom sbom: Resolve returns everything inside one container image, addressed by its digest or by its image ref.."
 ---
 
 # Hanzo · SBOM · sbom
@@ -14,17 +14,17 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/sbom/{wildcard1}` — Resolve everything inside a container image
+- `GET https://api.hanzo.ai/v1/sbom/{wildcard1}` — Resolve returns everything inside one container image, addressed by its digest or by its image ref.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `wildcard1` | path | yes | string |  |
+| `wildcard1` | path | yes | string | Ref is the image to resolve, either its content-addressed digest (`sha256:…`) or its full reference (`oci.hanzo.ai/hanzo/cloud:v1`). Both are matched, so either spelling of one image answers the same components. It is the greedy tail of the address, so slashes, a tag and a digest all travel in it whole, and a percent-encoded ref is decoded before it is looked up. Empty is a 400, never a scan of the store. |
 
 ## Response
 
-- `/v1/sbom/{wildcard1}` → JSON object.
+- `/v1/sbom/{wildcard1}` → `SbomView` object with fields: `componentCount`, `components`, `gitSha`, `imageDigest`, `imageRef`, `ingestedAt`, `sourceRepo`, `truncated`.
 
 ## Example
 

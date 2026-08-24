@@ -2,31 +2,38 @@ package s3
 
 // typed.go is this surface's typed half — one registry entry per operation,
 // which is what the OpenAPI operation's schema, the MCP tool, the CLI command and
-// every generated SDK method are all projected from. Six of the eight ops are
-// here; the two that are not are named in untypedByDesign (typed_wire_test.go)
-// with the wire fact that keeps them raw.
+// every generated SDK method are all projected from. All eight ops are here, and
+// untypedByDesign (typed_wire_test.go) is empty.
 //
-// TWO OF THE THREE BLOCKERS THIS PACKAGE RECORDED HAVE EXPIRED, and re-reading
-// them rather than inheriting them is the whole reason these ops exist:
+// IT REACHED EIGHT BY RE-READING FOUR RECORDED REFUSALS rather than inheriting
+// them. Each named a capability zip did not have, and each of the four has it now:
 //
 //   - THE MONEY WIRE. The refusal said a balance denial must be written IN BAND
 //     because a typed op's only refusal is a returned error, which zip renders
 //     flat. cloud.Denied carries the fleet's NESTED {"error":{"code","message"}}
 //     off a returned error and serve.go installs DenyEnvelope app-wide, so the
-//     capability was already there. It matters even less here than elsewhere: the
-//     gate lives in guard, a MIDDLEWARE that runs before the op is entered, so
-//     the denial never passes through a typed handler at all.
+//     capability was already there. It never even applied: the balance is asked
+//     in paid, which runs before the op is entered, so the denial does not pass
+//     through a typed handler at all.
 //   - TWO STATUSES, ONE OBJECT. zip v1.31.0 made WithStatus variadic and added
 //     StatusCoder, so an op declares the set and the ANSWER says which one it is.
 //     health is that: one shape, 200 or 503, both declared.
-//
-// The third is real and stays: fiber's `*` has no typed-op spelling, so the two
-// /objects/* ops cannot be typed at any zip version that renders the route as
-// {wildcard1} while the registry publishes `*`.
+//   - THE ADDRESS. zip's Template spells a greedy segment {wildcardN}, the name
+//     cloud's router reading already gave it, so openapi.Fold accepts an op there
+//     instead of refusing the whole document.
+//   - THE ARGUMENT. A greedy segment is now a DECLARED path parameter — zip reads
+//     every matched segment, not the ":name" ones alone. Without that the address
+//     templated {wildcard1} and declared nothing under it, and openapi.Fields,
+//     which builds the fleet's GraphQL field out of those parameters, produced a
+//     field with no argument for the object: the download answered 200 with a URL
+//     signed for an object named "{wildcard1}" and the delete answered 204 having
+//     removed nothing the caller named.
 
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -386,4 +393,111 @@ func (o ops) presignUpload(ctx context.Context, in *uploadIn) (*presignResponse,
 	return &presignResponse{
 		URL: u.String(), Method: http.MethodPut, Key: key, Expiry: int64(presignTTL.Seconds()),
 	}, nil
+}
+
+// objectRef addresses ONE object: a bucket by friendly name and a key that is the
+// whole trailing path.
+//
+// Key rides the route's greedy capture, which fiber names "*1" — the first
+// wildcard, numbered over wildcards rather than segments, so the named :bucket
+// ahead of it does not shift the number. The two tags answer two questions and
+// both are needed. `url:` says where the value comes from over HTTP, and it must
+// be fiber's key or the segment binds nothing. `json:` keeps the field's ordinary
+// name for a caller that addresses the operation BY NAME — MCP, the call plane
+// and the CLI hand their arguments across as one JSON object with no path to read,
+// so `json:"-"` would leave them no way to say which object they mean.
+//
+// The URL WINS over both other sources: zip binds body, then query, then path, so
+// a query or body naming a different bucket or key is overwritten by the address
+// that was matched. The operation therefore acts on what the URL named, which is
+// also what admit checked and what the ledger is debited for.
+type objectRef struct {
+	// Bucket is the bucket's friendly name, from the path.
+	Bucket string `json:"bucket"`
+	// Key is the object's key within the bucket — everything after that bucket's
+	// /objects/. It MAY contain "/", because a key is a path and this segment is
+	// captured whole: "2019/summer/a.jpg" is one key, not three. It is
+	// path-cleaned before use, so "../" reaches nothing outside the bucket, and a
+	// key that is empty, absolute or a bare folder marker is refused 400.
+	Key string `json:"key" url:"*1"`
+}
+
+// PresignDownload mints a presigned GET URL the caller downloads from DIRECTLY.
+//
+// The bytes never pass through this binary and the admin credential never leaves
+// the server: the URL is signed against the PUBLIC host, scoped to exactly this
+// bucket and key, and expires. It carries a content disposition of attachment
+// naming the object's file name, so a browser following it saves the object rather
+// than rendering it in place. A deployment with no public endpoint configured
+// cannot mint one and answers 503 rather than a URL that will not work.
+//
+// Billed per call — for MINTING the URL, which is the work this operation does;
+// the download that follows it comes straight from the store and is not seen here.
+// The balance is checked BEFORE anything is touched, so an unfunded org is refused
+// with no URL issued.
+func (o ops) presignDownload(ctx context.Context, in *objectRef) (*presignResponse, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bname, ok := friendlyParam(in.Bucket)
+	if !ok {
+		return nil, zip.ErrBadRequest("invalid bucket name")
+	}
+	key, ok := cleanKey(remainder(in.Key))
+	if !ok {
+		return nil, zip.ErrBadRequest("object key is required and must be a clean path")
+	}
+	if !o.s.State.admin.PresignConfigured() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "presigned download is not available (no public endpoint configured)")
+	}
+	pub, err := o.s.State.admin.PublicClient()
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
+	}
+	params := url.Values{}
+	params.Set("response-content-disposition", "attachment; filename=\""+path.Base(key)+"\"")
+	u, err := pub.PresignedGetObject(ctx, physicalBucket(org, bname), key, presignTTL, params)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "presign download: %v", err)
+	}
+	return &presignResponse{
+		URL: u.String(), Method: http.MethodGet, Key: key, Expiry: int64(presignTTL.Seconds()),
+	}, nil
+}
+
+// DeleteObject removes one object and answers 204.
+//
+// It removes ONE object and never a prefix: a key that looks like a folder deletes
+// the placeholder at that key, not the objects beneath it. The key is path-cleaned
+// first, so the delete cannot reach outside the bucket it names, and a bucket the
+// caller's org does not own is the same 404 an unknown name gives.
+//
+// Billed per call: the balance is checked BEFORE anything is touched, so an
+// unfunded org is refused with nothing deleted, and the debit lands only once the
+// object is gone.
+func (o ops) deleteObject(ctx context.Context, in *objectRef) (*struct{}, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bname, ok := friendlyParam(in.Bucket)
+	if !ok {
+		return nil, zip.ErrBadRequest("invalid bucket name")
+	}
+	key, ok := cleanKey(remainder(in.Key))
+	if !ok {
+		return nil, zip.ErrBadRequest("object key is required and must be a clean path")
+	}
+	cli, err := o.client()
+	if err != nil {
+		return nil, err
+	}
+	if err := cli.RemoveObject(ctx, physicalBucket(org, bname), key, s3.RemoveObjectOptions{}); err != nil {
+		if isNoSuchBucket(err) {
+			return nil, zip.ErrNotFound("bucket not found")
+		}
+		return nil, zip.Errorf(http.StatusBadGateway, "delete object: %v", err)
+	}
+	return nil, nil
 }

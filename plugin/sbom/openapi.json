@@ -90,8 +90,8 @@
     "/v1/sbom/{wildcard1}": {
       "get": {
         "operationId": "get_sbom_by_wildcard1",
-        "summary": "Resolve everything inside a container image",
-        "description": "Answers with the component set of one container image — each component's name, version, type, package URL and license — addressed by either the image digest or the image ref. The captured segment is greedy and percent-decoded, so a ref carrying slashes and a tag is passed whole.\n\nThis read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials belongs to a content-addressed digest rather than to an org, so every caller deploying the same image resolves the same components, and nothing tenant-owned is exposed by it. It still requires an attested caller — global is not public — and answers 403 without one. Ingest is the gated half of the pair.\n\nA miss is not the end of the lookup. The registry is the source of truth, so an unmaterialized ref is pulled from the SBOM attached to that image, persisted, and answered from the store — the first read of a freshly built image pays for the pull, later ones do not. The pull reads OUR registries and nothing else, which is what makes one shared answer trustworthy for every tenant: an attached document is whoever controls that repository speaking, so a ref outside them answers 404 rather than a stranger's account of what is in their image. A bare digest with no repository is not pullable and answers an honest 404, as does a ref with no attached document. Repeated ingests collapse to the latest, components come back ordered by type then name, and a result over 5000 components is capped with `truncated` set. When the datastore is not connected the answer is 503 rather than a fabricated empty image.",
+        "summary": "Resolve returns everything inside one container image, addressed by its digest or by its image ref.",
+        "description": "Resolve returns everything inside one container image, addressed by its digest\nor by its image ref.\n\nEach component comes back with its name, version, type, package URL and license.\n\nThis read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials\nbelongs to a content-addressed digest rather than to an org, so every caller\ndeploying the same image resolves the same components, and nothing tenant-owned\nis exposed by it. It still requires an attested caller — global is not public —\nand answers 403 without one. Ingest is the closed half of the pair.\n\nA miss is not the end of the lookup. The registry is the source of truth, so an\nunmaterialized ref is pulled from the SBOM attached to that image, persisted, and\nanswered from the store — the first read of a freshly built image pays for the\npull, later ones do not. The pull reads OUR registries and nothing else, which is\nwhat makes one shared answer trustworthy for every tenant: an attached document\nis whoever controls that repository speaking, so a ref outside them answers 404\nrather than a stranger's account of what is in their image. A bare digest with no\nrepository is not pullable and answers an honest 404, as does a ref with no\nattached document. Repeated ingests collapse to the latest, components come back\nordered by type then name, and a result over 5000 components is capped with\n`truncated` set. When the datastore is not connected the answer is 503 rather\nthan a fabricated empty image.",
         "tags": [
           "sbom"
         ],
@@ -100,16 +100,55 @@
             "name": "wildcard1",
             "in": "path",
             "required": true,
+            "description": "Ref is the image to resolve, either its content-addressed digest\n(`sha256:…`) or its full reference (`oci.hanzo.ai/hanzo/cloud:v1`). Both are\nmatched, so either spelling of one image answers the same components. It is\nthe greedy tail of the address, so slashes, a tag and a digest all travel in\nit whole, and a percent-encoded ref is decoded before it is looked up. Empty\nis a 400, never a scan of the store.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SbomView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
       }
     }
   },
   "components": {
     "schemas": {
+      "SbomComponent": {
+        "properties": {
+          "license": {
+            "description": "License is the FIRST license fact found for the component: its SPDX id, else\nits name, else the expression. Empty when the document declares none.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the dependency's package name as CycloneDX records it.",
+            "type": "string"
+          },
+          "purl": {
+            "description": "Purl is the package URL — the ecosystem-qualified identity a vulnerability\nfeed can be joined on.",
+            "type": "string"
+          },
+          "type": {
+            "description": "Type is the CycloneDX component type: library, application, framework, …",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the resolved version of that package.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SbomHealth": {
         "properties": {
           "datastore": {
@@ -168,6 +207,46 @@
           "imageDigest": {
             "description": "ImageDigest is the content-addressed digest the components were keyed under.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SbomView": {
+        "properties": {
+          "componentCount": {
+            "description": "ComponentCount is how many components this response carries — after the cap,\nso it matches components exactly rather than the image's true total.",
+            "type": "integer"
+          },
+          "components": {
+            "description": "Components is the flattened dependency set, ordered by type then name.",
+            "items": {
+              "$ref": "#/components/schemas/SbomComponent"
+            },
+            "type": "array"
+          },
+          "gitSha": {
+            "description": "GitSha is the commit the image was built from. Empty on the same terms as\nsourceRepo.",
+            "type": "string"
+          },
+          "imageDigest": {
+            "description": "ImageDigest is the content-addressed digest the components are keyed under,\nand is what identifies this bill of materials however it was asked for.",
+            "type": "string"
+          },
+          "imageRef": {
+            "description": "ImageRef is the image reference recorded alongside the digest. Empty when\nthe components were ingested against a digest with no ref.",
+            "type": "string"
+          },
+          "ingestedAt": {
+            "description": "IngestedAt is when the bill of materials was recorded, RFC 3339.",
+            "type": "string"
+          },
+          "sourceRepo": {
+            "description": "SourceRepo is the repository the image was built from. Empty unless the\ningest declared it — a pull from the registry does not learn it.",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "Truncated is true when the image has MORE components than the cap returns.",
+            "type": "boolean"
           }
         },
         "type": "object"

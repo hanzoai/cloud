@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -40,9 +39,8 @@ const (
 // the existing overlay. A brand-new overlay defaults to enabled (the catalog
 // default), so PATCH {"enabled":false} is the first act that hides an entry.
 //
-// The name says which noun it patches because publishing it (see the Register
-// below) puts it in the fleet's FLAT schema namespace, where one name may mean
-// only one shape. It was `patchBody` while it published nothing, which is
+// The name says which noun it patches because publishing it puts it in the
+// fleet's FLAT schema namespace, where one name may mean only one shape. It was `patchBody` while it published nothing, which is
 // exactly the generic name two apps eventually claim with two shapes — and the
 // weave then refuses both. Qualify before you publish; renaming afterwards is a
 // rename in every generated SDK.
@@ -138,66 +136,56 @@ func (o ops) adminCatalog(ctx context.Context, _ *pricingNoInput) (*adminCatalog
 	}, nil
 }
 
-// The PROSE and the BODIES of the one operation on this surface that cannot be
-// a typed op. The other thirty-two carry both in Go declarations zipdoc and zip
-// read; this one is pinned raw by the greedy wildcard (ops.go says why,
-// typed_wire_test.go proves it), so nothing derives either and it would publish
-// an operationId alone.
+// modelPatchIn is the model id from the URL plus the overlay patch.
 //
-// Prose alone was not enough, and the half that was missing is the one a client
-// trips over: an operation with no requestBody and no responses is
-// INDISTINGUISHABLE from a route that takes nothing and returns nothing, so
-// every SDK generated off this document offered a model-overlay patch with
-// nowhere to put the patch. Register states the two shapes the handler actually
-// binds — the same overlayPatch adminPatch decodes, the same Overlay applyPatch
-// answers with — so a shape here cannot drift from the code: change the struct
-// and the document follows.
-//
-// The wildcard blocks TYPING, not DECLARING. What stays lost is exactly what
-// only zip's typed registry supplies: an MCP tool, a CLI command, a typed SDK
-// method, and per-FIELD prose (Register reflects over Go types and Go drops
-// comments — see the proseless ledger in typed_wire_test.go).
-//
-// Both are keyed by the fiber pattern the ROUTER carries (`…/models/*`), never
-// the `{wildcard1}` template the document renders it as, and both render only
-// while that route is served — the registry cannot add an operation.
-func init() {
-	openapi.Register("/v1/admin/pricing/catalog/models/*", http.MethodPatch, overlayPatch{}, Overlay{})
-	openapi.Describe("/v1/admin/pricing/catalog/models/*", http.MethodPatch,
-		"Turn one model off, into beta for named orgs, or generally available",
-		"Sets one model's availability overlay — and the price overrides applied on top of the "+
-			"catalog — then answers the new effective overlay, so a console needs no second read. "+
-			"The model id is the whole remaining path, so a slashed id like "+
-			"`acme/some-model-1` addresses intact.\n\n"+
-			"SuperAdmin only; every other caller is 403, decided before the body is read. The "+
-			"overlay is PLATFORM-WIDE — this is the catalog every org prices against, not a "+
-			"per-org setting — and `betaOrgs` is what narrows a beta to named orgs.\n\n"+
-			"Only the fields the patch names change; an entry with no overlay yet starts from the "+
-			"catalog default, which is enabled. `state` is the coherent tri-state setter "+
-			"(`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied AFTER it, so "+
-			"they win where both are sent; anything else in `state` is 400. A field sent as an "+
-			"explicit `null` arrives indistinguishable from an absent one, so null does not clear "+
-			"anything.\n\n"+
-			"The rule worth reading twice: a disabled entry that still carries beta orgs IS a beta "+
-			"— `{\"enabled\":false,\"betaOrgs\":[\"acme\"]}` leaves acme seeing the model. Only an "+
-			"explicit `off` (or `beta:false`) with an empty list is the absolute kill switch that a "+
-			"user's own beta opt-in can never re-open.\n\n"+
-			"`overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it must be a "+
-			"JSON object or null — an array or a scalar is refused — and is bounded in size and "+
-			"nesting depth. An uninitialised overlay store answers 503.")
+// The id keeps a wire name rather than being URL-only. A typed op is reached off
+// HTTP as well — the call plane hands the arguments across as the body with no
+// path map — so `json:"-"` would leave those callers no way to name which model
+// they mean. The URL is still the authority: bindURL binds path LAST, so a body
+// id cannot redirect a write away from the model the address names.
+type modelPatchIn struct {
+	// ID is the model the overlay belongs to. Over HTTP it is the whole remaining
+	// path, so a slashed id (acme/some-model-1) addresses intact, and the path
+	// wins over anything sent in the body.
+	ID string `json:"id" url:"*1"`
+	overlayPatch
 }
 
-// adminPatchModel upserts the overlay for one model id. The id is a greedy
-// wildcard so slashed ids (acme/some-model-1) route intact.
-func adminPatchModel(c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// PatchModel turns one model off, into beta for named orgs, or generally available.
+//
+// Sets one model's availability overlay — and the price overrides applied on top
+// of the catalog — then answers the new effective overlay, so a console needs no
+// second read. The model id is the whole remaining path, so a slashed id like
+// `acme/some-model-1` addresses intact.
+//
+// SuperAdmin only; every other caller is 403. The overlay is PLATFORM-WIDE —
+// this is the catalog every org prices against, not a per-org setting — and
+// `betaOrgs` is what narrows a beta to named orgs.
+//
+// Only the fields the patch names change; an entry with no overlay yet starts
+// from the catalog default, which is enabled. `state` is the coherent tri-state
+// setter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied
+// AFTER it, so they win where both are sent; anything else in `state` is 400. A
+// field sent as an explicit `null` arrives indistinguishable from an absent one,
+// so null does not clear anything.
+//
+// The rule worth reading twice: a disabled entry that still carries beta orgs IS
+// a beta — `{"enabled":false,"betaOrgs":["acme"]}` leaves acme seeing the model.
+// Only an explicit `off` (or `beta:false`) with an empty list is the absolute
+// kill switch that a user's own beta opt-in can never re-open.
+//
+// `overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it
+// must be a JSON object or null — an array or a scalar is refused — and is
+// bounded in size and nesting depth. An uninitialised overlay store answers 503.
+func adminPatchModel(ctx context.Context, in *modelPatchIn) (*Overlay, error) {
+	if !callerIsAdmin(ctx) {
+		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
-	id := strings.TrimSpace(c.Param("*"))
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("model id required")
+		return nil, zip.ErrBadRequest("model id required")
 	}
-	return adminPatch(c, kindModel, id)
+	return applyPatch(ctx, kindModel, id, in.overlayPatch)
 }
 
 // providerPatchIn is the provider name from the URL plus the overlay patch.
@@ -233,31 +221,12 @@ func adminPatchProvider(ctx context.Context, in *providerPatchIn) (*Overlay, err
 	return applyPatch(ctx, kindProvider, name, in.overlayPatch)
 }
 
-// adminPatch reads the current overlay (or the enabled-default), applies only
-// the fields present in the body, and writes it back. Returns the new effective
-// overlay so the admin UI can reflect it without a re-fetch.
-//
-// It is the *zip.Ctx entry point into [applyPatch], kept for the ONE route that
-// cannot be a typed op: PATCH /v1/admin/pricing/catalog/models/* routes through a
-// greedy wildcard (see ops.go). The typed providers op calls applyPatch directly,
-// so both entry points run the same code and cannot drift.
-func adminPatch(c *zip.Ctx, kind, id string) error {
-	var body overlayPatch
-	if raw := c.Body(); len(raw) > 0 {
-		if err := json.Unmarshal(raw, &body); err != nil {
-			return zip.ErrBadRequest("invalid JSON body: " + err.Error())
-		}
-	}
-	out, err := applyPatch(c.Context(), kind, id, body)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, out)
-}
-
 // applyPatch is the overlay upsert itself, with no request in sight: read the
 // current overlay (or the enabled-default), apply only the fields the patch
 // carries, write it back, and answer with the new effective overlay.
+//
+// Both typed ops on this surface — the model one and the provider one — call it
+// directly, so the two cannot drift about what a patch means.
 func applyPatch(ctx context.Context, kind, id string, body overlayPatch) (*Overlay, error) {
 	if cat == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "catalog overlay not initialised")

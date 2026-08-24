@@ -1,7 +1,7 @@
 ---
 name: kms_secrets
 version: "8.0.0"
-description: "Read kms secrets: Lists the secrets your org holds, without their values., Read one secret's value."
+description: "Read kms secrets: Lists the secrets your org holds, without their values., Reads one secret's value from your org.."
 ---
 
 # Zoo · KMS · secrets
@@ -15,13 +15,13 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.zoo.ngo/v1/kms/secrets` — Lists the secrets your org holds, without their values.
-- `GET https://api.zoo.ngo/v1/kms/secrets/{wildcard1}` — Read one secret's value
+- `GET https://api.zoo.ngo/v1/kms/secrets/{wildcard1}` — Reads one secret's value from your org.
 
 ## Parameters
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `wildcard1` | path | yes | string |  |
+| `wildcard1` | path | yes | string | Secret is the coordinate beneath the caller's own org root: an optional `/`-separated subpath and then the name, such as `ci/deploy/token`. Over HTTP it is the trailing path itself, and the trailing path WINS over any other spelling sent with it. There is no org in it — the tenant comes from the validated claim — so another tenant's secret is not merely refused, it is unnameable. OMITTED is refused with a 400: there is no secret named "everything", and a blank address must not read as one. |
 | `env` | query | no | string | Env selects the environment, which is part of a secret's storage key. OMITTED means EVERY environment — this is the enumeration surface, so it must be able to answer "what is in here" without being told where to look. |
 | `environment` | query | no | string | Environment is the KMS operator's spelling of Env, accepted so one caller need not learn the other's vocabulary. Env wins when both are sent. |
 | `path` | query | no | string | Path narrows the listing to one subtree beneath the caller's org root, as a `/`-separated path such as `/ci`. OMITTED means the whole org. |
@@ -30,7 +30,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/kms/secrets` → `kmsSecrets` object with fields: `names`, `secrets`, `total`.
-- `/v1/kms/secrets/{wildcard1}` → JSON object.
+- `/v1/kms/secrets/{wildcard1}` → `kmsSecret` object with fields: `env`, `name`, `value`.
 
 ## Example
 
