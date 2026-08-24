@@ -61,7 +61,11 @@ import (
 // "/api/" is listed for the opposite reason to the others: nothing serves it.
 // The API is versioned at /v1/, so a caller on /api/ is on a prefix that does
 // not exist and gets a 404 instead of a 200 of console HTML.
-var apiPrefixes = []string{"/v1/", "/api/", "/zap", "/healthz", "/readyz"}
+// "/health" sits beside "/healthz" because it is the same probe under the name
+// a monitor reaches for first. Without it the catch-all below claimed the
+// address and answered console HTML — 200 when the API was unreachable, and 503
+// when only the static bundle was.
+var apiPrefixes = []string{"/v1/", "/api/", "/zap", "/health", "/healthz", "/readyz"}
 
 // consoleTitleRe matches the single <head> <title>…</title> element (any
 // attributes, any inner text, across newlines) so serveIndex can rewrite it to
