@@ -177,6 +177,25 @@ func TracingMiddleware() zip.Handler {
 		// Identity headers are validated upstream (IdentityMiddleware) before the
 		// handler runs, so by here c.Org() reflects the authenticated org.
 		status := c.Fiber().Response().StatusCode()
+		// A handler that RETURNS an error has not written a response yet: fiber
+		// unwinds the chain first and calls ErrorHandler after, so the response
+		// object still holds its default 200 when we read it here. Taking the
+		// status from the error instead is what makes the recorded status the one
+		// the caller actually got. mapError is the same function ErrorHandler
+		// renders with, so there is one answer to "what status is this error",
+		// and it is pure — it reads the error and returns a fresh value.
+		//
+		// Measured before the fix: a refused PATCH /v1/agents/sessions/:id went out
+		// 403 on the wire and recorded `http.response.status_code: 200` with the
+		// refusal in status.message — 956 of them in six hours from one client.
+		// The span was self-contradictory, but the METRIC below is the sharper
+		// loss: observeRequest takes this same value, so every error a handler
+		// returned counted as a 200 in hanzo_http_requests_total. That is the
+		// series this middleware exists to feed, and 5xx was unalertable through
+		// exactly the arm that reports faults.
+		if err != nil {
+			status = mapError(err).Status
+		}
 		span.SetAttributes(attribute.Int("http.response.status_code", status))
 		org := strings.Clone(c.Org())
 		if org != "" {
