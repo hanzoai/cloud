@@ -33,7 +33,7 @@ import (
 // must behave as shadow.
 //
 // The gate reads the identity boundary's OWN attestation, never a header, so the
-// app installs `attest` in front of it — the stand-in for SanitizeIdentity. That
+// app installs `boundary` in front of it — the stand-in for SanitizeIdentity. That
 // is not test scaffolding around a gap: it is the property under test. An app
 // WITHOUT it (abuseAppUnattested below) must see every caller as anonymous no
 // matter what headers arrive.
@@ -50,9 +50,9 @@ const (
 	withoutBoundary = false
 )
 
-// attest is the test's identity boundary: it mints the principal from the same
+// boundary is the test's identity boundary: it mints the principal from the same
 // headers SanitizeIdentity mints it from, and parks it where only a boundary can.
-func attest() zip.Handler {
+func boundary() zip.Handler {
 	return func(c *zip.Ctx) error {
 		if u := c.User(); u != "" {
 			principal.Mint(c, principal.Principal{Org: c.Org(), User: u})
@@ -66,13 +66,13 @@ func attest() zip.Handler {
 // abuseAppWith mounts the gate with or without the identity boundary in front of
 // it. Without it — the shape a hand-written plugin process has — every caller is
 // anonymous by construction, whatever headers arrive.
-func abuseAppWith(t *testing.T, mode string, boundary bool) (*zip.App, *edge.Traffic) {
+func abuseAppWith(t *testing.T, mode string, front bool) (*zip.App, *edge.Traffic) {
 	t.Helper()
 	tr := edge.NewTraffic()
 	deps := Deps{GatewayPolicy: staticModeStore(t, mode), Traffic: tr}
 	app := zip.New(zip.Config{})
-	if boundary {
-		app.Use(attest())
+	if front {
+		app.Use(boundary())
 	}
 	app.Use(AbuseGate(deps, tr))
 	h := func(c *zip.Ctx) error { return c.JSON(http.StatusOK, map[string]string{"ok": "1"}) }
@@ -501,7 +501,7 @@ func TestAbuseGate_ALapsedHoldForcesTheQuestionAgain(t *testing.T) {
 	tr := edge.NewTraffic()
 	deps := Deps{GatewayPolicy: staticModeStore(t, edge.ModeLive), Traffic: tr}
 	app := zip.New(zip.Config{})
-	app.Use(attest())
+	app.Use(boundary())
 	app.Use(AbuseGate(deps, tr))
 	app.Get("/v1/models", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "1"}) })
 

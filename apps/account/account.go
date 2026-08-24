@@ -109,7 +109,6 @@ var errNotFound = errors.New("not found")
 // writes mounted from another package.
 type state struct {
 	iam      *iamClient
-	csrfKey  []byte       // keyed-BLAKE3 MAC key for the money-write CSRF token (csrf.go)
 	writesRL *rateLimiter // per-IP abuse cap on the money-write routes (ratelimit.go)
 	// vfs is cloud's blob client (deps.VFS) — where a profile photo's bytes live
 	// (avatar.go). NewBase does not carry it, so it is taken from deps here, the
@@ -131,7 +130,6 @@ func newService(deps cloud.Deps) (*cloud.Service[state], error) {
 	}
 	b := cloud.NewBase(deps, "account")
 	st := state{iam: newIAMClient(), vfs: deps.VFS}
-	st.csrfKey = sharedCSRFKey(b.Log)
 	st.writesRL = newRateLimiter(keysWriteRatePerMin)
 	return &cloud.Service[state]{Base: b, State: st}, nil
 }
@@ -194,7 +192,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// and around nothing else, while op.invoke and op.direct are built before the
 	// wrap and are what MCP, the call plane, the graph and the CLI call. The four
 	// typed writes therefore carry both controls themselves — see requestCaller.
-	limit, csrf := rateLimit(s.State.writesRL), requireCSRF(s)
+	limit, csrf := rateLimit(s.State.writesRL), requireCSRF()
 	open := app.Group(prefix)  // reads
 	write := app.Group(prefix) // writes: the controls live in the operations
 
@@ -348,7 +346,7 @@ func (o ops) requestCaller(ctx context.Context, does act, requireOwner bool, wha
 		return no(zip.ErrForbidden("sign in to " + what))
 	}
 	if does != reads {
-		if err := checkCSRF(o.s, c); err != nil {
+		if err := cloud.Intended(c); err != nil {
 			return no(err)
 		}
 	}
