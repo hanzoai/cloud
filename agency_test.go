@@ -48,7 +48,7 @@ func TestCredentialClass_ReadsTheCredentialNotTheClient(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var got string
 			app := zip.New(zip.Config{})
-			app.Use(attest()) // the boundary; without it every caller is anonymous.
+			app.Use(boundary()) // the boundary; without it every caller is anonymous.
 			app.Get("/probe", func(c *zip.Ctx) error {
 				got = credentialClass(c)
 				return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
@@ -139,7 +139,7 @@ func TestCredentialClass_UsesTheBoundarysOwnResolution(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var class, fp string
 			app := zip.New(zip.Config{})
-			app.Use(attest())
+			app.Use(boundary())
 			app.Get("/probe", func(c *zip.Ctx) error {
 				class, fp = credentialClass(c), credentialOf(c)
 				return c.JSON(http.StatusOK, map[string]string{"ok": "1"})

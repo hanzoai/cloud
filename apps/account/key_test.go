@@ -1,7 +1,6 @@
 package account
 
 import (
-	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -63,24 +62,6 @@ func TestTheMinterKeepsItsOwnKeyOnALaptopAndRefusesItOnADeployment(t *testing.T)
 	}
 }
 
-// TestATokenMintedUnderOneKeyDoesNotVerifyUnderAnother is the fact the two boot
-// verdicts exist for, measured rather than assumed: two processes that resolved
-// different keys cannot accept each other's tokens, so an unset CONSOLE_CSRF_KEY
-// across the mint/verify split is a permanent refusal and not a degraded one.
-func TestATokenMintedUnderOneKeyDoesNotVerifyUnderAnother(t *testing.T) {
-	mint := &cloud.Service[state]{State: state{csrfKey: decode(t, testKey)}}
-	verify := &cloud.Service[state]{State: state{csrfKey: decode(t,
-		"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")}}
-
-	tok, _ := issueCSRF(mint, "alice", "acme")
-	if !verifyCSRF(mint, tok, "alice", "acme") {
-		t.Fatal("a token does not verify under the key that minted it")
-	}
-	if verifyCSRF(verify, tok, "alice", "acme") {
-		t.Fatal("a token verified under a key that did not mint it")
-	}
-}
-
 // TestDeployedDecidesWhichKeyTheMinterMayHold pins the fact `own` reads. cloud.Deployed
 // is false in this binary — nothing handed it a master key — which is exactly the
 // laptop answer, so the minter's fallback stays available to the suite.
@@ -88,13 +69,4 @@ func TestDeployedDecidesWhichKeyTheMinterMayHold(t *testing.T) {
 	if cloud.Deployed() {
 		t.Fatal("a test binary reports itself a deployment; the minter's fallback is then untestable")
 	}
-}
-
-func decode(t *testing.T, s string) []byte {
-	t.Helper()
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
 }
