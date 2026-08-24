@@ -44,6 +44,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/manifest"
@@ -69,6 +70,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	z := cloud.ZipApp(app)
 	if z == nil {
 		return fmt.Errorf("plugin.Mount: router carries no typed-op registry")
+	}
+	// core.Change verifies a token the account process minted, so this process must
+	// hold the same key; without it every operator action here is refused.
+	if err := account.Shared(); err != nil {
+		return fmt.Errorf("plugin.Mount: %w", err)
 	}
 	o := &ops{
 		z:       z,
@@ -328,7 +334,7 @@ func drift(hosts []Host) []Drift {
 // Response: {"status":"ok","msg":"billing -> 9f2c…","data":[{"host":"cloud-0",
 // "ok":true,"version":"9f2c…"}]}
 func (o *ops) reload(ctx context.Context, in *ReloadIn) (*ActionOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +385,7 @@ func (o *ops) disable(ctx context.Context, in *NameIn) (*ActionOut, error) {
 }
 
 func (o *ops) simple(ctx context.Context, in *NameIn, action string, here func() error) (*ActionOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
