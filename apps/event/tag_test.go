@@ -16,6 +16,7 @@ package event
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,42 +24,81 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zap-proto/zip"
 )
 
-func TestServeTag(t *testing.T) {
-	rec := httptest.NewRecorder()
-	serveTag(rec, httptest.NewRequest(http.MethodGet, "/v1/event/tag.js", nil))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
+// fetchTag drives the LIVE router — the real Mount the binary runs — rather than
+// handing the handler a recorder. A recorder is evidence about a FUNCTION; the tag
+// is a served ADDRESS, and the route is the only place the two meet. (http_test.go's
+// `do` cannot serve here: the 304 case needs a request HEADER, which it does not take.)
+func fetchTag(t *testing.T, app *zip.App, ifNoneMatch string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, tagPath, nil)
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
 	}
-	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/javascript") {
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", tagPath, err)
+	}
+	return resp
+}
+
+func TestServeTag(t *testing.T) {
+	resp := fetchTag(t, mountApp(t), "")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/javascript") {
 		t.Errorf("Content-Type = %q, want application/javascript", ct)
 	}
 	// A tag a browser cannot fetch cross-origin is a tag that never runs.
-	if ao := rec.Header().Get("Access-Control-Allow-Origin"); ao != "*" {
+	if ao := resp.Header.Get("Access-Control-Allow-Origin"); ao != "*" {
 		t.Errorf("Access-Control-Allow-Origin = %q, want *", ao)
 	}
-	if rec.Header().Get("ETag") == "" {
+	if resp.Header.Get("ETag") == "" {
 		t.Error("no ETag: every cold page load in the fleet would re-download the tag")
 	}
-	if body := rec.Body.String(); !strings.Contains(body, "/v1/event") {
+	if cc := resp.Header.Get("Cache-Control"); cc != tagMaxAge {
+		t.Errorf("Cache-Control = %q, want %q", cc, tagMaxAge)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Contains(body, []byte("/v1/event")) {
 		t.Error("tag does not name the endpoint it feeds")
+	}
+	// The WHOLE asset, not a prefix of it. The served body is the one thing the
+	// framing change could have moved — a truncated tag is a tag that does not run,
+	// and it would still contain the endpoint's address.
+	if !bytes.Equal(body, tagAsset) {
+		t.Errorf("served %d bytes, want the whole %d-byte asset", len(body), len(tagAsset))
 	}
 }
 
 // The tag is fetched on every cold page load, so the 304 is the common answer.
 func TestServeTagNotModified(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/v1/event/tag.js", nil)
-	r.Header.Set("If-None-Match", tagETag)
-	rec := httptest.NewRecorder()
-	serveTag(rec, r)
+	resp := fetchTag(t, mountApp(t), tagETag)
+	defer func() { _ = resp.Body.Close() }()
 
-	if rec.Code != http.StatusNotModified {
-		t.Fatalf("status = %d, want 304", rec.Code)
+	if resp.StatusCode != http.StatusNotModified {
+		t.Fatalf("status = %d, want 304", resp.StatusCode)
 	}
-	if rec.Body.Len() != 0 {
-		t.Errorf("304 carried %d bytes of body", rec.Body.Len())
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(body) != 0 {
+		t.Errorf("304 carried %d bytes of body", len(body))
+	}
+	// The validator rides the 304 as well: a client handed no ETag back has nothing
+	// to re-present, so the next load is a full download and the 304 buys nothing.
+	if et := resp.Header.Get("ETag"); et != tagETag {
+		t.Errorf("304 ETag = %q, want %q", et, tagETag)
 	}
 }
 

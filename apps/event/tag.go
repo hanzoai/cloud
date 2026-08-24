@@ -44,6 +44,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/zap-proto/zip"
 )
 
 //go:embed tag.js
@@ -131,18 +132,24 @@ func init() {
 // serveTag writes the tag. Public and unauthenticated by construction — it
 // carries no secret (the key is supplied by the PAGE, not by us) and a script a
 // browser cannot fetch anonymously is a script that never runs.
-func serveTag(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", tagMaxAge)
-	w.Header().Set("ETag", tagETag)
+//
+// Native, not adapted. Everything this reads and writes is a plain [zip.Ctx]
+// method — one request header, four response headers, a status and bytes — so
+// the net/http adapter it used to wear bought nothing and cost a goroutine, an
+// io.Pipe and a header map per request. It stays UNTYPED because the body is
+// JavaScript and a typed op ends in c.JSON, and because 304 is defined to carry
+// no body at all; that is a different fact from the adapter, and typed_wire_test.go
+// is where it is stated.
+func serveTag(c *zip.Ctx) error {
+	c.SetHeader("Content-Type", "application/javascript; charset=utf-8")
+	c.SetHeader("Cache-Control", tagMaxAge)
+	c.SetHeader("ETag", tagETag)
 	// A tag is loaded cross-origin from every property, so it answers any origin.
 	// It is a static asset with no credential and no tenant — there is nothing
 	// here to confine.
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if match := r.Header.Get("If-None-Match"); match == tagETag {
-		w.WriteHeader(http.StatusNotModified)
-		return
+	c.SetHeader("Access-Control-Allow-Origin", "*")
+	if match := c.Header("If-None-Match"); match == tagETag {
+		return c.NoContent(http.StatusNotModified)
 	}
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(tagAsset)
+	return c.Bytes(http.StatusOK, tagAsset)
 }

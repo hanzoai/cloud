@@ -249,7 +249,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The tag that feeds the canonical endpoint, on the same origin as the
 	// endpoint (tag.go). GET, static, unauthenticated: it is the install path for a
 	// surface with no bundler, and the page supplies the key.
-	app.Get(tagPath, zip.AdaptNetHTTP(http.HandlerFunc(serveTag)))
+	app.Get(tagPath, serveTag)
 
 	// The Sentry error wire, on the SAME endpoint:
 	// POST /v1/event/{project}/envelope|store. The project segment is variable, so

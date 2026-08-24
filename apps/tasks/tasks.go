@@ -48,17 +48,24 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// bare is the whole answer at /v1/tasks, on every method: the engine's ServeMux
-// derives a subtree redirect from its /v1/tasks/ pattern before any handler runs,
-// so the address is a signpost rather than a resource. TestBareNounIsARedirect
-// measures it.
-const bare = "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. " +
-	"The redirect is a routing fact derived from the engine's subtree, decided before any " +
-	"handler runs, so it is the same on every method.\n\n"
+// subtree is where the engine answers, and it is named ONCE: httpMux registers
+// it and the greedy route beside it covers the same ground. Two spellings of one
+// address is how a redirect comes to name a subtree nobody serves.
+const subtree = "/v1/tasks/"
 
-// engine is the sentence the five operations at /v1/tasks/* share: what the one
+// bare is the whole answer at /v1/tasks, on every method: a redirect into the
+// subtree. It is CLOUD's answer — net/http's subtree rule applied to the pattern
+// httpMux registers, never the engine's, which serves this address 404
+// (TestTheEngineDoesNotServeTheBareNoun) — and it reaches a client through the
+// GREEDY route at /v1/tasks/*, which matches the empty remainder and so claims
+// the bare noun too. TestTheBareNounAnswersEveryByte measures every byte of it.
+const bare = "Answers 307 with Location /v1/tasks/ — this address serves nothing itself. " +
+	"The status and the Location are the same on every method; a GET additionally carries the " +
+	"short HTML body a browser falls back to when it does not follow the redirect itself.\n\n"
+
+// behind is the sentence the five operations at /v1/tasks/* share: what the one
 // wildcard actually fronts, and the gate in front of it.
-const engine = "\n\nThis single address fronts the whole durable-workflow engine — namespaces, " +
+const behind = "\n\nThis single address fronts the whole durable-workflow engine — namespaces, " +
 	"workflows, schedules, batches, deployments, nexus, task queues, workers, activities and " +
 	"the rest — matched by path segment inside the engine's own router, which is why the " +
 	"document publishes one wildcard rather than sixty-four operations.\n\n" +
@@ -96,7 +103,7 @@ func init() {
 		"Reads from the durable engine: list namespaces, workflows, schedules, batches, "+
 			"deployments, task queues, workers and search attributes, fetch one workflow with "+
 			"its history, or subscribe to the realtime event stream. The cluster and settings "+
-			"probes are on this method too."+engine)
+			"probes are on this method too."+behind)
 	openapi.Describe("/v1/tasks/*", http.MethodPost,
 		"Start workflows and act on running ones",
 		"Everything that changes the engine's state: register a namespace, start a workflow "+
@@ -105,63 +112,85 @@ func init() {
 			"the one part of it that refuses a non-POST with a plain-text 405.\n\n"+
 			"The engine is event-sourced and exactly-once, so an action is durable once it is "+
 			"accepted and survives a process crash — a started workflow resumes rather than "+
-			"restarts."+engine)
+			"restarts."+behind)
 	openapi.Describe("/v1/tasks/*", http.MethodDelete,
 		"Delete an engine resource",
 		"Removes a resource the engine owns — a namespace and the like — inside the caller's "+
 			"own tenant shard.\n\n"+
 			"It is the narrowest of the three working methods: most of the engine's surface is "+
 			"read on GET and acted on with POST, so a delete that finds no route for its path "+
-			"answers the same plain-text 404 any unrouted path does."+engine)
+			"answers the same plain-text 404 any unrouted path does."+behind)
 	openapi.Describe("/v1/tasks/*", http.MethodPut,
 		"Not served by the engine",
 		"Published because this address accepts every method, but the engine routes no PUT: "+
 			"the answer is a plain-text 404, not a 405, and no state changes.\n\n"+
 			"Nothing here is updated by replacement. The engine is event-sourced — a workflow "+
 			"is changed by signalling, cancelling, terminating or resetting it, all of which "+
-			"are POST — so a client reaching for PUT wants POST."+engine)
+			"are POST — so a client reaching for PUT wants POST."+behind)
 	openapi.Describe("/v1/tasks/*", http.MethodPatch,
 		"Not served by the engine",
 		"Published because this address accepts every method, but the engine routes no "+
 			"PATCH: the answer is a plain-text 404, not a 405, and no state changes.\n\n"+
 			"There is no partial update on this surface. State advances by appending events, so "+
 			"the operations that change a running workflow — signal, cancel, terminate, reset — "+
-			"are all POST."+engine)
+			"are all POST."+behind)
 
-	// The methods left over on the ENGINE's addresses. Bound with All(), so they
-	// publish every method this generator knows and the ones above are only the
-	// ones that DO something. DescribeRest covers the remainder from the
-	// generator's own set, so a method added there is covered the day it appears
-	// rather than published bare — which is what a hand-copied list here had
-	// already produced for OPTIONS and TRACE. The UI addresses are the helper's.
-	for _, p := range []string{"/v1/tasks", "/v1/tasks/*"} {
-		openapi.DescribeRest(p,
-			"Not routed by the durable engine",
-			"Published because this address accepts every method, but the engine routes nothing "+
-				"here: the request arrives as an unrouted path and no workflow is read or started.")
-	}
-
+	// The methods left over. Bound with All(), so both addresses publish every
+	// method this generator knows and the ones above are only the ones that DO
+	// something. DescribeRest covers the remainder from the generator's own set,
+	// so a method added there is covered the day it appears rather than published
+	// bare — which is what a hand-copied list here had already produced for
+	// OPTIONS and TRACE.
+	openapi.DescribeRest("/v1/tasks",
+		"Redirect to the tasks API root",
+		bare+"Every method is answered the same way, because a subtree redirect is a routing "+
+			"fact and not a method's answer.")
+	openapi.DescribeRest("/v1/tasks/*",
+		"Not routed by the durable engine",
+		"Published because this address accepts every method, but the engine routes nothing "+
+			"here: the request arrives as an unrouted path and no workflow is read or started.")
 }
 
-// Mount adapts the shared engine's HTTP surface + the static UI onto app. It
-// creates NO engine — the ONE engine lives in cloud.EmbeddedTasks (durable.go).
+// Go drops comments at compile time, so this pass is the only way the prose on a
+// typed op reaches the document, the MCP tool description and the CLI. Without it
+// this package's one typed op — the plane read in activities_rpc.go, whose own
+// comment says it is a named handler so zipdoc can lift it — published a summary
+// and nothing else.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// Mount adapts the shared engine's HTTP surface onto app. It creates NO engine —
+// the ONE engine lives in cloud.EmbeddedTasks (durable.go).
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("tasks.Mount: nil app")
 	}
 
-	// NOT TYPED OPS, and the reason is the wire rather than the want of an edit.
+	// TWO REGISTRATIONS, ONE HANDLER, AND ONLY ONE OF THEM IS EVER ENTERED. The
+	// greedy `*` matches the EMPTY remainder, so /v1/tasks/* claims /v1/tasks as
+	// well — and it wins there over the exact route in EITHER registration order
+	// (TestTheGreedyRouteClaimsTheBareNoun; a `:param` sibling does not, which is
+	// what makes this a fact about greediness rather than about precedence). The
+	// exact registration is therefore unreachable, and what it still does is put
+	// the address in the DOCUMENT: paths are derived from the route table, so
+	// without it the capability's own address appears in no subset. It stays for
+	// that, and it carries the same handler so the two can never disagree about
+	// what /v1/tasks answers.
+	//
+	// That is also why the bare noun cannot be served natively here. Its answer is
+	// cloud's — hanzoai/tasks v1.52.9 registers no /v1/tasks/ subtree pattern at
+	// all, so the engine serves this address 404 on every method
+	// (TestTheEngineDoesNotServeTheBareNoun), and the redirect is net/http's rule
+	// applied to httpMux's own mux.Handle(subtree, …). Owning the answer is not
+	// enough: a handler at the exact address is never entered while the greedy
+	// sibling stands, so a native one would be a second, unexercised description
+	// of a wire the adapter actually produces. Narrowing the sibling to reach it
+	// (`/+`) would 404 the subtree root, which the wildcard serves today.
+	//
+	// NOT A TYPED OP, and the reason is the wire rather than the want of an edit.
 	// A typed op (zip.Get[In, Out]) is the ONE registry entry every projection
 	// reads, so what stays out of it publishes no schema, no prose, no MCP tool,
-	// no CLI command and no SDK method. The four mounts below are 28 published
-	// operations (plugin/tasks/openapi.json) with nothing said about any of them.
-	// Each address is refused for a fact typed_wire_test.go MEASURES, so a refusal
-	// here cannot outlive its reason:
-	//
-	// /v1/tasks answers 307 to /v1/tasks/ on every method — the engine's own
-	// ServeMux decides it from its subtree pattern, before a handler runs. A typed
-	// op answers 200, 204 or a 2xx it DECLARED; 307 and Location are not in its
-	// vocabulary. TestBareNounIsARedirect.
+	// no CLI command and no SDK method.
 	//
 	// /v1/tasks/* is ONE route over 64 engine operations this router never sees.
 	// They are matched by path SEGMENT inside hanzoai/tasks' own ServeMux
@@ -174,8 +203,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// with either. The one route also carries four content types at once (the JSON
 	// API, two text/plain refusals, an event STREAM), 12 of its verbs run on a
 	// malformed body a typed op would 400, and its errors carry `code` as a number
-	// where zip's carry `status`. TestOneWildcardCarriesFourContentTypes,
-	// TestCancelIgnoresAMalformedBody, TestEngineErrorEnvelopeIsNotZips.
+	// where zip's refusals answer RFC 9457 problem details.
+	// TestOneWildcardCarriesFourContentTypes, TestCancelIgnoresAMalformedBody,
+	// TestEngineErrorEnvelopeIsNotZips.
 	//
 	// The place these operations CAN become typed is hanzoai/tasks, which OWNS the
 	// surface. Typing them here would put a second copy of that module's route
@@ -218,9 +248,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// surface serves the Tasks HTTP API off cloud.EmbeddedTasks. The engine is
-// created after MountAll, so it is resolved lazily on the first request (by which
-// point Serve has run installDurableIngest); the per-engine route mux is then cached
+// engine resolves the ONE shared engine (durable.go). It is a var because Serve
+// is what sets it and a package test does not run Serve — so without a way to
+// state one, nothing here could drive the REAL router with a live engine — which
+// is how a refusal about this surface came to name the wrong mux and survive.
+var engine = cloud.EmbeddedTasks
+
+// notReady is the whole answer while the engine is nil, in the engine's own
+// refusal shape (`code` a NUMBER) so a client reads one vocabulary either side of
+// the redirect.
+var notReady = []byte(`{"error":"tasks engine not ready","code":503}`)
+
+// surface serves the Tasks HTTP API off the shared engine. The engine is created
+// after MountAll, so it is resolved lazily on the first request (by which point
+// Serve has run installDurableIngest); the per-engine route mux is then cached
 // once. A nil engine (embed failed / not yet wired) fails soft with 503.
 type surface struct {
 	once sync.Once
@@ -228,11 +269,11 @@ type surface struct {
 }
 
 func (s *surface) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	srv := cloud.EmbeddedTasks()
+	srv := engine()
 	if srv == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"tasks engine not ready","code":503}`))
+		_, _ = w.Write(notReady)
 		return
 	}
 	s.once.Do(func() { s.mux = httpMux(srv) })
@@ -260,7 +301,7 @@ func httpMux(srv *tasks.Embedded) http.Handler {
 	mux.Handle("/v1/tasks/cluster/health", srv.ClusterHandler())
 	mux.Handle("/v1/tasks/mcp", gate(srv.MCPHandler()))
 	mux.Handle("/v1/tasks/events", gate(srv.EventsHandler()))
-	mux.Handle("/v1/tasks/", gate(srv.HTTPHandler()))
+	mux.Handle(subtree, gate(srv.HTTPHandler()))
 	return mux
 }
 

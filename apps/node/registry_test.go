@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	kv "github.com/hanzokv/go/v9"
+	"github.com/zap-proto/zip"
 )
 
 // recorder collects what a session was sent. The send func runs on the invoking
@@ -333,12 +335,50 @@ func probeArg(t *testing.T, wire []byte) (corrID string, arg string) {
 type replica struct {
 	id   string
 	reg  *Registry
-	srv  *httptest.Server
+	app  *zip.App
+	url  string
 	hits atomic.Int64
 }
 
+// stop takes a replica off the network the way a pod dying does: the listener
+// closes at once, so nothing new is accepted. Bounded, because a peer may still
+// hold an idle keep-alive connection and a graceful drain would wait for it.
+func (r *replica) stop() { _ = r.app.Fiber().ShutdownWithTimeout(time.Second) }
+
+// peerApp mounts the peer endpoint the way routes() mounts it — POST only, on a
+// zip app — so what a test drives is the code that ships.
+//
+// BodyLimit is raised past the hop's own cap, because that cap is what these
+// tests are about; a deployment whose edge is narrower refuses first, with its
+// own answer, and that is a property of the deployment rather than of the hop.
+func peerApp(reg *Registry, seen func()) *zip.App {
+	app := zip.New(zip.Config{DisableStartupMessage: true, BodyLimit: int(peerMaxBody) + 1})
+	if seen != nil {
+		app.Use(zip.H(func(c *zip.Ctx) error { seen(); return c.Continue() }))
+	}
+	app.Post(PeerInvokePath, reg.PeerInvoke)
+	return app
+}
+
+// peerPost drives the endpoint through that same mount with no listener, for the
+// refusals a replica answers before it ever reaches a socket.
+func peerPost(t *testing.T, reg *Registry, token, body string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, PeerInvokePath, strings.NewReader(body))
+	if token != "" {
+		req.Header.Set(peerTokenHeader, token)
+	}
+	resp, err := peerApp(reg, nil).Test(req)
+	if err != nil {
+		t.Fatalf("peer post: %v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
+}
+
 // cluster builds n replicas sharing one presence map, each able to forward to
-// the others by id.
+// the others by id. zip runs on fasthttp, which httptest.Server cannot serve, so
+// each replica gets a real loopback listener (listen, ws_test.go).
 func cluster(t *testing.T, store PresenceStore, ids ...string) []*replica {
 	t.Helper()
 	reps := make([]*replica, len(ids))
@@ -358,15 +398,9 @@ func cluster(t *testing.T, store PresenceStore, ids ...string) []*replica {
 			PeerToken: testPeerToken,
 		}))
 
-		mux := http.NewServeMux()
-		peer := r.reg.PeerHandler()
-		mux.Handle(PeerInvokePath, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			r.hits.Add(1)
-			peer.ServeHTTP(w, req)
-		}))
-		r.srv = httptest.NewServer(mux)
-		t.Cleanup(r.srv.Close)
-		addrs[id] = r.srv.URL
+		r.app = peerApp(r.reg, func() { r.hits.Add(1) })
+		r.url = "http://" + listen(t, r.app)
+		addrs[id] = r.url
 		reps[i] = r
 	}
 	return reps
@@ -486,7 +520,7 @@ func TestDeadReplicaExpiresInsteadOfStrandingTheNode(t *testing.T) {
 	}
 
 	// cloud-0 dies: no unregister, no release, no renew — just silence.
-	a.srv.Close()
+	a.stop()
 	before := a.hits.Load()
 	f.advance(31 * time.Second) // one TTL
 
@@ -606,13 +640,13 @@ func TestStaleSelfClaimIsNotFoundNotASelfForward(t *testing.T) {
 
 // The peer endpoint takes an org from a body, so the token is the only thing
 // standing between it and a cross-tenant invoke primitive.
-func TestPeerHandlerRefusesWithoutTheRightToken(t *testing.T) {
+func TestPeerInvokeRefusesWithoutTheRightToken(t *testing.T) {
 	f := newFakeKV()
 	reps := cluster(t, NewKVPresence(f), "cloud-0", "cloud-1")
 	attach(t, reps[0], "acme", "n1", "c1", []byte("a:"))
 
 	body := strings.NewReader(`{"org":"acme","node":"n1","timeout_ms":1000}`)
-	req, _ := http.NewRequest(http.MethodPost, reps[0].srv.URL+PeerInvokePath, body)
+	req, _ := http.NewRequest(http.MethodPost, reps[0].url+PeerInvokePath, body)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -628,16 +662,79 @@ func TestPeerHandlerRefusesWithoutTheRightToken(t *testing.T) {
 		Presence: NewKVPresence(f),
 		Hop:      NewHTTPHop(func(string) (string, bool) { return "", false }, ""),
 	}))
-	rec := httptest.NewRecorder()
-	closed.PeerHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, PeerInvokePath, strings.NewReader(`{"org":"acme","node":"n1"}`)))
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("a peer endpoint with no token configured got %d, want 503", rec.Code)
+	if got := peerPost(t, closed, "", `{"org":"acme","node":"n1"}`).StatusCode; got != http.StatusServiceUnavailable {
+		t.Fatalf("a peer endpoint with no token configured got %d, want 503", got)
+	}
+}
+
+// This address answers TEXT to a refusal and bare JSON to an invocation, which
+// is the wire that keeps it out of the typed registry — a problem document and
+// a charset would both be a break here. So assert the bytes rather than the
+// statuses: the statuses are not what typing would move.
+func TestPeerInvokeAnswersTheBytesTheHopExpects(t *testing.T) {
+	live := cluster(t, NewKVPresence(newFakeKV()), "cloud-0")[0].reg
+	closed := NewRegistry(WithCluster(Cluster{
+		Replica:  "cloud-2",
+		Presence: NewKVPresence(newFakeKV()),
+		Hop:      NewHTTPHop(func(string) (string, bool) { return "", false }, ""),
+	}))
+
+	read := func(resp *http.Response) string {
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		return string(b)
+	}
+	// What net/http's Error wrote: two headers, the status, the message on a
+	// line of its own.
+	plain := func(what string, resp *http.Response, status int, body string) {
+		t.Helper()
+		if resp.StatusCode != status {
+			t.Fatalf("%s answered %d, want %d", what, resp.StatusCode, status)
+		}
+		if got := resp.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+			t.Fatalf("%s content-type %q", what, got)
+		}
+		if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Fatalf("%s x-content-type-options %q", what, got)
+		}
+		if got := read(resp); got != body {
+			t.Fatalf("%s body %q, want %q", what, got, body)
+		}
+	}
+
+	plain("no token configured", peerPost(t, closed, "", `{"org":"acme","node":"n1"}`),
+		http.StatusServiceUnavailable, "peer forwarding disabled\n")
+	plain("wrong token", peerPost(t, live, "", `{"org":"acme","node":"n1"}`),
+		http.StatusForbidden, "forbidden\n")
+	plain("unparseable body", peerPost(t, live, testPeerToken, `not json`),
+		http.StatusBadRequest, "bad request\n")
+	plain("no node named", peerPost(t, live, testPeerToken, `{"org":"acme"}`),
+		http.StatusBadRequest, "bad request\n")
+
+	// An invocation that RAN and found nothing is a 200 carrying a stable token
+	// the calling replica maps back onto a status — bare application/json, and
+	// the encoder's trailing newline.
+	resp := peerPost(t, live, testPeerToken, `{"org":"acme","node":"n1"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("an authenticated invocation answered %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("content-type %q, want bare application/json", got)
+	}
+	want, err := json.Marshal(peerAnswer{Err: peerErrNoSuchNode})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := read(resp); got != string(want)+"\n" {
+		t.Fatalf("body %q, want %q", got, string(want)+"\n")
 	}
 }
 
 // A peer may forward an invocation; it may not make this replica write whatever
 // it likes into one of its sockets. Only a node.invoke.request survives the hop.
-func TestPeerHandlerRefusesAFrameThatIsNotAnInvoke(t *testing.T) {
+func TestPeerInvokeRefusesAFrameThatIsNotAnInvoke(t *testing.T) {
 	f := newFakeKV()
 	reps := cluster(t, NewKVPresence(f), "cloud-0", "cloud-1")
 	var wrote atomic.Bool
@@ -653,7 +750,7 @@ func TestPeerHandlerRefusesAFrameThatIsNotAnInvoke(t *testing.T) {
 		Frame:     []byte(`{"type":"event","event":"connect.challenge","payload":{}}`),
 		TimeoutMS: 1000,
 	})
-	req, _ := http.NewRequest(http.MethodPost, reps[0].srv.URL+PeerInvokePath, bytes.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, reps[0].url+PeerInvokePath, bytes.NewReader(body))
 	req.Header.Set(peerTokenHeader, testPeerToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -687,9 +784,7 @@ func TestGateRefusalSurvivesAHop(t *testing.T) {
 			return &Denied{Code: "COMMAND_NOT_DECLARED", Message: "node did not declare " + command}
 		}),
 	)
-	srv := httptest.NewServer(owner.PeerHandler())
-	defer srv.Close()
-	addrs["cloud-0"] = srv.URL
+	addrs["cloud-0"] = "http://" + listen(t, peerApp(owner, nil))
 
 	caller := NewRegistry(WithCluster(Cluster{
 		Replica: "cloud-1", Presence: store, Hop: NewHTTPHop(resolve, testPeerToken), PeerToken: testPeerToken,
@@ -745,10 +840,8 @@ func TestHalfWiredClusterRefusesToServe(t *testing.T) {
 		if _, err := r.Invoke(context.Background(), key, probe(key, nil), time.Second); err == nil {
 			t.Fatalf("a registry wired with %+v served an invocation", c)
 		}
-		rec := httptest.NewRecorder()
-		r.PeerHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, PeerInvokePath, strings.NewReader(`{}`)))
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("a half-wired peer endpoint answered %d, want 503", rec.Code)
+		if got := peerPost(t, r, "", `{}`).StatusCode; got != http.StatusServiceUnavailable {
+			t.Fatalf("a half-wired peer endpoint answered %d, want 503", got)
 		}
 	}
 }
