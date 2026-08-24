@@ -2941,9 +2941,17 @@ components:
     D1Query:
       properties:
         params:
+          description: |-
+            Params are the statement's bound values, in the order its `?` placeholders
+            appear — a string, a number, a boolean or null, whatever the column takes.
+            Absent means the statement carries no placeholders; bind values here rather
+            than interpolating them into the statement.
           items: {}
           type: array
         sql:
+          description: |-
+            SQL is the statement to run. Blank (or absent) is refused before anything
+            reaches D1.
           type: string
       type: object
     Declaration:
@@ -10699,16 +10707,36 @@ components:
       type: object
     WorkerScriptPut:
       properties:
-        bindings: {}
+        bindings:
+          description: |-
+            Bindings are the resources the script can reach (KV, D1, R2, secrets, …), in
+            Cloudflare's own binding vocabulary, passed through as written: this plane
+            deliberately does not model Cloudflare's shapes. Absent uploads a script with
+            NO bindings, which replaces whatever the previous version had.
         compatibilityDate:
+          description: |-
+            CompatibilityDate pins which Workers runtime behaviour the script runs under,
+            as a plain calendar date ("2024-01-01"). Absent leaves the account's own
+            default in force.
           type: string
         compatibilityFlags:
+          description: |-
+            CompatibilityFlags turn individual runtime behaviours on or off around that
+            date ("nodejs_compat"), in Cloudflare's own flag vocabulary. Absent means the
+            date alone decides.
           items:
             type: string
           type: array
         mainModule:
+          description: MainModule is the module file the runtime starts at. Absent
+            means "worker.js".
           type: string
         script:
+          description: |-
+            Script means two things on this route, and the document says so in both places
+            it appears: the PATH segment names the Worker to publish, and the BODY field
+            carries that Worker's ES-module source — the code itself, never a name or a
+            URL. A blank or absent source is refused; there is no empty Worker.
           type: string
       type: object
     WriteIn:
@@ -11975,6 +12003,29 @@ components:
           items:
             $ref: '#/components/schemas/ProgramApplication'
           type: array
+      type: object
+    appliedResource:
+      properties:
+        message:
+          description: |-
+            Message is the engine's own sentence about this object — the apiserver's
+            refusal on a failure, and typically empty on success. It is for a human
+            reading a failed run, not a value to branch on.
+          type: string
+        resource:
+          description: |-
+            Resource identifies the object as group/version/kind/namespace/name, the
+            engine's own key. It is stable across runs, so two reports can be diffed on
+            it.
+          type: string
+        status:
+          description: |-
+            Status is what happened to this object, from the engine's closed
+            vocabulary: `Synced` (applied), `Pruned` (deleted because the source no
+            longer declares it), `SyncFailed` (refused — read Message) and
+            `PruneSkipped` (deletion was declined). It is the per-object detail behind
+            the report's counts.
+          type: string
       type: object
     applyRequest:
       properties:
@@ -26354,8 +26405,21 @@ components:
     listing:
       properties:
         lastModified:
+          description: |-
+            LastModified is when the BYTES last changed, as RFC 3339 in UTC to the
+            second — `2026-01-02T03:04:05Z`, the sandbox's own `date -u -r` on the file.
+            It is an mtime and not a creation time, so a file a later run overwrote
+            carries that run's clock. Never empty: a row exists only because `find`
+            stat-ed the file.
           type: string
         name:
+          description: |-
+            Name is the file's IDENTIFIER, `{session_id}/{fileId}` whole — never the bare
+            filename, and never URL-escaped. It is exactly what GET /v1/exec/download
+            takes after its prefix, and hanzo.chat matches it as a PREFIX
+            (`name.startsWith(session + "/")`) to decide which rows belong to a session
+            it is holding. `fileId` is the path RELATIVE to the session's artifact
+            directory, so it carries `/` for anything the run wrote in a sub-directory.
           type: string
       type: object
     listingPage:
@@ -39229,6 +39293,13 @@ components:
     objectItem:
       properties:
         etag:
+          description: |-
+            ETag is the store's entity tag for the bytes currently at this key, with the
+            quotes the store wraps it in stripped. It is an opaque VERSION and not a
+            checksum to verify against: a single-part upload's tag happens to be the MD5
+            of the content and a multipart upload's is not, and nothing here says which
+            this was. Compare two reads of one key to learn whether the object changed;
+            absent for a folder entry, and for an object the store reports none for.
           type: string
         isDir:
           description: true for a folder (common prefix)
@@ -40292,6 +40363,11 @@ components:
           description: seconds until the URL expires
           type: integer
         key:
+          description: |-
+            Key is the object key the URL was signed for, relative to the bucket root
+            and path-cleaned — so it is what the store will actually read or write, which
+            is not always the string the caller sent. The signature covers this one bucket
+            and this one key: a URL minted here reaches nothing else.
           type: string
         method:
           description: '"PUT" (upload) or "GET" (download)'
@@ -42215,6 +42291,76 @@ components:
         path:
           description: Path is the file the README was found at (README.md, README,
             …).
+          type: string
+      type: object
+    reconcileReport:
+      properties:
+        declared:
+          description: |-
+            Declared is how many objects the rendered source declares — the denominator
+            the three outcome counts below are read against. Zero means the render
+            produced nothing, which trips the prune fuse rather than sweeping the fleet.
+          type: integer
+        failed:
+          description: |-
+            Failed is how many objects the apply could not reconcile. Non-zero is a
+            PARTIAL run reported at 200: the engine applied what it could and each
+            failure names itself in Results, so a caller reads this number rather than
+            the status code to learn whether the fleet matches the source.
+          type: integer
+        instance:
+          description: |-
+            Instance is the tracking id this run stamps on everything it manages, so a
+            later run can tell the objects it owns from objects another instance
+            declares. DEPLOY_ENGINE_INSTANCE names it; the default is `universe`.
+          type: string
+        prune:
+          description: |-
+            Prune reports whether DELETION was enabled for this run. False means an
+            object the source no longer declares was left alone rather than removed, so
+            a zero Pruned below means "nothing to delete" only when this is true.
+          type: boolean
+        pruned:
+          description: |-
+            Pruned is how many live objects this run DELETED because the source no
+            longer declares them. Always 0 when Prune is false.
+          type: integer
+        results:
+          description: |-
+            Results is one entry per object the run acted on, in the order the engine
+            applied them. Empty (never null) when the run reconciled nothing.
+          items:
+            $ref: '#/components/schemas/appliedResource'
+          type: array
+        revision:
+          description: |-
+            Revision is the source commit this run applied, as the source resolved it —
+            a git commit SHA, not an image tag. It is what an operator cites when asking
+            what the cluster was last made to match.
+          type: string
+        source:
+          $ref: '#/components/schemas/reconcileSource'
+          description: |-
+            Source is the git coordinate the run rendered. It is this deployment's own
+            configuration echoed back, never a request parameter, and it is reported so
+            a reader of the answer knows WHICH tree the revision names.
+        synced:
+          description: Synced is how many objects the run applied successfully.
+          type: integer
+      type: object
+    reconcileSource:
+      properties:
+        path:
+          description: |-
+            Path is the directory WITHIN the repository that is rendered — everything
+            outside it is not this plane's desired state and is never applied.
+          type: string
+        ref:
+          description: Ref is the branch or tag the revision was resolved from.
+          type: string
+        repo:
+          description: Repo is the clone URL of the repository holding the desired
+            state.
           type: string
       type: object
     recordIn:
@@ -46567,6 +46713,20 @@ components:
         updatedAt:
           type: string
       type: object
+    sessionEnded:
+      properties:
+        loggedIn:
+          description: |-
+            LoggedIn is always false — this is the answer to having just signed out, so
+            it states the resulting session state rather than reporting the request's
+            outcome. It is not omitempty: false is the whole answer.
+          type: boolean
+        loginUrl:
+          description: |-
+            LoginURL is where to sign in again. Always present, because a caller that
+            has just signed out is exactly the caller who needs it.
+          type: string
+      type: object
     sessionList:
       properties:
         sessions:
@@ -49475,20 +49635,36 @@ components:
     userEnablementItem:
       properties:
         canOptIn:
-          description: beta && not yet opted in
+          description: |-
+            CanOptIn is whether POST /v1/pricing/enablement/optin would do anything
+            here: the item is in beta and this org is not on its list yet. False for a
+            caller with no validated org, who has no org to enrol.
           type: boolean
         effective:
-          description: visible to the caller's org
+          description: |-
+            Effective is whether the caller's org may use the item right now, which is
+            the field to branch on: true for any ga item, for a beta this org holds,
+            and never for an off one.
           type: boolean
         id:
+          description: |-
+            ID is the item within that namespace — a model id, a provider name, or a
+            feature key.
           type: string
         kind:
+          description: 'Kind is the namespace the id lives in: "model", "provider"
+            or "feature".'
           type: string
         optedIn:
-          description: caller's org on the beta list
+          description: |-
+            OptedIn is whether the caller's org is on this item's beta grant list. It
+            can be true on an "off" item — the list survives the kill switch and is
+            simply ignored while it is thrown — so it does not imply Effective.
           type: boolean
         state:
-          description: off|beta|ga
+          description: |-
+            State is the item's GLOBAL availability — "off", "beta" or "ga" — which is
+            the operator's setting and not this caller's answer. Effective is that.
           type: string
       type: object
     userOptinReq:
@@ -60322,18 +60498,32 @@ paths:
       x-tool: true
     post:
       description: |-
-        Answers 501 to every call. The bot runtime exposes no launch operation, so nothing here can start a sandbox, and this address is published rather than dropped because it is the collection every run is created in: GET lists them, POST would launch one.
+        Answers 501 to every call: launching a bot run is not implemented.
 
-        The refusal is total and takes no input. The handler never reads the body, so any bytes at all — malformed JSON included — get the same 501; no run id is minted, no session URL is handed back, and no per-run fee is charged. That is the point: the earlier version minted an id the runtime had never heard of, pointed it at a VNC node that did not exist, and took real money for it.
+        The bot runtime exposes no launch operation, so nothing here can start a sandbox.
+        This address is published rather than dropped because it is the collection every
+        run is created in: GET lists them, POST would launch one.
 
-        Listing and stopping runs are live and org-scoped. Only the launch is missing, and it returns in the same change that can prove a bot boots.
+        The refusal is total and takes no input. No run id is minted, no session URL is
+        handed back, and no per-run fee is charged. That is the point: the earlier version
+        minted an id the runtime had never heard of, pointed it at a VNC node that did not
+        exist, and took real money for it. 501 is the truth, and the truth is cheaper than
+        a plausible lie.
+
+        Listing and stopping runs are live and org-scoped. Only the launch is missing, and
+        it returns in the same change that can prove a bot boots — a runtime-side launch
+        operation first (TS, cross-repo), with the entitlement gate and the meter beside
+        it.
       operationId: post_bot_runs
-      summary: Reserved address for launching a bot run — not implemented, always
-        501
+      responses:
+        "501":
+          description: not implemented
+      summary: 'Answers 501 to every call: launching a bot run is not implemented.'
       tags:
       - bot
       x-app: bot
       x-public: true
+      x-tool: true
   /v1/bot/runs/{runId}/stop:
     post:
       description: |-
@@ -60349,7 +60539,11 @@ paths:
         would be a stop that cannot fail — so it is a 502.
       operationId: post_bot_runs_by_runid_stop
       parameters:
-      - in: path
+      - description: |-
+          RunID is the run to stop, as the bot runtime named it. It is read from the
+          URL — the `{runId}` segment the router matched on — and a body carrying a
+          different id cannot redirect the stop.
+        in: path
         name: runId
         required: true
         schema:
@@ -61990,9 +62184,15 @@ paths:
   /v1/cloudflare/d1/databases/{database}/query:
     post:
       description: |-
-        Executes a statement on one D1 database on the org's OWN Cloudflare account and relays D1's result set. `sql` is required and `params` carries the bound values in placeholder order — use them rather than interpolating values into the statement.
+        Runs one SQL statement against a D1 database. It executes on the org's
+        OWN Cloudflare account and relays D1's result set. The body is checked for a
+        non-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1
+        even though only two are named here.
 
-        The body is checked for a non-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1 even though only two are named here; the declared schema is open for that reason. That verbatim forward is why this is not a typed op — decoding and re-encoding the body would drop `params`, where the query's bound values live. Requires ORG ADMIN (403 otherwise); a malformed body or missing `sql` is 400; 503 if the org has never connected a Cloudflare token.
+        Requires ORG ADMIN — a statement may INSERT, UPDATE or DROP, so a query takes the
+        write gate rather than the read one — and a caller who is only an org member is
+        refused 403. A missing `sql` is 400; 503 if the org has never connected a
+        Cloudflare token.
       operationId: post_cloudflare_d1_databases_by_database_query
       parameters:
       - in: path
@@ -62003,19 +62203,25 @@ paths:
       requestBody:
         content:
           application/json:
+            example:
+              params:
+              - 42
+              sql: SELECT * FROM orders WHERE id = ?
             schema:
               $ref: '#/components/schemas/D1Query'
+        required: true
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema: {}
-          description: Success
-      summary: Run a SQL statement against a D1 database
+          description: ok
+      summary: Runs one SQL statement against a D1 database.
       tags:
       - cloudflare
       x-app: cloudflare
       x-public: true
+      x-tool: true
   /v1/cloudflare/kv/namespaces:
     get:
       description: |-
@@ -62535,12 +62741,24 @@ paths:
       x-tool: true
     put:
       description: |-
-        Publishes a module Worker to the org's OWN Cloudflare account under the name in the path, replacing whatever was there, and relays Cloudflare's result. `script` carries the module SOURCE; the optional compatibility date, compatibility flags and bindings are packed into the multipart upload Cloudflare expects.
+        Uploads or replaces a module Worker script. It publishes to the
+        org's OWN Cloudflare account under the name in the path, replacing whatever was
+        there, and relays Cloudflare's result. The compatibility date, compatibility
+        flags and bindings are packed into the multipart upload Cloudflare expects,
+        beside the module source.
 
-        The path names the script and the body field named `script` is its source — two different things that share a name, which is exactly why this cannot be a typed op: a binder that gives the URL the last word would overwrite the source with the script's name. Requires ORG ADMIN (403 otherwise); an unparseable body or empty source is 400; 503 if the org has never connected a Cloudflare token.
+        Requires ORG ADMIN — a Worker is arbitrary code on the org's own account and
+        domains — so a caller who is only an org member is refused 403. An empty source
+        is 400, as is a `mainModule` that is not a plain file name; 503 if the org has
+        never connected a Cloudflare token.
       operationId: put_cloudflare_workers_scripts_by_script
       parameters:
-      - in: path
+      - description: |-
+          Script means two things on this route, and the document says so in both places
+          it appears: the PATH segment names the Worker to publish, and the BODY field
+          carries that Worker's ES-module source — the code itself, never a name or a
+          URL. A blank or absent source is refused; there is no empty Worker.
+        in: path
         name: script
         required: true
         schema:
@@ -62550,17 +62768,19 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/WorkerScriptPut'
+        required: true
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema: {}
-          description: Success
-      summary: Upload or replace a module Worker script
+          description: ok
+      summary: Uploads or replaces a module Worker script.
       tags:
       - cloudflare
       x-app: cloudflare
       x-public: true
+      x-tool: true
   /v1/cloudflare/workers/scripts/{script}/subdomain:
     post:
       description: |-
@@ -71218,40 +71438,94 @@ paths:
   /v1/deploy/applications/{name}/rollback:
     post:
       description: |-
-        Performs exactly what the sync action performs: it stamps the sync-requested timestamp onto the application's App CR and answers the application re-projected. It does NOT select, pin or revert to a prior image tag, and that is the one thing to know before wiring anything to it — the name is the console's, the behaviour is the sync. Pinning a previous release rides the release client, which this address does not call yet.
+        Serves the console's rollback control, and today it
+        requests a reconcile and nothing more.
 
-        SuperAdmin-only and fail-closed, reading no request body, with an unknown application name a 404 and no cluster client a 503 — the same gate and the same failures as the sync it shares a handler with.
+        The opening verb is not style. zipdoc drops a leading CamelCase symbol only
+        when a plain verb follows it and never before a copula (internal/zipdoc/
+        extract.go:811-824, "CompleteDeployment IS the CI completion hook" would
+        otherwise become "Is the CI completion hook") — so "RollbackDeployApplication
+        is …" would publish a Go symbol no caller can see into the summary an SDK
+        docstring, an MCP tool list and a CLI help line all show.
+
+        It performs exactly what the sync action performs — the same stamp on the same
+        App CR, the same application re-projected — and it does NOT select, pin or
+        revert to a prior image tag. That is the one thing to know before wiring
+        anything to it: the name is the console's, the behaviour is the sync. Pinning a
+        previous release rides the release client, which this address does not call yet.
+
+        Same gate, same refusals and the same absent request body as the sync it shares
+        a core with.
       operationId: post_deploy_applications_by_name_rollback
       parameters:
-      - in: path
+      - description: |-
+          Name is the application to read, from the path. It must be a DNS-1123 label
+          (lowercase alphanumerics and hyphens, starting and ending alphanumeric) —
+          every operator App CR's metadata.name satisfies that, and anything else is a
+          400 rather than a lookup.
+        in: path
         name: name
         required: true
         schema:
           type: string
-      summary: The console's rollback control — today it requests a reconcile, nothing
-        more
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoApp'
+          description: ok
+      summary: Serves the console's rollback control, and today it requests a reconcile
+        and nothing more.
       tags:
       - deploy
       x-app: deploy
       x-public: true
+      x-tool: true
   /v1/deploy/applications/{name}/sync:
     post:
       description: |-
-        Requests an immediate reconcile of one application by stamping a sync-requested timestamp onto its App CR, which the operator's watch observes, and answers the application re-projected. It ASKS, it does not apply: the operator performs the reconcile on its own clock, so a 200 means the request landed, not that the rollout finished — the returned row's running version still lags until it does. The CR is the desired source today, so this is a nudge; when git becomes the source the same address becomes apply-from-git.
+        Asks the operator to reconcile ONE application now.
 
-        SuperAdmin-only and fail-closed — a non-SuperAdmin is refused before any cluster object is read or patched, and the write surface stays admin-only while the tenant surface is read-only reflection. It reads no request body. An unknown application name is a 404; no cluster client configured is a 503.
+        It stamps a sync-requested timestamp onto the application's App CR, which the
+        operator's watch observes, and answers the application re-projected. It ASKS,
+        it does not apply: the operator reconciles on its own clock, so a 200 means the
+        request landed, not that the rollout finished — the returned row's running
+        version still lags until it does.
+
+        SuperAdmin-only and fail-closed, and the gate is INSIDE the op rather than in
+        middleware wrapped around the route. That is a correctness requirement, not a
+        preference: this op is also reached by POST /mcp and by the by-name call plane,
+        neither of which runs route middleware, so a gate that only the REST projection
+        runs would publish an unguarded alias of a fleet-mutating write. It reads no
+        request body — the URL names the application and nothing else does. An unknown
+        name is a 404 (never a 403, which would confirm the application exists), a name
+        that is not a DNS-1123 label is a 400, and no cluster client is a 503.
       operationId: post_deploy_applications_by_name_sync
       parameters:
-      - in: path
+      - description: |-
+          Name is the application to read, from the path. It must be a DNS-1123 label
+          (lowercase alphanumerics and hyphens, starting and ending alphanumeric) —
+          every operator App CR's metadata.name satisfies that, and anything else is a
+          400 rather than a lookup.
+        in: path
         name: name
         required: true
         schema:
           type: string
-      summary: Ask the operator to reconcile one application now
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoApp'
+          description: ok
+      summary: Asks the operator to reconcile ONE application now.
       tags:
       - deploy
       x-app: deploy
       x-public: true
+      x-tool: true
   /v1/deploy/applications/{name}/syncwindows:
     get:
       description: |-
@@ -71416,15 +71690,36 @@ paths:
   /v1/deploy/logout:
     post:
       description: |-
-        Clears this console's session cookie and answers the signed-out state with the sign-in URL to start again. IAM's own session is untouched — this ends the console session only, so signing back in may not prompt for credentials.
+        Ends the console session on this host.
 
-        It is a POST because it changes state. As a GET it was reachable by a cross-site top-level navigation, which a SameSite=Lax cookie still rides, so any page could sign a SuperAdmin out; a POST is not carried cross-site by that cookie.
+        It clears this console's session cookie and answers the signed-out state with
+        the sign-in URL to start again. IAM's own session is untouched — this ends the
+        console session only, so signing back in may not prompt for credentials.
+
+        It is a POST because it CHANGES STATE. As a GET it was reachable by a
+        cross-site top-level navigation, which a SameSite=Lax cookie still rides, so
+        any page could sign a SuperAdmin out; a POST is not carried cross-site by that
+        cookie. It reads no request body and takes no argument: the session it ends is
+        the one the request already carries.
       operationId: post_deploy_logout
-      summary: End the console session on this host
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sessionEnded'
+          description: ok
+          headers:
+            Set-Cookie:
+              description: Set by POST /v1/deploy/logout.
+              schema:
+                type: string
+      summary: Ends the console session on this host.
       tags:
       - deploy
       x-app: deploy
       x-public: true
+      x-tool: true
   /v1/deploy/projects:
     get:
       description: |-
@@ -71457,15 +71752,37 @@ paths:
   /v1/deploy/reconcile:
     post:
       description: |-
-        Runs one full GitOps sync through the embedded engine — render the configured repo, ref and path, then three-way server-side apply with scoped prune — and answers the revision it applied, the source it came from, the declared/synced/pruned/failed counts and a per-resource result. This is the WRITE half of the plane: it mutates live cluster objects and, with prune enabled, deletes objects the source no longer declares.
+        Renders the configured git source and applies it to the
+        cluster, once.
 
-        SuperAdmin-only and fail-closed — a non-SuperAdmin is refused before any cluster object is read or touched. The git source is read AS THE CALLER, so the source plane scopes the answer itself rather than trusting this one to have scoped it. It reads no request body; the source is configuration, not a parameter. A deployment with the engine switched off, or with no usable cluster config, answers 503; a failure to start, render or sync is a 502.
+        It runs one full GitOps sync through the embedded engine — render the
+        configured repo, ref and path, then three-way server-side apply with scoped
+        prune — and answers the revision it applied, the source it came from, the
+        declared/synced/pruned/failed counts and a per-resource result. This is the
+        WRITE half of the plane: it mutates live cluster objects and, with prune
+        enabled, deletes objects the source no longer declares.
+
+        SuperAdmin-only and fail-closed, with the gate INSIDE the op because a typed op
+        is also reached by POST /mcp and by the by-name call plane, where no route
+        middleware runs. The git source is read AS THE PLATFORM, not as the caller: the
+        coordinate is this deployment's own configuration and never a parameter, which
+        is why the op reads no request body at all. A deployment with the engine
+        switched off, or with no usable cluster config, answers 503; a failure to
+        start, render or sync is a 502.
       operationId: post_deploy_reconcile
-      summary: Render the configured git source and apply it to the cluster, once
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/reconcileReport'
+          description: ok
+      summary: Renders the configured git source and applies it to the cluster, once.
       tags:
       - deploy
       x-app: deploy
       x-public: true
+      x-tool: true
   /v1/deploy/session/userinfo:
     get:
       description: |-
@@ -73847,7 +74164,24 @@ paths:
   /v1/exec/files/{sid}:
     get:
       description: |-
-        Files lists what a session holds.
+        Lists the files in an execution session.
+
+        Everything the session's sandbox holds — the uploads a run can read and the
+        artifacts it produced — each then fetched from GET /v1/exec/download.
+
+        The answer is a BARE JSON ARRAY of {name, lastModified}, where `name` is the
+        same {session_id}/{fileId} identifier download takes, because that is what the
+        client matches on. The obvious typed shape, `{files: […]}`, would have been a
+        silent wire change: the request still succeeds and `response.data.find(...)`
+        finds nothing, which reads as a session holding no files.
+
+        The NAME of this handler is what the published summary is cut from, and it used
+        to leak: the comment opened "Files lists …", which is not this function's
+        identifier, so zipdoc's exact-match strip left it and every SDK, tool list and
+        CLI help line opened with a Go symbol no caller can see. An openapi.Describe
+        stated a better summary beside the route and was DISCARDED — Fold replaces a
+        structural operation with the typed one — so the declaration read as landed and
+        rendered nowhere. The comment is the one home for this sentence.
 
         One recursive `find`, the same traversal the artifact sweep makes. It used to be
         `ls -1A` — top level only — while the sweep collected with `find`, so a run that
@@ -73874,7 +74208,7 @@ paths:
                   $ref: '#/components/schemas/listing'
                 type: array
           description: ok
-      summary: Files lists what a session holds.
+      summary: Lists the files in an execution session.
       tags:
       - exec
       x-app: exec
@@ -73882,18 +74216,59 @@ paths:
       x-tool: true
   /v1/exec/programmatic:
     post:
-      description: 'Answers 501. This address belongs to a DIFFERENT protocol from
-        /v1/exec: the server suspends a program on each tool call, returns the pending
-        calls with a continuation token, and resumes when the client posts results
-        back. Serving it means implementing suspension and resumption, so it refuses
-        in the open rather than answering with a shape the caller''s parser cannot
-        read.'
+      description: |-
+        Answers 501 — this deployment does not serve programmatic tool calling.
+
+        That sentence is the SUMMARY every projection shows, so it says what a caller
+        gets rather than what the code does; the rest names what it would take to stop
+        refusing.
+
+        /exec/programmatic is NOT this contract's sibling — it is a different protocol on
+        an adjacent path: a multi-round-trip loop where the server suspends a Python
+        program on a tool call, returns the pending calls with a continuation_token, and
+        resumes when the client posts the results back (@hanzochat/agents
+        ProgrammaticToolCalling). Implementing it means implementing suspension and
+        resumption, which is a program, not an endpoint.
+
+        So it answers 501 with that fact rather than being routed into `run`, which would
+        hand the caller a CodeResult its parser cannot read — a wrong answer, where this is a
+        refusal a client can act on.
+
+        IT IS A TYPED OP, and the refusal for keeping it raw did not survive reading. It
+        binds no body, opens no stream, relays no other process and sits on no wildcard,
+        so none of the four wire facts that keep a route raw applies to it; what was
+        cited instead was that a permanent stub should declare nothing. That argues for
+        silence in the DOCUMENT and buys the silence everywhere else too — no MCP tool,
+        no CLI command, no SDK method — so a caller could read this address and reach it
+        by no projection but REST, and learn only by calling it that the protocol is not
+        served. Declaring `zip.WithStatus(501)` is what makes typing honest: the document
+        publishes the ONE status this route sends, over an Out with no schema, rather
+        than the 204 a void op would otherwise have invented.
+
+        ONE delta, pinned by TestProgrammaticRefusesEveryBody: a body that is not JSON
+        now answers 400 rather than 501, because op.invoke decodes before the handler is
+        entered. Both are refusals of a protocol this deployment does not serve, no real
+        caller sends one, and 400 is what the rest of the fleet answers to bytes it
+        cannot parse.
+
+        It asks tenantOf for the reason every other operation here does, and the answer
+        is the same on the wire it was: over HTTP the credential middleware has already
+        run, so an admitted caller still reads 501. What the call closes is the entry
+        point a route table cannot see — typing an operation makes it an MCP tool, which
+        zip dispatches straight into the handler with no route and therefore no
+        middleware. Uniformity is the whole property: every path into this subsystem
+        reads the admission marker, so there is no operation anybody has to remember is
+        the exception.
       operationId: post_exec_programmatic
-      summary: Programmatic tool calling (not served here)
+      responses:
+        "501":
+          description: not implemented
+      summary: Answers 501 — this deployment does not serve programmatic tool calling.
       tags:
       - exec
       x-app: exec
       x-public: true
+      x-tool: true
   /v1/exec/upload:
     post:
       description: |-
@@ -77156,13 +77531,11 @@ paths:
   /v1/git/webhook:
     post:
       description: |-
-        GONE (410). This was the canonical forge's push-to-deploy endpoint, and it never dispatched a build in its life.
+        GONE (410). Push-to-deploy belongs to POST https://platform.hanzo.ai/v1/git-webhook, which owns the build system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.
 
-        It handed each verified push to cloud.OnGitPush, a single-registrant client whose only registrant lives in apps/platform. cloud runs each app as its own OS process, so in the git process that builder is nil forever — and this handler answered 204 either way. Delivered, signature valid, green on the forge's hook page, and nothing built.
+        Every delivery answers 410 whatever it carries — this endpoint reads no body and authenticates nothing.
 
-        Push-to-deploy now belongs to POST https://platform.hanzo.ai/v1/git-webhook, which owns the build system-of-record and dispatches BuildKit Jobs. git.hanzo.ai delivers there through ONE forge-wide system webhook covering every repository; a repo opts in by committing hanzo.yml, not by owning a hook of its own.
-
-        The route is kept, and answers 410 naming that address, precisely so a misdirected delivery says what is wrong. Deleting it would 404, and a 404 here reads as 'the API is switched off' — the wrong conclusion this estate has already drawn twice.
+        410 rather than 404, because the address was real and its meaning moved, which is the distinction 410 carries. A 404 from this estate is ambiguous: Hanzo Git serves /v1, so /api/v1 404s too and reads as "the API is switched off". A retired endpoint says it is retired and names its replacement, so the answer carries its own fix.
       operationId: post_git_webhook
       summary: Retired — forge pushes build via platform.hanzo.ai
       tags:
@@ -77174,7 +77547,7 @@ paths:
       description: |-
         Creates a repository in the caller's org and project scope and answers with its record. `name` is required and `description` is optional; `project` narrows the scope within the org. A name already taken in that scope is a 409 envelope and an invalid name a 400.
 
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
+        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
       operationId: post_git_zap_createrepo
       requestBody:
         content:
@@ -77191,7 +77564,7 @@ paths:
       description: |-
         Deletes the repository named by `name` and answers with the deleted name. A repository outside the caller's org and project scope is a 404 envelope, so a delete can never reach another tenant's repository.
 
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
+        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
       operationId: post_git_zap_deleterepo
       requestBody:
         content:
@@ -77208,7 +77581,7 @@ paths:
       description: |-
         Answers a single repository's record, named by `name`. A repository outside the caller's org and project scope is a 404 envelope, the same answer one that does not exist gets.
 
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
+        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
       operationId: post_git_zap_getrepo
       requestBody:
         content:
@@ -77225,7 +77598,7 @@ paths:
       description: |-
         Answers every repository in the caller's org and project scope. It reads NO body — the scope is entirely the caller's identity — so a request with an empty object is correct.
 
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
+        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
       operationId: post_git_zap_listrepos
       summary: List your repositories over the ZAP transport
       tags:
@@ -77237,7 +77610,7 @@ paths:
       description: |-
         Answers every repository in the caller's org with its size in bytes, plus the org's total — what git storage is actually being used, and by which repository. It reads NO body, and it is scoped to the caller's own org, so it is that org's footprint and never the fleet's.
 
-        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns — which is a wire shape a typed op cannot produce, and the reason this stays a raw handler — and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
+        A ZAP PROCEDURE, not a REST resource. It answers the bridge's {status, msg, data} envelope rather than the raw view the /v1 route returns, and it calls the SAME core function the REST route calls, so the two transports cannot diverge in behaviour. Org and project scope come from the request identity and NEVER from the body: the body cannot widen the caller's scope. Without a validated org the answer is a 403 envelope.
       operationId: post_git_zap_usage
       summary: Report your org's git storage footprint over the ZAP transport
       tags:
@@ -84932,22 +85305,35 @@ paths:
         respectively, all decided before any record is touched.
       operationId: get_kms_secrets
       parameters:
-      - in: query
+      - description: |-
+          Env selects the environment, which is part of a secret's storage key.
+          OMITTED means EVERY environment — this is the enumeration surface, so it
+          must be able to answer "what is in here" without being told where to look.
+        in: query
         name: env
         required: false
         schema:
           type: string
-      - in: query
+      - description: |-
+          Environment is the KMS operator's spelling of Env, accepted so one caller
+          need not learn the other's vocabulary. Env wins when both are sent.
+        in: query
         name: environment
         required: false
         schema:
           type: string
-      - in: query
+      - description: |-
+          Path narrows the listing to one subtree beneath the caller's org root, as
+          a `/`-separated path such as `/ci`. OMITTED means the whole org.
+        in: query
         name: path
         required: false
         schema:
           type: string
-      - in: query
+      - description: |-
+          SecretPath is the KMS operator's spelling of Path. Path wins when both are
+          sent.
+        in: query
         name: secretPath
         required: false
         schema:
@@ -107925,7 +108311,13 @@ paths:
 
         Only the caller's: every bucket is physically named under a per-org prefix and
         the listing strips that prefix, so a tenant sees friendly names and another
-        tenant's buckets are not in the answer at all.
+        tenant's buckets are not in the answer at all. Another org's bucket is not
+        refused but INVISIBLE, so this cannot be used to learn that a name is taken
+        elsewhere.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing done, and the debit lands only once the
+        work has succeeded.
       operationId: get_s3_buckets
       responses:
         "200":
@@ -107947,6 +108339,10 @@ paths:
         The physical name is derived from the caller's validated org, so a tenant can
         only ever create inside its own namespace and no request field can redirect
         that. A name already taken in the org is 409.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing created, and the debit lands only once the
+        bucket exists.
       operationId: post_s3_buckets
       requestBody:
         content:
@@ -107975,6 +108371,10 @@ paths:
         A non-empty bucket is 409 rather than a cascade: deleting a tenant's objects
         behind a single bucket call is not a thing this surface will do silently. A
         bucket the caller's org does not own is the same 404 an unknown name gives.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing deleted, and the debit lands only once the
+        bucket is gone.
       operationId: delete_s3_buckets_by_bucket
       parameters:
       - description: Bucket is the bucket's friendly name, from the path.
@@ -108002,6 +108402,10 @@ paths:
         instead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge
         bucket cannot exhaust memory — Total is what came back, not what the bucket
         holds.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing read, and the debit lands only once the
+        listing has succeeded.
       operationId: get_s3_buckets_by_bucket_objects
       parameters:
       - description: Bucket is the bucket to list, from the path.
@@ -108041,6 +108445,11 @@ paths:
         the server: the URL is signed against the PUBLIC host, scoped to exactly this
         bucket and key, and expires. A deployment with no public endpoint configured
         cannot mint one and answers 503 rather than a URL that will not work.
+
+        Billed per call — for MINTING the URL, which is the work this operation does;
+        the upload that follows it goes straight to the store and is not seen here. The
+        balance is checked BEFORE anything is touched, so an unfunded org is refused
+        with no URL issued.
       operationId: post_s3_buckets_by_bucket_objects
       parameters:
       - description: Bucket is the bucket to upload into, from the path.
@@ -110225,6 +110634,13 @@ paths:
 
         The token may arrive as `token` in the JSON body or, when the body is absent or unparseable, from the Authorization bearer — an unreadable body is NOT an error here. The sibling DELETE clears this same cookie and signs the browser out of team only: the IAM cookie set alongside it is a different credential with its own lifetime and is left alone.
       operationId: put_team_account_cookie
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cookieAck'
+          description: Success
       summary: Store the session token as this browser's cookie
       tags:
       - team
@@ -110299,6 +110715,14 @@ paths:
 
         The page is markup only. It reads money SAME-ORIGIN from cloud's own balance and usage endpoints, which pin the org from the IAM cookie the team OAuth callback set — nothing under this path proxies a money read, so there is no second auth mechanism here to get wrong. A deployment whose page was never built answers 503 naming the missing bundle, never a blank 200.
       operationId: get_team_billing_ui
+      responses:
+        2XX:
+          content:
+            text/html; charset=utf-8:
+              schema:
+                format: binary
+                type: string
+          description: Success
       summary: Open the wallet page
       tags:
       - team
@@ -110441,6 +110865,20 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+      responses:
+        2XX:
+          content:
+            text/plain; charset=utf-8:
+              schema:
+                format: binary
+                type: string
+          description: Success
       summary: Upload a file into a workspace
       tags:
       - team
@@ -110515,6 +110953,14 @@ paths:
         required: true
         schema:
           type: string
+      responses:
+        2XX:
+          content:
+            application/octet-stream:
+              schema:
+                format: binary
+                type: string
+          description: Success
       summary: Download a workspace file
       tags:
       - team
@@ -115575,7 +116021,7 @@ tags:
 - description: 'Package books is double-entry accounting: chart of accounts, ledger,
     bank reconciliation, and the reports that prove the books balance.'
   name: books
-- description: Package bots is a bot doing your work on a real desktop, live, while
+- description: Package bot is a bot doing your work on a real desktop, live, while
     you watch.
   name: bot
 - description: Package campaign is one go-to-market push across paid, organic and
