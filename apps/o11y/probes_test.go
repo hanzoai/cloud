@@ -62,8 +62,8 @@ func TestAddressFindsWatchedAndMissesUnwatched(t *testing.T) {
 	if !ok {
 		t.Fatal("iam is watched by the fleet and must have an address")
 	}
-	if !strings.HasPrefix(got, "http://iam.hanzo.svc") {
-		t.Fatalf("iam address = %q, want iam's own service", got)
+	if !strings.HasPrefix(got, "http://") {
+		t.Fatalf("iam address = %q, want an http address", got)
 	}
 
 	if got, ok := address("hanzo-mpc"); ok {
@@ -87,6 +87,31 @@ func TestKMSAddressPointsAtTheBinaryThatServesIt(t *testing.T) {
 	}
 	if !strings.HasPrefix(got, "http://cloud.hanzo.svc:8000/v1/kms") {
 		t.Fatalf("kms address = %q, want cloud's embedded KMS probe", got)
+	}
+}
+
+// iam is served by cloud, not by the retired iam Deployment. This is the same
+// pin as kms above, added after the fold went the other way: the CR was scaled
+// to zero while this address still named iam.hanzo.svc, so a healthy identity
+// provider was published as a standing outage until someone re-read the entry.
+// A fold that moves the workload without moving the address does not merely look
+// like an outage, it is reported as one.
+func TestIAMAddressPointsAtTheBinaryThatServesIt(t *testing.T) {
+	got, ok := address("iam")
+	if !ok {
+		t.Fatal("iam is customer-facing and must stay watched")
+	}
+	if strings.Contains(got, "iam.hanzo.svc") {
+		t.Fatalf("iam address = %q, but that Deployment is scaled to zero", got)
+	}
+	if !strings.HasPrefix(got, "http://cloud.hanzo.svc:8000/v1/iam") {
+		t.Fatalf("iam address = %q, want cloud's embedded IAM", got)
+	}
+	// The discovery document specifically: it is the first thing every client
+	// fetches before it can sign anybody in, so it answers the question the
+	// gauge is asked — can a customer log in.
+	if !strings.HasSuffix(got, "/.well-known/openid-configuration") {
+		t.Fatalf("iam address = %q, want the OIDC discovery document", got)
 	}
 }
 
