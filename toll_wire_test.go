@@ -23,12 +23,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/zap-proto/zip"
 )
 
@@ -167,30 +167,117 @@ func post(t *testing.T, app *zip.App, path, ctype, body string) string {
 	return string(b)
 }
 
-// TestTheProgramArmsItsRule keeps the OTHER claim: that serve.go installs the
-// money rule at all. The reach tests above measure a rule the test installed, so
-// they say nothing about whether the program installs one — delete the two lines
-// in serve.go and every assertion above still holds.
+// TestTheProgramArmsItsRule keeps the OTHER claim: that the program installs the
+// money rule at all. The reach tests above measure a rule the TEST installed, so
+// they say nothing about whether the program installs one — take the install out
+// and every assertion above still holds.
 //
-// It reads the composition root as source, which is what that claim is: a
-// question about the program's own text, asked of the text. An assertion against
-// a live App would ask the object what it was configured with, and a hook can be
-// installed and then overwritten by a later call — the last writer wins and the
-// object cannot tell you there were two.
+// It used to read the composition root AS TEXT and count two lines. Counting a
+// line of source says a call is WRITTEN, never that it RAN — and one of the two
+// lines it counted named App.Peer(), which nothing in this estate registers on, so
+// the pin reported a rule over a surface that had never once been asked about.
+//
+// So the claim is measured where it now lives: cloud.App constructs the program's
+// app WITH its rule, the way it constructs it with its identity boundary. This
+// builds one the only way it can be built, declares a PRICED surface on it, and
+// drives that operation over the call plane — a seam no route middleware reaches.
+// The ledger holds nothing, so the answer is the money wire's own refusal, and
+// only the rule could have produced it: no gate is installed here, the operation
+// itself returns a value, and an unpriced sibling driven the same way runs.
 func TestTheProgramArmsItsRule(t *testing.T) {
-	b, err := os.ReadFile("serve.go")
-	if err != nil {
-		t.Fatalf("read serve.go: %v", err)
+	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
+	led := planetest.Money(t, 0) // an empty ledger: a priced operation cannot be afforded
+
+	app := cloud.App("probe", &cloud.Config{Brand: "hanzo"},
+		cloud.Deps{Metering: led.Client(t)}, nil)
+	free := func(ctx context.Context, _ *none) (*ok, error) { return &ok{OK: true}, nil }
+	if err := mountAll(t, app, []cloud.Plugin{
+		{Name: "probe", Price: 500, Mount: func(r cloud.Router, _ cloud.Deps) error {
+			zip.Post(r, "/v1/probe/run", free, zip.WithOperationID("probe_run"))
+			return nil
+		}},
+		{Name: "audit", Price: cloud.Free, Mount: func(r cloud.Router, _ cloud.Deps) error {
+			zip.Post(r, "/v1/audit/write", free, zip.WithOperationID("audit_write"))
+			return nil
+		}},
+	}); err != nil {
+		t.Fatalf("MountAll: %v", err)
 	}
-	src := string(b)
-	for _, want := range []struct{ line, why string }{
-		{"app.Authorize(Toll(deps.Metering, deps.Commerce))",
-			"the program's own rule, over every operation it serves"},
-		{"app.Peer().Authorize(Toll(deps.Metering, deps.Commerce))",
-			"the peer plane is a SEPARATE zip.App with its own rule, so it takes the install explicitly"},
-	} {
-		if n := strings.Count(src, want.line); n != 1 {
-			t.Errorf("serve.go has %d of\n\t%s\nwant exactly 1 — %s", n, want.line, want.why)
+	if err := app.Build(); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if cents := cloud.PriceOf("/v1/probe/run").Cents(); cents != 500 {
+		t.Fatalf("the priced surface resolves to %dc, want 500c", cents)
+	}
+
+	// The refusal is the money wire's own vocabulary, which nothing else in this
+	// program speaks: no gate is installed here, the operation itself returns a
+	// value, and the seam carries no route middleware.
+	priced := post(t, app, zip.CallPath+"probe_run", zip.CallContentType, "")
+	if !money(priced) {
+		t.Fatalf("the program served a 500c operation against an empty ledger and answered %q — "+
+			"its own app is not under its money rule", priced)
+	}
+	// The control: unpriced work over the same seam still runs, so the refusal above
+	// is the PRICE being asked about and not the seam being broken.
+	if free := post(t, app, zip.CallPath+"audit_write", zip.CallContentType, ""); money(free) {
+		t.Fatalf("unpriced work was refused for money too (%q), so the row above measured a broken seam", free)
+	}
+}
+
+// money reports whether an answer speaks the fleet's money wire — the codes
+// cloud.Denied renders, and the only vocabulary the toll has.
+func money(answer string) bool {
+	for _, code := range []string{"insufficient_balance", "spend_cap_exceeded", "balance_unavailable"} {
+		if strings.Contains(answer, code) {
+			return true
 		}
+	}
+	return false
+}
+
+// TestTheInternalPlaneIsOutsideThePricedSurface proves the OTHER half of the money
+// rule's placement: the plane (plane.go) is a different zip.App and is deliberately
+// not under it.
+//
+// Two facts make that right. The plane listens on the pod's own socket, so no browser
+// and no network client can address it. And its operations are the IMPLEMENTATION of
+// operations the edge has already priced and already answered standing for — so
+// pricing the inner hop would bill one act twice, and gating it on standing would
+// refuse the very machinery that computes standing.
+//
+// The second is the one a future commit could break, because an address is a thing
+// somebody chooses. ServePlane asks it of every operation before it binds, so this
+// drives the real bind twice: once with an ordinary internal operation, which comes
+// up, and once with one declared at a PRICED address, which does not.
+func TestTheInternalPlaneIsOutsideThePricedSurface(t *testing.T) {
+	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
+	free := func(ctx context.Context, _ *none) (*ok, error) { return &ok{OK: true}, nil }
+
+	cloud.ResetPlane()
+	t.Cleanup(cloud.ResetPlane)
+	zip.Post(cloud.Plane(), "/probe/get", free, zip.WithOperationID("plane_get"))
+	stop, err := cloud.ServePlane("probeplane", nil)
+	if err != nil {
+		t.Fatalf("an ordinary internal operation kept the plane from binding: %v", err)
+	}
+	if err := stop(); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+
+	// The same plane, one operation declared at a priced address. The surface's price
+	// is the composition root's, so it is declared the way a program declares one.
+	cloud.ResetPlane()
+	if err := mountAll(t, newApp(), []cloud.Plugin{
+		{Name: "probe", Price: 500, Mount: func(cloud.Router, cloud.Deps) error { return nil }},
+	}); err != nil {
+		t.Fatalf("MountAll: %v", err)
+	}
+	zip.Post(cloud.Plane(), "/v1/probe/run", free, zip.WithOperationID("plane_priced"))
+	if _, err := cloud.ServePlane("probeplane2", nil); err == nil {
+		t.Fatal("the plane bound an operation at a priced address — the edge already charged for the " +
+			"operation it implements, so the inner hop would bill it twice")
+	} else if !strings.Contains(err.Error(), "500c") {
+		t.Fatalf("the refusal does not say what it would have cost: %v", err)
 	}
 }
