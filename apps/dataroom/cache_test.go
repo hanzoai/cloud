@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -126,4 +128,51 @@ func TestALinkVisitorsAnswerIsNotKept(t *testing.T) {
 		t.Fatalf("owner download: %d, want 200", st)
 	}
 	notKept(t, "GET /documents/:id/file", h)
+}
+
+// TestVaryIsAddedToWhatIsAlreadyThere. Vary is a LIST, and the edge names Origin
+// on it before this subsystem is reached: every CORS answer depends on Origin,
+// including the one that carries no CORS header at all. Assigning the header
+// drops that, and then a shared cache may hand one origin the answer computed for
+// another. The middleware here is exactly what the edge does (middleware_edge.go
+// appends Origin through fiber's own Vary), so this measures the composition and
+// not a stand-in.
+func TestVaryIsAddedToWhatIsAlreadyThere(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// In FRONT of the subsystem, where the edge sits. fiber runs middleware in
+	// registration order, so this has to be installed before Mount registers what
+	// it must precede.
+	app.Use(zip.H(func(c *zip.Ctx) error {
+		c.Fiber().Vary("Origin")
+		return c.Continue()
+	}))
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+
+	// An answer this subsystem writes for itself, so held is on the path.
+	rq := httptest.NewRequest(http.MethodPost, "/v1/dataroom/documents?name=deck.pdf&numPages=1",
+		strings.NewReader("%PDF-1.7\nD\n%%EOF"))
+	rq.Header.Set("Content-Type", "application/pdf")
+	rq.Header.Set("X-Org-Id", "acme")
+	rq.Header.Set("X-User-Id", "u_acme")
+	rq.Header.Set("Origin", "https://console.hanzo.ai")
+	resp, err := app.Test(rq)
+	if err != nil {
+		t.Fatalf("upload: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("upload: %d, want 200 — the rows below would measure a refusal", resp.StatusCode)
+	}
+	v := resp.Header.Get("Vary")
+	if !strings.Contains(v, "Origin") {
+		t.Errorf("Vary = %q, want Origin still named — assigning the header drops what "+
+			"the edge already put there", v)
+	}
+	if !strings.Contains(v, "Authorization") || !strings.Contains(v, "Cookie") {
+		t.Errorf("Vary = %q, want the credentials this address answers differently under", v)
+	}
+	t.Logf("Vary composed with the edge: %q", v)
 }
