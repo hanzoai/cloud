@@ -298,6 +298,7 @@ func mountForge(t *testing.T, f *stubForge) *zip.App {
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
+	sharedKey(t)
 	err := Mount(app, cloud.Deps{
 		DataDir: t.TempDir(),
 		KMS:     kmsStub{token: f.token},
@@ -1259,6 +1260,7 @@ func mountForgeBranded(t *testing.T, f *stubForge, brand string) *zip.App {
 	t.Setenv("CLOUD_FORGE_HOST", f.URL)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
+	sharedKey(t)
 	err := Mount(app, cloud.Deps{
 		DataDir: t.TempDir(),
 		Brand:   brand,
@@ -1407,4 +1409,12 @@ func TestForgeBoard_TheKeyIsAFilterSoTheGlobalAndPerAppBoardsAreQueries(t *testi
 	if got := titles("/v1/todo/board?label=app/nothing"); len(got) != 0 {
 		t.Errorf("unknown label = %v, want an empty board rather than a silent fall-through to all work", got)
 	}
+}
+
+// sharedKey provisions the anti-forgery key this package's mount requires: its
+// writes verify a token the account process minted, so a deployment carries the one
+// value from KMS and a mount without it refuses (apps/account, Shared).
+func sharedKey(t *testing.T) {
+	t.Helper()
+	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 }

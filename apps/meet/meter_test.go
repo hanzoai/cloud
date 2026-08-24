@@ -27,6 +27,7 @@ func billedMount(t *testing.T, l *planetest.Ledger) *zip.App {
 	t.Setenv(keyFileEnv, keyFileWith(t, keyBody("APIkey", "apisecret")))
 	st := load()
 	st.authority = holds(map[string]string{workspaceA: token.RoleMember})
+	sharedKey(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
 	app.Use(cloud.Bridge())

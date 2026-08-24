@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/todo"
 	"github.com/hanzoai/cloud/internal/manifesttest"
 
@@ -25,6 +26,9 @@ import (
 )
 
 func TestEveryRouteTodoServesIsRoutedToIt(t *testing.T) {
+	// The harness mounts the app as a deployed process would, and a deployed process
+	// holds the shared anti-forgery key its writes verify against (apps/account, Shared).
+	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	manifesttest.Case{
 		Name:  "todo",
 		Mount: todo.Mount,
