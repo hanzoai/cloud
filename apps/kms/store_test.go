@@ -1,7 +1,10 @@
 package kms
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 )
@@ -35,5 +38,49 @@ func TestDBFor_TenantCannotSpellReservedPartition(t *testing.T) {
 	}
 	if tenantDB == facadeDB {
 		t.Fatal("tenant _platform store and the facade store are the SAME handle — they must never alias")
+	}
+}
+
+// TestAStatementDoesNotWaitForeverOnTheSoleConnection pins the bound that turns
+// a busy store into an error instead of a hang.
+//
+// cloud.OrgDB pins each org file to ONE connection, so a second statement waits
+// for the first to finish — and database/sql waits until its CONTEXT is done.
+// These methods used db.QueryRow/Exec/Query, which carry no context, so the wait
+// had no ceiling of its own. The only one left was the caller's: cmd/cloud gives
+// up on a plugin at fifteen minutes, and live reads were measured completing at
+// duration_ms 900002 — that cap, not the work. Nothing waits that long, so the
+// answer arrived for nobody.
+//
+// The facade partition is deliberately the subject: a path outside orgs/<slug>/
+// is namespace.System(), so every platform credential CI reads shares this one
+// file and this one connection.
+func TestAStatementDoesNotWaitForeverOnTheSoleConnection(t *testing.T) {
+	defer func(d time.Duration) { storeOpTimeout = d }(storeOpTimeout)
+	storeOpTimeout = 150 * time.Millisecond
+
+	s := newSecretStore(cloud.Base{DataDir: t.TempDir()}, false)
+	db, err := s.dbFor("/facade-secret", true)
+	if err != nil || db == nil {
+		t.Fatalf("open facade store: db=%v err=%v", db, err)
+	}
+
+	// Hold the sole connection, exactly as a slow write or a checkpoint would.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	done := make(chan error, 1)
+	go func() { _, e := s.get("/facade-secret", "NAME", "prod"); done <- e }()
+
+	select {
+	case e := <-done:
+		if !errors.Is(e, context.DeadlineExceeded) {
+			t.Fatalf("get returned %v, want a deadline — the wait must end as an error, not as a late answer", e)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("get is still waiting for the sole connection after 5s — unbounded, so the only ceiling is the caller's fifteen-minute plugin cap")
 	}
 }
