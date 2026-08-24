@@ -201,6 +201,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// {"error": …} returns a goja.BundleErr, and this writes those bytes back
 	// verbatim. Also before the leaves, for the same registration-order reason.
 	g.Use(goja.Envelope())
+	// Then what every answer here says about being kept. See held.
+	g.Use(held())
 
 	// --- admin surface, typed (validated principal → org) --------------------
 	//
@@ -254,6 +256,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// refuse the very caller it is for.
 	platform := app.Group("/v1/admin/dataroom", sudoGate)
 	platform.Use(cloud.Bridge())
+	platform.Use(held())
 	zip.Get(platform, "/trust", o.roster)
 
 	// A public item's bytes. Untyped for the same reason the two admin file routes
@@ -504,7 +507,6 @@ func viewerDownload(s *cloud.Service[state], c *zip.Ctx) error {
 // under an attachment disposition. nosniff keeps the declared type binding, so a PDF
 // that is also valid markup is still only a PDF.
 func streamFile(s *cloud.Service[state], c *zip.Ctx, resp *goja.Response) error {
-	held(c)
 	if resp.Status != http.StatusOK {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(resp.Status, resp.Body)
@@ -557,7 +559,6 @@ func write(s *cloud.Service[state], c *zip.Ctx, org, route string, params, query
 		s.Log.Error("dataroom dispatch failed", "route", route, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "dataroom dispatch failed")
 	}
-	held(c)
 	c.SetHeader("Content-Type", "application/json")
 	return c.Bytes(resp.Status, resp.Body)
 }
@@ -571,6 +572,20 @@ func write(s *cloud.Service[state], c *zip.Ctx, org, route string, params, query
 // with no principal at all — a link id is the whole of the caller's identity, so
 // the URL alone is enough for a cache to key on and hand to the next visitor.
 //
+// ON THE GROUP, which is what makes "every answer" true. A typed op returns its
+// Out and touches no response at all — the twenty typed ops answer through
+// ops.call and ops.run (typed.go) — so a header written where the byte stream and
+// the untyped relay write theirs reached those two paths and nothing else,
+// leaving /documents, /datarooms, /trust and /links free for anyone to store.
+// /links is the one that matters most: it answers with the link ids, which are
+// the whole of a visitor's credential on the viewer surface. Every route this
+// subsystem serves hangs off one of its two groups, so one registration on each
+// carries all of them.
+//
+// Before the leaf rather than after it, so a refusal is as unstorable as an
+// answer: a 403 from the viewer surface is keyed by the same link id and shaped
+// by the same tenant as the bytes it withholds.
+//
 // Vary names the credentials the SAME address answers differently under: an owner
 // reading /documents/:id/file and another org reading the identical URL get
 // different bytes, so a cache that stores anyway must still not cross them.
@@ -582,9 +597,12 @@ func write(s *cloud.Service[state], c *zip.Ctx, org, route string, params, query
 // shared cache hand one origin the answer computed for another. fiber's Vary
 // appends and is idempotent, which is what that middleware uses for the same
 // reason.
-func held(c *zip.Ctx) {
-	c.SetHeader("Cache-Control", "private, no-store")
-	c.Fiber().Vary("Authorization", "Cookie")
+func held() zip.Handler {
+	return func(c *zip.Ctx) error {
+		c.SetHeader("Cache-Control", "private, no-store")
+		c.Fiber().Vary("Authorization", "Cookie")
+		return c.Continue()
+	}
 }
 
 // decodeBody decodes a JSON request body when readBody is set (bounded by maxBody).
