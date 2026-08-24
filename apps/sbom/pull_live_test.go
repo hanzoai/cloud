@@ -92,7 +92,7 @@ func TestPullOnMissLiveEndToEnd(t *testing.T) {
 	app := mountApp(t)
 
 	// First GET: not in datastore yet → pull-on-miss materializes it → 200 real comps.
-	code, body := do(t, app, http.MethodGet, "/v1/sbom/"+subjectRef, "", false)
+	code, body := do(t, app, http.MethodGet, "/v1/sbom/"+subjectRef, "", member)
 	if code != http.StatusOK {
 		t.Fatalf("pull-on-miss GET want 200, got %d (%s)", code, body)
 	}
@@ -110,7 +110,7 @@ func TestPullOnMissLiveEndToEnd(t *testing.T) {
 	t.Logf("pull-on-miss materialized %d components; digest=%s", view.ComponentCount, view.ImageDigest)
 
 	// Second GET: now a datastore cache HIT (no pull) — same real components.
-	code2, body2 := do(t, app, http.MethodGet, "/v1/sbom/"+subjectRef, "", false)
+	code2, body2 := do(t, app, http.MethodGet, "/v1/sbom/"+subjectRef, "", member)
 	if code2 != http.StatusOK {
 		t.Fatalf("cache-hit GET want 200, got %d (%s)", code2, body2)
 	}
@@ -123,7 +123,7 @@ func TestPullOnMissLiveEndToEnd(t *testing.T) {
 	}
 
 	// Resolve by DIGEST too (the console can hold a digest ref).
-	code3, body3 := do(t, app, http.MethodGet, "/v1/sbom/"+reg+"/hanzoai/cloud@"+dig.String(), "", false)
+	code3, body3 := do(t, app, http.MethodGet, "/v1/sbom/"+reg+"/hanzoai/cloud@"+dig.String(), "", member)
 	if code3 != http.StatusOK {
 		t.Fatalf("digest-ref GET want 200, got %d (%s)", code3, body3)
 	}

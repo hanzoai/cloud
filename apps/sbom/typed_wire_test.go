@@ -131,7 +131,7 @@ func TestResolveTakesASlashBearingRef(t *testing.T) {
 		"oci.hanzo.ai/hanzo/cloud:v1",
 		"oci.hanzo.ai/hanzo/cloud@sha256:abc",
 	} {
-		code, body := do(t, app, "GET", "/v1/sbom/"+ref, "", false)
+		code, body := do(t, app, "GET", "/v1/sbom/"+ref, "", member)
 		if code == 404 {
 			t.Fatalf("GET /v1/sbom/%s did not match the resolve route (404) — a slash-bearing ref must "+
 				"reach it; that greedy capture is why this route cannot be a typed op", ref)
@@ -149,7 +149,7 @@ func TestResolveTakesASlashBearingRef(t *testing.T) {
 // wire change.
 func TestHealthAndIngestKeepTheirBytes(t *testing.T) {
 	app := mountApp(t)
-	code, body := do(t, app, "GET", "/v1/sbom/health", "", false)
+	code, body := do(t, app, "GET", "/v1/sbom/health", "", anon)
 	if code != 200 {
 		t.Fatalf("health: got %d (%s), want 200", code, body)
 	}
@@ -158,7 +158,7 @@ func TestHealthAndIngestKeepTheirBytes(t *testing.T) {
 		t.Fatalf("health bytes moved:\n got %s\nwant %s", got, want)
 	}
 	// The SuperAdmin gate still refuses a non-admin, and still before any store work.
-	if code, _ := do(t, app, "POST", "/v1/sbom", `{"imageDigest":"sha256:a","document":{}}`, false); code != 403 {
+	if code, _ := do(t, app, "POST", "/v1/sbom", `{"imageDigest":"sha256:a","document":{}}`, member); code != 403 {
 		t.Fatalf("non-admin ingest: got %d, want 403", code)
 	}
 }

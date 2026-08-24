@@ -51,6 +51,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -157,12 +158,17 @@ func init() {
 			"This read is GLOBAL, not tenant-scoped, and deliberately so: a bill of materials "+
 			"belongs to a content-addressed digest rather than to an org, so every caller "+
 			"deploying the same image resolves the same components, and nothing tenant-owned "+
-			"is exposed by it. Ingest is the gated half of the pair.\n\n"+
+			"is exposed by it. It still requires an attested caller — global is not public — "+
+			"and answers 403 without one. Ingest is the gated half of the pair.\n\n"+
 			"A miss is not the end of the lookup. The registry is the source of truth, so an "+
 			"unmaterialized ref is pulled from the SBOM attached to that image, persisted, and "+
 			"answered from the store — the first read of a freshly built image pays for the "+
-			"pull, later ones do not. A bare digest with no repository is not pullable and "+
-			"answers an honest 404, as does a ref with no attached document. Repeated ingests "+
+			"pull, later ones do not. The pull reads OUR registries and nothing else, which is "+
+			"what makes one shared answer trustworthy for every tenant: an attached document "+
+			"is whoever controls that repository speaking, so a ref outside them answers 404 "+
+			"rather than a stranger's account of what is in their image. A bare digest with no "+
+			"repository is not pullable and answers an honest 404, as does a ref with no "+
+			"attached document. Repeated ingests "+
 			"collapse to the latest, components come back ordered by type then name, and a "+
 			"result over 5000 components is capped with `truncated` set. When the datastore "+
 			"is not connected the answer is 503 rather than a fabricated empty image.")
@@ -284,6 +290,19 @@ func (o ops) ingest(ctx context.Context, in *SbomIngest) (*SbomIngested, error) 
 // route whose wire did not. Typing this needs a zip capability that does not exist —
 // a wildcard capture declared as the path parameter it is.
 func resolve(s *cloud.Service[state], c *zip.Ctx) error {
+	// An attested caller, before anything else. GLOBAL is not PUBLIC: the read is
+	// cross-tenant because a bill of materials belongs to a digest rather than to an
+	// org, which says nothing about who may ask. And a miss does not merely read —
+	// it fetches a document off the network and writes the shared table — so a
+	// stranger must not be the one to start that. No org predicate follows, because
+	// the answer is the same for every tenant; only the question needs an owner.
+	//
+	// The check is HERE and not on the group: the probe beside it shares that group
+	// and has to stay answerable without a credential, and this is a raw handler, so
+	// its route is the only seam that reaches it.
+	if !principal.Validated(c) {
+		return principal.Refused(c)
+	}
 	ref := strings.Trim(strings.TrimSpace(c.Fiber().Params("*")), "/")
 	if dec, err := url.PathUnescape(ref); err == nil {
 		ref = dec

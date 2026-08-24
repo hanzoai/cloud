@@ -50,6 +50,44 @@ import (
 // can't exhaust memory. CycloneDX SBOMs for our images are well under this.
 const maxSBOMBytes = 64 << 20 // 64 MiB
 
+// registries are the repositories a pulled document may come from: our own two
+// hosts whole, and our three orgs on the shared public one.
+//
+// WHY THE PULL IS NARROWER THAN THE REF. The store is one table every tenant reads,
+// on the reasoning that a digest is content-addressed so the answer is the same for
+// everyone. An ATTACHED document is not covered by that digest — it is a separate
+// tag or referrer in the same repository — so its contents are whatever the party
+// holding that repository put there. Pulling from a repository we do not hold would
+// therefore write one tenant's supplier into the answer every other tenant reads,
+// through a door that POST /v1/sbom keeps shut behind SuperAdmin. It also decides
+// which hosts this pod will open a connection to, which the caller otherwise names.
+//
+// A ref outside this list is not pullable, and pull-on-miss ends in the same honest
+// 404 an image with no attached document gets.
+var registries = []string{
+	"oci.hanzo.ai",
+	"git.hanzo.ai",
+	"ghcr.io/hanzoai",
+	"ghcr.io/luxfi",
+	"ghcr.io/zooai",
+}
+
+// ours reports whether repo is one we publish to, comparing on SEGMENT boundaries
+// so ghcr.io/hanzoai matches ghcr.io/hanzoai/cloud and never ghcr.io/hanzoaix.
+//
+// It reads the PARSED repository rather than the caller's string: name.ParseReference
+// resolves the defaults ("nginx" is index.docker.io/library/nginx), so the comparison
+// is against the host a connection would actually go to.
+func ours(repo name.Repository) error {
+	full := repo.Name()
+	for _, r := range registries {
+		if full == r || strings.HasPrefix(full, r+"/") {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s is not a registry this store pulls from", full)
+}
+
 // pulled is the result of a successful registry pull: the resolved digest, the ref
 // we pulled through, and the parsed CycloneDX components ready to persist.
 type pulled struct {
@@ -58,18 +96,30 @@ type pulled struct {
 	Components []SbomComponent
 }
 
-// pullSBOM resolves ref → digest, locates the attached CycloneDX SBOM in the
-// registry, and parses it into components. ref MUST be a full image reference with
-// a repository (a bare `sha256:…` digest has no repo to pull from → error). Pure
-// production entry: DefaultKeychain auth (in-cluster/registry creds when present,
-// anonymous for public images) + the caller's context for cancellation.
+// pullSBOM is the production entry, and it decides WHERE before it fetches: the
+// reference is resolved to the repository a connection would go to, that repository
+// must be one of ours (see registries), and only then does the network open. It is
+// the ONE path pullAndStore takes, so both doors into the shared store — a caller's
+// miss and a deploy's prefetch — pass the same decision.
+//
+// ref MUST be a full image reference with a repository (a bare `sha256:…` digest has
+// no repo to pull from → error). Auth is DefaultKeychain (in-cluster/registry creds
+// when present, anonymous for public images) and cancellation is the caller's.
 func pullSBOM(ctx context.Context, ref string) (*pulled, error) {
+	parsed, err := name.ParseReference(strings.TrimSpace(ref))
+	if err != nil {
+		return nil, fmt.Errorf("parse reference %q: %w", ref, err)
+	}
+	if err := ours(parsed.Context()); err != nil {
+		return nil, err
+	}
 	return pullSBOMWith(ctx, ref, nil, remote.WithAuthFromKeychain(authn.DefaultKeychain))
 }
 
-// pullSBOMWith is the testable core: nameOpts (e.g. name.Insecure) tune reference
-// parsing; remoteOpts carry auth/transport. It is split out so a fake in-memory
-// registry can exercise the exact same locate logic as production.
+// pullSBOMWith is HOW we look, where pullSBOM is WHERE: nameOpts (e.g. name.Insecure)
+// tune reference parsing and remoteOpts carry auth and transport, so a fake in-memory
+// registry drives the identical locate logic. It holds no policy on purpose — a test
+// that had to be exempted from the rule would be testing a different program.
 func pullSBOMWith(ctx context.Context, ref string, nameOpts []name.Option, remoteOpts ...remote.Option) (*pulled, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
