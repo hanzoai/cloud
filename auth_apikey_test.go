@@ -315,8 +315,8 @@ func TestKeyHint_NeverDisclosesTheKey(t *testing.T) {
 
 // A KEY AND A TOKEN FOR ONE IDENTITY NAME THE SAME PAYER.
 //
-// IAM answers `billing_account` on the key door exactly as it answers it in a
-// token's claim — which ledger this credential spends from, decided where the
+// IAM answers `billing_account` when it validates a key exactly as it answers it
+// in a token's claim — which ledger this credential spends from, decided where the
 // grant shape is visible. Dropping it here did not leave the payer unknown, it
 // left it WRONG: account.Payer falls out of its named-account arm to the shape
 // rule, which answers Person(org, name) and never pools the signup org. A
