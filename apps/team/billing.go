@@ -41,6 +41,22 @@ import (
 // The path keys are the FIBER patterns exactly as registered below; the `*` is
 // what the document renders as {wildcard1}.
 func init() {
+	// A route that CANNOT be typed still owes its BODIES. Both of these published
+	// an operationId and nothing else, which a document consumer cannot tell from a
+	// route that returns none — so every generated SDK offered the wallet page with
+	// no stated answer at all. openapi.Bytes is the honest declaration for a body
+	// that is not JSON, and it names no component, so neither adds a bare property.
+	//
+	// The two media types differ because the ROUTES differ. The bare page resolves
+	// an empty capture to index.html unconditionally (ui), so text/html is what it
+	// always serves. The wildcard's type is derived per asset from the name
+	// (walletContentType), so naming one would be false for the rest; empty Type is
+	// OpenAPI's "opaque bytes", which is the true statement about a route whose
+	// media type varies. TestDeclaredMediaTypesAreTheServedOnes reads both off the
+	// live wire rather than trusting these two literals.
+	openapi.Register("/v1/team/billing/ui", http.MethodGet, nil,
+		openapi.Bytes{Type: "text/html; charset=utf-8"})
+	openapi.Register("/v1/team/billing/ui/*", http.MethodGet, nil, openapi.Bytes{})
 	openapi.Describe("/v1/team/billing/ui", http.MethodGet,
 		"Open the wallet page",
 		"Serves the usage-and-wallet page the Team front links to — HTML, not JSON. It is a "+
@@ -85,11 +101,12 @@ func (b *billingService) register(app cloud.Router, guard guardFn) {
 	// The group is built HERE so cmd/zipdoc can resolve the typed op's prefix from
 	// this file — see bots.go for why.
 	g := app.Group(teamPrefix)
-	// TYPED: the plan read is a JSON value with a name. The two /ui routes below
-	// stay UNTYPED and cannot be otherwise — they serve the embedded page's BYTES
-	// (html/js/css) under a per-asset Content-Type, which is not a shape a typed
-	// Out can describe.
+	// TYPED: the plan read is a JSON value with a name.
 	zip.Get(g, "/billing/plan", b.readPlan)
+	// UNTYPED: both answer the embedded bundle's BYTES, and the wildcard is blocked
+	// a second time by being GREEDY — the registry and the router spell that segment
+	// differently, so Fold would refuse the WHOLE document rather than publish one
+	// bad path. untypedByDesign cites both, and the byte replies are DECLARED below.
 	g.Get("/billing/ui", guard(b.ui))
 	g.Get("/billing/ui/*", guard(b.ui))
 }

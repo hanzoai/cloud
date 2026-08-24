@@ -17,11 +17,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
-// (Mount says why beside its registrations): the program's composer does, once
-// at the root. In a test the test IS the composer, so it owes the same install —
-// skipping it does not test a stricter program, it tests one where every
-// org-scoped op answers 403 for a reason production could never produce.
+// compose installs what a HOST installs, which is cloud.Bridge app-wide, once at
+// the root. In a test the test IS the composer, so it owes that install —
+// skipping it does not test a stricter program, it tests one production has
+// never run.
+//
+// Mount installs a Bridge of its own on the subsystem's router as well, and this
+// is deliberately not redundant with it: that one covers pricing's own prefixes
+// wherever pricing is mounted, INCLUDING with no composer at all, while this one
+// is what every other app in the binary rides. Bridge derives everything it parks
+// from the request, so the second pass parks the same values.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // doer drives the mounted subsystem over HTTP. Both tests here build one.

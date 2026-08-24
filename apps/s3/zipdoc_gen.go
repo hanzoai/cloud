@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/s3/buckets/:bucket", zip.Doc{
-		Description: "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives.",
+		Description: "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nbucket is gone.",
 		Fields: map[string]string{
 			"bucketRef.bucket": "Bucket is the bucket's friendly name, from the path.",
 		},
@@ -17,7 +17,7 @@ func init() {
 		Description: "Removes one object at the trailing wildcard path.",
 	})
 	zip.Describe("GET /v1/s3/buckets", zip.Doc{
-		Description: "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all.",
+		Description: "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all. Another org's bucket is not\nrefused but INVISIBLE, so this cannot be used to learn that a name is taken\nelsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
 		Fields: map[string]string{
 			"bucketItem.createdAt": "unix seconds",
 			"bucketItem.name":      "friendly name",
@@ -26,9 +26,10 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/s3/buckets/:bucket/objects", zip.Doc{
-		Description: "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.",
+		Description: "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
 		Fields: map[string]string{
 			"listIn.bucket":           "Bucket is the bucket to list, from the path.",
+			"objectItem.etag":         "ETag is the store's entity tag for the bytes currently at this key, with the\nquotes the store wraps it in stripped. It is an opaque VERSION and not a\nchecksum to verify against: a single-part upload's tag happens to be the MD5\nof the content and a multipart upload's is not, and nothing here says which\nthis was. Compare two reads of one key to learn whether the object changed;\nabsent for a folder entry, and for an object the store reports none for.",
 			"objectItem.isDir":        "true for a folder (common prefix)",
 			"objectItem.key":          "key RELATIVE to the requested prefix",
 			"objectItem.lastModified": "unix seconds (0 for a folder)",
@@ -53,7 +54,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/s3/buckets", zip.Doc{
-		Description: "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409.",
+		Description: "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nbucket exists.",
 		Fields: map[string]string{
 			"bucketIn.name":        "Name is the bucket's friendly name, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. It is validated AS GIVEN and never\nlower-cased for you: a client that creates \"Photos\" and then lists \"photos\"\nwould be reading a bucket it did not make, so mixed case is a clean 400.",
 			"bucketItem.createdAt": "unix seconds",
@@ -61,9 +62,10 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/s3/buckets/:bucket/objects", zip.Doc{
-		Description: "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.",
+		Description: "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe upload that follows it goes straight to the store and is not seen here. The\nbalance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
 		Fields: map[string]string{
 			"presignResponse.expiresIn": "seconds until the URL expires",
+			"presignResponse.key":       "Key is the object key the URL was signed for, relative to the bucket root\nand path-cleaned — so it is what the store will actually read or write, which\nis not always the string the caller sent. The signature covers this one bucket\nand this one key: a URL minted here reaches nothing else.",
 			"presignResponse.method":    "\"PUT\" (upload) or \"GET\" (download)",
 			"presignResponse.url":       "presigned URL the browser follows directly",
 			"uploadIn.bucket":           "Bucket is the bucket to upload into, from the path.",

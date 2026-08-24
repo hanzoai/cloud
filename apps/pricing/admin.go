@@ -33,19 +33,50 @@ const (
 	maxOverrideDepth = 32
 )
 
-// patchBody is the PATCH payload. Every field is optional (a pointer): only
-// fields present in the request body are changed; absent fields preserve the
-// existing overlay. A brand-new overlay defaults to enabled (the catalog
+// overlayPatch is the PATCH payload BOTH overlay writes take — the models
+// wildcard and the providers op — so the two routes cannot come to disagree
+// about what an overlay write accepts. Every field is optional (a pointer):
+// only fields present in the request body are changed; absent fields preserve
+// the existing overlay. A brand-new overlay defaults to enabled (the catalog
 // default), so PATCH {"enabled":false} is the first act that hides an entry.
-type patchBody struct {
-	Enabled *bool `json:"enabled,omitempty"`
-	Beta    *bool `json:"beta,omitempty"`
+//
+// The name says which noun it patches because publishing it (see the Register
+// below) puts it in the fleet's FLAT schema namespace, where one name may mean
+// only one shape. It was `patchBody` while it published nothing, which is
+// exactly the generic name two apps eventually claim with two shapes — and the
+// weave then refuses both. Qualify before you publish; renaming afterwards is a
+// rename in every generated SDK.
+//
+// `url:"-"` on every field is what keeps the body the only source. zip binds
+// query OVER a decoded body, so without it a converted route silently accepts
+// `?enabled=true` — a source the raw handler never read. Harmless for these
+// five today (setScalar leaves a pointer alone, zip@v1.36.3 typed.go:393) and
+// not harmless for the next field somebody adds as a plain string or bool, so
+// the tag states the rule where a reader of the struct sees it.
+type overlayPatch struct {
+	// Enabled sets the "ga" half of the state directly: true makes the entry
+	// generally available, false hides it from the public. Absent leaves it
+	// alone. Sent beside State it WINS, because it is applied after.
+	Enabled *bool `json:"enabled,omitempty" url:"-"`
+	// Beta sets the beta half directly, and it only means anything while the
+	// entry is not enabled: true keeps the orgs in BetaOrgs seeing it, false is
+	// the absolute kill switch. Absent leaves it alone; sent beside State it
+	// wins, because it is applied after.
+	Beta *bool `json:"beta,omitempty" url:"-"`
 	// State is the high-level tri-state setter ("off"|"beta"|"ga") that sets
 	// enabled+beta coherently; the low-level Enabled/Beta pointers (applied after)
-	// override it for fine control.
-	State     *string          `json:"state,omitempty"`
-	BetaOrgs  *[]string        `json:"betaOrgs,omitempty"`
-	Overrides *json.RawMessage `json:"overrides,omitempty"`
+	// override it for fine control. Anything else is 400.
+	State *string `json:"state,omitempty" url:"-"`
+	// BetaOrgs REPLACES the entry's beta grant list — it is not merged, so the
+	// list sent is the list stored, and `[]` revokes every grant. Entries are
+	// trimmed and de-duplicated. Absent leaves the existing grants alone.
+	BetaOrgs *[]string `json:"betaOrgs,omitempty" url:"-"`
+	// Overrides is an RFC 7386 merge patch applied over the entry's catalog
+	// values, stored and echoed back VERBATIM, so its keys are the catalog's own
+	// and not this API's. It must be a JSON object or null — an array or a scalar
+	// is 400 — and is bounded in size and nesting depth. Absent leaves the stored
+	// override alone; `{}` or null CLEARS it.
+	Overrides *json.RawMessage `json:"overrides,omitempty" url:"-"`
 }
 
 // adminCatalogOut is the whole catalog with every entry's enablement state.
@@ -107,16 +138,31 @@ func (o ops) adminCatalog(ctx context.Context, _ *pricingNoInput) (*adminCatalog
 	}, nil
 }
 
-// The prose for the one operation on this surface that cannot be a typed op.
-// The other thirty-one carry theirs in a doc comment zipdoc lifts; this one is
-// pinned raw by the greedy wildcard (ops.go says why, typed_wire_test.go proves
-// it), so there is no comment for anything to lift and the operation would
-// publish an operationId and nothing else — an SDK method and a CLI command
-// that cannot explain themselves. Declared through the same registry Register
-// uses, so it renders only while the router actually serves the route, and the
-// key is the fiber pattern the router carries (`…/models/*`), not the template
-// the document renders it as.
+// The PROSE and the BODIES of the one operation on this surface that cannot be
+// a typed op. The other thirty-two carry both in Go declarations zipdoc and zip
+// read; this one is pinned raw by the greedy wildcard (ops.go says why,
+// typed_wire_test.go proves it), so nothing derives either and it would publish
+// an operationId alone.
+//
+// Prose alone was not enough, and the half that was missing is the one a client
+// trips over: an operation with no requestBody and no responses is
+// INDISTINGUISHABLE from a route that takes nothing and returns nothing, so
+// every SDK generated off this document offered a model-overlay patch with
+// nowhere to put the patch. Register states the two shapes the handler actually
+// binds — the same overlayPatch adminPatch decodes, the same Overlay applyPatch
+// answers with — so a shape here cannot drift from the code: change the struct
+// and the document follows.
+//
+// The wildcard blocks TYPING, not DECLARING. What stays lost is exactly what
+// only zip's typed registry supplies: an MCP tool, a CLI command, a typed SDK
+// method, and per-FIELD prose (Register reflects over Go types and Go drops
+// comments — see the proseless ledger in typed_wire_test.go).
+//
+// Both are keyed by the fiber pattern the ROUTER carries (`…/models/*`), never
+// the `{wildcard1}` template the document renders it as, and both render only
+// while that route is served — the registry cannot add an operation.
 func init() {
+	openapi.Register("/v1/admin/pricing/catalog/models/*", http.MethodPatch, overlayPatch{}, Overlay{})
 	openapi.Describe("/v1/admin/pricing/catalog/models/*", http.MethodPatch,
 		"Turn one model off, into beta for named orgs, or generally available",
 		"Sets one model's availability overlay — and the price overrides applied on top of the "+
@@ -164,7 +210,7 @@ func adminPatchModel(c *zip.Ctx) error {
 type providerPatchIn struct {
 	// Name is the provider the overlay belongs to, from the URL.
 	Name string `json:"name"`
-	patchBody
+	overlayPatch
 }
 
 // PatchProvider sets one provider's availability overlay.
@@ -184,7 +230,7 @@ func adminPatchProvider(ctx context.Context, in *providerPatchIn) (*Overlay, err
 	if name == "" {
 		return nil, zip.ErrBadRequest("provider name required")
 	}
-	return applyPatch(ctx, kindProvider, name, in.patchBody)
+	return applyPatch(ctx, kindProvider, name, in.overlayPatch)
 }
 
 // adminPatch reads the current overlay (or the enabled-default), applies only
@@ -196,7 +242,7 @@ func adminPatchProvider(ctx context.Context, in *providerPatchIn) (*Overlay, err
 // greedy wildcard (see ops.go). The typed providers op calls applyPatch directly,
 // so both entry points run the same code and cannot drift.
 func adminPatch(c *zip.Ctx, kind, id string) error {
-	var body patchBody
+	var body overlayPatch
 	if raw := c.Body(); len(raw) > 0 {
 		if err := json.Unmarshal(raw, &body); err != nil {
 			return zip.ErrBadRequest("invalid JSON body: " + err.Error())
@@ -212,7 +258,7 @@ func adminPatch(c *zip.Ctx, kind, id string) error {
 // applyPatch is the overlay upsert itself, with no request in sight: read the
 // current overlay (or the enabled-default), apply only the fields the patch
 // carries, write it back, and answer with the new effective overlay.
-func applyPatch(ctx context.Context, kind, id string, body patchBody) (*Overlay, error) {
+func applyPatch(ctx context.Context, kind, id string, body overlayPatch) (*Overlay, error) {
 	if cat == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "catalog overlay not initialised")
 	}

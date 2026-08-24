@@ -9,26 +9,32 @@ package pricing
 // this surface shares: the receiver zipdoc lifts prose through, the two identity
 // readers, and the input every op that takes nothing off the wire uses.
 //
-// WHAT STAYS RAW. Two of thirty-two are left, they are the SAME route pattern's
-// two halves — the admin overlay PATCHes — and neither is a matter of effort. The
+// WHAT STAYS RAW. ONE of thirty-three, and it is not a matter of effort. The
 // partition is PINNED by typed_wire_test.go (untypedByDesign +
 // TestEveryRouteIsTypedOrNamed), so the next route here is typed by default, and
-// each reason below is additionally PROVED there against the toolchain in go.mod
+// the reason below is additionally PROVED there against the toolchain in go.mod
 // rather than asserted: a blocker fixed upstream turns the suite red.
 //
 //   - PATCH /v1/admin/pricing/catalog/models/* addresses a model id that may contain
 //     '/', so it routes through a greedy wildcard — and typing it does not merely
 //     publish a bad parameter, it REFUSES THE WHOLE DOCUMENT. zip keys a typed op
-//     by the fiber pattern (".../models/*"); the document keys the same route by
-//     its URI template (".../models/{wildcard1}", openapi.translate, because `*1`
-//     is not a legal template name). openapi.Fold looks the op's route up under
-//     that key, does not find it, and errors — and Spec builds ONE document, so
-//     every other pricing operation goes down with it. Past that there is still
-//     the second half: fiber binds the segment under the name `*1`, so the input
-//     needs a field tagged `json:"*1"`, which every projection would publish and
-//     which the document's own `{wildcard1}` could never agree with. A schema
-//     nobody can read is worse than none; a document that will not build is worse
-//     than both.
+//     by the fiber pattern (".../models/*"): Template rewrites `:name` segments and
+//     passes `*` through verbatim (zip@v1.36.3/address.go:61). This document keys
+//     the same route by its URI template (".../models/{wildcard1}",
+//     openapi/openapi.go:811, because fiber's own `*1` is not a legal template
+//     name). openapi.Fold looks the op's route up under zip's spelling, does not
+//     find it, and errors (openapi/openapi.go:705) — and Spec builds ONE document,
+//     so every other pricing operation goes down with it.
+//
+//     That is the WHOLE reason, and it used to be stated as two. The second half
+//     said the input would additionally need a field tagged `json:"*1"`, which
+//     every projection would publish. That is FALSE at this pin and has been since
+//     `url:` gained its own name: urlFieldName reads the `url:` tag ahead of
+//     `json:` (zip@v1.36.3/openapi.go:884), so `Name string` tagged
+//     `json:"-" url:"*1"` binds fiber's capture and publishes nothing in the body.
+//     A dead clause is worse than a missing one — a reader who checks it, finds it
+//     false and converts the route is wrong for a reason nothing warned them
+//     about — so it is corrected here rather than left standing.
 // PATCH /v1/admin/pricing/catalog/providers/:name was on this list and is now an op. Its
 // reason was that `overrides`, an RFC 7386 merge patch stored and echoed verbatim,
 // pins the Go type to json.RawMessage — which zip published as an ARRAY OF

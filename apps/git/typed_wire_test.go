@@ -1,11 +1,18 @@
 package git
 
 import (
+	"bytes"
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/openapi"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // typed_wire_test.go turns git's typed/untyped PARTITION from prose into a GATE.
@@ -28,11 +35,18 @@ import (
 // projection keys on.
 var untypedByDesign = map[string]string{
 	// 1. The RETIRED canonical-forge webhook (webhook.go), kept as a tombstone
-	// that answers 410 naming platform.hanzo.ai. It reads no body and returns no
-	// value, so there is no In and no Out for a typed op to be built from — a
-	// typed op is a shape, and this route deliberately has none left.
-	"POST /v1/git/webhook": "retired: reads no request and returns no value, only a 410 naming the " +
-		"endpoint that builds. A typed op needs an In or an Out; a tombstone has neither.",
+	// that answers 410 naming platform.hanzo.ai.
+	//
+	// Its old reason — "a typed op needs an In or an Out; a tombstone has
+	// neither" — was FALSE: `noInput` and `noContent` are this package's own
+	// (ops.go) and six typed ops already use them. What holds is ORDER, and it is
+	// measured rather than argued, below and in webhook_test.go.
+	"POST /v1/git/webhook": "ANY bytes answer 410 — which is what retired MEANS, and what " +
+		"TestWebhookIsGoneForEveryDelivery drives with a real push, an empty body and a malformed " +
+		"one. op.invoke json-decodes a non-empty body BEFORE the handler is entered (zip " +
+		"typed.go:485-490) and answers an undecodable one 400, so a typed op would tell `{not json` " +
+		"its body is bad instead of where the delivery belongs. Run it: " +
+		"TestATypedTombstoneWouldRefuseABodyItAnswersToday.",
 
 	// 2. The smart-HTTP git pack protocol. Neither direction is JSON: requests
 	// are application/x-git-*-request pack streams, responses are
@@ -61,39 +75,71 @@ var untypedByDesign = map[string]string{
 	// JSON twin of every one of these IS a typed op (/v1/git/repos/{name}/…
 	// refs|tree|blob|commits|readme), so the schema is not missing — it is at the
 	// address that answers JSON.
-	"GET /v1/git":              "server-rendered text/html (the repo list page); a typed Out answers JSON.",
-	"GET /v1/git/explore":      "server-rendered text/html (the public explore page); a typed Out answers JSON.",
-	"GET /v1/git/{org}/{repo}": "server-rendered text/html (the repo page); a typed Out answers JSON.",
-	"GET /v1/git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out " +
-		"answers JSON.",
-	"GET /v1/git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out " +
-		"answers JSON.",
-	"GET /v1/git/{org}/{repo}/commits": "server-rendered text/html (the commit log); a typed Out answers JSON.",
+	"GET /v1/git":                               "server-rendered text/html (the repo list page); a typed Out answers JSON.",
+	"GET /v1/git/explore":                       "server-rendered text/html (the public explore page); a typed Out answers JSON.",
+	"GET /v1/git/{org}/{repo}":                  "server-rendered text/html (the repo page); a typed Out answers JSON.",
+	"GET /v1/git/{org}/{repo}/tree/{wildcard1}": "server-rendered text/html (the tree browser); a typed Out answers JSON." + reasonWildcard,
+	"GET /v1/git/{org}/{repo}/blob/{wildcard1}": "server-rendered text/html (the blob view); a typed Out answers JSON." + reasonWildcard,
+	"GET /v1/git/{org}/{repo}/commits":          "server-rendered text/html (the commit log); a typed Out answers JSON.",
 
-	// 4. The ZAP procedure adapters (zap.go). Their PUBLISHED envelope is the
-	// contract the bridge's clients parse: success is cloud.OK, failure is a
-	// non-2xx {status:"error", msg}. A typed op reports failure by RETURNING an
-	// error, which zip renders as its own {status:<int>, code, error:<msg>}
-	// (zip/ctx.go HTTPError) — a different field name and a different type for
-	// `status`. cloud.Bridge only applies a handler-set status on SUCCESS, and the
-	// only exported setters are Created/Accepted, so nothing lets a typed op
-	// answer a 4xx with this body. The field is LOAD-BEARING, not cosmetic:
-	// zapface/dispatch.go:89-91 unmarshals the non-2xx envelope and forwards
-	// env.Msg to the ZAP client as its error text, so a typed op's {..., error}
-	// body would decode to an empty Msg and every ZAP failure would arrive with
-	// no message at all. They shrink by client migration, not by typing: the
-	// shared /zap plane already replays the typed /v1 ops frame-for-frame.
-	"POST /v1/git/zap/createRepo": "the ZAP envelope: a failure is a non-2xx {status:\"error\", msg}, " +
-		"where a typed op's returned error renders zip's {status:<int>, code, error}.",
-	"POST /v1/git/zap/listRepos": "the ZAP envelope: a failure is a non-2xx {status:\"error\", msg}, " +
-		"where a typed op's returned error renders zip's {status:<int>, code, error}.",
-	"POST /v1/git/zap/getRepo": "the ZAP envelope: a failure is a non-2xx {status:\"error\", msg}, " +
-		"where a typed op's returned error renders zip's {status:<int>, code, error}.",
-	"POST /v1/git/zap/deleteRepo": "the ZAP envelope: a failure is a non-2xx {status:\"error\", msg}, " +
-		"where a typed op's returned error renders zip's {status:<int>, code, error}.",
-	"POST /v1/git/zap/usage": "the ZAP envelope: a failure is a non-2xx {status:\"error\", msg}, " +
-		"where a typed op's returned error renders zip's {status:<int>, code, error}.",
+	// 4. The ZAP procedure adapters (zap.go). One fact, five addresses — see
+	// reasonZAP.
+	"POST /v1/git/zap/createRepo": reasonZAP,
+	"POST /v1/git/zap/listRepos":  reasonZAP,
+	"POST /v1/git/zap/getRepo":    reasonZAP,
+	"POST /v1/git/zap/deleteRepo": reasonZAP,
+	"POST /v1/git/zap/usage":      reasonZAP,
 }
+
+// reasonWildcard is the SECOND, independent mechanism the tree and blob pages
+// carry, and it is stronger than the text/html one they share with their four
+// siblings: those would publish a wrong CONTENT TYPE, this publishes NO DOCUMENT.
+//
+// Both address a path INSIDE a repository, so the route ends in fiber's greedy
+// `*` and the handler reads it back with c.Fiber().Params("*") (ui.go:299,321).
+// The two projections spell that segment differently and neither is wrong: zip's
+// own Template (zip address.go:61) rewrites only `:name`, so a typed registry
+// publishes the path VERBATIM as `…/tree/*`, while cloud's router reading has to
+// give the segment an OpenAPI name and calls it `{wildcard1}`
+// (openapi/openapi.go:808-823). Fold then looks the op up by the registry's
+// spelling, finds no live route at that key, and refuses (openapi/openapi.go:705)
+// — so `make -C apps/git describe` fails outright and git publishes nothing at
+// all. Run it: TestThePageWildcardCannotBeATypedOp.
+const reasonWildcard = " AND its captured segment is a greedy fiber wildcard, which zip's registry " +
+	"and cloud's router spell differently — so Fold refuses the WHOLE document rather than " +
+	"mis-naming one parameter."
+
+// reasonZAP is the fact the five ZAP procedure adapters share, and the recorded
+// version of it had EXPIRED twice over.
+//
+// It said a typed op's returned error renders `{status:<int>, code, error:<msg>}`
+// and that nothing lets one answer a 4xx with a body of its own. Neither holds at
+// the pinned zip: a refusal renders RFC 9457 problem-details — `{type, title,
+// status, detail, code}`, no `error` key at all (zip problem.go:39-77) — and
+// WithStatus is variadic over any status with StatusCoder picking one
+// (zip typed.go:154, 189), so the success envelope and a 400/404/409/500 carrying
+// {status:"error", msg} are both an ordinary typed Out today.
+//
+// What still holds is ORDER, and it is a fact no op can reach from inside itself.
+// op.invoke decodes the request body BEFORE the handler is entered (zip
+// typed.go:485-490) and answers an undecodable one with that problem document —
+// whose `status` member is a NUMBER. The bridge unmarshals every non-2xx body
+// into its own envelope, whose `status` is a STRING (zapface/dispatch.go:35-40),
+// so the unmarshal FAILS and the ZAP client is told `INVALID_RESPONSE —
+// non-envelope response (HTTP 400)` (dispatch.go:82-86) instead of the sentence
+// the handler wrote. Today that same body answers {status:"error", msg:"invalid
+// body"} and the bridge forwards the msg (dispatch.go:88-91).
+//
+// The 403 leg is NOT what holds them, and the old reason implied it did: dispatch
+// short-circuits 401/403 before it parses anything (dispatch.go:76-80).
+//
+// They shrink by client migration, not by typing: the shared /zap plane already
+// replays the typed /v1 ops frame-for-frame.
+const reasonZAP = "the bridge's envelope, and the order it is written in: op.invoke decodes the " +
+	"body before the handler (zip typed.go:485-490) and answers an undecodable one with a problem " +
+	"document whose `status` is a NUMBER, which zapface cannot unmarshal into an envelope whose " +
+	"`status` is a STRING — so the client is told INVALID_RESPONSE instead of the handler's " +
+	"sentence (zapface/dispatch.go:35-40,82-91)."
 
 // gitOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed
@@ -234,18 +280,25 @@ func TestVoidOpsPublishTheStatusTheySend(t *testing.T) {
 }
 
 // declaredBodies is the CLOSED list of untypedByDesign routes that DECLARE the
-// request they read (openapi.Register, webhook.go). "Cannot be a typed op" is not
-// "must be undocumented": a route publishing an operationId and nothing else is
-// indistinguishable, to every SDK generator, from a route that takes no body — so
-// the forge webhook shipped with nowhere to put the delivery and three ZAP
-// procedures with nowhere to put the repo name.
+// request they read. "Cannot be a typed op" is not "must be undocumented": a
+// route publishing an operationId and nothing else is indistinguishable, to every
+// SDK generator, from a route that takes no body — so three ZAP procedures
+// shipped with nowhere to put the repo name and four pack POSTs with nowhere to
+// put the pack.
+//
+// Each declaration lives BESIDE the family it describes — the ZAP three in
+// zap.go's init, the pack four in smart_http.go's, both read off the same table
+// their prose is. They used to sit together in webhook.go, one hand-written list
+// beside a loop, which is how four of them came to name addresses nothing
+// registers and render nothing at all.
 //
 // The value is the media type the declaration renders under, which is the fact
 // worth pinning: JSON for a body that is a document, octet-stream for one that is
 // opaque bytes. Every OTHER route in untypedByDesign must publish NO requestBody,
-// because it reads none — the two ZAP procedures that ignore the body (listRepos,
-// usage), the ref advertisement, and the twelve HTML pages. Declaring a body for
-// one of those would replace an honest silence with a fresh falsehood.
+// because it reads none — the retired webhook, the two ZAP procedures that ignore
+// the body (listRepos, usage), the ref advertisement, and the six HTML pages.
+// Declaring a body for one of those would replace an honest silence with a fresh
+// falsehood.
 var declaredBodies = map[string]string{
 	// No /v1/git/webhook entry: it was retired to a 410 and reads nothing, so
 	// declaring a body would hand every SDK a payload parameter for a call that
@@ -279,7 +332,8 @@ func TestRefusedRoutesDeclareTheBodyTheyRead(t *testing.T) {
 		switch {
 		case declared && op.RequestBody == nil:
 			t.Errorf("%s reads a %s body and declares none — every generated SDK offers "+
-				"this call with no payload parameter. Restore its openapi.Register (webhook.go).", key, want)
+				"this call with no payload parameter. Restore its openapi.Register, in the init "+
+				"beside the family it belongs to (zap.go, smart_http.go).", key, want)
 		case declared:
 			// Operation.RequestBody is `any` because two clients write it; a REFUSED
 			// route's can only have come from openapi.Register.
@@ -457,5 +511,93 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 		t.Errorf("proseless names propert(ies) that are gone or now described: %s\n"+
 			"An exemption that outlives its cause is how a generator gap becomes permanent — "+
 			"delete the entr(ies).", strings.Join(stale, ", "))
+	}
+}
+
+// probeApp is a bare app the two mechanism tests below register a throwaway op
+// on. It mounts NO subsystem: the question is what zip and cloud's projections do
+// with a registration, and mounting git would only add noise it does not turn on.
+func probeApp(t *testing.T) *zip.App {
+	t.Helper()
+	return zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+}
+
+// TestATypedTombstoneWouldRefuseABodyItAnswersToday RUNS the reason POST
+// /v1/git/webhook is not a typed op, rather than asserting it.
+//
+// The route's contract is that ANY bytes answer 410 — TestWebhookIsGoneForEveryDelivery
+// drives a real push, an empty body and `{not json` and requires 410 from all
+// three, because a "retired" endpoint with an input that changes the outcome is
+// not retired. A typed op cannot hold that, and this is the demonstration: the
+// same route shape, typed, answers the two decodable bodies exactly as the raw
+// one does and answers the malformed one 400, because op.invoke decodes before
+// the handler is entered (zip typed.go:485-490).
+//
+// It is written to go RED the day that stops being true: if every case answers
+// 410 here, zip has learned to decline the decode and the tombstone can be typed
+// — delete the untypedByDesign entry and this test with it.
+func TestATypedTombstoneWouldRefuseABodyItAnswersToday(t *testing.T) {
+	app := probeApp(t)
+	zip.Post(app.Group("/v1/probe"), "/webhook", func(context.Context, *noInput) (*noContent, error) {
+		return nil, zip.Errorf(http.StatusGone, "gone")
+	})
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want int
+	}{
+		{"an empty body", "", http.StatusGone},
+		{"a real JSON delivery", `{"ref":"refs/heads/main"}`, http.StatusGone},
+		{"a malformed body", "{not json", http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body io.Reader
+			if tc.body != "" {
+				body = bytes.NewReader([]byte(tc.body))
+			}
+			req := httptest.NewRequest(http.MethodPost, "/v1/probe/webhook", body)
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := app.Test(req, testCfg)
+			if err != nil {
+				t.Fatalf("probe: %v", err)
+			}
+			out, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode != tc.want {
+				t.Fatalf("a typed op answered %d, want %d — the decode order recorded in "+
+					"untypedByDesign[\"POST /v1/git/webhook\"] has changed. If the malformed "+
+					"body now answers 410, type the tombstone and delete both the entry and "+
+					"this test. (%s)", resp.StatusCode, tc.want, out)
+			}
+		})
+	}
+}
+
+// TestThePageWildcardCannotBeATypedOp RUNS the SECOND mechanism behind the tree
+// and blob pages — the one their entries carry beyond text/html, and the one the
+// ledger did not state until it was measured.
+//
+// Both address a path inside a repository, so the route ends in fiber's greedy
+// `*`. zip's registry publishes that path verbatim while cloud's router reading
+// names the segment `{wildcard1}`, so Fold finds no live route at the registry's
+// key and refuses — not one mis-named parameter but the WHOLE document, which is
+// every address this app publishes.
+//
+// Green means zip and cloud have agreed on a spelling: drop reasonWildcard from
+// the two entries, and re-read whether text/html alone still keeps them raw.
+func TestThePageWildcardCannotBeATypedOp(t *testing.T) {
+	app := probeApp(t)
+	zip.Get(app.Group("/v1/probe"), "/:org/:repo/tree/*", func(context.Context, *noInput) (*noContent, error) {
+		return nil, nil
+	})
+	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
+	if err == nil {
+		t.Fatal("openapi.Spec accepted a typed op on a greedy wildcard — zip's Template and " +
+			"cloud's router reading now name that segment the same way, so reasonWildcard has " +
+			"stopped being true for the tree and blob pages.")
+	}
+	if !strings.Contains(err.Error(), "no live route") {
+		t.Fatalf("refused for a different reason than the one recorded: %v", err)
 	}
 }

@@ -279,16 +279,17 @@ func (o ops) ingest(ctx context.Context, in *SbomIngest) (*SbomIngested, error) 
 // and bind it to BOTH columns. FINAL collapses ReplacingMergeTree duplicates from
 // repeated ingests. 404 when nothing matches (honest empty, never fabricated).
 //
-// UNTYPED BY DESIGN — the greedy wildcard, and it is the apps/pricing refusal one
-// subsystem over. The BOUND name and the PUBLISHED name cannot agree: fiber names
-// this capture `*1` (zip's bindURL matches c.Route().Params, so an input field must
-// carry `url:"*1"`), while the untyped projection publishes the address as
-// `/v1/sbom/{wildcard1}` with a PATH parameter of that name. A typed op publishes
-// op.Path VERBATIM — measured against zip v1.18.12 — so the address would become
-// `/v1/sbom/*` and `*1` would be declared as a QUERY parameter, which it is not:
-// three published facts changed (path, parameter name, parameter location) for a
-// route whose wire did not. Typing this needs a zip capability that does not exist —
-// a wildcard capture declared as the path parameter it is.
+// UNTYPED BY DESIGN — the greedy wildcard. zip's Template (address.go:61-73)
+// rewrites only `:name` segments, so a typed op here publishes the key
+// `/v1/sbom/*`, while cloud's router reading names that segment `{wildcard1}`
+// (openapi/openapi.go:811-829). openapi.Fold (openapi/openapi.go:699) looks the
+// op up by zip's spelling, finds no live route, and REFUSES at :705 — so the
+// cost is not a mis-named parameter, it is `make -C apps/sbom describe` failing
+// and this app publishing NO DOCUMENT AT ALL.
+//
+// untypedByDesign (typed_wire_test.go) is where that refusal is RECORDED, and
+// TestTheWildcardCannotBeATypedOp is where it is RUN: the day zip names a
+// wildcard the way cloud's reading does, the test goes green and says so.
 func resolve(s *cloud.Service[state], c *zip.Ctx) error {
 	// An attested caller, before anything else. GLOBAL is not PUBLIC: the read is
 	// cross-tenant because a bill of materials belongs to a digest rather than to an

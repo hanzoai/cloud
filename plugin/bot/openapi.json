@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package bots is a bot doing your work on a real desktop, live, while you watch.",
+    "description": "Package bot is a bot doing your work on a real desktop, live, while you watch.",
     "version": "v1"
   },
   "servers": [
@@ -46,12 +46,18 @@
       },
       "post": {
         "operationId": "post_bot_runs",
-        "summary": "Reserved address for launching a bot run — not implemented, always 501",
-        "description": "Answers 501 to every call. The bot runtime exposes no launch operation, so nothing here can start a sandbox, and this address is published rather than dropped because it is the collection every run is created in: GET lists them, POST would launch one.\n\nThe refusal is total and takes no input. The handler never reads the body, so any bytes at all — malformed JSON included — get the same 501; no run id is minted, no session URL is handed back, and no per-run fee is charged. That is the point: the earlier version minted an id the runtime had never heard of, pointed it at a VNC node that did not exist, and took real money for it.\n\nListing and stopping runs are live and org-scoped. Only the launch is missing, and it returns in the same change that can prove a bot boots.",
+        "summary": "Answers 501 to every call: launching a bot run is not implemented.",
+        "description": "Answers 501 to every call: launching a bot run is not implemented.\n\nThe bot runtime exposes no launch operation, so nothing here can start a sandbox.\nThis address is published rather than dropped because it is the collection every\nrun is created in: GET lists them, POST would launch one.\n\nThe refusal is total and takes no input. No run id is minted, no session URL is\nhanded back, and no per-run fee is charged. That is the point: the earlier version\nminted an id the runtime had never heard of, pointed it at a VNC node that did not\nexist, and took real money for it. 501 is the truth, and the truth is cheaper than\na plausible lie.\n\nListing and stopping runs are live and org-scoped. Only the launch is missing, and\nit returns in the same change that can prove a bot boots — a runtime-side launch\noperation first (TS, cross-repo), with the entitlement gate and the meter beside\nit.",
         "tags": [
           "bot"
         ],
-        "x-public": true
+        "responses": {
+          "501": {
+            "description": "not implemented"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/bot/runs/{runId}/stop": {
@@ -67,6 +73,7 @@
             "name": "runId",
             "in": "path",
             "required": true,
+            "description": "RunID is the run to stop, as the bot runtime named it. It is read from the\nURL — the `{runId}` segment the router matched on — and a body carrying a\ndifferent id cannot redirect the stop.",
             "schema": {
               "type": "string"
             }

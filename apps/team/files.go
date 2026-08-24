@@ -47,6 +47,20 @@ import (
 //
 // The path keys are the FIBER patterns exactly as registered above.
 func init() {
+	// The BODIES, which prose cannot carry and which these two published as nothing
+	// at all — so every generated SDK offered "upload a file" with nowhere to put
+	// the file. Binary is the request half (opaque bytes under the caller's own
+	// content type, which is what a multipart form is to a document) and Bytes the
+	// response half; neither names a component, so neither adds a bare property.
+	//
+	// The upload's answer is the blob id as PLAIN TEXT, not JSON — that is the
+	// second reason it cannot be a typed op and it is stated here rather than
+	// implied. The download's is genuinely opaque: the type is derived from the
+	// bytes, and octet-stream is both the honest "varies" and the literal fallback
+	// that route serves for everything it will not render inline.
+	openapi.Register("/v1/team/files/:workspace", http.MethodPost, openapi.Binary{},
+		openapi.Bytes{Type: "text/plain; charset=utf-8"})
+	openapi.Register("/v1/team/files/:workspace/:filename", http.MethodGet, nil, openapi.Bytes{})
 	openapi.Describe("/v1/team/files/:workspace", http.MethodPost,
 		"Upload a file into a workspace",
 		"Stores one file in a workspace's blob store and answers the blob id it is "+
@@ -102,10 +116,9 @@ func (s *filesService) register(app cloud.Router, guard guardFn) {
 	g := app.Group(teamPrefix)
 	// Workspace is in the PATH (front.ts POSTs to {UPLOAD_URL}/{workspace}).
 	//
-	// upload and download stay UNTYPED, and cannot be otherwise: upload's request
-	// is a multipart form (not JSON) whose part filename IS the blob id, and
-	// download's response is the blob's raw BYTES under a byte-derived
-	// Content-Type. Neither is a shape a typed In/Out can describe.
+	// upload and download stay UNTYPED and cannot be otherwise — upload takes a
+	// MULTIPART body and answers text/plain, download answers the blob's raw BYTES.
+	// untypedByDesign cites each; both DECLARE their bodies below.
 	g.Post("/files/:workspace", guard(s.upload))
 	g.Get("/files/:workspace/:filename", guard(s.download))
 	// deleteFile: DELETE getFileUrl(ws, file) = /{workspace}/{file}?file={file}

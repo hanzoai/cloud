@@ -156,7 +156,12 @@ func init() {
 		Example: json.RawMessage(`{"name":"orders"}`),
 	})
 	zip.Describe("POST /v1/cloudflare/d1/databases/:database/query", zip.Doc{
-		Description: "Runs a SQL statement against a database. The body ({sql, params}) is\nvalidated for a non-empty sql then forwarded VERBATIM (preserving params and any\nbatch fields), so the full CF query shape reaches D1 without field loss.\n\nNOT a typed op: that verbatim forward is the point. A typed In decodes the body\ninto a Go struct and re-encodes it, which drops every field the struct does not\nmodel — starting with params, which is where the query's bound values live.",
+		Description: "Runs one SQL statement against a D1 database. It executes on the org's\nOWN Cloudflare account and relays D1's result set. The body is checked for a\nnon-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1\neven though only two are named here.\n\nRequires ORG ADMIN — a statement may INSERT, UPDATE or DROP, so a query takes the\nwrite gate rather than the read one — and a caller who is only an org member is\nrefused 403. A missing `sql` is 400; 503 if the org has never connected a\nCloudflare token.",
+		Fields: map[string]string{
+			"D1Query.params": "Params are the statement's bound values, in the order its `?` placeholders\nappear — a string, a number, a boolean or null, whatever the column takes.\nAbsent means the statement carries no placeholders; bind values here rather\nthan interpolating them into the statement.",
+			"D1Query.sql":    "SQL is the statement to run. Blank (or absent) is refused before anything\nreaches D1.",
+		},
+		Example: json.RawMessage(`{"sql":"SELECT * FROM orders WHERE id = ?","params":[42]}`),
 	})
 	zip.Describe("POST /v1/cloudflare/kv/namespaces", zip.Doc{
 		Description: "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount. Requires org admin. Cloudflare mints the namespace id the value routes\naddress.",
@@ -239,6 +244,13 @@ func init() {
 		Description: "Writes a key's value: the request body IS the value (any content type),\nforwarded verbatim; optional expiration params ride the query. Mutation → org admin.\n\nNOT a typed op: the request body IS the stored value, under the caller's own\ncontent type. A typed In would parse it as JSON and refuse everything else.",
 	})
 	zip.Describe("PUT /v1/cloudflare/workers/scripts/:script", zip.Doc{
-		Description: "Uploads (or replaces) a module Worker script. Requires org admin.\n\nNOT a typed op: the path names the script (`:script`) and the body field `script`\ncarries the module SOURCE. zip's URL binder matches a path param to the In field\nof the same name and gives the URL the last word, so a typed In would overwrite\nthe source with the script name. Renaming either side would move the wire.",
+		Description: "Uploads or replaces a module Worker script. It publishes to the\norg's OWN Cloudflare account under the name in the path, replacing whatever was\nthere, and relays Cloudflare's result. The compatibility date, compatibility\nflags and bindings are packed into the multipart upload Cloudflare expects,\nbeside the module source.\n\nRequires ORG ADMIN — a Worker is arbitrary code on the org's own account and\ndomains — so a caller who is only an org member is refused 403. An empty source\nis 400, as is a `mainModule` that is not a plain file name; 503 if the org has\nnever connected a Cloudflare token.",
+		Fields: map[string]string{
+			"WorkerScriptPut.bindings":           "Bindings are the resources the script can reach (KV, D1, R2, secrets, …), in\nCloudflare's own binding vocabulary, passed through as written: this plane\ndeliberately does not model Cloudflare's shapes. Absent uploads a script with\nNO bindings, which replaces whatever the previous version had.",
+			"WorkerScriptPut.compatibilityDate":  "CompatibilityDate pins which Workers runtime behaviour the script runs under,\nas a plain calendar date (\"2024-01-01\"). Absent leaves the account's own\ndefault in force.",
+			"WorkerScriptPut.compatibilityFlags": "CompatibilityFlags turn individual runtime behaviours on or off around that\ndate (\"nodejs_compat\"), in Cloudflare's own flag vocabulary. Absent means the\ndate alone decides.",
+			"WorkerScriptPut.mainModule":         "MainModule is the module file the runtime starts at. Absent means \"worker.js\".",
+			"WorkerScriptPut.script":             "Script means two things on this route, and the document says so in both places\nit appears: the PATH segment names the Worker to publish, and the BODY field\ncarries that Worker's ES-module source — the code itself, never a name or a\nURL. A blank or absent source is refused; there is no empty Worker.",
+		},
 	})
 }

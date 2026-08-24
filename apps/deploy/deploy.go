@@ -145,29 +145,15 @@ func build(b cloud.Base, o oauth) (state, error) {
 	return st, nil
 }
 
-// The prose for the routes on this plane that cannot be typed ops. The read
-// projections are typed and zipdoc lifts their doc comments into zipdoc_gen.go;
-// these ten stay raw handlers for the reasons stated beside each registration — a
-// probe whose 503 carries the same domain body as its 200, a sign-in whose success
-// IS a 302 with a Set-Cookie, POSTs that read no body at all, a wildcard path zip
-// and the document template differently, and two unbounded SSE streams. So there is
-// no comment for anything to lift and the published document would carry an
-// operationId and nothing else. Half of them mutate a live cluster or mint a
-// session, so a caller reading only the document has to be told which gate stands
-// in front. Declared through the same registry Register uses, so a description
-// renders only while the router actually serves the route.
+// The prose for the routes on this plane that are NOT typed ops. Everything else
+// is one, and zipdoc lifts its doc comment into zipdoc_gen.go; these five stay raw
+// handlers for the wire fact stated beside each registration — two sign-in legs
+// whose success is a bodyless 302 with a Set-Cookie, a wildcard path zip and the
+// document template differently, and two unbounded SSE streams. So there is no
+// comment for anything to lift and the published document would carry an
+// operationId and nothing else. Declared through the same registry Register uses,
+// so a description renders only while the router actually serves the route.
 func init() {
-	openapi.Describe(dashPrefix+"/health", http.MethodGet,
-		"Whether this control plane can actually reach the cluster it deploys to",
-		"Reports the plane's real reachability: 200 only when the Kubernetes API server "+
-			"answers AND the App CRD is served, 503 with the same body shape otherwise, so a "+
-			"caller reads the same `k8s` and `crd` booleans either way rather than parsing an "+
-			"error envelope. It is a genuine dependency probe, not a process liveness ping — a "+
-			"running plane with no cluster behind it reports degraded.\n\n"+
-			"This is the ONE unauthenticated route that reports state, because liveness must be "+
-			"probe-able without a JWT. It therefore discloses booleans only: the underlying "+
-			"failure — the API server address, an RBAC refusal — is logged server-side and never "+
-			"put on the wire.")
 	openapi.Describe(loginPath, http.MethodGet,
 		"Start the sign-in round trip for this console",
 		"Redirects the browser to IAM's authorize endpoint, having minted a nonce and a PKCE "+
@@ -194,28 +180,6 @@ func init() {
 			"route re-derives SuperAdmin from the verified JWT — it exists so nobody is handed a "+
 			"session that silently 403s everything. No flow in progress, or a mismatched `state`, "+
 			"is a 400; a refused or unexchangeable code is a 401.")
-	openapi.Describe(logoutPath, http.MethodPost,
-		"End the console session on this host",
-		"Clears this console's session cookie and answers the signed-out state with the sign-in "+
-			"URL to start again. IAM's own session is untouched — this ends the console session "+
-			"only, so signing back in may not prompt for credentials.\n\n"+
-			"It is a POST because it changes state. As a GET it was reachable by a cross-site "+
-			"top-level navigation, which a SameSite=Lax cookie still rides, so any page could "+
-			"sign a SuperAdmin out; a POST is not carried cross-site by that cookie.")
-	openapi.Describe(dashPrefix+"/reconcile", http.MethodPost,
-		"Render the configured git source and apply it to the cluster, once",
-		"Runs one full GitOps sync through the embedded engine — render the configured repo, "+
-			"ref and path, then three-way server-side apply with scoped prune — and answers the "+
-			"revision it applied, the source it came from, the declared/synced/pruned/failed "+
-			"counts and a per-resource result. This is the WRITE half of the plane: it mutates "+
-			"live cluster objects and, with prune enabled, deletes objects the source no longer "+
-			"declares.\n\n"+
-			"SuperAdmin-only and fail-closed — a non-SuperAdmin is refused before any cluster "+
-			"object is read or touched. The git source is read AS THE CALLER, so the source plane "+
-			"scopes the answer itself rather than trusting this one to have scoped it. It reads "+
-			"no request body; the source is configuration, not a parameter. A deployment with the "+
-			"engine switched off, or with no usable cluster config, answers 503; a failure to "+
-			"start, render or sync is a 502.")
 	openapi.Describe(dashPrefix+"/account/can-i/*", http.MethodGet,
 		"Compatibility answer the console UI asks before enabling its buttons",
 		"Always answers `yes`, whatever resource, action or subresource the path names. It "+
@@ -224,30 +188,6 @@ func init() {
 			"route that returns fleet data or mutates a CR carries its own gate. Reaching it at "+
 			"all already requires SuperAdmin, so a caller who can read the `yes` is one for whom "+
 			"it is true.")
-	openapi.Describe(dashPrefix+"/applications/:name/sync", http.MethodPost,
-		"Ask the operator to reconcile one application now",
-		"Requests an immediate reconcile of one application by stamping a sync-requested "+
-			"timestamp onto its App CR, which the operator's watch observes, and answers the "+
-			"application re-projected. It ASKS, it does not apply: the operator performs the "+
-			"reconcile on its own clock, so a 200 means the request landed, not that the rollout "+
-			"finished — the returned row's running version still lags until it does. The CR is "+
-			"the desired source today, so this is a nudge; when git becomes the source the same "+
-			"address becomes apply-from-git.\n\n"+
-			"SuperAdmin-only and fail-closed — a non-SuperAdmin is refused before any cluster "+
-			"object is read or patched, and the write surface stays admin-only while the tenant "+
-			"surface is read-only reflection. It reads no request body. An unknown application "+
-			"name is a 404; no cluster client configured is a 503.")
-	openapi.Describe(dashPrefix+"/applications/:name/rollback", http.MethodPost,
-		"The console's rollback control — today it requests a reconcile, nothing more",
-		"Performs exactly what the sync action performs: it stamps the sync-requested "+
-			"timestamp onto the application's App CR and answers the application re-projected. "+
-			"It does NOT select, pin or revert to a prior image tag, and that is the one thing to "+
-			"know before wiring anything to it — the name is the console's, the behaviour is the "+
-			"sync. Pinning a previous release rides the release client, which this address does not "+
-			"call yet.\n\n"+
-			"SuperAdmin-only and fail-closed, reading no request body, with an unknown application "+
-			"name a 404 and no cluster client a 503 — the same gate and the same failures as the "+
-			"sync it shares a handler with.")
 	openapi.Describe(dashPrefix+"/stream/applications", http.MethodGet,
 		"Live application fleet updates as Server-Sent Events",
 		"Holds the connection open as text/event-stream and pushes one watch event per "+
@@ -302,6 +242,15 @@ func init() {
 // route, which answer 404 — and bounce reshapes a 403 and nothing else, so their
 // answer is what it was.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	// The bridge is deploy's OWN, installed on deploy's own router ahead of every
+	// leaf. A typed op receives a context and nothing else, and the request its
+	// principal is read off (cloud.Request, typed.go) is parked there by this and
+	// only this — so an app that leaves it to whoever composes it resolves no
+	// principal wherever that composer is absent, and every typed op here 403s a
+	// valid caller. Production got it from cloud.App's root install and the package
+	// harness had to install its own copy to compensate, which is a property held
+	// in two places and true in neither by construction.
+	app.Use(cloud.Bridge())
 	app.Use(zip.H(bounce))
 
 	// Liveness — public, probe-able without a JWT, and a TYPED op.
@@ -323,17 +272,36 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// later request, and a principal outside the admin org is refused a cookie.
 	// See login.go.
 	//
-	// login and callback stay RAW because their success IS a 302 with a Set-Cookie:
-	// a typed op answers 200/204 or a 2xx it DECLARED, and redirecting from inside
-	// one does not escape that — zip stamps cmp.Or(op.Status, 204) over the 302 for
-	// a nil Out (typed.go:305-309). logout stays raw for the body-decode reason the
-	// other POSTs do (registerDashboardRoutes).
+	// login and callback stay RAW, and the reason recorded here for a long time —
+	// "WithStatus refuses a non-2xx" — is FALSE at the pinned zip: WithStatus is
+	// variadic and takes any code in 100..599 (typed.go:154-168), and
+	// WithResponseHeader + HeaderCoder (typed.go:230-258) declare a Location and a
+	// Set-Cookie. What actually blocks them is the BODY.
+	//
+	// A typed op writes its declared headers only for a NON-NIL Out — a nil one
+	// takes the early return that stamps the status and returns
+	// (typed.go:543-551) — and the REST arm then ends in c.JSON(out)
+	// (typed.go:567). So declaring Location at all forces a JSON body and
+	// `Content-Type: application/json; charset=utf-8` onto a 302 that carries
+	// NEITHER today: fiber's Redirect.To sets Location, sets the status and writes
+	// nothing (fiber v3 redirect.go:328-335), which is what these two answer,
+	// measured. Typing them would move the wire on the one surface a browser
+	// follows blind.
+	//
+	// callback is blocked a SECOND way, and it is the harder one: it writes TWO
+	// Set-Cookie headers on one response — clearing the single-use flow cookie
+	// (login.go) and setting the session cookie — while HeaderCoder is a
+	// map[string]string written with c.Set (typed.go:558), which REPLACES rather
+	// than appends. One of the two cookies would simply not be sent.
 	app.Get(loginPath, cloud.Handle(s, login))
 	app.Get(callbackPath, cloud.Handle(s, callback))
-	// POST, not GET: signing out changes state, and a state-changing GET is
-	// reachable by a cross-site top-level navigation that a SameSite=Lax cookie
-	// still rides. See logout in login.go.
-	app.Post(logoutPath, cloud.Handle(s, logout))
+	// Signing out is a TYPED op: POST, not GET, because it changes state and a
+	// state-changing GET is reachable by a cross-site top-level navigation that a
+	// SameSite=Lax cookie still rides. The Set-Cookie that ENDS the session is
+	// declared here rather than written from inside the handler, which is what puts
+	// the route's whole effect in the document instead of in a side channel. See
+	// EndDeploySession in login.go.
+	zip.Post(cloud.ZipApp(app), logoutPath, ops{s: s}.logout, zip.WithResponseHeader("Set-Cookie"))
 	// Engine (write) reconcile — the embedded gitops-engine that replaces
 	// universe-crs. Gated by DEPLOY_ENGINE_ENABLED; see engine_mount.go.
 	registerEngineRoutes(app, s)

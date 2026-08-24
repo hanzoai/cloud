@@ -80,13 +80,36 @@ func overlayKey(kind, id string) string { return kind + "\x00" + id }
 //   - off  = !Enabled && !Beta   → hidden from EVERYONE, absolutely. BetaOrgs are
 //     IGNORED — a self-opt-in can never bypass an `off` kill switch.
 type Overlay struct {
-	Kind      string          `json:"kind"`
-	ID        string          `json:"id"`
-	Enabled   bool            `json:"enabled"`
-	Beta      bool            `json:"beta,omitempty"`
-	BetaOrgs  []string        `json:"betaOrgs,omitempty"`
+	// Kind is the namespace the id lives in: "model", "provider" or "feature".
+	// One id may name a different thing in each, so a row is only ever addressed
+	// by the pair.
+	Kind string `json:"kind"`
+	// ID is the entry this state governs within Kind — a model id (which may
+	// carry a provider prefix, "acme/some-model-1"), a provider name, or a
+	// feature key. Matched exactly as stored.
+	ID string `json:"id"`
+	// Enabled true is the "ga" state: everyone sees the entry. False is either
+	// "beta" or "off" depending on Beta — read State() rather than this flag
+	// alone, since false on its own does not say which.
+	Enabled bool `json:"enabled"`
+	// Beta matters only while Enabled is false, and it is what separates the two
+	// hidden states: true means the orgs in BetaOrgs still see the entry, false
+	// means nobody does and BetaOrgs is ignored. Absent reads as false.
+	Beta bool `json:"beta,omitempty"`
+	// BetaOrgs are the org ids granted a beta, trimmed and de-duplicated. It is
+	// consulted ONLY in the beta state; on an "off" entry it is inert, which is
+	// what makes off an absolute kill switch a self-opt-in cannot re-open. Absent
+	// means the grant list is empty.
+	BetaOrgs []string `json:"betaOrgs,omitempty"`
+	// Overrides is the RFC 7386 merge patch applied over this entry's catalog
+	// values — typically price fields — carried verbatim, so its keys are the
+	// catalog's own rather than this API's. Absent means the catalog value stands
+	// unmodified.
 	Overrides json.RawMessage `json:"overrides,omitempty"`
-	UpdatedAt int64           `json:"updatedAt,omitempty"`
+	// UpdatedAt is when this state was last written, in SECONDS since the Unix
+	// epoch (not milliseconds). Absent on a row no operator has touched, which is
+	// the same thing as having no row at all.
+	UpdatedAt int64 `json:"updatedAt,omitempty"`
 }
 
 // State is the tri-state label (off|beta|ga) an operator sets and the console

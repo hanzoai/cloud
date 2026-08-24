@@ -86,7 +86,7 @@ func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	if err := visor.Mount(app, deps); err != nil { // Wire order: visor first — the shadowing mount
 		t.Fatalf("visor.Mount: %v", err)
 	}
-	// Mount owns the relay (node.go mounts it last, so the native control
+	// Mount owns the relay (run.go mounts it last, so the native control
 	// planes cannot be shadowed) — the harness mounting it AGAIN declared
 	// ALL /v1/bot/runtime/* twice, which zip's build refuses outright since v1.26.0.
 	if err := Mount(app, deps); err != nil { // …bot last, as in the manifest order

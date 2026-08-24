@@ -37,17 +37,27 @@ const (
 )
 
 // notByHand is the sentence that matters most to the consumer these descriptions
-// reach. Twelve of git's published operations are the git wire protocol, so every
-// generated SDK offers twelve methods and every spec-derived CLI twelve commands
-// that a human should never call directly — and the honest thing the document can
-// do is say so.
+// reach. Six of git's published operations are the git wire protocol, so every
+// generated SDK offers six methods and every spec-derived CLI six commands that a
+// human should never call directly — and the honest thing the document can do is
+// say so.
 const notByHand = " This is git's own wire protocol, not an API call to make by " +
 	"hand: point a git client at the clone URL and it makes this request itself."
 
-// The four path families the SAME three handlers answer on. A family is a real
-// difference in who can reach the route and how the repository is addressed, so
-// each states its own, and the twelve descriptions are generated from three
-// leads and four suffixes rather than written twelve times.
+// The two path families the SAME three handlers answer on. A family is a real
+// difference in how the repository is addressed, so each states its own, and the
+// six descriptions are generated from three leads and two suffixes rather than
+// written six times.
+//
+// It held four rows until the root-host spelling was deleted from routes()
+// (git.go). The two that went — `/:org/:repo` and `/:org/:project/:repo` — named
+// addresses NOTHING registers, so their six descriptions and four body
+// declarations rendered nothing at all: prose written, reviewed and silently
+// dropped, which is the class openapi.Complete exists to catch and cannot, since
+// it judges an orphan only inside the products the app publishes and
+// manifest.OwnerOf("/:org/:repo") names none. A family is added and removed HERE,
+// where the loops below read it, so a row and its declarations cannot part company
+// again.
 var packMounts = []struct{ prefix, note string }{
 	{"/v1/git/:org/:repo", " Addressed under the API prefix, so `git clone " +
 		"https://<host>/v1/git/<org>/<repo>.git` works on any host the binary serves."},
@@ -55,24 +65,26 @@ var packMounts = []struct{ prefix, note string }{
 		"PROJECT as a middle path segment: project scope otherwise rides a header a " +
 		"git client cannot send, so this path is the only usable remote for a " +
 		"project-scoped repository."},
-	{"/:org/:repo", " Addressed at the git host's root, so `git clone " +
-		"https://<git-host>/<org>/<repo>.git` works with the canonical URL and no " +
-		"prefix. Served ONLY on the dedicated git host; on the API and console hosts " +
-		"it falls through, so a bare /:org/:repo can never shadow another surface."},
-	{"/:org/:project/:repo", " Addressed at the git host's root with the PROJECT as " +
-		"a middle path segment — the canonical-URL form of the project-scoped remote, " +
-		"since a git client has no header to carry a project. Served only on the " +
-		"dedicated git host; elsewhere it falls through."},
 }
 
-// The prose for git's twelve smart-HTTP operations. None can be a typed op — the
-// request and response are a binary pack stream — so zipdoc has nothing to lift,
-// and left bare they published twelve operationIds a reader could not tell from
-// twelve ordinary JSON calls. openapi.Describe attaches prose to routes the
-// router already carries; the four families below are four distinct router
-// patterns, so each is described separately rather than folded into one.
+// The prose AND the request bodies for git's six smart-HTTP operations, both read
+// off packMounts so a family declares itself or declares nothing.
+//
+// None can be a typed op — the request and response are a binary pack stream — so
+// zipdoc has nothing to lift, and left bare they published six operationIds a
+// reader could not tell from six ordinary JSON calls, over a request no SDK could
+// put a payload in. openapi.Describe attaches prose and openapi.Register attaches
+// a body, each to a route the router already carries; the pack POSTs read an
+// `application/x-git-*-request` stream, which is openapi.Binary — the same
+// declaration a receipt upload gets. info/refs reads no body and declares none.
+//
+// init, not routes(): Register and Describe both panic on a duplicate declaration
+// and routes() runs once per Mount.
 func init() {
 	for _, m := range packMounts {
+		openapi.Register(m.prefix+"/"+svcUploadPack, http.MethodPost, openapi.Binary{}, nil)
+		openapi.Register(m.prefix+"/"+svcReceivePack, http.MethodPost, openapi.Binary{}, nil)
+
 		openapi.Describe(m.prefix+"/info/refs", http.MethodGet,
 			"Advertise a repository's refs to a git client",
 			"The ref-advertisement phase of git's smart-HTTP protocol — the first "+

@@ -21,11 +21,14 @@ import (
 
 const testSecret = "team-http-test-secret"
 
-// compose installs what a HOST installs. A subsystem never installs cloud.Bridge
-// (team.go says why): the program's composer installs it once at the root. In a
-// test the test IS the composer, so it owes the same thing — a test that skips it
-// tests a program where every typed op answers 403 for a reason that would never
-// exist in production. Same helper apps/integrations uses.
+// compose installs what a HOST installs — cloud.Bridge, once at the root, which
+// is what Serve does binary-wide. In a test the test IS the composer, so it owes
+// the same thing, and modelling production means BOTH installs: team.Mount
+// carries its own bridge too (team.go), because no package's harness runs Serve
+// and an embedder that mounts team without one would otherwise 403 every typed
+// op. The two nest and that is harmless — both park the same values off the same
+// request. TestCollabRPCBridgedUnderBareMount is the one that deliberately does
+// NOT compose, so Mount's own install is what it measures.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // mountTeam mounts the team subsystem with an in-memory VFS so the files plane

@@ -78,14 +78,18 @@ type collabService struct {
 }
 
 func (s *collabService) register(app cloud.Router, guard guardFn) {
-	// The live Y.js WebSocket (wss://<host>/v1/team/collaborator). UNTYPED, and it cannot
-	// be otherwise: the response is a protocol upgrade, not a value.
+	// The live Y.js WebSocket (wss://<host>/v1/team/collaborator). UNTYPED, and it
+	// cannot be otherwise: the handler ends in an upgrade that hands the connection
+	// to a frame loop outliving it. untypedByDesign (typed_wire_test.go) cites the
+	// code on both sides.
 	app.Get(collabPrefix, guard(s.ws))
 	g := app.Group(collabPrefix)
 	// The RPC is a typed op, so it receives only a context: it authenticates with
 	// team's OWN HS256 token, which rides in a header or the account cookie, and
-	// cloud.Request is the only way to reach either (typed.go). cloud.Bridge
-	// parks that request, and the composer owns that install, once at its root.
+	// cloud.Request is the only way to reach either (typed.go). cloud.Bridge parks
+	// that request, and Mount installs it on team's own router (team.go) so this
+	// plane resolves its caller under a bare Mount too — the collaborator lane is
+	// a branch of /v1/team, so team's one install covers it.
 	zip.Post(g, "/rpc/:documentId", s.rpc)
 }
 

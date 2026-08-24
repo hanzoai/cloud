@@ -150,6 +150,14 @@ func commerceMasterKey(master []byte, lg luxlog.Logger) []byte {
 // a customer incident. Every registration below that cites this note is a
 // conversion the module still owes, not a route that can never be typed.
 //
+// THE NOTE IS NOW A TEST, which is the only form of it that can go red.
+// typed_wire_test.go holds two ledgers — `untypedByDesign` for the three wires
+// this stack cannot describe, `typingOwed` for the 173 the module owes — and
+// requires them to SUM with the typed ops to the surface the live router serves.
+// This paragraph enumerated nothing, so it could not notice that the bundles
+// below bind 175 addresses; the ledger names every one, and a route added
+// upstream arrives unclassified rather than unnoticed.
+//
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // Mount boots commerce ON the shared zip app (native co-residence).
@@ -195,6 +203,32 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if zapp == nil {
 		return fmt.Errorf("commerce: router is not a zip app — the embedded module has nothing to register on")
 	}
+
+	// THE BRIDGE, on commerce's OWN subtree and ahead of every leaf it serves.
+	//
+	// A typed op receives a context and no request, so the validated org has to be
+	// parked on that context before the op runs — which is what cloud.Bridge does,
+	// and what payingOrg (payments.go) reads back. Serve installs one app-wide, so
+	// nothing here was live-broken; what was missing is that NO PACKAGE TEST RUNS
+	// Serve. Three tests in this package installed it by hand
+	// (risk_payments_test.go, payingorg_s2s_test.go, ledger_peer_test.go), which
+	// is three copies of one fact and covers only the ops those three drive: a
+	// typed op added here without remembering would resolve no org and 403 a valid
+	// request, in this package's tests only, with the production path fine.
+	//
+	// It goes on the SUBSYSTEM ROUTER rather than on zapp, which is what scopes it:
+	// cloud's Router installs one handler at the root gated by `owns(path)`
+	// (scope.go Use), so it reaches every commerce address — including the cart,
+	// payment and health ops registered absolutely on zapp below, whose routes land
+	// on the root node — and reaches no sibling subsystem's. Installing it on the
+	// /v1/commerce GROUP instead would miss all three, because a group is a NEW App
+	// with a prefix and a Use on it never reaches a leaf declared on the parent.
+	//
+	// Installing it twice is harmless and is what every other converted app does:
+	// each Bridge derives the same facts from the same request, and the status
+	// carry-back reads the innermost binding, so the answer is unchanged.
+	app.Use(cloud.Bridge())
+
 	lg := luxlog.Default().New("subsystem", "commerce")
 	// The other direction of the same idea as the ops above: those publish what
 	// this process OWNS, and this reaches for the one thing it does not. The credit

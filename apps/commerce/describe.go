@@ -1,11 +1,17 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-// describe.go is commerce's PROSE. Every operation this subsystem serves is
+// describe.go is commerce's PROSE. Nearly every operation this subsystem serves is
 // registered by the embedded hanzoai/commerce module — its own route tables, its
 // own handlers, in another module — so there is no doc comment in this repo for
-// zipdoc to lift and no typed op to lift it from. Left bare, all 75 published an
+// zipdoc to lift and no typed op to lift it from. Left bare, each published an
 // operationId and NOTHING else: an SDK method that cannot explain itself, an MCP
 // tool a model cannot pick, a CLI command with no help text.
+//
+// The count is 176 of 183, and it is DERIVED rather than written down here:
+// typed_wire_test.go reads it off the live router and holds the two ledgers that
+// account for every one of them. This file used to say 75, which was true when it
+// was written and has been wrong for a long time — a number in prose is a
+// measurement with no way to fail, which is exactly what the gate replaced.
 //
 // openapi.Describe is the client for exactly that operation. It carries the same
 // drift-proof property Register has — a description whose route the router does

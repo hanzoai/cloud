@@ -6,6 +6,7 @@ package cloudflare
 // D1 query can INSERT/UPDATE/DROP, so it takes the write gate, not the read gate.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -83,45 +84,87 @@ func (o ops) d1DatabaseDelete(ctx context.Context, in *databaseRef) (*cfResult, 
 	return cl.relay(ctx, http.MethodDelete, d1Path(acct)+"/"+db, nil)
 }
 
-// D1Query is the shape this plane's query route takes, DECLARED for the document
-// (openapi.Register, cloudflare.go) rather than bound by the handler. The handler
-// forwards the caller's body to D1 verbatim, so there is no Go struct it could
-// bind that would also state the shape — binding one is exactly the field loss
-// the route refuses. It reads `sql` off the body to require it, and nothing else;
-// this states the two fields D1 itself takes, and the schema is an OPEN object, so
-// a field D1 accepts that is not named here still reaches D1 unchanged.
+// D1Query is a statement to run against one database: the database from the path,
+// the statement and its bound values from the body — plus the body's OWN BYTES,
+// kept as the caller wrote them so the forward to D1 stays verbatim.
+//
+// Naming two fields is not a claim that D1 takes only two. The schema is an OPEN
+// object and the bytes are what travel, so a field D1 accepts that is not named
+// here reaches D1 unchanged; `sql` and `params` are named because they are what a
+// caller has to know.
+//
+// Params is `[]json.RawMessage` rather than `[]any` because the ELEMENT is what its
+// schema has to say. A type that marshals itself states its own wire form and
+// publishes `{}` — any JSON, which is true — while `any` falls through zip's
+// schemaOf to `{"type": "object"}`, an assertion the `[42]` in this route's own
+// example refutes. Nothing decodes through it either way: the bytes are what travel.
 type D1Query struct {
-	// SQL is the statement to run. Required.
-	SQL string `json:"sql"`
-	// Params are the statement's bound values, in the order its placeholders appear.
-	Params []any `json:"params,omitempty"`
+	// Database is the D1 database to run against, from the path. The URL is the
+	// addressing authority: no body field can redirect a statement to another
+	// database.
+	Database string `json:"-" url:"database"`
+	// SQL is the statement to run. Blank (or absent) is refused before anything
+	// reaches D1.
+	SQL string `json:"sql" url:"-"`
+	// Params are the statement's bound values, in the order its `?` placeholders
+	// appear — a string, a number, a boolean or null, whatever the column takes.
+	// Absent means the statement carries no placeholders; bind values here rather
+	// than interpolating them into the statement.
+	Params []json.RawMessage `json:"params,omitempty" url:"-"`
+
+	// body is the caller's own bytes, unexported so it reaches no schema and no
+	// caller can send one. It is what the forward carries.
+	body json.RawMessage
 }
 
-// d1Query runs a SQL statement against a database. The body ({sql, params}) is
-// validated for a non-empty sql then forwarded VERBATIM (preserving params and any
-// batch fields), so the full CF query shape reaches D1 without field loss.
+// UnmarshalJSON keeps the caller's bytes and fills the two named fields, and NEVER
+// refuses the body.
 //
-// NOT a typed op: that verbatim forward is the point. A typed In decodes the body
-// into a Go struct and re-encodes it, which drops every field the struct does not
-// model — starting with params, which is where the query's bound values live.
-func (o ops) d1Query(c *zip.Ctx) error {
-	ctx := c.Context()
+// Both halves are the wire. The bytes are what D1 receives, so decoding and
+// re-encoding a Go struct would drop every field this type does not model —
+// starting with `params`, where the query's bound values live. And zip decodes a
+// typed op's body BEFORE the handler runs (typed.go op.invoke), so an error
+// returned here is a 400 that outranks this plane's own 403 for a caller who is
+// not an org admin; recording the outcome instead lets the handler re-decide in
+// the order it always used — admin, then the path, then the statement.
+//
+// Dropping the error also reproduces what this route always accepted: it used to
+// decode into a struct carrying `sql` alone, so a `params` D1 would reject reached
+// D1 and D1 answered. It is apps/goja's SizedIn.Fill one plane over. What it
+// cannot carry back is a body that is not JSON at all — encoding/json validates
+// the whole document before it calls any Unmarshaler — so those few bytes are the
+// one thing answered 400 where a non-admin used to read 403.
+func (q *D1Query) UnmarshalJSON(b []byte) error {
+	type body D1Query // no methods, so no recursion
+	var in body
+	_ = json.Unmarshal(b, &in) // the dropped error IS the wire; see above
+	*q = D1Query(in)
+	q.body = bytes.Clone(b)
+	return nil
+}
+
+// D1Query runs one SQL statement against a D1 database. It executes on the org's
+// OWN Cloudflare account and relays D1's result set. The body is checked for a
+// non-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1
+// even though only two are named here.
+//
+// Requires ORG ADMIN — a statement may INSERT, UPDATE or DROP, so a query takes the
+// write gate rather than the read one — and a caller who is only an org member is
+// refused 403. A missing `sql` is 400; 503 if the org has never connected a
+// Cloudflare token.
+//
+// Example: {"sql": "SELECT * FROM orders WHERE id = ?", "params": [42]}
+func (o ops) d1Query(ctx context.Context, in *D1Query) (*cfResult, error) {
 	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	db, err := pathSeg(c, "database", nameRE)
+	db, err := seg("database", in.Database, nameRE)
 	if err != nil {
-		return err
-	}
-	var in struct {
-		SQL string `json:"sql"`
-	}
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid request body")
+		return nil, err
 	}
 	if strings.TrimSpace(in.SQL) == "" {
-		return zip.ErrBadRequest("sql is required")
+		return nil, zip.ErrBadRequest("sql is required")
 	}
-	return cl.pass(c, http.MethodPost, d1Path(acct)+"/"+db+"/query", json.RawMessage(c.Body()))
+	return cl.relay(ctx, http.MethodPost, d1Path(acct)+"/"+db+"/query", in.body)
 }

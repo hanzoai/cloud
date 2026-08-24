@@ -104,6 +104,18 @@
         "tags": [
           "team"
         ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/cookieAck"
+                }
+              }
+            }
+          }
+        },
         "x-public": true
       }
     },
@@ -180,6 +192,19 @@
         "tags": [
           "team"
         ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "text/html; charset=utf-8": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
         "x-public": true
       }
     },
@@ -200,7 +225,20 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/team/bots": {
@@ -333,6 +371,29 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
         "x-public": true
       }
     },
@@ -408,6 +469,19 @@
             }
           }
         ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
         "x-public": true
       }
     },

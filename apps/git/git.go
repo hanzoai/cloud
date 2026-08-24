@@ -297,9 +297,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	o := ops{s: s}
 	g := app.Group("/v1/git")
-	// The principal bridge first: every typed op below reads its tenant off the
-	// request context, and a Use only runs ahead of routes registered after it.
-	g.Use(zip.H(bridgePrincipal))
+	// Both bridges first: every typed op below reads its tenant off the request
+	// context, and a Use only runs ahead of routes registered after it.
+	//
+	// cloud.Bridge is the FLEET's one client for the facts a typed signature drops
+	// — the validated org, validated-ness itself, the brand, the project — so a
+	// change to it reaches git like every other app. bridgePrincipal is git's own,
+	// and it is not a second copy of that: it carries the two facts the shared one
+	// does not, the FOLDED project scope (principal.ProjectFrom answers the header
+	// verbatim; projectScope degrades default, over-long and malformed to "",
+	// which is the physical key every repo row is stored under) and the acting
+	// USER an SSH key is owned by (keys.go). Both ride ONE tenant value with the
+	// org, so a handler cannot hold one and forget the others (ops.go).
+	g.Use(cloud.Bridge(), zip.H(bridgePrincipal))
 
 	// Control plane (JSON). Static /repos + /usage register before the
 	// smart-HTTP :org/:repo params so a real org can never shadow them.
@@ -319,9 +329,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// in-band so the commerce /v1 ErrorHandlerJSON (co-mounted ahead) cannot
 	// flatten it to 500.
 	//
-	// Untyped, deliberately: this is the endpoint a forge's own webhook protocol
-	// delivered to, and it now reads no request and returns no value — a typed
-	// op is built from an In or an Out, and a tombstone has neither.
+	// Untyped, and the reason is ORDER rather than shape: ANY bytes answer 410
+	// here, while op.invoke json-decodes a non-empty body before the handler is
+	// entered (zip typed.go:485-490) and answers an undecodable one 400. The whole
+	// mechanism and its measurement are in webhook.go.
 	g.Post("/webhook", cloud.Terminal(cloud.Handle(s, webhook)))
 	// SSH public-key registry (per-user keys for `git clone git@…`).
 	zip.Post(g, "/keys", o.registerKey, zip.WithStatus(http.StatusCreated))

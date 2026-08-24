@@ -37,11 +37,21 @@ var enablementKinds = map[string]bool{kindModel: true, kindProvider: true, "feat
 
 // adminEnablementItem is one row of the admin registry board.
 type adminEnablementItem struct {
-	Kind      string   `json:"kind"`
-	ID        string   `json:"id"`
-	State     string   `json:"state"` // off|beta|ga
-	BetaOrgs  []string `json:"betaOrgs"`
-	UpdatedAt int64    `json:"updatedAt"`
+	// Kind is the namespace the id lives in: "model", "provider" or "feature".
+	Kind string `json:"kind"`
+	// ID is the item within that namespace — a model id, a provider name, or a
+	// feature key.
+	ID string `json:"id"`
+	// State is the item's global availability, one of exactly "off" (nobody sees
+	// it), "beta" (only the orgs below see it) or "ga" (everybody sees it).
+	State string `json:"state"`
+	// BetaOrgs are the org ids granted this item's beta. It decides who sees a
+	// "beta" item and is IGNORED on an "off" one, so a non-empty list beside
+	// "off" grants nothing. Empty on a ga item, where there is nothing to grant.
+	BetaOrgs []string `json:"betaOrgs"`
+	// UpdatedAt is when an operator last set this item's state, in SECONDS since
+	// the Unix epoch (not milliseconds).
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // adminEnablementBoard is the managed registry, ordered by kind then id.
@@ -146,12 +156,26 @@ func (o ops) adminEnablementSet(ctx context.Context, in *setEnablementBody) (*ad
 
 // userEnablementItem is one row of the caller's effective view.
 type userEnablementItem struct {
-	Kind      string `json:"kind"`
-	ID        string `json:"id"`
-	State     string `json:"state"`     // off|beta|ga
-	Effective bool   `json:"effective"` // visible to the caller's org
-	OptedIn   bool   `json:"optedIn"`   // caller's org on the beta list
-	CanOptIn  bool   `json:"canOptIn"`  // beta && not yet opted in
+	// Kind is the namespace the id lives in: "model", "provider" or "feature".
+	Kind string `json:"kind"`
+	// ID is the item within that namespace — a model id, a provider name, or a
+	// feature key.
+	ID string `json:"id"`
+	// State is the item's GLOBAL availability — "off", "beta" or "ga" — which is
+	// the operator's setting and not this caller's answer. Effective is that.
+	State string `json:"state"`
+	// Effective is whether the caller's org may use the item right now, which is
+	// the field to branch on: true for any ga item, for a beta this org holds,
+	// and never for an off one.
+	Effective bool `json:"effective"`
+	// OptedIn is whether the caller's org is on this item's beta grant list. It
+	// can be true on an "off" item — the list survives the kill switch and is
+	// simply ignored while it is thrown — so it does not imply Effective.
+	OptedIn bool `json:"optedIn"`
+	// CanOptIn is whether POST /v1/pricing/enablement/optin would do anything
+	// here: the item is in beta and this org is not on its list yet. False for a
+	// caller with no validated org, who has no org to enrol.
+	CanOptIn bool `json:"canOptIn"`
 }
 
 // enablementBoard is the caller's own view of the registry. Field order matches

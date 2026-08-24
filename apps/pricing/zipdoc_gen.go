@@ -20,8 +20,12 @@ func init() {
 	zip.Describe("GET /v1/admin/pricing/enablement", zip.Doc{
 		Description: "Returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta. An item\nnobody has touched is absent, because an untouched item is generally\navailable; the console composes the candidate list from the live catalog.\nSuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
-			"adminEnablementBoard.items": "Items is every item an operator has set a state on. An item nobody has\ntouched is absent: it is generally available by default.",
-			"adminEnablementItem.state":  "off|beta|ga",
+			"adminEnablementBoard.items":    "Items is every item an operator has set a state on. An item nobody has\ntouched is absent: it is generally available by default.",
+			"adminEnablementItem.betaOrgs":  "BetaOrgs are the org ids granted this item's beta. It decides who sees a\n\"beta\" item and is IGNORED on an \"off\" one, so a non-empty list beside\n\"off\" grants nothing. Empty on a ga item, where there is nothing to grant.",
+			"adminEnablementItem.id":        "ID is the item within that namespace — a model id, a provider name, or a\nfeature key.",
+			"adminEnablementItem.kind":      "Kind is the namespace the id lives in: \"model\", \"provider\" or \"feature\".",
+			"adminEnablementItem.state":     "State is the item's global availability, one of exactly \"off\" (nobody sees\nit), \"beta\" (only the orgs below see it) or \"ga\" (everybody sees it).",
+			"adminEnablementItem.updatedAt": "UpdatedAt is when an operator last set this item's state, in SECONDS since\nthe Unix epoch (not milliseconds).",
 		},
 	})
 	zip.Describe("GET /v1/pricing", zip.Doc{
@@ -75,10 +79,12 @@ func init() {
 			"enablementBoard.betas":        "Betas are the subset of Items the caller's org may still opt into.",
 			"enablementBoard.items":        "Items is every managed item, each resolved for the caller's org.",
 			"enablementBoard.org":          "Org is the org this view was resolved for; empty for a caller with no\nvalidated principal, who sees only the generally-available items.",
-			"userEnablementItem.canOptIn":  "beta && not yet opted in",
-			"userEnablementItem.effective": "visible to the caller's org",
-			"userEnablementItem.optedIn":   "caller's org on the beta list",
-			"userEnablementItem.state":     "off|beta|ga",
+			"userEnablementItem.canOptIn":  "CanOptIn is whether POST /v1/pricing/enablement/optin would do anything\nhere: the item is in beta and this org is not on its list yet. False for a\ncaller with no validated org, who has no org to enrol.",
+			"userEnablementItem.effective": "Effective is whether the caller's org may use the item right now, which is\nthe field to branch on: true for any ga item, for a beta this org holds,\nand never for an off one.",
+			"userEnablementItem.id":        "ID is the item within that namespace — a model id, a provider name, or a\nfeature key.",
+			"userEnablementItem.kind":      "Kind is the namespace the id lives in: \"model\", \"provider\" or \"feature\".",
+			"userEnablementItem.optedIn":   "OptedIn is whether the caller's org is on this item's beta grant list. It\ncan be true on an \"off\" item — the list survives the kill switch and is\nsimply ignored while it is thrown — so it does not imply Effective.",
+			"userEnablementItem.state":     "State is the item's GLOBAL availability — \"off\", \"beta\" or \"ga\" — which is\nthe operator's setting and not this caller's answer. Effective is that.",
 		},
 	})
 	zip.Describe("GET /v1/pricing/featured", zip.Doc{
@@ -169,8 +175,19 @@ func init() {
 	zip.Describe("PATCH /v1/admin/pricing/catalog/providers/:name", zip.Doc{
 		Description: "Sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
 		Fields: map[string]string{
-			"patchBody.state":      "State is the high-level tri-state setter (\"off\"|\"beta\"|\"ga\") that sets\nenabled+beta coherently; the low-level Enabled/Beta pointers (applied after)\noverride it for fine control.",
-			"providerPatchIn.name": "Name is the provider the overlay belongs to, from the URL.",
+			"Overlay.beta":           "Beta matters only while Enabled is false, and it is what separates the two\nhidden states: true means the orgs in BetaOrgs still see the entry, false\nmeans nobody does and BetaOrgs is ignored. Absent reads as false.",
+			"Overlay.betaOrgs":       "BetaOrgs are the org ids granted a beta, trimmed and de-duplicated. It is\nconsulted ONLY in the beta state; on an \"off\" entry it is inert, which is\nwhat makes off an absolute kill switch a self-opt-in cannot re-open. Absent\nmeans the grant list is empty.",
+			"Overlay.enabled":        "Enabled true is the \"ga\" state: everyone sees the entry. False is either\n\"beta\" or \"off\" depending on Beta — read State() rather than this flag\nalone, since false on its own does not say which.",
+			"Overlay.id":             "ID is the entry this state governs within Kind — a model id (which may\ncarry a provider prefix, \"acme/some-model-1\"), a provider name, or a\nfeature key. Matched exactly as stored.",
+			"Overlay.kind":           "Kind is the namespace the id lives in: \"model\", \"provider\" or \"feature\".\nOne id may name a different thing in each, so a row is only ever addressed\nby the pair.",
+			"Overlay.overrides":      "Overrides is the RFC 7386 merge patch applied over this entry's catalog\nvalues — typically price fields — carried verbatim, so its keys are the\ncatalog's own rather than this API's. Absent means the catalog value stands\nunmodified.",
+			"Overlay.updatedAt":      "UpdatedAt is when this state was last written, in SECONDS since the Unix\nepoch (not milliseconds). Absent on a row no operator has touched, which is\nthe same thing as having no row at all.",
+			"overlayPatch.beta":      "Beta sets the beta half directly, and it only means anything while the\nentry is not enabled: true keeps the orgs in BetaOrgs seeing it, false is\nthe absolute kill switch. Absent leaves it alone; sent beside State it\nwins, because it is applied after.",
+			"overlayPatch.betaOrgs":  "BetaOrgs REPLACES the entry's beta grant list — it is not merged, so the\nlist sent is the list stored, and `[]` revokes every grant. Entries are\ntrimmed and de-duplicated. Absent leaves the existing grants alone.",
+			"overlayPatch.enabled":   "Enabled sets the \"ga\" half of the state directly: true makes the entry\ngenerally available, false hides it from the public. Absent leaves it\nalone. Sent beside State it WINS, because it is applied after.",
+			"overlayPatch.overrides": "Overrides is an RFC 7386 merge patch applied over the entry's catalog\nvalues, stored and echoed back VERBATIM, so its keys are the catalog's own\nand not this API's. It must be a JSON object or null — an array or a scalar\nis 400 — and is bounded in size and nesting depth. Absent leaves the stored\noverride alone; `{}` or null CLEARS it.",
+			"overlayPatch.state":     "State is the high-level tri-state setter (\"off\"|\"beta\"|\"ga\") that sets\nenabled+beta coherently; the low-level Enabled/Beta pointers (applied after)\noverride it for fine control. Anything else is 400.",
+			"providerPatchIn.name":   "Name is the provider the overlay belongs to, from the URL.",
 		},
 	})
 	zip.Describe("POST /v1/pricing/enablement/optin", zip.Doc{
@@ -178,10 +195,12 @@ func init() {
 		Fields: map[string]string{
 			"enablementOptRef.id":          "ID is the item within that namespace.",
 			"enablementOptRef.kind":        "Kind is the item's namespace: \"model\", \"provider\" or \"feature\".",
-			"userEnablementItem.canOptIn":  "beta && not yet opted in",
-			"userEnablementItem.effective": "visible to the caller's org",
-			"userEnablementItem.optedIn":   "caller's org on the beta list",
-			"userEnablementItem.state":     "off|beta|ga",
+			"userEnablementItem.canOptIn":  "CanOptIn is whether POST /v1/pricing/enablement/optin would do anything\nhere: the item is in beta and this org is not on its list yet. False for a\ncaller with no validated org, who has no org to enrol.",
+			"userEnablementItem.effective": "Effective is whether the caller's org may use the item right now, which is\nthe field to branch on: true for any ga item, for a beta this org holds,\nand never for an off one.",
+			"userEnablementItem.id":        "ID is the item within that namespace — a model id, a provider name, or a\nfeature key.",
+			"userEnablementItem.kind":      "Kind is the namespace the id lives in: \"model\", \"provider\" or \"feature\".",
+			"userEnablementItem.optedIn":   "OptedIn is whether the caller's org is on this item's beta grant list. It\ncan be true on an \"off\" item — the list survives the kill switch and is\nsimply ignored while it is thrown — so it does not imply Effective.",
+			"userEnablementItem.state":     "State is the item's GLOBAL availability — \"off\", \"beta\" or \"ga\" — which is\nthe operator's setting and not this caller's answer. Effective is that.",
 		},
 		Example: json.RawMessage(`{"kind":"feature","id":"labs"}`),
 	})
@@ -190,10 +209,12 @@ func init() {
 		Fields: map[string]string{
 			"enablementOptRef.id":          "ID is the item within that namespace.",
 			"enablementOptRef.kind":        "Kind is the item's namespace: \"model\", \"provider\" or \"feature\".",
-			"userEnablementItem.canOptIn":  "beta && not yet opted in",
-			"userEnablementItem.effective": "visible to the caller's org",
-			"userEnablementItem.optedIn":   "caller's org on the beta list",
-			"userEnablementItem.state":     "off|beta|ga",
+			"userEnablementItem.canOptIn":  "CanOptIn is whether POST /v1/pricing/enablement/optin would do anything\nhere: the item is in beta and this org is not on its list yet. False for a\ncaller with no validated org, who has no org to enrol.",
+			"userEnablementItem.effective": "Effective is whether the caller's org may use the item right now, which is\nthe field to branch on: true for any ga item, for a beta this org holds,\nand never for an off one.",
+			"userEnablementItem.id":        "ID is the item within that namespace — a model id, a provider name, or a\nfeature key.",
+			"userEnablementItem.kind":      "Kind is the namespace the id lives in: \"model\", \"provider\" or \"feature\".",
+			"userEnablementItem.optedIn":   "OptedIn is whether the caller's org is on this item's beta grant list. It\ncan be true on an \"off\" item — the list survives the kill switch and is\nsimply ignored while it is thrown — so it does not imply Effective.",
+			"userEnablementItem.state":     "State is the item's GLOBAL availability — \"off\", \"beta\" or \"ga\" — which is\nthe operator's setting and not this caller's answer. Effective is that.",
 		},
 		Example: json.RawMessage(`{"kind":"feature","id":"labs"}`),
 	})
@@ -207,11 +228,15 @@ func init() {
 	zip.Describe("PUT /v1/admin/pricing/enablement", zip.Doc{
 		Description: "Sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta. It is generic over\nkind, so the same call manages models, providers and product features through\nthe one registry. `off` is an absolute kill switch: a self-service opt-in can\nnever re-open it. SuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
-			"adminEnablementItem.state":  "off|beta|ga",
-			"setEnablementBody.betaOrgs": "BetaOrgs REPLACES the item's beta grant list when present. Omit it to\nleave the existing grants alone.",
-			"setEnablementBody.id":       "ID is the item within that namespace — a model id, a provider name, or a\nfeature's key.",
-			"setEnablementBody.kind":     "Kind is the item's namespace: \"model\", \"provider\" or \"feature\".",
-			"setEnablementBody.state":    "State is the item's global enablement: \"off\" (hidden from everyone,\nabsolutely), \"beta\" (visible only to granted orgs) or \"ga\" (visible to\neveryone). Required.",
+			"adminEnablementItem.betaOrgs":  "BetaOrgs are the org ids granted this item's beta. It decides who sees a\n\"beta\" item and is IGNORED on an \"off\" one, so a non-empty list beside\n\"off\" grants nothing. Empty on a ga item, where there is nothing to grant.",
+			"adminEnablementItem.id":        "ID is the item within that namespace — a model id, a provider name, or a\nfeature key.",
+			"adminEnablementItem.kind":      "Kind is the namespace the id lives in: \"model\", \"provider\" or \"feature\".",
+			"adminEnablementItem.state":     "State is the item's global availability, one of exactly \"off\" (nobody sees\nit), \"beta\" (only the orgs below see it) or \"ga\" (everybody sees it).",
+			"adminEnablementItem.updatedAt": "UpdatedAt is when an operator last set this item's state, in SECONDS since\nthe Unix epoch (not milliseconds).",
+			"setEnablementBody.betaOrgs":    "BetaOrgs REPLACES the item's beta grant list when present. Omit it to\nleave the existing grants alone.",
+			"setEnablementBody.id":          "ID is the item within that namespace — a model id, a provider name, or a\nfeature's key.",
+			"setEnablementBody.kind":        "Kind is the item's namespace: \"model\", \"provider\" or \"feature\".",
+			"setEnablementBody.state":       "State is the item's global enablement: \"off\" (hidden from everyone,\nabsolutely), \"beta\" (visible only to granted orgs) or \"ga\" (visible to\neveryone). Required.",
 		},
 		Example: json.RawMessage(`{"kind":"feature","id":"labs","state":"beta","betaOrgs":["acme"]}`),
 	})

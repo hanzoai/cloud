@@ -25,7 +25,7 @@
       "get": {
         "operationId": "get_s3_buckets",
         "summary": "Lists the caller org's own buckets.",
-        "description": "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all.",
+        "description": "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all. Another org's bucket is not\nrefused but INVISIBLE, so this cannot be used to learn that a name is taken\nelsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
         "tags": [
           "s3"
         ],
@@ -47,7 +47,7 @@
       "post": {
         "operationId": "post_s3_buckets",
         "summary": "Makes a new bucket for the caller's org and answers 201 with it.",
-        "description": "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409.",
+        "description": "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nbucket exists.",
         "tags": [
           "s3"
         ],
@@ -81,7 +81,7 @@
       "delete": {
         "operationId": "delete_s3_buckets_by_bucket",
         "summary": "Removes an EMPTY bucket and answers 204.",
-        "description": "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives.",
+        "description": "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nbucket is gone.",
         "tags": [
           "s3"
         ],
@@ -109,7 +109,7 @@
       "get": {
         "operationId": "get_s3_buckets_by_bucket_objects",
         "summary": "Lists one folder level of a bucket.",
-        "description": "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.",
+        "description": "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
         "tags": [
           "s3"
         ],
@@ -158,7 +158,7 @@
       "post": {
         "operationId": "post_s3_buckets_by_bucket_objects",
         "summary": "Mints a presigned PUT URL the caller uploads to DIRECTLY.",
-        "description": "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.",
+        "description": "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe upload that follows it goes straight to the store and is not seen here. The\nbalance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
         "tags": [
           "s3"
         ],
@@ -250,7 +250,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/presignResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/s3/health": {
@@ -331,6 +343,7 @@
       "objectItem": {
         "properties": {
           "etag": {
+            "description": "ETag is the store's entity tag for the bytes currently at this key, with the\nquotes the store wraps it in stripped. It is an opaque VERSION and not a\nchecksum to verify against: a single-part upload's tag happens to be the MD5\nof the content and a multipart upload's is not, and nothing here says which\nthis was. Compare two reads of one key to learn whether the object changed;\nabsent for a folder entry, and for an object the store reports none for.",
             "type": "string"
           },
           "isDir": {
@@ -383,6 +396,7 @@
             "type": "integer"
           },
           "key": {
+            "description": "Key is the object key the URL was signed for, relative to the bucket root\nand path-cleaned — so it is what the store will actually read or write, which\nis not always the string the caller sent. The signature covers this one bucket\nand this one key: a URL minted here reaches nothing else.",
             "type": "string"
           },
           "method": {

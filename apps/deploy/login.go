@@ -285,18 +285,59 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.Redirect(http.StatusFound, f.Return)
 }
 
-// logout clears the session cookie for this host. IAM's own session is untouched —
-// this ends the console session only.
+// EndDeploySession ends the console session on this host.
 //
-// It is a POST because it CHANGES STATE. As a GET it was reachable by a cross-site
-// top-level navigation (an <img> or a link on any page), which a SameSite=Lax cookie
-// still rides, so any site could sign a SuperAdmin out at will. A nuisance rather
-// than a compromise, but a state-changing GET is a bug regardless; POST is not
-// carried cross-site by a Lax cookie, so the class is closed.
-func logout(s *cloud.Service[state], c *zip.Ctx) error {
-	clearCookie(c, sessionCookie)
-	return c.JSON(http.StatusOK, map[string]any{"loggedIn": false, "loginUrl": loginPath})
+// It clears this console's session cookie and answers the signed-out state with
+// the sign-in URL to start again. IAM's own session is untouched — this ends the
+// console session only, so signing back in may not prompt for credentials.
+//
+// It is a POST because it CHANGES STATE. As a GET it was reachable by a
+// cross-site top-level navigation, which a SameSite=Lax cookie still rides, so
+// any page could sign a SuperAdmin out; a POST is not carried cross-site by that
+// cookie. It reads no request body and takes no argument: the session it ends is
+// the one the request already carries.
+func (o ops) logout(_ context.Context, _ *noInput) (*sessionEnded, error) {
+	return &sessionEnded{LoggedIn: false, LoginURL: loginPath}, nil
 }
+
+// sessionEnded is what the sign-out answers, and it carries the Set-Cookie that
+// DOES the signing out — declared on the op (WithResponseHeader) rather than
+// written by a handler reaching for the request, so the one header this route
+// exists to send appears in the document, the SDKs and the tool schema instead of
+// being a side channel no projection describes.
+//
+// It is a type of its own rather than the sessionUser the bootstrap read answers
+// with, even though the two marshal identically here. The cookie is a property of
+// THIS answer: hanging ResponseHeaders on sessionUser would clear the session on
+// every read of it.
+type sessionEnded struct {
+	// LoggedIn is always false — this is the answer to having just signed out, so
+	// it states the resulting session state rather than reporting the request's
+	// outcome. It is not omitempty: false is the whole answer.
+	LoggedIn bool `json:"loggedIn"`
+	// LoginURL is where to sign in again. Always present, because a caller that
+	// has just signed out is exactly the caller who needs it.
+	LoginURL string `json:"loginUrl"`
+}
+
+// ResponseHeaders clears the console session cookie.
+//
+// The value is written out LONGHAND rather than through fiber's cookie writer,
+// because a typed op states its headers as strings and the wire may not move: it
+// is byte-for-byte what `clearCookie(c, sessionCookie)` produced —
+// `setCookie(…, "", -1)` on a `__Host-` cookie, measured off the raw handler this
+// op replaced. TestSignOutClearsTheSessionCookieVerbatim asserts that exact
+// header, so a drift in either writer is a red test rather than a session nobody
+// can end.
+func (sessionEnded) ResponseHeaders() map[string]string {
+	return map[string]string{"Set-Cookie": clearedSessionCookie}
+}
+
+// clearedSessionCookie is the Set-Cookie that ends the console session: the
+// session cookie with an empty value and an already-elapsed lifetime, carrying
+// the same Path/HttpOnly/Secure/SameSite attributes it was set with — a cookie
+// that differs in any of those is a DIFFERENT cookie and would not replace it.
+const clearedSessionCookie = sessionCookie + "=; max-age=0; path=/; HttpOnly; secure; SameSite=Lax"
 
 // exchange redeems the authorization code at IAM's token endpoint with the PKCE
 // verifier. The client secret is sent only when one is configured (IAM accepts an

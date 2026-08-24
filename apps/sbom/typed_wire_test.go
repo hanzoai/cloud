@@ -1,11 +1,14 @@
 package sbom
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/openapi"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // This file makes the SBOM surface's typed partition a GATE instead of a paragraph.
@@ -18,21 +21,48 @@ import (
 // each with the wire fact that keeps it raw. The address is written the way the
 // DOCUMENT writes it, which is the identity every projection keys on.
 var untypedByDesign = map[string]string{
-	// The greedy resolve wildcard — the apps/pricing refusal, one subsystem over,
-	// and re-measured against the PINNED zip (v1.18.12) rather than inherited.
-	//
-	// The BOUND name and the PUBLISHED name cannot agree. fiber names this capture
-	// `*1` (zip's bindURL matches c.Route().Params, so an input field would need
-	// `url:"*1"`), while the untyped projection publishes the address as
-	// `/v1/sbom/{wildcard1}` with a PATH parameter of that name. A typed op
-	// publishes op.Path VERBATIM, so the address would become `/v1/sbom/*` and `*1`
-	// would be declared as a QUERY parameter — three published facts moved (path,
-	// parameter name, parameter location) for a route whose wire did not.
-	// TestResolveTakesASlashBearingRef is the wire this refusal protects.
-	"GET /v1/sbom/{wildcard1}": "a greedy wildcard: fiber binds the capture as `*1` while the document " +
-		"publishes it as the path parameter `{wildcard1}`, and a typed op publishes its path verbatim — so " +
-		"the bound field and the published parameter cannot agree.",
+	"GET /v1/sbom/{wildcard1}": reasonWildcard,
 }
+
+// reasonWildcard is the wire fact behind the one refusal, and it is STRONGER
+// than the sentence this ledger used to carry. "Three published facts move for a
+// route whose wire did not" reads as a document that would be wrong; the
+// document would not be PRODUCED.
+//
+// Three readings of one address, each correct on its own:
+//
+//   - zip's Template (address.go:61-73) rewrites only `:name` segments, so a `*`
+//     segment survives VERBATIM, and zip keys an op by closeColonParams(op.Path)
+//     (openapi.go:99, 518-520). A typed op here would publish `/v1/sbom/*`.
+//   - cloud's router reading must give that segment a legal URI-template name and
+//     calls it `{wildcard1}` (openapi/openapi.go:811-829 translate; fiber's own
+//     key is `*1`, which is not one).
+//   - fiber binds the capture as `*1`, so an In field would have to carry
+//     `url:"*1"` — the parameter a caller sees named twice, differently.
+//
+// openapi.Fold (openapi/openapi.go:699) then looks the typed op up by zip's
+// spelling, finds no live route at that key, and returns "typed op %q has no
+// live route — the registry and the router disagree about its path" (:705).
+// `describe` reaches Fold through openapi.FleetSpec → Spec, so the cost is not a
+// mis-named parameter: `make -C apps/sbom describe` FAILS and this app publishes
+// nothing at all. Same class as apps/kms's `/v1/kms/secrets/+`, which records it
+// the same way.
+//
+// The address is NECESSARY rather than awkward. The value is an image REFERENCE
+// carrying slashes and a tag or a digest, so a `:ref` segment (which matches one
+// segment) or a mandatory percent-encoding would be a wire change:
+// TestResolveTakesASlashBearingRef is that measurement.
+//
+// No version is cited, because a version in prose expires and this one already
+// had — the entry went on naming zip v1.18.12 for four minors after go.mod
+// stopped pinning it, which is how a refusal rots while reading as measured.
+// TestTheWildcardCannotBeATypedOp RUNS the refusal instead, so the day zip's
+// Template names a wildcard the way cloud's reading does, it goes green and says
+// so rather than going stale in silence.
+const reasonWildcard = "a greedy `*` capture: zip's Template (address.go:61-73) leaves the segment verbatim so a " +
+	"typed op publishes `/v1/sbom/*`, while cloud's router reading names it `{wildcard1}` " +
+	"(openapi/openapi.go:811-829). Fold looks the op up by zip's spelling, finds no live route, and " +
+	"REFUSES the whole document (openapi/openapi.go:699,705) — not a mis-named parameter, no document."
 
 // sbomOps reads BOTH projections of the live router at their one shared address
 // form: what the document says is served, and which of those carry a typed registry
@@ -115,6 +145,74 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		if strings.TrimSpace(desc) == "" {
 			t.Errorf("%s has no description — run: go generate -run zipdoc ./apps/sbom/...", key)
 		}
+	}
+}
+
+// TestEveryPublishedFieldIsDescribed gates the half the op-level gate cannot
+// see. Typing a route documents its ADDRESS and its SHAPE, never the shape's
+// FIELDS: those come from a doc comment on each one, which zipdoc lifts per
+// field, so a fully typed surface can still publish a document that says
+// nothing. A property reaches openapi.yaml, every generated SDK and every MCP
+// inputSchema, and its description is the only place the units, the closed
+// vocabulary or the meaning of ABSENCE can travel with it.
+//
+// There is no exemption ledger here and there is nothing to exempt: all three
+// published schemas come from typed ops, so zipdoc reaches every field of them.
+// The four generator gaps that force one elsewhere — a schema declared by
+// openapi.Register (reflection, and Go drops comments), an embedded struct, an
+// anonymous struct, a defined type over another struct — apply to none of them.
+// The day one does, the failure below says which property and why.
+//
+// openapi.Bare is the ONE walker: it reads the MARSHALLED document (Schemas is
+// open-typed, so walking the Go value silently skips whichever half it did not
+// expect) and descends into nested shapes, array items, additionalProperties and
+// every alternative of allOf/anyOf/oneOf. A top-level-only check reports clean
+// while an inline object inside a property ships bare.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "sbom", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if doc.Components == nil || len(doc.Components.Schemas) == 0 {
+		t.Fatal("sbom publishes no schemas at all — the gate would pass vacuously")
+	}
+	bare, err := openapi.Bare(doc)
+	if err != nil {
+		t.Fatalf("bare: %v", err)
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("%d published schema propert(ies) carry no description: %s\n"+
+			"Write the field's OWN doc comment — a header above a group of fields is lifted onto the "+
+			"first of them alone — then run: make -C apps/sbom describe. If the property arrived "+
+			"through openapi.Register, an embedded struct, an anonymous struct or a defined type, no "+
+			"comment can reach it: name it in a proseless ledger checked in BOTH directions "+
+			"(apps/projects/prose_test.go is the reference), never by hand-writing a schema.",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
+
+// TestTheWildcardCannotBeATypedOp is the refusal in untypedByDesign, RUN rather
+// than asserted. It registers a typed op at the same greedy `*` address resolve
+// serves and requires openapi.Spec to refuse to produce a document at all.
+//
+// A refusal nothing runs is a refusal that outlives its cause — this ledger's own
+// entry cited a zip version four minors stale. This one cannot: the day zip's
+// Template names a wildcard the way cloud's router reading does, the test goes
+// green and names what to do about it.
+func TestTheWildcardCannotBeATypedOp(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	g := app.Group("/v1/probe")
+	zip.Get(g, "/*", func(context.Context, *noArgs) (*SbomHealth, error) { return &SbomHealth{}, nil })
+
+	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
+	if err == nil {
+		t.Fatal("openapi.Spec accepted a typed op on a `*` wildcard — zip and cloud now agree about " +
+			"how to name that segment, so reasonWildcard has stopped being true. Type " +
+			"GET /v1/sbom/* and delete the untypedByDesign entry.")
+	}
+	if !strings.Contains(err.Error(), "no live route") {
+		t.Fatalf("refused for a different reason than the one recorded: %v", err)
 	}
 }
 

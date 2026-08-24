@@ -162,8 +162,8 @@
     "/v1/cloudflare/d1/databases/{database}/query": {
       "post": {
         "operationId": "post_cloudflare_d1_databases_by_database_query",
-        "summary": "Run a SQL statement against a D1 database",
-        "description": "Executes a statement on one D1 database on the org's OWN Cloudflare account and relays D1's result set. `sql` is required and `params` carries the bound values in placeholder order — use them rather than interpolating values into the statement.\n\nThe body is checked for a non-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1 even though only two are named here; the declared schema is open for that reason. That verbatim forward is why this is not a typed op — decoding and re-encoding the body would drop `params`, where the query's bound values live. Requires ORG ADMIN (403 otherwise); a malformed body or missing `sql` is 400; 503 if the org has never connected a Cloudflare token.",
+        "summary": "Runs one SQL statement against a D1 database.",
+        "description": "Runs one SQL statement against a D1 database. It executes on the org's\nOWN Cloudflare account and relays D1's result set. The body is checked for a\nnon-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1\neven though only two are named here.\n\nRequires ORG ADMIN — a statement may INSERT, UPDATE or DROP, so a query takes the\nwrite gate rather than the read one — and a caller who is only an org member is\nrefused 403. A missing `sql` is 400; 503 if the org has never connected a\nCloudflare token.",
         "tags": [
           "cloudflare"
         ],
@@ -180,23 +180,31 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "params": [
+                  42
+                ],
+                "sql": "SELECT * FROM orders WHERE id = ?"
+              },
               "schema": {
                 "$ref": "#/components/schemas/D1Query"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "200": {
             "content": {
               "application/json": {
                 "schema": {}
               }
-            }
+            },
+            "description": "ok"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/cloudflare/kv/namespaces": {
@@ -869,8 +877,8 @@
       },
       "put": {
         "operationId": "put_cloudflare_workers_scripts_by_script",
-        "summary": "Upload or replace a module Worker script",
-        "description": "Publishes a module Worker to the org's OWN Cloudflare account under the name in the path, replacing whatever was there, and relays Cloudflare's result. `script` carries the module SOURCE; the optional compatibility date, compatibility flags and bindings are packed into the multipart upload Cloudflare expects.\n\nThe path names the script and the body field named `script` is its source — two different things that share a name, which is exactly why this cannot be a typed op: a binder that gives the URL the last word would overwrite the source with the script's name. Requires ORG ADMIN (403 otherwise); an unparseable body or empty source is 400; 503 if the org has never connected a Cloudflare token.",
+        "summary": "Uploads or replaces a module Worker script.",
+        "description": "Uploads or replaces a module Worker script. It publishes to the\norg's OWN Cloudflare account under the name in the path, replacing whatever was\nthere, and relays Cloudflare's result. The compatibility date, compatibility\nflags and bindings are packed into the multipart upload Cloudflare expects,\nbeside the module source.\n\nRequires ORG ADMIN — a Worker is arbitrary code on the org's own account and\ndomains — so a caller who is only an org member is refused 403. An empty source\nis 400, as is a `mainModule` that is not a plain file name; 503 if the org has\nnever connected a Cloudflare token.",
         "tags": [
           "cloudflare"
         ],
@@ -879,6 +887,7 @@
             "name": "script",
             "in": "path",
             "required": true,
+            "description": "Script means two things on this route, and the document says so in both places\nit appears: the PATH segment names the Worker to publish, and the BODY field\ncarries that Worker's ES-module source — the code itself, never a name or a\nURL. A blank or absent source is refused; there is no empty Worker.",
             "schema": {
               "type": "string"
             }
@@ -891,19 +900,21 @@
                 "$ref": "#/components/schemas/WorkerScriptPut"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "200": {
             "content": {
               "application/json": {
                 "schema": {}
               }
-            }
+            },
+            "description": "ok"
           }
         },
-        "x-public": true
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/cloudflare/workers/scripts/{script}/subdomain": {
@@ -1326,16 +1337,18 @@
   "components": {
     "schemas": {
       "D1Query": {
-        "type": "object",
         "properties": {
           "params": {
-            "type": "array",
-            "items": {}
+            "description": "Params are the statement's bound values, in the order its `?` placeholders\nappear — a string, a number, a boolean or null, whatever the column takes.\nAbsent means the statement carries no placeholders; bind values here rather\nthan interpolating them into the statement.",
+            "items": {},
+            "type": "array"
           },
           "sql": {
+            "description": "SQL is the statement to run. Blank (or absent) is refused before anything\nreaches D1.",
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "PagesBuildConfig": {
         "properties": {
@@ -1481,25 +1494,31 @@
         "type": "object"
       },
       "WorkerScriptPut": {
-        "type": "object",
         "properties": {
-          "bindings": {},
+          "bindings": {
+            "description": "Bindings are the resources the script can reach (KV, D1, R2, secrets, …), in\nCloudflare's own binding vocabulary, passed through as written: this plane\ndeliberately does not model Cloudflare's shapes. Absent uploads a script with\nNO bindings, which replaces whatever the previous version had."
+          },
           "compatibilityDate": {
+            "description": "CompatibilityDate pins which Workers runtime behaviour the script runs under,\nas a plain calendar date (\"2024-01-01\"). Absent leaves the account's own\ndefault in force.",
             "type": "string"
           },
           "compatibilityFlags": {
-            "type": "array",
+            "description": "CompatibilityFlags turn individual runtime behaviours on or off around that\ndate (\"nodejs_compat\"), in Cloudflare's own flag vocabulary. Absent means the\ndate alone decides.",
             "items": {
               "type": "string"
-            }
+            },
+            "type": "array"
           },
           "mainModule": {
+            "description": "MainModule is the module file the runtime starts at. Absent means \"worker.js\".",
             "type": "string"
           },
           "script": {
+            "description": "Script means two things on this route, and the document says so in both places\nit appears: the PATH segment names the Worker to publish, and the BODY field\ncarries that Worker's ES-module source — the code itself, never a name or a\nURL. A blank or absent source is refused; there is no empty Worker.",
             "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "bucketCreateIn": {
         "properties": {

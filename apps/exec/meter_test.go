@@ -24,10 +24,10 @@ func billed(t *testing.T, l *planetest.Ledger) *zip.App {
 	t.Helper()
 	t.Setenv("CODE_EXEC_API_KEY", "k")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	// The host installs this before any subsystem mounts (app.go), and it is what
-	// parks the validated caller a meter reads back. Without it the payer resolves
-	// to nobody and every assertion below would pass vacuously.
-	app.Use(cloud.Bridge())
+	// No cloud.Bridge() here: Mount installs it on the subsystem's own router, ahead
+	// of its leaves. It used to be installed by hand right at this line, which is the
+	// tell the audit turned on — a package whose only Bridge lives in a test is a
+	// package proving its org path with the org absent everywhere else.
 	if err := Mount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

@@ -58,6 +58,17 @@ func (v *memVFS) Delete(_ context.Context, key string) error {
 // client-generated blob uuid (formData.append('file', file, uuid)).
 func uploadFile(t *testing.T, app *zip.App, ws, blobID string, headers map[string]string, data []byte) (int, []byte) {
 	t.Helper()
+	resp := uploadRaw(t, app, ws, blobID, headers, data)
+	defer func() { _ = resp.Body.Close() }()
+	out, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, out
+}
+
+// uploadRaw is the same upload with the RESPONSE left whole, so a header
+// assertion (Content-Type) has something to read. Same split, same reason, as
+// call/getRaw above: one request builder, two readings of its answer.
+func uploadRaw(t *testing.T, app *zip.App, ws, blobID string, headers map[string]string, data []byte) *http.Response {
+	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	fw, err := mw.CreateFormFile("file", blobID) // sets Content-Disposition filename=blobID
@@ -77,9 +88,7 @@ func uploadFile(t *testing.T, app *zip.App, ws, blobID string, headers map[strin
 	if err != nil {
 		t.Fatalf("upload Test: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	out, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, out
+	return resp
 }
 
 // getRaw returns the raw *http.Response so header assertions (Content-Type,
