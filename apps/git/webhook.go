@@ -25,11 +25,10 @@ import (
 // forge-wide system webhook on git.hanzo.ai delivers there for every repo; a
 // repo opts in by committing hanzo.yml, not by owning a hook.
 //
-// The route is KEPT and answers 410 rather than being deleted, because a
-// deleted route 404s and a 404 from this estate is the exact signal that has
-// already cost two investigations: Hanzo Git serves /v1, so /api/v1 404s and
-// reads as "the API is switched off". A retired endpoint must SAY it is retired
-// and NAME its replacement — an unexplained silence is what made the 204 expensive.
+// The route is KEPT and answers 410 rather than being deleted, because a deleted
+// route 404s and a 404 from this estate is ambiguous: Hanzo Git serves /v1, so
+// /api/v1 404s too and reads as "the API is switched off". A retired endpoint
+// SAYS it is retired and NAMES its replacement, so the answer carries its own fix.
 //
 // It reads no body, holds no secret and verifies nothing: there is nothing left
 // here to authenticate. GIT_WEBHOOK_SECRET is no longer read by this binary.
