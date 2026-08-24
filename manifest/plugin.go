@@ -8,9 +8,10 @@
 // grow the host's build by one package. What an app DOES belongs to the app's
 // own binary; where it lives and what it answers is all the router needs.
 //
-// apps.go is the single source of truth for both facts (Wire() for the set and
-// its order, the `eager` map for the rest), and apps.go is where a change is
-// made. Apps in apps.go is generated from it — see plugin/gen-app-cmds.
+// apps.go is the single source of truth, and it is HAND-AUTHORED — see its own
+// header. Apps is the set and its load order; the per-app flags sit on the row.
+// A change is made there. plugin/gen-app-cmds reads it the other way, validating
+// that every row has a plugin/<name> and every plugin/<name> has a row.
 package manifest
 
 import (
