@@ -25,9 +25,28 @@ package account
 // TOKEN — base64url( ts_be64(8) || mac(16) ), where
 //   mac = KeyedBLAKE3(csrfKey, domain \x00 uid \x00 org \x00 ts)[:16]  (luxfi/crypto).
 // It is BOUND to the validated principal (X-User-Id + X-Org-Id) so a token minted for
-// one identity cannot authorize a write as another, and it EXPIRES after csrfTTL. The
-// key is server-only (KMS-sourced env CONSOLE_CSRF_KEY); no key ⇒ a per-process random
-// key (tokens then reset on restart — the SPA re-fetches on a 403).
+// one identity cannot authorize a write as another, and it EXPIRES after csrfTTL.
+//
+// THE KEY IS SHARED, AND THAT IS A DEPLOYMENT FACT. One address MINTS a token —
+// GET /v1/account/csrf, served by this app — and the operations that VERIFY one are
+// registered in OTHER apps, each of which is its own process (plugin/<name>/main.go
+// links one subsystem; the host runs each as a child). A MAC verifies against the key
+// that wrote it, so those processes hold ONE key or no token ever verifies. That key
+// is CONSOLE_CSRF_KEY, from KMS, on the pod — a child inherits the host's environment
+// whole, so one value reaches every process.
+//
+// Absent, [loadCSRFKey] mints a per-process random key. That is right for the MINTER
+// alone, which only ever verifies tokens it wrote itself, and wrong for everyone
+// else, whose every verify then fails — a permanent 403 across the money path that no
+// test can see from inside one process. So the two sides ask different questions of
+// the same key at BOOT, and both are answered here:
+//
+//	[Shared] — the verifiers. An ephemeral key verifies nothing they will be sent,
+//	           so it refuses, and the mount fails.
+//	[MountAccount] — the minter. An ephemeral key works for one process over one
+//	           lifetime, so it is allowed on a laptop and refused on a deployment
+//	           ([cloud.Deployed] — this process was handed a master key, so it has a
+//	           secret store and no excuse for a missing one).
 
 import (
 	"context"
@@ -36,6 +55,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -55,47 +75,100 @@ const (
 	csrfTokenLen  = 8 + csrfMACLen // ts || mac
 )
 
-// csrfKeyOnce guards the process-wide CSRF MAC key. account@48 issues the token and
-// the money WRITES that verify the token are registered elsewhere — co-resident on
-// commerce (RequireCSRF below) — so the key must be ONE value for the process, not one
-// per Mount. Without that, the ephemeral (no CONSOLE_CSRF_KEY) case gives each
-// registration its own random key and no minted token ever verifies. Deterministic from
-// CONSOLE_CSRF_KEY (KMS) in prod.
+// KeyEnv names the shared anti-forgery MAC key. KMS holds the value; the pod carries
+// it; a plugin child inherits it. It is the ONE name, so an operator provisioning it
+// and an error telling them to say the same word.
+const KeyEnv = "CONSOLE_CSRF_KEY"
+
+// shared decodes the key every process is meant to hold, or says why there is none.
+// A PURE READ of the environment, so both verdicts below can be asked whenever, and
+// asking one cannot fix the answer for the other.
+func shared() ([]byte, error) {
+	raw := strings.TrimSpace(os.Getenv(KeyEnv))
+	if raw == "" {
+		return nil, fmt.Errorf("%s is unset, so this process holds an anti-forgery key nobody else does", KeyEnv)
+	}
+	if b, err := hex.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+	if b, err := base64.StdEncoding.DecodeString(raw); err == nil && len(b) == 32 {
+		return b, nil
+	}
+	return nil, fmt.Errorf("%s is set but does not decode to 32 bytes of hex or base64", KeyEnv)
+}
+
+// The process-wide MAC key, resolved once: the token is minted and verified in one
+// process by several registrations, and a key per Mount would leave a token minted by
+// one unverifiable by the next.
 var (
 	csrfKeyOnce sync.Once
 	csrfKeyVal  []byte
 )
 
-// sharedCSRFKey returns the process-wide keyed-BLAKE3 MAC key, loaded ONCE.
+// sharedCSRFKey returns the process-wide keyed-BLAKE3 MAC key — [shared] when there
+// is one, else a random key this process alone holds. Which of the two is a boot
+// question, answered by [Shared] and [own] before a request ever arrives.
 func sharedCSRFKey(log luxlog.Logger) []byte {
-	csrfKeyOnce.Do(func() { csrfKeyVal = loadCSRFKey(log) })
+	csrfKeyOnce.Do(func() {
+		k, lone := shared()
+		if lone == nil {
+			csrfKeyVal = k
+			return
+		}
+		if log != nil {
+			log.Warn("anti-forgery key is this process's alone", "why", lone)
+		}
+		csrfKeyVal = make([]byte, 32)
+		if _, err := rand.Read(csrfKeyVal); err != nil {
+			// crypto/rand failure is catastrophic; a zero key would be forgeable.
+			panic("console: cannot generate CSRF key: " + err.Error())
+		}
+	})
 	return csrfKeyVal
 }
 
-// loadCSRFKey returns the 32-byte keyed-BLAKE3 MAC key. Prefers the server-only env
-// CONSOLE_CSRF_KEY (KMS-sourced; hex or base64-std, must decode to exactly 32 bytes);
-// otherwise a per-process random key with a WARN (single-replica tolerable — tokens
-// reset on restart, the SPA transparently re-fetches on a 403).
-func loadCSRFKey(log luxlog.Logger) []byte {
-	if raw := strings.TrimSpace(os.Getenv("CONSOLE_CSRF_KEY")); raw != "" {
-		if b, err := hex.DecodeString(raw); err == nil && len(b) == 32 {
-			return b
-		}
-		if b, err := base64.StdEncoding.DecodeString(raw); err == nil && len(b) == 32 {
-			return b
-		}
-		if log != nil {
-			log.Warn("CONSOLE_CSRF_KEY set but not a 32-byte hex/base64 value; using an ephemeral per-process key")
-		}
-	} else if log != nil {
-		log.Warn("CONSOLE_CSRF_KEY unset; using an ephemeral per-process CSRF key (set it from KMS for multi-replica/restart-stable tokens)")
+// serving reports whether this process will answer requests. `<binary> describe <dir>`
+// projects the router into an artifact and exits, so it holds no session, is sent no
+// token and has nothing to control — and the artifact is a function of the code alone
+// (cloud.SpecConfig), which a key read from the environment would break.
+func serving() bool {
+	_, projecting := cloud.DescribeRequested()
+	return !projecting
+}
+
+// Shared is the VERIFIER's verdict, taken at BOOT. An app whose operations ask [CSRF]
+// calls it once from its Mount.
+//
+// It is the whole difference between a control that works and one that refuses
+// everything: this process verifies MACs written by the process that serves
+// GET /v1/account/csrf, and a key it invented itself matches none of them. Returning
+// the error fails the mount, which in a plugin child is exit 1 and in the host is the
+// app absent behind a 503 — a missing key is then loud at boot, in one line, instead
+// of a 403 on every console write for as long as the pod runs.
+//
+// The minter does not call this: its own key verifies its own tokens, so a laptop with
+// no KMS still issues and accepts them. See [own].
+func Shared() error {
+	if _, lone := shared(); lone != nil && serving() {
+		return fmt.Errorf("anti-forgery: %w; it verifies the token GET /v1/account/csrf mints in another process, "+
+			"so both must hold the same 32-byte key — set %s from KMS", lone, KeyEnv)
 	}
-	k := make([]byte, 32)
-	if _, err := rand.Read(k); err != nil {
-		// crypto/rand failure is catastrophic; a zero key would be forgeable, so panic.
-		panic("console: cannot generate CSRF key: " + err.Error())
+	return nil
+}
+
+// own is the MINTER's verdict on a key of its own, which is a different question with
+// a different answer: this app issues the tokens it accepts, so one process over one
+// lifetime is self-consistent and a laptop with no KMS works unchanged. A DEPLOYMENT
+// is not one process over one lifetime — it was handed a master key, so a secret store
+// stands behind it, and a key it invented would be one value per replica and a new one
+// per restart, refusing every console session that crossed either.
+func own(deployed bool) error {
+	_, lone := shared()
+	if lone == nil || !deployed || !serving() {
+		return nil
 	}
-	return k
+	return fmt.Errorf("anti-forgery: %w; this process holds a master key, so it has a secret store — set %s "+
+		"from KMS (32 bytes, hex or base64) on every process that mints or verifies a console token", lone, KeyEnv)
 }
 
 // csrfMAC computes the bound, truncated keyed-BLAKE3 MAC for (uid, org, ts).

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -66,6 +67,9 @@ func mountApp(t *testing.T, base, token string) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_COMMERCE_HTTP_URL", base)
 	t.Setenv("COMMERCE_SERVICE_TOKEN", token)
+	// The shared anti-forgery key this surface's writes verify against. A deployment
+	// takes it from KMS; the mount refuses without it (key_test.go).
+	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	// The composer's install, once at the root, ahead of every route it serves:
 	// cloud.Bridge parks the validated org on the context for the typed finance ops.

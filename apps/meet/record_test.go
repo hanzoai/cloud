@@ -256,6 +256,7 @@ func billedRecord(t *testing.T, l *planetest.Ledger) (*zip.App, *media) {
 	t.Setenv(keyFileEnv, keyFileWith(t, keyBody(apiKey, apiSecret)))
 	st := load()
 	st.authority = holds(map[string]string{workspaceA: token.RoleMember})
+	sharedKey(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
 	app.Use(cloud.Bridge())
