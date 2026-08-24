@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Package admission is the launch-control GATE for Hanzo's hosted services — the COMPLETE waitlist feature, COMPOSING the ONE flag engine (apps/flags) one-way.",
+    "description": "Package admission is launch control for Hanzo's hosted services — the waitlist DECIDE, COMPOSING the ONE flag engine (apps/flags) one-way.",
     "version": "v1"
   },
   "servers": [
