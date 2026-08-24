@@ -66,16 +66,21 @@ var fleetTargets = []prober.Target{
 	{Name: "bot-gateway", URL: "http://bot-gateway.hanzo.svc:80/health"},
 	{Name: "commerce", URL: "http://commerce.hanzo.svc:8001/health"},
 
-	// iam answers on port 80 (→ 8000), but /healthz is not a route it serves
-	// there: it is measured 404, which the prober correctly scored as down and
-	// the status page published as an outage of a healthy identity provider.
-	// The address below is the OIDC discovery document — what iam's own
-	// readiness probe reads, and the first thing every client fetches before it
-	// can sign anybody in. If it answers, a customer can log in; if it does not,
-	// no customer can. That is the dependency worth measuring, and unlike a
-	// health path it cannot drift away from the contract, because it IS the
-	// contract.
-	{Name: "iam", URL: "http://iam.hanzo.svc:80/.well-known/openid-configuration"},
+	// iam is served by THIS binary now. The standalone iam Deployment is scaled
+	// to zero (charts/app/values/hanzo/iam.yaml: "RETIRED — identity is cloud's
+	// embedded IAM now"), so iam.hanzo.svc selects no pods and refused every
+	// probe — a healthy identity provider published as a standing outage, the
+	// same shape kms had above and for the same reason. What a customer of
+	// hanzo.id reaches is cloud's embedded IAM.
+	//
+	// The path is still the OIDC discovery document, for the reason it always
+	// was: it is the first thing every client fetches before it can sign anybody
+	// in, so if it answers a customer can log in and if it does not, none can.
+	// Unlike a health path it cannot drift away from the contract, because it IS
+	// the contract. Measured 200 through the edge that fronts this address, and
+	// it returns a real document (issuer https://hanzo.id) rather than the SPA
+	// catch-all an unrouted path would give.
+	{Name: "iam", URL: "http://cloud.hanzo.svc:8000/v1/iam/.well-known/openid-configuration"},
 
 	// kms is served by THIS binary. The standalone kms Deployment is scaled to
 	// zero and its Service has no endpoints, so the old kms.hanzo.svc address
@@ -128,10 +133,18 @@ var fleetTargets = []prober.Target{
 // side — its Service selects cloud's pods, so commerce.hanzo.svc is already
 // cloud, and the entry is left as it stands because it is measured to answer.
 //
-// iam and bot-gateway still carry their own CRs at replicas=1, so they are still
-// separate processes at their own addresses. When they fold in, the address
-// moves to cloud's in the same change that removes their CR — not before, or the
-// fold looks like an outage.
+// bot-gateway still carries its own CR at replicas=1, so it is still a separate
+// process at its own address. When it folds in, the address moves to cloud's in
+// the same change that scales the CR down — not before, or the fold looks like
+// an outage.
+//
+// iam was that case and is now folded: its CR sits at replicas=0 while the
+// address here still named iam.hanzo.svc, which is the failure this note warned
+// about arriving from the other side. A fold that moves the workload without
+// moving the address does not look like an outage, it IS reported as one, for as
+// long as nobody re-reads the entry. The lesson the kms and iam entries share:
+// when a service folds into cloud, its NAME stays (that is what a customer
+// knows) and its ADDRESS becomes cloud's, in the same change.
 
 // address returns where the named service answers and whether this fleet watches
 // it at all. It is the only way to learn a service's address: a caller that
