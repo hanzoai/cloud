@@ -198,8 +198,17 @@ func TestBillingFollowsTheOwnerNotTheTree(t *testing.T) {
 			t.Errorf("Billable(POST %s) = false; lsp owns this path and declares cloud.Metered", p)
 		}
 	}
-	if Billable("POST", "/v1/code/symbols") {
-		t.Error("Billable(POST /v1/code/symbols) = true; code declares cloud.Free and lsp no longer nests inside it")
+	// The other half of "billing follows the owner": /v1/code/symbols reads like an
+	// lsp address and is not one. code owns it and code's OWN declaration decides
+	// it — which is a live claim in both directions now that code declares Metered
+	// (its /ask synthesizes and its /search embeds, both through the wrapped AI
+	// client). The check is that the answer comes from the owner, not that the
+	// answer is no.
+	if got := manifest.OwnerOf("/v1/code/symbols"); got != "code" {
+		t.Fatalf("OwnerOf(/v1/code/symbols) = %q, want code — this test's subject moved", got)
+	}
+	if !Billable("POST", "/v1/code/symbols") {
+		t.Error("Billable(POST /v1/code/symbols) = false; code owns this path and declares cloud.Metered")
 	}
 }
 
@@ -340,6 +349,7 @@ var meteredByAIWrapper = map[string]bool{
 	"ai":    true, // the completions surface itself.
 	"ask":   true, // holds deps.AI and answers questions with it.
 	"agent": true, // replays /v1/chat/completions in-process (aiCompleter).
+	"code":  true, // /ask synthesizes over deps.AI, /search embeds over deps.Embed.
 }
 
 // meteredWithoutAMeter is THE GAP, named so it is countable. Each entry declares

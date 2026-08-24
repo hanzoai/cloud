@@ -260,7 +260,7 @@ func TestTheQuoteScalesWithTheRowsAsked(t *testing.T) {
 // what something costs needed standing, a customer who ran out could never find
 // out why.
 func TestTheRateCardIsAReadAndThereforeFree(t *testing.T) {
-	if cloud.Consumes(http.MethodGet) {
+	if cloud.Consumes(http.MethodGet, ratePath) {
 		t.Fatal("a GET consumes nothing, so it must not be priced at the edge")
 	}
 	if cloud.DefaultPrice(http.MethodGet, ratePath) != 0 {

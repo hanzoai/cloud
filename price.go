@@ -81,10 +81,10 @@ func (p Price) Cents() int64 {
 // Declared reports whether somebody answered what this surface costs.
 func (p Price) Declared() bool { return p != Undeclared }
 
-// Consumes reports whether a request by this METHOD spends resource somebody has
-// to pay a provider for. It is the one fact that lets a price be declared per
-// SURFACE without a per-route table: a surface's cost basis is shared by its
-// writes, and its reads have no cost basis at all.
+// Consumes reports whether an OPERATION spends resource somebody has to pay a
+// provider for. It is the one fact that lets a price be declared per SURFACE
+// without a per-route table: a surface's cost basis is shared by its writes, and
+// its reads, with the exception below, have no cost basis at all.
 //
 // THE BUG IT CLOSES, MEASURED. DefaultPrice priced by PATH alone, so a surface
 // declared at 25¢ charged 25¢ for `GET /v1/<surface>/list` — a directory listing
@@ -95,20 +95,56 @@ func (p Price) Declared() bool { return p != Undeclared }
 //
 // The rule and its justification are not new here — spend.go's Billable has
 // carried them since the standing gate was written: "gating reads already caused
-// one outage, a balance view that 402s is unusable, and no read this binary
-// serves calls a paid provider." What is new is that the CHARGE now asks the same
-// question the STANDING check does, from the same line, so the two can no longer
-// disagree about what a read is.
+// one outage, a balance view that 402s is unusable." What is new is that the
+// CHARGE now asks the same question the STANDING check does, from the same line,
+// so the two can no longer disagree about what a read is.
 //
-// A surface whose paid unit of work is a read is therefore unpriceable at the
-// edge, deliberately. It is not a gap to paper over with a second knob: such a
-// surface meters its own units downstream and declares Metered.
-func Consumes(method string) bool {
+// IT TAKES THE PATH BECAUSE THE METHOD IS NOT THE OPERATION. The rest of that old
+// sentence — "no read this binary serves calls a paid provider" — is measurably
+// false, and reading the method alone is what made it unanswerable: a search
+// embeds its query through the metered AI client, and the object plane meters
+// every request its guard wraps. GET said nothing about whether money moved, so
+// those operations were outside the standing gate by construction, and no
+// declaration anywhere could bring them in. An operation that spends is not a
+// read, whichever verb it answers on.
+func Consumes(method, path string) bool {
 	switch method {
 	case "GET", "HEAD", "OPTIONS":
+		for _, r := range paidReads {
+			if under(path, r) {
+				return true
+			}
+		}
 		return false
 	}
 	return true
+}
+
+// paidReads are the operations whose READ IS the paid unit of work — the whole
+// exception to "a read spends nothing", written where the rule is.
+//
+// price.go's own answer for this class used to be that such a surface "meters its
+// own units downstream and declares Metered", and that half is right: the edge
+// still charges nothing for them (each declares Metered, so Price.Cents is 0, and
+// an edge charge on top of a downstream meter bills the same work twice). What
+// the declaration could NOT say was that the READ spends, so Billable never asked
+// for standing and the meter ran on whatever the caller had. This list is that
+// missing half, and it is the only thing here the method cannot answer.
+//
+// It is short by construction and it is MEASURED — each entry names the line that
+// moves the money — because a surface that wants to spend on a read has to be
+// written down here, in the file the money rule lives in, rather than acquiring
+// the property by adding a call inside a handler.
+//
+// Each entry is a root and covers everything beneath it, asked through scope.go's
+// `under` so the comparison is the one the ROUTER makes: /V1/S3/... reaches the
+// route registered at /v1/s3/..., and a raw prefix test would answer "not on the
+// list" for a request that is about to spend.
+var paidReads = []string{
+	"/v1/code/ask",         // the answer is synthesized through deps.AI (apps/code/ask.go).
+	"/v1/code/search",      // the semantic tier embeds the query through deps.Embed (apps/code/search.go).
+	"/v1/websearch/search", // one debit per answer a bought engine served (apps/websearch/meter.go).
+	"/v1/s3/",              // the guard meters every request it wraps (apps/s3/s3.go); the probe is outside it.
 }
 
 // DefaultPrice is what ONE invocation of the operation (method, path) costs.
@@ -151,7 +187,7 @@ func DefaultPrice(method, path string) int64 {
 	// was Free: the declaration had no way to say "charge the work, not the index".
 	// Checked before the price so an unpriced read costs nothing either way and the
 	// two paths cannot diverge.
-	if !Consumes(method) {
+	if !Consumes(method, path) {
 		return 0
 	}
 	return PriceOf(path).Cents()

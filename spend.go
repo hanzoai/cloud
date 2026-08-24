@@ -208,9 +208,11 @@ func creditIn(ctx context.Context, w principal.Wallet) (ok, funded bool) {
 // Billable says WHETHER standing is required, DefaultPrice says WHAT the edge charges.
 // Pricing something at zero can no longer un-authorize it.
 //
-// READS ARE NEVER BILLABLE. GET/HEAD/OPTIONS pass unconditionally — gating reads
-// already caused one outage, a balance view that 402s is unusable, and no read this
-// binary serves calls a paid provider.
+// A READ IS BILLABLE ONLY WHERE THE READ IS THE PAID UNIT. GET/HEAD/OPTIONS
+// otherwise pass unconditionally — gating reads already caused one outage, and a
+// balance view that 402s is unusable. The exceptions are named in price.go's
+// paidReads, beside the rule they are the exception to, because an operation that
+// debits is not a read whichever verb it answers on.
 //
 // The path sets are MEASURED, not invented:
 //   - inference — the exact paths zen's Claim owns (zen@v1.4.2 proxy.go) plus ai's
@@ -225,7 +227,7 @@ func Billable(method, path string) bool {
 	// Consumes (price.go) is the ONE place the read/write rule lives, so the
 	// question "does standing apply" and the question "does the edge charge" can
 	// never be answered from two copies of it that drift apart.
-	if !Consumes(method) {
+	if !Consumes(method, path) {
 		return false
 	}
 	if Reachable(path) {
@@ -235,7 +237,7 @@ func Billable(method, path string) bool {
 		return true
 	}
 	for _, t := range meteredTrees {
-		if path == strings.TrimSuffix(t, "/") || strings.HasPrefix(path, t) {
+		if under(path, t) {
 			// Prefixes NEST, and the shorter one here may belong to a different
 			// app than the one that actually serves this path. A bare HasPrefix
 			// scan then bills the neighbour's surface on this app's standing —
@@ -321,6 +323,7 @@ var meteredApps = []string{
 	"ask",          // the answer engine's per-question fee.
 	"auto",         // per-run automation fee.
 	"cloudflare",   // Workers AI + provisioning.
+	"code",         // /ask synthesizes and /search embeds, both through the metered AI client.
 	"company",      // the $999 formation, gated and debited in providers.go; the genesis anchor rides inside it.
 	"compliance",   // one identity inquiry opened at the vendor, on the deployment's key.
 	"content",      // studio renders (GPU).
@@ -419,6 +422,13 @@ func meteredPrefixes() []string {
 // /v1/billing/webhooks/:provider. Gating an inbound payment webhook loses payments
 // outright, so that prefix is load-bearing twice over.
 func Reachable(path string) bool {
+	// Compare what the ROUTER matched, not what the client typed. Every rule below
+	// is a lowercase literal, and fiber serves /V1/CODE/ASK from the route registered
+	// at /v1/code/ask — so an un-normalised path fell past the /v1 test into "the SPA
+	// shell", and one capital letter exempted a metered operation from the whole
+	// money rule. RoutePath is this package's one normalisation (risk.go); `under`
+	// below folds through it too, so the two halves of this function agree.
+	path = RoutePath(path)
 	// Liveness / readiness / metrics — a gate must never hide whether the process is
 	// up, or an incident becomes invisible at exactly the wrong moment.
 	switch path {
@@ -458,10 +468,13 @@ func Reachable(path string) bool {
 		return true
 	}
 	for _, sub := range reachableTrees {
-		// A sub-tree covers its own ROOT as well as everything under it. Matching only
-		// "<root>/" is how a paywall ends up refusing the exact URL its own 402 points
-		// at — one missing slash and the cure is behind the gate. One rule, both forms.
-		if path == strings.TrimSuffix(sub, "/") || strings.HasPrefix(path, sub) {
+		// A sub-tree covers its own ROOT as well as everything under it, and the
+		// comparison is scope.go's `under` — the one this package already trusts to
+		// mean "inside my subtree", folded through RoutePath. Matching only "<root>/"
+		// is how a paywall ends up refusing the exact URL its own 402 points at; a raw
+		// prefix test is how one capital letter walks past a gate. One rule, one
+		// function, every form.
+		if under(path, sub) {
 			return true
 		}
 	}
