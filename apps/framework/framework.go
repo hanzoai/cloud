@@ -94,17 +94,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	g := app.Group("/v1/framework")
 
-	// bridgeFacts FIRST: a typed op receives only a context, so the two
-	// header-only identity facts its signature drops have to be parked there.
-	// fiber runs middleware in registration order, so one installed after its
-	// leaves never runs; and the group bounds it to the subtree this subsystem
-	// serves.
+	// No identity middleware here. Every operation reads the caller from the
+	// request itself (caller / callerOf below), which is what each of the six
+	// seams that reach an op carries — a route is only one of them, and middleware
+	// reaches only that one.
 	//
-	// cloud.Bridge is not installed here. Whoever composes the program installs it
-	// once at the root — after the identity check that mints the validated org and
-	// before any subsystem registers a route (serve.go) — because that order is a
-	// property of the whole program and no subsystem can assert it for itself.
-	g.Use(zip.H(bridgeFacts))
+	// cloud.Bridge is likewise not installed here. Whoever composes the program
+	// installs it once at the root, after the identity check that mints the
+	// validated org and before any subsystem registers a route (serve.go), because
+	// that order is a property of the whole program and no subsystem can assert it
+	// for itself.
 
 	o := ops{s: s}
 
@@ -237,69 +236,56 @@ func Shutdown() error {
 	return err
 }
 
-// ---- the two boundaries ----
+// ---- the boundary ----
 
-// caller turns a validated request principal into an engine Caller.
+// caller turns a validated request principal into an engine Caller. THE ONE
+// derivation, asked by every operation here and by the two raw handlers.
 //
-// This is the ONE tenant-derivation path. principal.Org returns an org only for
-// a VALIDATED principal (a gateway/BFF-minted X-User-Id from a verified IAM
-// credential); a forged X-Org-Id with no validated principal yields nothing, so
-// the engine is handed an empty Caller and refuses 403 before touching a store.
+// principal.Org returns an org only for a VALIDATED principal (a gateway- or
+// BFF-minted X-User-Id from a verified IAM credential), so a forged X-Org-Id with
+// no validated principal yields nothing and the engine is handed the zero Caller.
+//
+// A CALLER NAMES SOMEBODY, and principal.Org is what makes that true: it turns on
+// the validated USER claim as well as the org, and answers no when the user is
+// blank. So an org here always arrives with a person attached, and this reads the
+// user rather than re-deciding it — the rule lives in one place, and a second copy
+// of it would only be two implementations that happen to agree.
+//
+// It matters because the engine keys role grants by user and claims an unowned
+// org for its first caller. A caller with an org and no name would take that
+// one-shot claim for the empty string, which nobody holds and nobody can revoke,
+// since revoking takes the very role the row absorbed.
+//
+// TRIMMED AND CLONED, in that order and for two reasons: trimmed so the value
+// written to fw_roles is the value principal.Org validated, and cloned because
+// c.User() is a zero-copy view into the reused fasthttp request buffer while the
+// engine writes this into a store.
 func caller(c *zip.Ctx) engine.Caller {
 	org, ok := principal.Org(c)
 	if !ok {
 		return engine.Caller{}
 	}
-	return engine.Caller{Org: org, User: c.User(), IsAdmin: c.IsAdmin()}
+	return engine.Caller{Org: org, User: strings.Clone(strings.TrimSpace(c.User())), IsAdmin: c.IsAdmin()}
 }
 
-// facts are the identity values a TYPED op needs that cloud.Bridge does not
-// carry: the validated user id and platform admin-ness, both header-only. The
-// ORG is deliberately absent — cloud.Bridge already parks it and one fact with
-// two carriers is one carrier too many.
-type facts struct {
-	// user is the validated principal's id. CLONED at the bridge: c.User() is a
-	// zero-copy view into the reused fasthttp request buffer, and the engine
-	// writes this value into fw_roles when it seeds an org's first manager, so it
-	// outlives the request.
-	user string
-	// admin is c.IsAdmin() — the PLATFORM SuperAdmin bit, which the engine's
-	// permission calculus lets bypass per-DocType rights.
-	admin bool
-}
-
-// factsKey names the request-scoped slot bridgeFacts parks facts under.
-// Unexported zero-size type: unforgeable from another package.
-type factsKey struct{}
-
-// bridgeFacts carries the header-only halves of the engine Caller onto the
-// request context — the twin of the org cloud.Bridge parks. A request that never
-// passed the bridge reads back the zero facts, so absence is "no user, not an
-// admin", which the engine refuses before touching a store.
-func bridgeFacts(c *zip.Ctx) error {
-	c.SetContext(context.WithValue(c.Context(), factsKey{}, facts{
-		user:  strings.Clone(c.User()),
-		admin: c.IsAdmin(),
-	}))
-	return c.Continue()
-}
-
-// callerOf is caller() across the typed-op client, and the SAME decision: the org
-// comes from principal.OrgFrom (what principal.Org decided, parked by
-// cloud.Bridge) and the rest from bridgeFacts. No validated org means the ZERO
-// Caller — exactly what caller() returns for an unvalidated principal — which
-// the engine refuses 403 before touching a store.
+// callerOf is caller() reached from a typed op, which holds a context rather than
+// a request. Same derivation, one place.
 //
-// FAIL CLOSED OFF THE HTTP PATH. An MCP tools/call and a CLI LocalInvoke pass no
-// bridge, so both reads come back empty and every op here refuses. That is the
-// handler's own gate, with no second gate to keep in sync.
+// IT READS THE REQUEST, and that is the point. A typed op is reached by six seams
+// — the REST route, MCP, the call plane, the graph, the CLI and Here — and only
+// the first passes through any middleware, so identity parked by a route cannot
+// be read by the other five. The request itself is what every seam that has one
+// carries, and the identity boundary has already authenticated whoever is
+// calling by the time any of them reach an op.
+//
+// FAIL CLOSED where there is no request: a CLI LocalInvoke has none, so it gets
+// the zero Caller and every op here refuses.
 func callerOf(ctx context.Context) engine.Caller {
-	org, ok := principal.OrgFrom(ctx)
+	c, ok := cloud.Request(ctx)
 	if !ok {
 		return engine.Caller{}
 	}
-	f, _ := ctx.Value(factsKey{}).(facts)
-	return engine.Caller{Org: org, User: f.user, IsAdmin: f.admin}
+	return caller(c)
 }
 
 // fail maps an engine error to the HTTP status its Code means. The engine

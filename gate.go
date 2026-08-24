@@ -25,6 +25,8 @@ package cloud
 // business and none of them keeps a copy of the rule.
 
 import (
+	"context"
+
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -50,6 +52,27 @@ func AuthorityOf(c *zip.Ctx) Authority {
 		Super:     principal.IsSuperAdmin(c),
 		OrgAdmin:  principal.IsOrgAdmin(c),
 	}
+}
+
+// AuthorityIn reads the same three facts off a typed op's CONTEXT, for the
+// preamble that holds no *zip.Ctx. Same extraction, same verdict — AuthorityOf
+// is asked through the request this finds.
+//
+// IT EXISTS BECAUSE A ROUTE IS NOT THE ONLY WAY IN. zip records a typed op and
+// its route's handler as two fields of one entry and wraps only the handler, so
+// a gate installed as middleware — handed to Group, composed through With, or
+// installed at the root and bounded by path — runs for REST and for nothing
+// else, while MCP, the call plane, the graph and the CLI invoke the op directly
+// and the identity middleware has already authenticated whoever is calling. An
+// operation that requires authority therefore asks for it HERE, in its own
+// preamble, which is the one place every way in passes through.
+//
+// Fail-closed off the HTTP path: no request, no verified claim, no authority.
+func AuthorityIn(ctx context.Context) Authority {
+	if c, ok := Request(ctx); ok {
+		return AuthorityOf(c)
+	}
+	return Authority{}
 }
 
 // Scope is how much authority a route REQUIRES. It is a closed set: there are
