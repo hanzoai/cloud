@@ -102,15 +102,27 @@ func rateKey(c *zip.Ctx) string {
 	return "a:" + ip
 }
 
-// rateLimit gates a handler, refusing 429 when the caller (validated principal, else
-// socket peer) exceeds rl. It is a zip.Middleware so ONE definition serves both the
-// typed ops (through With, which carries it into the registration) and the raw
-// handlers the untyped routes still use.
+// capped is THE frequency decision, once: nil when this caller may act again, a
+// 429 when it may not. The middleware below and the ops' own preamble
+// (requestCaller) are two ways to ASK it, never two copies of it.
+func capped(rl *rateLimiter, c *zip.Ctx) error {
+	if !rl.allow(rateKey(c)) {
+		return zip.Errorf(429, "rate limit exceeded; retry shortly")
+	}
+	return nil
+}
+
+// rateLimit is that decision as MIDDLEWARE, for the untyped avatar write, which
+// is a raw handler and has no preamble to put it in. It does NOT reach a typed
+// op: With composes around the route's handler, and MCP, the call plane, the
+// graph and the CLI call the op without ever building one — so the two key ops
+// ask capped themselves and are not wrapped here, which is also what keeps one
+// REST request costing one token.
 func rateLimit(rl *rateLimiter) zip.Middleware {
 	return func(next zip.Handler) zip.Handler {
 		return func(c *zip.Ctx) error {
-			if !rl.allow(rateKey(c)) {
-				return zip.Errorf(429, "rate limit exceeded; retry shortly")
+			if err := capped(rl, c); err != nil {
+				return err
 			}
 			return next(c)
 		}
