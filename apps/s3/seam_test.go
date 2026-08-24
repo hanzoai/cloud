@@ -24,10 +24,17 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// testCSRFKey is the shared anti-forgery key this test binary holds. admit asks
+// account's control, and account refuses to mount a verifier that invented its own
+// key — in production the value comes from KMS on the pod, and here from one
+// constant, so the mint and the verify inside this process agree.
+const testCSRFKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // emptyBuckets is what the object store answers a ListBuckets with: a caller
 // with no buckets, which is a SUCCESS and therefore the answer that must bill.
@@ -50,6 +57,7 @@ func seamApp(t *testing.T, commerceURL string) (*zip.App, *int32) {
 		_, _ = io.WriteString(w, emptyBuckets)
 	}))
 	t.Cleanup(srv.Close)
+	t.Setenv(account.KeyEnv, testCSRFKey)
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
 	t.Setenv("S3_ADMIN_ENDPOINT", srv.Listener.Addr().String())
@@ -227,5 +235,117 @@ func TestTheTenantIsAskedOnEveryWayIn(t *testing.T) {
 	}
 	if bs.debits() != 0 {
 		t.Fatalf("debits = %d without a principal, want 0", bs.debits())
+	}
+}
+
+// === anti-forgery ===========================================================
+//
+// This plane spends the caller's balance on a READ, so the ordinary reason a read
+// needs no token does not hold here: a page the caller never visited can send
+// their browser to one of these addresses, the cookie they already hold
+// authenticates it, and the debit lands on them. The answer is unreadable
+// cross-origin, so nothing leaks — what moves is money.
+//
+// The control is account's, asked in the operation's own preamble, and it is a
+// no-op the moment a caller PRESENTS a credential. These rows are paired around
+// that: the same request with a Bearer, and the same request with the token it was
+// asked for, both have to get through, or the refusal above would be indistinguishable
+// from a surface that refuses everything.
+
+// asVisitor drives a request the way a cross-site page can: the cookie the browser
+// already holds, and nothing the page had to be able to read to obtain.
+func asVisitor(t *testing.T, app *zip.App, req *http.Request, extra map[string]string) (int, string) {
+	t.Helper()
+	req.Header.Set("Cookie", "hanzo_iam_token=whatever")
+	for k, v := range extra {
+		req.Header.Set(k, v)
+	}
+	return send(t, app, req, "acme", "u-acme")
+}
+
+func routeReq() *http.Request { return httptest.NewRequest(http.MethodGet, "/v1/s3/buckets", nil) }
+
+func nameReq() *http.Request {
+	frame := `{"jsonrpc":"2.0","id":1,"method":"tools/call",` +
+		`"params":{"name":"get_s3_buckets","arguments":{}}}`
+	r := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader([]byte(frame)))
+	r.Header.Set("Content-Type", "application/json")
+	return r
+}
+
+// TestACookieAloneCannotSpend. On the route and by name alike, a request carrying
+// only the ambient cookie is refused before the balance is touched; the same
+// request presenting a credential is served and billed.
+func TestACookieAloneCannotSpend(t *testing.T) {
+	bs := &billServer{available: 100000}
+	app, reached := seamApp(t, bs.start(t))
+
+	st, body := asVisitor(t, app, routeReq(), nil)
+	if st != http.StatusForbidden {
+		t.Fatalf("route on a cookie alone = %d %s, want 403", st, body)
+	}
+	if _, body = asVisitor(t, app, nameReq(), nil); answered(body) {
+		t.Fatalf("by name on a cookie alone answered the operation: %s", body)
+	}
+	if got := atomic.LoadInt32(reached); got != 0 {
+		t.Fatalf("the store was asked %d times on a cookie alone, want 0", got)
+	}
+	if bs.debits() != 0 {
+		t.Fatalf("debits = %d on a cookie alone, want 0 — that is the caller's money", bs.debits())
+	}
+
+	// A caller that PRESENTED a credential cannot be forged into, so it pays no
+	// price for the control. Both ways in, so neither row above measured
+	// unreachability.
+	if st, body = asVisitor(t, app, routeReq(), map[string]string{"Authorization": "Bearer t"}); st != http.StatusOK {
+		t.Fatalf("route with a bearer = %d %s, want 200 — the control must cost an API client nothing", st, body)
+	}
+	if _, body = asVisitor(t, app, nameReq(), map[string]string{"Authorization": "Bearer t"}); !answered(body) {
+		t.Fatalf("by name with a bearer was refused: %s", body)
+	}
+	if !waitFor(func() bool { return bs.debits() == 2 }) {
+		t.Fatalf("debits = %d after two credentialed calls, want 2", bs.debits())
+	}
+}
+
+// TestTheTokenTheControlAsksForIsAccepted. The refusal above names a token; this
+// obtains that token the way a browser does — from a same-origin response a
+// cross-site page cannot read — and requires it to work. Without this row the
+// control could be "refuse every cookie", which would be a broken surface rather
+// than a defended one.
+func TestTheTokenTheControlAsksForIsAccepted(t *testing.T) {
+	bs := &billServer{available: 100000}
+	app, _ := seamApp(t, bs.start(t))
+	if err := account.MountAccount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("MountAccount: %v", err)
+	}
+
+	st, body := asVisitor(t, app, httptest.NewRequest(http.MethodGet, "/v1/account/csrf", nil), nil)
+	if st != http.StatusOK {
+		t.Fatalf("mint token = %d %s, want 200", st, body)
+	}
+	var mint struct {
+		Token string `json:"csrfToken"`
+	}
+	if err := json.Unmarshal([]byte(body), &mint); err != nil || mint.Token == "" {
+		t.Fatalf("no token in %s", body)
+	}
+
+	if st, body = asVisitor(t, app, routeReq(), map[string]string{"X-CSRF-Token": mint.Token}); st != http.StatusOK {
+		t.Fatalf("route with the minted token = %d %s, want 200", st, body)
+	}
+	if _, body = asVisitor(t, app, nameReq(), map[string]string{"X-CSRF-Token": mint.Token}); !answered(body) {
+		t.Fatalf("by name with the minted token was refused: %s", body)
+	}
+	if !waitFor(func() bool { return bs.debits() == 2 }) {
+		t.Fatalf("debits = %d after two attested calls, want 2", bs.debits())
+	}
+
+	// A token minted for somebody else is not this caller's.
+	req := httptest.NewRequest(http.MethodGet, "/v1/s3/buckets", nil)
+	req.Header.Set("Cookie", "hanzo_iam_token=whatever")
+	req.Header.Set("X-CSRF-Token", mint.Token)
+	if st, _ = send(t, app, req, "other", "u-other"); st != http.StatusForbidden {
+		t.Fatalf("another org's token = %d, want 403 — the token is bound to who it was minted for", st)
 	}
 }

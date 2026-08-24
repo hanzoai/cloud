@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/internal/planetest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -190,6 +191,7 @@ func TestSearXNGDoorBillsTheCaller(t *testing.T) {
 	braveAt(t, "brave")
 	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 
+	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Metering: l.Client(t), Env: "mainnet"}); err != nil {

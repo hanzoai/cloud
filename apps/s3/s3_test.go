@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 
@@ -72,6 +73,10 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	// billing_test.go's subject — unfunded → 402, unreachable biller → refused, the
 	// handler running ZERO times in both.
 	t.Setenv("CLOUD_S3_FEE_CENTS", "0")
+	// admit asks account's anti-forgery control, and account refuses to mount a
+	// verifier holding a key nobody else does. In production the value comes from
+	// KMS on the pod; here one constant serves the whole binary.
+	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	// Clear any ambient S3 env; set creds only when requested.
 	for _, k := range []string{"S3_ADMIN_ACCESS_KEY", "S3_ADMIN_SECRET_KEY", "S3_ADMIN_ENDPOINT", "S3_PUBLIC_ENDPOINT"} {
 		t.Setenv(k, "")

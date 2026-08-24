@@ -332,6 +332,38 @@ func RequireCSRF() zip.Handler {
 	return requireCSRF(s)(func(c *zip.Ctx) error { return c.Next() })
 }
 
+// RequireCSRFOnSpend is [RequireCSRF] narrowed to the requests that COST the
+// caller money, for a surface whose READ is the paid unit of work.
+//
+// The ordinary rule is that a read needs no token: a GET changes nothing, and
+// requiring one to list a board would break every server-side reader. That rule
+// rests on a read being free, and on these surfaces it is not — the answer is
+// synthesized through a model, or embedded, or bought from a vendor, and the
+// caller's balance pays for it. So a page the caller never visited can send their
+// browser to one of these addresses, the cookie they already hold authenticates
+// it, and the debit lands on them. Nothing leaks — the answer is unreadable
+// cross-origin — what moves is money.
+//
+// WHICH REQUESTS SPEND IS NOT RESTATED HERE. It asks [cloud.Consumes], which is
+// where the money rule lives and where the paid reads are named beside it, so this
+// control and the balance gate can never disagree about what a read is, and a
+// surface added to that list is covered without anyone remembering this function.
+//
+// It is a ROUTE handler, and that is the whole of what it claims: the ambient
+// cookie it defends against is a BROWSER's, and a browser reaches an operation
+// over its route. An operation reachable by name as well — MCP, the call plane,
+// the graph — asks [CSRF] in its own preamble instead, which is the one place
+// every seam passes through; a surface that does so needs nothing here.
+func RequireCSRFOnSpend() zip.Handler {
+	gate := RequireCSRF()
+	return func(c *zip.Ctx) error {
+		if !cloud.Consumes(c.Method(), c.Path()) {
+			return c.Next()
+		}
+		return gate(c)
+	}
+}
+
 // csrfResp is the anti-CSRF token a browser echoes on every money write.
 type csrfResp struct {
 	// Token is the value to send back in the X-CSRF-Token header. It is bound to the
