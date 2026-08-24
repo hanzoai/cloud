@@ -281,14 +281,36 @@ jobs:
           #
           # No org in the path: the store root comes from the validated claim, so
           # this reads the KMS credential's OWN org and cannot name another's.
+          # A THIRD CAUSE READS THE SAME AS THOSE TWO, and it is the one that bit.
+          # Piping curl straight into jq discards the STATUS, so a read that TIMED
+          # OUT and a store that holds no such name both arrive as an empty string
+          # — and the refusal below then reports an outage as a provisioning fault.
+          # Measured: five consecutive releases refused for "no client id" while
+          # review/IAM_CLIENT_ID was present and correct the whole time and the door
+          # was briefly slow. It sends the reader to IAM, to the store's contents and
+          # to this file's history, none of which is where the fault is. Keep the
+          # code and let the refusal say which of the three happened.
+          KMS_CODE_F=$(mktemp)
           kms_secret() {
-            curl -sS --max-time 30 \
+            body=$(mktemp)
+            curl -sS --max-time 30 -o "$body" -w '%{http_code}' \
                 "${KMS_ENDPOINT}/v1/kms/secrets/review/$1?env=${KMS_SECRET_ENV}" \
-                -H "Authorization: Bearer ${KMS_TOKEN}" \
-              | jq -r '.value // .secret.value // empty'
+                -H "Authorization: Bearer ${KMS_TOKEN}" > "$KMS_CODE_F" 2>/dev/null \
+              || echo 000 > "$KMS_CODE_F"
+            [ "$(cat "$KMS_CODE_F")" = 200 ] \
+              && jq -r '.value // .secret.value // empty' < "$body" 2>/dev/null
+            rm -f "$body"
           }
           REVIEW_CLIENT_ID=$(again kms_secret IAM_CLIENT_ID || true)
-          [ -n "$REVIEW_CLIENT_ID" ] || { echo "::error::review: no client id for ${REVIEW_CLIENT} in KMS at review/IAM_CLIENT_ID (env ${KMS_SECRET_ENV}, org from the KMS credential); the reviewer has no identity, so the change does not pass"; exit 1; }
+          if [ -z "$REVIEW_CLIENT_ID" ]; then
+            code=$(cat "$KMS_CODE_F" 2>/dev/null || echo 000)
+            if [ "$code" = 200 ]; then
+              echo "::error::review: the store answered and holds no value at review/IAM_CLIENT_ID (env ${KMS_SECRET_ENV}, org from the KMS credential), so ${REVIEW_CLIENT} has no identity. Seal it, or point KMS_CLIENT_ID at the org that carries it."
+            else
+              echo "::error::review: the store did not answer for review/IAM_CLIENT_ID — last status ${code} at ${KMS_ENDPOINT}, asked six times over seventy-five seconds. This is the DOOR, not the credential: the row may be perfectly present. Re-run at this sha once it answers."
+            fi
+            exit 1
+          fi
 
           # THE SECRET IS NEVER A VALUE AND NEVER IN ARGV. It is piped from the
           # store into the grant that spends it, as a curl config read on stdin.
