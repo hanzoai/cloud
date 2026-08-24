@@ -89883,7 +89883,7 @@ paths:
 
         It authenticates with the shared peer token, compared in constant time, and carries no user identity at all. That is why the org arrives IN THE BODY here: the forwarding replica already derived it from a gateway-validated header, so the value is a fact being relayed rather than a claim being made. On any caller-facing route the same field would be a cross-tenant invoke primitive.
 
-        It fails closed on its own configuration: with no peer token set, or a half-wired cluster that has presence but no way to forward, it serves 503 and forwards nothing — an unauthenticated endpoint that takes an org from a body is precisely the hole. A missing or wrong token is 403, and the forwarded body is bounded on read.
+        It fails closed on its own configuration: with no peer token set, or a half-wired cluster that has presence but no way to forward, it serves 503 and forwards nothing — an unauthenticated endpoint that takes an org from a body is precisely the hole. A missing or wrong token is 403, and the forwarded body is bounded.
 
         Two things to get right. Its refusals are text/plain rather than the JSON every zip error uses, so a client decoding them as JSON will fail on the error path only. And an invocation that RAN but was denied still answers 200 here, carrying a stable error token in the JSON body — no such node, timeout, node gone, denied, failed — which the calling replica maps back onto the status codes a caller sees. Authorization already ran on this replica at the socket and is deliberately not repeated.
       operationId: post_node_peer_invoke
@@ -109886,7 +109886,7 @@ paths:
   /v1/tasks:
     delete:
       description: |-
-        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.
+        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.
 
         A 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.
       operationId: delete_tasks
@@ -109897,7 +109897,7 @@ paths:
       x-public: true
     get:
       description: |-
-        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.
+        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.
 
         A 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.
       operationId: get_tasks
@@ -109908,7 +109908,7 @@ paths:
       x-public: true
     patch:
       description: |-
-        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.
+        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.
 
         A 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.
       operationId: patch_tasks
@@ -109919,7 +109919,7 @@ paths:
       x-public: true
     post:
       description: |-
-        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.
+        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.
 
         A 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.
       operationId: post_tasks
@@ -109930,7 +109930,7 @@ paths:
       x-public: true
     put:
       description: |-
-        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The redirect is a routing fact derived from the engine's subtree, decided before any handler runs, so it is the same on every method.
+        Answers 307 with Location /v1/tasks/ — this address serves nothing itself. The status and the Location are the same on every method; a GET additionally carries the short HTML body a browser falls back to when it does not follow the redirect itself.
 
         A 307 preserves both the method and the body, so a client that follows redirects re-sends the request unchanged to /v1/tasks/ and nothing is lost. A client that does NOT follow redirects sees only the 307 and performs no work — address /v1/tasks/ directly and the hop disappears.
       operationId: put_tasks
