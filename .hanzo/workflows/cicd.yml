@@ -885,6 +885,7 @@ jobs:
           # That is the correct direction to fail: a hole is visible and inert
           # (pin.sh refuses a tag that does not resolve), whereas a reused
           # number is invisible and serves the wrong bytes.
+
           # RESUMING IS ASKED FIRST, because the loop below cannot ask it.
           #
           # A retry of THIS commit must adopt the number it already owns rather
