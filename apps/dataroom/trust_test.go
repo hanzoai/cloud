@@ -112,11 +112,12 @@ func mountTrust(t *testing.T) (*zip.App, *memVFS) {
 // upload puts real bytes through the data room's own upload route and returns the
 // document id. The trust centre never takes bytes itself — this is the one
 // endpoint — so a test that skipped it would be testing a path production does
-// not have.
-func upload(t *testing.T, app *zip.App, org, name string, data []byte) string {
+// not have. `claims` is the Content-Type the UPLOADER asserts, which is a separate
+// thing from what the bytes are and from what the file is later served as.
+func upload(t *testing.T, app *zip.App, org, name, claims string, data []byte) string {
 	t.Helper()
 	rq := httptest.NewRequest(http.MethodPost, "/v1/dataroom/documents?name="+name, strings.NewReader(string(data)))
-	rq.Header.Set("Content-Type", "application/pdf")
+	rq.Header.Set("Content-Type", claims)
 	rq.Header.Set("X-Org-Id", org)
 	rq.Header.Set("X-User-Id", "u_"+org)
 	resp, err := app.Test(rq)
@@ -208,7 +209,7 @@ func TestPublicCenterWithholdsTheGatedTier(t *testing.T) {
 	app, _ := mountTrust(t)
 	publishCenter(t, app, "acme", "acme", "")
 
-	secret := upload(t, app, "acme", "report.pdf", []byte("%PDF-1.7 auditor's own words"))
+	secret := upload(t, app, "acme", "report.pdf", "application/pdf", []byte("%PDF-1.7 auditor's own words"))
 	code, gated := hitJSON(t, app, admin("acme"), http.MethodPost, "/v1/dataroom/trust/artifacts", map[string]any{
 		"kind": "report", "name": "Examination report", "attester": "auditor", "document": secret,
 		"summary": "The auditor's report on the examination.",
@@ -221,7 +222,7 @@ func TestPublicCenterWithholdsTheGatedTier(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("publish gated: %d %v", code, gated)
 	}
-	open := upload(t, app, "acme", "policy.pdf", []byte("%PDF-1.7 our access policy"))
+	open := upload(t, app, "acme", "policy.pdf", "application/pdf", []byte("%PDF-1.7 our access policy"))
 	if code, got := hitJSON(t, app, admin("acme"), http.MethodPost, "/v1/dataroom/trust/artifacts", map[string]any{
 		"kind": "policy", "name": "Access control policy", "attester": "self", "tier": "public", "document": open,
 		"body": "Every account is issued through Hanzo IAM.",
@@ -291,7 +292,7 @@ func TestPublicCenterWithholdsTheGatedTier(t *testing.T) {
 func TestPublicFileServesWhatTheOrgStatesItself(t *testing.T) {
 	app, _ := mountTrust(t)
 	publishCenter(t, app, "acme", "acme", "")
-	doc := upload(t, app, "acme", "caiq.pdf", []byte("%PDF-1.7 CAIQ answers"))
+	doc := upload(t, app, "acme", "caiq.pdf", "application/pdf", []byte("%PDF-1.7 CAIQ answers"))
 	_, item := hitJSON(t, app, admin("acme"), http.MethodPost, "/v1/dataroom/trust/artifacts", map[string]any{
 		"kind": "questionnaire", "name": "CAIQ", "attester": "self", "tier": "public", "document": doc,
 	})
@@ -359,7 +360,7 @@ func TestGrantOpensOnlyForThePartyThatAsked(t *testing.T) {
 	app, _ := mountTrust(t)
 	publishCenter(t, app, "acme", "acme", "")
 
-	doc := upload(t, app, "acme", "report.pdf", []byte("%PDF-1.7 the auditor's report"))
+	doc := upload(t, app, "acme", "report.pdf", "application/pdf", []byte("%PDF-1.7 the auditor's report"))
 	_, item := hitJSON(t, app, admin("acme"), http.MethodPost, "/v1/dataroom/trust/artifacts", map[string]any{
 		"kind": "report", "name": "Examination report", "attester": "auditor", "document": doc,
 	})
@@ -461,7 +462,7 @@ func TestOnlyAnOrgAdminChangesWhatItReleases(t *testing.T) {
 func TestAForeignOrgAdminReachesNothing(t *testing.T) {
 	app, _ := mountTrust(t)
 	publishCenter(t, app, "acme", "acme", "")
-	doc := upload(t, app, "acme", "report.pdf", []byte("%PDF-1.7 acme's report"))
+	doc := upload(t, app, "acme", "report.pdf", "application/pdf", []byte("%PDF-1.7 acme's report"))
 	_, item := hitJSON(t, app, admin("acme"), http.MethodPost, "/v1/dataroom/trust/artifacts", map[string]any{
 		"kind": "report", "name": "Examination report", "attester": "auditor", "document": doc,
 	})
