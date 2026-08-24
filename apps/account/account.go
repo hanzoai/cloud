@@ -170,16 +170,26 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	}
 	o := ops{s: s}
 
-	// The five request pipelines, each declared once. `With` composes middleware
-	// around a leaf at registration time (limit(csrf(handler))) and carries into the
-	// typed registration, so a typed op is gated exactly as the untyped route beside
-	// it — a decorator that dropped the gate there would register the op ungated.
-	// The trailing Group is the path prefix these routes share, and each op's
-	// identity is that prefix composed with its leaf.
+	// The request pipelines. The trailing Group is the path prefix these routes
+	// share, and each op's identity is that prefix composed with its leaf.
+	//
+	// Every operation here is registered through the ROUTER the composer handed
+	// us, never through the bare zip app underneath it. The router keeps the
+	// program's own App and carries this prefix itself, so an op declared through
+	// it answers to the rule the composer installed over the whole program
+	// (serve.go's Toll) and its path is the address it actually answers at. A
+	// group taken off the bare app is a different App with an empty prefix, and an
+	// op declared there is outside both.
+	//
+	// The two middleware values below are for the AVATAR routes, which are raw
+	// handlers with no preamble to put a control in. They are not what controls the
+	// typed writes: `With` composes around the leaf HANDLER at registration time
+	// and around nothing else, while op.invoke and op.direct are built before the
+	// wrap and are what MCP, the call plane, the graph and the CLI call. The four
+	// typed writes therefore carry both controls themselves — see requestCaller.
 	limit, csrf := rateLimit(s.State.writesRL), requireCSRF(s)
-	open := app.Group(prefix)                     // reads: no gate
-	write := zapp.With(limit, csrf).Group(prefix) // money writes
-	guard := zapp.With(csrf).Group(prefix)        // a write that is not rate-limited
+	open := app.Group(prefix)  // reads
+	write := app.Group(prefix) // writes: the controls live in the operations
 
 	// The anti-CSRF token the embedded SPA echoes as X-CSRF-Token on every money
 	// write (csrf.go). Safe (read-only), same-origin.
@@ -219,7 +229,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// /v1/iam/onboard and serves its own first-run onboarding there. This is the
 	// richer operation and it is now reachable for the first time: it also creates
 	// an ADDITIONAL org for a caller who already has one, without moving them.
-	zip.Post(guard, "/orgs", o.onboard)
+	zip.Post(write, "/orgs", o.onboard)
 	// Console module embed-entitlement + reachability probe (embed.go).
 	zip.Get(open, "/embed", o.embedStatus)
 	// The crypto wallet top-up (POST /commerce/topup/wallet + GET /commerce/topup/rails)
@@ -254,7 +264,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// CSRF-guarded like the other account writes, and not rate-limited because a
 	// person dragging the size/density steps writes faster than a money cap allows.
 	zip.Get(open, "/appearance", o.getAppearance)
-	zip.Post(guard, "/appearance", o.setAppearance)
+	zip.Post(write, "/appearance", o.setAppearance)
 	return nil
 }
 
@@ -268,12 +278,54 @@ type ops struct{ s *cloud.Service[state] }
 // entirely by the caller's own validated principal.
 type noInput struct{}
 
-// requestCaller is resolveCaller for a typed op. Account's entire surface is the
-// signed-in caller's OWN account, and resolving them needs more of the validated
-// principal than the tenant: the user id (X-User-Id), the IAM username
-// (X-User-Name) and validated-ness itself, none of which principal.OrgFrom
-// carries. So this package reaches for the REQUEST, in this ONE function, and
-// every op asks it rather than reading headers of its own.
+// act says what an operation DOES, and that is what decides the controls it must
+// pass. It cannot be read off the HTTP method: over MCP, the call plane and the
+// graph every operation arrives as one POST, so the method describes the
+// TRANSPORT and says nothing about the operation.
+type act int
+
+const (
+	reads   act = iota // changes nothing
+	changes            // changes something: the anti-CSRF control
+	rotates            // changes the caller's LIVE CREDENTIAL: that control, and the frequency cap
+)
+
+// scoped and unscoped say whether an operation needs the caller's ORG resolved.
+// The key ops must act inside one; onboarding, appearance, embed and the token
+// mint also serve a first-run user who has none yet.
+const (
+	scoped   = true
+	unscoped = false
+)
+
+// requestCaller settles everything an account op needs before it acts: the
+// controls its act calls for, then the signed-in caller it acts AS. Every op
+// opens with it and none carries a copy, so a write cannot be written here
+// without answering what it does.
+//
+// Account's entire surface is the signed-in caller's OWN account, and resolving
+// them needs more of the validated principal than the tenant: the user id
+// (X-User-Id), the IAM username (X-User-Name) and validated-ness itself, none of
+// which principal.OrgFrom carries. So this package reaches for the REQUEST, in
+// this ONE function, and every op asks it rather than reading headers of its own.
+//
+// THE CONTROLS ARE HERE, and not only on the route, because a route is one of the
+// seams that reach an operation and not the only one. zip records the route's
+// handler and the op as two fields of one registry entry and wraps only the
+// handler, while MCP, the call plane (POST /.well-known/zip/op/<name>, which takes
+// a body a page can send as a Blob under a CORS-simple content type, and takes NO
+// body at all just as happily), the graph and the CLI call the op DIRECTLY. The
+// depth-0 identity middleware still authenticates the caller there, so without
+// this a signed-in tab's ambient cookie mints and revokes that person's sk- —
+// session-equivalent, per the key note above — from any page the CORS policy
+// admits. The route keeps the same control for the untyped avatar write, which has
+// no preamble to put it in: one rule, two call sites, never two rules.
+//
+// The anti-CSRF control runs BEFORE the frequency cap deliberately. Both refuse a
+// forged cross-origin write, but the cap keys on the VALIDATED principal — the
+// victim's — so charging the forgery to their bucket would let a page lock its
+// visitor out of their own key management. Refused first, it costs the victim
+// nothing.
 //
 // It fails closed off the HTTP path (the CLI's LocalInvoke, where there is no
 // request): no request, no attested caller, no account — the same refusal an
@@ -282,16 +334,27 @@ type noInput struct{}
 // The *zip.Ctx comes back with the caller because two ops need the request for
 // more than identity: issueCSRFToken pins Cache-Control on its response, and
 // embedStatus reads the SuperAdmin claim (X-User-IsAdmin) that lives in a header.
-func requestCaller(ctx context.Context, requireOwner bool) (caller, *zip.Ctx, bool) {
+func (o ops) requestCaller(ctx context.Context, does act, requireOwner bool, what string) (caller, *zip.Ctx, error) {
+	no := func(err error) (caller, *zip.Ctx, error) { return caller{}, nil, err }
 	c, ok := cloud.Request(ctx)
 	if !ok {
-		return caller{}, nil, false
+		return no(zip.ErrForbidden("sign in to " + what))
+	}
+	if does != reads {
+		if err := checkCSRF(o.s, c); err != nil {
+			return no(err)
+		}
+	}
+	if does == rotates {
+		if err := capped(o.s.State.writesRL, c); err != nil {
+			return no(err)
+		}
 	}
 	cr, ok := resolveCaller(c, requireOwner)
 	if !ok {
-		return caller{}, nil, false
+		return no(zip.ErrForbidden("sign in to " + what))
 	}
-	return cr, c, true
+	return cr, c, nil
 }
 
 // ── caller resolution (the tenancy boundary) ─────────────────────────────────
@@ -489,9 +552,9 @@ func revokeClass(in *keyTypeIn, c *zip.Ctx) (string, bool) {
 // A transient IAM read failure reports an empty set rather than a 5xx, so the
 // page shows the honest empty state and never a fabricated key.
 func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
-	cr, c, ok := requestCaller(ctx, true)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to manage API keys")
+	cr, c, err := o.requestCaller(ctx, reads, scoped, "manage API keys")
+	if err != nil {
+		return nil, err
 	}
 	if !o.s.State.iam.configured() {
 		return nil, notConfigured("API key management")
@@ -564,9 +627,9 @@ func prefixOf(key string) string {
 //
 // Example: {"type": "publishable"}
 func (o ops) mintKey(ctx context.Context, in *keyTypeIn) (*mintedKey, error) {
-	cr, c, ok := requestCaller(ctx, true)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to manage API keys")
+	cr, c, err := o.requestCaller(ctx, rotates, scoped, "manage API keys")
+	if err != nil {
+		return nil, err
 	}
 	if !o.s.State.iam.configured() {
 		return nil, notConfigured("API key management")
@@ -616,9 +679,9 @@ type revokedKey struct {
 //
 // Example: {"type": "publishable"}
 func (o ops) revokeKey(ctx context.Context, in *keyTypeIn) (*revokedKey, error) {
-	cr, c, ok := requestCaller(ctx, true)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to manage API keys")
+	cr, c, err := o.requestCaller(ctx, rotates, scoped, "manage API keys")
+	if err != nil {
+		return nil, err
 	}
 	if !o.s.State.iam.configured() {
 		return nil, notConfigured("API key management")
@@ -723,9 +786,10 @@ func hasHomeOrg(ctx context.Context, iam *iamClient, cr caller) (bool, error) {
 //
 // Example: {"name": "Acme"}
 func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) {
-	cr, c, ok := requestCaller(ctx, false) // first-run onboarding allows a zero-org user
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to create an organization")
+	// unscoped: first-run onboarding serves a caller with no org yet.
+	cr, c, err := o.requestCaller(ctx, changes, unscoped, "create an organization")
+	if err != nil {
+		return nil, err
 	}
 	s := o.s
 	if !s.State.iam.configured() {

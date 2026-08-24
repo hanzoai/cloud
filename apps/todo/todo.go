@@ -50,6 +50,7 @@
 package todo
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -281,14 +282,49 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 }
 
+// changes and reads say what an operation DOES, so no call site carries a bare
+// boolean. It cannot be read off the HTTP method: over the MCP door every
+// operation arrives as one POST to /mcp, so the method describes the transport
+// and says nothing about the operation.
+const (
+	changes = true
+	reads   = false
+)
+
+// csrf asks the estate's ONE anti-CSRF control (apps/account) from inside a typed
+// op, for the operations that change a board.
+//
+// IT IS HERE AND NOT ONLY ON THE GROUP, because a typed op is TWO fields of one
+// registry entry — the route's handler and the op — and zip wraps only the
+// handler. Six seams reach the op: the REST route, MCP, the call plane, GraphQL,
+// the CLI and Here. A tools/call at POST /mcp therefore never meets
+// requireCSRFOnWrites below, while the depth-0 identity middleware still
+// authenticates the caller. The preamble is the one place every seam passes
+// through; the group keeps the same control for the untyped routes, which have no
+// preamble to put it in. One rule, two ways to ask it, never two rules.
+//
+// source_test.go measures all three writes on both doors.
+func csrf(ctx context.Context, act bool) error {
+	if act == reads {
+		return nil
+	}
+	return account.CSRF(ctx)
+}
+
 // unsafe is the set of methods that CHANGE a board. Everything else is a read.
 var unsafe = map[string]bool{
 	http.MethodPost: true, http.MethodPut: true,
 	http.MethodPatch: true, http.MethodDelete: true,
 }
 
-// requireCSRFOnWrites is the anti-CSRF gate for every todo write, installed
-// ONCE on the group rather than six times on the routes.
+// requireCSRFOnWrites is the same control on the ROUTE, for the routes that are
+// not typed ops and so have no preamble to put it in.
+//
+// It is not what protects the three typed writes — csrf above is, because this
+// never runs for them off the REST door. It stays because a raw handler under
+// /v1/todo has only this: the three repository-lifecycle refusals today, and
+// whatever untyped route is written next, which would otherwise be the one write
+// on this surface with no control at all.
 //
 // THREAT. A browser authenticates this surface from an httpOnly session COOKIE,
 // which is AMBIENT: a page on any other origin that can reach us carries it too.
@@ -306,8 +342,10 @@ var unsafe = map[string]bool{
 // CONSOLE_CSRF_KEY. This does not re-implement any of that; it only decides WHEN
 // to apply it.
 //
-// ON THE GROUP, BY METHOD, not per route: a gate written six times is a gate the
-// seventh write forgets. Reads pass through untouched (a GET changes nothing, and
+// BY METHOD, which is sound HERE and only here: this reads the path the
+// TRANSPORT carried, so it runs on a real /v1/todo/* request whose method really
+// is the operation. That is exactly what an op cannot assume — hence the act
+// constant above. Reads pass through untouched (a GET changes nothing, and
 // requiring a token to list a board would break every server-side reader), and
 // account's own gate is a no-op for a Bearer/gateway caller, which cannot be
 // CSRF'd — so this costs an API client nothing.

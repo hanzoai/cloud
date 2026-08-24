@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -630,6 +632,479 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 			t.Errorf("header-auth write = %d, want 200 (%s)", code, raw)
 		}
 	})
+}
+
+// ── the anti-CSRF gate, on every door ────────────────────────────────────────
+
+// A typed op is TWO fields of one registry entry — the route's handler and the
+// op — and zip wraps only the handler. Six seams reach the op: the REST route,
+// MCP, the call plane, GraphQL, the CLI and Here. The test above proves the gate
+// on the seam middleware DOES cover; this one proves it on a seam middleware
+// cannot reach, which is why todo.go's csrf lives in the ops' own preambles.
+
+// tab makes one request the way a SIGNED-IN TAB does: an ambient session cookie,
+// the identity headers the boundary would have minted, and whatever credential
+// header the row under test carries.
+func tab(t *testing.T, app *zip.App, method, path string, body any, head map[string]string) (int, string) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range head {
+		rq.Header.Set(k, v)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(raw)
+}
+
+// mcpCall makes one JSON-RPC call at the MCP door — the seam that reaches the op
+// without passing the route's handler.
+func mcpCall(t *testing.T, app *zip.App, method string, params map[string]any, head map[string]string) string {
+	t.Helper()
+	raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+	rq := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(raw))
+	rq.Header.Set("Content-Type", "application/json")
+	for k, v := range head {
+		rq.Header.Set(k, v)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
+}
+
+// planeCall makes one call at the op-CALL PLANE, the fourth seam. It carries NO
+// body, which is the cheapest form of the request and needs no encoder at all:
+// zip decodes nothing when there is nothing to decode and runs the op on a zero
+// input. The content type is what a no-preflight fetch sends, and zip does not
+// read it here — nothing about the encoding is a control.
+func planeCall(t *testing.T, app *zip.App, id string, head map[string]string) (int, string) {
+	t.Helper()
+	rq := httptest.NewRequest(http.MethodPost, zip.CallPath+id, nil)
+	for k, v := range head {
+		rq.Header.Set(k, v)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("POST %s%s: %v", zip.CallPath, id, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+// graphCall makes one call at the GRAPH door, the third seam that reaches an op
+// without passing the route's handler. It is browser-reachable exactly as MCP is:
+// a JSON body under a CORS-simple content type, so no preflight.
+func graphCall(t *testing.T, app *zip.App, query string, head map[string]string) string {
+	t.Helper()
+	raw, _ := json.Marshal(map[string]any{"query": query})
+	rq := httptest.NewRequest(http.MethodPost, "/.well-known/graph", bytes.NewReader(raw))
+	for k, v := range head {
+		rq.Header.Set(k, v)
+	}
+	resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("POST /.well-known/graph: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
+}
+
+// graphQuery renders one op as the graph request that reaches it.
+//
+// The field is the op's OWN id — the same id the MCP tool carries, because both
+// are one registry entry projected twice — so a door is added to the table below
+// without a second list of names to keep in step. Every Out in that table carries
+// `number`, which is the one selection this needs.
+func graphQuery(kind, field string, args map[string]any) string {
+	var b strings.Builder
+	b.WriteString(kind + " { " + field + "(")
+	first := true
+	for _, k := range slices.Sorted(maps.Keys(args)) {
+		if !first {
+			b.WriteString(", ")
+		}
+		first = false
+		v, _ := json.Marshal(args[k]) // a JSON scalar literal IS a GraphQL one
+		b.WriteString(k + ": " + string(v))
+	}
+	b.WriteString(") { number } }")
+	return b.String()
+}
+
+// claimBoard and claimNum name the work item a claim acts on. It is a LOCAL
+// INDEX row, not a forge issue: claimIssue is the one write that does not go
+// through onForge, so it is also the one whose refusal cannot be read off the
+// forge stub's log.
+const (
+	claimBoard = "ENG"
+	claimNum   = 1
+)
+
+// seedClaim puts a real, UNHELD work item in the index a claim reads.
+//
+// Without it the whole claim column of the table below is vacuous: an ungated
+// claim of a row that does not exist answers "issue N not found" and changes
+// nothing, so "nothing was taken" would be true of the gate and of its absence
+// alike. Measured — before the gate existed, the claim of an empty index came
+// back 404 while the two forge writes went through.
+func seedClaim(t *testing.T) {
+	t.Helper()
+	st, err := storeFor(mounted, "hanzo", claimBoard)
+	if err != nil {
+		t.Fatalf("open the index: %v", err)
+	}
+	if err := st.CreateProject(t.Context(), Project{
+		ID: "p_eng", Org: "hanzo", Key: claimBoard, Name: "Engineering",
+	}); err != nil {
+		t.Fatalf("seed the board: %v", err)
+	}
+	got, err := st.CreateIssue(t.Context(), Issue{
+		ID: "i_seed", ProjectID: "p_eng", Org: "hanzo", Title: "unheld work", Status: "todo",
+	})
+	if err != nil {
+		t.Fatalf("seed the work item: %v", err)
+	}
+	if got.Number != claimNum || got.Assignee != "" {
+		t.Fatalf("the seeded work item is #%d held by %q, want #%d held by nobody",
+			got.Number, got.Assignee, claimNum)
+	}
+}
+
+// claimRow reads that work item back. A claim READS the index before it writes,
+// so "the store was never called" says nothing about whether the claim landed;
+// the state the row is left in is the only honest answer.
+func claimRow(t *testing.T) Issue {
+	t.Helper()
+	st, err := storeFor(mounted, "hanzo", claimBoard)
+	if err != nil {
+		t.Fatalf("open the index: %v", err)
+	}
+	rows, err := st.ListIssues(t.Context(), "hanzo", "", IssueFilter{})
+	if err != nil {
+		t.Fatalf("read the index: %v", err)
+	}
+	for _, r := range rows {
+		if r.Number == claimNum {
+			return r
+		}
+	}
+	t.Fatalf("the seeded work item is gone, so nothing below is measuring a claim")
+	return Issue{}
+}
+
+// TestEveryWriteIsGatedOnEveryDoorAndEveryHeader.
+//
+// The gate has to hold across THREE independent axes, and a test that fixes two
+// of them measures almost nothing:
+//
+//   - the DOOR. A typed op is not one entry point. zip wraps the route's handler
+//     and calls the op directly over MCP, the call plane, GraphQL, the CLI and
+//     Here — so the gate lives in the ops' own preambles, and every door has to
+//     be shown to reach it. Worse than skipped: cloud.Router.Group installs at
+//     the ROOT gated on path, so a /v1/todo gate runs on /mcp and immediately
+//     continues, while the depth-0 identity middleware still authenticates the
+//     caller. FOUR of the six are exercised here — REST, MCP, the graph and
+//     the call plane, which are the four a browser can reach. The plane was
+//     written off once as "a zapenc body no page can produce", and that was
+//     wrong twice: a page can build those bytes (the encoder is a public
+//     module) and send them as a Blob under a CORS-simple content type, and it
+//     does not have to, because zip decodes NOTHING when the body is empty and
+//     runs the op on a zero input. `fetch(url, {method:'POST',
+//     credentials:'include'})` reaches it. The CLI and Here carry no request at
+//     all, and TestAWriteOffTheHTTPPathIsRefused covers that shape.
+//   - the OPERATION. All three writes, because they do not share one preamble:
+//     the two forge writes go through onForge and the claim reads the local
+//     index, so a suite exercising only the forge would not notice the claim
+//     ungated.
+//   - the HEADER. The gate steps aside for a caller holding an explicit
+//     credential, and "explicit" has to mean exactly what the identity boundary
+//     reads. It is a CROSS-header precedence — bearer(Authorization), then
+//     bearer(X-Authorization), then basic(Authorization) — so a value that is a
+//     credential under one header and not the other is precisely where the gate
+//     and the boundary come apart.
+//
+// Every row is a signed-in tab: a real session cookie, which is ambient, and no
+// CSRF token. The three writes must be refused, and must leave the forge and the
+// index untouched.
+func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
+	// basic64 is `user:password` — a WELL-FORMED Basic credential. Under
+	// Authorization the boundary reads it and the caller is explicit; under
+	// X-Authorization the boundary never tries Basic at all and falls through to
+	// the cookie, so a gate reading it as explicit would excuse a
+	// cookie-authenticated write.
+	const basic64 = "Basic dXNlcjpwYXNzd29yZA=="
+	for _, cred := range []struct {
+		name  string
+		value string
+		// explicit names the headers under which the identity boundary reads this
+		// value AS a credential. Everywhere else the request is ambient and gated.
+		explicit []string
+	}{
+		{"no credential header", "", nil},
+		{"junk", "x", nil},
+		{"bare Bearer", "Bearer", nil},
+		{"another scheme", "Token abc", nil},
+		{"bare Basic", "Basic", nil},
+		{"the string null", "null", nil},
+		{"padded Bearer", "  Bearer  ", nil},
+		{"well-formed Bearer", "Bearer hk-not-a-real-key", []string{"Authorization", "X-Authorization"}},
+		{"well-formed Basic", basic64, []string{"Authorization"}},
+	} {
+		for _, header := range []string{"Authorization", "X-Authorization"} {
+			if cred.value == "" && header == "X-Authorization" {
+				continue // the same row as "no credential header" on the other name
+			}
+			explicit := slices.Contains(cred.explicit, header)
+			t.Run(cred.name+"/"+header, func(t *testing.T) {
+				f := newForge(t)
+				f.visible["alice"] = []string{"hanzoai"}
+				f.repo("hanzoai", "api", issue(7, "card", "open", "todo"))
+				app := mountForge(t, f)
+				seedClaim(t)
+
+				head := map[string]string{
+					"Cookie":             "hanzo_iam_token=session-value",
+					"X-Org-Id":           "hanzo",
+					"X-User-Id":          "u_alice",
+					authz.HeaderUserName: "alice",
+				}
+				if cred.value != "" {
+					head[header] = cred.value
+				}
+
+				ops := []struct {
+					name    string
+					tool    string
+					method  string
+					path    string
+					body    any
+					args    map[string]any
+					changes bool
+				}{
+					{"create", "post_todo_projects_by_key_issues",
+						http.MethodPost, "/v1/todo/projects/api/issues",
+						map[string]any{"title": "filed by a cross-site page"},
+						map[string]any{"key": "api", "title": "filed by a cross-site page"}, true},
+					{"update", "patch_todo_projects_by_key_issues_by_num",
+						http.MethodPatch, "/v1/todo/projects/api/issues/7",
+						map[string]any{"status": "done"},
+						map[string]any{"key": "api", "num": 7, "status": "done"}, true},
+					{"claim", "post_todo_projects_by_key_issues_by_num_claim",
+						http.MethodPost, "/v1/todo/projects/" + claimBoard + "/issues/1/claim",
+						nil, map[string]any{"key": claimBoard, "num": claimNum}, true},
+					{"read", "get_todo_projects_by_key_issues_by_num",
+						http.MethodGet, "/v1/todo/projects/api/issues/7",
+						nil, map[string]any{"key": "api", "num": 7}, false},
+				}
+
+				// The tools are really there, under these names. Otherwise every MCP
+				// row below asserts a refusal that an unknown tool would have produced
+				// anyway.
+				list := mcpCall(t, app, "tools/list", nil, nil)
+				for _, op := range ops {
+					if !strings.Contains(list, `"`+op.tool+`"`) {
+						t.Fatalf("%s is not on the MCP door, so the mcp rows assert nothing:\n%s", op.tool, list)
+					}
+				}
+
+				for _, door := range []string{"rest", "mcp", "graph", "plane"} {
+					for _, op := range ops {
+						f.mu.Lock()
+						before := len(f.writes)
+						f.mu.Unlock()
+						was := claimRow(t)
+
+						// A cross-origin POST with a CORS-simple content type: no
+						// preflight, so nothing stops a browser sending it.
+						cross := map[string]string{"Origin": "https://evil.example"}
+						for k, v := range head {
+							cross[k] = v
+						}
+						cross["Content-Type"] = "text/plain;charset=UTF-8"
+
+						var code int
+						var body string
+						switch door {
+						case "rest":
+							code, body = tab(t, app, op.method, op.path, op.body, head)
+						case "mcp":
+							body = mcpCall(t, app, "tools/call", map[string]any{
+								"name": op.tool, "arguments": op.args,
+							}, cross)
+						case "plane":
+							code, body = planeCall(t, app, op.tool, cross)
+						default:
+							kind := "mutation"
+							if !op.changes {
+								kind = "query"
+							}
+							body = graphCall(t, app, graphQuery(kind, op.tool, op.args), cross)
+						}
+						f.mu.Lock()
+						reached := append([]write(nil), f.writes[before:]...)
+						f.mu.Unlock()
+						now := claimRow(t)
+
+						switch {
+						case op.changes && !explicit:
+							// THE REFUSAL ITSELF, on whichever door, and in the words of
+							// THIS gate — so a refusal for some other reason cannot stand
+							// in for one that never happened. MCP answers a handler error
+							// as isError content rather than a status, so that door is
+							// asserted on the words.
+							if (door == "rest" || door == "plane") && code != http.StatusForbidden {
+								// 403 and not 404: on the plane an unknown op id answers
+								// "unknown op", which is also a refusal and proves nothing.
+								t.Errorf("%s %s with %s: %q and a session cookie = %d %q, want 403",
+									door, op.name, header, cred.value, code, body)
+							}
+							if door != "rest" && !strings.Contains(body, "CSRF") {
+								t.Errorf("%s %s with %s: %q and a session cookie answered %q, want the anti-CSRF refusal",
+									door, op.name, header, cred.value, body)
+							}
+							// AND IT NEVER HAPPENED. A gate that answers 403 after the write
+							// is an audit trail, and the row the forge kept would carry the
+							// victim's own name.
+							//
+							// Errorf and not Fatalf, which is the difference between a matrix
+							// and a tripwire: the doors are the axis being measured, and
+							// stopping at the first one that leaks says nothing about the two
+							// after it. Both sides of the state are re-read per cell, so a
+							// leak in one door does not corrupt the next one's baseline.
+							if len(reached) != 0 {
+								t.Errorf("SECURITY: %s %s with %s: %q reached the forge from a cross-site page with no CSRF token: %+v",
+									door, op.name, header, cred.value, reached)
+							}
+							if now.Assignee != was.Assignee || now.Status != was.Status {
+								t.Errorf("SECURITY: %s %s with %s: %q took work item #%d from a cross-site page with no CSRF token (%q/%q -> %q/%q)",
+									door, op.name, header, cred.value, claimNum, was.Assignee, was.Status, now.Assignee, now.Status)
+							}
+						case op.changes && explicit:
+							// THE CONTROL, and the whole answer to "was any of this
+							// vacuous". The boundary reads this value as a credential, so
+							// the gate steps aside — and the very same request then really
+							// does file an issue, close one, and take somebody's work. A
+							// refusal asserted above is therefore a refusal of something
+							// that would otherwise have landed.
+							if op.name == "claim" {
+								// Held by the CALLER this request names — a claim binds work
+								// to whoever is asking and never to an argument.
+								if now.Assignee != head["X-User-Id"] || now.Status != "in_progress" {
+									t.Errorf("%s claim with an explicit credential left #%d as %q/%q, want held by %s and in_progress — %s",
+										door, claimNum, now.Assignee, now.Status, head["X-User-Id"], body)
+								}
+								continue
+							}
+							if door == "plane" {
+								// A bodyless plane call carries no title and no issue
+								// number, so the op refuses on its own input rather than
+								// writing. What matters is WHOSE refusal it is: past the
+								// control, and past the by-name lookup — the two ways this
+								// row could have been measuring nothing.
+								if strings.Contains(body, "CSRF") || strings.Contains(body, "unknown op") {
+									t.Errorf("plane %s with an explicit credential answered %d %q — "+
+										"the plane refusal above was not the control", op.name, code, body)
+								}
+								continue
+							}
+							if len(reached) == 0 {
+								t.Errorf("%s %s with an explicit credential reached the forge with nothing: %d %q — "+
+									"the refusals above are then refusals of a write that never worked", door, op.name, code, body)
+							}
+						default:
+							// Reads are not gated, on either door: a read changes nothing,
+							// and requiring a token to open a board would mean fetching one
+							// before the page that fetches one.
+							if door == "rest" && code != http.StatusOK {
+								t.Errorf("rest read with %s: %q = %d %q, want 200", header, cred.value, code, body)
+							}
+							if door == "plane" && strings.Contains(body, "CSRF") {
+								t.Errorf("plane read with %s: %q = %d %q, want the read to pass — "+
+									"a read changes nothing", header, cred.value, code, body)
+							}
+							if door != "rest" && (strings.Contains(body, `"isError":true`) || strings.Contains(body, "CSRF")) {
+								t.Errorf("%s read with %s: %q answered %q, want the issue", door, header, cred.value, body)
+							}
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
+// TestAWriteOffTheHTTPPathIsRefused covers the two seams the matrix cannot drive
+// over HTTP: the CLI's local invoke and Here, which hand an op a context with no
+// request behind it.
+//
+// There is no ambient credential to abuse there and therefore no CSRF, so this is
+// not the same threat — it pins the DIRECTION. "A write is gated" has to be a
+// property of the control itself rather than of whichever check happens to run
+// after it, or the day a preamble is reordered the fail-closed answer comes from
+// nowhere.
+func TestAWriteOffTheHTTPPathIsRefused(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(7, "card", "open", "todo"))
+	_ = mountForge(t, f)
+	seedClaim(t)
+	o := ops{s: mounted}
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"create", func() error { _, e := o.forgeCreateIssue(t.Context(), &newIssue{Key: "api", Title: "x"}); return e }},
+		{"update", func() error {
+			_, e := o.forgePatchIssue(t.Context(), &issueEdit{Key: "api", Num: 7, Status: "done"})
+			return e
+		}},
+		{"claim", func() error {
+			_, e := o.claimIssue(t.Context(), &issueClaim{Key: claimBoard, Num: claimNum})
+			return e
+		}},
+	} {
+		err := tc.call()
+		if err == nil {
+			t.Errorf("%s off the HTTP path succeeded — a write with no attested caller must refuse", tc.name)
+			continue
+		}
+		// NAMED, not merely non-nil. scopeForge and claimIssue each refuse an
+		// unattested caller on their own, so `err != nil` is true whether or not
+		// the control ran — the ordering onForge claims (before a credential is
+		// read, before the deadline starts, before the forge hears anything)
+		// would survive being deleted. The control's own words are the only
+		// evidence that it is what answered.
+		if !strings.Contains(err.Error(), account.Unattested) {
+			t.Errorf("%s off the HTTP path was refused by something other than the control: %v", tc.name, err)
+		}
+	}
+	f.mu.Lock()
+	reached := len(f.writes)
+	f.mu.Unlock()
+	if reached != 0 {
+		t.Errorf("%d writes with no attested caller reached the forge", reached)
+	}
+	if got := claimRow(t); got.Assignee != "" {
+		t.Errorf("work item #%d was taken by %q with no attested caller", claimNum, got.Assignee)
+	}
 }
 
 // ── the surviving store ──────────────────────────────────────────────────────

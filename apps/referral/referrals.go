@@ -52,6 +52,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/internal/mint"
@@ -194,10 +195,23 @@ func isSafeMethod(m string) bool {
 	return m == http.MethodGet || m == http.MethodHead
 }
 
-// requireAdmin is the SuperAdmin gate on the two /v1/admin leaves. SuperAdmin-ness
-// is a HEADER, which a typed op cannot see, so the check runs here — and running it
-// here also keeps the 403 ahead of the body decode, exactly where the untyped
-// handlers had it.
+// sudo is the SuperAdmin fact, read where every way into an operation passes: its
+// own preamble. cloud.AuthorityIn is the ONE extraction and it fails closed off the
+// HTTP path.
+//
+// The two admin ops ask this rather than relying on requireAdmin below, and the
+// difference is the whole of what a route is. A typed op and its route's handler
+// are two fields of one registry entry; zip wraps the handler, so requireAdmin runs
+// for REST and for nothing else — while MCP, the call plane and the graph invoke
+// the op directly with the caller already authenticated. Without this, any
+// signed-in caller reached the cross-tenant attribution directory and the
+// platform-wide sweep by name.
+func sudo(ctx context.Context) bool { return cloud.AuthorityIn(ctx).Super }
+
+// requireAdmin is the same fact on the ROUTE, and it stays for the ORDER it gives:
+// a non-admin sending a body that will not parse is answered 403, never the
+// decoder's 400, exactly where the untyped handlers had it. It is not what makes
+// these ops SuperAdmin-only — sudo above is.
 func requireAdmin() zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
@@ -327,6 +341,18 @@ type claimView struct {
 //
 // Example: {"code": "H4NZ0ABC"}
 func (o referralOps) claim(ctx context.Context, body *claimRequest) (*claimView, error) {
+	// FIRST-TOUCH AND PERMANENT: an org can be referred once, ever, so this write
+	// cannot be undone by repeating it or by anything downstream. That is exactly
+	// the write a page on another origin wants, because the ambient session cookie
+	// a browser authenticates this surface with rides along on its request too — so
+	// a visitor's org is attributed to whoever's code the page names, once, forever.
+	//
+	// Asked here rather than on the route because a route is one of the seams that
+	// reach an operation: zip wraps the route's handler, while MCP, the call plane,
+	// the graph and the CLI call the op with the caller already authenticated.
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	s := o.s
 	refereeOrg, ok := principal.OrgFrom(ctx)
 	if !ok {
@@ -414,6 +440,9 @@ type adminBonusesEnvelope struct {
 // referrers, conversion) is a different surface, GET /v1/admin/affiliate/referrals,
 // owned by the affiliates subsystem over the shared attribution spine.
 func (o referralOps) adminList(ctx context.Context, in *adminListIn) (*adminBonusesEnvelope, error) {
+	if !sudo(ctx) {
+		return nil, zip.ErrForbidden("SuperAdmin required")
+	}
 	s := o.s
 	rows, err := s.State.store.ListAll(ctx, adminLimitOf(in.Limit))
 	if err != nil {
@@ -467,6 +496,9 @@ type sweepEnvelope struct {
 //
 // It reads nothing from the caller — the counters it returns are the whole result.
 func (o referralOps) adminSweep(ctx context.Context, _ *noIn) (*sweepEnvelope, error) {
+	if !sudo(ctx) {
+		return nil, zip.ErrForbidden("SuperAdmin required")
+	}
 	s := o.s
 	pending, err := s.State.store.ListPending(ctx, "", sweepLimit)
 	if err != nil {
