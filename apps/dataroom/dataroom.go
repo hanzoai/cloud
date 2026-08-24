@@ -574,9 +574,17 @@ func write(s *cloud.Service[state], c *zip.Ctx, org, route string, params, query
 // Vary names the credentials the SAME address answers differently under: an owner
 // reading /documents/:id/file and another org reading the identical URL get
 // different bytes, so a cache that stores anyway must still not cross them.
+//
+// It is APPENDED and never assigned. Vary is a LIST, and the edge has already
+// named Origin on it by the time a request arrives here: every CORS answer
+// depends on Origin, including the one that carries no CORS header at all
+// (middleware_edge.go). SetHeader overwrites, so assigning drops that and lets a
+// shared cache hand one origin the answer computed for another. fiber's Vary
+// appends and is idempotent, which is what that middleware uses for the same
+// reason.
 func held(c *zip.Ctx) {
 	c.SetHeader("Cache-Control", "private, no-store")
-	c.SetHeader("Vary", "Authorization, Cookie")
+	c.Fiber().Vary("Authorization", "Cookie")
 }
 
 // decodeBody decodes a JSON request body when readBody is set (bounded by maxBody).
