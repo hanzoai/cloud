@@ -5,12 +5,12 @@
 
 package org
 
-// checkpoint_test.go pins the crypto-integration contract: a fenced ship must fold the
-// WAL into the real on-disk file (and, on the pure-Go encryption envelope, re-encrypt it)
-// BEFORE reading the bytes it ships — otherwise it ships STALE state and a takeover reads
-// a lost acked write. It proves the WithCheckpoint client runs on every Sync before the
-// read, that the shipped snapshot carries the just-committed write, and that a failing
-// checkpoint fails the ship CLOSED (never a stale ship acked).
+// checkpoint_test.go pins the crypto contract: on a backend that defers encryption, a
+// fenced ship must re-encrypt the real on-disk file BEFORE reading the bytes it ships —
+// otherwise it ships STALE state and a takeover reads a lost acked write. It proves the
+// WithSeal client runs on every Sync before the read, that the shipped snapshot carries
+// the just-committed write, and that a failing seal fails the ship CLOSED (never a stale
+// ship acked). Folding the WAL is the codec's own step and is proven in pin_test.go.
 
 import (
 	"context"
@@ -23,24 +23,21 @@ import (
 	"github.com/hanzoai/vfs/replica"
 )
 
-// TestSyncCheckpointsBeforeShip: with an injected checkpoint (standing in for the
-// envelope's re-encrypting Checkpoint), Sync must invoke it before reading the file, and
-// the durable object must then carry the committed write — i.e. the ship is FRESH.
-func TestSyncCheckpointsBeforeShip(t *testing.T) {
+// TestSyncSealsBeforeShip: with an injected seal (standing in for the envelope's
+// re-encrypting Checkpoint), Sync must invoke it before reading the file, and the durable
+// object must then carry the committed write — i.e. the ship is FRESH.
+func TestSyncSealsBeforeShip(t *testing.T) {
 	ctx := context.Background()
 	cs := newFakeCondStore()
 	const orgID = "acme"
 	dbKey := replica.DBPath(orgID, "", "research")
 
-	var checkpoints atomic.Int64
+	var seals atomic.Int64
 	dy := NewDurability(cs, &liveView{self: "solo", set: []Member{{ID: "solo"}}}, nil,
-		WithCheckpoint(func(ctx context.Context, db *sql.DB) error {
-			// Do the real WAL fold (the envelope would ALSO re-encrypt here) so the file
-			// read that follows sees the latest committed page, then record the call.
-			if _, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
-				return err
-			}
-			checkpoints.Add(1)
+		WithSeal(func(*sql.DB) error {
+			// The envelope would re-encrypt the real path here; the codec has already
+			// folded the WAL, so recording the call is all this stands in for.
+			seals.Add(1)
 			return nil
 		}))
 	d := dy.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
@@ -53,8 +50,8 @@ func TestSyncCheckpointsBeforeShip(t *testing.T) {
 	if acked, err := d.Sync(ctx); err != nil || !acked {
 		t.Fatalf("sync: acked=%v err=%v", acked, err)
 	}
-	if checkpoints.Load() == 0 {
-		t.Fatal("Sync must run the injected checkpoint before shipping (envelope re-encrypt point)")
+	if seals.Load() == 0 {
+		t.Fatal("Sync must run the injected seal before shipping (envelope re-encrypt point)")
 	}
 	// The shipped durable object carries the committed write — the ship was fresh, not
 	// stale. (On the envelope backend this is exactly what guards against shipping stale
@@ -64,17 +61,17 @@ func TestSyncCheckpointsBeforeShip(t *testing.T) {
 	}
 }
 
-// TestSyncFailsClosedOnCheckpointError: if the checkpoint (envelope re-encrypt) fails, the
-// ship must NOT proceed — a stale snapshot shipped as complete is a silent lost write. The
-// write is not acknowledged and the durable object is untouched.
-func TestSyncFailsClosedOnCheckpointError(t *testing.T) {
+// TestSyncFailsClosedOnSealError: if the seal (envelope re-encrypt) fails, the ship must
+// NOT proceed — a stale snapshot shipped as complete is a silent lost write. The write is
+// not acknowledged and the durable object is untouched.
+func TestSyncFailsClosedOnSealError(t *testing.T) {
 	ctx := context.Background()
 	cs := newFakeCondStore()
 	const orgID = "acme"
 	dbKey := replica.DBPath(orgID, "", "research")
 
 	dy := NewDurability(cs, &liveView{self: "solo", set: []Member{{ID: "solo"}}}, nil,
-		WithCheckpoint(func(context.Context, *sql.DB) error {
+		WithSeal(func(*sql.DB) error {
 			return fmt.Errorf("envelope re-encrypt failed")
 		}))
 	d := dy.For(testNS(orgID), "research", dbKey, filepath.Join(t.TempDir(), "research.db"))
@@ -86,9 +83,9 @@ func TestSyncFailsClosedOnCheckpointError(t *testing.T) {
 	putKV(t, db, "k1", "v1")
 	acked, err := d.Sync(ctx)
 	if acked || err == nil {
-		t.Fatalf("a failed checkpoint must fail the ship closed: acked=%v err=%v", acked, err)
+		t.Fatalf("a failed seal must fail the ship closed: acked=%v err=%v", acked, err)
 	}
 	// Fail-closed guarantees no stale ship: Sync errors out of produce() BEFORE any
 	// fenced Put, so the write is neither acknowledged nor shipped — the successor will
-	// never read a snapshot that predates the checkpoint that could not run.
+	// never read a snapshot that predates the seal that could not run.
 }
