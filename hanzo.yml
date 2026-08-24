@@ -429,6 +429,13 @@ test:
       # -tags: the cgo floor above. CGO_ENABLED=1 without sqlite_math_functions
       # cannot compile the 47 packages that reach hanzoai/base/core, so this step
       # reported "[build failed]" for them instead of running their tests.
+      # The anti-forgery key every process that verifies the console token must
+      # hold. On a pod it comes from KMS; a test run has no KMS and no boot, so
+      # the suite declares it here — once, for every package — rather than each
+      # package carrying a copy. A key already in the environment wins, so a real
+      # one is never overridden. Mount refuses without it, which is the point:
+      # the refusal is what makes a process holding a key nobody else holds say so.
+      export CONSOLE_CSRF_KEY="${CONSOLE_CSRF_KEY:-ZGV2LWNzcmYta2V5LWZvci10ZXN0cy1vbmx5LTAwMDA=}"
       go test -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
         -skip 'TestRecord_DebitsFinanceInProcess|TestIndexerUnreachableHonestEmpty' \
         ./...
