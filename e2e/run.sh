@@ -122,6 +122,12 @@ fi
 # long-lived key needs to exist in the tree. (A pinned key + a stale data dir is
 # the ONE combination that breaks — "unwrap DEK: message authentication failed".)
 export CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)"
+# The anti-forgery key is ONE key for the whole boot. A CSRF token is minted by
+# GET /v1/account/csrf in one process and checked in another, so an app that
+# resolves a key of its own can never accept a token anybody else minted — and
+# every app that checks one REFUSES TO MOUNT rather than hold a private key.
+# Random for the same reason the master key is: nothing outlives this run.
+export CONSOLE_CSRF_KEY="$(head -c 32 /dev/urandom | base64 -w0)"
 export CLOUD_DATA_DIR="$DATA_DIR"
 export CLOUD_ZAP_LISTEN=":$ZAP_PORT"
 export CLOUD_TASKS_GATED_PORT="$TASKS_GATED_PORT"
