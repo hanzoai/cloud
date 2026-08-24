@@ -298,7 +298,7 @@ func rec(t *testing.T, app *zip.App, method, room, bearer string) (int, recordin
 	return resp.StatusCode, out, string(raw)
 }
 
-// ── the door ─────────────────────────────────────────────────────────────────
+// ── the endpoint ─────────────────────────────────────────────────────────────────
 
 // TestRecordRefusesAnyoneTheRoomWouldNot is the fail-closed table, and it is the
 // test this whole file exists for.
@@ -306,8 +306,8 @@ func rec(t *testing.T, app *zip.App, method, room, bearer string) (int, recordin
 // A recording is a durable artifact of other people's conversation, so the rule is
 // that only somebody the room would ADMIT may start, stop or read one — the same
 // decision /v1/meet/getToken makes. Every row below breaks exactly one thing that
-// decision turns on, and each is run against all three methods, because three doors
-// onto one rule is three chances to leave one open.
+// decision turns on, and each is run against all three methods, because three entry
+// points onto one rule is three chances to leave one open.
 //
 // THE MEDIA SERVER IS ASSERTED UNTOUCHED. Without that, a surface that authorized
 // AFTER starting a recording would pass every row here: the caller would still get
@@ -353,7 +353,7 @@ func TestRecordRefusesAnyoneTheRoomWouldNot(t *testing.T) {
 		{"not a member of anything", roomIn(workspaceA), holds(nil), member},
 		// The authority answered with a row that seats nobody. getToken refuses it
 		// because LiveKit cannot seat an empty identity; this refuses it because the
-		// two doors onto one room must not disagree about who is in it.
+		// two entry points onto one room must not disagree about who is in it.
 		{"the row names no account", roomIn(workspaceA), seats(""), member},
 	}
 	for _, c := range cases {
@@ -499,7 +499,7 @@ func TestStoppingAnUnrecordedRoomIsNotAnError(t *testing.T) {
 // It is a DIFFERENT grant from the one a browser gets, and the separation has to
 // hold in both directions: a token that could also join would, if it leaked, put
 // its holder in the call; a join token that could record would let any participant
-// record from the browser without passing this surface's door at all.
+// record from the browser without passing this surface's check at all.
 func TestTheEgressTokenRecordsAndCannotJoin(t *testing.T) {
 	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
@@ -555,7 +555,7 @@ func TestTheEgressTokenRecordsAndCannotJoin(t *testing.T) {
 	_, join := ask(t, app, room, "person-42", access(t, ada))
 	joinGrant := verify(t, join, apiSecret)["video"].(map[string]any)
 	if _, present := joinGrant["roomRecord"]; present {
-		t.Error("SECURITY: the browser's join token carries roomRecord — a participant could record without passing this door")
+		t.Error("SECURITY: the browser's join token carries roomRecord — a participant could record without passing this check")
 	}
 }
 
@@ -983,9 +983,9 @@ func seats(id string) *answers {
 	return a
 }
 
-// ── the doors a route gate does not cover ────────────────────────────────────
+// ── the endpoints a route check does not cover ────────────────────────────────────
 
-// mcp calls one tool over the MCP door the way a browser can: JSON-RPC in the body,
+// mcp calls one tool over the MCP server the way a browser can: JSON-RPC in the body,
 // whatever headers the caller chooses. It returns the raw envelope.
 func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head map[string]string) string {
 	t.Helper()
@@ -1006,9 +1006,9 @@ func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head 
 
 // TestTheMCPDoorIsNotAWayPastTheGate.
 //
-// A typed op is reachable by TWO doors and only one of them is a route. zip records
+// A typed op is reachable by TWO entry points and only one is a route. zip records
 // the route's handler and the op as two fields of one entry, and wraps only the
-// handler (typed.go, addRoute); the MCP door calls op.invoke directly (mcp.go). So
+// handler (typed.go, addRoute); the MCP server calls op.invoke directly (mcp.go). So
 // NO Use/Group/With reaches a tools/call — the identity middleware runs because it
 // is installed at depth 0, which leaves the caller authenticated with every
 // prefix-scoped gate skipped.
@@ -1016,14 +1016,14 @@ func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head 
 // That is the whole attack: a signed-in tab's cookie is ambient, a cross-origin
 // POST with a CORS-simple content type needs no preflight, and the anti-CSRF token
 // a route would have demanded is never asked for. The gate therefore cannot live on
-// the group. It lives in ops.ready, which both doors go through.
+// the group. It lives in ops.ready, which both entry points go through.
 func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
 	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
 
 	// The tool is really there — otherwise this test passes by naming nothing.
 	list := mcp(t, app, "tools/list", nil, nil)
 	if !strings.Contains(list, "meetRecordStart") {
-		t.Fatalf("meetRecordStart is not on the MCP door, so this test asserts nothing:\n%s", list)
+		t.Fatalf("meetRecordStart is not on the MCP server, so this test asserts nothing:\n%s", list)
 	}
 
 	body := mcp(t, app, "tools/call", map[string]any{
@@ -1038,7 +1038,7 @@ func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
 	})
 	for _, called := range m.asked() {
 		if called == "StartRoomCompositeEgress" {
-			t.Fatalf("SECURITY: a cross-site page started a recording through the MCP door with no CSRF token.\n%s", body)
+			t.Fatalf("SECURITY: a cross-site page started a recording through the MCP server with no CSRF token.\n%s", body)
 		}
 	}
 }
@@ -1048,9 +1048,9 @@ func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
 // The anti-CSRF gate has to hold across THREE independent axes, and a test that
 // fixes two of them measures almost nothing:
 //
-//   - the DOOR. A typed op is not one entry point. zip wraps only the route's
+//   - the ENTRY POINT. A typed op is not one. zip wraps only the route's
 //     handler and calls the op directly over MCP, the call plane, GraphQL, the CLI
-//     and Here — so the gate lives in the op's own preamble, and every door has to
+//     and Here — so the gate lives in the op's own preamble, and every surface has to
 //     be shown to reach it.
 //   - the OPERATION. start and stop both CHANGE something and read does not. Stop
 //     is the consent-critical direction: a cross-site page that can end a recording
@@ -1089,13 +1089,13 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 			t.Run(name+"/"+header, func(t *testing.T) {
 				// A well-formed Basic under Authorization IS a credential the boundary
 				// reads, so the gate correctly steps aside — and the request is then
-				// refused on its merits by the door instead. That row is the control
+				// refused on its merits by the endpoint instead. That row is the control
 				// that keeps the rest from passing because nothing is ever explicit.
 				explicit := value == basic64 && header == "Authorization"
 
 				app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
 				cookie := "hanzo_iam_token=" + access(t, ada)
-				for _, door := range []string{"rest", "mcp"} {
+				for _, surface := range []string{"rest", "mcp"} {
 					m.clear()
 					for _, op := range []struct {
 						name    string
@@ -1123,7 +1123,7 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 						}
 						var code int
 						var body string
-						if door == "rest" {
+						if surface == "rest" {
 							code, body = ambient(t, app, op.method, roomIn(workspaceA), head)
 						} else {
 							// A cross-origin POST with a CORS-simple content type: no
@@ -1135,12 +1135,12 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 							}, head)
 						}
 						if op.changes && !explicit {
-							// The REFUSAL ITSELF, on whichever door. MCP answers a handler
-							// error as isError content rather than a status, so the door
+							// The REFUSAL ITSELF, on whichever surface. MCP answers a handler
+							// error as isError content rather than a status, so the surface
 							// that has no status is asserted on the words — and on the
 							// words of THIS gate, so a refusal for some other reason
 							// cannot stand in for one that never happened.
-							switch door {
+							switch surface {
 							case "rest":
 								if code != http.StatusForbidden {
 									t.Errorf("rest %s with %s: %q and a session cookie = %d %q, want 403",
@@ -1155,14 +1155,14 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 							for _, called := range m.asked()[before:] {
 								if called == "StartRoomCompositeEgress" || called == "StopEgress" {
 									t.Fatalf("SECURITY: %s %s with %s: %q reached the media server (%s) "+
-										"from a cross-site page with no CSRF token", door, op.name, header, value, called)
+										"from a cross-site page with no CSRF token", surface, op.name, header, value, called)
 								}
 							}
 						}
-						if !op.changes && door == "rest" && code == http.StatusForbidden {
+						if !op.changes && surface == "rest" && code == http.StatusForbidden {
 							t.Errorf("%s read with %s: %q = 403 — a read changes nothing, and requiring a "+
 								"token to poll would mean fetching one before the page that fetches one",
-								door, header, value)
+								surface, header, value)
 						}
 					}
 				}
@@ -1503,7 +1503,7 @@ func TestTheRoomIsNamedOnTheWayOut(t *testing.T) {
 // A peer that omits room_name on a live recording used to have that entry silently
 // discarded, and the room then read as free: stop answered 200 "not being recorded"
 // while it kept writing, and the next start put a second recorder beside it. That is
-// the two-recorder failure again, arriving through a peer-shaped door instead of a
+// the two-recorder failure again, arriving through a peer-shaped surface instead of a
 // race — and the 200 is the same false assurance to the same person.
 //
 // LiveKit populates room_name for a room-composite egress, so this is not a live
@@ -1558,7 +1558,7 @@ func TestAnUnreadableEntryIsNotACleanRoom(t *testing.T) {
 	// refused while a worker runs, the room is then permanently unattributable, and
 	// the recording can never be stopped.
 	//
-	// It is the same axis as the int64-carried-as-a-string one door away. The
+	// It is the same axis as the int64-carried-as-a-string one surface away. The
 	// encoder's promise is not something this side can check, so both are read here.
 	t.Run("a peer that omits status is sending a STARTING recording", func(t *testing.T) {
 		app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
