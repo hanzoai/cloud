@@ -184,6 +184,34 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	}))
 
 	Identify(app, cfg)
+
+	// The money rule, for the reason identity is here: a program is either holding
+	// an app that prices its operations or it is holding nothing.
+	//
+	// It used to be two lines in Listen, and one of them named an app with no
+	// operations in it — App.Peer(), which nothing in this estate registers on —
+	// while the test that kept them read the composition root AS TEXT and counted
+	// them. Counting a line of source says a call is written, never that it ran, so
+	// the arrangement could report a rule over a surface it had never once been
+	// asked about. Constructed with the rule, the program's app cannot exist without
+	// it, and a test that builds one and drives an operation measures the fact
+	// instead of reading it.
+	//
+	// The peer sibling takes it too. It is a SEPARATE zip.App with its own rule
+	// (zip peer.go), it holds no operation today, and arming it at construction is
+	// what keeps it from acquiring one that is outside the rule. It binds no socket
+	// until something registers on it, so this costs a struct.
+	//
+	// THE INTERNAL PLANE IS NOT THIS APP and is deliberately outside the rule. It is
+	// a third zip.App (plane.go) listening on the pod's own socket: no browser and
+	// no network client can address it, and its operations are the implementation of
+	// operations the edge already priced and already answered standing for. Pricing
+	// the inner hop would bill one act twice, and gating it on standing would refuse
+	// the machinery that computes standing. That its addresses are outside the
+	// priced surface is asked at every bind rather than assumed — plane.go, unpriced.
+	rule := Toll(deps.Metering, deps.Commerce)
+	app.Authorize(rule)
+	app.Peer().Authorize(rule)
 	return app
 }
 

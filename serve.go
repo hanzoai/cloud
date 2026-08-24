@@ -300,7 +300,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	// One reader, one answer, and the kill switch always wins.
 	app.Use(SpendGate(deps.Commerce))
 
-	// The same two gates, asked about the OPERATION instead of the request.
+	// The same two gates, asked about the OPERATION instead of the request, are
+	// already in force: App() constructs this program WITH its money rule, the way
+	// it constructs it with its identity boundary. Nothing is installed here.
 	//
 	// Both of the above are middleware, and middleware reads the path the TRANSPORT
 	// carried. That is the operation only over plain REST: an MCP tools/call arrives
@@ -312,12 +314,6 @@ func Listen(plugins []Plugin, enable []string) error {
 	// whichever transport it came in by. It stands down for a request whose own
 	// path names a declared surface, because that is exactly when the two gates
 	// above have already answered — one operation, one answer. See toll.go.
-	//
-	// The peer sibling is a SEPARATE zip.App with its own hook (peer.go), so it gets
-	// the gate explicitly. It binds no socket until something registers a peer op, so
-	// this costs a struct today and closes the client the day one appears.
-	app.Authorize(Toll(deps.Metering, deps.Commerce))
-	app.Peer().Authorize(Toll(deps.Metering, deps.Commerce))
 
 	// A typed op cannot write a response body — zip stamps the op's declared status
 	// over a hand-written one — so it refuses through an error, and this is what turns
