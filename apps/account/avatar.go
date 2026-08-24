@@ -188,8 +188,10 @@ func (o ops) putAvatar(c *zip.Ctx) error {
 
 	// The format is decided by the BYTES. A name and a part Content-Type are the
 	// client's to choose, so neither may decide what this origin later serves.
+	// A photo is a PICTURE: magic names other things it can serve safely, and this
+	// route wants none of them.
 	kind := magic.Type(data)
-	if kind == "" {
+	if !strings.HasPrefix(kind, "image/") {
 		return zip.Errorf(http.StatusUnsupportedMediaType,
 			"a profile photo must be a PNG, JPEG, GIF or WebP image")
 	}
@@ -272,7 +274,7 @@ func (o ops) getAvatar(c *zip.Ctx) error {
 	// image, so this can only fire on an object written by some other path. Serving
 	// it inline under a guessed type is the XSS the allow-list exists to prevent.
 	kind := magic.Type(data)
-	if kind == "" {
+	if !strings.HasPrefix(kind, "image/") {
 		return zip.ErrNotFound("no such photo")
 	}
 	c.SetHeader("Content-Type", kind)
