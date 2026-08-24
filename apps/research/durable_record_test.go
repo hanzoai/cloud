@@ -15,7 +15,6 @@ package research
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strconv"
 	"sync"
@@ -29,17 +28,15 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// shipCheckpoint mirrors what the composition root wires (build.go: NewDurability
-// with WithCheckpoint(durableCheckpoint)). Without it the ship reads the real path
-// on a backend that has not written it yet: the pure-Go envelope keeps the
-// plaintext on tmpfs and only re-encrypts to the real file on Checkpoint or Close,
-// so a snapshot taken without this ships stale ciphertext — or, on a store that has
-// never been closed, no file at all. sqlitedrv.Checkpoint is a no-op on the
-// write-time-encrypting backends, so this is correct on every build.
-func shipCheckpoint() org.DurabilityOption {
-	return org.WithCheckpoint(func(_ context.Context, db *sql.DB) error {
-		return sqlitedrv.Checkpoint(db)
-	})
+// shipSeal mirrors what the composition root wires (build.go: NewDurability with
+// WithSeal(sqlitedrv.Checkpoint)). Without it the ship reads the real path on a
+// backend that has not written it yet: the pure-Go envelope keeps the plaintext on
+// tmpfs and only re-encrypts to the real file on Checkpoint or Close, so a snapshot
+// taken without this ships stale ciphertext — or, on a store that has never been
+// closed, no file at all. sqlitedrv.Checkpoint is a no-op on the write-time-
+// encrypting backends, so this is correct on every build.
+func shipSeal() org.DurabilityOption {
+	return org.WithSeal(sqlitedrv.Checkpoint)
 }
 
 // memCAS is an in-process replica.ConditionalStore: one atomic (data, generation)
@@ -104,7 +101,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 	cas := newMemCAS()
 	const orgID = "acme"
 
-	ownerDur := org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipCheckpoint())
+	ownerDur := org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipSeal())
 	ownerStore := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: ownerDur}, "research", openStore)
 	t.Cleanup(func() { _ = ownerStore.CloseAll() })
 	mountedStores = ownerStore
@@ -120,7 +117,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 	// cek derives from the SAME master and the SAME namespace, and reads the evidence
 	// back. A logger surfaces a degraded hydrate as a test failure rather than a
 	// silent empty store.
-	succDur := org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint())
+	succDur := org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipSeal())
 	succStore := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: succDur, Log: luxlog.New("succ")}, "research", openStore)
 	t.Cleanup(func() { _ = succStore.CloseAll() })
 	st, err := succStore.For(cloud.MustOrgNamespace(orgID, ""))
@@ -142,7 +139,7 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 // cannot open twice.
 func TestDurableForDedupsConcurrentOpens(t *testing.T) {
 	cas := newMemCAS()
-	dur := org.NewDurability(cas, soleMembership(t, "pod-a"), nil, shipCheckpoint())
+	dur := org.NewDurability(cas, soleMembership(t, "pod-a"), nil, shipSeal())
 	stores := cloud.NewOrgStore(cloud.Base{DataDir: t.TempDir(), Durable: dur}, "research", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
 
