@@ -243,6 +243,12 @@ var (
 // rather than by reading its own absence as free. A middleware is applied only to
 // what is FOR SALE and can refuse on sight; the tool client is applied to everything
 // and has to look. Neither ever renders "I cannot tell" as "free".
+// IT PRICES BY PATH, so it covers a ROUTE and covers exactly that. An operation
+// reached by name — over MCP, the call plane, the graph or the CLI — arrives with
+// no path to look up, which is not a gap in this handler but the reason [Settle]
+// exists: it prices a named resource and is asked from inside the operation, where
+// every seam passes. Apply this to raw routes whose address IS the priced thing;
+// price an operation with Settle.
 func Enforce() zip.Handler {
 	return func(c *zip.Ctx) error {
 		s := mounted
