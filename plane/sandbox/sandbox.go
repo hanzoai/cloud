@@ -30,12 +30,20 @@ const App = "sandbox"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.SandboxAttach,
 	plane.SandboxEnd,
 	plane.SandboxLease,
 	plane.SandboxRead,
 	plane.SandboxRun,
 	plane.SandboxStop,
 	plane.SandboxWrite,
+}
+
+// SandboxAttach report that somebody is watching a project.
+//
+// Calls plane.SandboxAttach on sandbox over the peer plane.
+func SandboxAttach(ctx context.Context, in *plane.AttachIn) (*plane.Attached, error) {
+	return plane.Ask[plane.AttachIn, plane.Attached](ctx, App, plane.SandboxAttach, in)
 }
 
 // SandboxEnd end a sandbox's lease.
