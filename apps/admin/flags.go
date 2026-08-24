@@ -79,7 +79,7 @@ type setFlagIn struct {
 // "category":"launch","label":"Chat waitlist","description":"Gate chat behind the waitlist",
 // "value":true,"source":"stored"}]}}
 func setFlag(ctx context.Context, in *setFlagIn) (*flagsOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
