@@ -118,7 +118,7 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 	// fleet, so it cannot reach cloud's binder — and without binding, zip resolved the
 	// start endpoint to a private temp path. The endpoint then existed nowhere any
 	// child looked, so waking a lazy app failed with "this process runs under a router
-	// whose start door is not there" and every call to a not-yet-started app was
+	// whose start socket is not there" and every call to a not-yet-started app was
 	// unreachable.
 	plane.BindRuntimeDir()
 	path := zip.SocketPath(plane.HostApp)

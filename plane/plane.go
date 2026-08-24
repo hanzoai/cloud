@@ -2999,6 +2999,52 @@ type CodingStarted struct {
 	TargetID string `json:"targetId,omitempty"`
 }
 
+// ---- code: fold a pushed tree into the org's index ---------------------------
+
+// CodeIndex folds a repo's text files into the org's code-intelligence index.
+//
+// It is an OP rather than an injected function because the two planes are two
+// PROCESSES. apps/git carried an `Indexer` seam for the composition root to fill
+// with apps/code's client, and the fleet runs one binary per app — plugin/git
+// links git, plugin/code links code, and nothing links both — so the seam could
+// never be filled and push-indexing was inert wherever it shipped. That is the
+// same failure charge_peer.go records for the tools charger, and it has the same
+// answer: ask the process that owns the thing.
+const CodeIndex = "code_index"
+
+// IndexFile is one file of the pushed tree. Content is TEXT — the git side drops
+// binaries and over-cap blobs before it sends, and the code side caps again,
+// because a bound stated once is a bound the other end has to trust.
+type IndexFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+// IndexIn is a full-tree reconcile for one repo: everything that should be in
+// the index after this push, so the receiver can prune what is no longer there.
+//
+// BillingOrg rides beside Org because indexing EMBEDS, and an embedding is paid
+// inference. Org is the tenant whose index this is; BillingOrg is who pays for
+// the work, and they are not always the same org.
+type IndexIn struct {
+	Org        string      `json:"org"`
+	BillingOrg string      `json:"billingOrg"`
+	Project    string      `json:"project"`
+	Repo       string      `json:"repo"`
+	Files      []IndexFile `json:"files"`
+}
+
+// Indexed reports what the reconcile did. Skipped counts files the receiver
+// declined — a binary that slipped through, or one over its own cap — so a
+// caller can tell "indexed nothing because there was nothing" from "indexed
+// nothing because everything was refused".
+type Indexed struct {
+	Files   int `json:"files"`
+	Chunks  int `json:"chunks"`
+	Pruned  int `json:"pruned"`
+	Skipped int `json:"skipped"`
+}
+
 // ---- ask.figures -----------------------------------------------------------
 
 // Figure is ONE grounded number a domain read for the caller's own org: what it
