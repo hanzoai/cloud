@@ -318,6 +318,11 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	if app == nil {
 		return fmt.Errorf("meet.Mount: nil app")
 	}
+	// The group gate below verifies a MAC the account process minted; without the
+	// shared key it refuses every write on this surface.
+	if err := accountapp.Shared(); err != nil {
+		return fmt.Errorf("meet.Mount: %w", err)
+	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "meet"), State: st}
 
 	// The path suffix is the CALLER's, not ours. The office client POSTs

@@ -123,13 +123,17 @@ type state struct {
 const keysWriteRatePerMin = 30
 
 // newService builds the subsystem value. The CSRF key is the process-wide
-// singleton (csrf.go), so a token minted here verifies wherever it is echoed.
-func newService(deps cloud.Deps) *cloud.Service[state] {
+// singleton (csrf.go), so a token minted here verifies wherever it is echoed — and
+// `own` is the boot question about that key this app, as the MINTER, must answer.
+func newService(deps cloud.Deps) (*cloud.Service[state], error) {
+	if err := own(cloud.Deployed()); err != nil {
+		return nil, err
+	}
 	b := cloud.NewBase(deps, "account")
 	st := state{iam: newIAMClient(), vfs: deps.VFS}
 	st.csrfKey = sharedCSRFKey(b.Log)
 	st.writesRL = newRateLimiter(keysWriteRatePerMin)
-	return &cloud.Service[state]{Base: b, State: st}
+	return &cloud.Service[state]{Base: b, State: st}, nil
 }
 
 // MountAccount wires account's self-service routes (order 48) — the ones that must
@@ -138,7 +142,10 @@ func MountAccount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("account.MountAccount: nil app")
 	}
-	s := newService(deps)
+	s, err := newService(deps)
+	if err != nil {
+		return err
+	}
 	if err := routesAccount(s, app); err != nil {
 		return err
 	}

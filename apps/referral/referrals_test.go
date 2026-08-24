@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/plane"
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
@@ -630,6 +631,7 @@ func lower(s string) string {
 func TestMount(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
+	sharedKey(t)
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -644,4 +646,12 @@ func TestMount(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("mounted GET /v1/referral (no principal) want 403, got %d", resp.StatusCode)
 	}
+}
+
+// sharedKey provisions the anti-forgery key this package's mount requires: its
+// writes verify a token the account process minted, so a deployment carries the one
+// value from KMS and a mount without it refuses (apps/account, Shared).
+func sharedKey(t *testing.T) {
+	t.Helper()
+	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 }
