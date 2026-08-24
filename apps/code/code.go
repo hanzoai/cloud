@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -94,6 +95,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	exposeIndex()
 
+	// This surface verifies MACs another process mints, so a key it invented itself
+	// would refuse every ambient-cookie call for as long as the pod ran. Asked at
+	// boot rather than discovered on the wire.
+	if err := account.Shared(); err != nil {
+		return fmt.Errorf("code.Mount: %w", err)
+	}
 	if err := routes(app, s); err != nil {
 		return err
 	}
@@ -107,7 +114,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // Mount so this package's own tests drive the REAL registration instead of a
 // reconstruction of it that can drift from what the binary serves.
 func routes(app cloud.Router, s *service) error {
-	g := app.Group("/v1/code")
+	// The two operations named in cloud's paidReads are here, so this surface's
+	// READS spend: /search embeds the query and /ask synthesizes the answer, both
+	// against the caller's balance. account's control asks the same money rule the
+	// balance gate does and applies only to the requests it says cost something —
+	// so /tree and /file, which are free, pass untouched, and a caller presenting
+	// any credential pays nothing for it either.
+	g := app.Group("/v1/code", account.RequireCSRFOnSpend())
 	// cloud.Bridge is not installed here: the composer installs it once at the
 	// root, after the identity check that mints the validated org and before any
 	// subsystem registers a route — an order only the whole program can assert.

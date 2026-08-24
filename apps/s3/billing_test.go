@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/internal/planetest"
@@ -60,6 +61,7 @@ func (b *billServer) lastDebit() (string, []byte) { return b.peer.Org(), b.peer.
 // org "hanzo"; empty ⇒ !Enabled()).
 func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Helper()
+	t.Setenv(account.KeyEnv, testCSRFKey)
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
 	t.Setenv("S3_ADMIN_ENDPOINT", "127.0.0.1:1")
@@ -90,6 +92,11 @@ func callGuard(t *testing.T, s *cloud.Service[state], org string, hErr error) (s
 		return c.NoContent(http.StatusNoContent)
 	})
 	app := zip.New(zip.Config{DisableStartupMessage: true})
+	// What serve.go installs for the whole binary: the request parked on the
+	// context, which is where admit reads the caller it judges. No package's own
+	// harness runs Serve, so without this every call here is refused for a reason
+	// that has nothing to do with the gate under test.
+	app.Use(cloud.Bridge())
 	app.Post("/v1/s3/op", h)
 	req := httptest.NewRequest("POST", "/v1/s3/op", nil)
 	if org != "" {
