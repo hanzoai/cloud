@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/luxfi/crypto"
@@ -69,6 +70,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "wallet")
 	if deps.DataDir == "" {
 		return fmt.Errorf("wallet.Mount: empty DataDir")
+	}
+	// Every operation here that mints a wallet, rotates a key or signs asks
+	// account.CSRF, which verifies a MAC the account process minted; without the
+	// shared key it refuses all of them.
+	if err := account.Shared(); err != nil {
+		return fmt.Errorf("wallet.Mount: %w", err)
 	}
 	st, err := openStore(deps.DataDir)
 	if err != nil {
@@ -418,6 +425,9 @@ type safeProposal struct {
 //
 // Example: {"name": "treasury"}
 func (o ops) createAccount(ctx context.Context, in *createAccountIn) (*WalletAccount, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -462,6 +472,9 @@ func (o ops) listAccounts(ctx context.Context, _ *noInput) (*accountList, error)
 //
 // Example: {"accountId": "acct_9f8c1d", "name": "ops hot wallet", "custody": "kms", "tier": "hot", "chain": "eip155:36963"}
 func (o ops) createWallet(ctx context.Context, in *createWalletIn) (*Wallet, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -594,6 +607,9 @@ func (o ops) getWallet(ctx context.Context, in *walletRef) (*Wallet, error) {
 //
 // Example: {"id": "wal_4b1e77"}
 func (o ops) rotateKeys(ctx context.Context, in *walletRef) (*Wallet, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -632,6 +648,9 @@ func (o ops) rotateKeys(ctx context.Context, in *walletRef) (*Wallet, error) {
 //
 // Example: {"id": "wal_4b1e77", "message": "approve withdrawal 42"}
 func (o ops) sign(ctx context.Context, in *signIn) (*signature, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -683,6 +702,9 @@ func (o ops) sign(ctx context.Context, in *signIn) (*signature, error) {
 //
 // Example: {"id": "wal_4b1e77", "to": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", "value": "0", "data": "0x", "chainId": 36963, "nonce": 7}
 func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposal, error) {
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {
