@@ -70,6 +70,7 @@ import (
 	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/s3admin"
@@ -219,6 +220,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("s3.Mount: nil app")
 	}
+	// The anti-forgery token admit asks for is minted by another process, so this
+	// one verifies MACs it did not write: a key it invented itself matches none of
+	// them and every ambient-cookie call would 403 for as long as the pod ran.
+	// Asked at boot, in one line, rather than discovered on the wire.
+	if err := account.Shared(); err != nil {
+		return fmt.Errorf("s3.Mount: %w", err)
+	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "s3"), State: state{admin: s3admin.New()}}
 
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
@@ -284,13 +292,26 @@ func fee() int64 { return cloud.ResourceFeeCents(opFeeEnvPrefix, "op") }
 // admit is the sentence every data-plane operation opens with, and it answers the
 // caller's org so the operation can address storage inside it.
 //
-// Three refusals in the order they have to be asked. A subsystem that cannot
-// serve anyone says so before it says who it serves, so the readiness check comes
-// first. Then the tenant boundary — cloud.Member (a validated principal,
-// HIP-0519's one predicate set) and an org to act for — because billing an
-// unauthenticated caller would read an empty ledger and answer a money question
-// about nobody. Then the balance: an unfunded org is 402 and, in the fail-closed
-// posture, an unreachable commerce is 503, both with NOTHING touched.
+// Four refusals in the order they have to be asked. A subsystem that cannot serve
+// anyone says so before it says who it serves, so the readiness check comes first.
+// Then the tenant boundary — cloud.Member (a validated principal, HIP-0519's one
+// predicate set) and an org to act for — because billing an unauthenticated caller
+// would read an empty ledger and answer a money question about nobody. Then the
+// anti-forgery token, immediately before the money, because that is what it is
+// about: this plane spends the caller's balance on a READ, so a page the caller
+// never visited must not be able to spend it for them by sending them here with a
+// cookie they already hold. Then the balance itself: an unfunded org is 402 and,
+// in the fail-closed posture, an unreachable commerce is 503, both with NOTHING
+// touched.
+//
+// THE TOKEN IS ASKED HERE RATHER THAN ON THE ROUTE, and it is free to ask here.
+// account's control refuses a caller with no request, and this plane has none to
+// serve: every operation resolves its tenant from the request, so a caller without
+// one is already refused above. Asking in the preamble therefore costs no CLI, no
+// agent and no service caller, and it covers the seams a route cannot — the same
+// reason the money moved here. account's gate is a no-op the moment a caller
+// PRESENTS a credential (Bearer, gateway, API key), which is every client that
+// reaches this surface; only the ambient-cookie path is asked for the echoed token.
 //
 // The denial travels as an ERROR (cloud.Denied), which is the one refusal channel
 // every shape here shares — serve.go installs DenyEnvelope app-wide, so a REST
@@ -306,6 +327,9 @@ func admit(s *cloud.Service[state], c *zip.Ctx) (string, error) {
 	org, ok := tenant(c)
 	if !ok {
 		return "", principal.Refused(c)
+	}
+	if err := account.CSRF(c.Context()); err != nil {
+		return "", err
 	}
 	project, projectValidated := principal.ValidatedProject(c)
 	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, "op", fee()); err != nil {

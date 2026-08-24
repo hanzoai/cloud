@@ -140,6 +140,16 @@ func Consumes(method, path string) bool {
 // `under` so the comparison is the one the ROUTER makes: /V1/S3/... reaches the
 // route registered at /v1/s3/..., and a raw prefix test would answer "not on the
 // list" for a request that is about to spend.
+//
+// AN ENTRY HERE CARRIES A SECOND OBLIGATION, and it is on the surface rather than
+// on this file: a read that spends can be driven by a page the caller never
+// visited, because a browser sent there carries the cookie it already holds and
+// the debit lands on them. So the surface named here also asks for the
+// anti-forgery token on the ambient-cookie path — account.RequireCSRFOnSpend on
+// its group, which reads Consumes below so the two can never disagree about which
+// requests spend, or account.CSRF in the operation's own preamble where the
+// operation is reachable by name as well as by route. Both cost a caller that
+// presents any credential nothing.
 var paidReads = []string{
 	"/v1/code/ask",         // the answer is synthesized through deps.AI (apps/code/ask.go).
 	"/v1/code/search",      // the semantic tier embeds the query through deps.Embed (apps/code/search.go).

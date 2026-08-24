@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -51,6 +52,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	mockBing(t, bingFixture)
 	t.Setenv("WEBSEARCH_API_KEY", "k")
 
+	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
@@ -149,6 +151,7 @@ func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
 	t.Setenv("WEBSEARCH_BING_URL", srv.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "") // unset: the key path would 503 — the principal must pass regardless
 
+	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
@@ -176,6 +179,7 @@ func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
 func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
 
+	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
