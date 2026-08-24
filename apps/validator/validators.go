@@ -160,39 +160,50 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/:tokenId", o.get)
 }
 
-// requireOrgOnWrite refuses a WRITE with no validated principal before zip decodes
-// its body.
+// identity is THE decision, once: nil when a request may go on to the decoder, a
+// 403 when it may not. The two shapes below are two ways to ASK it, never two
+// copies of it — which they were, each carrying its own method test.
 //
-// A typed op runs after the decode, so moving the identity check into the op would
-// answer 400 to an unauthenticated caller whose body is also malformed, where this
-// surface has always answered 403. The check therefore lives where the untyped
-// handler's ran: ahead of the body. It is scoped to writes because the reads under
-// this prefix answer 403 from inside their own handlers (no body to decode first),
-// and because the auto-registered GET /v1/validator/health must stay probe-able.
+// A typed op runs after the decode, so moving the check into the op would answer
+// 400 to an unauthenticated caller whose body is also malformed, where this surface
+// has always answered 403. The check therefore lives where the untyped handler's
+// ran: ahead of the body.
+//
+// IT EXEMPTS READS, NOT NON-POSTS. It named POST, which is a method standing in for
+// a property — the property is "a body will be decoded before an op could answer",
+// and the next verb this surface takes carries the property without carrying the
+// name. Reads pass because they answer 403 from inside their own handlers, with no
+// body to decode first, and because the auto-registered GET /v1/validator/health
+// must stay answerable to a kubelet.
+func identity(c *zip.Ctx) error {
+	switch c.Method() {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return nil
+	}
+	if _, ok := principal.Org(c); !ok {
+		return zip.ErrForbidden("validated identity required")
+	}
+	return nil
+}
+
+// requireOrgOnWrite asks [identity] in the shape a group's Use takes.
 func requireOrgOnWrite() zip.Handler {
 	return func(c *zip.Ctx) error {
-		if c.Method() != http.MethodPost {
-			return c.Continue()
-		}
-		if _, ok := principal.Org(c); !ok {
-			return zip.ErrForbidden("validated identity required")
+		if err := identity(c); err != nil {
+			return err
 		}
 		return c.Continue()
 	}
 }
 
-// gateWrite is the SAME refusal as a leaf-wrapping zip.Middleware, for the two
-// collection-root ops that hang off a router rather than a prefixed group (see
-// routes). A signature adapter, not a second rule: a group's Use takes a handler
-// that calls c.Continue(), With() takes func(Handler) Handler, and both ask
-// principal.Org the one question above.
+// gateWrite asks [identity] in the shape With() takes, for the two collection-root
+// ops that hang off a router rather than a prefixed group (see routes). A signature
+// adapter, not a second rule: a group's Use takes a handler that calls c.Continue(),
+// With() takes func(Handler) Handler.
 func gateWrite(next zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if c.Method() != http.MethodPost {
-			return next(c)
-		}
-		if _, ok := principal.Org(c); !ok {
-			return zip.ErrForbidden("validated identity required")
+		if err := identity(c); err != nil {
+			return err
 		}
 		return next(c)
 	}

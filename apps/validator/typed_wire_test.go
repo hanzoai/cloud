@@ -355,3 +355,40 @@ func TestSlotViewKeepsItsKeyOrder(t *testing.T) {
 		t.Errorf("slot with a registration: keys = %s, want %s", got, want)
 	}
 }
+
+// TestTheRefusalFollowsTheOperationNotTheVerb drives the CHECK, not the mounted
+// surface, and deliberately so: this surface answers GET and POST, so the router
+// returns 405 for the verbs the defect is about and no request could ever reach
+// the check. A test that asked through the surface would pass with the defect in
+// place, which is the shape of a check that cannot run.
+//
+// The property: identity exempts READS. It named POST, which is a method standing
+// in for "a body will be decoded before an op could answer" — so the next verb this
+// surface takes would arrive unrefused, on a rule that reads as if it covered it.
+func TestTheRefusalFollowsTheOperationNotTheVerb(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	reached := gateWrite(func(c *zip.Ctx) error { return c.String(http.StatusOK, "reached") })
+	app.Get("/x", reached)
+	app.Post("/x", reached)
+	app.Put("/x", reached)
+	app.Patch("/x", reached)
+	app.Delete("/x", reached)
+
+	for m, want := range map[string]int{
+		http.MethodGet:    http.StatusOK,        // a read answers from its own handler; the probe answers to anyone.
+		http.MethodPost:   http.StatusForbidden, // the verb the surface takes today.
+		http.MethodPut:    http.StatusForbidden, // and every verb it might take tomorrow.
+		http.MethodPatch:  http.StatusForbidden,
+		http.MethodDelete: http.StatusForbidden,
+	} {
+		resp, err := app.Test(httptest.NewRequest(m, "/x", strings.NewReader("{")))
+		if err != nil {
+			t.Fatalf("%s /x: %v", m, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("anonymous %s = %d (%s), want %d", m, resp.StatusCode, body, want)
+		}
+	}
+}
