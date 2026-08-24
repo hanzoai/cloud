@@ -34,7 +34,7 @@ package org
 //	open  : Hydrate() BEFORE opening the local handle — acquire the lease and
 //	        CarryForward-restore the latest durable snapshot into the local file
 //	        (or, for a non-owner, refresh read-only). Then open the handle and Bind()
-//	        it so Sync can checkpoint on the same single connection.
+//	        it so Sync can fold the WAL on the same single connection.
 //	write : after the write transaction COMMITS, Sync() — snapshot the local file and
 //	        ship it fenced at the lease round. A ship rejected as ErrStaleRound means
 //	        this replica was deposed: the write is NOT acknowledged and the caller
@@ -62,7 +62,19 @@ type Durability struct {
 	fenced *replica.FencedStore
 	cipher *Cipher
 	codec  snapshotCodec // how the durable payload is produced/applied (swappable ship)
+	reader opener        // opens a snapshot's own read-only handle; nil ⇒ none available
 }
+
+// opener opens a second, READ-ONLY handle on the database a Durable names. A snapshot
+// holds a read transaction on it while it copies the file, which is what lets the store
+// keep its own connection (see pin). It answers (nil, nil) on a backend that has no
+// second handle to give — the on-disk file is then not a database another handle could
+// open, and the snapshot copies it unpinned, as it always did.
+//
+// It is a FUNCTION and not a handle because the snapshot opens one per ship and closes
+// it again: nothing else may hold it, nothing has to close it on a promotion or an
+// eviction, and a store that never ships never opens one.
+type opener func(ns namespace.Namespace, subsystem, path string) (*sql.DB, error)
 
 // NewDurability builds the factory over an atomic-CAS object store (the SeaweedFS S3
 // If-Match ConditionalStore), the live membership view (election input), and an
@@ -75,8 +87,8 @@ type Durability struct {
 // buildDurability construction site, with no change here — the fence reads and CASes
 // through whatever store it is handed. The ship mechanism is likewise swappable: the
 // default wholeFile codec can be replaced by a WAL-frame delta codec behind snapshotCodec
-// without touching the fence or round. WithCheckpoint injects the envelope's re-encrypting
-// Checkpoint (crypto-integration client).
+// without touching the fence or round. WithSeal injects the envelope's re-encrypting
+// Checkpoint (crypto client); WithReader injects the opener a snapshot pins its file with.
 func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher, opts ...DurabilityOption) *Durability {
 	var o durabilityOpts
 	for _, fn := range opts {
@@ -86,7 +98,8 @@ func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher
 		fencer: NewCASFencer(cond, view),
 		fenced: replica.NewFencedStore(cond),
 		cipher: cipher,
-		codec:  wholeFile{checkpoint: o.checkpoint},
+		codec:  wholeFile{seal: o.seal},
+		reader: o.reader,
 	}
 }
 
@@ -94,17 +107,27 @@ func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher
 type DurabilityOption func(*durabilityOpts)
 
 type durabilityOpts struct {
-	checkpoint func(context.Context, *sql.DB) error
+	seal   func(*sql.DB) error
+	reader opener
 }
 
-// WithCheckpoint injects the operation that folds the WAL into the real on-disk file and,
-// on the pure-Go encryption ENVELOPE, re-encrypts that real path — so a fenced ship reads
-// FRESH bytes, never stale ciphertext (which would be a lost acked write on takeover). The
-// composition root wires cek's Checkpoint here on the envelope backend; the default (no
-// option) is a raw TRUNCATE checkpoint, correct for the SQLCipher page-level and plaintext
-// backends that encrypt on write. This composes ship-before-ack with encrypt-on-checkpoint.
-func WithCheckpoint(fn func(context.Context, *sql.DB) error) DurabilityOption {
-	return func(o *durabilityOpts) { o.checkpoint = fn }
+// WithSeal injects the operation that makes the on-disk file hold every committed write
+// on a backend that defers encryption. The pure-Go ENVELOPE keeps its plaintext on tmpfs
+// and re-encrypts to the real path only when asked, so without this a ship would read the
+// last-sealed ciphertext — a lost acked write on takeover. On the SQLCipher page-level and
+// plaintext backends, which encrypt as they write, it is a successful no-op. Folding the
+// WAL is NOT its job and never was a backend's choice: the codec does that itself, once,
+// on every backend, and the fold is also where the file is pinned for the copy.
+func WithSeal(fn func(*sql.DB) error) DurabilityOption {
+	return func(o *durabilityOpts) { o.seal = fn }
+}
+
+// WithReader injects the opener a snapshot pins its file with — a second, read-only handle
+// on the same database. Without it every ship copies the file while writers are free to
+// move it; with it the copy reads what the fold left. The composition root supplies it
+// where a second handle is safe (see opener).
+func WithReader(open opener) DurabilityOption {
+	return func(o *durabilityOpts) { o.reader = open }
 }
 
 // For mints the Durable binding for one org DB. It takes the NAME — the same
@@ -173,9 +196,8 @@ func (d *Durable) Hydrate(ctx context.Context) error {
 	return nil
 }
 
-// Bind lends Durable the store's live handle so Sync checkpoints on the SAME single
-// connection the store writes through (serializing snapshot against writes without a
-// second handle). Call after the store opens the local file.
+// Bind lends Durable the store's live handle so Sync folds the WAL on the SAME single
+// connection the store writes through. Call after the store opens the local file.
 func (d *Durable) Bind(db *sql.DB) {
 	d.mu.Lock()
 	d.db = db
@@ -232,7 +254,7 @@ func (d *Durable) TryClaim(ctx context.Context) (bool, error) {
 // replica was deposed, so it drops ownership and does NOT acknowledge — the caller
 // retries on the new owner. A non-owner returns (false, ErrNotOwner). Call AFTER the
 // write transaction commits and OUTSIDE any open transaction (Sync takes the sole
-// connection to checkpoint).
+// connection for the two statements that fold the WAL and pin the file).
 func (d *Durable) Sync(ctx context.Context) (acked bool, err error) {
 	d.mu.Lock()
 	owned, lease := d.owned, d.lease
@@ -279,16 +301,33 @@ func (d *Durable) Close(ctx context.Context) error {
 }
 
 // snapshot produces the durable payload for the bound local database via the swappable
-// codec (default wholeFile: checkpoint + framed file copy). It takes the store's SOLE
-// connection through the codec so the payload is consistent against concurrent writes.
-func (d *Durable) snapshot(ctx context.Context) ([]byte, error) {
+// codec (default wholeFile: fold the WAL, pin the file, copy it).
+//
+// It opens the snapshot's own read-only handle for the length of this call and closes it
+// again. One handle per ship costs an open on a file that is about to be read whole and
+// sent to an object store, and it buys a lifetime nothing else has to manage: no handle
+// survives a promotion, an eviction or a shutdown, because none outlives the ship that
+// made it.
+func (d *Durable) snapshot(ctx context.Context) (payload []byte, err error) {
 	d.mu.Lock()
 	db := d.db
 	d.mu.Unlock()
 	if db == nil {
 		return nil, fmt.Errorf("org: durable %s not bound to a db", d.dbKey)
 	}
-	return d.dy.codec.produce(ctx, db, d.dbPath)
+	var reader *sql.DB
+	if d.dy.reader != nil {
+		// A reader that cannot be opened fails the ship rather than falling back to an
+		// unpinned copy: the write is not acknowledged and the caller retries, where a
+		// fallback would ship a file writers were free to move under it.
+		if reader, err = d.dy.reader(d.ns, d.subsystem, d.dbPath); err != nil {
+			return nil, fmt.Errorf("org: durable reader %s: %w", d.dbKey, err)
+		}
+		if reader != nil {
+			defer reader.Close()
+		}
+	}
+	return d.dy.codec.produce(ctx, db, reader, d.dbPath)
 }
 
 // restore is the hydrate callback: it opens the sealed durable payload (envelope

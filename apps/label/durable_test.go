@@ -24,7 +24,6 @@ package label
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -81,15 +80,13 @@ func (m *memCAS) PutIfVersion(_ context.Context, key string, data []byte, expect
 	return strconv.Itoa(o.ver + 1), nil
 }
 
-// shipCheckpoint mirrors what the composition root wires (build.go: NewDurability
-// with WithCheckpoint). Without it the ship reads the real path on a backend that
-// has not written it yet: the pure-Go envelope keeps the plaintext on tmpfs and
-// only re-encrypts on Checkpoint or Close, so a snapshot taken without this ships
-// stale ciphertext — or, on a store never closed, no file at all.
-func shipCheckpoint() org.DurabilityOption {
-	return org.WithCheckpoint(func(_ context.Context, db *sql.DB) error {
-		return sqlitedrv.Checkpoint(db)
-	})
+// shipSeal mirrors what the composition root wires (build.go: NewDurability with
+// WithSeal(sqlitedrv.Checkpoint)). Without it the ship reads the real path on a
+// backend that has not written it yet: the pure-Go envelope keeps the plaintext on
+// tmpfs and only re-encrypts on Checkpoint or Close, so a snapshot taken without
+// this ships stale ciphertext — or, on a store never closed, no file at all.
+func shipSeal() org.DurabilityOption {
+	return org.WithSeal(sqlitedrv.Checkpoint)
 }
 
 // soleMembership names id as the only writer-eligible member, so id is the owner
@@ -137,7 +134,7 @@ func TestAnAcknowledgedRecordSurvivesATakeover(t *testing.T) {
 	cas := newMemCAS()
 	at := time.Now().UTC().Add(-100 * 24 * time.Hour).Truncate(time.Second)
 
-	owner, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipCheckpoint()), &recorder{})
+	owner, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipSeal()), &recorder{})
 	out := post(t, owner, "acme", "u_acme", batch(
 		assertion("transaction", "tx-durable", at, at.Add(24*time.Hour), Productive, Dispute, "dp-1", 1)))
 	if out.Recorded != 1 {
@@ -145,7 +142,7 @@ func TestAnAcknowledgedRecordSurvivesATakeover(t *testing.T) {
 	}
 	// NOTHING IS CLOSED HERE. That is the point.
 
-	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint()), &recorder{})
+	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipSeal()), &recorder{})
 	code, raw := req(t, succ, http.MethodGet, "/v1/label?subject=tx-durable", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("the successor's read = %d %s", code, raw)
@@ -183,7 +180,7 @@ func TestAWriteOnANonOwnerFailsClosed(t *testing.T) {
 	}
 	t.Cleanup(m.Stop)
 
-	app, _ := wireDurable(t, org.NewDurability(cas, m, nil, shipCheckpoint()), &recorder{})
+	app, _ := wireDurable(t, org.NewDurability(cas, m, nil, shipSeal()), &recorder{})
 	at := time.Now().UTC().Add(-100 * 24 * time.Hour).Truncate(time.Second)
 	code, raw := req(t, app, http.MethodPost, "/v1/label", orgID, "u_acme", batch(
 		assertion("transaction", "tx-nonowner", at, at.Add(24*time.Hour), Productive, Dispute, "dp-1", 1)))
@@ -210,7 +207,7 @@ func TestADeposedWriterDoesNotAcknowledge(t *testing.T) {
 	cas := newMemCAS()
 	at := time.Now().UTC().Add(-100 * 24 * time.Hour).Truncate(time.Second)
 
-	owner, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipCheckpoint()), &recorder{})
+	owner, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipSeal()), &recorder{})
 	if out := post(t, owner, "acme", "u_acme", batch(
 		assertion("transaction", "tx-before", at, at.Add(24*time.Hour), Productive, Dispute, "dp-before", 1))); out.Recorded != 1 {
 		t.Fatalf("the owner recorded %d, want 1", out.Recorded)
@@ -219,7 +216,7 @@ func TestADeposedWriterDoesNotAcknowledge(t *testing.T) {
 	// The successor takes the lease at a higher round. The owner is told nothing:
 	// it still believes it is the writer, which is exactly the split it must not
 	// acknowledge a record through.
-	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint()), &recorder{})
+	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipSeal()), &recorder{})
 	if code, raw := req(t, succ, http.MethodGet, "/v1/label", "acme", "u_acme", ""); code != http.StatusOK {
 		t.Fatalf("the successor's read = %d %s", code, raw)
 	}
@@ -251,7 +248,7 @@ func TestADeposedWriterDoesNotAcknowledge(t *testing.T) {
 func TestADisposalIsShippedBeforeItIsAcknowledged(t *testing.T) {
 	cas := newMemCAS()
 	w := &recorder{}
-	owner, s := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipCheckpoint()), w)
+	owner, s := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipSeal()), w)
 
 	// A record old enough to dispose of, written eight years ago — retention
 	// measures the SERVER clock at the write, so it has to be planted at that
@@ -278,7 +275,7 @@ func TestADisposalIsShippedBeforeItIsAcknowledged(t *testing.T) {
 		t.Fatalf("disposed %d, want 1", out.Disposed)
 	}
 	// The owner is gone, ungracefully.
-	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint()), &recorder{})
+	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipSeal()), &recorder{})
 	code, raw = req(t, succ, http.MethodGet, "/v1/label", "acme", "u_acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("the successor's read = %d %s", code, raw)
@@ -297,7 +294,7 @@ func TestADisposalIsShippedBeforeItIsAcknowledged(t *testing.T) {
 // of this control that cannot be undone.
 func TestAHoldIsShippedBeforeItIsAcknowledged(t *testing.T) {
 	cas := newMemCAS()
-	owner, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipCheckpoint()), &recorder{})
+	owner, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-owner"), nil, shipSeal()), &recorder{})
 	at := time.Now().UTC().Add(-100 * 24 * time.Hour).Truncate(time.Second)
 	out := post(t, owner, "acme", "u_acme", batch(
 		assertion("transaction", "tx-hold", at, at.Add(24*time.Hour), Productive, Dispute, "dp-1", 1)))
@@ -306,7 +303,7 @@ func TestAHoldIsShippedBeforeItIsAcknowledged(t *testing.T) {
 		t.Fatalf("placing the hold: %+v", got)
 	}
 
-	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipCheckpoint()), &recorder{})
+	succ, _ := wireDurable(t, org.NewDurability(cas, soleMembership(t, "pod-successor"), nil, shipSeal()), &recorder{})
 	if !heldFlag(t, succ, "acme", id) {
 		t.Fatal("the takeover lost a litigation hold: the record is disposable again and nobody was told")
 	}

@@ -3,7 +3,6 @@ package cloud
 import (
 	"cmp"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -951,54 +950,20 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []
 	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "atomic_cas", true, "encrypted", cipher != nil)
 	// members.Members is the live election snapshot; hand it to the shard router so it
 	// routes on the SAME set the fencer elects over — the store-layer owner and the routed
-	// owner never disagree. WithCheckpoint WIRES the ship checkpoint (durableCheckpoint) so
-	// ship-before-ack folds the WAL into the real path before reading it — the crypto
-	// envelope's re-encrypt integration point (P5).
-	return org.NewDurability(cond, members, cipher, org.WithCheckpoint(durableCheckpoint)), members.Members
-}
-
-// durableCheckpoint makes the real on-disk file reflect every committed write before a
-// durable ship reads it — the checkpoint the codec runs before snapshotting (WithCheckpoint).
-// Two steps, correct on every backend:
-//
-//  1. A TRUNCATE checkpoint with the busy fail-closed guard: busy!=0 means a reader held the
-//     WAL so the main file is missing committed frames, and shipping it would silently lose an
-//     acked write. This folds the WAL and — on the WRITE-time-encrypting backends (cgo
-//     libsqlcipher page-level, and plaintext) — leaves the real path already fresh.
-//  2. sqlitedrv.Checkpoint re-encrypts the pure-Go ENVELOPE backend's real path. The envelope
-//     defers encryption to Checkpoint/Close, so after step 1 the real path is STALE ciphertext
-//     until re-encrypted; without this the ship reads stale bytes and loses acked writes on
-//     takeover (the envelope backend landed in hanzoai/sqlite v0.4.0 — every pure-Go and
-//     mislinked-cgo keyed open routes through it). It is a successful no-op on the write-time
-//     backends, so it runs unconditionally.
-//
-// Step 1's connection is released before step 2 so the envelope re-encrypt sees a clean handle.
-func durableCheckpoint(ctx context.Context, db *sql.DB) error {
-	if err := walCheckpointTruncate(ctx, db); err != nil {
-		return err
-	}
-	if err := sqlitedrv.Checkpoint(db); err != nil {
-		return fmt.Errorf("durable checkpoint re-encrypt: %w", err)
-	}
-	return nil
-}
-
-// walCheckpointTruncate folds the WAL into the main file with the busy fail-closed guard,
-// on its own connection (released on return, before the envelope re-encrypt).
-func walCheckpointTruncate(ctx context.Context, db *sql.DB) error {
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return fmt.Errorf("durable checkpoint conn: %w", err)
-	}
-	defer conn.Close()
-	var busy, logFrames, checkpointed int
-	if err := conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
-		return fmt.Errorf("durable checkpoint: %w", err)
-	}
-	if busy != 0 {
-		return fmt.Errorf("durable checkpoint did not complete (busy=%d, log=%d, checkpointed=%d) — refusing to ship a snapshot missing committed WAL frames", busy, logFrames, checkpointed)
-	}
-	return nil
+	// owner never disagree.
+	//
+	// WithSeal hands the ship the crypto client: on the pure-Go envelope backend
+	// sqlitedrv.Checkpoint re-encrypts the real path so the ship reads fresh bytes and not
+	// the last-sealed ciphertext (which would be a lost acked write on takeover); on the
+	// write-time backends it is a successful no-op, so it is passed unconditionally.
+	//
+	// WithReader hands it orgReader, the read-only handle a ship pins its file with, so the
+	// store's own connection is free while the file is copied and the copy reads what the
+	// fold left there.
+	return org.NewDurability(cond, members, cipher,
+		org.WithSeal(sqlitedrv.Checkpoint),
+		org.WithReader(orgReader),
+	), members.Members
 }
 
 // disabledDurability records that the durable plane is OFF, at ERROR when the

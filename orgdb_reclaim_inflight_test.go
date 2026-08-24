@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/internal/org"
+	sqlitedrv "github.com/hanzoai/sqlite"
 )
 
 // Reclaim bounds byNS. Nothing bounded inflight, and the two are not the same map.
@@ -28,7 +29,7 @@ func TestReclaimBoundsTheOpenSetAndLeavesNothingInFlight(t *testing.T) {
 	if err := members.Start(context.Background()); err != nil {
 		t.Fatalf("membership: %v", err)
 	}
-	dur := org.NewDurability(cond, members, nil, org.WithCheckpoint(durableCheckpoint))
+	dur := org.NewDurability(cond, members, nil, org.WithSeal(sqlitedrv.Checkpoint), org.WithReader(orgReader))
 
 	store := NewOrgStore(Base{DataDir: t.TempDir(), Durable: dur}, "widget", openRows)
 	store.maxOpen = 2
@@ -71,7 +72,7 @@ func TestAFailedOpenLeavesNothingInFlight(t *testing.T) {
 	if err := members.Start(context.Background()); err != nil {
 		t.Fatalf("membership: %v", err)
 	}
-	dur := org.NewDurability(cond, members, nil, org.WithCheckpoint(durableCheckpoint))
+	dur := org.NewDurability(cond, members, nil, org.WithSeal(sqlitedrv.Checkpoint), org.WithReader(orgReader))
 
 	explode := true
 	store := NewOrgStore(Base{DataDir: t.TempDir(), Durable: dur}, "widget", func(db *sql.DB) (*sql.DB, error) {

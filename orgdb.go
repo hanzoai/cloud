@@ -24,6 +24,7 @@ import (
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
+	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -73,6 +74,32 @@ func openOrgDB(ns namespace.Namespace, subsystem, dir string) (*sql.DB, error) {
 	return db, nil
 }
 
+// orgReader opens a snapshot's own read-only handle on an org file, through the SAME cek
+// derivation the store's handle came from — cloud names the database and holds no key.
+// A durable ship holds a read transaction on it while it copies the file, so the store
+// keeps its own connection and the copy reads a file nothing is moving (internal/org,
+// pin). It is opened per ship and closed with it; nothing else may hold it.
+//
+// It answers (nil, nil) when the codec is not linked. That build keeps a keyed database
+// as an envelope — one plaintext copy on tmpfs per handle, encrypted back to the real
+// path at checkpoint — so the real path is not a database a second handle could open, and
+// a second envelope open would be a second plaintext copy of which only the last to close
+// survives. The linked codec keeps the database live on disk in SQLCipher pages, where a
+// second connection is what SQLite is built for. Every binary that opens an org file is
+// built against it (the plugins; cmd/cloud opens none), so this is the shipped path and
+// the other answer is the honest one for a build that cannot take it.
+func orgReader(ns namespace.Namespace, subsystem, path string) (*sql.DB, error) {
+	if !sqlitedrv.CodecLinked() {
+		return nil, nil
+	}
+	db, err := cek.OpenAt(ns, subsystem, path)
+	if err != nil {
+		return nil, fmt.Errorf("cloud: org reader open %s/%s: %w", ns, subsystem, err)
+	}
+	sqlpool.Single(db)
+	return db, nil
+}
+
 // OrgStore is the lazily-opened, cached set of per-entity stores of type T for
 // one subsystem, each keyed by the NAMESPACE that names it so an entity's
 // SQLite file is opened (and migrated) exactly once. It is the caching layer
@@ -83,8 +110,11 @@ func openOrgDB(ns namespace.Namespace, subsystem, dir string) (*sql.DB, error) {
 //
 // The key is the namespace and not the path because the namespace is the fact
 // and the path is a rendering of it. Keyed by path, two spellings that render
-// the same file would be two entries and therefore two open handles on one
-// SQLite — which the at-rest cek layer does not support. Keyed by the value,
+// the same file would be two entries and therefore two STORE handles on one
+// SQLite — two writers, and on the envelope backend two plaintext copies of
+// which only the last to close survives. (orgReader's read-only handle is not
+// one of these: it writes nothing, it exists only for the length of a ship, and
+// it opens only on the backend that keeps the database live on disk.) Keyed by the value,
 // that state cannot be constructed.
 type OrgStore[T io.Closer] struct {
 	dataDir   string

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/internal/org"
+	sqlitedrv "github.com/hanzoai/sqlite"
 )
 
 // A failed open must not wedge the namespace it failed on.
@@ -33,7 +34,7 @@ func TestFailedOpenDoesNotWedgeTheNamespace(t *testing.T) {
 	if err := members.Start(context.Background()); err != nil {
 		t.Fatalf("membership: %v", err)
 	}
-	dur := org.NewDurability(cond, members, nil, org.WithCheckpoint(durableCheckpoint))
+	dur := org.NewDurability(cond, members, nil, org.WithSeal(sqlitedrv.Checkpoint), org.WithReader(orgReader))
 
 	explode := true
 	store := NewOrgStore(Base{DataDir: t.TempDir(), Durable: dur}, "widget",
