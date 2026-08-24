@@ -276,7 +276,7 @@ type VolumeSnapshotOut struct {
 // Response: {"status":"ok","msg":"","data":{"id":"snap-01J","name":"acme-data-before-migration",
 // "sizeGiB":200,"created":"2026-07-27T00:00:00Z"}}
 func (b *board) snapshotVolume(ctx context.Context, in *VolumeIn) (*VolumeSnapshotOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ type mutation[T any] struct {
 // between the operator loading the page and pressing the button is refused, and if any
 // cluster is unreachable the scan is incomplete and NOTHING may be mutated.
 func run[T any](ctx context.Context, b *board, m mutation[T]) (*MutationOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -427,13 +427,9 @@ func (b *board) expandVolume(ctx context.Context, in *VolumeIn) (*MutationOut, e
 // goes with it.
 // Response: {"status":"ok","msg":"","data":{"deleted":true,"name":"worker-3","freedMonthlyCents":4800}}
 func (b *board) deleteDroplet(ctx context.Context, in *DropletIn) (*MutationOut, error) {
-	id, err := strconv.Atoi(strings.TrimSpace(in.ID))
-	if err != nil {
-		return &MutationOut{Status: core.Err, Msg: "droplet id must be numeric"}, nil
-	}
 	return run(ctx, b, mutation[Machine]{
 		action: "infra.droplet.delete", resType: "do_droplet", resID: in.ID,
-		find:    func(snap Snapshot) (Machine, bool) { return findNode(snap, id) },
+		find:    func(snap Snapshot) (Machine, bool) { return findDroplet(snap, in.ID) },
 		verdict: func(n Machine) (bool, string) { return n.Mutable, n.BlockedReason },
 		apply: func(ctx context.Context, do *digitalocean.Client, n Machine) (map[string]any, error) {
 			if err := do.DeleteDroplet(ctx, n.ID); err != nil {
@@ -456,18 +452,14 @@ func (b *board) deleteDroplet(ctx context.Context, in *DropletIn) (*MutationOut,
 // Response: {"status":"ok","msg":"","data":{"name":"worker-3","from":"s-2vcpu-4gb",
 // "to":"s-4vcpu-8gb","permanent":false,"actionId":1234567,"actionStatus":"in-progress"}}
 func (b *board) resizeDroplet(ctx context.Context, in *DropletIn) (*MutationOut, error) {
-	id, err := strconv.Atoi(strings.TrimSpace(in.ID))
-	if err != nil {
-		return &MutationOut{Status: core.Err, Msg: "droplet id must be numeric"}, nil
-	}
-	if strings.TrimSpace(in.Size) == "" {
-		return &MutationOut{Status: core.Err, Msg: "size is required (a DigitalOcean size slug, e.g. s-4vcpu-8gb)"}, nil
-	}
 	return run(ctx, b, mutation[Machine]{
 		action: "infra.droplet.resize", resType: "do_droplet", resID: in.ID,
-		find:    func(snap Snapshot) (Machine, bool) { return findNode(snap, id) },
+		find:    func(snap Snapshot) (Machine, bool) { return findDroplet(snap, in.ID) },
 		verdict: func(n Machine) (bool, string) { return n.Mutable, n.BlockedReason },
 		apply: func(ctx context.Context, do *digitalocean.Client, n Machine) (map[string]any, error) {
+			if strings.TrimSpace(in.Size) == "" {
+				return nil, fmt.Errorf("size is required (a DigitalOcean size slug, e.g. s-4vcpu-8gb)")
+			}
 			act, err := do.ResizeDroplet(ctx, n.ID, in.Size, in.Disk)
 			if err != nil {
 				return nil, err
@@ -538,7 +530,7 @@ func (b *board) scaleNodePool(ctx context.Context, in *ScaleIn) (*MutationOut, e
 // Example: {"cordon":true,"drain":true}
 // Response: {"status":"ok","msg":"","data":{"name":"worker-3","schedulable":false,"evicted":7}}
 func (b *board) cordonNode(ctx context.Context, in *CordonIn) (*MutationOut, error) {
-	c, err := core.Admit(ctx)
+	c, err := core.Change(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -595,6 +587,23 @@ func findVolume(s Snapshot, id string) (Volume, bool) {
 		}
 	}
 	return Volume{}, false
+}
+
+// findDroplet locates the machine an operator named, and it takes the id AS WRITTEN.
+//
+// Both droplet routes used to parse the id in the handler and answer "must be numeric"
+// on a bad one, which put a decision about the REQUEST ahead of the decision about the
+// CALLER — the same shape a forged cross-origin request would meet before any control
+// ran, and one an operation whose whole job is destroying a machine must not have. An id
+// that is not a number names no droplet, so it is simply not found, and `run` — which
+// holds the gate, the fresh scan, the verdict and the audit — is the only thing that
+// answers.
+func findDroplet(s Snapshot, id string) (Machine, bool) {
+	n, err := strconv.Atoi(strings.TrimSpace(id))
+	if err != nil {
+		return Machine{}, false
+	}
+	return findNode(s, n)
 }
 
 func findNode(s Snapshot, id int) (Machine, bool) {
