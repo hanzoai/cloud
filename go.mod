@@ -31,7 +31,7 @@ require (
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.6
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.5.2
+	github.com/hanzoai/sqlite v0.5.5
 	github.com/hanzoai/trust v0.2.4
 	github.com/hanzoai/types v0.1.1
 	github.com/hanzokv/go/v9 v9.22.0
@@ -440,7 +440,7 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
-	github.com/hanzoai/dbx v1.17.2 // indirect
+	github.com/hanzoai/dbx v1.17.4 // indirect
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v1.0.0 // indirect
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
@@ -689,7 +689,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.6
-	github.com/hanzoai/ai v1.833.121
+	github.com/hanzoai/ai v1.833.178
 	github.com/hanzoai/authz v1.10.34
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16
