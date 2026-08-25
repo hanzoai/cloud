@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/internal/cluster"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -382,37 +383,9 @@ func TestScanOrder(t *testing.T) {
 	// classify to a real tenant. A scanned-but-unclassified namespace would render
 	// rows with an empty tenant — rows no OrgAdmin could ever be confined to.
 	for _, ns := range got {
-		tenant, env, ok := nsClass(ns)
+		tenant, env, ok := cluster.Class(ns)
 		if !ok || tenant == "" || env == "" {
 			t.Errorf("scanOrder namespace %q does not classify: tenant=%q env=%q ok=%v", ns, tenant, env, ok)
-		}
-	}
-}
-
-// TestNsClassIsTotalAndConfining pins the classifier's two load-bearing properties:
-// it is TOTAL (every input decided, never a panic) and it CONFINES (anything it does
-// not recognise is classified out, so the reader can never reach beyond the platform
-// tier, and a tenant namespace authorizes to its own org rather than to "hanzo").
-func TestNsClassIsTotalAndConfining(t *testing.T) {
-	for _, tc := range []struct {
-		ns, tenant, env string
-		ok              bool
-	}{
-		{"hanzo", "hanzo", "main", true},
-		{"hanzo-mainnet", "hanzo", "main", true},
-		{"hanzo-testnet", "hanzo", "test", true},
-		{"hanzo-devnet", "hanzo", "dev", true},
-		{"tenant-maxpower", "maxpower", "main", true}, // authorizes to maxpower, NOT hanzo
-		{"tenant-hanzo", "hanzo", "main", true},
-		{"tenant-", "", "", false},     // empty tenant is not a tenant
-		{"kube-system", "", "", false}, // never ours
-		{"default", "", "", false},
-		{"", "", "", false},
-		{"hanzo-evil", "", "", false}, // a look-alike suffix is not a lifecycle env
-	} {
-		tenant, env, ok := nsClass(tc.ns)
-		if tenant != tc.tenant || env != tc.env || ok != tc.ok {
-			t.Errorf("nsClass(%q) = (%q,%q,%v), want (%q,%q,%v)", tc.ns, tenant, env, ok, tc.tenant, tc.env, tc.ok)
 		}
 	}
 }
@@ -420,7 +393,7 @@ func TestNsClassIsTotalAndConfining(t *testing.T) {
 // TestDiscoverNamespacesAddsTenantsAndNeverBlanks pins the two properties that make
 // discovery safe. It only ever ADDS to the first-party set — an empty or failed
 // listing degrades to today's behavior rather than blanking the board (the bug this
-// test was written for) — and a namespace nsClass does not recognise can never enter
+// test was written for) — and a namespace cluster.Class does not recognise can never enter
 // the scan set, so the reader still cannot reach beyond the platform tier.
 func TestDiscoverNamespacesAddsTenantsAndNeverBlanks(t *testing.T) {
 	ns := func(name string) *unstructured.Unstructured {
@@ -442,7 +415,7 @@ func TestDiscoverNamespacesAddsTenantsAndNeverBlanks(t *testing.T) {
 		t.Errorf("discoverNamespaces = %v, want %v", got, want)
 	}
 	for _, n := range got {
-		if _, _, ok := nsClass(n); !ok {
+		if _, _, ok := cluster.Class(n); !ok {
 			t.Errorf("unclassified namespace %q entered the scan set", n)
 		}
 	}

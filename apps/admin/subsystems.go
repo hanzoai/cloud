@@ -154,7 +154,7 @@ type subsystemRow struct {
 // SubsystemsIn is the GET /v1/admin/subsystems filter.
 type SubsystemsIn struct {
 	// Range bounds the telemetry window: 24h, 7d or 30d. Anything else, including
-	// empty, resolves to the default through the same o11yRange the o11y board uses.
+	// empty, resolves to the default through the same window grammar the o11y board uses.
 	Range string `json:"range"`
 }
 
@@ -176,8 +176,8 @@ func (o ops) Subsystems(ctx context.Context, in *SubsystemsIn) (*SubsystemsOut, 
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
 	}
-	rangeLabel := o11yRange(in.Range)
-	since := computeSince(rangeLabel)
+	rangeLabel := core.WarehouseRange(in.Range)
+	since := core.WarehouseSince(rangeLabel)
 	now := time.Now().UTC()
 
 	// The inventory is authoritative and always available — it IS this process.
@@ -196,7 +196,7 @@ func (o ops) Subsystems(ctx context.Context, in *SubsystemsIn) (*SubsystemsOut, 
 		return &SubsystemsOut{Status: core.OK, Data: &payload}, nil
 	}
 
-	sinceTS := chTS(since)
+	sinceTS := core.CHTimeLit(since)
 	index := rowIndex(rows)
 
 	redRows, err := datastore.Query(ctx, subsystemREDSQL(), sinceTS)
@@ -250,17 +250,17 @@ func rowIndex(rows []subsystemRow) map[string]int {
 func applyRED(rows []subsystemRow, index map[string]int, warehouse []map[string]any, window time.Duration) {
 	minutes := window.Minutes()
 	for _, r := range warehouse {
-		i, ok := index[chStr(r["subsystem"])]
+		i, ok := index[core.CHStr(r["subsystem"])]
 		if !ok {
 			continue
 		}
 		row := &rows[i]
-		row.Requests = chInt64(r["requests"])
-		row.Errors = chInt64(r["errors"])
-		row.ErrorRate = chFloat64(r["error_rate"])
-		row.LatencyP50Ms = chFloat64(r["p50"])
-		row.LatencyP95Ms = chFloat64(r["p95"])
-		row.LatencyP99Ms = chFloat64(r["p99"])
+		row.Requests = core.CHInt64(r["requests"])
+		row.Errors = core.CHInt64(r["errors"])
+		row.ErrorRate = core.CHFloat64(r["error_rate"])
+		row.LatencyP50Ms = core.CHFloat64(r["p50"])
+		row.LatencyP95Ms = core.CHFloat64(r["p95"])
+		row.LatencyP99Ms = core.CHFloat64(r["p99"])
 		if minutes > 0 {
 			row.RequestsPerMin = round2(float64(row.Requests) / minutes)
 		}
@@ -270,15 +270,15 @@ func applyRED(rows []subsystemRow, index map[string]int, warehouse []map[string]
 // applyLastError folds the most recent errored span per subsystem onto its row.
 func applyLastError(rows []subsystemRow, index map[string]int, warehouse []map[string]any) {
 	for _, r := range warehouse {
-		i, ok := index[chStr(r["subsystem"])]
+		i, ok := index[core.CHStr(r["subsystem"])]
 		if !ok {
 			continue
 		}
 		row := &rows[i]
-		row.LastErrorAt = chTime(r["at"])
-		row.LastErrorRoute = chStr(r["route"])
-		row.LastErrorStatus = chStr(r["status"])
-		row.LastErrorMessage = chStr(r["message"])
+		row.LastErrorAt = core.CHTime(r["at"])
+		row.LastErrorRoute = core.CHStr(r["route"])
+		row.LastErrorStatus = core.CHStr(r["status"])
+		row.LastErrorMessage = core.CHStr(r["message"])
 	}
 }
 

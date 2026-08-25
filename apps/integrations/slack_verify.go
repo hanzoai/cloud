@@ -3,7 +3,6 @@ package integrations
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"strconv"
 	"strings"
@@ -16,11 +15,11 @@ import (
 //   - Slack request-signature verification: constant-time HMAC-SHA256 over the
 //     EXACT raw body, with a strict 5-minute anti-replay timestamp window. The
 //     same gate protects the Events webhook AND the slash-command endpoint.
-//   - A signed, TTL'd, single-use "subject state" primitive used by the per-user
-//     link flow for browser continuity (leg1↔leg2 nonce) and the (team,user)
-//     link cookie. This is ORTHOGONAL to the OAuth-connect state in state.go
-//     (statePayload{org,provider,nonce}); both HMAC with the SAME s.stateKey —
-//     one signing key, two named subjects.
+//   - The Slack (team,user) link subject, signed by the shared signed-state
+//     primitive in channel_state.go and used for browser continuity
+//     (leg1↔leg2 nonce) and the link cookie. This is ORTHOGONAL to the
+//     OAuth-connect state in state.go (statePayload{org,provider,nonce}); both
+//     HMAC with the SAME s.stateKey — one signing key, distinct named subjects.
 
 // ── Slack request signing (webhook + slash) ─────────────────────────────────
 
@@ -64,85 +63,29 @@ func verifySlackSignature(signingSecret, signature, timestamp, rawBody string, n
 }
 
 // ── signed single-use link state (the ONE link primitive) ───────────────────
-
-// slackLinkTTLSec is the link-state lifetime — legs 1→3 must complete within it.
-// It is ALSO the single-use seen-set TTL, so a signed link state redeems exactly
-// once within its validity.
-const slackLinkTTLSec = 60 * 10 // 10 minutes
-
-// signSlackSubject binds an opaque subject into a signed, TTL'd, single-use-
-// noncable state:
 //
-//	base64url("<subject>.<exp>.<nonce>") + "." + base64url(hmac)
-//
-// The subject MUST NOT contain '.' (the field separator). Returns an error only
-// if the CSPRNG fails — a predictable nonce would let a redeemed state replay
-// once its seen-set entry expires. `now`=0 → time.Now.
-func signSlackSubject(key []byte, subject string, now int64) (string, error) {
-	if now == 0 {
-		now = time.Now().Unix()
-	}
-	exp := now + slackLinkTTLSec
-	nonce, err := genToken() // 128-bit CSPRNG hex (integrations.genToken)
-	if err != nil {
-		return "", err
-	}
-	payload := base64.RawURLEncoding.EncodeToString(
-		[]byte(subject + "." + strconv.FormatInt(exp, 10) + "." + nonce))
-	return payload + "." + hmacB64URL(key, payload), nil
-}
-
-// verifySlackSubject verifies a signed subject state and returns the bound
-// subject + single-use nonce. The constant-time MAC is checked BEFORE the payload
-// is parsed (a tampered payload never reaches the split/parse). ok=false on any
-// MAC / format / expiry failure. `now`=0 → time.Now.
-func verifySlackSubject(key []byte, state string, now int64) (subject, nonce string, ok bool) {
-	dot := strings.LastIndexByte(state, '.')
-	if dot <= 0 {
-		return "", "", false
-	}
-	payload := state[:dot]
-	mac := state[dot+1:]
-	if !hmac.Equal([]byte(mac), []byte(hmacB64URL(key, payload))) {
-		return "", "", false
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(payload)
-	if err != nil {
-		return "", "", false
-	}
-	parts := strings.SplitN(string(decoded), ".", 3)
-	if len(parts) != 3 || parts[0] == "" || parts[2] == "" {
-		return "", "", false
-	}
-	exp, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil {
-		return "", "", false
-	}
-	if now == 0 {
-		now = time.Now().Unix()
-	}
-	if now > exp {
-		return "", "", false
-	}
-	return parts[0], parts[2], true
-}
+// Slack composes its (team,user) subject here and signs it with the SAME
+// signSubject/verifySubject every other channel uses (channel_state.go). Slack is
+// one subject shape, not a second state format: a hardening that lands on one
+// copy of an algebra and not the other leaves the old rule serving whoever
+// reaches it.
 
 // slackLinkSep joins the Slack (team,user) into the link-cookie subject. Slack
 // team/user ids are [A-Z0-9] (no ':' and no '.'), so the composite is unambiguous
-// under both this split and the '.' split in verifySlackSubject.
+// under both this split and the '.' split in verifySubject.
 const slackLinkSep = ":"
 
 // signSlackLink binds the Slack-VERIFIED (team,user) into a signed, single-use
 // link state, so the hanzo.id OIDC leg proves it originated from a server-minted
 // prompt gated by a verified Slack sign-in — a forged (team,user) cannot smuggle in.
 func signSlackLink(key []byte, teamID, slackUserID string, now int64) (string, error) {
-	return signSlackSubject(key, teamID+slackLinkSep+slackUserID, now)
+	return signSubject(key, teamID+slackLinkSep+slackUserID, now)
 }
 
 // verifySlackLink verifies a link state and recovers the bound (team,user) +
 // nonce. ok=false on any MAC / format / expiry failure.
 func verifySlackLink(key []byte, state string, now int64) (teamID, slackUserID, nonce string, ok bool) {
-	subject, n, sok := verifySlackSubject(key, state, now)
+	subject, n, sok := verifySubject(key, state, now)
 	if !sok {
 		return "", "", "", false
 	}

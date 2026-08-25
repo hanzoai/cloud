@@ -20,6 +20,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/internal/cluster"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -143,10 +144,11 @@ func productFromView(v plane.App) productRow {
 // `hanzo.ai/tier` label on the App CRs would make it authoritative — a universe/operator
 // follow-up; until then this stays the single, documented classifier (one place, no fork).
 func tierOf(v plane.App) string {
-	// A workload in a tenant namespace is a customer / PaaS deployment, not platform infra.
-	// (Today the paas observer scans only the platform namespaces, so this is future-proofing
-	// for when the scan federates tenant/other clusters.)
-	if isTenantNamespace(v.Namespace) {
+	// A workload outside the platform tenant is a customer / PaaS deployment, not
+	// platform infra. The namespace is classified by the one function that decides
+	// what a namespace means (cluster.Class), never a second list here — a list is
+	// how hanzo-mainnet came to read as a customer's.
+	if t, _, ok := cluster.Class(v.Namespace); ok && t != cluster.Platform {
 		return "paas"
 	}
 	// The operator's OWN declared role is authoritative when present.
@@ -194,14 +196,4 @@ func repoName(registry string) string {
 		return registry[i+1:]
 	}
 	return registry
-}
-
-// isTenantNamespace reports whether ns is OUTSIDE the platform tier (hanzo/-testnet/-devnet) —
-// i.e. a customer / PaaS-tenant namespace. Kept in lockstep with the paas scanOrder.
-func isTenantNamespace(ns string) bool {
-	switch strings.TrimSpace(ns) {
-	case "hanzo", "hanzo-testnet", "hanzo-devnet", "":
-		return false
-	}
-	return true
 }

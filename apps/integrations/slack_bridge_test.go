@@ -131,26 +131,26 @@ func TestSlackSubjectStateRoundtrip(t *testing.T) {
 	for i := range key {
 		key[i] = byte(i + 7)
 	}
-	st, err := signSlackSubject(key, "nonce-abc", 0)
+	st, err := signSubject(key, "nonce-abc", 0)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
-	sub, nonce, ok := verifySlackSubject(key, st, 0)
+	sub, nonce, ok := verifySubject(key, st, 0)
 	if !ok || sub != "nonce-abc" || nonce == "" {
 		t.Fatalf("roundtrip mismatch: sub=%q nonce=%q ok=%v", sub, nonce, ok)
 	}
 	// Tampered MAC → fail.
-	if _, _, ok := verifySlackSubject(key, st[:len(st)-1]+"Z", 0); ok {
+	if _, _, ok := verifySubject(key, st[:len(st)-1]+"Z", 0); ok {
 		t.Fatal("tampered state must fail")
 	}
 	// Different key → fail (a forged state under the wrong key never verifies).
 	other := make([]byte, 32)
-	if _, _, ok := verifySlackSubject(other, st, 0); ok {
+	if _, _, ok := verifySubject(other, st, 0); ok {
 		t.Fatal("state under a different key must fail")
 	}
 	// Expired → fail.
-	past, _ := signSlackSubject(key, "s", time.Now().Add(-slackLinkTTLSec*time.Second-time.Minute).Unix())
-	if _, _, ok := verifySlackSubject(key, past, 0); ok {
+	past, _ := signSubject(key, "s", time.Now().Add(-linkStateTTLSec*time.Second-time.Minute).Unix())
+	if _, _, ok := verifySubject(key, past, 0); ok {
 		t.Fatal("expired state must fail")
 	}
 	// Link subject (team:user) roundtrips.
@@ -428,7 +428,7 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 
 	app := newApp(t, newKMS(t))
 
-	ss, _ := signSlackSubject(mounted.State.stateKey, "nonce-A", 0)
+	ss, _ := signSubject(mounted.State.stateKey, "nonce-A", 0)
 
 	// (a) No init cookie at all → refused.
 	res := req(t, app, http.MethodGet, "/v1/integrations/slack/link/slack?code=c&state="+url.QueryEscape(ss), "", nil)
@@ -484,7 +484,7 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 	// pairing directly: sign the slack-signin state over a known nonce and present
 	// the matching init cookie.
 	const nonce = "leg2-nonce"
-	ss, _ := signSlackSubject(mounted.State.stateKey, nonce, 0)
+	ss, _ := signSubject(mounted.State.stateKey, nonce, 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link/slack?code=usercode-acme&state="+url.QueryEscape(ss), nil)
 	rq.Header.Set("Cookie", slackInitCookie+"="+nonce)
 	resp, err := app.Test(rq)

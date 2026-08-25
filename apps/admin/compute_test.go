@@ -18,6 +18,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/admin/core"
 )
 
 // TestBuildComputeQuery_Filters proves the WHERE clause binds the range, and adds
@@ -73,16 +75,16 @@ func TestComputeSince(t *testing.T) {
 		"xyz": 30 * 24 * time.Hour, // unknown → default
 	}
 	for label, want := range cases {
-		got := now.Sub(computeSince(label))
+		got := now.Sub(core.WarehouseSince(label))
 		if d := got - want; d < -2*time.Second || d > 2*time.Second {
-			t.Errorf("computeSince(%q) lookback = %v, want ≈%v", label, got, want)
+			t.Errorf("core.WarehouseSince(%q) lookback = %v, want ≈%v", label, got, want)
 		}
 	}
 }
 
 // TestTerminalComputeSQL renders the terminal set as a quoted CH list.
 func TestTerminalComputeSQL(t *testing.T) {
-	got := terminalComputeSQL()
+	got := core.SQLInList(terminalComputeEvents)
 	for _, e := range []string{"'stop'", "'destroy'", "'terminated'", "'shutdown'"} {
 		if !strings.Contains(got, e) {
 			t.Errorf("terminal list missing %s; got %q", e, got)
@@ -125,19 +127,19 @@ func TestComputeLeavesFromRows(t *testing.T) {
 
 // TestComputeCoercers proves the map coercers accept the driver natives + degrade.
 func TestComputeCoercers(t *testing.T) {
-	if chInt64(uint64(7)) != 7 || chInt64(int64(7)) != 7 || chInt64(float64(7)) != 7 {
-		t.Error("chInt64 must accept uint64/int64/float64")
+	if core.CHInt64(uint64(7)) != 7 || core.CHInt64(int64(7)) != 7 || core.CHInt64(float64(7)) != 7 {
+		t.Error("CHInt64 must accept uint64/int64/float64")
 	}
-	if chInt64("nope") != 0 || chInt64(nil) != 0 {
-		t.Error("chInt64 must degrade non-numerics to 0")
+	if core.CHInt64("nope") != 0 || core.CHInt64(nil) != 0 {
+		t.Error("CHInt64 must degrade non-numerics to 0")
 	}
-	if chStr("x") != "x" || chStr(42) != "" {
-		t.Error("chStr must pass strings, degrade others to empty")
+	if core.CHStr("x") != "x" || core.CHStr(42) != "" {
+		t.Error("CHStr must pass strings, degrade others to empty")
 	}
-	if chTime(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)) != "2026-01-02T03:04:05Z" {
-		t.Error("chTime must format time.Time as RFC3339 UTC")
+	if core.CHTime(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)) != "2026-01-02T03:04:05Z" {
+		t.Error("CHTime must format time.Time as RFC3339 UTC")
 	}
-	if chTime(123) != "" {
-		t.Error("chTime must degrade non-time to empty")
+	if core.CHTime(123) != "" {
+		t.Error("CHTime must degrade non-time to empty")
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/datastore"
 )
 
@@ -56,9 +57,9 @@ type ledgerQuery struct {
 // argument, the tenant form two; nothing is interpolated.
 func (s ledgerScope) where() (string, []any) {
 	if s.Org == "" {
-		return " WHERE timestamp >= ?", []any{chTS(s.Since)}
+		return " WHERE timestamp >= ?", []any{core.CHTimeLit(s.Since)}
 	}
-	return " WHERE timestamp >= ? AND organization = ?", []any{chTS(s.Since), s.Org}
+	return " WHERE timestamp >= ? AND organization = ?", []any{core.CHTimeLit(s.Since), s.Org}
 }
 
 // ── builders (unit-tested) ──
@@ -168,7 +169,7 @@ func foldLedger(ctx context.Context, s ledgerScope) (ledgerFold, error) {
 	if err != nil {
 		return ledgerFold{}, err
 	}
-	return foldOf(firstRowOr(rows)), nil
+	return foldOf(core.CHFirstRow(rows)), nil
 }
 
 // foldLedgerByOrg folds the window per tenant, keyed by org slug. ONE query answers the
@@ -184,7 +185,7 @@ func foldLedgerByOrg(ctx context.Context, s ledgerScope) (map[string]ledgerFold,
 	}
 	out := make(map[string]ledgerFold, len(rows))
 	for _, r := range rows {
-		out[chStr(r["org"])] = foldOf(r)
+		out[core.CHStr(r["org"])] = foldOf(r)
 	}
 	return out, nil
 }
@@ -192,8 +193,8 @@ func foldLedgerByOrg(ctx context.Context, s ledgerScope) (map[string]ledgerFold,
 // foldOf reads the three counters every caller of a fold renders.
 func foldOf(r map[string]any) ledgerFold {
 	return ledgerFold{
-		Requests:  chInt64(r["requests"]),
-		Tokens:    chInt64(r["tokens"]),
-		CostCents: chInt64(r["cost_cents"]),
+		Requests:  core.CHInt64(r["requests"]),
+		Tokens:    core.CHInt64(r["tokens"]),
+		CostCents: core.CHInt64(r["cost_cents"]),
 	}
 }

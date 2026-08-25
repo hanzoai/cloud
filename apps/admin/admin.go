@@ -265,7 +265,7 @@ func (o ops) orgs(ctx context.Context, in *orgsIn) (*orgsOut, error) {
 	// columns for every row. Per-org it would be a query per tenant, and this fleet has
 	// eighty-one; a directory that costs O(orgs) round-trips gets slower every signup.
 	// A tenant with no rows in the window is absent from the map and reads a true zero.
-	ledger, _ := foldLedgerByOrg(ctx, ledgerScope{Since: computeSince(usageRange)})
+	ledger, _ := foldLedgerByOrg(ctx, ledgerScope{Since: core.WarehouseSince(usageRange)})
 	members := foldUsersByOrg(o.s, ctx, cr, orgs)
 	money := core.Delegate(ctx)
 
@@ -471,8 +471,8 @@ func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
 
 	// ONE scope, four reads: the totals, the daily curve and the model split all describe
 	// the same window of the same rows, so they cannot disagree about which window it was.
-	scope := ledgerScope{Since: computeSince(usageRange), Org: org}
-	totals := foldOf(firstRowOr(ledgerRows(ctx, ledgerTotals(scope))))
+	scope := ledgerScope{Since: core.WarehouseSince(usageRange), Org: org}
+	totals := foldOf(core.CHFirstRow(ledgerRows(ctx, ledgerTotals(scope))))
 
 	return &usageOut{Status: core.OK, Data: &usageData{
 		Totals: usageTotals{
@@ -495,15 +495,15 @@ const (
 )
 
 // usagePointsFrom projects the ledger's daily buckets onto the board's points. The bucket
-// key is a DAY, not an instant — see chDate.
+// key is a DAY, not an instant — see core.CHDate.
 func usagePointsFrom(rows []map[string]any) []usagePoint {
 	out := make([]usagePoint, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, usagePoint{
-			Date:       chDate(r["ts"]),
-			SpendCents: chInt64(r["cost_cents"]),
-			Tokens:     chInt64(r["tokens"]),
-			Requests:   chInt64(r["requests"]),
+			Date:       core.CHDate(r["ts"]),
+			SpendCents: core.CHInt64(r["cost_cents"]),
+			Tokens:     core.CHInt64(r["tokens"]),
+			Requests:   core.CHInt64(r["requests"]),
 		})
 	}
 	return out
@@ -517,9 +517,9 @@ func usageByModelFrom(rows []map[string]any) []usageByModel {
 	out := make([]usageByModel, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, usageByModel{
-			Model:      chStr(r["model"]),
-			SpendCents: chInt64(r["cost_cents"]),
-			Tokens:     chInt64(r["tokens"]),
+			Model:      core.CHStr(r["model"]),
+			SpendCents: core.CHInt64(r["cost_cents"]),
+			Tokens:     core.CHInt64(r["tokens"]),
 		})
 	}
 	return out
@@ -629,7 +629,7 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 	// The AI usage ledger — the 30-day spend + token tiles, from ONE fold of the window
 	// the tiles name. It reports itself like every other upstream: a warehouse that is
 	// not connected is a source that is DOWN, never a fleet that served nothing.
-	aiSpend, aiErr := foldLedger(ctx, ledgerScope{Since: computeSince(usageRange)})
+	aiSpend, aiErr := foldLedger(ctx, ledgerScope{Since: core.WarehouseSince(usageRange)})
 	sources = append(sources, core.SrcOf("usage", aiErr, int(aiSpend.Requests), now))
 
 	// o11y System Health.

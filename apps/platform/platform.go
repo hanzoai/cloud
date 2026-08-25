@@ -58,6 +58,7 @@ import (
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
+	"github.com/hanzoai/cloud/internal/remote"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
@@ -853,7 +854,7 @@ func (o ops) createApp(ctx context.Context, body *createAppReq) (*appView, error
 		ID: id, Org: org, ProjectID: project, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
 		Environment: cmp.Or(strings.TrimSpace(body.Environment), "production"), Source: source,
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: cmp.Or(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
-		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
+		RepoProvider: remote.Provider(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
 		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
 		StorageGB: s.State.k8s.limits.clampStorage(body.StorageGB),
 		EnvJSON:   string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
@@ -1157,22 +1158,6 @@ func slugify(name string) string {
 		out = strings.Trim(out[:40], "-")
 	}
 	return out
-}
-
-func providerFromURL(raw string) string {
-	r := strings.ToLower(raw)
-	switch {
-	case r == "":
-		return ""
-	case strings.Contains(r, "github.com"):
-		return "github"
-	case strings.Contains(r, "gitlab"):
-		return "gitlab"
-	case strings.Contains(r, "bitbucket"):
-		return "bitbucket"
-	default:
-		return "git"
-	}
 }
 
 func branchDefault(repoURL string) string {

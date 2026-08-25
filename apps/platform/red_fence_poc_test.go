@@ -243,7 +243,7 @@ func TestCDConfinementNeverHandsOverAReservedNamespace(t *testing.T) {
 
 // scopeNamespaces carried the identical compare and is LIVE on /v1/platform/fleet.
 //
-// It is exercised in the layout fleet.go's nsClass actually decodes — the
+// It is exercised in the layout the fleet board actually decodes — the
 // `tenant-<slug>` namespaces that exist on the cluster today — because the bug
 // and its fix are about the COMPARE, not the layout. Teaching the fleet board
 // the bare-org layout this package now writes is the convergence follow-up; it
