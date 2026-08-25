@@ -36,6 +36,7 @@ up at once. Every listener here is one somebody else's instance may already hold
 | `<name>.localhost` reaching the site plane | **yes** — `CLOUD_SITES_APEX=localhost` |
 | serving the project's FILES | **needs object storage** |
 | TLS | **needs an ingress in front** |
+| egress | **runs elsewhere, on purpose** — see below |
 
 The last two are not switches, so they are worth stating plainly.
 
@@ -49,6 +50,21 @@ gateway — cloud does not embed one. Point `S3_ACCESS_KEY` / `S3_SECRET_KEY` /
 **TLS.** zip terminates no TLS — there is no `tls.Config` in it — so this is
 plaintext on a loopback port. TLS belongs to `hanzoai/ingress` in front, which is
 also the estate's rule for who may terminate it.
+
+**Egress is not missing from this list — it is deliberately not here.** It holds
+upstream credentials so that a caller asks it for a CALL and never for a key, and
+that only means anything while the key is somewhere the caller is not. Its own
+architecture doc puts the limit exactly: "relocating the reader while the store
+stays put buys nothing … if a credential is read by the very process tree it is
+leaving, moving the reader moves nothing. The boundary has to move where the
+STORE is." Mounting egress as an app in this host would put the credential back
+inside the blast radius it exists to escape — and a host outside the cluster but
+inside the same cloud account is not outside a compromise of that account either,
+so where it runs is a deliberate choice rather than an assumed property.
+
+It is the same shape as `credz` one layer out: cloud already refuses to let the
+KMS root key reach any child but the broker. Egress is that rule applied to money
+instead of to a master key.
 
 ## The boot is warm, and that is a choice
 
