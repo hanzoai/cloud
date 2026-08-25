@@ -196,22 +196,6 @@ func TestSlugify(t *testing.T) {
 	}
 }
 
-func TestProviderFromURL(t *testing.T) {
-	cases := map[string]string{
-		"":                             "",
-		"https://github.com/hanzoai/x": "github",
-		"git@github.com:hanzoai/x.git": "github",
-		"https://gitlab.com/g/x":       "gitlab",
-		"https://bitbucket.org/b/x":    "bitbucket",
-		"https://git.example.com/x":    "git",
-	}
-	for in, want := range cases {
-		if got := providerFromURL(in); got != want {
-			t.Errorf("providerFromURL(%q)=%q want %q", in, got, want)
-		}
-	}
-}
-
 func TestSafeRel(t *testing.T) {
 	bad := []string{"/etc/passwd", "../escape", "a/../../b", "../../x"}
 	for _, p := range bad {

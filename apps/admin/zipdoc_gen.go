@@ -480,7 +480,7 @@ func init() {
 			"SourceStatus.name":             "Name identifies the upstream read, dotted by system: \"do.volumes\", \"do.balance\",\n\"k8s.hanzo-k8s\", \"iam.orgs\", \"billing.subscriptions\". It is stable, so a console\ncan keep per-source state across reads.",
 			"SourceStatus.ok":               "OK is whether that read succeeded. False is the whole point of this row: an\naggregator answers with what it got rather than failing, so the only way a reader\ncan tell a real zero from a missing source is here.",
 			"SourceStatus.rows":             "Rows is how many records came back. Zero with ok=true is a genuine empty result;\nzero with ok=false means nothing was read at all.",
-			"SubsystemsIn.range":            "Range bounds the telemetry window: 24h, 7d or 30d. Anything else, including\nempty, resolves to the default through the same o11yRange the o11y board uses.",
+			"SubsystemsIn.range":            "Range bounds the telemetry window: 24h, 7d or 30d. Anything else, including\nempty, resolves to the default through the same window grammar the o11y board uses.",
 			"SubsystemsOut.data":            "Data is the board. Null only when the caller was refused.",
 			"SubsystemsOut.msg":             "Msg is the failure reason when Status is \"error\", empty otherwise.",
 			"SubsystemsOut.status":          "Status is \"ok\" or \"error\", at HTTP 200 either way. An absent warehouse still\nanswers \"ok\" with the full inventory — the telemetry gap is reported in\ndata.sources.",

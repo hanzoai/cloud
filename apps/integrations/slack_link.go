@@ -55,7 +55,7 @@ const (
 func setSlackCookie(s *cloud.Service[state], c *zip.Ctx, name, val string) {
 	c.Fiber().Cookie(&fiber.Cookie{
 		Name: name, Value: val, Path: "/",
-		MaxAge: slackLinkTTLSec, HTTPOnly: true, Secure: true,
+		MaxAge: linkStateTTLSec, HTTPOnly: true, Secure: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
 	})
 }
@@ -89,7 +89,7 @@ func slackLink(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	ss, err := signSlackSubject(s.State.stateKey, initNonce, 0)
+	ss, err := signSubject(s.State.stateKey, initNonce, 0)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "state: %v", err)
 	}
@@ -127,7 +127,7 @@ func slackLinkSlack(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(code) > maxCodeLen {
 		return zip.ErrBadRequest("authorization code too large")
 	}
-	subject, _, ok := verifySlackSubject(s.State.stateKey, state, 0)
+	subject, _, ok := verifySubject(s.State.stateKey, state, 0)
 	if !ok {
 		clearSlackCookie(s, c, slackInitCookie)
 		return zip.ErrBadRequest("invalid or expired link")

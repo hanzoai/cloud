@@ -301,18 +301,18 @@ func datastoreFill(ctx context.Context) *datastoreVolume {
 // datastoreFillFromRow maps a system.disks row → the datastore card (PURE, tested).
 // nil when the disk reports no capacity (an unusable read, not a fabricated 0%).
 func datastoreFillFromRow(r map[string]any) *datastoreVolume {
-	total := float64(chInt64(r["total_space"]))
+	total := float64(core.CHInt64(r["total_space"]))
 	if total <= 0 {
 		return nil
 	}
-	free := float64(chInt64(r["free_space"]))
+	free := float64(core.CHInt64(r["free_space"]))
 	used := total - free
 	if used < 0 {
 		used = 0
 	}
 	return &datastoreVolume{
-		Name:    chStr(r["name"]),
-		Mount:   chStr(r["path"]),
+		Name:    core.CHStr(r["name"]),
+		Mount:   core.CHStr(r["path"]),
 		SizeGiB: int(total / bytesPerGiB),
 		UsedGiB: round1(used / bytesPerGiB),
 		Pct:     round1(used / total * 100),

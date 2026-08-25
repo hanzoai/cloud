@@ -295,8 +295,8 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
 	}
-	rangeLabel := o11yRange(in.Range)
-	since := computeSince(rangeLabel)
+	rangeLabel := core.WarehouseRange(in.Range)
+	since := core.WarehouseSince(rangeLabel)
 	payload := aiMetrics{
 		Range:        rangeLabel,
 		Start:        since.Format(time.RFC3339),
@@ -315,23 +315,23 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 		return &aimetricsOut{Status: core.OK, Data: &payload}, nil
 	}
 
-	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, span.time, eval_*.ts
+	sinceTS := core.CHTimeLit(since) // DateTime literal — cloud_usage.timestamp, span.time, eval_*.ts
 	interval := o11yBucket(rangeLabel)
 	fleet := ledgerScope{Since: since} // the ledger reads are fleet-wide here
 
 	// ── LLM generations (fleet) over gen_ai spans — totals builder SHARED with the
 	// o11y board (o11y.go): one query, one builder, two boards ──
 	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
-		r := firstRowOr(rows)
-		payload.O11yAI.Generations = chInt64(r["gens"])
-		payload.O11yAI.CostUsd = chFloat64(r["cost"])
+		r := core.CHFirstRow(rows)
+		payload.O11yAI.Generations = core.CHInt64(r["gens"])
+		payload.O11yAI.CostUsd = core.CHFloat64(r["cost"])
 	}
 	// Generation latency (separate query so a duration/attribute mismatch never
 	// zeroes the proven generations+cost number above).
 	if rows, err := datastore.Query(ctx, aimO11yAILatencySQL(), sinceTS); err == nil {
-		r := firstRowOr(rows)
-		payload.O11yAI.LatencyMsAvg = chFloat64(r["lat_avg"])
-		payload.O11yAI.LatencyMsP95 = chFloat64(r["lat_p95"])
+		r := core.CHFirstRow(rows)
+		payload.O11yAI.LatencyMsAvg = core.CHFloat64(r["lat_avg"])
+		payload.O11yAI.LatencyMsP95 = core.CHFloat64(r["lat_p95"])
 	}
 	// Generations per-model.
 	if rows, err := datastore.Query(ctx, aimO11yAIModelsSQL(), sinceTS); err == nil {
@@ -339,16 +339,16 @@ func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
 	}
 
 	// ── Per-model usage (fleet) from the live cloud_usage ledger (ledger.go) ──
-	fillAimUsage(&payload.Usage, firstRowOr(ledgerRows(ctx, ledgerTotals(fleet))))
+	fillAimUsage(&payload.Usage, core.CHFirstRow(ledgerRows(ctx, ledgerTotals(fleet))))
 	payload.TopModels = aimModelsFromRows(ledgerRows(ctx, ledgerByModel(fleet, aimTopN)))
 	payload.TopActors = aimActorsFromRows(ledgerRows(ctx, ledgerByActor(fleet, aimTopN)))
 
 	// ── Evals (fleet): traces + scores + progress ──
 	if rows, err := datastore.Query(ctx, aimEvalTracesSQL(), sinceTS); err == nil {
-		fillAimEvalTraces(&payload.Evals, firstRowOr(rows))
+		fillAimEvalTraces(&payload.Evals, core.CHFirstRow(rows))
 	}
 	if rows, err := datastore.Query(ctx, aimEvalScoresSQL(), sinceTS); err == nil {
-		fillAimEvalScores(&payload.Evals, firstRowOr(rows))
+		fillAimEvalScores(&payload.Evals, core.CHFirstRow(rows))
 	}
 	if rows, err := datastore.Query(ctx, aimScoreNamesSQL(), sinceTS); err == nil {
 		payload.ScoreNames = scoreNamesFromRows(rows)
@@ -427,36 +427,36 @@ func aimScoreSeriesSQL(interval string) string {
 // ── pure row parsers (unit-tested) ──
 
 func fillAimUsage(u *aimUsage, r map[string]any) {
-	u.Requests = chInt64(r["requests"])
-	u.Tokens = chInt64(r["tokens"])
-	u.PromptTokens = chInt64(r["prompt_tokens"])
-	u.CompletionTokens = chInt64(r["completion_tokens"])
-	u.CostCents = chInt64(r["cost_cents"])
-	u.Models = chInt64(r["models"])
+	u.Requests = core.CHInt64(r["requests"])
+	u.Tokens = core.CHInt64(r["tokens"])
+	u.PromptTokens = core.CHInt64(r["prompt_tokens"])
+	u.CompletionTokens = core.CHInt64(r["completion_tokens"])
+	u.CostCents = core.CHInt64(r["cost_cents"])
+	u.Models = core.CHInt64(r["models"])
 }
 
 func fillAimEvalTraces(e *aimEvals, r map[string]any) {
-	e.Traces = chInt64(r["traces"])
-	e.Runs = chInt64(r["runs"])
-	e.Datasets = chInt64(r["datasets"])
-	e.Models = chInt64(r["models"])
-	e.LatencyMsAvg = chFloat64(r["lat_avg"])
+	e.Traces = core.CHInt64(r["traces"])
+	e.Runs = core.CHInt64(r["runs"])
+	e.Datasets = core.CHInt64(r["datasets"])
+	e.Models = core.CHInt64(r["models"])
+	e.LatencyMsAvg = core.CHFloat64(r["lat_avg"])
 }
 
 func fillAimEvalScores(e *aimEvals, r map[string]any) {
-	e.Scores = chInt64(r["scores"])
-	e.AvgScore = chFloat64(r["avg_value"])
-	e.ScoreNames = chInt64(r["score_names"])
+	e.Scores = core.CHInt64(r["scores"])
+	e.AvgScore = core.CHFloat64(r["avg_value"])
+	e.ScoreNames = core.CHInt64(r["score_names"])
 }
 
 func aimModelsFromRows(rows []map[string]any) []aimModelStat {
 	out := make([]aimModelStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, aimModelStat{
-			Model:     chStr(r["model"]),
-			Requests:  chInt64(r["requests"]),
-			Tokens:    chInt64(r["tokens"]),
-			CostCents: chInt64(r["cost_cents"]),
+			Model:     core.CHStr(r["model"]),
+			Requests:  core.CHInt64(r["requests"]),
+			Tokens:    core.CHInt64(r["tokens"]),
+			CostCents: core.CHInt64(r["cost_cents"]),
 		})
 	}
 	return out
@@ -466,10 +466,10 @@ func aimActorsFromRows(rows []map[string]any) []aimActorStat {
 	out := make([]aimActorStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, aimActorStat{
-			Actor:     chStr(r["actor"]),
-			Requests:  chInt64(r["requests"]),
-			Tokens:    chInt64(r["tokens"]),
-			CostCents: chInt64(r["cost_cents"]),
+			Actor:     core.CHStr(r["actor"]),
+			Requests:  core.CHInt64(r["requests"]),
+			Tokens:    core.CHInt64(r["tokens"]),
+			CostCents: core.CHInt64(r["cost_cents"]),
 		})
 	}
 	return out
@@ -479,9 +479,9 @@ func lfModelsFromRows(rows []map[string]any) []aimLfModelStat {
 	out := make([]aimLfModelStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, aimLfModelStat{
-			Model:       chStr(r["model"]),
-			Generations: chInt64(r["gens"]),
-			CostUsd:     chFloat64(r["cost"]),
+			Model:       core.CHStr(r["model"]),
+			Generations: core.CHInt64(r["gens"]),
+			CostUsd:     core.CHFloat64(r["cost"]),
 		})
 	}
 	return out
@@ -491,11 +491,11 @@ func scoreNamesFromRows(rows []map[string]any) []aimScoreStat {
 	out := make([]aimScoreStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, aimScoreStat{
-			Name:     chStr(r["name"]),
-			Count:    chInt64(r["n"]),
-			AvgValue: chFloat64(r["avg_value"]),
-			MinValue: chFloat64(r["min_value"]),
-			MaxValue: chFloat64(r["max_value"]),
+			Name:     core.CHStr(r["name"]),
+			Count:    core.CHInt64(r["n"]),
+			AvgValue: core.CHFloat64(r["avg_value"]),
+			MinValue: core.CHFloat64(r["min_value"]),
+			MaxValue: core.CHFloat64(r["max_value"]),
 		})
 	}
 	return out
@@ -505,11 +505,11 @@ func evalRunsFromRows(rows []map[string]any) []aimRunStat {
 	out := make([]aimRunStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, aimRunStat{
-			RunName:  chStr(r["run_name"]),
-			Dataset:  chStr(r["dataset"]),
-			Scores:   chInt64(r["scores"]),
-			AvgValue: chFloat64(r["avg_value"]),
-			LastTs:   chTime(r["last_ts"]),
+			RunName:  core.CHStr(r["run_name"]),
+			Dataset:  core.CHStr(r["dataset"]),
+			Scores:   core.CHInt64(r["scores"]),
+			AvgValue: core.CHFloat64(r["avg_value"]),
+			LastTs:   core.CHTime(r["last_ts"]),
 		})
 	}
 	return out
@@ -519,9 +519,9 @@ func scoreSeriesFromRows(rows []map[string]any) []aimScorePoint {
 	out := make([]aimScorePoint, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, aimScorePoint{
-			Ts:       chTime(r["ts"]),
-			AvgValue: chFloat64(r["avg_value"]),
-			Count:    chInt64(r["n"]),
+			Ts:       core.CHTime(r["ts"]),
+			AvgValue: core.CHFloat64(r["avg_value"]),
+			Count:    core.CHInt64(r["n"]),
 		})
 	}
 	return out

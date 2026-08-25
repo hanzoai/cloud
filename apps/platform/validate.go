@@ -39,7 +39,7 @@ import (
 // ── build-input validation (CRIT-1) ──────────────────────────────────────────
 
 // defaultGitProviderHosts is the built-in allowlist of git apexes a build
-// context may be fetched from (mirrors providerFromURL's recognized set). An
+// context may be fetched from (mirrors remote.Provider's recognized set). An
 // allowlist — not a denylist — is the safe default: an unknown host is refused,
 // never fetched. An exact apex OR a subdomain of one is accepted (so
 // codeload.github.com under github.com is allowed).

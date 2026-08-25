@@ -17,13 +17,15 @@ package admin
 import (
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/apps/admin/core"
 )
 
 // TestO11yRange normalizes the enum and defaults to 30d.
 func TestO11yRange(t *testing.T) {
 	for in, want := range map[string]string{"24h": "24h", "7d": "7d", "30d": "30d", "": "30d", "bogus": "30d", " 7d ": "7d"} {
-		if got := o11yRange(in); got != want {
-			t.Errorf("o11yRange(%q) = %q, want %q", in, got, want)
+		if got := core.WarehouseRange(in); got != want {
+			t.Errorf("core.WarehouseRange(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -172,8 +174,8 @@ func TestChFloat64(t *testing.T) {
 		"nil":     {nil, 0},
 	}
 	for name, c := range cases {
-		if got := chFloat64(c.in); got != c.want {
-			t.Errorf("chFloat64(%s=%v) = %v, want %v", name, c.in, got, c.want)
+		if got := core.CHFloat64(c.in); got != c.want {
+			t.Errorf("core.CHFloat64(%s=%v) = %v, want %v", name, c.in, got, c.want)
 		}
 	}
 }

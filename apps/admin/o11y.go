@@ -45,7 +45,6 @@ package admin
 import (
 	"context"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
@@ -268,8 +267,8 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
 	}
-	rangeLabel := o11yRange(in.Range)
-	since := computeSince(rangeLabel)
+	rangeLabel := core.WarehouseRange(in.Range)
+	since := core.WarehouseSince(rangeLabel)
 	payload := o11yGlobal{
 		Range:       rangeLabel,
 		Start:       since.Format(time.RFC3339),
@@ -290,21 +289,21 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 	// ONE DateTime bound for every source: hanzo.cloud_usage keys on `timestamp`,
 	// and the plane's event.span / event.log both key on a `time` DateTime64(9)
 	// column — a single DateTime literal binds against all three.
-	sinceTS := chTS(since)
+	sinceTS := core.CHTimeLit(since)
 	interval := o11yBucket(rangeLabel)
 	// The ledger reads share ONE scope value (ledger.go) — this board is fleet-wide,
 	// so it names no tenant.
 	fleet := ledgerScope{Since: since}
 
 	// LLM usage totals (all orgs) — the shared ledger reads live in ledger.go.
-	fillUsageTotals(&payload.Totals, firstRowOr(ledgerRows(ctx, ledgerTotals(fleet))))
+	fillUsageTotals(&payload.Totals, core.CHFirstRow(ledgerRows(ctx, ledgerTotals(fleet))))
 	// Trace RED metrics (all services).
 	if rows, err := datastore.Query(ctx, o11yTraceTotalsSQL(), sinceTS); err == nil {
-		fillTraceTotals(&payload.Totals, firstRowOr(rows))
+		fillTraceTotals(&payload.Totals, core.CHFirstRow(rows))
 	}
 	// Fleet log volume.
 	if rows, err := datastore.Query(ctx, o11yLogVolumeSQL(), sinceTS); err == nil {
-		payload.Totals.LogVolume = chInt64(firstRowOr(rows)["c"])
+		payload.Totals.LogVolume = core.CHInt64(core.CHFirstRow(rows)["c"])
 	}
 	// Usage time-series (fleet).
 	payload.Series = usageSeriesFromRows(ledgerRows(ctx, ledgerSeries(fleet, interval)))
@@ -322,8 +321,8 @@ func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
 	}
 	// Fleet LLM generations — gen_ai spans on the plane; best-effort.
 	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
-		r := firstRowOr(rows)
-		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
+		r := core.CHFirstRow(rows)
+		payload.LLM = o11yLLM{Generations: core.CHInt64(r["gens"]), CostUsd: core.CHFloat64(r["cost"])}
 	}
 
 	return &o11yOut{Status: core.OK, Data: &payload}, nil
@@ -381,34 +380,34 @@ func o11yLLMSQL() string {
 // ── pure row parsers (unit-tested) ──
 
 func fillUsageTotals(t *o11yTotals, r map[string]any) {
-	t.Requests = chInt64(r["requests"])
-	t.Tokens = chInt64(r["tokens"])
-	t.PromptTokens = chInt64(r["prompt_tokens"])
-	t.CompletionTokens = chInt64(r["completion_tokens"])
-	t.CostCents = chInt64(r["cost_cents"])
-	t.Errors = chInt64(r["errors"])
-	t.Orgs = chInt64(r["orgs"])
-	t.Models = chInt64(r["models"])
+	t.Requests = core.CHInt64(r["requests"])
+	t.Tokens = core.CHInt64(r["tokens"])
+	t.PromptTokens = core.CHInt64(r["prompt_tokens"])
+	t.CompletionTokens = core.CHInt64(r["completion_tokens"])
+	t.CostCents = core.CHInt64(r["cost_cents"])
+	t.Errors = core.CHInt64(r["errors"])
+	t.Orgs = core.CHInt64(r["orgs"])
+	t.Models = core.CHInt64(r["models"])
 }
 
 func fillTraceTotals(t *o11yTotals, r map[string]any) {
-	t.TraceCount = chInt64(r["traces"])
-	t.LatencyP50Ms = chFloat64(r["p50"])
-	t.LatencyP95Ms = chFloat64(r["p95"])
-	t.LatencyP99Ms = chFloat64(r["p99"])
-	t.TraceErrorRate = chFloat64(r["err_rate"])
-	t.Services = chInt64(r["services"])
+	t.TraceCount = core.CHInt64(r["traces"])
+	t.LatencyP50Ms = core.CHFloat64(r["p50"])
+	t.LatencyP95Ms = core.CHFloat64(r["p95"])
+	t.LatencyP99Ms = core.CHFloat64(r["p99"])
+	t.TraceErrorRate = core.CHFloat64(r["err_rate"])
+	t.Services = core.CHInt64(r["services"])
 }
 
 func usageSeriesFromRows(rows []map[string]any) []o11ySeries {
 	out := make([]o11ySeries, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, o11ySeries{
-			Ts:        chTime(r["ts"]),
-			Requests:  chInt64(r["requests"]),
-			Tokens:    chInt64(r["tokens"]),
-			CostCents: chInt64(r["cost_cents"]),
-			Errors:    chInt64(r["errors"]),
+			Ts:        core.CHTime(r["ts"]),
+			Requests:  core.CHInt64(r["requests"]),
+			Tokens:    core.CHInt64(r["tokens"]),
+			CostCents: core.CHInt64(r["cost_cents"]),
+			Errors:    core.CHInt64(r["errors"]),
 		})
 	}
 	return out
@@ -417,7 +416,7 @@ func usageSeriesFromRows(rows []map[string]any) []o11ySeries {
 func logSeriesFromRows(rows []map[string]any) []o11yLogPoint {
 	out := make([]o11yLogPoint, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, o11yLogPoint{Ts: chTime(r["ts"]), Count: chInt64(r["c"])})
+		out = append(out, o11yLogPoint{Ts: core.CHTime(r["ts"]), Count: core.CHInt64(r["c"])})
 	}
 	return out
 }
@@ -426,10 +425,10 @@ func topOrgsFromRows(rows []map[string]any) []o11yOrgStat {
 	out := make([]o11yOrgStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, o11yOrgStat{
-			Org:       chStr(r["org"]),
-			Requests:  chInt64(r["requests"]),
-			Tokens:    chInt64(r["tokens"]),
-			CostCents: chInt64(r["cost_cents"]),
+			Org:       core.CHStr(r["org"]),
+			Requests:  core.CHInt64(r["requests"]),
+			Tokens:    core.CHInt64(r["tokens"]),
+			CostCents: core.CHInt64(r["cost_cents"]),
 		})
 	}
 	return out
@@ -439,10 +438,10 @@ func topModelsFromRows(rows []map[string]any) []o11yModelStat {
 	out := make([]o11yModelStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, o11yModelStat{
-			Model:     chStr(r["model"]),
-			Requests:  chInt64(r["requests"]),
-			Tokens:    chInt64(r["tokens"]),
-			CostCents: chInt64(r["cost_cents"]),
+			Model:     core.CHStr(r["model"]),
+			Requests:  core.CHInt64(r["requests"]),
+			Tokens:    core.CHInt64(r["tokens"]),
+			CostCents: core.CHInt64(r["cost_cents"]),
 		})
 	}
 	return out
@@ -452,28 +451,16 @@ func topServicesFromRows(rows []map[string]any) []o11ySvcStat {
 	out := make([]o11ySvcStat, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, o11ySvcStat{
-			Service:      chStr(r["service"]),
-			Requests:     chInt64(r["requests"]),
-			ErrorRate:    chFloat64(r["error_rate"]),
-			LatencyP95Ms: chFloat64(r["p95"]),
+			Service:      core.CHStr(r["service"]),
+			Requests:     core.CHInt64(r["requests"]),
+			ErrorRate:    core.CHFloat64(r["error_rate"]),
+			LatencyP95Ms: core.CHFloat64(r["p95"]),
 		})
 	}
 	return out
 }
 
 // ── small pure helpers ──
-
-// o11yRange normalizes the ?range enum (default 30d).
-func o11yRange(v string) string {
-	switch strings.TrimSpace(v) {
-	case "24h":
-		return "24h"
-	case "7d":
-		return "7d"
-	default:
-		return "30d"
-	}
-}
 
 // o11yBucket maps the range to a fixed datastore interval clause (a server-side
 // CONSTANT — never user input — so it is safe to render into the SQL). ~24-30
@@ -486,44 +473,5 @@ func o11yBucket(rangeLabel string) string {
 		return "6 HOUR"
 	default:
 		return "1 DAY"
-	}
-}
-
-// firstRowOr returns the first row or an empty map (never nil), so a parser reads
-// honest zeros from an empty result instead of panicking.
-func firstRowOr(rows []map[string]any) map[string]any {
-	if len(rows) == 0 {
-		return map[string]any{}
-	}
-	return rows[0]
-}
-
-// chFloat64 coerces a datastore numeric cell to float64 (the round()/quantile()
-// columns land as float64; a Decimal serialized to string is parsed). The twin of
-// chInt64 for the latency/error-rate/cost fields. Non-numeric → 0 (honest zero).
-func chFloat64(v any) float64 {
-	switch n := v.(type) {
-	case float64:
-		return n
-	case float32:
-		return float64(n)
-	case int:
-		return float64(n)
-	case int64:
-		return float64(n)
-	case int32:
-		return float64(n)
-	case uint64:
-		return float64(n)
-	case uint32:
-		return float64(n)
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
-		if err != nil {
-			return 0
-		}
-		return f
-	default:
-		return 0
 	}
 }

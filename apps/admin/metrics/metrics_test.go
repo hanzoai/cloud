@@ -114,8 +114,8 @@ func TestNormalizeAndEmpty(t *testing.T) {
 
 func TestNormalizeWindow(t *testing.T) {
 	for in, want := range map[string]string{"24h": "24h", "7d": "7d", "30d": "30d", "": "30d", "90d": "30d"} {
-		if got := normalizeWindow(in); got != want {
-			t.Fatalf("normalizeWindow(%q) = %q, want %q", in, got, want)
+		if got := core.WarehouseRange(in); got != want {
+			t.Fatalf("core.WarehouseRange(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

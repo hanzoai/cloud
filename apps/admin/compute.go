@@ -35,7 +35,6 @@ package admin
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/datastore"
@@ -111,7 +110,7 @@ func compute(ctx context.Context, in *computeIn) (*computeOut, error) {
 	}
 	// Honest-empty when the warehouse is not connected or the usage table is not
 	// provisioned yet (the visor/commerce emitter is still being wired).
-	if !datastore.Ready() || !computeTableExists(ctx) {
+	if !datastore.Ready() || !core.CHTableExists(ctx, computeTable) {
 		return &computeOut{Status: core.OK, Data: []computeLeaf{}, Total: core.Total(0)}, nil
 	}
 
@@ -169,7 +168,7 @@ type computeOut struct {
 // kind, and the time bound are all POSITIONAL parameters.
 func buildComputeQuery(rangeLabel, kind, org string) (string, []any) {
 	where := "ts >= ?"
-	args := []any{chTS(computeSince(rangeLabel))}
+	args := []any{core.CHTimeLit(core.WarehouseSince(rangeLabel))}
 	if kind != "" {
 		where += " AND kind = ?"
 		args = append(args, kind)
@@ -182,7 +181,7 @@ func buildComputeQuery(rangeLabel, kind, org string) (string, []any) {
 		"count() AS machines, countIf(active) AS active, sum(spend) AS spend_cents, max(last_ts) AS last_ts " +
 		"FROM (SELECT org, app, project, kind, machine_id, " +
 		"sum(price_cents) AS spend, max(ts) AS last_ts, " +
-		"argMax(event, ts) NOT IN (" + terminalComputeSQL() + ") AS active " +
+		"argMax(event, ts) NOT IN (" + core.SQLInList(terminalComputeEvents) + ") AS active " +
 		"FROM " + computeTable + " WHERE " + where + " " +
 		"GROUP BY org, app, project, kind, machine_id) " +
 		"GROUP BY org, app, project, kind ORDER BY spend_cents DESC"
@@ -194,122 +193,15 @@ func computeLeavesFromRows(rows []map[string]any) []computeLeaf {
 	leaves := make([]computeLeaf, 0, len(rows))
 	for _, r := range rows {
 		leaves = append(leaves, computeLeaf{
-			Org:        chStr(r["org"]),
-			App:        chStr(r["app"]),
-			Project:    chStr(r["project"]),
-			Kind:       chStr(r["kind"]),
-			Machines:   chInt64(r["machines"]),
-			Active:     chInt64(r["active"]),
-			SpendCents: chInt64(r["spend_cents"]),
-			LastTs:     chTime(r["last_ts"]),
+			Org:        core.CHStr(r["org"]),
+			App:        core.CHStr(r["app"]),
+			Project:    core.CHStr(r["project"]),
+			Kind:       core.CHStr(r["kind"]),
+			Machines:   core.CHInt64(r["machines"]),
+			Active:     core.CHInt64(r["active"]),
+			SpendCents: core.CHInt64(r["spend_cents"]),
+			LastTs:     core.CHTime(r["last_ts"]),
 		})
 	}
 	return leaves
-}
-
-// computeTableExists probes for the operator-owned events table. Any error → false
-// (honest "not available yet"), mirroring analytics.tableExists.
-func computeTableExists(ctx context.Context) bool {
-	rows, err := datastore.Query(ctx, "EXISTS TABLE "+computeTable)
-	if err != nil || len(rows) == 0 {
-		return false
-	}
-	for _, v := range rows[0] {
-		return chInt64(v) == 1
-	}
-	return false
-}
-
-// computeSince maps the ?range enum to a lower time bound (default 30d).
-func computeSince(rangeLabel string) time.Time {
-	now := time.Now().UTC()
-	switch strings.TrimSpace(rangeLabel) {
-	case "24h":
-		return now.Add(-24 * time.Hour)
-	case "7d":
-		return now.Add(-7 * 24 * time.Hour)
-	default:
-		return now.Add(-30 * 24 * time.Hour)
-	}
-}
-
-// terminalComputeSQL renders the terminal-event set as a datastore string list.
-func terminalComputeSQL() string {
-	quoted := make([]string, len(terminalComputeEvents))
-	for i, e := range terminalComputeEvents {
-		quoted[i] = "'" + e + "'"
-	}
-	return strings.Join(quoted, ",")
-}
-
-// chTS formats a time as a datastore DateTime literal (UTC), bound as a string arg.
-func chTS(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
-
-// ── map[string]any coercers (the DatastoreQuery row shape) ───────────────────
-//
-// The datastore driver decodes each column to its native Go type (uint64 for
-// count()/sum(UInt*), time.Time for DateTime, string for String); these accept
-// those natives so a driver/transport change can't crash a read.
-
-func chInt64(v any) int64 {
-	switch n := v.(type) {
-	case int:
-		return int64(n)
-	case int64:
-		return n
-	case int32:
-		return int64(n)
-	case uint:
-		return int64(n)
-	case uint64:
-		return int64(n)
-	case uint32:
-		return int64(n)
-	case uint16:
-		return int64(n)
-	case uint8:
-		return int64(n)
-	case float64:
-		return int64(n)
-	case float32:
-		return int64(n)
-	default:
-		return 0
-	}
-}
-
-func chStr(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-
-// chDate coerces a datastore DateTime (time.Time) to a UTC calendar day. A daily bucket
-// IS a day, and saying so is what lets a reader take the month and the day off the front
-// of it; an RFC3339 instant carries a midnight nobody asked about.
-func chDate(v any) string {
-	switch t := v.(type) {
-	case time.Time:
-		return t.UTC().Format("2006-01-02")
-	case string:
-		if len(t) >= 10 {
-			return t[:10]
-		}
-		return t
-	default:
-		return ""
-	}
-}
-
-// chTime coerces a datastore DateTime (time.Time) to an RFC3339 UTC string.
-func chTime(v any) string {
-	switch t := v.(type) {
-	case time.Time:
-		return t.UTC().Format(time.RFC3339)
-	case string:
-		return t
-	default:
-		return ""
-	}
 }

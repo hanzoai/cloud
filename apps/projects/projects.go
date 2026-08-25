@@ -68,6 +68,7 @@ import (
 	"github.com/hanzoai/cloud/forge"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/fqdn"
+	"github.com/hanzoai/cloud/internal/remote"
 	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
@@ -774,7 +775,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body project
 	p := Project{
 		ID: id, Org: org, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: strings.TrimSpace(body.Repo.Branch),
-		RepoProvider: providerFromURL(body.Repo.URL), Framework: framework,
+		RepoProvider: remote.Provider(body.Repo.URL), Framework: framework,
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
 		ForkedFrom: body.ForkedFrom,
 		Visibility: vis,
@@ -1053,7 +1054,7 @@ func (o ops) update(ctx context.Context, in *projectsUpdate) (*projectsProject, 
 	if body.Repo != nil {
 		p.RepoURL = strings.TrimSpace(body.Repo.URL)
 		p.RepoBranch = strings.TrimSpace(body.Repo.Branch)
-		p.RepoProvider = providerFromURL(p.RepoURL)
+		p.RepoProvider = remote.Provider(p.RepoURL)
 		if p.RepoBranch == "" && p.RepoURL != "" {
 			p.RepoBranch = "main"
 		}
@@ -1238,23 +1239,6 @@ func slugify(name string) string {
 		out = strings.Trim(out[:40], "-")
 	}
 	return out
-}
-
-// providerFromURL classifies a git remote into a known provider for display.
-func providerFromURL(raw string) string {
-	r := strings.ToLower(raw)
-	switch {
-	case r == "":
-		return ""
-	case strings.Contains(r, "github.com"):
-		return "github"
-	case strings.Contains(r, "gitlab"):
-		return "gitlab"
-	case strings.Contains(r, "bitbucket"):
-		return "bitbucket"
-	default:
-		return "git"
-	}
 }
 
 // Shutdown closes the projects store. Idempotent. Mirrors the provisioning

@@ -10,17 +10,15 @@ import (
 	"time"
 )
 
-// bridge_state.go holds the PLATFORM-AGNOSTIC signed-state primitive the non-Slack
-// account-link flows share: a signed, TTL'd, single-use "subject state". It is
-// provider-blind — Discord's (guild,user), Teams' (tenant,user) and Telegram's
-// (chat,user) link all compose their subject and sign it here. Orthogonal to the
-// OAuth-connect state in state.go (statePayload{org,provider,nonce}); both HMAC with
-// the SAME s.State.stateKey — one signing key, distinct named subjects.
+// channel_state.go holds the PLATFORM-AGNOSTIC signed-state primitive every
+// account-link flow shares: a signed, TTL'd, single-use "subject state". It is
+// provider-blind — Slack's (team,user), Discord's (guild,user), Teams' (tenant,user)
+// and Telegram's (chat,user) link all compose their subject and sign it here.
+// Orthogonal to the OAuth-connect state in state.go (statePayload{org,provider,nonce});
+// both HMAC with the SAME s.State.stateKey — one signing key, distinct named subjects.
 //
-// The signing/verifying algebra is the generalized twin of slack_verify.go's
-// signSlackSubject/verifySlackSubject. The shared low-level primitives both compose —
-// the constant-time hmacB64URL, the single-use seenSet, abs64 — live ONCE HERE
-// (provider-agnostic) and are reused by the Slack primitives too (no redeclaration).
+// The constant-time hmacB64URL, the single-use seenSet and abs64 live here too, so
+// the algebra and the pieces it composes have one home.
 
 // linkStateTTLSec is the account-link state lifetime — the browser legs must
 // complete within it. It is ALSO the single-use seen-set TTL (channelSeen), so a

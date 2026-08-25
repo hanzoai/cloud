@@ -79,7 +79,7 @@ var (
 func slackBridgeReady(s *cloud.Service[state]) {
 	channelReady()
 	slackBridgeOnce.Do(func() {
-		slackUsedStates = newSeenSet(time.Duration(slackLinkTTLSec) * time.Second)
+		slackUsedStates = newSeenSet(time.Duration(linkStateTTLSec) * time.Second)
 	})
 }
 

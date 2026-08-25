@@ -14,15 +14,15 @@
 
 package core
 
-// warehouse — the ONE-copy datastore-read kernel the billing FLEET views
-// (metrics/invoices/subscriptions) compose. They read commerce.events — the
-// single warehouse table the commerce analytics collector lands every
-// customer-activity event in (subscription/invoice/usage lifecycle) — over the
-// SAME shared client (datastore.Query) the o11y/compute/analytics lenses
-// already use, no second connection. This mirrors compute.go's row-coercers and
-// EXISTS-TABLE probe, hoisted here so the three sibling domains share ONE copy
-// instead of each re-deriving it (DRY; the admin-package o11y/compute keep their
-// own private copies as the read template).
+// warehouse — the ONE-copy datastore-read kernel every admin view composes: the
+// window grammar, the EXISTS-TABLE probe, and the row coercers. The billing
+// FLEET views (metrics/invoices/subscriptions) read commerce.events — the single
+// warehouse table the commerce analytics collector lands every customer-activity
+// event in (subscription/invoice/usage lifecycle) — over the SAME shared client
+// (datastore.Query) the o11y/compute/analytics lenses already use, no second
+// connection. The admin package holds no private copy of any of it: a coercer
+// that exists twice is a column that reads correctly on one board and as zero on
+// the other, which is indistinguishable from a real zero.
 //
 // Every read is honest by construction: no datastore connected, or the events
 // table not provisioned (the emitter is still being wired) → the real empty
@@ -77,7 +77,8 @@ func BillingEventsReady(ctx context.Context) bool {
 
 // CHTableExists probes the datastore for a table's presence. The name is a
 // package constant (never user input), so EXISTS TABLE is safe. Any error →
-// false (honest "not available yet"), mirroring compute.computeTableExists.
+// false (honest "not available yet") — a table nobody has provisioned reads as
+// "not available yet", never as an error a board has to render.
 func CHTableExists(ctx context.Context, qualified string) bool {
 	rows, err := datastore.Query(ctx, "EXISTS TABLE "+qualified)
 	if err != nil || len(rows) == 0 {
@@ -101,19 +102,33 @@ func SQLInList(vals []string) string {
 	return strings.Join(quoted, ",")
 }
 
-// WarehouseSince maps the ?range enum (24h|7d|30d, default 30d) to a lower time
-// bound, mirroring compute.computeSince so the fleet views share ONE window
-// grammar.
-func WarehouseSince(rangeLabel string) time.Time {
-	now := time.Now().UTC()
-	switch strings.TrimSpace(rangeLabel) {
-	case "24h":
-		return now.Add(-24 * time.Hour)
-	case "7d":
-		return now.Add(-7 * 24 * time.Hour)
-	default:
-		return now.Add(-30 * 24 * time.Hour)
+// warehouseWindow is the ?range / ?window enum: each label beside the lookback
+// it covers. A label and its window are ONE fact, so they are written once — two
+// switches would let a member be added to the rendering and not to the query, and
+// a board would then say "90d" over thirty days of rows, which reads as true.
+var warehouseWindow = map[string]time.Duration{
+	"24h": 24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+	"30d": 30 * 24 * time.Hour,
+}
+
+// warehouseWindowDefault answers for anything outside the enum, including empty —
+// a typo widens the window rather than failing the read.
+const warehouseWindowDefault = "30d"
+
+// WarehouseRange clamps the caller's label to the enum: the canonical string a
+// view renders and keys its bucket size off.
+func WarehouseRange(rangeLabel string) string {
+	label := strings.TrimSpace(rangeLabel)
+	if _, ok := warehouseWindow[label]; ok {
+		return label
 	}
+	return warehouseWindowDefault
+}
+
+// WarehouseSince is the same label read as the lower time bound a query starts at.
+func WarehouseSince(rangeLabel string) time.Time {
+	return time.Now().UTC().Add(-warehouseWindow[WarehouseRange(rangeLabel)])
 }
 
 // CHTimeLit formats a time as a datastore DateTime literal (UTC), bound as a
@@ -134,7 +149,11 @@ func CHFirstRow(rows []map[string]any) map[string]any {
 // The datastore driver decodes each column to its native Go type (uint64 for
 // count()/sum(UInt*), float64 for round()/JSON numerics, time.Time for DateTime,
 // string for String); these accept those natives so a driver/transport change
-// can't crash a read. Twins of the admin-package compute.go coercers.
+// can't crash a read. A 64-bit integer arrives QUOTED under
+// output_format_json_quote_64bit_integers, and any toString()/formatted column
+// arrives as a string whatever its type, so the string arms are the ordinary
+// case rather than a fallback — without them such a column reads as an honest-
+// looking zero on a spend board.
 
 func CHInt64(v any) int64 {
 	switch n := v.(type) {
@@ -169,6 +188,35 @@ func CHInt64(v any) int64 {
 	}
 }
 
+// CHFloat64 coerces a datastore numeric cell to float64 — the round()/quantile()
+// columns land as float64, and a Decimal serialized to string is parsed.
+func CHFloat64(v any) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case int32:
+		return float64(n)
+	case uint64:
+		return float64(n)
+	case uint32:
+		return float64(n)
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
+		if err != nil {
+			return 0
+		}
+		return f
+	default:
+		return 0
+	}
+}
+
 func CHStr(v any) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -182,6 +230,23 @@ func CHTime(v any) string {
 	case time.Time:
 		return t.UTC().Format(time.RFC3339)
 	case string:
+		return t
+	default:
+		return ""
+	}
+}
+
+// CHDate coerces a datastore DateTime to a UTC calendar day. A daily bucket IS a
+// day, and saying so is what lets a reader take the month and the day off the
+// front of it; an RFC3339 instant carries a midnight nobody asked about.
+func CHDate(v any) string {
+	switch t := v.(type) {
+	case time.Time:
+		return t.UTC().Format("2006-01-02")
+	case string:
+		if len(t) >= 10 {
+			return t[:10]
+		}
 		return t
 	default:
 		return ""

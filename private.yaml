@@ -60987,7 +60987,7 @@ paths:
       parameters:
       - description: |-
           Range bounds the telemetry window: 24h, 7d or 30d. Anything else, including
-          empty, resolves to the default through the same o11yRange the o11y board uses.
+          empty, resolves to the default through the same window grammar the o11y board uses.
         in: query
         name: range
         required: false

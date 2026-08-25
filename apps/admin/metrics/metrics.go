@@ -252,7 +252,7 @@ func Metrics(ctx context.Context, in *MetricsIn) (*MetricsOut, error) {
 		return nil, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	window := normalizeWindow(in.Window)
+	window := core.WarehouseRange(in.Window)
 	limit := parseLimit(in.Limit)
 
 	// Honest not-configured snapshot when the warehouse/collector table is absent.
@@ -598,19 +598,6 @@ func normalize(m SaaSMetrics) SaaSMetrics {
 		m.Gaps = []string{}
 	}
 	return m
-}
-
-// normalizeWindow clamps ?window to the supported set (default 30d) — mirrors the
-// warehouse window grammar (core.WarehouseSince).
-func normalizeWindow(v string) string {
-	switch strings.TrimSpace(v) {
-	case "24h":
-		return "24h"
-	case "7d":
-		return "7d"
-	default:
-		return "30d"
-	}
 }
 
 // parseLimit clamps the top-N cap to [1,200], defaulting to defaultLimit.
