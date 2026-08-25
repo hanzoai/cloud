@@ -29,6 +29,13 @@ echo ">> $name.localhost:$port  org=$org  serving $root"
 # console: apps/sites reads CLOUD_SITES_APEX and routes any <slug>.<apex> to the
 # project of that slug. run.sh never sets it, so this reaches the binary.
 export CLOUD_SITES_APEX=localhost
+# Deploying a site is METERED — $1.00 a deploy by default, and an org with no
+# balance is refused 402. That is the money plane working. A local stack has no
+# biller and no way to fund one that is not deliberately hard (IAM forbids a
+# reserved-org client on the public token endpoint, which is what a SuperAdmin
+# grant would need), so it takes the free tier the code already names: a fee of
+# 0 is un-gated, and it is operator configuration rather than a bypass.
+export CLOUD_HOSTING_FEE_CENTS="${CLOUD_HOSTING_FEE_CENTS:-0}"
 # ONE number in the config, a contiguous block from it. Every listener in this
 # process is a port somebody else's instance may already hold — the three
 # brokers bind well-known ones — so deriving them all from the project's port
@@ -65,6 +72,26 @@ tok=$(printf '%s' "$login" | node -e 'let s="";process.stdin.on("data",d=>s+=d).
 
 curl -sS -X POST "$BASE/v1/projects" -H "Authorization: Bearer $tok" \
   -H 'content-type: application/json' -d "{\"slug\":\"$name\",\"name\":\"$name\"}" >/dev/null || true
+
+# The project's files. `serve` is a directory of bytes and the site plane keeps
+# them in object storage, so this is where the local stack needs a store — see
+# the note below when it has none.
+files=$(node -e '
+const {readdirSync,readFileSync,statSync}=require("fs"), {join,relative}=require("path");
+const root=process.argv[1], out=[];
+(function walk(d){ for (const e of readdirSync(d,{withFileTypes:true})) {
+  const p=join(d,e.name);
+  if (e.isDirectory()) walk(p);
+  else if (statSync(p).size <= 8*1024*1024) out.push({path:relative(root,p).split("\\").join("/"),content:readFileSync(p,"utf8")});
+} })(root);
+process.stdout.write(JSON.stringify({slug:process.argv[2],files:out}));
+' "$root" "$name")
+deploy=$(curl -sS -X POST "$BASE/v1/projects/sites/deploy" -H "Authorization: Bearer $tok" \
+  -H 'content-type: application/json' --data-binary "$files")
+case "$deploy" in
+  *'"status":"live"'*) echo ">> deployed: $(printf '%s' "$deploy" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(j.files.length+" file(s)")}catch{process.stdout.write("?")}})')" ;;
+  *) echo ">> deploy did not go live: $deploy" ;;
+esac
 
 echo ">> up:  $BASE"
 echo ">> api: curl $BASE/v1            # every capability, each started on first use"
