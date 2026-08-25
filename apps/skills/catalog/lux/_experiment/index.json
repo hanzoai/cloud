@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
+      "name": "experiment_assign",
+      "path": "experiment_assign/SKILL.md",
+      "service": "experiment",
+      "sha256": "f17477021ad63f9413412671676dab7e8d81ede1040199e0adff491202658184"
+    },
+    {
+      "description": "Read experiment experiment: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
+      "name": "experiment_experiment",
+      "path": "experiment_experiment/SKILL.md",
+      "service": "experiment",
+      "sha256": "64232af72fe8e78f7aeb3c35cc821669279ab985b990c3a5a717d50b394c80b1"
+    },
+    {
+      "description": "Read experiment health: Is whether the experiments subsystem is mounted and serving in this process..",
+      "name": "experiment_health",
+      "path": "experiment_health/SKILL.md",
+      "service": "experiment",
+      "sha256": "cd42ce6117aca451a1d5e8d0a3a2e8ca89b4899fce76ad14d6c276db410b1421"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

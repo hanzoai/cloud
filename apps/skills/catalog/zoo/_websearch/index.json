@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read websearch search: Keyless web meta-search, in the SearXNG JSON envelope..",
+      "name": "websearch_search",
+      "path": "websearch_search/SKILL.md",
+      "service": "websearch",
+      "sha256": "cec28d82131e77c422e2cddc4622e1b826056d7854b1845f5d47af17d679d6a7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

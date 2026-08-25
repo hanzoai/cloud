@@ -1,0 +1,67 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 8,
+  "skills": [
+    {
+      "description": "Read agents activity: Serves the org-wide recent-activity feed..",
+      "name": "agents_activity",
+      "path": "agents_activity/SKILL.md",
+      "service": "agents",
+      "sha256": "7523beb96ae38ebe57ade33169518c5b2d16da9d9210c1da542fcca2e30a7014"
+    },
+    {
+      "description": "Read agents agents: Returns every agent defined in the caller's org, each with the number of runs recorded against it., Returns one agent with its system prompt and its 20 most recent runs..",
+      "name": "agents_agents",
+      "path": "agents_agents/SKILL.md",
+      "service": "agents",
+      "sha256": "c9652777ed10d29fb4aecad2304e8ba9826a4498b9f3d036a4c7f9c15534d7a1"
+    },
+    {
+      "description": "Read agents builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the rea",
+      "name": "agents_builds",
+      "path": "agents_builds/SKILL.md",
+      "service": "agents",
+      "sha256": "17710001e6e6fe622e8ead895a5f399bddf277884e4924c20601d010e653fbc6"
+    },
+    {
+      "description": "Read agents chat: List the agent threads in your org, Read one agent thread in full, List the agent presets available to a caller.",
+      "name": "agents_chat",
+      "path": "agents_chat/SKILL.md",
+      "service": "agents",
+      "sha256": "a1730cfdf781a18e1a82947d662cefc94b36711d3543a591b87f30876b62487d"
+    },
+    {
+      "description": "Read agents metrics: Serves the invocations-over-time histogram for the org's Agents dashboard..",
+      "name": "agents_metrics",
+      "path": "agents_metrics/SKILL.md",
+      "service": "agents",
+      "sha256": "15bc33345f8f7d43fe4428545ce22a6aa012e5140e37097327a296d66ada8830"
+    },
+    {
+      "description": "Read agents runs: Returns the org's agent runs across EVERY agent, newest first — what ran here, for whom, on which model, how long it took, and why it failed., Returns one agent's execution history, newest first — each run's input, its output or its error, and how long it took..",
+      "name": "agents_runs",
+      "path": "agents_runs/SKILL.md",
+      "service": "agents",
+      "sha256": "d01a06826fe96d37b46b314127befbef9940ddc5380b62f587deb0b5928e4592"
+    },
+    {
+      "description": "Read agents sessions: Returns the caller org's live sessions, newest first — each with its event count, its direct-child count and a one-line preview of its latest event., Live session and event updates for the caller's org, as Server-Sent Events., Returns one session with its di",
+      "name": "agents_sessions",
+      "path": "agents_sessions/SKILL.md",
+      "service": "agents",
+      "sha256": "3b1eeeb38ea651bc5049d7d5cc73ad8cc821655d742ac5eda47d801c5c012c4d"
+    },
+    {
+      "description": "Read agents targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load..",
+      "name": "agents_targets",
+      "path": "agents_targets/SKILL.md",
+      "service": "agents",
+      "sha256": "9b55c954129b6c7bd0f5e262f66628c328854c2cb583c7e07e814e5c700270ef"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

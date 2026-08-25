@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly.",
+      "name": "s3_buckets",
+      "path": "s3_buckets/SKILL.md",
+      "service": "s3",
+      "sha256": "87b0ee553711eb18eed37e1b26ae557d8dc4386c1eb1573fa261267548ea70c2"
+    },
+    {
+      "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
+      "name": "s3_health",
+      "path": "s3_health/SKILL.md",
+      "service": "s3",
+      "sha256": "082b5c7d00dcca22728e176a69f23cb53b6e69842cea7cc71a9af85c8a901c1c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

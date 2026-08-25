@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read domain availability: Checks exact names rather than searching for them, and answers the same quote shape search does — purchasable, premium, first-term and renewal price in cents..",
+      "name": "domain_availability",
+      "path": "domain_availability/SKILL.md",
+      "service": "domain",
+      "sha256": "7a6634351f1eb61777e9ed425f696409fee0c3709940b3bda3d71b0b0324067a"
+    },
+    {
+      "description": "Read domain domains: Is the domains your org has bought here, newest registration first, each carrying the name, when it was registered, when it expires, what the org paid, the registrar order id and the nameservers it points at..",
+      "name": "domain_domains",
+      "path": "domain_domains/SKILL.md",
+      "service": "domain",
+      "sha256": "3ca30156f06683b86db9e9e149225e9fff72311e012b7388f2062944b5f42a71"
+    },
+    {
+      "description": "Read domain health: Reports registrar reachability honestly: ok only when the wholesale credentials are present AND name.com accepted them on a live call made while you waited..",
+      "name": "domain_health",
+      "path": "domain_health/SKILL.md",
+      "service": "domain",
+      "sha256": "53c2cdc9fbd900a49f6a66e18b7be093fd4e76fbf8ec2434fcd8cd5a4eca320e"
+    },
+    {
+      "description": "Read domain search: Finds names built from the keyword q, plus the registrar's alternate-TLD suggestions, and answers a quote for each: the name, whether it is purchasable, whether it is premium, the first-term and renewal price in cents, and the TLD..",
+      "name": "domain_search",
+      "path": "domain_search/SKILL.md",
+      "service": "domain",
+      "sha256": "7f3283e13b86a1d346f71027ea013149c179a687e0a595bc8bf36897f2b9368b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

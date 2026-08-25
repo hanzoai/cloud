@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read destination destination: Reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it., Reports",
+      "name": "destination_destination",
+      "path": "destination_destination/SKILL.md",
+      "service": "destination",
+      "sha256": "3ab827162e021071ef3db12b62e2a217fedd482572abeb57fe2d02d570c46e77"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

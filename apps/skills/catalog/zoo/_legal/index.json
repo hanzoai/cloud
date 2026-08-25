@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read legal documents: Returns the org's generated documents, newest first, WITHOUT their rendered content — fetch one document to read its body., Returns one of the org's documents WITH its rendered body..",
+      "name": "legal_documents",
+      "path": "legal_documents/SKILL.md",
+      "service": "legal",
+      "sha256": "1ca348435316fc5e447faf2913ee2cb2190744a648b04c9bb59fa98c3ba7aa1b"
+    },
+    {
+      "description": "Read legal filings: Returns the org's filing records, newest first — which documents were filed where, through which provider, and what the filing's honest status is..",
+      "name": "legal_filings",
+      "path": "legal_filings/SKILL.md",
+      "service": "legal",
+      "sha256": "6e72657939ce3f45e2b28bb7da983cc28af20e95e177092a96f10454f576ade1"
+    },
+    {
+      "description": "Read legal health: Reports that the legal subsystem is serving and how many built-in templates its catalog carries..",
+      "name": "legal_health",
+      "path": "legal_health/SKILL.md",
+      "service": "legal",
+      "sha256": "6f8b8053c15a8fdadbef5ef10b3064e3419e2283b9fcd602bb1396766b1c93b8"
+    },
+    {
+      "description": "Read legal templates: Returns the org's effective template catalog: every built-in template, with any the org has overridden replaced by its own latest version., Returns one template resolved for the caller's org — the org's own override if it has saved one, else the built-in — w",
+      "name": "legal_templates",
+      "path": "legal_templates/SKILL.md",
+      "service": "legal",
+      "sha256": "7db63700d0ef73637aff2bd47214f5ccdd186b6b1ec7608b3ffd12332d5edd3b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read settings settings: Reads the caller org's configuration for one product, with every secret field MASKED — only the names of the set secrets come back, never their values, which live in KMS..",
+      "name": "settings_settings",
+      "path": "settings_settings/SKILL.md",
+      "service": "settings",
+      "sha256": "1c7437daa019ee61318dce1cf6e50474b24f1f4d6be9bf682330400f597a87e6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read catalog catalog: Browse searches AND browses the cross-org catalog: every project, app and site the fleet has built, whichever org built it..",
+      "name": "catalog_catalog",
+      "path": "catalog_catalog/SKILL.md",
+      "service": "catalog",
+      "sha256": "dfc0167cef63d9a8c7f5b1d9fbecca6568ecd71d008119153af5a21336840cd2"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read metrics health: How many metric series this deployment holds for your org.",
+      "name": "metrics_health",
+      "path": "metrics_health/SKILL.md",
+      "service": "metrics",
+      "sha256": "fc958fbf584a59fc7e3dace746926f19f3aab3901f66a62f08e11f1eb5711604"
+    },
+    {
+      "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
+      "name": "metrics_logs",
+      "path": "metrics_logs/SKILL.md",
+      "service": "metrics",
+      "sha256": "1764163639e5594abe24d55e15bf91147661a43f836cc5786cd2b565c93b091d"
+    },
+    {
+      "description": "Read metrics query: Read your org's series back over a time range.",
+      "name": "metrics_query",
+      "path": "metrics_query/SKILL.md",
+      "service": "metrics",
+      "sha256": "635516c95a81d96cc91509dd48f0d14c1e85b7dbc964d5cedda3b28eccac7dba"
+    },
+    {
+      "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
+      "name": "metrics_traces",
+      "path": "metrics_traces/SKILL.md",
+      "service": "metrics",
+      "sha256": "ecc9bbda7ecaa1796a5aa952495f4ca70d1dc6bbdfa935c9a26ccc15b9bb20df"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

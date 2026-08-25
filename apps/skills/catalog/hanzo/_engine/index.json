@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read engine model: Read one model's load state on the serving runtime.",
+      "name": "engine_model",
+      "path": "engine_model/SKILL.md",
+      "service": "engine",
+      "sha256": "5a59affe0b61a6021de3c514021fd1ab711aa96c91d6e407b2a7849a61e69ce6"
+    },
+    {
+      "description": "Read engine models: List the models the serving runtime holds, with each one's load state.",
+      "name": "engine_models",
+      "path": "engine_models/SKILL.md",
+      "service": "engine",
+      "sha256": "e33015c21a8f6bad90d91d43278159a3c5f185c4b3695911fc272308285fdcb0"
+    },
+    {
+      "description": "Read engine status: Whether the serving runtime is reachable, and which build it runs.",
+      "name": "engine_status",
+      "path": "engine_status/SKILL.md",
+      "service": "engine",
+      "sha256": "83cf78d752078ce81ffce9828c60fc53421a1b82a690f1a424fdfd3200423f02"
+    },
+    {
+      "description": "Read engine system: The serving host's own inventory: devices, memory and build capabilities.",
+      "name": "engine_system",
+      "path": "engine_system/SKILL.md",
+      "service": "engine",
+      "sha256": "752715e772bc6d7405ee4c135acd4a1704edc37b078a062fcc5996f0d96f8ca4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read webhook deliveries: Returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took..",
+      "name": "webhook_deliveries",
+      "path": "webhook_deliveries/SKILL.md",
+      "service": "webhook",
+      "sha256": "23d58a0df13b5bf1bf5085fb51e6f5a44b1754c030159efb33b5aacd51e0333f"
+    },
+    {
+      "description": "Read webhook webhook: Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts., Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted..",
+      "name": "webhook_webhook",
+      "path": "webhook_webhook/SKILL.md",
+      "service": "webhook",
+      "sha256": "df0f5aaf24ee95c23c68813a2c37e4b2ff98f350058b99c4ecacb47ad30eb700"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

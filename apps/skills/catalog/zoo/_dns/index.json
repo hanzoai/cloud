@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read dns dns: Read your org's DNS zones and records.",
+      "name": "dns_dns",
+      "path": "dns_dns/SKILL.md",
+      "service": "dns",
+      "sha256": "228434e7bc799fe04b1650fd9488e72b10dcee90675fa5f6b014789ee89c0a73"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

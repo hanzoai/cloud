@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read allowance allowance: Answers what the CALLER has left of their plan's free-call allowance this period, and the instant the count starts again..",
+      "name": "allowance_allowance",
+      "path": "allowance_allowance/SKILL.md",
+      "service": "allowance",
+      "sha256": "4f71424697c5e282eb40e3d0ecb7144d45dc3da5eaae0eb4c36c9e968826a0ad"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

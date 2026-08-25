@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read tel calls: Lists the calls this org has placed or received, newest first..",
+      "name": "tel_calls",
+      "path": "tel_calls/SKILL.md",
+      "service": "tel",
+      "sha256": "316fc85cd3a274cba6d38d9bc23ff502598fb51fd6bdc9a042b3541c59df209b"
+    },
+    {
+      "description": "Read tel messages: Lists the messages this org has sent or received, newest first..",
+      "name": "tel_messages",
+      "path": "tel_messages/SKILL.md",
+      "service": "tel",
+      "sha256": "323e6902ca2ec7488602c5dcfaafb521f54198b13d220412abaf5ec53384d3ca"
+    },
+    {
+      "description": "Read tel numbers: Lists the phone numbers this org HOLDS — the ones it has bought and not released., Asks the carrier what is available to buy..",
+      "name": "tel_numbers",
+      "path": "tel_numbers/SKILL.md",
+      "service": "tel",
+      "sha256": "8f5446e30f95a3bc207243103a86acb6a06f15e5143c726b7556958dbac08554"
+    },
+    {
+      "description": "Read tel summary: Counts what this org holds on the telephony plane: its numbers, its calls and its messages..",
+      "name": "tel_summary",
+      "path": "tel_summary/SKILL.md",
+      "service": "tel",
+      "sha256": "1e131bc948905738870ef813b46f4e4929202725664db4c64079d1a283ed153d"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read referral referral: Returns the caller's referral code, share link and the referrals they have made..",
+      "name": "referral_referral",
+      "path": "referral_referral/SKILL.md",
+      "service": "referral",
+      "sha256": "4164b7a15806d7ff9f0941de12c7798735160182a62a9724f310404d35b255e6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

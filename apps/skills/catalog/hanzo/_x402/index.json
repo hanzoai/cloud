@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read x402 settlements: Settlement reads one x402 payment receipt by id..",
+      "name": "x402_settlements",
+      "path": "x402_settlements/SKILL.md",
+      "service": "x402",
+      "sha256": "80c901ee0799ba7ebadf5a0ec6a0f2d67c0eafe5dd47dbdc37b0048b7a770ef7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

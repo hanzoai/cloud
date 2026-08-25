@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read destination destination: Reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it., Reports",
+      "name": "destination_destination",
+      "path": "destination_destination/SKILL.md",
+      "service": "destination",
+      "sha256": "aaf9a7a2458a2d89dcaeaa5a177a3e3ab9f1b588aacb467fbe74babd80102ccf"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

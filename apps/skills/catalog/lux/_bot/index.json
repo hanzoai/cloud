@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
+      "name": "bot_runs",
+      "path": "bot_runs/SKILL.md",
+      "service": "bot",
+      "sha256": "14e6e5875cca5c05c719e837e5f9d6c4c7b9b4525cdb1181faf4d2d2041b22bc"
+    },
+    {
+      "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
+      "name": "bot_runtime",
+      "path": "bot_runtime/SKILL.md",
+      "service": "bot",
+      "sha256": "d4ab3ffc855471503fd7bf1c64c9d3d87cfb15046c5daf62f5534c6d935ab533"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read notify health: Reports that the notify send surface is mounted..",
+      "name": "notify_health",
+      "path": "notify_health/SKILL.md",
+      "service": "notify",
+      "sha256": "4c395957d8c8788244ad0da0c58d57e2439086d78cdbb1c3c4fb4a6fe74e714c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

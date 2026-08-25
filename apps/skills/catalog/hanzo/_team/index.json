@@ -1,0 +1,53 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 6,
+  "skills": [
+    {
+      "description": "Read team account: Start a sign-in at hanzo.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
+      "name": "team_account",
+      "path": "team_account/SKILL.md",
+      "service": "team",
+      "sha256": "f554c74b9e9bad336b3114c16c0073aa204a414b03b1c8ad7ee3f9963c24bd7a"
+    },
+    {
+      "description": "Read team billing: Returns the plan and seat counts for the caller's OWN org, resolved from the VERIFIED team session token — never a client header., Open the wallet page, Load an asset of the wallet page.",
+      "name": "team_billing",
+      "path": "team_billing/SKILL.md",
+      "service": "team",
+      "sha256": "fbccbd7da2cb92a6dd44370a15501726b9d20cc3b14e33686559a59ecf1986fb"
+    },
+    {
+      "description": "Read team bots: Returns the caller org's bot members — the org's agents projected as the workspace Employees they become, each with the member account uuid and Person reference the roster addresses it by..",
+      "name": "team_bots",
+      "path": "team_bots/SKILL.md",
+      "service": "team",
+      "sha256": "ed595e3cb57066f75a3cea8df91ee98c95bc25cb60645a96dedbdf950648d89a"
+    },
+    {
+      "description": "Read team collaborator: Open the live collaborative-editing socket.",
+      "name": "team_collaborator",
+      "path": "team_collaborator/SKILL.md",
+      "service": "team",
+      "sha256": "958641d8c62e9ef781b7c64e5ceb32883326172a020990137d099310f8c27216"
+    },
+    {
+      "description": "Read team files: Download a workspace file.",
+      "name": "team_files",
+      "path": "team_files/SKILL.md",
+      "service": "team",
+      "sha256": "266e41b0d589a4092b5271462bf1eeed2c134f29dcf8c5903f152630ed4043b5"
+    },
+    {
+      "description": "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Statistics returns the transactor's live sessions for the workspace",
+      "name": "team_transactor",
+      "path": "team_transactor/SKILL.md",
+      "service": "team",
+      "sha256": "4f10231cc9b4401ede0950431eaca1c4b94d328c4e207912000b5d4491b2f9c3"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

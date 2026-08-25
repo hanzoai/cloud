@@ -1,0 +1,74 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 9,
+  "skills": [
+    {
+      "description": "Read integrations callback: OAuth return for any connector.",
+      "name": "integrations_callback",
+      "path": "integrations_callback/SKILL.md",
+      "service": "integrations",
+      "sha256": "b34b1751c318f3c2af0c30ac2c3371940eec60e26a3ede663ad9a3e2883a989a"
+    },
+    {
+      "description": "Read integrations connectors: Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints., Lists the user-scoped provider cards — the catalog of what a user can connect, and how., Hands the custodied access token to its owner — the ONE place cus",
+      "name": "integrations_connectors",
+      "path": "integrations_connectors/SKILL.md",
+      "service": "integrations",
+      "sha256": "f2e28306c39886f17f96a8ece3f1660c7f58e42c879f21b07c1204d364914b1b"
+    },
+    {
+      "description": "Read integrations discord: Begin linking a Lux account from Discord, Complete the Discord account link, Discord sign-in return leg.",
+      "name": "integrations_discord",
+      "path": "integrations_discord/SKILL.md",
+      "service": "integrations",
+      "sha256": "127649a14400421b8b709cd7a5af03f2f8c0286b8195cb740dd198de9d8618b2"
+    },
+    {
+      "description": "Read integrations github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object",
+      "name": "integrations_github",
+      "path": "integrations_github/SKILL.md",
+      "service": "integrations",
+      "sha256": "115e79ae382b1290fc9fd732f351a81832a1194782d51b3477c8cabdd4b446cf"
+    },
+    {
+      "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
+      "name": "integrations_gitlab",
+      "path": "integrations_gitlab/SKILL.md",
+      "service": "integrations",
+      "sha256": "3454dad751a42752b8a0324cbf3cac6a60ac0d9b536cd3372e1a6e5c7d6b1505"
+    },
+    {
+      "description": "Read integrations integrations: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a singl",
+      "name": "integrations_integrations",
+      "path": "integrations_integrations/SKILL.md",
+      "service": "integrations",
+      "sha256": "1ac1fb1c6f0fa5edbdbb0d2a75937e5be6b06bf13021e7fcfe7e029b6f59f6aa"
+    },
+    {
+      "description": "Read integrations slack: Install the Lux app into a Slack workspace, Begin linking a Lux account from Slack, Complete the Slack account link.",
+      "name": "integrations_slack",
+      "path": "integrations_slack/SKILL.md",
+      "service": "integrations",
+      "sha256": "848ccb43ddd8b8249a0f36f40e728fc361e0d0827b549e3846df0edb4810be10"
+    },
+    {
+      "description": "Read integrations teams: Begin linking a Lux account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
+      "name": "integrations_teams",
+      "path": "integrations_teams/SKILL.md",
+      "service": "integrations",
+      "sha256": "ba6c78285b1e67cdd45dc3db9b9acb8518f86d938815a8ccbc079359cbf7cd98"
+    },
+    {
+      "description": "Read integrations telegram: Begin linking a Lux account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
+      "name": "integrations_telegram",
+      "path": "integrations_telegram/SKILL.md",
+      "service": "integrations",
+      "sha256": "87db5b617bac4fe1cc04cb58207ba6dcbe6a0aa5ea3cf95a19c693db428418cb"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

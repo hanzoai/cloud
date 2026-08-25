@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read sync sync: List returns every sync link the caller's org has, each with its two endpoints, its direction and trigger policy, and the time it last reconciled., Get returns one sync by id..",
+      "name": "sync_sync",
+      "path": "sync_sync/SKILL.md",
+      "service": "sync",
+      "sha256": "f748c2e52518680d0a07ebc8bbd537c1bf5ec8376618d3f50d1715bfb5d57c08"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

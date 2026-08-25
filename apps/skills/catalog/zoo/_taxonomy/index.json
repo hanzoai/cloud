@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read taxonomy taxonomy: Read returns the product catalogue as this caller sees it: the PLATFORM catalogue — Zoo's own products, the part that is true for everyone — plus the caller's own org's rows, every category in display order and each carrying the products filed under it in ",
+      "name": "taxonomy_taxonomy",
+      "path": "taxonomy_taxonomy/SKILL.md",
+      "service": "taxonomy",
+      "sha256": "12f432d995a742006f9d0c3f6480d443a25cdd1f90cb1a23140ace9f4188afe8"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

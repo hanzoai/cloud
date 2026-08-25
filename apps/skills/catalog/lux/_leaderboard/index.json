@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read leaderboard activity: Activity returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present..",
+      "name": "leaderboard_activity",
+      "path": "leaderboard_activity/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "66971a6ce51b864a485d6fcfbdcb7642de89661c6fd2980a2fcb6912c162cf95"
+    },
+    {
+      "description": "Read leaderboard leaderboard: Leaderboard ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page..",
+      "name": "leaderboard_leaderboard",
+      "path": "leaderboard_leaderboard/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "73e9d13854de0f97db89423302a3c23c92c89b5f0da074416108218bdae0ca7d"
+    },
+    {
+      "description": "Read leaderboard optin: Returns the caller's own public-listing preference and their org's, each with whether the caller may change it..",
+      "name": "leaderboard_optin",
+      "path": "leaderboard_optin/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "8a802ee8dc77f262687a5a55a3295a1d70b88f65dc2361be1e21c6cb9356b194"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

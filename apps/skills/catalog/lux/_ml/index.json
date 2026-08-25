@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read ml health: Whether model serving can actually work right now.",
+      "name": "ml_health",
+      "path": "ml_health/SKILL.md",
+      "service": "ml",
+      "sha256": "2a1ce48459eae400df4d76e0474b514b7757f96e5e11a27eeeaa4e18780f7ccd"
+    },
+    {
+      "description": "Read ml models: Lists the inference models deployed in the caller's org., Returns one deployed inference model..",
+      "name": "ml_models",
+      "path": "ml_models/SKILL.md",
+      "service": "ml",
+      "sha256": "1a827c807003123792bef2a0a803dcf5c592a823f98607647760b6bb070a05ac"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

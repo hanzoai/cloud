@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read template template: Lists the public starter-kit catalog plus, for a validated caller, that org's own private kits., Returns one starter kit: the caller org's own by that slug, else the public catalog's..",
+      "name": "template_template",
+      "path": "template_template/SKILL.md",
+      "service": "template",
+      "sha256": "05b0ab7264c450823e111b63213ce8e888a402ffc87ebc37359c0ec364018234"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

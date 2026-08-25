@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read author author: Returns the caller's author-program dashboard: enrolment status, linked forge login, verified repositories and owner-wide claims, recorded deploys, accrued / pending / paid royalty, and the payout history..",
+      "name": "author_author",
+      "path": "author_author/SKILL.md",
+      "service": "author",
+      "sha256": "06b32c9a656de7e8ef44a9c3608bfbec0c872c32670da5e4e32571cf614b8c4b"
+    },
+    {
+      "description": "Read author basis: Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed wh",
+      "name": "author_basis",
+      "path": "author_basis/SKILL.md",
+      "service": "author",
+      "sha256": "06a996d1609e86576d65f591456c0e566a0a639cb737256e7438ae1d64ed63b5"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

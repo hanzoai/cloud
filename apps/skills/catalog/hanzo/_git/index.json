@@ -1,0 +1,74 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 9,
+  "skills": [
+    {
+      "description": "Read git blob: View a file in a repository.",
+      "name": "git_blob",
+      "path": "git_blob/SKILL.md",
+      "service": "git",
+      "sha256": "3375bde2be0d83f436f922329099eaea6cd17c50726fa9678ce5297e84a67334"
+    },
+    {
+      "description": "Read git commits: Read a repository's commit log.",
+      "name": "git_commits",
+      "path": "git_commits/SKILL.md",
+      "service": "git",
+      "sha256": "4d0673170b9cf3d5b0e296f6d5bb037ae5227377b10890f74b59779c6658ba72"
+    },
+    {
+      "description": "Read git explore: Discover public repositories across every org.",
+      "name": "git_explore",
+      "path": "git_explore/SKILL.md",
+      "service": "git",
+      "sha256": "7834af0a19002e1729c1a3c483d9008f584754dbfbb184a9478212d9a0f08aac"
+    },
+    {
+      "description": "Read git git: Browse your org's repositories, Open a repository's home page.",
+      "name": "git_git",
+      "path": "git_git/SKILL.md",
+      "service": "git",
+      "sha256": "e0c950c42697672e01feed53e406fb3ee6975c8989ae10cc449156a12cb81fbc"
+    },
+    {
+      "description": "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client.",
+      "name": "git_info",
+      "path": "git_info/SKILL.md",
+      "service": "git",
+      "sha256": "ab2fe3b0a4b8451fb397301e93b918bbb5d13377f6aed2c95b1d3051071cf46a"
+    },
+    {
+      "description": "Read git keys: Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@<host>:<org>/<repo>.git`..",
+      "name": "git_keys",
+      "path": "git_keys/SKILL.md",
+      "service": "git",
+      "sha256": "b78dc53f7d446d8399c2bf8a78638549952221e19251dc18abb1297d90aa5d4a"
+    },
+    {
+      "description": "Read git repos: Returns the repos in the caller's scope, most recently updated first., Returns one repo with its live ref state: every branch name and the resolved HEAD commit., Returns one file's bytes at one revision..",
+      "name": "git_repos",
+      "path": "git_repos/SKILL.md",
+      "service": "git",
+      "sha256": "f7917a69e7ea1fdfe00d832eedf9bea4e934e1936e6c082a716bd816252e0e46"
+    },
+    {
+      "description": "Read git tree: Browse a directory inside a repository.",
+      "name": "git_tree",
+      "path": "git_tree/SKILL.md",
+      "service": "git",
+      "sha256": "d698b69b5febfe6842080beb6a5721f47c8117f6aa8ad6c0191cefb1faaaf566"
+    },
+    {
+      "description": "Read git usage: Returns per-repo and total storage bytes for the caller's org — the queryable, per-tenant number commerce and o11y meter on..",
+      "name": "git_usage",
+      "path": "git_usage/SKILL.md",
+      "service": "git",
+      "sha256": "e05519be2ab77702083b71688269a516fe5059a86d96d3db7ac2a0dab86bf16c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

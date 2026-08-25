@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read translate memory: List returns the org's own translation-memory entries, newest first, optionally narrowed to one target language and/or one position on the review ladder..",
+      "name": "translate_memory",
+      "path": "translate_memory/SKILL.md",
+      "service": "translate",
+      "sha256": "73ee774800ea87ca629424e0b9bdcccbc24640625f340f360b534be764e18ebe"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

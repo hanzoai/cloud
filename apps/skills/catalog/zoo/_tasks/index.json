@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read tasks tasks: Redirect to the tasks API root, Read workflow state from the durable engine.",
+      "name": "tasks_tasks",
+      "path": "tasks_tasks/SKILL.md",
+      "service": "tasks",
+      "sha256": "a96727b0402f439773864a9602789d0a710a9439cc1a6bc7816ac4eb8b281c49"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

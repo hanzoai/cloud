@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read link devices: Shows one machine: its accounts, usage and live sessions..",
+      "name": "link_devices",
+      "path": "link_devices/SKILL.md",
+      "service": "link",
+      "sha256": "dcbdfb425ca8122c8b3907f77c29e5ebb1804db6ed2521adf4555fee2a997832"
+    },
+    {
+      "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
+      "name": "link_link",
+      "path": "link_link/SKILL.md",
+      "service": "link",
+      "sha256": "6d1e0e994ec73ef8fd7aff210941bb5db6bdbd9c175c92a27700651eae60f325"
+    },
+    {
+      "description": "Read link route: Gets the failover order across your linked accounts..",
+      "name": "link_route",
+      "path": "link_route/SKILL.md",
+      "service": "link",
+      "sha256": "31b0fc37274db52a2626f6f9f96de9854f46175fc59cb40780968cb96f851230"
+    },
+    {
+      "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Hanzo spend side by side..",
+      "name": "link_usage",
+      "path": "link_usage/SKILL.md",
+      "service": "link",
+      "sha256": "6f89ca2a94c79ea84b0fe0b0f153e6224244d026eaa9919387d733458e982d34"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

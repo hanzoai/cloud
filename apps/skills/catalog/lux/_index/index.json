@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read index health: Reports whether the search plane can serve..",
+      "name": "index_health",
+      "path": "index_health/SKILL.md",
+      "service": "index",
+      "sha256": "c76326524abf24f8205927535c646b4739b6c95b8b2313d3f0775714a2a316a8"
+    },
+    {
+      "description": "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index..",
+      "name": "index_indexes",
+      "path": "index_indexes/SKILL.md",
+      "service": "index",
+      "sha256": "07c897c02f86a140e285f9df70365fdc98595f4ee7fd9b52dab779f13b79b5bb"
+    },
+    {
+      "description": "Read index stats: Counts the documents in each of your indexes..",
+      "name": "index_stats",
+      "path": "index_stats/SKILL.md",
+      "service": "index",
+      "sha256": "fbf733d70dd43329939392f82c64c8ec10ff85f881d5560e9bd7a9236e3001a1"
+    },
+    {
+      "description": "Read index tasks: Checks a write task, which has already finished..",
+      "name": "index_tasks",
+      "path": "index_tasks/SKILL.md",
+      "service": "index",
+      "sha256": "ce34c00a8fe44671299d91cb2ce6273dd2add86f4b70cb36022dcd2ce9b9fae7"
+    },
+    {
+      "description": "Read index version: Identifies the search implementation answering..",
+      "name": "index_version",
+      "path": "index_version/SKILL.md",
+      "service": "index",
+      "sha256": "74995ea6edfd4e410bcd16118d64314d96e20104a2a826aae43ac93db6213bcb"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

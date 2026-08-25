@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read campaign campaign: Returns the org's campaigns, newest first, optionally narrowed to one status., Returns one campaign of the caller's org — its name, audience, creatives, channels with their per-channel launch state, schedule, budget and status..",
+      "name": "campaign_campaign",
+      "path": "campaign_campaign/SKILL.md",
+      "service": "campaign",
+      "sha256": "6831304e0e8237df32f3a561d6aef4821b685e0ce6c4f1822b7db00568c96af0"
+    },
+    {
+      "description": "Read campaign metrics: Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS..",
+      "name": "campaign_metrics",
+      "path": "campaign_metrics/SKILL.md",
+      "service": "campaign",
+      "sha256": "4898d8d49a4f3cde5e6d0862b814165717cd102d79bdd0f86278871f6fab4cfc"
+    },
+    {
+      "description": "Read campaign summary: Returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach..",
+      "name": "campaign_summary",
+      "path": "campaign_summary/SKILL.md",
+      "service": "campaign",
+      "sha256": "bebbfa68e89fa5e8e612521b01390fa6f722cea17982f9c084c3696fd56549ad"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

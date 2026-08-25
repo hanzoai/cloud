@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read kv history: History returns one key's retained revisions, oldest first — every put and every delete marker up to the bucket's History depth..",
+      "name": "kv_history",
+      "path": "kv_history/SKILL.md",
+      "service": "kv",
+      "sha256": "ade05b96d4972b115f40b2567bb8a7d4e73f72b8fe2f618be87900dd4905282c"
+    },
+    {
+      "description": "Read kv kv: Get returns one key's current value and revision..",
+      "name": "kv_kv",
+      "path": "kv_kv/SKILL.md",
+      "service": "kv",
+      "sha256": "3aebacd598f6aafc82455168816bf0eef2a27fe4584387d61e2af4c5353bdf95"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

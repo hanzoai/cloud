@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
+      "name": "bot_runs",
+      "path": "bot_runs/SKILL.md",
+      "service": "bot",
+      "sha256": "0eb4054df114f9816c522800a4e869bd3a322fb9437b3e1efd3b71dd6507bee5"
+    },
+    {
+      "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
+      "name": "bot_runtime",
+      "path": "bot_runtime/SKILL.md",
+      "service": "bot",
+      "sha256": "980b0967b8f52ee644f77259b75659fcc8c4586b2dd9d28b2eda689d8f3f1407"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

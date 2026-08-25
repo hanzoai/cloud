@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read link devices: Shows one machine: its accounts, usage and live sessions..",
+      "name": "link_devices",
+      "path": "link_devices/SKILL.md",
+      "service": "link",
+      "sha256": "62f6ac7fac7edb66a7fee0bfa23f01386ec8856ecdea75dfe00624972c74e3ed"
+    },
+    {
+      "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
+      "name": "link_link",
+      "path": "link_link/SKILL.md",
+      "service": "link",
+      "sha256": "9bb56c68751241cb2d6908dc0273c6ac4335595c3848a07393fff15492ed7fa0"
+    },
+    {
+      "description": "Read link route: Gets the failover order across your linked accounts..",
+      "name": "link_route",
+      "path": "link_route/SKILL.md",
+      "service": "link",
+      "sha256": "156ead44ad62cb057b5d725d8179277f08a7cbf65c318021a07855eb697a00a6"
+    },
+    {
+      "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Lux spend side by side..",
+      "name": "link_usage",
+      "path": "link_usage/SKILL.md",
+      "service": "link",
+      "sha256": "4602c7dbc2b0470f22a3d3e809975dfe771da5ba23b58be6bfd8b85bb2309912"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

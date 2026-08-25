@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
+      "name": "network_network",
+      "path": "network_network/SKILL.md",
+      "service": "network",
+      "sha256": "db04539f8f1f88db2fe838c2f98906d617430ff8db6dfeb31b62d8267018b7e6"
+    },
+    {
+      "description": "Read network routers: Returns the Zero Trust routers the caller's org owns..",
+      "name": "network_routers",
+      "path": "network_routers/SKILL.md",
+      "service": "network",
+      "sha256": "dac2d3f117f609763cda59b044682dddb22f7b61a49606cceec9511095c311b5"
+    },
+    {
+      "description": "Read network services: Returns the Zero Trust edge services the caller's org owns..",
+      "name": "network_services",
+      "path": "network_services/SKILL.md",
+      "service": "network",
+      "sha256": "634cf4748a290b2a89090ebbbf7f6179e18d34059d2b3774527686c9827702eb"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

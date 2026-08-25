@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read todo board: Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
+      "name": "todo_board",
+      "path": "todo_board/SKILL.md",
+      "service": "todo",
+      "sha256": "b367d42fbbfd3ed69123e39c59f1806e0a832185165391db5a565ed61dbf039b"
+    },
+    {
+      "description": "Read todo issues: Answers across every project in the org..",
+      "name": "todo_issues",
+      "path": "todo_issues/SKILL.md",
+      "service": "todo",
+      "sha256": "3f97bc56bc7414494722d3b514b5c7623beaaa330c64661dffd13d04fad68762"
+    },
+    {
+      "description": "Read todo projects: Returns the boards of your org — the places your work actually is., Returns one board of your org by its key — the repository name., Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
+      "name": "todo_projects",
+      "path": "todo_projects/SKILL.md",
+      "service": "todo",
+      "sha256": "5e4df47920969cef3f4b7e46bbb6a585b7cde42a02100bc241e6408304b01732"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read wallet accounts: Returns the caller org's wallet accounts, newest first..",
+      "name": "wallet_accounts",
+      "path": "wallet_accounts/SKILL.md",
+      "service": "wallet",
+      "sha256": "39182ccefa663c48e7560d8699e77f76d43eacf73be1be4b0c2504ad35afadaa"
+    },
+    {
+      "description": "Read wallet wallet: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
+      "name": "wallet_wallet",
+      "path": "wallet_wallet/SKILL.md",
+      "service": "wallet",
+      "sha256": "520156c29347b048deb8244f80486cb81473ccf7b9b5c988b5fe6ece32060a6a"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

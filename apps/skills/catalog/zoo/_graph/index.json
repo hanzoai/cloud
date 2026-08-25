@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read graph graph: Read the assertions this organization has recorded.",
+      "name": "graph_graph",
+      "path": "graph_graph/SKILL.md",
+      "service": "graph",
+      "sha256": "6f80a3cfdaef2e9245fd5e8e139b1e63638c68249deb9ee5e5a785fbe846a35e"
+    },
+    {
+      "description": "Read graph search: Find assertions by their text rather than by an entity key.",
+      "name": "graph_search",
+      "path": "graph_search/SKILL.md",
+      "service": "graph",
+      "sha256": "96d061024ea8daab7d3dbd2bdf13b7498f016cdb4b2dbe6edf4bee351fbce69a"
+    },
+    {
+      "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",
+      "name": "graph_vocabulary",
+      "path": "graph_vocabulary/SKILL.md",
+      "service": "graph",
+      "sha256": "427fdf590a0e78e9f0cbec6a1ff499cd68d7e5c570f4184898f41ef6581db9a2"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

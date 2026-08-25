@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read dataset dataset: List this org's datasets, Describe every version of one dataset.",
+      "name": "dataset_dataset",
+      "path": "dataset_dataset/SKILL.md",
+      "service": "dataset",
+      "sha256": "ffd106f491d56e154287b1a3de051a51fdc252b795361e148f14ce8156b6b8ae"
+    },
+    {
+      "description": "Read dataset export: Read a version's rows back, one page at a time.",
+      "name": "dataset_export",
+      "path": "dataset_export/SKILL.md",
+      "service": "dataset",
+      "sha256": "2265945c0f762f34582bb72d745360f5e59f8559f754a029e7497c33935e9dd4"
+    },
+    {
+      "description": "Read dataset lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
+      "name": "dataset_lineage",
+      "path": "dataset_lineage/SKILL.md",
+      "service": "dataset",
+      "sha256": "59c0caae1a9e7a9afc1608f051460aa3f18885e7d982e21abab7a3aa36401873"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

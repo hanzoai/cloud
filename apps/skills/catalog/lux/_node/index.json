@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read node connect: The socket a bot node dials and holds open to become invokable..",
+      "name": "node_connect",
+      "path": "node_connect/SKILL.md",
+      "service": "node",
+      "sha256": "cd793288fdaa2ae9660933fc94156990949cc21e0a020a807e64cb0b4def9a1e"
+    },
+    {
+      "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
+      "name": "node_node",
+      "path": "node_node/SKILL.md",
+      "service": "node",
+      "sha256": "a75d2a18257d0c8d44acd018752bb3b6720ce2045b95c56e19324aff17074a34"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

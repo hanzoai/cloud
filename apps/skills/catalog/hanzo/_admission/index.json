@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read admission waitlist: Reports whether ONE host is currently gated by the launch waitlist..",
+      "name": "admission_waitlist",
+      "path": "admission_waitlist/SKILL.md",
+      "service": "admission",
+      "sha256": "bb6d9337441d69e7515086b0f36d81516ba224f00d61ee4e5baf96ca6e0479f9"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

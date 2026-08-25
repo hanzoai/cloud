@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read referral referral: Returns the caller's referral code, share link and the referrals they have made..",
+      "name": "referral_referral",
+      "path": "referral_referral/SKILL.md",
+      "service": "referral",
+      "sha256": "c72f16f5f03c39ef59c93dbd81a5024fcf7c2337f2b2d895b6216e7b6f3b932f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read template template: Lists the public starter-kit catalog plus, for a validated caller, that org's own private kits., Returns one starter kit: the caller org's own by that slug, else the public catalog's..",
+      "name": "template_template",
+      "path": "template_template/SKILL.md",
+      "service": "template",
+      "sha256": "e3f3ac13d8dbcc606cc83155325e5416ab3f40dbfec8fd9c6c1dc13b997c311b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

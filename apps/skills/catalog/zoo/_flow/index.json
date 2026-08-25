@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read flow runs: Runs reads one workflow's recorded runs: every component build with its result, keyed by component..",
+      "name": "flow_runs",
+      "path": "flow_runs/SKILL.md",
+      "service": "flow",
+      "sha256": "e5d555f60d670eaec262ec9600768a586fc10caa63b8fe2bd4cfc38a2d414c6e"
+    },
+    {
+      "description": "Read flow status: Status reports whether the flow service is reachable and which version it runs..",
+      "name": "flow_status",
+      "path": "flow_status/SKILL.md",
+      "service": "flow",
+      "sha256": "7daec5b4877c618b3b589e757a99128ace7270d892b6312c2b83e2a8893f5848"
+    },
+    {
+      "description": "Read flow workflows: Workflows lists the caller's workflows, paged., Workflow reads one of the caller's workflows — the full record, graph included..",
+      "name": "flow_workflows",
+      "path": "flow_workflows/SKILL.md",
+      "service": "flow",
+      "sha256": "76bb88e5385a73f13765f4ee8ca74f7618d2573b25852623ea1a33c0e8c3048b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

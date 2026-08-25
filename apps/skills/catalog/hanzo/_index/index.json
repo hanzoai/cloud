@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read index health: Reports whether the search plane can serve..",
+      "name": "index_health",
+      "path": "index_health/SKILL.md",
+      "service": "index",
+      "sha256": "e621932f4832d1d6c6fe4ef1b6ddff895f42c5a600153197c35b6451061154d1"
+    },
+    {
+      "description": "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index..",
+      "name": "index_indexes",
+      "path": "index_indexes/SKILL.md",
+      "service": "index",
+      "sha256": "916f0063b7c9bed3dd414b840a08617d9e8abebc55063df6cf37e05047f1f81c"
+    },
+    {
+      "description": "Read index stats: Counts the documents in each of your indexes..",
+      "name": "index_stats",
+      "path": "index_stats/SKILL.md",
+      "service": "index",
+      "sha256": "b7c332f81a3992d77a2db9a21b47ac567c1e716552bf7acdbfa5fe3159dfe626"
+    },
+    {
+      "description": "Read index tasks: Checks a write task, which has already finished..",
+      "name": "index_tasks",
+      "path": "index_tasks/SKILL.md",
+      "service": "index",
+      "sha256": "dc2abd0815c5533c1ff9bd579b76c975c0ab76876b745e843723927045a2c5c0"
+    },
+    {
+      "description": "Read index version: Identifies the search implementation answering..",
+      "name": "index_version",
+      "path": "index_version/SKILL.md",
+      "service": "index",
+      "sha256": "37f56a057cea4f13fd0f660dcc7af9d86c801f15bcff9241e9f4c5a30310362f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read label coverage: How much of the window has matured, and how much of that is judged.",
+      "name": "label_coverage",
+      "path": "label_coverage/SKILL.md",
+      "service": "label",
+      "sha256": "56a61ec3e5c5657ccf00171989a23f5774d406521b945d4d566d95c83c7cf404"
+    },
+    {
+      "description": "Read label label: Read the assertions this tenant has recorded.",
+      "name": "label_label",
+      "path": "label_label/SKILL.md",
+      "service": "label",
+      "sha256": "baece2cfa4e24a3fc7b6b85969afb52deffb34609eb094b36fc8d1f0a4b6572d"
+    },
+    {
+      "description": "Read label vocabulary: The closed vocabularies and the precedence rule that resolves a conflict.",
+      "name": "label_vocabulary",
+      "path": "label_vocabulary/SKILL.md",
+      "service": "label",
+      "sha256": "087d6e0ede338f44f949bfc59f44330f44bcb2790f8615d327195267b27df5e7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,60 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read compliance accreditation: Returns the org's tracked accreditation-state records, newest first — evidence entries the org keeps, never a platform certification., Returns one tracked accreditation record..",
+      "name": "compliance_accreditation",
+      "path": "compliance_accreditation/SKILL.md",
+      "service": "compliance",
+      "sha256": "4b2a390e0d8987cb655641787a90b1c49549de356a65edad315c8308f70f0edd"
+    },
+    {
+      "description": "Read compliance audit: AuditRead is the compliance read of the SHARED tamper-evident audit plane — the SOC 2 posture surface (privileged actions: who started/decided what, when)..",
+      "name": "compliance_audit",
+      "path": "compliance_audit/SKILL.md",
+      "service": "compliance",
+      "sha256": "701bfa48e9125a0a881f2036ed4c0023ba50b6775baef734261e4e9e657aaed6"
+    },
+    {
+      "description": "Read compliance health: Health reports subsystem liveness and the wired verification provider..",
+      "name": "compliance_health",
+      "path": "compliance_health/SKILL.md",
+      "service": "compliance",
+      "sha256": "7af1e4de9996e31c666dce91c13d54f9257fc0efc7823424825fdac3e2fd86ef"
+    },
+    {
+      "description": "Read compliance records: ListRecords is the unified compliance-record view for the org: its verifications and accreditation records together, each provider-reported or tracked, never platform-asserted..",
+      "name": "compliance_records",
+      "path": "compliance_records/SKILL.md",
+      "service": "compliance",
+      "sha256": "ae8130e3ba687c4dabdef5c749ad9a5972c7a6d3551c9b8984cdf456ea472501"
+    },
+    {
+      "description": "Read compliance status: Status is the org's honest posture read: the wired provider and the per-status tally of its verifications..",
+      "name": "compliance_status",
+      "path": "compliance_status/SKILL.md",
+      "service": "compliance",
+      "sha256": "576018e90ee9be8a3e085fda770d736ed562e0b76b84d44827f901d63ba430b3"
+    },
+    {
+      "description": "Read compliance subjects: Returns the org's subjects as PII-MINIMIZED summaries — no name or email, only whether an email is on file., Returns one subject WITH its contact PII — the only surface that returns it, and only to the owning org..",
+      "name": "compliance_subjects",
+      "path": "compliance_subjects/SKILL.md",
+      "service": "compliance",
+      "sha256": "96275b4f4753778ff09395f6840657217685cce9294774e43e45ab504fdd3fd3"
+    },
+    {
+      "description": "Read compliance verifications: Returns the org's KYC/KYB verifications, newest first — opaque subject references and provider-reported statuses only, no subject PII., Returns one verification — its opaque subject reference and provider-reported status, no subject PII..",
+      "name": "compliance_verifications",
+      "path": "compliance_verifications/SKILL.md",
+      "service": "compliance",
+      "sha256": "24c799a29c371eb7a8797225c6cbe67ac237bd130e1968b9634c8f5bfcc05e3d"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

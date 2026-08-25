@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read mq health: Reports whether the message plane behind this surface answers..",
+      "name": "mq_health",
+      "path": "mq_health/SKILL.md",
+      "service": "mq",
+      "sha256": "297bf2fb8422a785e5aea390875e455cc9e1282bef84d476817265f53ed0cd79"
+    },
+    {
+      "description": "Read mq info: Returns the broker's identity and the org's stream count..",
+      "name": "mq_info",
+      "path": "mq_info/SKILL.md",
+      "service": "mq",
+      "sha256": "c34551eaaa31a7919c7237afe8e0f0278585ea6b6e67deab887489ecee40806e"
+    },
+    {
+      "description": "Read mq stream: Returns the org's streams, name-ordered, with their live state., Returns one stream's configuration and live state., Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence..",
+      "name": "mq_stream",
+      "path": "mq_stream/SKILL.md",
+      "service": "mq",
+      "sha256": "d4de5a2adc7fdb172b4f4b5f6993e166bf66c4f4189b60a02f1dc87df725d8b0"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

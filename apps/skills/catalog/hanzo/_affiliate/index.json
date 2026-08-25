@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read affiliate affiliate: Answers the caller org's OWN affiliate standing: status, referral code and share link, commission rate, how many orgs it has referred, and its lifetime accrued, still-pending and already-paid commission in integer cents, with its payout history..",
+      "name": "affiliate_affiliate",
+      "path": "affiliate_affiliate/SKILL.md",
+      "service": "affiliate",
+      "sha256": "474b90907242af2c047b50949e48ced7ff56a570cba4e3e768c2e8d5fbea073a"
+    },
+    {
+      "description": "Read affiliate leaderboard: Answers the top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank..",
+      "name": "affiliate_leaderboard",
+      "path": "affiliate_leaderboard/SKILL.md",
+      "service": "affiliate",
+      "sha256": "3a910b6ead821d1ce590837338148c8aff555945374f58712e0b39e5a982c7bb"
+    },
+    {
+      "description": "Read affiliate me: Answers the richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there., Answers ",
+      "name": "affiliate_me",
+      "path": "affiliate_me/SKILL.md",
+      "service": "affiliate",
+      "sha256": "b80ecc93824f352940044ffc85418d476833cfb9aee14078b8b07e76d1841ddf"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

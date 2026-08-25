@@ -1,0 +1,60 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read provisioning datastore: Lists the caller org's Zoo Datastore warehouses., Returns one Zoo Datastore warehouse's metadata..",
+      "name": "provisioning_datastore",
+      "path": "provisioning_datastore/SKILL.md",
+      "service": "provisioning",
+      "sha256": "5b1c2a89ff3f7972b7a977e8040cb9c05fa436e5b14c952c9c02aba3622fb1ae"
+    },
+    {
+      "description": "Read provisioning docdb: ListDocDB lists the caller org's Zoo DocDB document databases., GetDocDB returns one Zoo DocDB database's metadata..",
+      "name": "provisioning_docdb",
+      "path": "provisioning_docdb/SKILL.md",
+      "service": "provisioning",
+      "sha256": "36ba8afd9ea534c41c64160f6886db44606d6eeed1e3f3de53f84373085030c4"
+    },
+    {
+      "description": "Read provisioning kv: ListKV lists the caller org's Zoo KV stores., GetKV returns one Zoo KV store's metadata..",
+      "name": "provisioning_kv",
+      "path": "provisioning_kv/SKILL.md",
+      "service": "provisioning",
+      "sha256": "b6424ac140212a890e9de7a694bacc1f93c497bf47f954e1991585459344d0da"
+    },
+    {
+      "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
+      "name": "provisioning_s3",
+      "path": "provisioning_s3/SKILL.md",
+      "service": "provisioning",
+      "sha256": "3058218a449871bac660e27f709f5e22d2c91b33e74b6147dad65bff52a4a198"
+    },
+    {
+      "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
+      "name": "provisioning_search",
+      "path": "provisioning_search/SKILL.md",
+      "service": "provisioning",
+      "sha256": "0d784c57e95061ab666e595621367351732a7b5f2bb7edfd07a9aa399b849b01"
+    },
+    {
+      "description": "Read provisioning sql: ListSQL lists the caller org's Zoo SQL databases., GetSQL returns one Zoo SQL database's metadata..",
+      "name": "provisioning_sql",
+      "path": "provisioning_sql/SKILL.md",
+      "service": "provisioning",
+      "sha256": "50793b68cd981ad734c1b22ea197821255fb1f4614f936e3fddc4021d371667b"
+    },
+    {
+      "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
+      "name": "provisioning_vector",
+      "path": "provisioning_vector/SKILL.md",
+      "service": "provisioning",
+      "sha256": "233798e54bc02c899b96cbc23574a45aa76c21524df905f6fcd7da79eb6e1d57"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

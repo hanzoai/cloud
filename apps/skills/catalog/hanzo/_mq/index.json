@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read mq health: Reports whether the message plane behind this surface answers..",
+      "name": "mq_health",
+      "path": "mq_health/SKILL.md",
+      "service": "mq",
+      "sha256": "0d45ad6f4d65e34d1563990c835a034804066c4616bd749b695a8a2a6894ad17"
+    },
+    {
+      "description": "Read mq info: Returns the broker's identity and the org's stream count..",
+      "name": "mq_info",
+      "path": "mq_info/SKILL.md",
+      "service": "mq",
+      "sha256": "95279b62d5f79ab2744b67d9ffc06d44bf89f71756e9a39e6d3bf335254370e9"
+    },
+    {
+      "description": "Read mq stream: Returns the org's streams, name-ordered, with their live state., Returns one stream's configuration and live state., Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence..",
+      "name": "mq_stream",
+      "path": "mq_stream/SKILL.md",
+      "service": "mq",
+      "sha256": "20998ee0d761db2c46bafd39edb4a45be6b3b1c33c3c6dd190c001560cb2c701"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

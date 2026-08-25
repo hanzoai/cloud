@@ -1,0 +1,67 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 8,
+  "skills": [
+    {
+      "description": "Read projects deployments: Returns a project's deploy history, newest version first., Returns one deployment of a project by id..",
+      "name": "projects_deployments",
+      "path": "projects_deployments/SKILL.md",
+      "service": "projects",
+      "sha256": "766ddc2595b56399f57c13c6883e040c471090bc846d240854842f705676862c"
+    },
+    {
+      "description": "Read projects domains: Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes..",
+      "name": "projects_domains",
+      "path": "projects_domains/SKILL.md",
+      "service": "projects",
+      "sha256": "adabc00189c9078250ad6f13603d086c6a73bc8b30a66b00fa2f1ff8c3e9ba8d"
+    },
+    {
+      "description": "Read projects edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
+      "name": "projects_edge",
+      "path": "projects_edge/SKILL.md",
+      "service": "projects",
+      "sha256": "d716c7c83c3c9f8aee02ce46b47976983239b3348fc30c3cd3eba40b6a00b2bf"
+    },
+    {
+      "description": "Read projects projects: Returns every project your org owns., Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it..",
+      "name": "projects_projects",
+      "path": "projects_projects/SKILL.md",
+      "service": "projects",
+      "sha256": "9e9b6954d7785803dd46854fdeb35f25685eaac49cd252321407fb096606bb06"
+    },
+    {
+      "description": "Read projects releases: Returns a site's releases newest-first, marking the active one — the rollback menu..",
+      "name": "projects_releases",
+      "path": "projects_releases/SKILL.md",
+      "service": "projects",
+      "sha256": "ee51785473d738f481755071707b3223a29827c1c446aed9801eff3857e8eb4f"
+    },
+    {
+      "description": "Read projects shot: Get a PNG of the project's live site.",
+      "name": "projects_shot",
+      "path": "projects_shot/SKILL.md",
+      "service": "projects",
+      "sha256": "9c961d3fc200b76d74bb9322e06a01091b307d7fa456fa89ce7d0394d191b5fd"
+    },
+    {
+      "description": "Read projects sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
+      "name": "projects_sites",
+      "path": "projects_sites/SKILL.md",
+      "service": "projects",
+      "sha256": "fb11d29a3b35bf828f1fa62adda509eb8a12254b03cab1f6b9ce1040befa65cf"
+    },
+    {
+      "description": "Read projects tags: The site's browser tag set for the hosted tag — which pixels to inject, by publishable key.",
+      "name": "projects_tags",
+      "path": "projects_tags/SKILL.md",
+      "service": "projects",
+      "sha256": "d5b8373f92a200b06ff34905aced30d89f6d0ccc0d9b6900d953a7c7faa7ce03"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
