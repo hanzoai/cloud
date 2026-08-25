@@ -436,6 +436,21 @@ test:
       # one is never overridden. Mount refuses without it, which is the point:
       # the refusal is what makes a process holding a key nobody else holds say so.
       export CONSOLE_CSRF_KEY="${CONSOLE_CSRF_KEY:-ZGV2LWNzcmYta2V5LWZvci10ZXN0cy1vbmx5LTAwMDA=}"
+      # A HUNG FETCH IS NOT A SLOW TEST, and -timeout does not cover it. That flag
+      # bounds test EXECUTION; the toolchain resolving modules happens before any
+      # test runs and is bounded by nothing. When the module host was unreachable
+      # this step sat on `go: downloading` for NINETY MINUTES, held its runner, and
+      # left a run the forge still called in_progress on a runner that no longer
+      # existed — a phantom whose concurrency group then blocked every later run
+      # for the same sha. The release did not fail; it stopped being possible.
+      #
+      # So resolve first, under a bound of its own, and say which of the two it was.
+      # Private modules here come from git.hanzo.ai, so "the host is down" and "the
+      # code is wrong" are different sentences and only one of them is about us.
+      timeout 10m go mod download || {
+        echo "::error::modules did not resolve in 10m. Private modules come from git.hanzo.ai — check the forge is serving before reading this as a code failure."
+        exit 1
+      }
       go test -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
         -skip 'TestRecord_DebitsFinanceInProcess|TestIndexerUnreachableHonestEmpty' \
         ./...
