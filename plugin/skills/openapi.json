@@ -23,6 +23,23 @@
         "description": "The Agent Skills Discovery catalogue an AI client reads to learn what this deployment can do: every skill, with the sha256 of the SKILL.md that is actually served for it, so a client can verify the document it then fetches.\n\nThe catalogue is GENERATED from the per-service OpenAPI specs and embedded in the binary; this route serves those bytes verbatim and never re-derives them, which is what makes the digests hold. Which brand's catalogue you get is decided per request from the Host — api.hanzo.ai answers the Hanzo catalogue, api.lux.network the Lux one, api.zoo.ngo the Zoo one — never one brand's skills on another's surface; a Host whose brand has no embedded catalogue falls back to the deployment brand, then to hanzo.\n\nPublic by design: the discovery surface carries no secrets, so there is no bearer and no tenant scope. Answers `Cache-Control: public, max-age=300`, and a catalogue that is not embedded is `{\"error\":…}` at 404."
       }
     },
+    "/.well-known/agent-skills/{product}/index.json": {
+      "get": {
+        "operationId": "get_.well-known_agent-skills_by_product_index.json",
+        "summary": "One product's skills, as a catalogue in its own right",
+        "description": "Serves the index for a single product — the same shape and the same fields as the brand catalogue, narrowed to the skills of one product, so a client that already walks the top document needs no second parser.\n\nThe top catalogue lists 116 products beside its skills and gives each one this address; without it those links answer 404 and a reader looking for one capability is back to reading every skill. The segment is the product name prefixed `_` (`_account`), which is what keeps a product index and a skill distinguishable in one flat directory and is why the skill route rejects it.\n\nBrand resolution and caching are index.json's. Public — no bearer, no tenant scope. A product the serving brand does not carry is `{\"error\":…}` at 404.",
+        "parameters": [
+          {
+            "name": "product",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/.well-known/agent-skills/{skill}/SKILL.md": {
       "get": {
         "operationId": "get_.well-known_agent-skills_by_skill_skill.md",
