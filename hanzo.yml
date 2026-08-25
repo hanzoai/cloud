@@ -157,7 +157,26 @@ test:
     # It PREDICTS; app-contract still DECIDES. A moved closure means the document was
     # generated from source that has since changed, not that the projection differs.
     run: |
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # GONOPROXY=none is the load-bearing half, and it is stated on every step
+      # here because GOPRIVATE is shorthand for BOTH GONOPROXY and the sumdb
+      # bypass while only the second is wanted. The sumdb has no entry for a
+      # module we publish; the module PROXY is the only source that survives a
+      # repository being RE-ROOTED. A public repo that has been clean-cut
+      # answers `unknown revision` for every version published before the cut,
+      # while proxy.golang.org still serves them — measured on
+      # github.com/hanzoai/dataroom v1.1.7 and github.com/hanzoai/sign v1.0.0,
+      # whose GitHub repos hold no commits at all. So forcing `direct` turns a
+      # cold module cache into `invalid package name: ""` on a tree nobody
+      # changed, which is why this surfaced as a code failure and is not one.
+      #
+      # Nothing is trusted MORE for it: go.sum verifies every hash either way,
+      # and that is also what says the proxy's copy is the right one — the forge
+      # publishes a DIFFERENT commit at sign v1.0.0, and that copy does not
+      # verify against this tree. Mirroring the forge's tags to GitHub would
+      # therefore have broken the build rather than fixed it. A genuinely
+      # private module answers 410 at the proxy and falls through to `direct`
+      # on the GH_PAT credential, which is what the comma in GOPROXY is for.
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
@@ -195,7 +214,7 @@ test:
     # invariant. It reads manifest.Apps as a value; seconds, no fleet build.
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
@@ -251,7 +270,7 @@ test:
     # took three more behind it.
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
@@ -280,7 +299,7 @@ test:
     # inside a step that reports twenty-two minutes late.
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
@@ -322,7 +341,7 @@ test:
       # CGO_ENABLED=0 to match `make cloud`: the cgo graph carries one extra
       # package, so leaving it unset makes the number CI prints disagree with the
       # number a developer measures, for no reason anyone can see.
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=0
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off CGO_ENABLED=0
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
@@ -362,7 +381,7 @@ test:
     # the openapi endpoint itself.
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
@@ -385,7 +404,7 @@ test:
     # link peaks in the GiBs). It runs after the cheap gates on purpose.
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
@@ -405,7 +424,7 @@ test:
   - name: go-unit
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=1
+      export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off CGO_ENABLED=1
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
       # does not, the flag is a no-op and every step here compiles the world.
