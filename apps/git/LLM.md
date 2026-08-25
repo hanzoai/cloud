@@ -352,7 +352,7 @@ shared one to park the whole principal.
   data}`), but `data` is `repoView` / `[]repoView` / `usageView` — names zip's
   typed fold ALREADY publishes as components off the typed /v1 ops. Reflecting
   them a second time through `openapi.schemaOf` would put two derivations behind
-  one schema name, which is exactly what `openapi.Weave` refuses ("every
+  one schema name, which is exactly what `openapi.Compose` refuses ("every
   generated SDK would bind whichever it read last"). So the request halves are
   declared and the response halves wait on the two clients agreeing who owns a
   shared view type. The pack responses and the six HTML pages have no client at

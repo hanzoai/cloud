@@ -16,7 +16,7 @@ package o11y
 // {"status":"error","msg":...}. Two shapes, one refuser, and a unit test on the
 // refuser could not see either.
 //
-// So this exercises the REAL mount: MountO11y, the real route table, the real
+// So this exercises the REAL mount: Mount, the real route table, the real
 // gate, against a runtime that actually routes. An anonymous caller must get the
 // runtime's answer on the tenant-free reads and a refusal everywhere else.
 
@@ -64,7 +64,7 @@ func doorApp(t *testing.T) *zip.App {
 	// the chain it claims to exercise is missing a link.
 	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("MountO11y: %v", err)
+		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = shutdownAnnotationQueues() })
 	return app

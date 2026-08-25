@@ -27,7 +27,7 @@ import (
 // code does — orm.New + the owner/name id — and closes it, so what follows reads a
 // file on disk rather than a handle in this process.
 // dataDirWithStore is a DataDir that already HOLDS an identity store — the state
-// every real deployment is in, and now the only state this graft will open. Mount
+// every real deployment is in, and now the only state this subsystem will open. Mount
 // refuses an absent store on purpose (a missing volume must not be answered by
 // minting an empty identity service), so a test that mounts has to look like
 // production rather than like a blank disk.
@@ -99,7 +99,7 @@ func seedIdentity(t *testing.T, path, org, name string) {
 	}
 }
 
-// THE CONTRACT: the graft opens the store that holds the identities.
+// THE CONTRACT: the subsystem opens the store that holds the identities.
 //
 // This is the property, and nothing weaker is worth asserting. The previous test
 // checked that the file this opened was CIPHERTEXT, which it was — and it was also a
@@ -111,7 +111,7 @@ func seedIdentity(t *testing.T, path, org, name string) {
 //
 // It reads through the SAME opener a caller gets from DB(), so what a sibling
 // subsystem reflects in-process (clients/platform, clients/deploy) is the same rows.
-func TestTheGraftOpensTheStoreThatHoldsTheIdentities(t *testing.T) {
+func TestMountOpensTheStoreThatHoldsTheIdentities(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
@@ -129,14 +129,14 @@ func TestTheGraftOpensTheStoreThatHoldsTheIdentities(t *testing.T) {
 		t.Fatalf("read users: %v", err)
 	}
 	if len(users) != 1 {
-		t.Fatalf("the grafted store holds %d users, want the 1 that is in %s — a fully-mounted, completely empty identity service is not a deployment", len(users), path)
+		t.Fatalf("the opened store holds %d users, want the 1 that is in %s — a fully-mounted, completely empty identity service is not a deployment", len(users), path)
 	}
 	if got := users[0].Owner + "/" + users[0].Name; got != "hanzo/z" {
 		t.Errorf("read %q, want hanzo/z", got)
 	}
 }
 
-// The store IAM's CLI is pointed at and the store this graft opens are ONE file.
+// The store IAM's CLI is pointed at and the store this subsystem opens are ONE file.
 //
 // It is asserted on the PATH because that is the whole of the cutover: a deployment
 // mounts the identity volume at {DataDir}/iam and there is nothing else to say. A

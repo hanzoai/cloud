@@ -24,7 +24,7 @@ import (
 // face folded under /v1/o11y/sentinel in the module (v1.5.67), so one prefix is
 // the whole surface again and there is no second list to keep in step.
 
-// surfaceApp mounts the WHOLE observability surface through the REAL MountO11y,
+// surfaceApp mounts the WHOLE observability surface through the REAL Mount,
 // so the assertions below read the router the document is generated from rather
 // than a reconstruction of it — a route added anywhere inside that mount (or in
 // the upstream module it ends with) shows up here without anyone remembering to
@@ -41,14 +41,14 @@ func surfaceApp(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	// The COMPOSER's middleware, installed at the root exactly as cloud.App does
 	// (app.go) — because since "identity is the composer's" no subsystem installs
-	// it, and MountO11y least of all: a second copy at this prefix is the install
+	// it, and Mount least of all: a second copy at this prefix is the install
 	// that took the surface down. Without it every typed op below answers 403 no
 	// matter what it was asked, which reads like a live outage and is only ever a
 	// harness that stopped composing the way the real process does. scopeApp
 	// (scope_test.go) already states this; surfaceApp is where it was missed.
 	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("MountO11y: %v", err)
+		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = shutdownAnnotationQueues() })
 	return app
@@ -263,10 +263,10 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 
 }
 
-// ---- the graft, measured -------------------------------------------------
+// ---- composing, measured -------------------------------------------------
 
-// TestGraftQualifiesEveryPublishedType is the deliverable of the graft, and the
-// reason it exists: the fleet's schema namespace is FLAT, o11y names its types
+// TestComposingQualifiesEveryPublishedType is the deliverable of composing o11y as
+// one app: the fleet's schema namespace is FLAT, o11y names its types
 // after ordinary nouns, and five other apps name theirs the same way.
 //
 // Unqualified, o11y's Service (a traced APM service) and ingress's Service (a
@@ -279,7 +279,7 @@ func TestUntypedRoutesKeepTheirWire(t *testing.T) {
 // published here is never a function of who else is in the room. The assertion is
 // therefore TOTAL — every schema, not a sample — because a rule that holds for
 // most names is not this rule.
-func TestGraftQualifiesEveryPublishedType(t *testing.T) {
+func TestComposingQualifiesEveryPublishedType(t *testing.T) {
 	reg, err := openapi.Typed(surfaceApp(t))
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
@@ -296,7 +296,7 @@ func TestGraftQualifiesEveryPublishedType(t *testing.T) {
 	if len(bare) > 0 {
 		sort.Strings(bare)
 		t.Errorf("%d schema(s) published unqualified: %s\n"+
-			"Every type o11y publishes must arrive through the graft, which qualifies it by the app "+
+			"Every type o11y publishes must arrive through the composed app, which qualifies it by the app "+
 			"that declared it. An unqualified name is a name another app may also claim.",
 			len(bare), strings.Join(bare, ", "))
 	}
@@ -315,12 +315,12 @@ func TestGraftQualifiesEveryPublishedType(t *testing.T) {
 	}
 }
 
-// TestGraftLeavesAddressesAlone is the other half: a graft changes what the fleet
-// CALLS o11y's types and nothing about where o11y answers or what an SDK method
-// is named. Paths are absolute and untouched; operationIds are published SDK
+// TestComposingLeavesAddressesAlone is the other half: composing changes what the
+// fleet CALLS o11y's types and nothing about where o11y answers or what an SDK
+// method is named. Paths are absolute and untouched; operationIds are published SDK
 // method names and rewriting one at compose time would make it a function of
 // where the app is deployed.
-func TestGraftLeavesAddressesAlone(t *testing.T) {
+func TestComposingLeavesAddressesAlone(t *testing.T) {
 	served, typed := o11yOps(t)
 	for _, want := range []string{
 		"GET /v1/o11y/product/metrics", // cloud's own org-pinned RED read, at its own address

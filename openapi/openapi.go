@@ -572,7 +572,7 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 				return nil, err
 			}
 		}
-		// An UNTYPED route inside a GRAFTED app has its prose in neither place a
+		// An UNTYPED route inside a COMPOSED app has its prose in neither place a
 		// host can reach: not in the typed registry (it is not typed) and not in
 		// [Describe] (that is this repo's client, and the route is another repo's).
 		// It is in the doc comment on the handler, where it belongs, and zipdoc

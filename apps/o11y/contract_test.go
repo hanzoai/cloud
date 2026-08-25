@@ -6,7 +6,7 @@ import "github.com/hanzoai/cloud"
 // way. cloud.MountFunc is `func(cloud.Router, cloud.Deps) error` — the shape
 // cloud.Plugin takes, and therefore the shape a generated plugin main can call.
 //
-// This app used to be the one exception: MountO11y demanded a concrete *zip.App,
+// This app used to be the one exception: Mount demanded a concrete *zip.App,
 // which the Router interface does not promise. Nothing was wrong with the code it
 // ran; the cost was that the deviation CASCADED — plugin/o11y/main.go could not be
 // a generated stub like its ~120 siblings, because it had to build an *App by hand

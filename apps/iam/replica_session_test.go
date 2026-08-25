@@ -39,7 +39,7 @@ import (
 //
 // The pods are separate iamserver.NewApp instances rather than two Mount calls
 // because Mount publishes its handle through package state (embeddedDB), and two
-// grafts in one process would share it — which is the one thing a test about two
+// of them in one process would share it — which is the one thing a test about two
 // pods must not do. NewApp takes the store as its argument, so what these two share
 // is exactly what a real pair of pods shares and nothing else.
 func TestASessionMintedOnOnePodIsAcceptedByTheNext(t *testing.T) {

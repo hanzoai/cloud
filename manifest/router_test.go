@@ -108,7 +108,7 @@ var unreachable = []string{
 	// iam was relayed through a wildcard, so the only thing it could publish at the
 	// issuer root was /.well-known/{wildcard1} — and the only prefix that could have
 	// routed it was /.well-known, which owns the whole subtree and would have taken
-	// skills' with it. Grafted, iam declares the three exact documents its
+	// skills' with it. Composed, iam declares the three exact documents its
 	// router holds (jwks, openid-configuration, oauth-authorization-server), so the
 	// host routes exactly those. A relying party's FIRST call reaches an app now.
 	// Three lines lived here: /v1/bot/{connect,nodes,peer/invoke}, held by `bot`

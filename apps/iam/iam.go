@@ -29,14 +29,14 @@
 // zip matches the most specific pattern. The two addresses that were NOT specificity
 // but SHADOWING — /v1/iam/keys and /v1/iam/onboard, where apps/account registered
 // deprecated aliases at addresses IAM already owns and serves — are gone from
-// apps/account: a graft refuses a duplicate address at compose time rather than
+// apps/account: zip refuses a duplicate address at build rather than
 // letting registration order decide silently, and at api.hanzo.ai those two were
 // already answered by IAM anyway (ingress routes /v1/iam/* there).
 //
 // THE STORE IS THE IDENTITY STORE — {DataDir}/iam/iam.db, ENCRYPTED AT REST under the
 // key cek derives for it, and converted in place the first time it is opened if it
 // arrived plaintext. It is the same file the standalone iam is pointed at with --db,
-// which is the whole point: mount the identity volume there and this graft serves the
+// which is the whole point: mount the identity volume there and this subsystem serves the
 // identities that exist, rather than a second database that agrees with none of them.
 // See openStore for how both of those are true at once, which they were not before.
 // This embed owns its OWN orm.DB outright, so the old fork's
@@ -64,7 +64,7 @@
 // chosen at boot by a stat() call. Now there is one registration and the addresses are
 // whatever IAM declares; only the answer changes.
 //
-// Grafted in process (the whole IAM v2 surface, at its canonical paths — every
+// Composed in process (the whole IAM v2 surface, at its canonical paths — every
 // pattern IAM's own router declares, and nothing else):
 //
 //	/v1/iam/…      OIDC/OAuth2 (/v1/iam/oauth/{authorize,token,userinfo,introspect,
@@ -88,8 +88,8 @@ package iam
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches a consumer — Go drops
-// comments at compile time. The grafted surface carries its own prose from
-// github.com/hanzoai/iam (each op's WithSummary/WithTags, which a graft copies
+// comments at compile time. The composed surface carries its own prose from
+// github.com/hanzoai/iam (each op's WithSummary/WithTags, which composing copies
 // verbatim); the ops THIS package owns are the internal-plane reads of the store
 // it holds — the roster (roster_rpc.go), an org's projects (projects_rpc.go) and
 // a caller's waitlist state (approval_rpc.go).
