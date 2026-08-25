@@ -81,10 +81,10 @@ func mountScope(a *zip.App) {
 	// every one of them needs an id this read is where you get. Claiming the
 	// collection and nothing under it is what keeps that a composition.
 	zip.Get(a, o11yPrefix+"/traces", handleTraces)
-	// Flat, org-gated LLM-obs sessions list (sessions.go): pins the runtime's
-	// /api/sessions route and refuses an org-less caller at the cloud boundary.
-	// Raw: it relays the runtime's own envelope byte-for-byte, and a relay has
-	// no Go shape to declare.
+	// Flat, org-pinned LLM-obs sessions list (sessions.go): delegates to the
+	// runtime's /v1/o11y/llm/sessions and refuses an org-less caller at the cloud
+	// boundary. Raw: it relays the runtime's own envelope byte-for-byte, and a
+	// relay has no Go shape to declare.
 	a.Get("/v1/o11y/sessions", sessionsHandler)
 }
 

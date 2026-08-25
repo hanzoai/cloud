@@ -41,10 +41,13 @@
 //   - FALLBACK: a reverse proxy to a still-running o11y Deployment, used only when
 //     the embed is disabled (no DSN) or fails to init. Fail-soft, zero downtime.
 //
-// Path is preserved verbatim: /v1/o11y/* reaches the o11y runtime unchanged,
-// which rewrites /v1/o11y/* -> /api/* internally (see o11y app.createPublicServer).
-// The gateway terminates auth and propagates identity as X-* headers; the runtime
-// (embedded) or the proxy (fallback) sees the same request.
+// Path is preserved verbatim: /v1/o11y/* reaches the o11y runtime unchanged, and
+// the runtime registers every route at its full public path and strips no prefix
+// (see hanzoai/o11y app.createPublicServer). So the address a caller asks for is
+// the address that matches, and an address the runtime does not serve matches
+// nothing rather than something adjacent. The gateway terminates auth and
+// propagates identity as X-* headers; the runtime (embedded) or the proxy
+// (fallback) sees the same request.
 package o11y
 
 import (
@@ -439,15 +442,12 @@ func mountRuntime(deps cloud.Deps) error {
 
 // Mount composes the whole observability surface into its host as ONE app,
 // through [zip.Router.Use] — the same client apps/iam composes identity through.
-//
-// The verb used to be Graft, and the prose here went on naming it after zip
-// removed it: [zip.App.Graft] does not resolve, so the one link a reader would
-// follow to learn how this composes has been dead. Use is the ONE composition
-// verb now, and an *App IS a Component, so the child below is passed to it whole.
+// Use is the ONE composition verb, and an *App IS a Component, so the child below
+// is passed to it whole.
 //
 // # Why the surface is an app and not a pile of routes on the host's router
 //
-// A grafted op arrives carrying Origin = the child's AppName, and zip qualifies
+// A composed op arrives carrying Origin = the child's AppName, and zip qualifies
 // every named type that op reaches as "<origin>.<Type>" — unconditionally, not on
 // collision, so a published name is never a function of who else is in the room
 // (zip schemaRegistry.nameFor). That is why identity's 95 schemas are iam.* and
@@ -494,11 +494,11 @@ func mountRuntime(deps cloud.Deps) error {
 // the validated org parked at /v1/o11y is the one every typed op behind it reads.
 // door_test.go is the end-to-end proof, over the real mount.
 //
-// # Nothing is left on the host but the graft
+// # Nothing is left on the host but the child
 //
 // [zip.App.Declaration] drops HEAD and OPTIONS unconditionally — they are the
 // shadows fiber generates for a GET and for CORS, and a host does not route those
-// on their own, so a route declared with All cannot cross a graft intact. One
+// on their own, so a route declared with All cannot compose intact. One
 // route needed that exception: the /v1/sentinel proxy, which answered OPTIONS as a
 // real method. It is gone — the runtime carries the error face at /v1/o11y/sentinel
 // now, twelve named paths with typed ops instead of a wildcard — so there is no
@@ -591,8 +591,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := module.Mount(a); err != nil {
 		return err
 	}
-	// zip v1.23: Use is the ONE composition verb, and an *App IS a Component. The
-	// address-conflict check Graft ran here now runs at Build over the whole program.
+	// Use is the ONE composition verb, and an *App IS a Component. The
+	// address-conflict check runs at Build, over the whole program.
 	app.Use(a)
 	return nil
 }
@@ -602,9 +602,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // is registered here, BEFORE hanzoai/o11y's own table, so Fiber's in-order match
 // gives the specific routes precedence over the runtime relay.
 //
-// host is the router the graft lands on, and now takes nothing but the graft:
-// the one route that could not cross it — the /v1/sentinel wildcard — is gone,
-// folded into the module's own named routes under /v1/o11y/sentinel. See
+// host is the router the child composes onto, and now takes nothing but the
+// child: the one route that could not cross — the /v1/sentinel wildcard — is
+// gone, folded into the module's own named routes under /v1/o11y/sentinel. See
 // [Mount].
 //
 // cloud.Bridge is NOT installed here, and no subsystem installs it. The typed ops

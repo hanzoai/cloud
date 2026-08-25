@@ -59,11 +59,12 @@ impl detail resolved inside the handlers, never leaked into a route:
   to the v3 engine route INTERNALLY (the version-less alias would resolve to v5,
   which 400s the v3 composite payload the console speaks), delegating to the same
   gated runtime handler the wildcard uses.
-- `/v1/o11y/sessions` — the flat, org-gated LLM-obs sessions list (`sessions.go`);
-  pins the runtime's `/api/sessions` route (traces grouped by `session.id` on the
-  gen_ai span plane) and refuses an org-less caller at the cloud boundary. Session
-  DETAIL is composed CLIENT-side (list + traces filtered by session); the runtime
-  serves only the list, so there is deliberately no `/sessions/:id` route.
+- `/v1/o11y/sessions` — the flat, org-pinned LLM-obs sessions list (`sessions.go`);
+  delegates to the runtime's `/v1/o11y/llm/sessions` (traces grouped by
+  `session.id` on the gen_ai span plane) and refuses an org-less caller at the
+  cloud boundary. Session DETAIL is composed CLIENT-side (list + traces filtered
+  by session); the runtime serves only the list, so there is deliberately no
+  `/sessions/:id` route.
 - `/v1/o11y/annotation-queues*` — the NATIVE human-review queues (`annotation_queues.go`
   + `annotation_store.go`); see below.
 - `/v1/o11y/{services,dependency_graph,dashboards,rules,…}` — resolved by the
@@ -153,31 +154,33 @@ hanzo.id PKCE and 401s a machine. One endpoint per concern.
 **The tests.** `red_forge_test.go` calls `gate()` directly against a backend that
 answers 200 to anything — it proves the predicate and CANNOT see the chain, which
 is why it passed throughout the outage. `door_test.go` drives the real
-`MountO11y` route table against a runtime that routes: the tenant-free reads must
+`Mount` route table against a runtime that routes: the tenant-free reads must
 return the RUNTIME's bytes anonymously, tenant reads must still be refused with
 the DOOR's own reason (the runtime's 401 would mean the request got through), and
 the four dead `/api/v1|v2` names must NOT be exempt. A fake more forgiving than
 production is not a test of production.
 
-## The o11y pin is at v1.5.49 (was BLOCKED at v1.5.34 — that blocker is gone)
+## The o11y pin is at v1.5.67 (was BLOCKED at v1.5.34 — that blocker is gone)
 
-> ⚠️ **THE BUMP HAPPENED; THE THREE FORWARDS BELOW WERE NOT UPDATED WITH IT.**
-> `go.mod` now pins **v1.5.49**, well past the v1.5.37 this section was written to
-> hold the line against — so the warning below is no longer a plan, it is a
-> description of live code. Verified against the pinned module: `"/api/sessions"`
-> is registered NOWHERE (the list is `/v1/o11y/llm/sessions`), and `"/api/v3"`
-> survives only inside `parser_test.go`, never as a registration. So
-> `sessions.go` (which sets `r.URL.Path = "/api/sessions"`) and `query.go` (which
-> forwards to `/api/v3/<resource>`) both name routes the runtime no longer
-> serves. Both are ORG-GATED, so neither can be probed anonymously and neither
-> showed up in the endpoint work above — they need their own pass, and the fix is to
-> forward to the current spellings rather than to re-pin.
+> ✅ **ALL THREE FORWARDS BELOW ARE RESOLVED.** `go.mod` pins **v1.5.67**. Read
+> off the composed router (381 addresses): `"/api/sessions"` is registered
+> NOWHERE — the list is `/v1/o11y/llm/sessions` — and the only `/api` addresses
+> are the two Sentry SDK ingest wires under `/v1/o11y/api/{project_id}/`. Both
+> forwards were ORG-PINNED, so neither could be probed anonymously and neither
+> showed up in the endpoint work above.
 >
-> A second reason they cannot be trusted as written: rewriting `r.URL.Path`
-> alone does not redirect anything at the EMBEDDED runtime. That backing is
-> `adaptor.FiberApp`, which routes on `RequestURI` — see the endpoint section above —
-> so a handler that edits `URL.Path` and leaves `RequestURI` pointing at the
-> original public path will be routed by the ORIGINAL path.
+> `query.go` is deleted. `sessions.go` now delegates to
+> `/v1/o11y/llm/sessions` NATIVELY — no adapter, request built server-shaped —
+> and `sessions_test.go` drives it over BOTH backings.
+>
+> The second half of that defect is worth keeping in view, because it is a whole
+> class: rewriting `r.URL.Path` alone redirects nothing at the in-process
+> runtime. That backing is `adaptor.FiberApp`, which routes on `RequestURI`, so a
+> handler that edits `URL.Path` is routed by whatever `RequestURI` still says —
+> and `zip.AdaptNetHTTP` converts with `forServer=false`, which leaves
+> `RequestURI` EMPTY. fasthttp normalises empty to `/`, the console route answers
+> `/`, and the caller gets the SPA shell with a 200. Measured on both backings by
+> mutating the fix and watching it go red.
 
 `go.mod` USED TO PIN `github.com/hanzoai/o11y v1.5.34`. v1.5.37 renamed the module's
 INTERNAL route literals (`/api/vN/<rest>` → `/v1/o11y/<rest>`) and deleted
@@ -187,9 +190,10 @@ churned — so nothing in production broke, and nothing here needs "fixing" to
 restore a path. What the bump does break is this package's three in-handler
 forwards, which name the internal spelling:
 
-- `sessions.go` forwards to `/api/sessions`; at v1.5.37+ that list is
+- `sessions.go` forwarded to `/api/sessions`; at v1.5.37+ that list is
   `/v1/o11y/llm/sessions` (llmobs moved under `/llm/` to stop `sessions` and
-  `users` colliding with the auth/IAM nouns that already own those words).
+  `users` colliding with the sign-in and IAM nouns that already own those words).
+  **FIXED**, and the adapter went with it.
 - `query.go` forwarded to `/api/v3/<resource>` — **this was the blocker, and it
   is now DELETED** (see "the three addresses" below). The bump landed before the
   console migration this file prescribed, so the ordering it assumed is gone:
@@ -221,7 +225,7 @@ wire format, received as-is, not our spelling of a route — and they are now
 `o11y.IngestWire`, exported precisely because the gateway's JWT bypass must match
 it byte-for-byte.
 
-## The published document carries o11y's typed ops — the surface is grafted
+## The published document carries o11y's typed ops — the surface is one app
 
 `plugin/o11y/openapi.json` is the build-time subset the fleet document is woven
 from. It was STALE at 34 operations (including a `/v1/o11y/{wildcard1}` and three
@@ -246,9 +250,10 @@ surface and prove it.
 have revealed the next collision, and the one after that — `Account`, `Channel`,
 `Event`, `Host` and `TLSConfig` are ordinary words, six other apps use them, and
 a type name that has to stay unique against every app in the fleet is a name
-nobody can choose safely. So `MountO11y` GRAFTS instead: it builds one
+nobody can choose safely. So `Mount` COMPOSES instead: it builds one
 `zip.App{AppName: "o11y"}`, mounts the whole surface on it — cloud's own scoped
-reads and hanzoai/o11y's relay table both — and hands it to `host.Graft`. Every
+reads and hanzoai/o11y's relay table both — and passes it to `host.Use`, the one
+composition verb, because an `*App` IS a Component. Every
 op then carries `Origin = "o11y"` and zip qualifies each type it reaches as
 `o11y.<Type>`, unconditionally rather than on collision, so a published name is
 never a function of who else is in the room. All 777 of o11y's schemas are
@@ -257,18 +262,19 @@ already owned it (`Service`/`TLSConfig` → ingress, `Account` → books, `Chann
 content, `Event` → analytics, `Host` → plugins).
 
 This is `apps/iam`'s mechanism, unchanged — identity's 95 schemas have been
-`iam.*` since it was grafted, and there is exactly one way to namespace a
-composed surface. The rename is a PURE one: all 389 addresses, operationIds and
+`iam.*` since it was composed this way, and there is exactly one way to namespace
+a composed surface. The rename is a PURE one: all 389 addresses, operationIds and
 operation objects are byte-identical once the `o11y.` prefix is undone.
 
-Two facts the graft made local, both load-bearing:
+Two facts composing made local, both load-bearing:
 
-- **`ALL /v1/sentinel/*` is registered on the HOST, not on the child.**
-  `zip.App.Declaration` drops HEAD and OPTIONS unconditionally — they are the
-  shadows fiber generates — so an endpoint opened with `All` cannot cross a graft
-  intact, and OPTIONS is a method that proxy genuinely answers and publishes. It
-  stays at the same point in the same order, and costs nothing: a wildcard proxy
-  declares no typed op and contributes no schema.
+- **NOTHING is registered on the host but the child.** `zip.App.Declaration`
+  drops HEAD and OPTIONS unconditionally — they are the shadows fiber generates —
+  so an address opened with `All` cannot compose intact. One needed that
+  exception: the `/v1/sentinel` proxy, which answered OPTIONS as a real method.
+  It is gone — the runtime carries the error face at `/v1/o11y/sentinel`, named
+  paths with typed ops instead of a wildcard — so there is no `All` left and
+  nothing for the host to hold.
 - **the three shared addresses are GONE — they were told apart, not assigned.**
   `GET /v1/o11y/logs`, `GET /v1/o11y/metrics` and `POST /v1/o11y/query_range` were
   declared by both halves. While the module had a `/v1/o11y/*` catch-all, in-order
@@ -354,7 +360,7 @@ comments at compile time.
   Three claimants on one concept; the one that could never have worked is the one
   that went. `planesink.go` keeps the shared `datastoreSink` and states every
   table FULLY QUALIFIED — pinned by `TestPlaneTablesAreQualified`.
-- **`cloud.Bridge()` is installed by `MountO11y` on the `/v1/o11y` group, first.**
+- **`cloud.Bridge()` is installed by `Mount` on the `/v1/o11y` group, first.**
   Not optional and not redundant with `cloud.Listen`: o11y runs as its OWN process
   (`plugin/o11y/main.go` builds a bare `zip.App`), and the host's context does not
   cross the socket — so without this install every typed op here 403s a caller the
@@ -370,7 +376,7 @@ The other 8 stay untyped because typing them would MOVE the wire, which typing i
 not allowed to do. **The refusals are GATED, not prose** (`typed_wire_test.go`):
 `untypedByDesign` is the closed list, keyed the way the DOCUMENT writes each
 address, and `TestEveryRouteIsTypedOrNamed` reads the live router of the REAL
-`MountO11y` — so a route added anywhere in that mount is typed by default, and
+`Mount` — so a route added anywhere in that mount is typed by default, and
 dropping one out of the registry takes a deliberate edit with a reason. The stale
 direction is gated too: a name for an operation o11y no longer serves is red.
 `TestEveryTypedOpIsDescribed` holds the prose to the same bar (an op added without
