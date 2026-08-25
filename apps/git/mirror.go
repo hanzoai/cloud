@@ -386,20 +386,22 @@ func gitConfigEnv(kv ...string) []string {
 	return env
 }
 
-// mirrorAuthHeader returns the base64 "x-access-token:<token>" basic-auth
-// credential for an https source, or "" for http and for a host we hold no
-// credential for. A tenant-supplied URL cannot capture a credential (HIGH-1)
-// because there is none to capture: see mirrorCredential.
+// mirrorAuthHeader returns the base64 "<user>:<token>" basic-auth credential for
+// an https source, or "" for http and for a host we hold no credential for. The
+// username comes from mirrorBasicUser, so a token held for GitLab is presented
+// the one way GitLab accepts. A tenant-supplied URL cannot capture a credential
+// (HIGH-1) because there is none to capture: see mirrorCredential.
 func mirrorAuthHeader(srcURL string) string {
 	u, err := url.Parse(srcURL)
 	if err != nil || u.Scheme != "https" {
 		return ""
 	}
-	tok := mirrorCredential(u.Hostname())
+	host := u.Hostname()
+	tok := mirrorCredential(host)
 	if tok == "" {
 		return ""
 	}
-	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+	return base64.StdEncoding.EncodeToString([]byte(mirrorBasicUser(host) + ":" + tok))
 }
 
 // mirrorCredential returns the token minted FOR host, or "" if we hold none.

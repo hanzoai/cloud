@@ -145,18 +145,28 @@ func TestMirrorCredNeverLeavesItsHost(t *testing.T) {
 	if mirrorAuthHeader("https://git.hanzo.ai/hanzoai/cloud.git") == "" {
 		t.Fatal("git.hanzo.ai now holds a credential and must receive it")
 	}
-	if want := base64Cred("forge-token"); mirrorAuthHeader("https://git.hanzo.ai/x.git") != want {
+	if want := base64Cred("x-access-token", "forge-token"); mirrorAuthHeader("https://git.hanzo.ai/x.git") != want {
 		t.Fatal("git.hanzo.ai must receive ITS OWN token, not another host's")
 	}
-	if want := base64Cred("github-token"); mirrorAuthHeader("https://github.com/x.git") != want {
+	if want := base64Cred("x-access-token", "github-token"); mirrorAuthHeader("https://github.com/x.git") != want {
 		t.Fatal("github.com must still receive its own token")
+	}
+
+	// A token is presented under the username its host ACCEPTS. GitLab rejects a
+	// personal or OAuth token offered as anything but oauth2, so the credential
+	// held in the environment must be spelled the way an explicitly-supplied one
+	// already is — one rule, not one rule per path.
+	t.Setenv("GIT_MIRROR_TOKEN_GITLAB_COM", "gitlab-token")
+	if want := base64Cred("oauth2", "gitlab-token"); mirrorAuthHeader("https://gitlab.com/g/x.git") != want {
+		t.Fatal("gitlab.com must receive its token under oauth2")
 	}
 }
 
 // base64Cred renders the credential mirrorAuthHeader is expected to produce, so a
-// test asserts WHICH token arrived rather than merely that one did.
-func base64Cred(tok string) string {
-	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+// test asserts WHICH token arrived under WHICH username rather than merely that
+// one did.
+func base64Cred(user, tok string) string {
+	return base64.StdEncoding.EncodeToString([]byte(user + ":" + tok))
 }
 
 // envHost turns a hostname into the tail of an env var name; a host that differs

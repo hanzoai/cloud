@@ -205,8 +205,9 @@ const mirrorAllowPrivateEnv = "GIT_MIRROR_ALLOW_PRIVATE_HOSTS"
 // EXPLICIT per-call cred wins — but only over https, so a token can never ride
 // an http URL — except on loopback, which is the local forge a test serves and
 // is not a network anyone else is on. With no explicit cred it falls back to the
-// token NAMED FOR THAT HOST, so a tenant-supplied URL to a host we hold nothing
-// for finds nothing and proceeds anonymously.
+// token NAMED FOR THAT HOST, presented under the username that host accepts, so
+// a tenant-supplied URL to a host we hold nothing for finds nothing and proceeds
+// anonymously.
 func credAuthHeader(remoteURL string, cred gitCred) string {
 	if cred.Token != "" {
 		if !confidential(remoteURL) {
@@ -217,11 +218,12 @@ func credAuthHeader(remoteURL string, cred gitCred) string {
 	if !confidential(remoteURL) {
 		return ""
 	}
-	tok := mirrorCredential(hostOf(remoteURL))
+	host := hostOf(remoteURL)
+	tok := mirrorCredential(host)
 	if tok == "" {
 		return ""
 	}
-	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+	return base64.StdEncoding.EncodeToString([]byte(mirrorBasicUser(host) + ":" + tok))
 }
 
 // confidential reports whether a credential may be sent to this URL: https
