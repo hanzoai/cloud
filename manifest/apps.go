@@ -63,7 +63,7 @@ var Apps = []App{
 	// its clients speak AMQP on :5672 and never call the HTTP endpoint at all.
 	{Name: "amqp", Prefixes: []string{"/v1/amqp"}, Eager: true},
 	{Name: "mq", Prefixes: []string{"/v1/mq"}},
-	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
+	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/:product/index.json", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
 	// One store, three signals, one root: the logs and traces endpoints fold under
