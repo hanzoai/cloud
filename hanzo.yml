@@ -144,8 +144,15 @@ test:
     #                     being re-rooted (dataroom v1.1.7, sign v1.0.0 — their
     #                     github repos hold no commits at all now)
     #   direct → github   a module the proxy has never been allowed to see
-    #   direct → THE FORGE  a version published only here (amqp v0.4.2: github
-    #                     carries that repo privately and stops at v0.3.1)
+    #   direct → THE FORGE  a module the credential on the github rung cannot
+    #                     read either. 7 of this tree's 51 hanzoai modules are
+    #                     PRIVATE — amqp, licensing, plans, pricing, thinking,
+    #                     trust, zen — so the proxy has never been allowed to
+    #                     see them (it answers 404 with `could not read
+    #                     Username`), and github answers `unknown revision` to a
+    #                     credential without access, which is the same sentence
+    #                     a deleted tag produces. The tag is THERE; the reader
+    #                     was not admitted. Do not read that error as absence.
     #
     # This gate installs the last rung, and it is deliberately the LAST one: the
     # rewrite is consulted only when the proxy has already declined, so a module
@@ -181,13 +188,20 @@ test:
         echo "GIT_CONFIG_GLOBAL=$CFG"
         echo "GIT_CONFIG_NOSYSTEM=1"
       } >> "${GITHUB_ENV:-/dev/null}"
-      # Prove the rung rather than announce it: this is the module that sent us
-      # looking, and it exists at no other publisher.
+      # Report what this step can actually ESTABLISH, which is that the rewrite
+      # is in the config git will read — not that some particular module is
+      # readable. Reaching for a repo instead conflates two different answers:
+      # a rewrite that failed to install, and a credential this one repo does
+      # not admit. The first version of this gate did exactly that and warned on
+      # a run whose modules all resolved, which is a warning nobody can act on.
+      #
+      # The rung is LAST, so a module it cannot read is one an earlier rung
+      # already served or one a later gate will name, with the module in hand.
       if GIT_CONFIG_GLOBAL="$CFG" GIT_CONFIG_NOSYSTEM=1 \
-           git ls-remote https://github.com/hanzoai/amqp refs/tags/v0.4.2 2>/dev/null | grep -q .; then
-        echo "forge fallthrough OK"
+           git config --get-regexp '^url\..*git\.hanzo\.ai.*\.insteadof$' >/dev/null 2>&1; then
+        echo "forge rung installed"
       else
-        echo "::warning::the git.hanzo.ai rewrite is installed but did not answer for a version only it publishes; a later gate will name the module it could not read"
+        echo "::warning::the git.hanzo.ai rewrite did not take; only the proxy and github will answer, so a module published solely on the forge will be named by a later gate"
       fi
 
   - name: closure-current
