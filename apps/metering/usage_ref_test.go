@@ -21,7 +21,7 @@ func meteredWallet(t *testing.T, seedCents int64) (finance.Client, *metering.Cli
 	t.Cleanup(func() { finance.Publish(nil); _ = fin.Close() })
 
 	if _, err := fin.Deposit(context.Background(), types.DepositInput{
-		Org: "acme", Subject: "acme", Amount: money.FromCents(seedCents),
+		Org: "acme", Subject: "acme", Amount: money.FromCents(seedCents), Ref: "seed",
 	}); err != nil {
 		t.Fatalf("seed deposit: %v", err)
 	}

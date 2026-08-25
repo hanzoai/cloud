@@ -24,7 +24,7 @@ func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	if _, err := f.Deposit(ctx, types.DepositInput{
-		Org: "acme", Subject: "acme", Amount: money.FromCents(10_000),
+		Org: "acme", Subject: "acme", Amount: money.FromCents(10_000), Ref: "seed",
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 		wg.Go(func() {
 			subject := "acme/" + refOf(i)
 			if _, derr := f.Deposit(ctx, types.DepositInput{
-				Org: "acme", Subject: subject, Amount: money.FromCents(100),
+				Org: "acme", Subject: subject, Amount: money.FromCents(100), Ref: "seed-" + subject,
 			}); derr != nil {
 				t.Errorf("seed %s: %v", subject, derr)
 				return

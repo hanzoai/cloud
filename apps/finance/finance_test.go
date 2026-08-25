@@ -40,7 +40,7 @@ func TestPrepaidWalletLedger(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	// Deposit 1000 into acme's org pool.
-	id, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(1000)})
+	id, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(1000), Ref: "seed-pool"})
 	if err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestPrepaidWalletLedger(t *testing.T) {
 	mustBalance(t, f, "acme", "acme", 700)
 
 	// A per-user subject is an isolated wallet WITHIN the same file.
-	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme/bob", Amount: money.FromCents(500)}); err != nil {
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme/bob", Amount: money.FromCents(500), Ref: "seed-bob"}); err != nil {
 		t.Fatalf("deposit bob: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme/bob", 500)
@@ -91,14 +91,21 @@ func TestDepositRefIdempotent(t *testing.T) {
 	}
 	mustBalance(t, f, "acme", "acme", 1000) // ONE credit, not 2000.
 
-	// Empty Ref stays additive: two fresh-ref deposits stack.
-	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(500)}); err != nil {
-		t.Fatalf("deposit additive #1: %v", err)
-	}
-	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(500)}); err != nil {
-		t.Fatalf("deposit additive #2: %v", err)
+	// Two DIFFERENT events are two credits, however alike the money is.
+	for _, ref := range []string{"settle-2", "settle-3"} {
+		if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(500), Ref: ref}); err != nil {
+			t.Fatalf("deposit %s: %v", ref, err)
+		}
 	}
 	mustBalance(t, f, "acme", "acme", 2000) // 1000 + 500 + 500.
+
+	// A deposit that names no event is refused, and refused BEFORE the books are touched.
+	for _, ref := range []string{"", "   "} {
+		if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(500), Ref: ref}); !errors.Is(err, ErrRefMissing) {
+			t.Fatalf("deposit under ref %q: err = %v; want ErrRefMissing", ref, err)
+		}
+	}
+	mustBalance(t, f, "acme", "acme", 2000) // unchanged: a refused deposit moves nothing.
 }
 
 // TestDepositRefIsOnePaymentAndNotJustOneKey — the swallow.
@@ -439,7 +446,7 @@ func TestBalanceReadErrorSurfaces(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	// Fund acme so the store + a real balance row exist; confirm the happy read.
-	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(5000)}); err != nil {
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(5000), Ref: "seed"}); err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 5000)

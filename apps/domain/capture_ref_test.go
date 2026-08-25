@@ -28,7 +28,7 @@ func fundedBiller(t *testing.T, seedCents int64) (finance.Client, *meterBiller) 
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil); _ = fin.Close() })
 	if _, err := fin.Deposit(context.Background(), types.DepositInput{
-		Org: "acme", Subject: "acme", Amount: money.FromCents(seedCents),
+		Org: "acme", Subject: "acme", Amount: money.FromCents(seedCents), Ref: "seed",
 	}); err != nil {
 		t.Fatalf("seed deposit: %v", err)
 	}

@@ -19,6 +19,7 @@ package commerce
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/hanzoai/commerce/billing/creditledger"
@@ -214,5 +215,62 @@ func TestLedgerAdapter_BalanceReadsTheAccountItIsAsked(t *testing.T) {
 	}
 	if got := rec.reads[1]; got.org != "acme" || got.subject != "acme/alice" {
 		t.Errorf("member read addressed (%q,%q), want (acme, acme/alice) — the subject was used as the ledger", got.org, got.subject)
+	}
+}
+
+// realBooks publishes a REAL per-org finance ledger for one test — the books both credit
+// doors actually write. The recorder above states what the adapter TRANSLATES; this
+// states what the ledger DOES with it, and the rule under test is the ledger's.
+func realBooks(t *testing.T) finance.Client {
+	t.Helper()
+	fin := finance.New(t.TempDir())
+	prev := finance.Current()
+	finance.Publish(fin)
+	t.Cleanup(func() { finance.Publish(prev) })
+	return fin
+}
+
+// A grant names the event it credits, and this seam is where that used to be optional.
+//
+// The op that credits over the plane has always refused an empty key; this adapter is
+// the OTHER door onto the same books, relaying the credit endpoint, and it handed the
+// key straight through. An absent one became a fresh id inside the ledger, so a grant
+// re-sent after a lost reply credited the wallet twice — a mint, keyed on nothing.
+//
+// Both directions: a named grant re-sent is one grant, and an unnamed one is refused
+// with the wallet exactly where it was.
+func TestLedgerAdapter_AGrantNamesTheEventItCredits(t *testing.T) {
+	fin := realBooks(t)
+	ctx := context.Background()
+	grant := func(key string) (int64, error) {
+		_, cents, err := client.Credit(ctx, creditledger.CreditInput{
+			Org: "acme", Subject: "acme/alice", Currency: "usd",
+			AmountCents: 2500, IdempotencyKey: key,
+		})
+		return cents, err
+	}
+
+	if _, err := grant("pay_1"); err != nil {
+		t.Fatalf("grant: %v", err)
+	}
+	cents, err := grant("pay_1")
+	if err != nil {
+		t.Fatalf("re-send the same grant: %v", err)
+	}
+	if cents != 2500 {
+		t.Errorf("one grant re-sent left %d cents, want 2500", cents)
+	}
+
+	for _, key := range []string{"", "   "} {
+		if _, err := grant(key); !errors.Is(err, finance.ErrRefMissing) {
+			t.Fatalf("grant under key %q: err = %v; want ErrRefMissing", key, err)
+		}
+	}
+	bal, err := fin.Balance(ctx, "acme", "acme/alice", "usd", false)
+	if err != nil {
+		t.Fatalf("read the wallet: %v", err)
+	}
+	if bal.Cents() != 2500 {
+		t.Errorf("a refused grant moved money: wallet holds %d cents, want 2500", bal.Cents())
 	}
 }

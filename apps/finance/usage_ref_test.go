@@ -39,7 +39,7 @@ func TestUsageRefIsScopedToTheWallet(t *testing.T) {
 	// collide.
 	for _, who := range []string{"acme/alice", "acme/bob"} {
 		if _, err := f.Deposit(ctx, types.DepositInput{
-			Org: "acme", Subject: who, Amount: money.FromCents(100),
+			Org: "acme", Subject: who, Amount: money.FromCents(100), Ref: "seed-" + who,
 		}); err != nil {
 			t.Fatalf("seed %s: %v", who, err)
 		}
@@ -78,7 +78,7 @@ func TestUsageRefIsOneChargeAndNotJustOneKey(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	if _, err := f.Deposit(ctx, types.DepositInput{
-		Org: "acme", Subject: "acme", Amount: money.FromCents(1000),
+		Org: "acme", Subject: "acme", Amount: money.FromCents(1000), Ref: "seed",
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestUsageWithoutARefStandsAlone(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	if _, err := f.Deposit(ctx, types.DepositInput{
-		Org: "acme", Subject: "acme", Amount: money.FromCents(100),
+		Org: "acme", Subject: "acme", Amount: money.FromCents(100), Ref: "seed",
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}

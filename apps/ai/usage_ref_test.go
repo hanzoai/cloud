@@ -43,7 +43,7 @@ func serveCommerce(t *testing.T, seedSubject string, seedCents int64) finance.Cl
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil); _ = fin.Close() })
 	if _, err := fin.Deposit(context.Background(), types.DepositInput{
-		Org: "acme", Subject: seedSubject, Amount: money.FromCents(seedCents),
+		Org: "acme", Subject: seedSubject, Amount: money.FromCents(seedCents), Ref: "seed",
 	}); err != nil {
 		t.Fatalf("seed deposit: %v", err)
 	}

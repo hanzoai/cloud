@@ -184,10 +184,17 @@ func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency stri
 }
 
 // Deposit posts a balanced credit (funding:platform → wallet) to subject's wallet in
-// org's file and returns the ledger entry id. Idempotent on in.Ref when set: a replay of
-// the same non-empty Ref is a no-op returning the ORIGINAL entry id (checked inside the
-// same transaction as the insert), so a fixed-ref backfill/settlement credits AT MOST
-// ONCE. An empty Ref takes a fresh id, so grants stay additive (they stack).
+// org's file and returns the ledger entry id. Idempotent on in.Ref: a replay is a no-op
+// returning the ORIGINAL entry id (checked inside the same transaction as the insert),
+// so a backfill or a settlement credits AT MOST ONCE.
+//
+// MONEY IN NAMES THE EVENT IT CAME FROM, and that rule lives HERE rather than at the
+// doors. The ref used to be optional — an empty one took the entry's own fresh id, which
+// reads as a default and is a mint: nothing that carried it could ever replay, so every
+// re-send of a grant was a second grant. The plane op that credits over the wire has
+// always refused an empty ref for exactly that reason, and an in-process caller reaching
+// the same books went around it. A rule that only one of two doors states is a rule the
+// other door breaks, so it is stated where both arrive ([ErrRefMissing]).
 //
 // A REPLAY IS THE SAME MONEY TO THE SAME WALLET, and a ref hit that is not that is
 // [ErrRefTaken] rather than a credit or a borrowed entry id — the idempotency key carries
@@ -205,15 +212,14 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	if in.Amount.Sign() <= 0 {
 		return "", fmt.Errorf("finance: deposit amount must be positive, got %s", in.Amount)
 	}
+	if strings.TrimSpace(in.Ref) == "" {
+		return "", ErrRefMissing
+	}
 	store, err := f.storeFor(in.Org, in.Test)
 	if err != nil {
 		return "", err
 	}
 	id := mint.ID("dep")
-	ref := in.Ref
-	if ref == "" {
-		ref = id // no idempotency key → fresh ref, additive grant
-	}
 	entryID := id
 	if err := store.Tx(ctx, func(tx ledger.Tx) error {
 		posted, ferr := depositByRef(tx, in)
@@ -227,7 +233,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 		e := ledger.JournalEntry{
 			ID:        id,
 			Kind:      string(KindDeposit),
-			Ref:       ref,
+			Ref:       in.Ref,
 			Memo:      in.Notes,
 			Amount:    in.Amount,
 			CreatedAt: time.Now().Unix(),
@@ -282,19 +288,30 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 // meaning, both sides of the money plane.
 var ErrRefTaken = errors.New("already used for a different (subject,amount)")
 
+// ErrRefMissing is a deposit that names no event.
+//
+// The ref is the deposit's idempotency key, so a deposit without one cannot replay and a
+// caller that re-sends it credits the wallet again. There is no honest default: a key
+// minted here is fresh on every attempt, which dedups nothing while LOOKING like it
+// does, and only the caller knows which of two sends is one payment.
+//
+// Every caller already holds the name — a card settlement's id, a payment id off a
+// webhook, an x402 settlement, a cutover's fixed key, an operator's nonce. The one that
+// did not was the grant relayed from the credit endpoint, where an absent key meant a
+// grant that stacks on retry.
+var ErrRefMissing = errors.New("finance: deposit requires a ref (the event it credits)")
+
 // depositByRef is the ONE reading of what a deposit's Ref already holds: the original
 // entry id when the SAME (subject, amount) is posted under it — a genuine replay, which
 // answers with the first credit and posts nothing — the empty string when the ref is free,
-// and [ErrRefTaken] when the ref is posted for a different payment.
+// and [ErrRefTaken] when the ref is posted for a different payment. The ref is never empty
+// here: [Deposit] refuses that ahead of both callers.
 //
 // Both callers ask the same question and must not answer it two ways: the in-transaction
 // branch asks it against the insert's own tx (so two concurrent replays cannot both post),
 // and [creditedUnder] asks it on a detached one after a failure. Only the transaction
 // differs, so only the transaction is theirs.
 func depositByRef(tx ledger.Tx, in types.DepositInput) (string, error) {
-	if in.Ref == "" {
-		return "", nil // no key → a fresh ref; an empty-Ref grant stacks and never replays
-	}
 	e, ok, err := tx.EntryByRef(string(KindDeposit), "", in.Ref)
 	if err != nil || !ok {
 		return "", err

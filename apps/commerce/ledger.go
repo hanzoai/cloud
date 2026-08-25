@@ -32,6 +32,13 @@ var _ creditledger.CreditLedger = ledger{}
 // the ledger entry id + that account's new available balance in cents. Idempotent on
 // IdempotencyKey: finance dedups on Ref, so the same key credits AT MOST once.
 //
+// THE KEY IS REQUIRED, and the ledger is what requires it (finance.ErrRefMissing). A
+// credit without one cannot replay, so re-sending it credits again — and nothing here
+// can supply the missing one, because a key minted for the caller is fresh on every
+// attempt and only the caller knows which of two sends is one grant. The op that credits
+// over the plane has always said so; this seam reaches the same books and now answers
+// the same way.
+//
 // Subject exists because the pool is not always the account the gate reads. In the
 // shared signup org each member spends from their own wallet, so a pool-only credit
 // funds a balance nobody can spend while the member it was meant for is refused at

@@ -33,7 +33,7 @@ func TestBackfilledProgramStopsTheSecondDebit(t *testing.T) {
 	const stable = "domain:renew:acme.ai" // a ref a caller holds across the deploy
 	before := New(dir)
 	if _, err := before.Deposit(ctx, types.DepositInput{
-		Org: "acme", Subject: "acme", Amount: money.FromCents(100),
+		Org: "acme", Subject: "acme", Amount: money.FromCents(100), Ref: "seed-pool",
 	}); err != nil {
 		t.Fatalf("seed deposit: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestBackfillKeepsDistinctActsDistinct(t *testing.T) {
 
 	before := New(dir)
 	if _, err := before.Deposit(ctx, types.DepositInput{
-		Org: "acme", Subject: "acme/bob", Amount: money.FromCents(100),
+		Org: "acme", Subject: "acme/bob", Amount: money.FromCents(100), Ref: "seed-bob",
 	}); err != nil {
 		t.Fatalf("seed deposit: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestARepairedRefBelongsToThePayerAlone(t *testing.T) {
 	before := New(dir)
 	for _, subject := range []string{"acme", "acme/bob"} {
 		if _, err := before.Deposit(ctx, types.DepositInput{
-			Org: "acme", Subject: subject, Amount: money.FromCents(100),
+			Org: "acme", Subject: subject, Amount: money.FromCents(100), Ref: "seed-" + subject,
 		}); err != nil {
 			t.Fatalf("seed %s: %v", subject, err)
 		}

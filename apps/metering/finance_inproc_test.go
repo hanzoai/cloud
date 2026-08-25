@@ -24,7 +24,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	defer finance.Publish(nil)
 
 	// Seed acme's pooled wallet with $1.00 (100¢).
-	if _, err := fin.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(100)}); err != nil {
+	if _, err := fin.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(100), Ref: "seed"}); err != nil {
 		t.Fatalf("seed deposit: %v", err)
 	}
 

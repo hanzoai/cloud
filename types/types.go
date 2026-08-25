@@ -329,10 +329,13 @@ type DepositInput struct {
 	Currency string       // default "usd"
 	Notes    string
 	Tags     string
-	// Ref, when non-empty, is the deposit's idempotency key: two deposits carrying the SAME
+	// Ref is the deposit's idempotency key and is REQUIRED: two deposits carrying the SAME
 	// Ref credit the wallet AT MOST ONCE (the replay is a no-op returning the first entry's
-	// id), so a fixed Ref makes a backfill/settlement exactly-once. Empty keeps the additive
-	// default — each grant takes a fresh ref and stacks. Mirrors UsageInput.Ref.
+	// id), so a settlement or a backfill is exactly-once. It is the event the money came
+	// from — a payment id, a settlement, a cutover key, an operator's nonce — because only
+	// a caller that knows the event can tell its own retry from a second payment. An empty
+	// one is refused rather than defaulted (finance.ErrRefMissing): a key minted for the
+	// caller is fresh on every attempt and dedups nothing.
 	Ref  string
 	Test bool // write to the sandbox (test-mode) ledger
 }
