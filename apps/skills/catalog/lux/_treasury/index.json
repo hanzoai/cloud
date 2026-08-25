@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read treasury accounts: Returns the ledger accounts the caller may see, with their balances..",
+      "name": "treasury_accounts",
+      "path": "treasury_accounts/SKILL.md",
+      "service": "treasury",
+      "sha256": "f507414510715059156713219ec6b929325bca6bd8624d43f1e2930b27849340"
+    },
+    {
+      "description": "Read treasury treasury: Returns the reserve fund's health and the current revenue-share policy for any validated caller..",
+      "name": "treasury_treasury",
+      "path": "treasury_treasury/SKILL.md",
+      "service": "treasury",
+      "sha256": "4cd202cdca6e40256741a803301f284bfa8669a3b60c9154dd1ab56cd1f4dda5"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

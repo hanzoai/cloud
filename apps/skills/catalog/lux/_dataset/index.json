@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read dataset dataset: List this org's datasets, Describe every version of one dataset.",
+      "name": "dataset_dataset",
+      "path": "dataset_dataset/SKILL.md",
+      "service": "dataset",
+      "sha256": "334b12400471e600ca7d06fad0b79e52b2a569b6fbee235abd47d558876f1b67"
+    },
+    {
+      "description": "Read dataset export: Read a version's rows back, one page at a time.",
+      "name": "dataset_export",
+      "path": "dataset_export/SKILL.md",
+      "service": "dataset",
+      "sha256": "86dc376e66d20682eab246611a01629bf4d16e7c402f6cbf2d7fa2180902f2e9"
+    },
+    {
+      "description": "Read dataset lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
+      "name": "dataset_lineage",
+      "path": "dataset_lineage/SKILL.md",
+      "service": "dataset",
+      "sha256": "07cdffb763d8f7bf35e71969ea8f8ccc1c02276b04f74392cb21c25fec834c9c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

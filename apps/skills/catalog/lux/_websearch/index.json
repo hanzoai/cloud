@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read websearch search: Keyless web meta-search, in the SearXNG JSON envelope..",
+      "name": "websearch_search",
+      "path": "websearch_search/SKILL.md",
+      "service": "websearch",
+      "sha256": "466c23b2029fddd532505b1e129ce5b21f884222483d180c158a1190628889c1"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

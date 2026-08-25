@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read flow runs: Runs reads one workflow's recorded runs: every component build with its result, keyed by component..",
+      "name": "flow_runs",
+      "path": "flow_runs/SKILL.md",
+      "service": "flow",
+      "sha256": "471f13e9c0a67687859ae6258c3cc881f8374059b322cbc6015702a366f5c38c"
+    },
+    {
+      "description": "Read flow status: Status reports whether the flow service is reachable and which version it runs..",
+      "name": "flow_status",
+      "path": "flow_status/SKILL.md",
+      "service": "flow",
+      "sha256": "088f1b168a8caf172915a040b47631a140bcc8d600ff689918c73593cfd16b42"
+    },
+    {
+      "description": "Read flow workflows: Workflows lists the caller's workflows, paged., Workflow reads one of the caller's workflows — the full record, graph included..",
+      "name": "flow_workflows",
+      "path": "flow_workflows/SKILL.md",
+      "service": "flow",
+      "sha256": "cc0fcf5417da31c0f5b035f1e029e9a0e0b6dcf30f4f039acb0b17f63e274499"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

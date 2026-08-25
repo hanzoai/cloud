@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read wallet accounts: Returns the caller org's wallet accounts, newest first..",
+      "name": "wallet_accounts",
+      "path": "wallet_accounts/SKILL.md",
+      "service": "wallet",
+      "sha256": "20339f67a7407d3247fc0a157114f37df9da445b43325d1c2adceabc66c6336e"
+    },
+    {
+      "description": "Read wallet wallet: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
+      "name": "wallet_wallet",
+      "path": "wallet_wallet/SKILL.md",
+      "service": "wallet",
+      "sha256": "430a8dbc13a395dcfb5a17966f10d041ee4d3d22bafaa1530fb8d528922e826f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

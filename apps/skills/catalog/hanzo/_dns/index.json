@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read dns dns: Read your org's DNS zones and records.",
+      "name": "dns_dns",
+      "path": "dns_dns/SKILL.md",
+      "service": "dns",
+      "sha256": "4f8eddb57c83d6fe295379cc1af6553bfb6f5b4e23e597a6c0cb6e720653d317"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

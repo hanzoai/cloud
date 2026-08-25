@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read websearch search: Keyless web meta-search, in the SearXNG JSON envelope..",
+      "name": "websearch_search",
+      "path": "websearch_search/SKILL.md",
+      "service": "websearch",
+      "sha256": "174cb0757cd572ce2b50ad8d5786ed82650e79435dfe84974069dc9b9d7c9ee7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

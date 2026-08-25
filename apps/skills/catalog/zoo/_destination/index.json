@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read destination destination: Reports every destination this deployment can forward to, each with the caller org's connection state: whether it is connected, whether it is enabled, whether a credential resolves right now, and the config fields the console renders for it., Reports",
+      "name": "destination_destination",
+      "path": "destination_destination/SKILL.md",
+      "service": "destination",
+      "sha256": "d62279888e2c19e8c573893d48a8727df28496297bd9d233f7b3bb26784d9157"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

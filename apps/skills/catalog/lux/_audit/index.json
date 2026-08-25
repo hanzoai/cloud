@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read audit audit: List reads the caller's OWN org audit trail, newest first, with the total the filter matched so a console can page it..",
+      "name": "audit_audit",
+      "path": "audit_audit/SKILL.md",
+      "service": "audit",
+      "sha256": "4a4618d6b3f5f2d40f4fa0cfdc4baf6bc4480b295c26ad1708ad14452f39f18a"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

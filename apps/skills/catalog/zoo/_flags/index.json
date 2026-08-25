@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read flags activity: Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time..",
+      "name": "flags_activity",
+      "path": "flags_activity/SKILL.md",
+      "service": "flags",
+      "sha256": "0586125fdf19ddfefd3c288cf436a6fb898a8fbe3486048fc5a0060d41eb668b"
+    },
+    {
+      "description": "Read flags defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
+      "name": "flags_defs",
+      "path": "flags_defs/SKILL.md",
+      "service": "flags",
+      "sha256": "64f43e652ec1988baa1102942e1560d9d64632ca733c85787e6778c6469be08f"
+    },
+    {
+      "description": "Read flags health: Health reports that the flag engine is serving..",
+      "name": "flags_health",
+      "path": "flags_health/SKILL.md",
+      "service": "flags",
+      "sha256": "4cba7f9dc5c99d18fa0c987cf05bd5db8abe5193f9e77b29b9a7ce53f755ce14"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

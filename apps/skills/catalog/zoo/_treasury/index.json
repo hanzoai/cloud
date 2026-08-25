@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read treasury accounts: Returns the ledger accounts the caller may see, with their balances..",
+      "name": "treasury_accounts",
+      "path": "treasury_accounts/SKILL.md",
+      "service": "treasury",
+      "sha256": "b686f30cb3b9b3f344efbc7d2e7dcd13deef139571c95c1f68823611997b3b88"
+    },
+    {
+      "description": "Read treasury treasury: Returns the reserve fund's health and the current revenue-share policy for any validated caller..",
+      "name": "treasury_treasury",
+      "path": "treasury_treasury/SKILL.md",
+      "service": "treasury",
+      "sha256": "cce501b463da991470b324d69fff3545a7d3440299bc89bc2d2539f7afcc78d1"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

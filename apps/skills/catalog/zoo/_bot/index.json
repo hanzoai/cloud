@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read bot runs: List returns the caller org's live bot runs, read from the bot runtime and projected into the console contract with each run's live session URL derived here..",
+      "name": "bot_runs",
+      "path": "bot_runs/SKILL.md",
+      "service": "bot",
+      "sha256": "3bf882be2121011da43b2edc173a700bafa805a690c905a9e0293f52676aadc2"
+    },
+    {
+      "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
+      "name": "bot_runtime",
+      "path": "bot_runtime/SKILL.md",
+      "service": "bot",
+      "sha256": "3f5b9d92c4ccbad16ecd65483082a17db4bfcebc55625004ce0247f94c00fd6f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

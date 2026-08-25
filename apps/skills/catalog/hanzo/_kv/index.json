@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read kv history: History returns one key's retained revisions, oldest first — every put and every delete marker up to the bucket's History depth..",
+      "name": "kv_history",
+      "path": "kv_history/SKILL.md",
+      "service": "kv",
+      "sha256": "6cbc27c9e0975d438debaa4151210eafe1fabb443b4ef5e5834b7ae7029fce73"
+    },
+    {
+      "description": "Read kv kv: Get returns one key's current value and revision..",
+      "name": "kv_kv",
+      "path": "kv_kv/SKILL.md",
+      "service": "kv",
+      "sha256": "542c11661a0b2b1412b3fa4d3351d063e0570eaaeebe338eb0e84d8a49d6649e"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,53 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 6,
+  "skills": [
+    {
+      "description": "Read cloudflare d1: Lists the D1 databases on the org's Cloudflare account..",
+      "name": "cloudflare_d1",
+      "path": "cloudflare_d1/SKILL.md",
+      "service": "cloudflare",
+      "sha256": "660b6c6c29b92e05d6d389eeb79100d2b0abc07c5f9ffaca3f3a543deaa003a9"
+    },
+    {
+      "description": "Read cloudflare kv: KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare account., Read a Workers KV value as its stored bytes.",
+      "name": "cloudflare_kv",
+      "path": "cloudflare_kv/SKILL.md",
+      "service": "cloudflare",
+      "sha256": "369dbd83d98d275a3ed8d1879077543832e7be405b209a3d43f7e2b3920de54f"
+    },
+    {
+      "description": "Read cloudflare pages: Lists the org's Cloudflare Pages projects., Reads one Cloudflare Pages project — its build config, deployment configs and latest deployment..",
+      "name": "cloudflare_pages",
+      "path": "cloudflare_pages/SKILL.md",
+      "service": "cloudflare",
+      "sha256": "1ffa7f3d62d2f70fdce62f8d912759b2190a7cf1c4691e3f5d70cdfa4f1c7f3a"
+    },
+    {
+      "description": "Read cloudflare r2: Lists the R2 buckets on the org's Cloudflare account..",
+      "name": "cloudflare_r2",
+      "path": "cloudflare_r2/SKILL.md",
+      "service": "cloudflare",
+      "sha256": "51f480feb88b68e2c4467ed3ea22584d7b4bfbf61a7cf2f9efd292f07575efba"
+    },
+    {
+      "description": "Read cloudflare workers: Lists the Worker scripts on the org's Cloudflare account., Reads the org account's workers.dev subdomain — the name under which every subdomain-enabled script is served., Lists the Worker routes bound within one zone — the URL patterns that dispatch to a ",
+      "name": "cloudflare_workers",
+      "path": "cloudflare_workers/SKILL.md",
+      "service": "cloudflare",
+      "sha256": "9cb48780f63c6cf7667d990d03f13313553ad23796be88087c69c58be7dadb01"
+    },
+    {
+      "description": "Read cloudflare zones: Lists the Cloudflare zones the org's connected API token can see, paged and filtered by the query parameters Cloudflare itself accepts., Reads one Cloudflare zone the org's token can see., Reads a zone's Cloudflare traffic dashboard — requests, bandwidth, t",
+      "name": "cloudflare_zones",
+      "path": "cloudflare_zones/SKILL.md",
+      "service": "cloudflare",
+      "sha256": "bd90cbb69522a70570bc6aad975b6ee8bcbdd4922adfc267a07f5e66e8fa681b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

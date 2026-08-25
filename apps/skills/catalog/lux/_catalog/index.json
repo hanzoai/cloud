@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read catalog catalog: Browse searches AND browses the cross-org catalog: every project, app and site the fleet has built, whichever org built it..",
+      "name": "catalog_catalog",
+      "path": "catalog_catalog/SKILL.md",
+      "service": "catalog",
+      "sha256": "f24838fd18a8a474411ff49a34ad3a42f7e04dc95fc9d4975d9c0c9762a43432"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

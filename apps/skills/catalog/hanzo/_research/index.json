@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read research artifacts: Returns the caller org's research-diary feed newest-first — the snapshots and reports tied to its runs, as metadata and content addresses; the bytes themselves are fetched by hash., Fetch one recorded artifact's bytes by its content hash..",
+      "name": "research_artifacts",
+      "path": "research_artifacts/SKILL.md",
+      "service": "research",
+      "sha256": "90fe833387600dcd018e8483a94e30b730e9c94bf423c4908fe722f8769cf6d7"
+    },
+    {
+      "description": "Read research experiments: Returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history..",
+      "name": "research_experiments",
+      "path": "research_experiments/SKILL.md",
+      "service": "research",
+      "sha256": "d910c9ae4b85f5ae24d74e6016816f92cf0df0359403f0304122e1b5253e332c"
+    },
+    {
+      "description": "Read research projects: Returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view..",
+      "name": "research_projects",
+      "path": "research_projects/SKILL.md",
+      "service": "research",
+      "sha256": "c59002b5638d67156cee5c149744feb1c3e1974a93300e0d6ee18b4dfac4dd04"
+    },
+    {
+      "description": "Read research totals: Returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target..",
+      "name": "research_totals",
+      "path": "research_totals/SKILL.md",
+      "service": "research",
+      "sha256": "e13123a20835f37cb5a136aa49e7aac36eeed20fb148462bc67b121461b23f44"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

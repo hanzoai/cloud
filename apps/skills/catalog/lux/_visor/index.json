@@ -1,0 +1,53 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 6,
+  "skills": [
+    {
+      "description": "Read visor clusters: Returns the caller org's clusters from both sources: the managed clusters projected from Visor's node pools, and the BYO clusters attached to the caller's project..",
+      "name": "visor_clusters",
+      "path": "visor_clusters/SKILL.md",
+      "service": "visor",
+      "sha256": "4b815d1b58bff581fc05294ed739f7c3de972b47ec3cf653cdc59421ed714650"
+    },
+    {
+      "description": "Read visor compute: Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs., Returns one of the caller org's bot machines with its agent binding., Regions lists the regions a machine can be launched i",
+      "name": "visor_compute",
+      "path": "visor_compute/SKILL.md",
+      "service": "visor",
+      "sha256": "3e971e833f4705be41bca515881f53cb7132446b7f3542ec5435b4746f8ffea4"
+    },
+    {
+      "description": "Read visor fleet: Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines., Returns the caller org's gpu-jobs render queue, e",
+      "name": "visor_fleet",
+      "path": "visor_fleet/SKILL.md",
+      "service": "visor",
+      "sha256": "94385d61d81e69a94ca1f71c7830d1d178cbd8c0b8bd106e6ce44abcee07efd1"
+    },
+    {
+      "description": "Read visor gpus: Returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi., Is an HONEST empty surface: Visor exposes no GPU a",
+      "name": "visor_gpus",
+      "path": "visor_gpus/SKILL.md",
+      "service": "visor",
+      "sha256": "85c2e64c6273d3d3493ce63faaabf983d9f2f1413fc593fb713a4adfe016ce4f"
+    },
+    {
+      "description": "Read visor k8s: Lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun., Returns one cluster's detail: node pools + worker nodes., Returns every DOKS worker node in the org's clusters as a machin",
+      "name": "visor_k8s",
+      "path": "visor_k8s/SKILL.md",
+      "service": "visor",
+      "sha256": "67942c2714a65d60f1134096556caa0e0c5b504bbffb2a3edfe3486bdb15138b"
+    },
+    {
+      "description": "Read visor machines: Returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\")., Returns every agent↔machine binding in t",
+      "name": "visor_machines",
+      "path": "visor_machines/SKILL.md",
+      "service": "visor",
+      "sha256": "754c276d001b41f77eac91d9453fe1934e1a038c8a37d696774241ed59a27080"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

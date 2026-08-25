@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read crm applications: Returns the org's Startup Program applications, newest first., Returns one Startup Program application with its AI screen and stage history..",
+      "name": "crm_applications",
+      "path": "crm_applications/SKILL.md",
+      "service": "crm",
+      "sha256": "b2710f4dff84c42a6f3e8dce732d1c4ce241ba2f6ef8fe1388c1a14227187b99"
+    },
+    {
+      "description": "Read crm companies: Returns the caller org's companies, most recently updated first., Returns one of the caller org's companies..",
+      "name": "crm_companies",
+      "path": "crm_companies/SKILL.md",
+      "service": "crm",
+      "sha256": "d7624a184340b1d0169a390619bfe7bf9bf6c95862a8cc1aeafe7518d103c3d8"
+    },
+    {
+      "description": "Read crm contacts: Returns the caller org's contacts, most recently updated first., Returns one of the caller org's contacts..",
+      "name": "crm_contacts",
+      "path": "crm_contacts/SKILL.md",
+      "service": "crm",
+      "sha256": "1fd8c6da3d55e7e7148f7ca63aad0e90a32a64632a32fbcb2be8802e3597bfe0"
+    },
+    {
+      "description": "Read crm opportunities: Returns the caller org's deals, most recently updated first., Returns one of the caller org's deals..",
+      "name": "crm_opportunities",
+      "path": "crm_opportunities/SKILL.md",
+      "service": "crm",
+      "sha256": "9f1b958264a2dac979ae1b540e4803b12d4bfac57c537aaab61101a8dc616b2a"
+    },
+    {
+      "description": "Read crm summary: Summary counts the caller org's CRM records: companies, contacts, opportunities..",
+      "name": "crm_summary",
+      "path": "crm_summary/SKILL.md",
+      "service": "crm",
+      "sha256": "e298a6804ca7e07d63e166aa7386ad4897652246e72144b2d2ccce3705a46b13"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

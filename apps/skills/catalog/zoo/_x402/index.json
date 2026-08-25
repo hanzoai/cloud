@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read x402 settlements: Settlement reads one x402 payment receipt by id..",
+      "name": "x402_settlements",
+      "path": "x402_settlements/SKILL.md",
+      "service": "x402",
+      "sha256": "6f6551851a9b486622b575f7ec170a3a569ec5c02ed740a6a5bc2e9cfb68ada8"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read webhook deliveries: Returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took..",
+      "name": "webhook_deliveries",
+      "path": "webhook_deliveries/SKILL.md",
+      "service": "webhook",
+      "sha256": "1bec6d35a8d3efd36c439881f0661da14d12153f081ede8c72267fe0cc53013a"
+    },
+    {
+      "description": "Read webhook webhook: Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts., Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted..",
+      "name": "webhook_webhook",
+      "path": "webhook_webhook/SKILL.md",
+      "service": "webhook",
+      "sha256": "104661d90d55bbfd7447cd838bdb9d8e57f697bcfab0feb25c6d6334c847be79"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

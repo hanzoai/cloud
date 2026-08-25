@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read graph graph: Read the assertions this organization has recorded.",
+      "name": "graph_graph",
+      "path": "graph_graph/SKILL.md",
+      "service": "graph",
+      "sha256": "b6a069388ab3d12d06e838f5ffa92d094e4b944cd9307266287d33b1d89bee67"
+    },
+    {
+      "description": "Read graph search: Find assertions by their text rather than by an entity key.",
+      "name": "graph_search",
+      "path": "graph_search/SKILL.md",
+      "service": "graph",
+      "sha256": "bbb632ca2843b551235a492704939ddccac2667aea7b27dd94be7a6e0d59eab6"
+    },
+    {
+      "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",
+      "name": "graph_vocabulary",
+      "path": "graph_vocabulary/SKILL.md",
+      "service": "graph",
+      "sha256": "25e275423944837d06d9ab9b02d434f1afb437143fc35f6a241700ed7a468fca"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

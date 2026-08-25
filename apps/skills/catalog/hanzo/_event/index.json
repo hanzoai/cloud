@@ -1,0 +1,60 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read event errors: Errors returns the caller org's most recently captured errors, newest first..",
+      "name": "event_errors",
+      "path": "event_errors/SKILL.md",
+      "service": "event",
+      "sha256": "425f5b40f6b9a9e7437213994486a25c2f71b5f9dd586d3691f34494a4321ca5"
+    },
+    {
+      "description": "Read event health: Health reports whether the event plane can take a write and the warehouse can answer a read..",
+      "name": "event_health",
+      "path": "event_health/SKILL.md",
+      "service": "event",
+      "sha256": "fa151eb4a6992729e3c7a55a8416597f3f0eb62c925bc58be3d9597ec7ce68f4"
+    },
+    {
+      "description": "Read event insights: Returns the caller org's most recent product events, newest first., Reports that the unified insights surface is serving..",
+      "name": "event_insights",
+      "path": "event_insights/SKILL.md",
+      "service": "event",
+      "sha256": "d0897553a9fb0517264465482de468b036f797d4a0ebab65ff81a93b6d5d3eda"
+    },
+    {
+      "description": "Read event overview: Overview returns the caller org's analytics KPIs for one time window..",
+      "name": "event_overview",
+      "path": "event_overview/SKILL.md",
+      "service": "event",
+      "sha256": "400449254440353cb9ea56291af75454d7e29cff393b542279ad5f15a8a52ffd"
+    },
+    {
+      "description": "Read event tag js: The Hanzo event tag — the one-line install for a surface with no bundler.",
+      "name": "event_tag-js",
+      "path": "event_tag-js/SKILL.md",
+      "service": "event",
+      "sha256": "f3a5fadb48671cb3ba1db75c211cb6ba78d9ecd962102c4d1c4be0bb6173abb3"
+    },
+    {
+      "description": "Read event timeseries: Timeseries returns the caller org's LLM usage over time as an evenly-spaced series..",
+      "name": "event_timeseries",
+      "path": "event_timeseries/SKILL.md",
+      "service": "event",
+      "sha256": "bb5f4be077371b0997a3777f242bd00a56207406db118fc996f7fe3ad090d213"
+    },
+    {
+      "description": "Read event top: Top returns the caller org's ranked lenses for one window, five of them at once..",
+      "name": "event_top",
+      "path": "event_top/SKILL.md",
+      "service": "event",
+      "sha256": "48c55b3a86da32c7a96566c20a7cc44f94f3f4af9b290e6afaf60375ec8bd95c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

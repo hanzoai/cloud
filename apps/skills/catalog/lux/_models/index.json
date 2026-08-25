@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read models access: Returns the caller's own standing for a gated model: \"granted\", \"requested\", or empty when they have never asked..",
+      "name": "models_access",
+      "path": "models_access/SKILL.md",
+      "service": "models",
+      "sha256": "b2f5d3628c0912df36b77f0daa2e53591e0bc27ef9e39c16b5247a9c921eb973"
+    },
+    {
+      "description": "Read models models: Returns the list of available models from the routing table..",
+      "name": "models_models",
+      "path": "models_models/SKILL.md",
+      "service": "models",
+      "sha256": "c808989c578aec729d733e643efed603feda5fbc05f3e53905398c6e8e222368"
+    },
+    {
+      "description": "Read models providers: Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected..",
+      "name": "models_providers",
+      "path": "models_providers/SKILL.md",
+      "service": "models",
+      "sha256": "ca53fc5c1be6ec12bc2a4177ef65a5c8409ab120c1d4d982bf0fa4e23f7bba15"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

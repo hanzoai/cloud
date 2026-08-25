@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read allowance allowance: Answers what the CALLER has left of their plan's free-call allowance this period, and the instant the count starts again..",
+      "name": "allowance_allowance",
+      "path": "allowance_allowance/SKILL.md",
+      "service": "allowance",
+      "sha256": "ab89f01355fb6836dcc576f0269b7f3e05c852d42c7d219f67294f59d1294be7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

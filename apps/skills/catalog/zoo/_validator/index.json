@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read validator challenge: Issues the single-use nonce and the exact message a wallet must sign to claim a validator slot..",
+      "name": "validator_challenge",
+      "path": "validator_challenge/SKILL.md",
+      "service": "validator",
+      "sha256": "aa8bfcfce5f72abe13e94514310d9409ac86bce0968a559cc25bce03b288d662"
+    },
+    {
+      "description": "Read validator validator: Returns the validator slots the caller's org has claimed., Returns one claimed validator slot, scoped to the caller's org..",
+      "name": "validator_validator",
+      "path": "validator_validator/SKILL.md",
+      "service": "validator",
+      "sha256": "9f2c2170357d7724cd97bb3f181ebf39fe1a04d1700e0b76d839e23fda35ded6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

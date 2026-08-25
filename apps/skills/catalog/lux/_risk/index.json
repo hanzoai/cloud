@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read risk features: The feature catalogue: what the model reads, and what your surface carries.",
+      "name": "risk_features",
+      "path": "risk_features/SKILL.md",
+      "service": "risk",
+      "sha256": "db6c89a6c7b0976699d41d9577bad25f3c64144829b9f8c4de3fe32a008a5246"
+    },
+    {
+      "description": "Read risk health: Whether the risk model plane can actually work right now.",
+      "name": "risk_health",
+      "path": "risk_health/SKILL.md",
+      "service": "risk",
+      "sha256": "52b88ff3256261b4be1ea5769b73140b569d8e799acb67639d2e3001f47181dd"
+    },
+    {
+      "description": "Read risk policy: Your organisation's decision-regime history, and which version is in force.",
+      "name": "risk_policy",
+      "path": "risk_policy/SKILL.md",
+      "service": "risk",
+      "sha256": "808c9166dfb6005d1866d093b143061d58bea24c493598e91bbc3eb424150ce7"
+    },
+    {
+      "description": "Read risk search: Read back one exhaustive search.",
+      "name": "risk_search",
+      "path": "risk_search/SKILL.md",
+      "service": "risk",
+      "sha256": "fc1dde6b4045470524f6643dc2b9a36e1b4078ee59be2af429c227284a890885"
+    },
+    {
+      "description": "Read risk state: Report your organisation's model: what it learned, and what it realised.",
+      "name": "risk_state",
+      "path": "risk_state/SKILL.md",
+      "service": "risk",
+      "sha256": "ed55be955d03bf710cd6d4dc70c14c3601a93461c1ddd2d75d78c00adeac714c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

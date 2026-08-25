@@ -1,0 +1,109 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 14,
+  "skills": [
+    {
+      "description": "Read plan blockchain: Returns the blockchain RPC plan catalog: the tiers metered in monthly compute units, with their prices, limits and overage terms..",
+      "name": "plan_blockchain",
+      "path": "plan_blockchain/SKILL.md",
+      "service": "plan",
+      "sha256": "94aa247087971fbce9812ea91cfaacc5c834dea10a2946f650b6f2fc58fe8f8e"
+    },
+    {
+      "description": "Read plan dns: ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records per zone and queries per day..",
+      "name": "plan_dns",
+      "path": "plan_dns/SKILL.md",
+      "service": "plan",
+      "sha256": "a32d921c3c82e92ca4d895646f792b5a8833465163d9ce8076767c09fbb94a39"
+    },
+    {
+      "description": "Read plan entitlements: Returns what one plan GRANTS and not what it costs: the canonical namespaced entitlement block and the flat license-feature list derived from it..",
+      "name": "plan_entitlements",
+      "path": "plan_entitlements/SKILL.md",
+      "service": "plan",
+      "sha256": "2d6574bb1d7a0dcb998846bd1809e9afb3fb5cefe474000e80aa2aec8ca5cdec"
+    },
+    {
+      "description": "Read plan gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPUs, host memory and hourly price..",
+      "name": "plan_gpu",
+      "path": "plan_gpu/SKILL.md",
+      "service": "plan",
+      "sha256": "5b3e22eb766d80a415257bb92aab40da5272554735d78ff48ca48713adda29dc"
+    },
+    {
+      "description": "Read plan health: Health reports that the plans subsystem is mounted and serving..",
+      "name": "plan_health",
+      "path": "plan_health/SKILL.md",
+      "service": "plan",
+      "sha256": "675e2f001f9afbb9af55a041c4c68e7b792fb6b50df69e342053957425ba8499"
+    },
+    {
+      "description": "Read plan plan: Returns the Zoo cloud plan catalog: every cloud tier with its price, included capacity, limits and feature list, scoped to the caller's catalog..",
+      "name": "plan_plan",
+      "path": "plan_plan/SKILL.md",
+      "service": "plan",
+      "sha256": "01ab00acf2222f682a4a392e9d2f7b9277850afaf89fdb0f565f999f62eae238"
+    },
+    {
+      "description": "Read plan policy: Returns the published pricing policy: whether pricing is transparent, the revenue-sharing terms (idle compute resale and the open-source share) and the principles the catalog is priced by..",
+      "name": "plan_policy",
+      "path": "plan_policy/SKILL.md",
+      "service": "plan",
+      "sha256": "5028cc67466b95cb6bc0246842e454fcd7bce4ca96e14e01d93e5198fa2a68af"
+    },
+    {
+      "description": "Read plan regions: Returns the regions cloud capacity is offered in, each with its display name and physical location..",
+      "name": "plan_regions",
+      "path": "plan_regions/SKILL.md",
+      "service": "plan",
+      "sha256": "f7d01b54af488cb09036f2e2035713616c6de76694df95bbbd9e9cd9d582b610"
+    },
+    {
+      "description": "Read plan resolve: Resolves one plan to everything a consumer of the catalog needs at once: its canonical entitlement block, the flat license-feature list a signed license carries, its billing reference, and the catalog it came from..",
+      "name": "plan_resolve",
+      "path": "plan_resolve/SKILL.md",
+      "service": "plan",
+      "sha256": "e5fc4fc815473a45a4f093014e792aedb61db938b4f77802e0a638d00af117e7"
+    },
+    {
+      "description": "Read plan schema: Returns the two JSON Schema documents this surface speaks: entitlements.schema.json, which declares every entitlement key with its type, unit and enum, and plan.schema.json, which a catalog plan record conforms to..",
+      "name": "plan_schema",
+      "path": "plan_schema/SKILL.md",
+      "service": "plan",
+      "sha256": "d318043ca8c81a7155453b82b9769aa46c67993addaac5308242dead02c7ccf8"
+    },
+    {
+      "description": "Read plan storage: Returns the block-storage price block: the price per GB per month and the volume size bounds a cloud plan may attach..",
+      "name": "plan_storage",
+      "path": "plan_storage/SKILL.md",
+      "service": "plan",
+      "sha256": "d5ca487d5e9e70c6b860813b488cdf1d4b98ecd03d1dcf17abe0b4ea6164a175"
+    },
+    {
+      "description": "Read plan subscriptions: Returns the subscription ladder — the personal and team tiers a customer buys to use the cloud, each with its monthly and annual price, seat rules, limits and billing reference..",
+      "name": "plan_subscriptions",
+      "path": "plan_subscriptions/SKILL.md",
+      "service": "plan",
+      "sha256": "bb7540a9361f40b58b431f7e96571df50ac431b74d50eb5a9643b1aa17e1c6a0"
+    },
+    {
+      "description": "Read plan tools: Returns the per-use price of every metered tool — web search, code interpreter, image generation, speech — each with the unit it is billed in..",
+      "name": "plan_tools",
+      "path": "plan_tools/SKILL.md",
+      "service": "plan",
+      "sha256": "e298dda3014c78b48d2ca9d0cfc0dfcdddbfb786185d9b4d9fd3e574586066b3"
+    },
+    {
+      "description": "Read plan vocab: Returns the entitlement key vocabulary: every key with its namespace, JSON type, nullability, unit, enum and title, the list of namespaces, and the engine features a license can grant..",
+      "name": "plan_vocab",
+      "path": "plan_vocab/SKILL.md",
+      "service": "plan",
+      "sha256": "99058ab4312b41bbb24a0a5329e8a7b5f1861c6afa8f331fb86de4fcb62fc49b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

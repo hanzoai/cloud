@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read leaderboard activity: Activity returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present..",
+      "name": "leaderboard_activity",
+      "path": "leaderboard_activity/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "921eee2da301541e93744f58d975f967df11d00e2c69c0b8956a2e177a5966c7"
+    },
+    {
+      "description": "Read leaderboard leaderboard: Leaderboard ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page..",
+      "name": "leaderboard_leaderboard",
+      "path": "leaderboard_leaderboard/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "c95790fc9d93c593132c987cf8aad95ae685868502a6bf5e69b158cbd0d3fa94"
+    },
+    {
+      "description": "Read leaderboard optin: Returns the caller's own public-listing preference and their org's, each with whether the caller may change it..",
+      "name": "leaderboard_optin",
+      "path": "leaderboard_optin/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "433af0cd0e7fdc508531d7449f2b7422ecf865a04a0374e6aafc49f34a6a4a68"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

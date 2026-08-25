@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read models access: Returns the caller's own standing for a gated model: \"granted\", \"requested\", or empty when they have never asked..",
+      "name": "models_access",
+      "path": "models_access/SKILL.md",
+      "service": "models",
+      "sha256": "9c4ff33f69aeddcf739ee48c1f56d5410b93f3598d3ef85e37392177b32f74d8"
+    },
+    {
+      "description": "Read models models: Returns the list of available models from the routing table..",
+      "name": "models_models",
+      "path": "models_models/SKILL.md",
+      "service": "models",
+      "sha256": "8df234ce3e1d40d9685dd513df8bc6e1dc4304c3033c393a4bb3d502690ff7e5"
+    },
+    {
+      "description": "Read models providers: Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected..",
+      "name": "models_providers",
+      "path": "models_providers/SKILL.md",
+      "service": "models",
+      "sha256": "fd5b92c06d69c7066345e7a8b609c0f5e9c5a40eeb6beb10a8026db8444373d6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

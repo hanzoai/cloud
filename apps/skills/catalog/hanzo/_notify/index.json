@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read notify health: Reports that the notify send surface is mounted..",
+      "name": "notify_health",
+      "path": "notify_health/SKILL.md",
+      "service": "notify",
+      "sha256": "28b3ef0b819a1f9f65e2d7c5f3072557dc9a893e5a04d6088827479d41c91011"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

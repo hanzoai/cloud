@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",
+      "name": "knowledge_connectors",
+      "path": "knowledge_connectors/SKILL.md",
+      "service": "knowledge",
+      "sha256": "5f72d412ba88a279d6172377a23286dbd6d5ad49140a9b6b21da16baf8af5396"
+    },
+    {
+      "description": "Read knowledge graph: Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges..",
+      "name": "knowledge_graph",
+      "path": "knowledge_graph/SKILL.md",
+      "service": "knowledge",
+      "sha256": "74747e83200ab67c1e3da66dcda42170ed33bed6b857c29d44fe83cfc100ea08"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

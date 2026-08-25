@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read metrics health: How many metric series this deployment holds for your org.",
+      "name": "metrics_health",
+      "path": "metrics_health/SKILL.md",
+      "service": "metrics",
+      "sha256": "3cec5ff06740965758394b763b34e5dc928951a9b0e3e46d50cad6ef6c88ff0f"
+    },
+    {
+      "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
+      "name": "metrics_logs",
+      "path": "metrics_logs/SKILL.md",
+      "service": "metrics",
+      "sha256": "0c247be52ad86395fc91cda84967f4b00b791956cd68e06b19c4678e2aaa9b96"
+    },
+    {
+      "description": "Read metrics query: Read your org's series back over a time range.",
+      "name": "metrics_query",
+      "path": "metrics_query/SKILL.md",
+      "service": "metrics",
+      "sha256": "c3ed0c64afe1aadbbb5f67dcb3c6df51c3ae26ed014c33e0502e01683c42ec74"
+    },
+    {
+      "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
+      "name": "metrics_traces",
+      "path": "metrics_traces/SKILL.md",
+      "service": "metrics",
+      "sha256": "8aa92e9297deb43f00c101a152ea80bdc4b0258e41c67c2c1dda80faeaa6b741"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

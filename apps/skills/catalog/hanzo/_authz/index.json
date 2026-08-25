@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read authz health: Liveness of the policy engine.",
+      "name": "authz_health",
+      "path": "authz_health/SKILL.md",
+      "service": "authz",
+      "sha256": "b413e02df8748c60b8bddbe10d339d68c5a8c8934a228a33d98fe8f30a27978d"
+    },
+    {
+      "description": "Read authz readyz: Readiness of the policy engine.",
+      "name": "authz_readyz",
+      "path": "authz_readyz/SKILL.md",
+      "service": "authz",
+      "sha256": "15b3edb7d9a186783996d2a3d6355ef19b6ae228ed95f2712d4640ae74755dba"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

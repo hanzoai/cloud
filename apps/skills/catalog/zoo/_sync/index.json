@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read sync sync: List returns every sync link the caller's org has, each with its two endpoints, its direction and trigger policy, and the time it last reconciled., Get returns one sync by id..",
+      "name": "sync_sync",
+      "path": "sync_sync/SKILL.md",
+      "service": "sync",
+      "sha256": "12cfa9faa3e69a2ee9172a98f5eda4d398e9fa471f54a593fd314cb7240e98e8"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

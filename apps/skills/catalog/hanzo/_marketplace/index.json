@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read marketplace listings: Returns the listings the caller's own org has published — what this org is offering, not what it can buy..",
+      "name": "marketplace_listings",
+      "path": "marketplace_listings/SKILL.md",
+      "service": "marketplace",
+      "sha256": "a741a81d7c88d1b4c3ffdcb6e957e24939bdc2e91dfcd4b6abdaf147e92402de"
+    },
+    {
+      "description": "Read marketplace marketplace: Discover lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope..",
+      "name": "marketplace_marketplace",
+      "path": "marketplace_marketplace/SKILL.md",
+      "service": "marketplace",
+      "sha256": "6e3fc0e21ffe2a67041560dbbdb0c6b230a1159a514ac34ecb3c505f856271e4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

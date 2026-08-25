@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read seo rates: What each call on this surface costs, from the vendor's own list.",
+      "name": "seo_rates",
+      "path": "seo_rates/SKILL.md",
+      "service": "seo",
+      "sha256": "ac0f0bc3cd2fe95dc80bf50999bdf5a2088a238a3b9c7b30c38a1a605b8420ad"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

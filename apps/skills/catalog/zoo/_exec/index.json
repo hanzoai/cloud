@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read exec download: Download a file from a session.",
+      "name": "exec_download",
+      "path": "exec_download/SKILL.md",
+      "service": "exec",
+      "sha256": "78d9e5b9efabedc98e56802136fba7a15ded33191d7554aeb062cb892b0311f0"
+    },
+    {
+      "description": "Read exec files: Files lists what a session holds..",
+      "name": "exec_files",
+      "path": "exec_files/SKILL.md",
+      "service": "exec",
+      "sha256": "6ce47a7e385f11432922f972e8104c595636c45b24a19e1d264775ac741c3cf4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

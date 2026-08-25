@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read esign documents: Returns your org's documents, newest first., Returns one document with its recipients and field layout., Returns the document's full audit trail, oldest first..",
+      "name": "esign_documents",
+      "path": "esign_documents/SKILL.md",
+      "service": "esign",
+      "sha256": "3f73b242a3bb995da24e238742e583b5ae93fc8fbfd74a39ee02d10f6e9c82ac"
+    },
+    {
+      "description": "Read esign health: Reports whether the e-signature surface is mounted..",
+      "name": "esign_health",
+      "path": "esign_health/SKILL.md",
+      "service": "esign",
+      "sha256": "83825efc7b2dc86e92e3f68b3ab7edf642531b34e30fe4262ba09da53eda5dcd"
+    },
+    {
+      "description": "Read esign o: Opens a document you were asked to sign, using your signing link..",
+      "name": "esign_o",
+      "path": "esign_o/SKILL.md",
+      "service": "esign",
+      "sha256": "6dfe5755b32d85414ff11cbb72d1309411f03e2746210b3aa5bd8b742acbf3c4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

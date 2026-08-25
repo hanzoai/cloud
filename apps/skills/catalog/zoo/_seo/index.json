@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read seo rates: What each call on this surface costs, from the vendor's own list.",
+      "name": "seo_rates",
+      "path": "seo_rates/SKILL.md",
+      "service": "seo",
+      "sha256": "c602cf6282ea31a22864327fb8acb3a8d3df1e4fa7ab8022ce27c769794a68e8"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

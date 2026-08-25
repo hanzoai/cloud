@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read models access: Returns the caller's own standing for a gated model: \"granted\", \"requested\", or empty when they have never asked..",
+      "name": "models_access",
+      "path": "models_access/SKILL.md",
+      "service": "models",
+      "sha256": "bac28ec6582cbc1902ef2ae88c96e65869dee1397cabaf30e389063982e93782"
+    },
+    {
+      "description": "Read models models: Returns the list of available models from the routing table..",
+      "name": "models_models",
+      "path": "models_models/SKILL.md",
+      "service": "models",
+      "sha256": "921b39b0ef96eecb5b4d59273101782ac5ade613a9b6f30c341fe8a8dece3b1b"
+    },
+    {
+      "description": "Read models providers: Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected..",
+      "name": "models_providers",
+      "path": "models_providers/SKILL.md",
+      "service": "models",
+      "sha256": "ef426c39c726bd7ddbd28b56d17f222b92d7e884f43a7f86c4599b66975276cf"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read marketplace listings: Returns the listings the caller's own org has published — what this org is offering, not what it can buy..",
+      "name": "marketplace_listings",
+      "path": "marketplace_listings/SKILL.md",
+      "service": "marketplace",
+      "sha256": "bb250a3ad87f3d34f9f52a661e086c2844946f2afdc62c0d85bd327db8d828cd"
+    },
+    {
+      "description": "Read marketplace marketplace: Discover lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope..",
+      "name": "marketplace_marketplace",
+      "path": "marketplace_marketplace/SKILL.md",
+      "service": "marketplace",
+      "sha256": "ad57c934189144a0d42677d77b04a37ef2a2882e9cd09350cc40ab8940ca9fe9"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

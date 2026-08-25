@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read gateway config: Read returns the EFFECTIVE edge policy the caller is subject to: the platform CORS allowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated rate ceiling, edge-cache TTLs and accepted-method allowlist..",
+      "name": "gateway_config",
+      "path": "gateway_config/SKILL.md",
+      "service": "gateway",
+      "sha256": "dbb8d1c525d1243bade6a612e7e780908f75405e32f1cedf81d20a73ceea0a35"
+    },
+    {
+      "description": "Read gateway traffic: Report who is calling this org's API right now.",
+      "name": "gateway_traffic",
+      "path": "gateway_traffic/SKILL.md",
+      "service": "gateway",
+      "sha256": "e404776d89374bb49a58c6126c97ef14650e20bb05011610d53682e2a238a6be"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

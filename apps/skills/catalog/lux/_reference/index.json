@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read reference reference: Lists every set this plane publishes, with its version and how fresh it is., Reference describes one set and lists your org's overrides in it..",
+      "name": "reference_reference",
+      "path": "reference_reference/SKILL.md",
+      "service": "reference",
+      "sha256": "24f4f459ee39f752b9e7ff6c88f1cfccc5958187cb4875484d776577780ba975"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

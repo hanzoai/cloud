@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read wallet accounts: Returns the caller org's wallet accounts, newest first..",
+      "name": "wallet_accounts",
+      "path": "wallet_accounts/SKILL.md",
+      "service": "wallet",
+      "sha256": "4d7184f04200ebabed6cbbde6c7475bd73286247f22c5983857076fbe09d2a04"
+    },
+    {
+      "description": "Read wallet wallet: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
+      "name": "wallet_wallet",
+      "path": "wallet_wallet/SKILL.md",
+      "service": "wallet",
+      "sha256": "c02e5ca7140cc87c17217c8dd535d02aace96c776a2e60b4f7193439117bf298"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

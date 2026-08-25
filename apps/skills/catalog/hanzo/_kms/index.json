@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read kms config: Returns the runtime configuration for the KMS console..",
+      "name": "kms_config",
+      "path": "kms_config/SKILL.md",
+      "service": "kms",
+      "sha256": "26e392874f3d9f0c353baa130a93c92960b6b131561653e5d157dd963f58ae38"
+    },
+    {
+      "description": "Read kms health: Reports whether this broker can actually serve secrets..",
+      "name": "kms_health",
+      "path": "kms_health/SKILL.md",
+      "service": "kms",
+      "sha256": "8c56fdd25a04632d4c931ecacf263105dc1bfe79c2da1e87bd0d5a9e871afec9"
+    },
+    {
+      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Read one secret's value.",
+      "name": "kms_secrets",
+      "path": "kms_secrets/SKILL.md",
+      "service": "kms",
+      "sha256": "6124da8236808c8a9f41ca97dedf2a61211f45385cb617434930a3d14edf8203"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

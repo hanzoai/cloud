@@ -1,0 +1,102 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 13,
+  "skills": [
+    {
+      "description": "Read books accounts: Returns the org's chart of accounts — the seeded fixed chart every posting key in the ledger refers to..",
+      "name": "books_accounts",
+      "path": "books_accounts/SKILL.md",
+      "service": "books",
+      "sha256": "8a45b0be19a7f395888ce1fa040eb820c5d163b6f83e4742fa72a84c5b5f5dcf"
+    },
+    {
+      "description": "Read books bank: Returns the org's normalized bank transactions, newest first — every row the import and connector paths have ingested, with its amount in exact cents, its direction, and whether it has been matched to a voucher yet., Returns the org's unmatched bank inflows and t",
+      "name": "books_bank",
+      "path": "books_bank/SKILL.md",
+      "service": "books",
+      "sha256": "07e6892f6f627fbd272c54a47e2792210f51904fa639117f32956c8665d2ea9d"
+    },
+    {
+      "description": "Read books export: Returns the complete financial package for the caller's org over (from, to]: the trial balance, the P&L, the balance sheet, and the GL detail behind them — the four statements a tax preparer or an investor asks for, assembled from the one ledger in a single rea",
+      "name": "books_export",
+      "path": "books_export/SKILL.md",
+      "service": "books",
+      "sha256": "c9e0081e93c661085a834f05975062c5ce6e6ae2c0c4a3912017c462ea850148"
+    },
+    {
+      "description": "Read books gl: ListGL returns the org's most recent GL Entry rows, newest first..",
+      "name": "books_gl",
+      "path": "books_gl/SKILL.md",
+      "service": "books",
+      "sha256": "745c1d6da4784aea5621995bba3a387e76a0a07a30049cf88b13497e7f6dbbda"
+    },
+    {
+      "description": "Read books inbox: Returns the org's open document queue — everything uploaded but not yet booked, newest first, each with its extracted summary and the confidence the scanner resolved its category at..",
+      "name": "books_inbox",
+      "path": "books_inbox/SKILL.md",
+      "service": "books",
+      "sha256": "70e37d2a0d324248ddf8cf1ca37dbfea8923491384b6e72df36f3913b2d0ca79"
+    },
+    {
+      "description": "Read books metrics: Metrics returns the org's deterministic SaaS-metrics snapshot over an optional (from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash, deferred revenue, monthly burn and runway — as raw int64-cent figures AND the same figures already",
+      "name": "books_metrics",
+      "path": "books_metrics/SKILL.md",
+      "service": "books",
+      "sha256": "917a020c056bb159cac5ae8b5f2f24596b6b87a5df773867c83fe544386dbc1f"
+    },
+    {
+      "description": "Read books pnl: Returns the org's accrual-basis Profit & Loss over an optional (from, to] window of RFC3339 posting times: recognized revenue, matched cost, and the net..",
+      "name": "books_pnl",
+      "path": "books_pnl/SKILL.md",
+      "service": "books",
+      "sha256": "d1802d592acd80195b92c4c6be0cb8334cb9e8d9ca164880c6574c835cd69558"
+    },
+    {
+      "description": "Read books position: Returns the org's Balance Sheet as of `to` (empty = all time), with the Assets == Liabilities + Equity equation proof..",
+      "name": "books_position",
+      "path": "books_position/SKILL.md",
+      "service": "books",
+      "sha256": "d2b237795121835dcf39005fa1abed808bbf561fe2971b8bf62428a26cc846c8"
+    },
+    {
+      "description": "Read books questions: Returns the clarifying questions the caller's own recent GL raises — the unusual postings a founder should look at (outliers, reversals, round-offs, uncosted revenue, an overdrawn wallet), sharpest first..",
+      "name": "books_questions",
+      "path": "books_questions/SKILL.md",
+      "service": "books",
+      "sha256": "0a38f0816ba326e4bc98360b2ad8ceaf631ea2246d0791f57d490a2e8729a651"
+    },
+    {
+      "description": "Read books rules: Returns the org's auto-categorization rules, highest priority first..",
+      "name": "books_rules",
+      "path": "books_rules/SKILL.md",
+      "service": "books",
+      "sha256": "920ef6cba5321acde9119f527ff9e59eed061b948dada688b6707304af1f330c"
+    },
+    {
+      "description": "Read books transactions: Returns the org's booked ledger as a single-line register, newest first: one row per voucher, with its date, description, vendor, category, source and amount in exact cents..",
+      "name": "books_transactions",
+      "path": "books_transactions/SKILL.md",
+      "service": "books",
+      "sha256": "239306d1ca22223a8e7a1f0b7b7fed2ea53fbea5193949c6ea8177742f9ffda5"
+    },
+    {
+      "description": "Read books trial: Returns the org's trial balance over an optional [from, to] window of RFC3339 posting times, including the opening/closing columns and the TotalDebit == TotalCredit proof that the books balance..",
+      "name": "books_trial",
+      "path": "books_trial/SKILL.md",
+      "service": "books",
+      "sha256": "57d5c5c393eb93475e7410a295e72f3a234d4b5bad04eb2b754cf0e290ea1607"
+    },
+    {
+      "description": "Read books vendors: Returns the org's vendor book: each canonical vendor, the alias spellings a receipt may print it under, and the expense account new bills from it default to..",
+      "name": "books_vendors",
+      "path": "books_vendors/SKILL.md",
+      "service": "books",
+      "sha256": "ec15e17bcac0b00677522c96d8e5b1501c8b21180b30bfb2f60bbf1ce55a6634"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

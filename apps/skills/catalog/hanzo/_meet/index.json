@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read meet health: Health reports whether the office can mint join tokens..",
+      "name": "meet_health",
+      "path": "meet_health/SKILL.md",
+      "service": "meet",
+      "sha256": "e94eab49b2e2565c0ff89a9d93f126e8e50e88a50a4425a68bcc58c156a614ec"
+    },
+    {
+      "description": "Read meet record: What is being recorded in a room, and where the file goes.",
+      "name": "meet_record",
+      "path": "meet_record/SKILL.md",
+      "service": "meet",
+      "sha256": "26432ac888b75811816b8dc7d45d6a82e4827a3fedfe6f6dbf59a6aa241edffe"
+    },
+    {
+      "description": "Read meet session: What this caller may open a room in.",
+      "name": "meet_session",
+      "path": "meet_session/SKILL.md",
+      "service": "meet",
+      "sha256": "c6c4085161d353671958d8200483cb84fe006a01fd6fdc25688c18391c9fcc7e"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

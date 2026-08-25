@@ -1,0 +1,158 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 21,
+  "skills": [
+    {
+      "description": "Read pricing base: Returns the Hanzo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list..",
+      "name": "pricing_base",
+      "path": "pricing_base/SKILL.md",
+      "service": "pricing",
+      "sha256": "8966705b4b864d5bdb50fc01df57dadd46c2505fe9f3ccae9562e79fb9327b8d"
+    },
+    {
+      "description": "Read pricing blockchain: Returns the blockchain access plans — the RPC and node tiers, each with its monthly price, compute-unit allowance and feature list..",
+      "name": "pricing_blockchain",
+      "path": "pricing_blockchain/SKILL.md",
+      "service": "pricing",
+      "sha256": "7cc5a7a28aa7bfbefe89a52b7cdfba62915898a7fa4f3c1667138e460a6edb92"
+    },
+    {
+      "description": "Read pricing cloud: Returns the public cloud section of the catalog in one document: its instance plans, its regions and its block-storage prices., Returns just the cloud instance plans — each with its vCPU, memory, disk, CPU type, VM allowance, feature list and monthly and hourl",
+      "name": "pricing_cloud",
+      "path": "pricing_cloud/SKILL.md",
+      "service": "pricing",
+      "sha256": "639413c73cc358bd7042d291aa66cc483c85d992af2613ed677a3a040f156b2e"
+    },
+    {
+      "description": "Read pricing compute: Returns the compute section of the catalog: the cloud provider and region the prices are quoted for, the monthly markup applied to them, the full instance-size tier list and the named presets., Returns just the named compute sizes — the short, human-labelled",
+      "name": "pricing_compute",
+      "path": "pricing_compute/SKILL.md",
+      "service": "pricing",
+      "sha256": "bd7471cfa78b6f0d6668b8763b5e3043ca93f085f100e3957d02298c9ec8c243"
+    },
+    {
+      "description": "Read pricing datastore: Returns the Hanzo Datastore rate card: the tier list, the per-GB storage and egress usage rates, the annual discount and the trial..",
+      "name": "pricing_datastore",
+      "path": "pricing_datastore/SKILL.md",
+      "service": "pricing",
+      "sha256": "5596eb7f402bd8b8518c6b55509054049c68985020a4557bc2d57d7ea99a927a"
+    },
+    {
+      "description": "Read pricing enablement: Returns what the caller's org can actually use: every managed item with its global state, whether it is effective here, whether this org is already opted into its beta, and whether it may still opt in..",
+      "name": "pricing_enablement",
+      "path": "pricing_enablement/SKILL.md",
+      "service": "pricing",
+      "sha256": "8b535753ec37c40958df8811fdf3e543b751f21ce5553bf432153e322cce71b7"
+    },
+    {
+      "description": "Read pricing featured: Returns the models the catalog highlights, filtered to what the caller's org may see..",
+      "name": "pricing_featured",
+      "path": "pricing_featured/SKILL.md",
+      "service": "pricing",
+      "sha256": "779ebad5321df0b7f8b665573bf47378758abbada0eb7ba4d0f9730f5090d2f4"
+    },
+    {
+      "description": "Read pricing free: Returns the models that cost nothing to call, filtered to what the caller's org may see..",
+      "name": "pricing_free",
+      "path": "pricing_free/SKILL.md",
+      "service": "pricing",
+      "sha256": "a6facc56d12fd54cd9f0e02aa34079d080eef4d6195998c0fcd5a7af940fd1c7"
+    },
+    {
+      "description": "Read pricing gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPU, host memory and hourly price..",
+      "name": "pricing_gpu",
+      "path": "pricing_gpu/SKILL.md",
+      "service": "pricing",
+      "sha256": "600400d2d281de53d587f2c6b724e3076bbe534c6804c1b69bca82731991f6e1"
+    },
+    {
+      "description": "Read pricing health: Health reports that the pricing subsystem is mounted and serving..",
+      "name": "pricing_health",
+      "path": "pricing_health/SKILL.md",
+      "service": "pricing",
+      "sha256": "65ef4ff396ed24bbf27b38559f59e20dcc9512daae4fbdc28fa8641e9df31beb"
+    },
+    {
+      "description": "Read pricing iam: ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its monthly and annual price, monthly-active-user allowance and feature list..",
+      "name": "pricing_iam",
+      "path": "pricing_iam/SKILL.md",
+      "service": "pricing",
+      "sha256": "90ed8919162b9ad45fc8cd32558cf3e5dd36b9278b5fb7927230fe4349bef9bf"
+    },
+    {
+      "description": "Read pricing model: Returns one model's catalog entry — its pricing, context window and capabilities as the pricing source records them..",
+      "name": "pricing_model",
+      "path": "pricing_model/SKILL.md",
+      "service": "pricing",
+      "sha256": "21c3504c4ae3847c2c1c41aa1141432aeb1a69bda9ee399edcbb473b5d003ca1"
+    },
+    {
+      "description": "Read pricing models: Returns the whole model catalog — every model the gateway serves, Zen and third-party alike — filtered to what the caller's org may see..",
+      "name": "pricing_models",
+      "path": "pricing_models/SKILL.md",
+      "service": "pricing",
+      "sha256": "876da93519adf5f01177ec91b750b74796e13fff8d30589b941d2e32e71a1e05"
+    },
+    {
+      "description": "Read pricing paas: ListPaaSPlans returns the application-hosting plans — the deploy-and-host tiers, each with its monthly and annual price, app and memory allowances and feature list..",
+      "name": "pricing_paas",
+      "path": "pricing_paas/SKILL.md",
+      "service": "pricing",
+      "sha256": "38e17a53d67c439b77fcd228b7868564e98335acb6c3b4ac6989a383cb461b4a"
+    },
+    {
+      "description": "Read pricing policy: Returns the pricing policy document: the revenue-sharing terms (the idle-resale share and the open-source share, each with its percentage and who is eligible) and the commitments Hanzo makes about how it bills — no hidden fees, no egress charges, no surprise ",
+      "name": "pricing_policy",
+      "path": "pricing_policy/SKILL.md",
+      "service": "pricing",
+      "sha256": "3c7076ece71561105660ca8225191dd08406c3b610b4c38ccfc347ffa35eb4de"
+    },
+    {
+      "description": "Read pricing pricing: Returns the whole pricing catalog in one document: Zen and third-party models, providers, model families, the free-model list, plan and infrastructure pricing..",
+      "name": "pricing_pricing",
+      "path": "pricing_pricing/SKILL.md",
+      "service": "pricing",
+      "sha256": "a6af50ce31819eafc2cf2f0d97b15b45a7db86a4335e705bacea6adac43b9185"
+    },
+    {
+      "description": "Read pricing providers: Returns the model providers the catalog knows, each with its info object, filtered to what the caller's org may see..",
+      "name": "pricing_providers",
+      "path": "pricing_providers/SKILL.md",
+      "service": "pricing",
+      "sha256": "68d11bf924c0d74e97faa85c055829d91d701e2e6856c5841dacad52c78dc372"
+    },
+    {
+      "description": "Read pricing services: Returns the managed-service rate cards — Search, Crawl, Vector, Console and Managed Services — each with its own tiers, and some with usage rates or a comparison table..",
+      "name": "pricing_services",
+      "path": "pricing_services/SKILL.md",
+      "service": "pricing",
+      "sha256": "54dad956176ba08609b51866879f0e3a50178c45ae655a1e953174a1e5bf838f"
+    },
+    {
+      "description": "Read pricing subscriptions: Returns the API subscription plans — the account-level tiers a customer subscribes to, each with its monthly and annual price, included credit, rate limits and feature list..",
+      "name": "pricing_subscriptions",
+      "path": "pricing_subscriptions/SKILL.md",
+      "service": "pricing",
+      "sha256": "df82ad66c4fef5291ffe1a4a29df45a21fa51cd3a7aa0bc160fff5e52712dc6b"
+    },
+    {
+      "description": "Read pricing summary: Returns the catalog's headline statistics — model counts by family and the provider directory..",
+      "name": "pricing_summary",
+      "path": "pricing_summary/SKILL.md",
+      "service": "pricing",
+      "sha256": "336526cc8a8a40de5a018170b786812f51bb1ff4a5fb1e750ab954764aadd3cb"
+    },
+    {
+      "description": "Read pricing tools: Returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit..",
+      "name": "pricing_tools",
+      "path": "pricing_tools/SKILL.md",
+      "service": "pricing",
+      "sha256": "b258c5d41261260ceb97eb4526854addb6c8ac24a20405be17c862c6b190607a"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

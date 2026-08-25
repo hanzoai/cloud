@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read blueprint blueprint: Returns every deployable blueprint with its service count and estimated monthly compute cost..",
+      "name": "blueprint_blueprint",
+      "path": "blueprint_blueprint/SKILL.md",
+      "service": "blueprint",
+      "sha256": "085416a3f05ff1096bbcdc0af59d28b161e093acbfedd87f9ed001eaa69f0305"
+    },
+    {
+      "description": "Read blueprint health: Reports blueprint liveness and echoes the compute rate card in force..",
+      "name": "blueprint_health",
+      "path": "blueprint_health/SKILL.md",
+      "service": "blueprint",
+      "sha256": "0a9ec18649740fb37d6e2e1ad2e8e422331218a675f55504745bba4325facbdf"
+    },
+    {
+      "description": "Read blueprint sbom: A blueprint's bill of images and what running it costs.",
+      "name": "blueprint_sbom",
+      "path": "blueprint_sbom/SKILL.md",
+      "service": "blueprint",
+      "sha256": "537e65de9dabb740febd210c0c26d6eada890e90af21acab5fbaf42fb83f48a6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
