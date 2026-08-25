@@ -31,8 +31,8 @@ import (
 // touch" has exactly one answer and it is derived from exactly one input.
 //
 // A namespace taken from a path, a query or a body would be the same bug in a
-// new costume, and TestNoStoreOutsideTenancy in tenancy_test.go is what keeps it
-// that way as the package grows: it fails if any file other than this one
+// new costume, and TestOnlyTenancyResolvesAStore in tenancy_test.go is what keeps
+// it that way as the package grows: it fails if any file other than this one
 // resolves a store.
 
 // storeFor opens (on first touch) and returns the database holding org's agent

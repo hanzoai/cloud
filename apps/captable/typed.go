@@ -585,7 +585,8 @@ type captableRoundInvestment struct {
 type captableRoundDetail struct {
 	// Investments is every investment into this round, oldest first.
 	Investments []captableRoundInvestment `json:"investments"`
-	// Round is the round itself.
+	// Round is the round's own terms — name, type, valuation, target and status —
+	// as against the investments beside it.
 	Round captableRound `json:"round"`
 }
 
@@ -679,7 +680,7 @@ type captableHolding struct {
 	OwnershipPct float64 `json:"ownershipPct"`
 	// Shares is the shares this stakeholder holds by certificate.
 	Shares int64 `json:"shares"`
-	// StakeholderID is the stakeholder.
+	// StakeholderID addresses the stakeholder these totals are for.
 	StakeholderID string `json:"stakeholderId"`
 }
 
@@ -693,7 +694,7 @@ type captableClassHolding struct {
 	Issued int64 `json:"issued"`
 	// Name is the class name.
 	Name string `json:"name"`
-	// ShareClassID is the share class.
+	// ShareClassID addresses the class this position is for.
 	ShareClassID string `json:"shareClassId"`
 }
 

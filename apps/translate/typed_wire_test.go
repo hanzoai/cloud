@@ -19,23 +19,22 @@ import (
 // ops, each with the wire fact that keeps it raw. The address is written the way
 // the DOCUMENT writes it, which is the identity every projection keys on.
 var untypedByDesign = map[string]string{
-	// The translate endpoint itself. Its refusal is a DOMAIN body, and a typed op
-	// cannot write one — the apps/ml and apps/company class, re-measured against
-	// the PINNED zip (v1.18.12) rather than inherited as prose.
+	// The translate endpoint itself. Its refusal is the MONEY wire, re-measured
+	// against the pinned zip, v1.36.8, rather than inherited as prose.
 	//
 	// A bulk-tier gate or engine refusal answers cloud.DenyResource, the fleet-wide
 	// NESTED {"error":{"code","message"}} at 402/503 that the console routes to a
-	// top-up prompt. A typed op's ONLY refusal is a returned error, which zip's
-	// errorHandler renders as the FLAT {"status","code","error"}; writing the nested
-	// body from inside the op does not escape it either, because a nil Out makes zip
-	// stamp cmp.Or(op.Status, 204) over the 402. One Out and one declared status per
-	// op — the multi-status gap (task #78), not an oversight. The two call sites are
-	// translate.go's `s.Bill.Gate(...) -> cloud.DenyResource` and its
+	// top-up prompt, and DenyResource writes that object BARE. A typed op's ONLY
+	// refusal is a returned error, which zip renders as RFC 9457 problem members
+	// (type/title/status/detail, plus code): the nested body rides Detail intact and
+	// gains those members beside it. Same call apps/agents and apps/guide record —
+	// a change to the money wire, owned by whoever owns that wire. The two call
+	// sites are translate.go's `s.Bill.Gate(...) -> cloud.DenyResource` and its
 	// ErrInsufficientBalance / ErrSpendCapExceeded branch; cloud.DenyResource
 	// (resource_billing.go) is where the nested shape is written.
 	"POST /v1/translate": "a bulk-tier spend denial answers 402/503 carrying the fleet's NESTED " +
-		"{\"error\":{\"code\",\"message\"}} domain body (cloud.DenyResource); a typed op's only refusal is a " +
-		"returned error, which zip renders as the flat HTTPError with nowhere to put it.",
+		"{\"error\":{\"code\",\"message\"}} domain body BARE (cloud.DenyResource); a typed op's only refusal " +
+		"is a returned error, which adds the problem members beside it.",
 }
 
 // translateOps reads BOTH projections of the live router at their one shared

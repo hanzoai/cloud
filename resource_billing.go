@@ -406,7 +406,7 @@ func DenyResource(c *zip.Ctx, err error) error {
 // channel a typed op has. It holds the money wire's own status and body, and
 // DenyEnvelope writes them back untouched — so a typed op refuses with exactly
 // the bytes DenyResource writes beside it, rather than reshaping a 402 the whole
-// fleet reads by `error.code` into zip's flat {status,code,error}.
+// fleet reads by `error.code` into zip's RFC 9457 problem members.
 //
 // It is not an escape from typing. The op still declares its In and its Out, so
 // the document, the MCP tool, the CLI command and the SDK method all exist; what

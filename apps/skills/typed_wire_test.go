@@ -18,24 +18,23 @@ import (
 // ops, each with the wire fact that keeps it raw. The address is written the way the
 // DOCUMENT writes it, which is the identity every projection keys on.
 //
-// Both were re-read against the PINNED zip (v1.18.12) rather than inherited, and
+// Both were re-read against the pinned zip, v1.36.8, rather than inherited, and
 // both are STRUCTURAL: there is no shape of In/Out that serves these wires.
 var untypedByDesign = map[string]string{
-	// The catalogue. Three independent facts, any one sufficient.
+	// The catalogue. Two independent facts, either one sufficient.
 	//
 	//  1. The response is the EMBEDDED FILE'S BYTES, and index.json carries a sha256
 	//     per skill computed over the served SKILL.md. A typed Out re-marshals
 	//     through encoding/json, which re-orders keys and re-indents — the document
 	//     a client verifies would stop being the document that was generated.
-	//  2. Cache-Control: public, max-age=300. zip's typed path writes the JSON body
-	//     and the status and nothing else.
-	//  3. A miss answers {"error": …} at 404, where a typed op's returned error
-	//     renders zip's flat {"status","code","error"}.
+	//  2. A miss answers {"error": …} at 404, where a typed op's returned error
+	//     renders RFC 9457 problem+json (type/title/status/detail, code as an
+	//     extension member).
 	//
 	// TestIndexIsServedVerbatimWithItsCacheHeader is that measurement.
 	"GET /.well-known/agent-skills/index.json": "serves the embedded catalogue BYTES verbatim (its sha256 " +
-		"digests are computed over what is served), under a Cache-Control a typed op cannot set, with a " +
-		"{\"error\":…} 404 body zip's errorHandler does not produce.",
+		"digests are computed over what is served), with a {\"error\":…} 404 body zip's errorHandler does " +
+		"not produce.",
 
 	// One skill document. Structural: the response is text/markdown — a DOCUMENT,
 	// not a JSON value — and a typed op marshals its Out with c.JSON and always
@@ -111,8 +110,9 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 }
 
 // TestIndexIsServedVerbatimWithItsCacheHeader is the measurement behind the first
-// refusal: the response is the embedded file byte-for-byte, and it carries the
-// discovery convention's Cache-Control. Both are things a typed op cannot do.
+// refusal: the response is the embedded file byte-for-byte. It also pins the
+// discovery convention's Cache-Control, which is the wire whether or not the op
+// is typed.
 func TestIndexIsServedVerbatimWithItsCacheHeader(t *testing.T) {
 	app := newApp(t, "hanzo")
 	code, body, hdr := get(t, app, "/.well-known/agent-skills/index.json", "api.hanzo.ai")
@@ -128,8 +128,7 @@ func TestIndexIsServedVerbatimWithItsCacheHeader(t *testing.T) {
 			"served, so a re-marshal (which is what a typed Out does) breaks verification")
 	}
 	if got := hdr.Get("Cache-Control"); got != "public, max-age=300" {
-		t.Fatalf("Cache-Control = %q, want the discovery convention's value — zip's typed path cannot "+
-			"set a response header, which is the other half of this refusal", got)
+		t.Fatalf("Cache-Control = %q, want the discovery convention's value", got)
 	}
 }
 

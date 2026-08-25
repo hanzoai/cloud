@@ -191,10 +191,9 @@ func TestTypedOpBindsURL(t *testing.T) {
 		"The clients/agents migration is unblocked on this axis.")
 }
 
-// TestProjections records the payoff side: the OpenAPI document and the MCP tool
-// surface DO populate from the typed ops. Both are EMPTY today only because
-// cloud registers zero typed ops (installOpenAPIRoutes/installMCP early-return
-// on len(a.ops)==0). The registry works; the binding is what does not.
+// TestTypedOpProjectionsPopulate records the payoff side: the OpenAPI document
+// and the MCP tool surface populate from the op registry. This pins that they do,
+// against the zip this module names.
 func TestTypedOpProjectionsPopulate(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "probe", OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})
 	zip.Get[sessionKey, sessionView](app, "/v1/agents/sessions/:id",
@@ -256,7 +255,7 @@ func digParams(t *testing.T, doc map[string]any, path, method string) []any {
 	return params
 }
 
-// TestMCPIsUnauthenticated is the security half. A typed op is auto-published as
+// TestTypedOpMCPIsAnonymous is the security half. A typed op is auto-published as
 // an MCP tool at POST /mcp, and mcpCall runs op.invoke DIRECTLY. The handler
 // receives context.Background() — it cannot see a header, so it cannot run
 // cloud's authz gate (tenant(c) → 403), which every agents handler relies on.
@@ -302,7 +301,7 @@ func TestTypedOpMCPIsAnonymous(t *testing.T) {
 		"(tenant(c)->403) and a typed handler cannot run it.", got.org)
 }
 
-// TestPrincipalBridge measures the REMEDY for the org half, on stock zip.
+// TestPrincipalBridgeCarriesOrg measures the REMEDY for the org half, on stock zip.
 //
 // fiber's SetContext (already used by cloud's TracingMiddleware,
 // middleware_tracing.go:108) is honored by DefaultCtx.Context(), which
@@ -311,7 +310,7 @@ func TestTypedOpMCPIsAnonymous(t *testing.T) {
 // NOT as an In field. It works over REST and MCP alike, and an anonymous caller
 // arrives with an empty org, which the handler refuses.
 //
-// This half needs no framework change. Only URL binding does.
+// This half needs no framework change.
 func TestPrincipalBridgeCarriesOrg(t *testing.T) {
 	var got bound
 	app := zip.New(zip.Config{AppName: "probe", OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"}})

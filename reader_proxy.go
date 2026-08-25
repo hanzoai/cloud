@@ -2,17 +2,15 @@ package cloud
 
 // Reader edge — a transparent, always-ready reverse proxy to the single writer.
 //
-// WHY A PROXY, NOT A LOCAL-STORE REPLICA. The writer embeds an exclusive-lock
-// ZapDB KMS store (a Badger fork). clients/kms.TestConcurrentOpen_LiveWriterStore-
-// IsNotROShareable proves that opening that store READ-ONLY while the writer is
-// live FAILS ("Log truncate required to run DB") — Badger's RO open replays the
-// live memtable WAL and refuses to truncate it. So a reader CANNOT open the KMS
-// store off the writer's PVC, even read-only, even same-node. (The audit SQLite
-// store IS concurrently shareable — audit/shareability_probe_test.go — but the
-// KMS store is the one that is not, and every mutation is audited on the writer
-// anyway.) Rather than braid a partial local-read replica that must carefully
-// route KMS + every audited verb to the writer, the reader is the SIMPLEST
-// correct thing: it opens NO stores and forwards EVERY request to the writer.
+// WHY A PROXY, NOT A LOCAL-STORE REPLICA. The reader holds no writer pin — the
+// exclusive right to open the RWO stores for write (package writerpin) — so it
+// opens NO stores and forwards EVERY request to the writer. What once made this
+// the only possible shape no longer holds: the per-org SQLite KMS store has no
+// exclusive-opener lock (two Clients open one data dir concurrently in
+// apps/kms.TestConcurrentOpen_PerOrgSQLiteHasNoExclusiveLock) and the audit
+// store is read-shareable while the writer appends
+// (audit.TestShareability_ReaderSharesLiveWriterStore). Serving reads locally is
+// a design choice now, not a blocked one.
 //
 // WHAT IT BUYS. The reader Deployment rolls RollingUpdate (maxUnavailable:0), so
 // the edge Service always has a ready endpoint. During a writer roll the reader

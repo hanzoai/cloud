@@ -785,7 +785,7 @@
             "type": "string"
           },
           "title": {
-            "description": "Title is required.",
+            "description": "Title is the one line the card is read by on the board. Blank or whitespace\nis refused — an untitled card cannot be told apart from any other.",
             "type": "string"
           }
         },

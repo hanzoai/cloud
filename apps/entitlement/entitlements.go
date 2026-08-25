@@ -138,7 +138,7 @@ func routes(app cloud.Router, s *service) {
 	// The ENTITLEMENT (commerce) projection the @hanzogui/shell reads — the READ
 	// side of the unified paywall (projection.go), distinct from the ENABLEMENT
 	// store above. ONE more op on this existing subsystem: it does NOT add a
-	// Wire spec, so apps/wire_test.go TestWireOrderMatchesFrozen stays green.
+	// Wire spec, so manifest/order_test.go's TestAppsOrderMatchesFrozen stays green.
 	//
 	// Declared on the /v1 PARENT with a non-empty leaf: zip.Get(g, "") on a
 	// /v1/entitlement group would normalise to "/v1/entitlement/", and op.Path is

@@ -37,13 +37,6 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// membershipSource returns the writer-membership Source for the durability fencer AND
-// the shard router. self and staticPeers are the fallback (self is always a member of
-// the static set); selector is CLOUD_PEER_SELECTOR; port is the http port stamped onto
-// each live peer's Addr so the shard router can dial it. When the process is in a
-// cluster and selector != "", it yields the live Ready pod set; otherwise it yields the
-// static set, so the exact same wiring runs everywhere.
-
 // K8s returns a live membership Source for the given label selector, plus the
 // namespace it is watching. A non-nil error means "not in a cluster" (dev,
 // native-Go) and the caller falls back to its static peer set.

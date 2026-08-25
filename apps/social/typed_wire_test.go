@@ -540,7 +540,7 @@ func TestEveryOpFailsClosedWithoutAPrincipal(t *testing.T) {
 // no deployment carries the provider OAuth-app credentials, so a publish answers 503
 // NAMING what is absent and never marks the post published. Typing moved nothing
 // here — the untyped handler returned a zip error too, which zip renders as the same
-// flat {status,code,error} envelope (ctx.go:201).
+// RFC 9457 problem members (zip problem.go).
 func TestPublishFailsClosedWithTheMissingCredentials(t *testing.T) {
 	t.Setenv("X_API_KEY", "")
 	t.Setenv("X_API_SECRET", "")

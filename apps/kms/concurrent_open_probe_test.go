@@ -24,7 +24,7 @@ package kms
 // WILL FAIL — the signal that the replicas=1 constraint has crept back in.
 //
 // Run:
-//   CGO_ENABLED=0 GOWORK=off GOFLAGS=-mod=mod go test ./clients/kms/ -run ConcurrentOpen -v
+//   CGO_ENABLED=0 GOWORK=off GOFLAGS=-mod=mod go test ./apps/kms/ -run ConcurrentOpen -v
 
 import (
 	"fmt"

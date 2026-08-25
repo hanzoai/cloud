@@ -22,9 +22,10 @@ package cloud
 // renders its own refusal writes a response and returns nil, and never arrives
 // here at all.
 //
-// The BODY stays zip's own {status, code, error}. Every SDK in the fleet already
-// reads that shape and `code` is exactly the machine-readable reason a paywall
-// branches on — this FILLS it rather than inventing a second envelope beside it.
+// The BODY stays zip's own: the RFC 9457 problem members, whose `code` is exactly
+// the machine-readable reason a paywall branches on — this FILLS it rather than
+// inventing a second envelope beside it. errmap_reserved_test.go measures that key
+// set against the pinned zip, so no comment here has to assert it.
 
 import (
 	"errors"

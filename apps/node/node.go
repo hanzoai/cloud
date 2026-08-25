@@ -246,7 +246,7 @@ func routes(app cloud.Router, s *cloud.Service[state], deps cloud.Deps) {
 	// {"error":"denied","code":…,"reason":…} — that a client switches on, and the
 	// SAME body is returned both for a pre-flight sanitize refusal and for the
 	// node's own denial. A typed op's only way to refuse is to RETURN an error,
-	// which zip renders as its flat {status,code,error} HTTPError; writing the
+	// which zip renders as its RFC 9457 problem members; writing the
 	// body from inside the op does not escape it either, because a nil Out makes
 	// zip stamp cmp.Or(op.Status, 204) over the 403. Same class as apps/ml's
 	// in-band 402 and task #78's multi-status responses. It also needs the

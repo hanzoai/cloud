@@ -65,7 +65,7 @@ func init() {
 			"frameworkRow.publisher": "Publisher is who publishes it.",
 			"frameworkRow.total":     "Total is how many clauses the standard publishes.",
 			"frameworkRow.unit":      "Unit is what one clause is; Units is its plural.",
-			"frameworkRow.units":     "Units is the plural of Unit.",
+			"frameworkRow.units":     "Units is Unit's plural, carried so a caller renders \"12 controls\" without\nhaving to pluralise a word it does not know.",
 			"trustTally.absent":      "Absent is how many the organization does not have. An absent control still\nnames the clause it would satisfy — that is a roadmap — but it never moves\na coverage number.",
 			"trustTally.automated":   "Automated is how many run with nobody in the loop.",
 			"trustTally.partial":     "Partial is how many run but do not cover their whole claim. Each says what\nis missing.",
@@ -190,13 +190,13 @@ func init() {
 			"frameworkRow.publisher":   "Publisher is who publishes it.",
 			"frameworkRow.total":       "Total is how many clauses the standard publishes.",
 			"frameworkRow.unit":        "Unit is what one clause is; Units is its plural.",
-			"frameworkRow.units":       "Units is the plural of Unit.",
+			"frameworkRow.units":       "Units is Unit's plural, carried so a caller renders \"12 controls\" without\nhaving to pluralise a word it does not know.",
 		},
 	})
 	zip.Describe("GET /v1/trust/policies", zip.Doc{
 		Description: "Lists your organization's published policies.",
 		Fields: map[string]string{
-			"policyList.policies": "Policies is the list.",
+			"policyList.policies": "Policies is the organization's published policy documents, each as the\ncentre holds it.",
 		},
 	})
 	zip.Describe("GET /v1/trust/profile", zip.Doc{
@@ -247,7 +247,7 @@ func init() {
 			"frameworkRow.publisher": "Publisher is who publishes it.",
 			"frameworkRow.total":     "Total is how many clauses the standard publishes.",
 			"frameworkRow.unit":      "Unit is what one clause is; Units is its plural.",
-			"frameworkRow.units":     "Units is the plural of Unit.",
+			"frameworkRow.units":     "Units is Unit's plural, carried so a caller renders \"12 controls\" without\nhaving to pluralise a word it does not know.",
 			"orgRef.org":             "Org is the organization's slug — the name in its address.",
 			"trustTally.absent":      "Absent is how many the organization does not have. An absent control still\nnames the clause it would satisfy — that is a roadmap — but it never moves\na coverage number.",
 			"trustTally.automated":   "Automated is how many run with nobody in the loop.",

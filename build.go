@@ -791,9 +791,9 @@ func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
 // runner runs in-cluster and the public issuer host (https://hanzo.id) is fronted
 // by Cloudflare, which 403s a server-side (non-browser) loopback POST with edge
 // error 1006 — so minting against the PUBLIC issuer URL fails and every
-// POST /v1/agents/:ref/run 502s (root-caused 2026-07-04: in-cluster POST to
-// https://hanzo.id/v1/iam/oauth/token → 403/1006, while http://iam.hanzo.svc/... → 200).
-// This mirrors the KMS login-broker resolution (clients/kms) exactly — one
+// POST /v1/agents/:ref/run 502s. Measured: an in-cluster POST to
+// https://hanzo.id/v1/iam/oauth/token answers 403/1006, http://iam.hanzo.svc/... 200.
+// This mirrors the KMS login-broker resolution (apps/kms/mount.go) exactly — one
 // split-horizon policy, no drift. Prefer, in order: an explicit override
 // (CLOUD_AI_IAM_TOKEN_URL), the in-cluster IAM service base (IAM_URL — already
 // wired to http://iam.hanzo.svc for JWKS), then the public issuer as a last resort
@@ -926,7 +926,7 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*org.Durability, func() []
 	// Membership: LIVE when in-cluster + CLOUD_PEER_SELECTOR is set (a rolling upgrade's
 	// changing pod set is tracked, a draining/dead pod is never elected an org's owner),
 	// else the STATIC CLOUD_PEERS/self set — capability-detected, no flag (see
-	// membership_k8s.go). A single-pod deployment with no peers is its own sole writer.
+	// membership_writers.go). A single-pod deployment with no peers is its own sole writer.
 	// The 2s refresh keeps a drained pod out of every peer's election within a bound the
 	// terminationGracePeriod covers, so a rolling handoff loses no request.
 	self := selfID(cfg)

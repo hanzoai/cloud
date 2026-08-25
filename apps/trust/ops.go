@@ -207,7 +207,8 @@ type frameworkRow struct {
 	Edition string `json:"edition"`
 	// Unit is what one clause is; Units is its plural.
 	Unit string `json:"unit"`
-	// Units is the plural of Unit.
+	// Units is Unit's plural, carried so a caller renders "12 controls" without
+	// having to pluralise a word it does not know.
 	Units string `json:"units"`
 	// Total is how many clauses the standard publishes.
 	Total int `json:"total"`
@@ -380,7 +381,8 @@ type subprocessorList struct {
 
 // policyList is the published policies.
 type policyList struct {
-	// Policies is the list.
+	// Policies is the organization's published policy documents, each as the
+	// centre holds it.
 	Policies []json.RawMessage `json:"policies"`
 }
 

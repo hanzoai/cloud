@@ -544,7 +544,7 @@ type adminBook struct {
 	Status string `json:"status"`
 	// Msg is the envelope's message slot, empty on success.
 	Msg string `json:"msg"`
-	// Data is the book.
+	// Data is the envelope's payload: the author records and the fleet roll-up.
 	Data adminBookData `json:"data"`
 }
 

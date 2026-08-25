@@ -29,7 +29,7 @@ import (
 //
 //   - POST /payment stays UNTYPED, and the reason is a wire nothing asserted: a
 //     billing denial answers the fleet-wide {"error":{"code","message"}} contract,
-//     which zip's error type (a flat {status,code,error}) cannot express. That
+//     which zip's own refusal (the RFC 9457 problem members) does not spell. That
 //     reason was a comment, so the next pass could type the route, reshape the
 //     money-path error for every metered client, and stay green. It is a wire now
 //     — see TestPaymentDenialWire.
@@ -192,7 +192,7 @@ func denial(t *testing.T, m map[string]any) (code, message string) {
 // shape across every Hanzo surface.
 //
 // This is what keeps POST /payment out of the typed registry: a typed op's error
-// renders zip's flat {status,code,error}, so typing the route as it stands would
+// renders zip's RFC 9457 problem members, so typing the route as it stands would
 // silently reshape all three of these. The test is the guard on that decision.
 func TestPaymentDenialWire(t *testing.T) {
 	for _, tc := range []struct {

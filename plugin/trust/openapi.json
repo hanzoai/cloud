@@ -933,7 +933,7 @@
             "type": "string"
           },
           "units": {
-            "description": "Units is the plural of Unit.",
+            "description": "Units is Unit's plural, carried so a caller renders \"12 controls\" without\nhaving to pluralise a word it does not know.",
             "type": "string"
           }
         },
@@ -942,7 +942,7 @@
       "policyList": {
         "properties": {
           "policies": {
-            "description": "Policies is the list.",
+            "description": "Policies is the organization's published policy documents, each as the\ncentre holds it.",
             "items": {},
             "type": "array"
           }

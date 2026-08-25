@@ -852,7 +852,7 @@
             "type": "string"
           },
           "id": {
-            "description": "ID is the document.",
+            "description": "ID is the document this PDF was rendered from.",
             "type": "string"
           },
           "pdfBase64": {

@@ -506,7 +506,7 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/adminBookData",
-            "description": "Data is the book."
+            "description": "Data is the envelope's payload: the author records and the fleet roll-up."
           },
           "msg": {
             "description": "Msg is the envelope's message slot, empty on success.",

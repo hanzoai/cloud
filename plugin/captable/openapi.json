@@ -1000,7 +1000,7 @@
             "type": "string"
           },
           "shareClassId": {
-            "description": "ShareClassID is the share class.",
+            "description": "ShareClassID addresses the class this position is for.",
             "type": "string"
           }
         },
@@ -1239,7 +1239,7 @@
             "type": "integer"
           },
           "stakeholderId": {
-            "description": "StakeholderID is the stakeholder.",
+            "description": "StakeholderID addresses the stakeholder these totals are for.",
             "type": "string"
           }
         },
@@ -1605,7 +1605,7 @@
           },
           "round": {
             "$ref": "#/components/schemas/captableRound",
-            "description": "Round is the round itself."
+            "description": "Round is the round's own terms — name, type, valuation, target and status —\nas against the investments beside it."
           }
         },
         "type": "object"
