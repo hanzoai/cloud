@@ -1,0 +1,95 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 12,
+  "skills": [
+    {
+      "description": "Read deploy account: Compatibility answer the console UI asks before enabling its buttons.",
+      "name": "deploy_account",
+      "path": "deploy_account/SKILL.md",
+      "service": "deploy",
+      "sha256": "c2207d38bf44c39d808595c9aeadb3dee1857e7716ccbcf270f64379725ad4ad"
+    },
+    {
+      "description": "Read deploy applications: Returns the fleet as an argocd ApplicationList: one projected Application per operator App CR, carrying the image tag the CR DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled health, and the sync verdict those two produce (de",
+      "name": "deploy_applications",
+      "path": "deploy_applications/SKILL.md",
+      "service": "deploy",
+      "sha256": "8ae8b75eed4e29c4fb843b9dcafbda9c5f65e488e0d8c446657e1354d79fb18d"
+    },
+    {
+      "description": "Read deploy callback: Finish the sign-in round trip and mint the console session.",
+      "name": "deploy_callback",
+      "path": "deploy_callback/SKILL.md",
+      "service": "deploy",
+      "sha256": "ea12d2b738921cd4ae8a0966a4dcfa6f2745f075e1563c30bc6ca8c5b5f3503f"
+    },
+    {
+      "description": "Read deploy clusters: Returns the argocd ClusterList of the destinations the caller's applications reconcile into: one entry per distinct destination server, carrying the count of applications reconciling into it..",
+      "name": "deploy_clusters",
+      "path": "deploy_clusters/SKILL.md",
+      "service": "deploy",
+      "sha256": "3f1b661511967b6af57c7888b2d12558f5f4dd25b95222e100aaf7897020d23e"
+    },
+    {
+      "description": "Read deploy gitops: Lists every Zoo CD Application in the cluster: the git source each one polls, the commit it last APPLIED, how its last sync operation ended, and its recent deploy history — newest deploy first, ordered by namespace then name..",
+      "name": "deploy_gitops",
+      "path": "deploy_gitops/SKILL.md",
+      "service": "deploy",
+      "sha256": "8fccd32ec3a7ca3ea142412e21d39430aa0ffed941e976d3dc36fccdd2ac7749"
+    },
+    {
+      "description": "Read deploy health: Health reports whether this deployment can observe the delivery plane..",
+      "name": "deploy_health",
+      "path": "deploy_health/SKILL.md",
+      "service": "deploy",
+      "sha256": "702c45631e0defd3c0f4080b3e6b85ae1b4ea9cf77c0f4dafb7b4e20846765fd"
+    },
+    {
+      "description": "Read deploy login: Start the sign-in round trip for this console.",
+      "name": "deploy_login",
+      "path": "deploy_login/SKILL.md",
+      "service": "deploy",
+      "sha256": "72157d4ce989375f847f9a2c7c4d96eaf32a305bf0a11b1cb6e985ef94de9322"
+    },
+    {
+      "description": "Read deploy projects: Returns the argocd AppProjectList this console groups and filters applications by..",
+      "name": "deploy_projects",
+      "path": "deploy_projects/SKILL.md",
+      "service": "deploy",
+      "sha256": "798d089aec6b10288f25adb455666a11f9f2e74e7c1ed804c7f5433e74d296fa"
+    },
+    {
+      "description": "Read deploy session: Answers \"is this browser signed in, and if not where does it sign in?\" — the dashboard SPA's bootstrap question, and the only route on this plane that answers for an anonymous caller..",
+      "name": "deploy_session",
+      "path": "deploy_session/SKILL.md",
+      "service": "deploy",
+      "sha256": "312030e3dc2d1884278b769fa9b76082e0d918a84ab734cad22223469cd21d07"
+    },
+    {
+      "description": "Read deploy settings: Returns the argocd AuthSettings object the dashboard SPA awaits before its first render..",
+      "name": "deploy_settings",
+      "path": "deploy_settings/SKILL.md",
+      "service": "deploy",
+      "sha256": "f3bd1c2b4bce53269087a84a80b51e7f4711c1eecab1b7a31c76ff627a206a5b"
+    },
+    {
+      "description": "Read deploy stream: Live application fleet updates as Server-Sent Events, Live resource tree for one application, as Server-Sent Events.",
+      "name": "deploy_stream",
+      "path": "deploy_stream/SKILL.md",
+      "service": "deploy",
+      "sha256": "adecfb838e06b3c76bffd66e423b8802aae6b25cf5a74d3f09686b14d02dbdc2"
+    },
+    {
+      "description": "Read deploy version: Returns the argocd VersionMessage the dashboard SPA reads at bootstrap..",
+      "name": "deploy_version",
+      "path": "deploy_version/SKILL.md",
+      "service": "deploy",
+      "sha256": "4c50ef1a7d1aae4fb7c918bca509602227a1e93d926b653b2bd25463fc0c0472"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

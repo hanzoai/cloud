@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read crm applications: Returns the org's Startup Program applications, newest first., Returns one Startup Program application with its AI screen and stage history..",
+      "name": "crm_applications",
+      "path": "crm_applications/SKILL.md",
+      "service": "crm",
+      "sha256": "1aa84d5df30269f1a47d08a825775d59acec8e4c0a155d9f147d85c42e2a92a2"
+    },
+    {
+      "description": "Read crm companies: Returns the caller org's companies, most recently updated first., Returns one of the caller org's companies..",
+      "name": "crm_companies",
+      "path": "crm_companies/SKILL.md",
+      "service": "crm",
+      "sha256": "54cb6562408ae7267a1c16ff7306b418530f9ebc9990d0d87d1e5fa5c27892fd"
+    },
+    {
+      "description": "Read crm contacts: Returns the caller org's contacts, most recently updated first., Returns one of the caller org's contacts..",
+      "name": "crm_contacts",
+      "path": "crm_contacts/SKILL.md",
+      "service": "crm",
+      "sha256": "b915fa652e727ac1ca18647a0cfb331980a371fc2f53f597d8c67d0eec5ee457"
+    },
+    {
+      "description": "Read crm opportunities: Returns the caller org's deals, most recently updated first., Returns one of the caller org's deals..",
+      "name": "crm_opportunities",
+      "path": "crm_opportunities/SKILL.md",
+      "service": "crm",
+      "sha256": "a9e23e1a96babe1505cd3480072dab100e78cf260c3a8c827060299907a1d609"
+    },
+    {
+      "description": "Read crm summary: Summary counts the caller org's CRM records: companies, contacts, opportunities..",
+      "name": "crm_summary",
+      "path": "crm_summary/SKILL.md",
+      "service": "crm",
+      "sha256": "c39046021b74dd4f59818354134254050de63a812e041a5ae46c10b28ac2d09c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

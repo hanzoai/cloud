@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read webhook deliveries: Returns one endpoint's per-attempt delivery log, newest first — the record of what was sent, what the subscriber answered, and how long it took..",
+      "name": "webhook_deliveries",
+      "path": "webhook_deliveries/SKILL.md",
+      "service": "webhook",
+      "sha256": "226648a8e61a7b29baf7d66e4e854f20079b1cf7575f788c03e7dce8dfcd9ebd"
+    },
+    {
+      "description": "Read webhook webhook: Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts., Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted..",
+      "name": "webhook_webhook",
+      "path": "webhook_webhook/SKILL.md",
+      "service": "webhook",
+      "sha256": "643c17ab7f782a79e2aba6f960a81df1df496a32e5bfe373c6011181a7ecd65b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,60 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read eval datasets: Is the datasets your org has, each with its name, description, metadata and timestamps., Returns one dataset of the caller's org by name, together with its live item count — the one read that answers how big the set actually is., Is the examples in one of your",
+      "name": "eval_datasets",
+      "path": "eval_datasets/SKILL.md",
+      "service": "eval",
+      "sha256": "cf35776ac4415398ece64e658bfd24981e2308deb2b972553bb2a51ca6fa77da"
+    },
+    {
+      "description": "Read eval evaluators: Is the judges your org has defined, each with its judge model, criteria and the score name it writes under..",
+      "name": "eval_evaluators",
+      "path": "eval_evaluators/SKILL.md",
+      "service": "eval",
+      "sha256": "e0c03fa650597677c7ab9ae5110ac3398a9e5ba0de32c93c407526416903e717"
+    },
+    {
+      "description": "Read eval metrics: Is your org's AI overview board over a window: totals (generations, prompt and completion tokens, cost in cents, errors, success rate, distinct models and users), a gap-filled time series, a per-model breakdown with the long tail folded into \"other\", and latenc",
+      "name": "eval_metrics",
+      "path": "eval_metrics/SKILL.md",
+      "service": "eval",
+      "sha256": "8b0edda93317daf780bbce4fe6829c02c3e01c31dad854281ebadc354ed14a0c"
+    },
+    {
+      "description": "Read eval rubrics: Is the score shapes your org has declared — each name's data type, its numeric bounds and its allowed categories..",
+      "name": "eval_rubrics",
+      "path": "eval_rubrics/SKILL.md",
+      "service": "eval",
+      "sha256": "96f63f5d16a9495f350c81c3b903558da100695ed43f659d493c716c248c8613"
+    },
+    {
+      "description": "Read eval runs: Is your past runs and how they scored — the dataset and model, the judge model, how many examples were attempted and how many scored, the average score, and when it happened..",
+      "name": "eval_runs",
+      "path": "eval_runs/SKILL.md",
+      "service": "eval",
+      "sha256": "0691e13c0af543a941a7973e1c2fc502b240e88e03bea7800652681384ff0020"
+    },
+    {
+      "description": "Read eval scores: Is the score events your org has recorded, narrowed by any of name, runName and traceId..",
+      "name": "eval_scores",
+      "path": "eval_scores/SKILL.md",
+      "service": "eval",
+      "sha256": "d52a0716181211b40b99f7461468d5e7a425bdb44796f2cb8750256ca5faa00c"
+    },
+    {
+      "description": "Read eval traces: Is the traces behind your evaluations — one per model call an evaluation made, carrying its input, output, model and timing — narrowed by any of sessionId, runName and datasetName..",
+      "name": "eval_traces",
+      "path": "eval_traces/SKILL.md",
+      "service": "eval",
+      "sha256": "1b61f8dfbeab3376c0efaf679e8a197aead570a20e5389232048fc063bb2fa05"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

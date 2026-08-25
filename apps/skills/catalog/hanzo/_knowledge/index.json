@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",
+      "name": "knowledge_connectors",
+      "path": "knowledge_connectors/SKILL.md",
+      "service": "knowledge",
+      "sha256": "8e83b097a7a569585d280c5b6a5f65ab2bc2989c36ebe0793ac9058f4884a378"
+    },
+    {
+      "description": "Read knowledge graph: Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges..",
+      "name": "knowledge_graph",
+      "path": "knowledge_graph/SKILL.md",
+      "service": "knowledge",
+      "sha256": "36ec28c8d9d2ae0f425bf7650190ee6f2527bc806133f92446a86db94815c4b0"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

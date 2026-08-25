@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read notify health: Reports that the notify send surface is mounted..",
+      "name": "notify_health",
+      "path": "notify_health/SKILL.md",
+      "service": "notify",
+      "sha256": "5753f9adbd061b829941d489000e265d818de8d4287cb34af6bf747008460bbd"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

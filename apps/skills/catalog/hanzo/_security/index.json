@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read security findings: Is the org's findings — rule, severity, path, line, masked preview and fingerprint — newest first, across scans or within one., Returns a single finding: which rule fired, where (path and line), the masked preview and the SHA-256 fingerprint of the secret ",
+      "name": "security_findings",
+      "path": "security_findings/SKILL.md",
+      "service": "security",
+      "sha256": "c98f24ebc1c823d44524e4a32d6bddb7b91465a8faa99946a34d4597f7d65bde"
+    },
+    {
+      "description": "Read security health: Reports that the scanning subsystem is serving and how many secret-detection rules the engine holds..",
+      "name": "security_health",
+      "path": "security_health/SKILL.md",
+      "service": "security",
+      "sha256": "0ac0d09f6fd6fed8297de830ea2cd3ec2d294d420ec6573ad8e31b0ecac8a775"
+    },
+    {
+      "description": "Read security rules: Is the secret-detection catalog the engine scans with..",
+      "name": "security_rules",
+      "path": "security_rules/SKILL.md",
+      "service": "security",
+      "sha256": "4fdc6a1d270b8034156442b076dbc12ea09ecac2254a2e519d0f30d575b9ac98"
+    },
+    {
+      "description": "Read security scans: Is the org's scan history, newest first, each as the same summary the submission answered — files read, findings fired, tally by severity., Returns one scan together with every finding on it, so the detail view is one round-trip rather than a list call per sc",
+      "name": "security_scans",
+      "path": "security_scans/SKILL.md",
+      "service": "security",
+      "sha256": "d07c49066ce7bc2954371bb68e75def8bb23c846891ba66982114933faa8a543"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read licensing download: Download resolves a release to its artifact, gated on a valid license..",
+      "name": "licensing_download",
+      "path": "licensing_download/SKILL.md",
+      "service": "licensing",
+      "sha256": "b47c06b5a2505aee76ee6de71002ee68bd4023a31e6949c684c2109c882bf443"
+    },
+    {
+      "description": "Read licensing healthz: Health reports which signer this deployment mints with, and in which env..",
+      "name": "licensing_healthz",
+      "path": "licensing_healthz/SKILL.md",
+      "service": "licensing",
+      "sha256": "b62cc36cdd70f05c990e717001583bfdfe7e92e2d5a691cdb7313e46d8a98f84"
+    },
+    {
+      "description": "Read licensing jwks: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
+      "name": "licensing_jwks",
+      "path": "licensing_jwks/SKILL.md",
+      "service": "licensing",
+      "sha256": "f38a225b15531b250cca1306acad0338855a6f2258d3a8a77b47b4ca758524da"
+    },
+    {
+      "description": "Read licensing pubkey: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
+      "name": "licensing_pubkey",
+      "path": "licensing_pubkey/SKILL.md",
+      "service": "licensing",
+      "sha256": "3e13cfaef6cc3c98b7b929ea132cce232ee74c56ddef4da3c2d168e9d153e823"
+    },
+    {
+      "description": "Read licensing releases: Lists the signed binary releases this deployment can serve., Reads one release's metadata: its product, version, platform and the cosign material a client verifies the binary against..",
+      "name": "licensing_releases",
+      "path": "licensing_releases/SKILL.md",
+      "service": "licensing",
+      "sha256": "af06a61e5095508d0a31654bddabf3d57aae14cf4b149928bb9be0e51087626b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

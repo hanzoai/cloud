@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read flow runs: Runs reads one workflow's recorded runs: every component build with its result, keyed by component..",
+      "name": "flow_runs",
+      "path": "flow_runs/SKILL.md",
+      "service": "flow",
+      "sha256": "063e07def6ba9bc7ae5d0352f1af931f632e23ef3728b821084442ae2b9c11ef"
+    },
+    {
+      "description": "Read flow status: Status reports whether the flow service is reachable and which version it runs..",
+      "name": "flow_status",
+      "path": "flow_status/SKILL.md",
+      "service": "flow",
+      "sha256": "6f63bbde644b4070dbda8a7711e41a8615b1f213e852c1b700d11147e1ec15c1"
+    },
+    {
+      "description": "Read flow workflows: Workflows lists the caller's workflows, paged., Workflow reads one of the caller's workflows — the full record, graph included..",
+      "name": "flow_workflows",
+      "path": "flow_workflows/SKILL.md",
+      "service": "flow",
+      "sha256": "cb38e556091268aef731097f33e666016359b6233d931a94cde05024f8cee5dc"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

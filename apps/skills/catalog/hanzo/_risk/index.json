@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read risk features: The feature catalogue: what the model reads, and what your surface carries.",
+      "name": "risk_features",
+      "path": "risk_features/SKILL.md",
+      "service": "risk",
+      "sha256": "ccef1b3fd97270371f31671b3d2a72fc0ce4dab6dc619db890d047398712dad9"
+    },
+    {
+      "description": "Read risk health: Whether the risk model plane can actually work right now.",
+      "name": "risk_health",
+      "path": "risk_health/SKILL.md",
+      "service": "risk",
+      "sha256": "02fcbc69c31a7b530c6a85ef90376eb1c252412b01fa3ae6a5d30025ab386346"
+    },
+    {
+      "description": "Read risk policy: Your organisation's decision-regime history, and which version is in force.",
+      "name": "risk_policy",
+      "path": "risk_policy/SKILL.md",
+      "service": "risk",
+      "sha256": "0fd74084f0acc5a9155b1f1eaa2455f4be9b7899fcb6d017611e14c0b8cfec9e"
+    },
+    {
+      "description": "Read risk search: Read back one exhaustive search.",
+      "name": "risk_search",
+      "path": "risk_search/SKILL.md",
+      "service": "risk",
+      "sha256": "db492ecf9a157fd577ca8a706c3ac66a08c503a79c6cf20bfd5bf53cdd385675"
+    },
+    {
+      "description": "Read risk state: Report your organisation's model: what it learned, and what it realised.",
+      "name": "risk_state",
+      "path": "risk_state/SKILL.md",
+      "service": "risk",
+      "sha256": "6a0f275f90cc956a2e87db479bda242efd5d518d78281c531c41eda79e970601"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read metrics health: How many metric series this deployment holds for your org.",
+      "name": "metrics_health",
+      "path": "metrics_health/SKILL.md",
+      "service": "metrics",
+      "sha256": "4eee251467d43ed0f6797eab20bf918da5656a81ace08540d6755aef50e43afc"
+    },
+    {
+      "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
+      "name": "metrics_logs",
+      "path": "metrics_logs/SKILL.md",
+      "service": "metrics",
+      "sha256": "93c334b9d096627a9a7a052d3cf1a3a1067578154e5840fc70a4a41ed34a4aca"
+    },
+    {
+      "description": "Read metrics query: Read your org's series back over a time range.",
+      "name": "metrics_query",
+      "path": "metrics_query/SKILL.md",
+      "service": "metrics",
+      "sha256": "4719e6e4238e1292143d8a2e5682c6625dc87279bee558f0be9a39ce2946b0bd"
+    },
+    {
+      "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
+      "name": "metrics_traces",
+      "path": "metrics_traces/SKILL.md",
+      "service": "metrics",
+      "sha256": "a3821a16c3f7615e34d483107f6d54bad02481bda4ad3cbc1881df3b58423bce"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

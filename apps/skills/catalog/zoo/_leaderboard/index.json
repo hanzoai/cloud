@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read leaderboard activity: Activity returns the per-day usage series for ONE authorized subject — the points a contribution heatmap and a timeline are drawn from, gap-filled so every day in the range is present..",
+      "name": "leaderboard_activity",
+      "path": "leaderboard_activity/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "a1a0cea2bc052132cd2b76d53938095d509c2f5ef453061ec4b628715e9fd354"
+    },
+    {
+      "description": "Read leaderboard leaderboard: Leaderboard ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page..",
+      "name": "leaderboard_leaderboard",
+      "path": "leaderboard_leaderboard/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "b35e861384fff4c1ce05e6f2548ff49cf783f2dec64af1414a9227922cd4d701"
+    },
+    {
+      "description": "Read leaderboard optin: Returns the caller's own public-listing preference and their org's, each with whether the caller may change it..",
+      "name": "leaderboard_optin",
+      "path": "leaderboard_optin/SKILL.md",
+      "service": "leaderboard",
+      "sha256": "16526d2f083f059308ba80171d3f1697ad2c1fd5a662c320dd25819a3892b48e"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

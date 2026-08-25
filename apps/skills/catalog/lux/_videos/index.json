@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read videos content: Implements GET /v1/videos/{id}/content — download the finished MP4..",
+      "name": "videos_content",
+      "path": "videos_content/SKILL.md",
+      "service": "videos",
+      "sha256": "968dbc00d89d824a77ea7a09866fc1fd791728a554767f6253c3ad36c4d1a84b"
+    },
+    {
+      "description": "Read videos videos: Implements GET /v1/videos/{id} — poll a job's status..",
+      "name": "videos_videos",
+      "path": "videos_videos/SKILL.md",
+      "service": "videos",
+      "sha256": "592531461fc5aed77db193d1c6d2550775be7e7eb09f9b80ae1dca1096b7c3a7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

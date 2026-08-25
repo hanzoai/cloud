@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read esign documents: Returns your org's documents, newest first., Returns one document with its recipients and field layout., Returns the document's full audit trail, oldest first..",
+      "name": "esign_documents",
+      "path": "esign_documents/SKILL.md",
+      "service": "esign",
+      "sha256": "9ac4eddd18920fcf2c3c3182286302e2eb18d42cd20ee31cad69a070aac376ac"
+    },
+    {
+      "description": "Read esign health: Reports whether the e-signature surface is mounted..",
+      "name": "esign_health",
+      "path": "esign_health/SKILL.md",
+      "service": "esign",
+      "sha256": "8250b2a572373a27435b6a77967ba9c0d88640a45c3c10e3910ba233294baadd"
+    },
+    {
+      "description": "Read esign o: Opens a document you were asked to sign, using your signing link..",
+      "name": "esign_o",
+      "path": "esign_o/SKILL.md",
+      "service": "esign",
+      "sha256": "3953bb323ff213e397aeed28f26e5f502abb28d6b9e5d14361192ea967ad3021"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

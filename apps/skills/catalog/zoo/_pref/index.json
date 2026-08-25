@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read pref pref: Returns the signed-in caller's OWN preference document — the theme, density and pinned nav that follow them across every Zoo surface..",
+      "name": "pref_pref",
+      "path": "pref_pref/SKILL.md",
+      "service": "pref",
+      "sha256": "6f96a53d792dcf28a54910e86d8582a452b0f4eb11b93cb487ba6b0ae92a548f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

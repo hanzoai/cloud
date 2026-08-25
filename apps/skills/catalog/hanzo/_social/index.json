@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read social accounts: Returns the org's connected accounts — each one's id, network, handle, status and timestamps, most-recently-updated first., Returns one of the org's connected accounts by id — its network, handle, status and timestamps — or 404..",
+      "name": "social_accounts",
+      "path": "social_accounts/SKILL.md",
+      "service": "social",
+      "sha256": "759cbd34f7053e2e1884e8ab926b86e2c38d0ba857589b7c85238aaade07d231"
+    },
+    {
+      "description": "Read social posts: Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first., Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external ",
+      "name": "social_posts",
+      "path": "social_posts/SKILL.md",
+      "service": "social",
+      "sha256": "2b6fd5100241ec53dc423612a406b63abd079a5e451c6a92f687f97dc6669473"
+    },
+    {
+      "description": "Read social providers: Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing..",
+      "name": "social_providers",
+      "path": "social_providers/SKILL.md",
+      "service": "social",
+      "sha256": "0df747bcc98497a6a0574c5bc54b4a53169c9ad066796b904a01647c729c4858"
+    },
+    {
+      "description": "Read social summary: Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected..",
+      "name": "social_summary",
+      "path": "social_summary/SKILL.md",
+      "service": "social",
+      "sha256": "978760e440e90f271b73669af904962cfdf716ddf1644d8bf20028ce261821c1"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

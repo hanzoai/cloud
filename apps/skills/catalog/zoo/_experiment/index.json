@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
+      "name": "experiment_assign",
+      "path": "experiment_assign/SKILL.md",
+      "service": "experiment",
+      "sha256": "7024cd80e007217e9cc57c2f2dda9c1a267de9af9729dc5ed67180ccf155aea6"
+    },
+    {
+      "description": "Read experiment experiment: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
+      "name": "experiment_experiment",
+      "path": "experiment_experiment/SKILL.md",
+      "service": "experiment",
+      "sha256": "e3d336328a6c3101b54ea10b5f7252adf3226b9e39aa05a28ee7eeec2d4e163c"
+    },
+    {
+      "description": "Read experiment health: Is whether the experiments subsystem is mounted and serving in this process..",
+      "name": "experiment_health",
+      "path": "experiment_health/SKILL.md",
+      "service": "experiment",
+      "sha256": "4c59173090630d44f7702094378df2f89c0eb41770ccdbf5d826237cc9e9e8c1"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

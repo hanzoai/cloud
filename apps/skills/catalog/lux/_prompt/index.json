@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read prompt catalog: Catalog returns the read-only starter prompt library shipped with the binary — reference content every tenant sees the same, NOT the caller's own prompts and never mixed into them..",
+      "name": "prompt_catalog",
+      "path": "prompt_catalog/SKILL.md",
+      "service": "prompt",
+      "sha256": "7b8e48843f032c2cd6a7e6499c3ef8d719613883e9761ab7e1fe918bf223201a"
+    },
+    {
+      "description": "Read prompt metrics: Metrics returns real per-prompt statistics for the caller's org: how many versions each prompt has, which one is current, and when it was created and last changed..",
+      "name": "prompt_metrics",
+      "path": "prompt_metrics/SKILL.md",
+      "service": "prompt",
+      "sha256": "8f6846aea0e50914efff5b6a100115950e7a20c16009e1e1cdd8806572aa9252"
+    },
+    {
+      "description": "Read prompt prompt: List returns the caller org's prompt library as one row per prompt: its name, type, every version number it has, its taxonomy and when it last changed., Get returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version i",
+      "name": "prompt_prompt",
+      "path": "prompt_prompt/SKILL.md",
+      "service": "prompt",
+      "sha256": "13fd8c0976f8ca37137e97e1fb7ce96e447e12edaacf552f292522bed4ab40e9"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read tel calls: Lists the calls this org has placed or received, newest first..",
+      "name": "tel_calls",
+      "path": "tel_calls/SKILL.md",
+      "service": "tel",
+      "sha256": "59ebd4e015e6255a23482ebd13a96ed2101264704df4aa1591f75c9787f96d94"
+    },
+    {
+      "description": "Read tel messages: Lists the messages this org has sent or received, newest first..",
+      "name": "tel_messages",
+      "path": "tel_messages/SKILL.md",
+      "service": "tel",
+      "sha256": "9af50faf14097e3e327a3676b8120e24af2c842d22cc2ab765c50a3123f5db94"
+    },
+    {
+      "description": "Read tel numbers: Lists the phone numbers this org HOLDS — the ones it has bought and not released., Asks the carrier what is available to buy..",
+      "name": "tel_numbers",
+      "path": "tel_numbers/SKILL.md",
+      "service": "tel",
+      "sha256": "3001b48097ca3a7f50f0bb2f4af2f604b10773ab8eb242166bef6e77ee29f148"
+    },
+    {
+      "description": "Read tel summary: Counts what this org holds on the telephony plane: its numbers, its calls and its messages..",
+      "name": "tel_summary",
+      "path": "tel_summary/SKILL.md",
+      "service": "tel",
+      "sha256": "aad5f05c0d02a6221ec87d429888f392c9cf82b1ee225627920a568a939cc01c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read usage analytics: Is the entitlement-GATED per-provider breakdown of the caller org's LLM usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads its totals from., Echoes a plan's resolved analytics entitlement so a dashboard can configure itself agai",
+      "name": "usage_analytics",
+      "path": "usage_analytics/SKILL.md",
+      "service": "usage",
+      "sha256": "621bbcd32b33f551453d2546e10fcdca514e207834af44725cda4ca11b84703a"
+    },
+    {
+      "description": "Read usage samples: Is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my plan is 47% through its 6h window, resets at 14:20\"..",
+      "name": "usage_samples",
+      "path": "usage_samples/SKILL.md",
+      "service": "usage",
+      "sha256": "c45d5cb06c9fc82c67140d798c005801719bf22e40cba7071e99ee311d2d4ec3"
+    },
+    {
+      "description": "Read usage summary: Answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse, and the caller's OWN linked provider accounts beside the org's Zoo-routed u",
+      "name": "usage_summary",
+      "path": "usage_summary/SKILL.md",
+      "service": "usage",
+      "sha256": "c4ba9543ba3005cf5bf9c49ba979ed696014db50464fbea05a49461e45e024b6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

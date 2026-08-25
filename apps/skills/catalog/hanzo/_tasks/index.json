@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read tasks tasks: Redirect to the tasks API root, Read workflow state from the durable engine.",
+      "name": "tasks_tasks",
+      "path": "tasks_tasks/SKILL.md",
+      "service": "tasks",
+      "sha256": "1ab22d6b3ca88b65cf3eb6a2dbcc4b34c270338b8f80b4beee913a4461e6f60f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

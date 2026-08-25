@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read world limits: Echoes a World plan's rate limits, alert quota and model-API grant, read straight from the live @hanzo/plans catalog, so agents and dashboards configure themselves against the catalog instead of hardcoding tier numbers..",
+      "name": "world_limits",
+      "path": "world_limits/SKILL.md",
+      "service": "world",
+      "sha256": "91ced3ab9d39f7c6c19452bb79ea37225ee7223ccf1db37e8512223eecff24ec"
+    },
+    {
+      "description": "Read world news: Returns the caller's merged world-news feed: every source their project's pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed — fetched concurrently, narrowed by the pipeline's keyword/region/source filters, deduplicated by link and so",
+      "name": "world_news",
+      "path": "world_news/SKILL.md",
+      "service": "world",
+      "sha256": "c137a0063c835cc56776d1abe72693cbb8daf573428da9de0fa2cb394a3e5066"
+    },
+    {
+      "description": "Read world pipeline: Returns the caller project's news pipeline: which feeds it reads and how the merged result is filtered..",
+      "name": "world_pipeline",
+      "path": "world_pipeline/SKILL.md",
+      "service": "world",
+      "sha256": "08bf44faccf8d3345dba37aaea760b2e3929bd12c00d05bb8cf38b95b07e062b"
+    },
+    {
+      "description": "Read world stream: Live news refreshes for the caller's org and project, as Server-Sent Events..",
+      "name": "world_stream",
+      "path": "world_stream/SKILL.md",
+      "service": "world",
+      "sha256": "0f1859d291f8e2bd3e0cc7fbccb380f099bce16a64a924d21eb2bcd081acdaa9"
+    },
+    {
+      "description": "Read world world: Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on..",
+      "name": "world_world",
+      "path": "world_world/SKILL.md",
+      "service": "world",
+      "sha256": "7a38f3e4037223b96c36fa19484245295bee088c7924b52eb7cb028ce96dde45"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

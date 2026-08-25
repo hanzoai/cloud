@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read marketplace listings: Returns the listings the caller's own org has published — what this org is offering, not what it can buy..",
+      "name": "marketplace_listings",
+      "path": "marketplace_listings/SKILL.md",
+      "service": "marketplace",
+      "sha256": "f84aa35d4ac319cb23066cf6679a0bd10830e48521b67e6aa27ec67bf6a7b8f8"
+    },
+    {
+      "description": "Read marketplace marketplace: Discover lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope..",
+      "name": "marketplace_marketplace",
+      "path": "marketplace_marketplace/SKILL.md",
+      "service": "marketplace",
+      "sha256": "8b65f1e77f5e4f7ec296fd8637d985cf9cabcba9ad3fb5c06bb3f45a73dbf05f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

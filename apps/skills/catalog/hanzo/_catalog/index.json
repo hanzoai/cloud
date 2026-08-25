@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read catalog catalog: Browse searches AND browses the cross-org catalog: every project, app and site the fleet has built, whichever org built it..",
+      "name": "catalog_catalog",
+      "path": "catalog_catalog/SKILL.md",
+      "service": "catalog",
+      "sha256": "e5dc03b224161f6bc5bb925e7ea9ac848cd8ab2a0cc5e5603722d3d32d3940af"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

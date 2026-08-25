@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read node connect: The socket a bot node dials and holds open to become invokable..",
+      "name": "node_connect",
+      "path": "node_connect/SKILL.md",
+      "service": "node",
+      "sha256": "337ccf938ca0b69e3a4f7076a211b1dae64f93c6c1e53606f4c048a6b58a4be8"
+    },
+    {
+      "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
+      "name": "node_node",
+      "path": "node_node/SKILL.md",
+      "service": "node",
+      "sha256": "acaf8dad364866d2c144eeff77aa7ccbfb43f0734114aa9919ae9c5e5cb3e2b7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

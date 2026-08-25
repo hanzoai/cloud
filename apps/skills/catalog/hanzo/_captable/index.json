@@ -1,0 +1,88 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 11,
+  "skills": [
+    {
+      "description": "Read captable classes: Returns the caller org's share classes, in creation order..",
+      "name": "captable_classes",
+      "path": "captable_classes/SKILL.md",
+      "service": "captable",
+      "sha256": "04932d617c2903f451759ddccd4e9683b7ba625232bbbed7d509f65df4236169"
+    },
+    {
+      "description": "Read captable company: Returns the caller org's cap-table company record..",
+      "name": "captable_company",
+      "path": "captable_company/SKILL.md",
+      "service": "captable",
+      "sha256": "895229fee27955b17b08e796eebf5fd299eec8a0f87fa7f490cd2239fe2a0794"
+    },
+    {
+      "description": "Read captable convertibles: Returns the caller org's convertible notes, newest first..",
+      "name": "captable_convertibles",
+      "path": "captable_convertibles/SKILL.md",
+      "service": "captable",
+      "sha256": "3928d74d4d7580031a7f018a5d09af131d71d0942bbc67148491cead532833af"
+    },
+    {
+      "description": "Read captable investments: Returns the caller org's investments, newest first..",
+      "name": "captable_investments",
+      "path": "captable_investments/SKILL.md",
+      "service": "captable",
+      "sha256": "b3812c0ce590e2bc6182a31060744e765a10f2a3b77c6578d71f759af67e836a"
+    },
+    {
+      "description": "Read captable options: Returns the caller org's option grants, newest first..",
+      "name": "captable_options",
+      "path": "captable_options/SKILL.md",
+      "service": "captable",
+      "sha256": "3da87e4a2191f18786b9e05e20a52771965b3b130d1c35ae037c7b303e8e5966"
+    },
+    {
+      "description": "Read captable plans: Returns the caller org's equity plans, newest first..",
+      "name": "captable_plans",
+      "path": "captable_plans/SKILL.md",
+      "service": "captable",
+      "sha256": "4255f871c6ba67ad2bce3dd565a8da7fc637e3cc1e9e3705736027c6ea491960"
+    },
+    {
+      "description": "Read captable rounds: Returns the caller org's fundraising rounds, newest first., Returns one of the caller org's fundraising rounds together with every investment written into it, oldest first..",
+      "name": "captable_rounds",
+      "path": "captable_rounds/SKILL.md",
+      "service": "captable",
+      "sha256": "22b990e094bf18618f78ec471b90de0679139c38d2fc9871549007e7021838f4"
+    },
+    {
+      "description": "Read captable safes: Returns the caller org's SAFEs, newest first..",
+      "name": "captable_safes",
+      "path": "captable_safes/SKILL.md",
+      "service": "captable",
+      "sha256": "41e5ddcc38686e515fa06247c9615b37c9a6b48cfd5040cfc63c776834844396"
+    },
+    {
+      "description": "Read captable shares: Returns the caller org's share certificates, newest first..",
+      "name": "captable_shares",
+      "path": "captable_shares/SKILL.md",
+      "service": "captable",
+      "sha256": "888e546bb8a8d45f604d916e0065f752789da7887e913332c3f5a1a015d08b53"
+    },
+    {
+      "description": "Read captable stakeholders: Returns the caller org's stakeholders, newest first..",
+      "name": "captable_stakeholders",
+      "path": "captable_stakeholders/SKILL.md",
+      "service": "captable",
+      "sha256": "6aaa822070aee524e5874a02dd86135efa8f8599cf523110acde07e76a658125"
+    },
+    {
+      "description": "Read captable summary: Computes the caller org's cap table..",
+      "name": "captable_summary",
+      "path": "captable_summary/SKILL.md",
+      "service": "captable",
+      "sha256": "19368b9aeb9dc7a4f94a1cfad99bb9cafc6aa2f75cd09681f10205bbb343e663"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

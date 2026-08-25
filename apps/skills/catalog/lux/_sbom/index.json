@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read sbom health: Health is a pure liveness probe: the service is up; datastore reflects whether the datastore store is connected..",
+      "name": "sbom_health",
+      "path": "sbom_health/SKILL.md",
+      "service": "sbom",
+      "sha256": "df554d7e35c2a436b0f10f8c391122e30e2e9f6289d722606bbc6ad6fae0fbe6"
+    },
+    {
+      "description": "Read sbom sbom: Resolve everything inside a container image.",
+      "name": "sbom_sbom",
+      "path": "sbom_sbom/SKILL.md",
+      "service": "sbom",
+      "sha256": "71246f144ea4a22175b116691456d0451402320a1d1a0215b543102b4ea0f597"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

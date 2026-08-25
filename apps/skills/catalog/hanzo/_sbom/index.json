@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read sbom health: Health is a pure liveness probe: the service is up; datastore reflects whether the datastore store is connected..",
+      "name": "sbom_health",
+      "path": "sbom_health/SKILL.md",
+      "service": "sbom",
+      "sha256": "ee223fe69dd9fdf28b1da903f4354329675f8daeee47a4944599ea6f8d66efe1"
+    },
+    {
+      "description": "Read sbom sbom: Resolve everything inside a container image.",
+      "name": "sbom_sbom",
+      "path": "sbom_sbom/SKILL.md",
+      "service": "sbom",
+      "sha256": "f94c328acc0732a7c7ae09e4eb9fc913c62b5865b864c47bee3fb1d6deb058ee"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

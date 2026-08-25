@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read web3 chains: Reports the chains this deployment can reach., Reports one chain and whether its upstream is answering..",
+      "name": "web3_chains",
+      "path": "web3_chains/SKILL.md",
+      "service": "web3",
+      "sha256": "4735b5e94798f43acecacf79497b18ab1e73235af38599879a55ec6d5da2b0ac"
+    },
+    {
+      "description": "Read web3 tokens: Reads an address's native balance on a chain..",
+      "name": "web3_tokens",
+      "path": "web3_tokens/SKILL.md",
+      "service": "web3",
+      "sha256": "5b17b05df2026799594f6241daaf643618f6c96163fb28614dffbf5b07234b29"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read security findings: Is the org's findings — rule, severity, path, line, masked preview and fingerprint — newest first, across scans or within one., Returns a single finding: which rule fired, where (path and line), the masked preview and the SHA-256 fingerprint of the secret ",
+      "name": "security_findings",
+      "path": "security_findings/SKILL.md",
+      "service": "security",
+      "sha256": "231dca7cfaebe984f94d2f8e61277f8a6bc8ee86bb02690a7afa804085adfc41"
+    },
+    {
+      "description": "Read security health: Reports that the scanning subsystem is serving and how many secret-detection rules the engine holds..",
+      "name": "security_health",
+      "path": "security_health/SKILL.md",
+      "service": "security",
+      "sha256": "f580c676273b64409c0db67af0eee04c52090446ab5a00b5e24ab7f4798c3f21"
+    },
+    {
+      "description": "Read security rules: Is the secret-detection catalog the engine scans with..",
+      "name": "security_rules",
+      "path": "security_rules/SKILL.md",
+      "service": "security",
+      "sha256": "8e51c2f4c6b74892e9c9a670a2532b2f77752518176ab90a26bd20132c6a4b24"
+    },
+    {
+      "description": "Read security scans: Is the org's scan history, newest first, each as the same summary the submission answered — files read, findings fired, tally by severity., Returns one scan together with every finding on it, so the detail view is one round-trip rather than a list call per sc",
+      "name": "security_scans",
+      "path": "security_scans/SKILL.md",
+      "service": "security",
+      "sha256": "8775b9ae6559966534465d2458b1eb7d0859db9351d5aaadf4d1937d50db013b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

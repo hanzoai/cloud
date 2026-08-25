@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read mq health: Reports whether the message plane behind this surface answers..",
+      "name": "mq_health",
+      "path": "mq_health/SKILL.md",
+      "service": "mq",
+      "sha256": "16d77c9e22cef0c2ed787361e5580465a022a1a6e75f01697bff0be42b088e31"
+    },
+    {
+      "description": "Read mq info: Returns the broker's identity and the org's stream count..",
+      "name": "mq_info",
+      "path": "mq_info/SKILL.md",
+      "service": "mq",
+      "sha256": "02a16d5eaf980a8da5f0f986e82b110c4d651cd31405814d4986519f3a736752"
+    },
+    {
+      "description": "Read mq stream: Returns the org's streams, name-ordered, with their live state., Returns one stream's configuration and live state., Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence..",
+      "name": "mq_stream",
+      "path": "mq_stream/SKILL.md",
+      "service": "mq",
+      "sha256": "2ac1cba86a678fea7466b2bfecbbb7bbb8ffcea3aa6d3dc96f45d3f95f7d41af"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

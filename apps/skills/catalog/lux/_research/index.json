@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read research artifacts: Returns the caller org's research-diary feed newest-first — the snapshots and reports tied to its runs, as metadata and content addresses; the bytes themselves are fetched by hash., Fetch one recorded artifact's bytes by its content hash..",
+      "name": "research_artifacts",
+      "path": "research_artifacts/SKILL.md",
+      "service": "research",
+      "sha256": "33be0abd0da9d3137f35df6a76bdaf2b0cedb96d409331ebaf742ac3ae59df8e"
+    },
+    {
+      "description": "Read research experiments: Returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history..",
+      "name": "research_experiments",
+      "path": "research_experiments/SKILL.md",
+      "service": "research",
+      "sha256": "08d42c505c5dc59a074dcf4f418ef562f4161f6e56ed4b0b405fadb7397c70ab"
+    },
+    {
+      "description": "Read research projects: Returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view..",
+      "name": "research_projects",
+      "path": "research_projects/SKILL.md",
+      "service": "research",
+      "sha256": "dbbc0bf993fcba1ce2bf01a3b50711ca000b787c77cd67c07d04665af902521a"
+    },
+    {
+      "description": "Read research totals: Returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target..",
+      "name": "research_totals",
+      "path": "research_totals/SKILL.md",
+      "service": "research",
+      "sha256": "a24d74ee110a7af10e65d36c9468ad7c68599efa6761933b3f86afe2e34aa13f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

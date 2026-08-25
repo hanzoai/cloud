@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read crm applications: Returns the org's Startup Program applications, newest first., Returns one Startup Program application with its AI screen and stage history..",
+      "name": "crm_applications",
+      "path": "crm_applications/SKILL.md",
+      "service": "crm",
+      "sha256": "e3d5ffb272cf1f742c77eb00434ce2316d73412a39a83fa8e22a04835982d4cc"
+    },
+    {
+      "description": "Read crm companies: Returns the caller org's companies, most recently updated first., Returns one of the caller org's companies..",
+      "name": "crm_companies",
+      "path": "crm_companies/SKILL.md",
+      "service": "crm",
+      "sha256": "25abd58e667d34e68ae46941f623914d5eae5941a2f07500c6f3ee5a54a718f8"
+    },
+    {
+      "description": "Read crm contacts: Returns the caller org's contacts, most recently updated first., Returns one of the caller org's contacts..",
+      "name": "crm_contacts",
+      "path": "crm_contacts/SKILL.md",
+      "service": "crm",
+      "sha256": "2adf3619c2c9ea6cedc934ee24d4cb876ba38a4862e5fc2d1c471c3ee8c39499"
+    },
+    {
+      "description": "Read crm opportunities: Returns the caller org's deals, most recently updated first., Returns one of the caller org's deals..",
+      "name": "crm_opportunities",
+      "path": "crm_opportunities/SKILL.md",
+      "service": "crm",
+      "sha256": "ced1dad985094f1710fc8a88fc27057af265d39b9f4e5879dae0b65fff2f8f8f"
+    },
+    {
+      "description": "Read crm summary: Summary counts the caller org's CRM records: companies, contacts, opportunities..",
+      "name": "crm_summary",
+      "path": "crm_summary/SKILL.md",
+      "service": "crm",
+      "sha256": "64626e50941ee3a25be7f39799544a38c214368f5743adf696cff1caf82bf375"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

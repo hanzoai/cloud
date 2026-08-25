@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read index health: Reports whether the search plane can serve..",
+      "name": "index_health",
+      "path": "index_health/SKILL.md",
+      "service": "index",
+      "sha256": "9944d859d384ef6c64965730c7dc89d449f3ac68dc03cc006b3e74e0663e61f2"
+    },
+    {
+      "description": "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index..",
+      "name": "index_indexes",
+      "path": "index_indexes/SKILL.md",
+      "service": "index",
+      "sha256": "2786fbb8447888486f070b5740425f27c25c9d6989598833a45b6a9b296b6918"
+    },
+    {
+      "description": "Read index stats: Counts the documents in each of your indexes..",
+      "name": "index_stats",
+      "path": "index_stats/SKILL.md",
+      "service": "index",
+      "sha256": "9a4d2775cb5c9e33d80dd2d6220cc388258fe3b2c4253c913f471b3aa1110f12"
+    },
+    {
+      "description": "Read index tasks: Checks a write task, which has already finished..",
+      "name": "index_tasks",
+      "path": "index_tasks/SKILL.md",
+      "service": "index",
+      "sha256": "2fb90b50f9c6a77789285224c9d194724109dad2e1eb5ce1a1f6f40957d0b07f"
+    },
+    {
+      "description": "Read index version: Identifies the search implementation answering..",
+      "name": "index_version",
+      "path": "index_version/SKILL.md",
+      "service": "index",
+      "sha256": "4176984230917012857006e3fb6fa50e97062a3e2bef1ef1a110957ab403c690"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

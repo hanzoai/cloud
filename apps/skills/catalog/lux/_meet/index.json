@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read meet health: Health reports whether the office can mint join tokens..",
+      "name": "meet_health",
+      "path": "meet_health/SKILL.md",
+      "service": "meet",
+      "sha256": "a0a4fc9c474bcb8d3fe5746c53fdc297625936442a0bcce53a7ada94e01e4bd2"
+    },
+    {
+      "description": "Read meet record: What is being recorded in a room, and where the file goes.",
+      "name": "meet_record",
+      "path": "meet_record/SKILL.md",
+      "service": "meet",
+      "sha256": "906de68dcbc72d42e8d2edc7e8227f95bf044fe52f90ce64296b6366894da06e"
+    },
+    {
+      "description": "Read meet session: What this caller may open a room in.",
+      "name": "meet_session",
+      "path": "meet_session/SKILL.md",
+      "service": "meet",
+      "sha256": "f95036b07b3b8d928cfab3e58fa9329e4858b1b59d2181f4be2120bb7ed87aa7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

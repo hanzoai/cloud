@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read admission waitlist: Reports whether ONE host is currently gated by the launch waitlist..",
+      "name": "admission_waitlist",
+      "path": "admission_waitlist/SKILL.md",
+      "service": "admission",
+      "sha256": "aff8ff0d825dd8df195b73c823676cbb291068fdd8ae8940610ccf9aa0bdfa7f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

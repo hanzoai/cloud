@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read ml health: Whether model serving can actually work right now.",
+      "name": "ml_health",
+      "path": "ml_health/SKILL.md",
+      "service": "ml",
+      "sha256": "19191a72f9fdc00b7ee45fed61d48c04532b680c7897206b74bea3d59b64817d"
+    },
+    {
+      "description": "Read ml models: Lists the inference models deployed in the caller's org., Returns one deployed inference model..",
+      "name": "ml_models",
+      "path": "ml_models/SKILL.md",
+      "service": "ml",
+      "sha256": "0df474355d253bb1da57349f29f243549b9c378d5f27182c4dd418476041a534"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read kv history: History returns one key's retained revisions, oldest first — every put and every delete marker up to the bucket's History depth..",
+      "name": "kv_history",
+      "path": "kv_history/SKILL.md",
+      "service": "kv",
+      "sha256": "b4d7b961adcc67678f0ad6f671a2c72dd8c832cfdacfe366759efa54347febe6"
+    },
+    {
+      "description": "Read kv kv: Get returns one key's current value and revision..",
+      "name": "kv_kv",
+      "path": "kv_kv/SKILL.md",
+      "service": "kv",
+      "sha256": "95dc71ed89f99ca1e2a24475197693d52c970df6e041b002a85bd2bd65466236"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

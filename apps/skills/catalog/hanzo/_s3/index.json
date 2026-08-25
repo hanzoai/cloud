@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly.",
+      "name": "s3_buckets",
+      "path": "s3_buckets/SKILL.md",
+      "service": "s3",
+      "sha256": "50b08b225c64462acd3ee1306d96a92cf39d80406854733a6050f2f0132068b6"
+    },
+    {
+      "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
+      "name": "s3_health",
+      "path": "s3_health/SKILL.md",
+      "service": "s3",
+      "sha256": "6dd139a31e685a2a4fa0ac8e4be660a8a50068abfe3ad2f0362e461970ef5d86"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

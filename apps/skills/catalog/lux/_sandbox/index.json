@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read sandbox fs: Read a file, or list a directory.",
+      "name": "sandbox_fs",
+      "path": "sandbox_fs/SKILL.md",
+      "service": "sandbox",
+      "sha256": "1e0afd73b455a3299206d1b4858bf6e12b4f0b8de12b1b172ab06eb641a0f875"
+    },
+    {
+      "description": "Read sandbox sandbox: Lists the caller org's sandboxes, newest first., Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends..",
+      "name": "sandbox_sandbox",
+      "path": "sandbox_sandbox/SKILL.md",
+      "service": "sandbox",
+      "sha256": "6940b684c23b05375c77ad4c20cc59fe19ee1c291e9822a525fd7e1715c9ad82"
+    },
+    {
+      "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",
+      "name": "sandbox_screen",
+      "path": "sandbox_screen/SKILL.md",
+      "service": "sandbox",
+      "sha256": "93fec148aca0f72ec45d280c488309fce94e12138b23ef486b8ebd2b3cae544c"
+    },
+    {
+      "description": "Read sandbox terminal: The terminal, as a page, The terminal, as a socket.",
+      "name": "sandbox_terminal",
+      "path": "sandbox_terminal/SKILL.md",
+      "service": "sandbox",
+      "sha256": "620d95836187e41b5fff871311f6dc328c0bbfd359b98f20a42cf5696de521b4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

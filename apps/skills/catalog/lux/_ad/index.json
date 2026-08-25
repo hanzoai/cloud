@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read ad campaigns: Returns the caller org's ad campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
+      "name": "ad_campaigns",
+      "path": "ad_campaigns/SKILL.md",
+      "service": "ad",
+      "sha256": "8d848cd154650e773ee5abc72e179db9a0cb4e2da1fe652f3a6e2e84eacb1eb1"
+    },
+    {
+      "description": "Read ad summary: Rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them..",
+      "name": "ad_summary",
+      "path": "ad_summary/SKILL.md",
+      "service": "ad",
+      "sha256": "fd0d9ab85207a7cd5d5bbf7dfab21cb6663bb0cead9faf70520dfed19ac01428"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

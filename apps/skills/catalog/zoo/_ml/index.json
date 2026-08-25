@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read ml health: Whether model serving can actually work right now.",
+      "name": "ml_health",
+      "path": "ml_health/SKILL.md",
+      "service": "ml",
+      "sha256": "874ecba9efb583a8b7e2004584dd44cd9e0c0fce15a750f9b9487dc9772972b9"
+    },
+    {
+      "description": "Read ml models: Lists the inference models deployed in the caller's org., Returns one deployed inference model..",
+      "name": "ml_models",
+      "path": "ml_models/SKILL.md",
+      "service": "ml",
+      "sha256": "2916eb4d6c3d154efbd63b4373c31bc48c04c2d5a1c954d53f4bbe307c5d787b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

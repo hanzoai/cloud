@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read authz health: Liveness of the policy engine.",
+      "name": "authz_health",
+      "path": "authz_health/SKILL.md",
+      "service": "authz",
+      "sha256": "36de52c33923e267880ae832d0b64fa0de8fc8f2aed12696116a58a7981a3a13"
+    },
+    {
+      "description": "Read authz readyz: Readiness of the policy engine.",
+      "name": "authz_readyz",
+      "path": "authz_readyz/SKILL.md",
+      "service": "authz",
+      "sha256": "74e4a2a336574b053354f6a0ddb62d0448aeec2b74ba6c1fbf07b77929b61e5c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

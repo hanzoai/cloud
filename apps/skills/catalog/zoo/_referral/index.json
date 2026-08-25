@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read referral referral: Returns the caller's referral code, share link and the referrals they have made..",
+      "name": "referral_referral",
+      "path": "referral_referral/SKILL.md",
+      "service": "referral",
+      "sha256": "5f079ee02360a6d0fc7c870d65555a0be0d66829aa9374264c3b950c443248fb"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

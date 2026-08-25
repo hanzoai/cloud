@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read entitlement entitlement: Projection reports which console apps the CALLER's org may open, and the plan slug that decides it..",
+      "name": "entitlement_entitlement",
+      "path": "entitlement_entitlement/SKILL.md",
+      "service": "entitlement",
+      "sha256": "e69817494ab009e7e7347c35b873b71ad07b8cf660ec434739b78cc3e77f3525"
+    },
+    {
+      "description": "Read entitlement orgs: Get lists the products an org has ENABLED — its own intent, which the console's paid-product sidebar reads to decide what to show..",
+      "name": "entitlement_orgs",
+      "path": "entitlement_orgs/SKILL.md",
+      "service": "entitlement",
+      "sha256": "77d268db4b706dfc005d2ce9c49f5107bc5ad39700c1f3a4ead3e569c9a3d134"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

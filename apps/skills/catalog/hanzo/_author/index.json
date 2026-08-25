@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read author author: Returns the caller's author-program dashboard: enrolment status, linked forge login, verified repositories and owner-wide claims, recorded deploys, accrued / pending / paid royalty, and the payout history..",
+      "name": "author_author",
+      "path": "author_author/SKILL.md",
+      "service": "author",
+      "sha256": "4bd5316e6d33b1e9091f6306d045dca987c4d582739b8445262f79666266e21d"
+    },
+    {
+      "description": "Read author basis: Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed wh",
+      "name": "author_basis",
+      "path": "author_basis/SKILL.md",
+      "service": "author",
+      "sha256": "6e198e1560cb11e0c98558115e308f0fd5c87abbb359a8faaf8528bb9c89c091"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

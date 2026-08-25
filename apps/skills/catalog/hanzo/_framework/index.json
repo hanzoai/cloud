@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read framework doctypes: Returns every DocType defined in the caller's org., Returns one DocType definition — its fields, naming rule, permissions and lifecycle flags..",
+      "name": "framework_doctypes",
+      "path": "framework_doctypes/SKILL.md",
+      "service": "framework",
+      "sha256": "7fdf2748ac5c2c1fccdd39541ab6d20df3d348b68f21765bee3618de86c99388"
+    },
+    {
+      "description": "Read framework framework: Returns the caller org's documents of one DocType, filtered, ordered and projected by the query., Returns one document by name, with Password fields redacted..",
+      "name": "framework_framework",
+      "path": "framework_framework/SKILL.md",
+      "service": "framework",
+      "sha256": "5cda9106b8e526d096c74e56ab653a466c646dc86cc3486ad79b493b2625ed7d"
+    },
+    {
+      "description": "Read framework modules: Returns every app lane compiled into this deployment and the DocTypes each one installs., Returns one app lane's install state for the caller's org: the DocTypes the lane declares, and which of them already exist in the org..",
+      "name": "framework_modules",
+      "path": "framework_modules/SKILL.md",
+      "service": "framework",
+      "sha256": "ba758b95847d447c6fc02657b17dff007c34049362fc71666b2442ed1d7c8e58"
+    },
+    {
+      "description": "Read framework roles: Returns every (user, role) assignment in the caller's org..",
+      "name": "framework_roles",
+      "path": "framework_roles/SKILL.md",
+      "service": "framework",
+      "sha256": "a4e739c6bac8aa97da9ba50e6600728d92bef8b19532a2322f60fa5f69ae6f6d"
+    },
+    {
+      "description": "Read framework summary: Reports how much of the DocType surface the caller's org uses: how many DocTypes it has defined, and how many documents exist across them..",
+      "name": "framework_summary",
+      "path": "framework_summary/SKILL.md",
+      "service": "framework",
+      "sha256": "14e7302870c06b99e30ae4e1b01e5bd22219183a3173eaecc970ab1756359f51"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read auto connectors: Connectors returns the connector catalogue..",
+      "name": "auto_connectors",
+      "path": "auto_connectors/SKILL.md",
+      "service": "auto",
+      "sha256": "716cc811c48198d8ea3a22c5345418b7e961476c4014b887710e66f241f16c65"
+    },
+    {
+      "description": "Read auto flows: Returns the caller org's automations, most-recently-updated first., Returns one automation and its latest version., Returns one flow's versions, newest first..",
+      "name": "auto_flows",
+      "path": "auto_flows/SKILL.md",
+      "service": "auto",
+      "sha256": "85945edf4e10b32bf0d9e602a7a8db3bb1679ba22b9e5b1fc558cafdef88c2f9"
+    },
+    {
+      "description": "Read auto runs: Returns the caller org's run history, newest first., Returns one run..",
+      "name": "auto_runs",
+      "path": "auto_runs/SKILL.md",
+      "service": "auto",
+      "sha256": "bf09a073d230c50bbdd4164e4daf37f376129719caf350c67c4a7d5412c6d19d"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

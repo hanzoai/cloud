@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read author author: Returns the caller's author-program dashboard: enrolment status, linked forge login, verified repositories and owner-wide claims, recorded deploys, accrued / pending / paid royalty, and the payout history..",
+      "name": "author_author",
+      "path": "author_author/SKILL.md",
+      "service": "author",
+      "sha256": "9b03fa6ee1dc083361fe6aa7011992a5d31cb9dce5f9c590a5efd33bc201770d"
+    },
+    {
+      "description": "Read author basis: Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed wh",
+      "name": "author_basis",
+      "path": "author_basis/SKILL.md",
+      "service": "author",
+      "sha256": "9ae7574dde9215ecfc5cf04112faa8bc747a2ef89e754be73481826e2b041ec4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

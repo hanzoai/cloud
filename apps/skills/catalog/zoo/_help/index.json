@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read help articles: Returns the public knowledge base: the help center's Published, publicly-visible articles as cards., Returns one public article by slug, with its body..",
+      "name": "help_articles",
+      "path": "help_articles/SKILL.md",
+      "service": "help",
+      "sha256": "271a93a53c291c4707d88c986ff98739c3658330b97665ca1f29b4c0a3788d3e"
+    },
+    {
+      "description": "Read help categories: Returns the knowledge-base sections for the public center's navigation — but ONLY the sections that front at least one Published, public article, so an internal (agent-only) category name or description never leaks..",
+      "name": "help_categories",
+      "path": "help_categories/SKILL.md",
+      "service": "help",
+      "sha256": "c9d07052e0337cb7a07a3eb91a833baf46ae45e15f10123e50670c7d92e4598b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read sandbox fs: Read a file, or list a directory.",
+      "name": "sandbox_fs",
+      "path": "sandbox_fs/SKILL.md",
+      "service": "sandbox",
+      "sha256": "bdccadba0912e3f16e9a77f74768c12968864ead85574742fbd01d08a94a5a37"
+    },
+    {
+      "description": "Read sandbox sandbox: Lists the caller org's sandboxes, newest first., Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends..",
+      "name": "sandbox_sandbox",
+      "path": "sandbox_sandbox/SKILL.md",
+      "service": "sandbox",
+      "sha256": "8536252150a02bfb213fbd8ee03b18dc4627528ad93843871bee97e14a7bef82"
+    },
+    {
+      "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",
+      "name": "sandbox_screen",
+      "path": "sandbox_screen/SKILL.md",
+      "service": "sandbox",
+      "sha256": "c27c8f9d124754ca743b8794e96f8192e40f9e13aca3f8f38a329c2cfbd1226f"
+    },
+    {
+      "description": "Read sandbox terminal: The terminal, as a page, The terminal, as a socket.",
+      "name": "sandbox_terminal",
+      "path": "sandbox_terminal/SKILL.md",
+      "service": "sandbox",
+      "sha256": "3d6ce39ffebec7d45cf4e5a9c06edd6995047f84de5de0e8773debfee1cfb70f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

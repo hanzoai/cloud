@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read domain availability: Checks exact names rather than searching for them, and answers the same quote shape search does — purchasable, premium, first-term and renewal price in cents..",
+      "name": "domain_availability",
+      "path": "domain_availability/SKILL.md",
+      "service": "domain",
+      "sha256": "cf8be66a114cba0e564edb7fbe3ed8bbc70645545a2ac0b2942eddcf30dddfa2"
+    },
+    {
+      "description": "Read domain domains: Is the domains your org has bought here, newest registration first, each carrying the name, when it was registered, when it expires, what the org paid, the registrar order id and the nameservers it points at..",
+      "name": "domain_domains",
+      "path": "domain_domains/SKILL.md",
+      "service": "domain",
+      "sha256": "c4c1943c37eca40e0d4aee1e0fcf1c55632bc1d9f64049d1bc16f18aae8aca98"
+    },
+    {
+      "description": "Read domain health: Reports registrar reachability honestly: ok only when the wholesale credentials are present AND name.com accepted them on a live call made while you waited..",
+      "name": "domain_health",
+      "path": "domain_health/SKILL.md",
+      "service": "domain",
+      "sha256": "dd25e9f00ba0bf45086ba6decc2e8b2352acd37fc6f0fb2c3c4c806203de55a6"
+    },
+    {
+      "description": "Read domain search: Finds names built from the keyword q, plus the registrar's alternate-TLD suggestions, and answers a quote for each: the name, whether it is purchasable, whether it is premium, the first-term and renewal price in cents, and the TLD..",
+      "name": "domain_search",
+      "path": "domain_search/SKILL.md",
+      "service": "domain",
+      "sha256": "436c0eb464c84b80f50e1ea70f0488afafa54a3a85cd316a43ebf1389c5841d9"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
