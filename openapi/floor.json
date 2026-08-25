@@ -1,6 +1,6 @@
 {
-  "paths": 1729,
-  "operations": 2395,
+  "paths": 1725,
+  "operations": 2389,
   "products": {
     "account": 10,
     "ad": 7,
@@ -37,7 +37,7 @@
     "dataset": 7,
     "deploy": 21,
     "destination": 5,
-    "dns": 12,
+    "dns": 5,
     "domain": 7,
     "engine": 4,
     "entitlement": 3,
@@ -102,7 +102,7 @@
     "seo": 7,
     "settings": 2,
     "share": 2,
-    "skills": 2,
+    "skills": 3,
     "social": 13,
     "standing": 1,
     "sync": 6,
