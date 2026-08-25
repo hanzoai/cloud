@@ -419,7 +419,7 @@ type objectRef struct {
 	// captured whole: "2019/summer/a.jpg" is one key, not three. It is
 	// path-cleaned before use, so "../" reaches nothing outside the bucket, and a
 	// key that is empty, absolute or a bare folder marker is refused 400.
-	Key string `json:"key" url:"*1"`
+	Key string `json:"key" url:"+1"` // "+1" is fiber's key for the route's `+` capture; see s3.go.
 }
 
 // PresignDownload mints a presigned GET URL the caller downloads from DIRECTLY.

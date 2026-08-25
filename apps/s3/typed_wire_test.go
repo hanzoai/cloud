@@ -428,3 +428,55 @@ func alone(t *testing.T) *zip.App {
 	}
 	return app
 }
+
+// TestTheCollectionIsNotSwallowedByTheObjectRoute drives the bare collection and
+// requires it to reach listObjects.
+//
+// It did not. A greedy `*` matches the EMPTY remainder and beats an exact sibling
+// whichever order the two register in, so every spelling of
+// GET /v1/s3/buckets/{b}/objects — bare, with ?prefix=, with a trailing separator
+// — arrived at presignDownload as an object request carrying no key and was
+// refused 400 before the store was asked. listObjects was registered, published,
+// dispatchable by name, and unreachable over HTTP.
+//
+// The route captures with `+` now, which requires a character after /objects/.
+// This asserts on WHAT THE STORE WAS ASKED rather than on the status, because the
+// status alone cannot tell "listed nothing" from "never ran": the 400 came back
+// without the store hearing anything at all.
+func TestTheCollectionIsNotSwallowedByTheObjectRoute(t *testing.T) {
+	app, asked := live(t)
+	for _, path := range []string{
+		"/v1/s3/buckets/photos/objects",
+		"/v1/s3/buckets/photos/objects?prefix=2019/",
+		"/v1/s3/buckets/photos/objects/",
+	} {
+		*asked = ""
+		code, body := ask(t, app, "GET", path, "")
+		if *asked == "" {
+			t.Errorf("GET %s answered %d without asking the store — the collection is being "+
+				"served by the object route again: %s", path, code, body)
+			continue
+		}
+		if strings.Contains(*asked, "objects") {
+			t.Errorf("GET %s asked the store %q — the address leaked into the key", path, *asked)
+		}
+	}
+}
+
+// TestTheObjectRouteStillTakesADeepKey is the other half, and the reason the fix
+// is `+` rather than dropping the greedy capture: an object key IS a path, so the
+// segment must still swallow slashes whole.
+func TestTheObjectRouteStillTakesADeepKey(t *testing.T) {
+	app, asked := live(t)
+	*asked = ""
+	if code, body := ask(t, app, "GET", "/v1/s3/buckets/photos/objects/"+deep, ""); code != 200 {
+		t.Fatalf("the deep key answered %d: %s", code, body)
+	}
+	*asked = ""
+	if code, _ := ask(t, app, "DELETE", "/v1/s3/buckets/photos/objects/"+deep, ""); code != 204 {
+		t.Fatalf("the deep delete answered %d", code)
+	}
+	if !strings.HasSuffix(*asked, "/"+deep) {
+		t.Fatalf("the store was asked %q, want a key ending %q", *asked, deep)
+	}
+}
