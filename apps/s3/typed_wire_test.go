@@ -480,3 +480,65 @@ func TestTheObjectRouteStillTakesADeepKey(t *testing.T) {
 		t.Fatalf("the store was asked %q, want a key ending %q", *asked, deep)
 	}
 }
+
+// TestAnEncodedKeyAndAPlainOneAreTheSameObject is the property every generated
+// client depends on and none of them had.
+//
+// The router hands a captured segment over exactly as it arrived — it decodes
+// nothing, not %2F and not %20 — while every client cut from this API
+// percent-encodes a path parameter: Go's url.PathEscape, Python's quote(safe=""),
+// and JS's encodeURIComponent all render "2019/summer/a.jpg" as
+// "2019%2Fsummer%2Fa.jpg". Undecoded, the two spellings addressed two DIFFERENT
+// keys and BOTH answered success, so a delete sent by any SDK removed a key
+// nobody had stored, reported 204, and left the object it named in place.
+//
+// It asserts on WHAT THE STORE WAS ASKED, because both spellings answer 204
+// either way: the status cannot tell the two apart, which is precisely why this
+// went unseen.
+func TestAnEncodedKeyAndAPlainOneAreTheSameObject(t *testing.T) {
+	app, asked := live(t)
+
+	*asked = ""
+	if code, body := ask(t, app, "DELETE", "/v1/s3/buckets/photos/objects/"+deep, ""); code != 204 {
+		t.Fatalf("the plain spelling answered %d: %s", code, body)
+	}
+	plain := *asked
+
+	*asked = ""
+	encoded := strings.ReplaceAll(deep, "/", "%2F")
+	if code, body := ask(t, app, "DELETE", "/v1/s3/buckets/photos/objects/"+encoded, ""); code != 204 {
+		t.Fatalf("the encoded spelling answered %d: %s", code, body)
+	}
+	if *asked != plain {
+		t.Fatalf("the two spellings addressed different objects:\n  plain   %q\n  encoded %q\n"+
+			"every generated SDK sends the encoded form, so it was deleting a key nobody stored "+
+			"and reporting success", plain, *asked)
+	}
+}
+
+// TestAnEscapeIsDecodedOnceAndOnlyOnce pins the two cases a decode gets wrong in
+// opposite directions: a literal percent must survive as one character, and a
+// malformed escape must be refused rather than smuggled through as a key.
+func TestAnEscapeIsDecodedOnceAndOnlyOnce(t *testing.T) {
+	app, asked := live(t)
+
+	for _, c := range []struct{ sent, want string }{
+		{"a%20b.txt", "a b.txt"},     // a space, encoded
+		{"a%25b.txt", "a%b.txt"},     // a LITERAL percent: decoded once, not twice
+		{"a%2520b.txt", "a%20b.txt"}, // and once only — this is "a%20b.txt" as a key
+	} {
+		*asked = ""
+		if code, body := ask(t, app, "DELETE", "/v1/s3/buckets/photos/objects/"+c.sent, ""); code != 204 {
+			t.Fatalf("%s answered %d: %s", c.sent, code, body)
+		}
+		if !strings.HasSuffix(*asked, "/"+c.want) {
+			t.Errorf("%s addressed %q, want a key ending %q", c.sent, *asked, c.want)
+		}
+	}
+
+	// The MALFORMED case ("a%zz.txt") is not driven here and cannot be: Go's own
+	// httptest.NewRequest refuses to build that request ("invalid URL escape"), so
+	// no Go client can send one and this harness cannot either. remainder still
+	// refuses it — a 400 rather than a key with a stray percent — for a raw client
+	// that can put those bytes on the wire.
+}
