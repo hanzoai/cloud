@@ -49,6 +49,7 @@ export KAFKA_PORT=$((port + 5))
 export AMQP_PORT=$((port + 6))
 # Chosen HERE so this script can talk to what it booted. run.sh randomises when
 # the caller sets nothing, which is still what every suite gets.
+export PASSWORD="${PASSWORD:-***REMOVED***}"
 export CLIENT_SECRET="${CLIENT_SECRET:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
 export SERVICE_TOKEN="${SERVICE_TOKEN:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
 BOOT_ONLY=1 ./e2e/run.sh
@@ -63,7 +64,7 @@ login=$(curl -sS -X POST "$BASE/v1/iam/oauth/token" \
   -H 'content-type: application/x-www-form-urlencoded' \
   --data-urlencode 'grant_type=password' \
   --data-urlencode 'username=z' \
-  --data-urlencode 'password=***REMOVED***' \
+  --data-urlencode "password=$PASSWORD" \
   --data-urlencode 'client_id=hanzo-console' \
   --data-urlencode "client_secret=$CLIENT_SECRET" \
   )

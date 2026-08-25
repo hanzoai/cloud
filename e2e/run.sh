@@ -46,7 +46,11 @@ BASE="http://127.0.0.1:${HTTP_PORT}"
 # secret and password exist only inside this data dir, which is deleted on exit.
 ORG=hanzo
 OTHER_ORG=acme
-PASSWORD='***REMOVED***'
+# The house convention for the seeded superuser, and overridable for the same
+# reason the two credentials below are: a caller that boots this and then signs
+# in needs the password it was seeded with, and a second copy of the literal is
+# the thing that goes stale when this one changes.
+PASSWORD="${PASSWORD:-***REMOVED***}"
 CLIENT_ID=hanzo-console
 # Fresh per run, unless the caller already has one. BOOT_ONLY leaves the instance
 # up for somebody else to talk to, and talking to it needs the credential it was
