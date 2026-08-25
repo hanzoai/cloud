@@ -333,6 +333,53 @@ func TestAPIKeyCallerIsRefusedAndNeverReachesUpstream(t *testing.T) {
 	}
 }
 
+// The plane's OWN Content-Type and its bytes come back untouched.
+//
+// This is the fact that decides the shape of this head, so it is driven rather
+// than asserted about: a typed op answers c.JSON under a declared status and
+// fiber stamps application/json over anything a header coder set, so a surface
+// that must carry `text/dns` for a zone file cannot be one (typed_wire_test.go
+// runs the framework half). The bytes are compared exactly — a relay that
+// re-encoded a body would still pass a status check.
+func TestPlaneContentTypeAndBytesPassThrough(t *testing.T) {
+	const zoneFile = "a.com.\t300\tIN\tA\t192.0.2.1\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/dns; charset=utf-8")
+		_, _ = w.Write([]byte(zoneFile))
+	}))
+	defer srv.Close()
+	app := dnsApp(t, srv.URL)
+
+	res, body := do(t, app, as(httptest.NewRequest(http.MethodGet, "/v1/dns/zones/a.com", nil), "orgA", "orgA/dave", "eyJhbGciOiJSUzI1NiJ9.session"))
+	if ct := res.Header.Get("Content-Type"); ct != "text/dns; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want the plane's own relayed verbatim", ct)
+	}
+	if body != zoneFile {
+		t.Fatalf("body = %q, want the plane's bytes unchanged", body)
+	}
+}
+
+// An address the plane does not serve never leaves cloud.
+//
+// The head used to relay EVERY path under /v1/dns and let the plane answer 404,
+// which is what a greedy wildcard buys: an address that is not in any document
+// still reached another process. routes declares the plane's own addresses, so
+// an unknown one is refused at cloud's router. The status a caller sees is the
+// same 404; the body is cloud's own, and nothing is forwarded.
+func TestAnUndeclaredAddressIsNotRelayed(t *testing.T) {
+	up := newStubDNS()
+	defer up.Close()
+	app := dnsApp(t, up.URL)
+
+	res, _ := do(t, app, as(httptest.NewRequest(http.MethodGet, "/v1/dns/nope", nil), "orgA", "orgA/dave", "eyJhbGciOiJSUzI1NiJ9.session"))
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for an address the plane does not serve", res.StatusCode)
+	}
+	if up.hits != 0 {
+		t.Fatalf("upstream reached %d time(s), want 0 — an undeclared address must not be forwarded", up.hits)
+	}
+}
+
 // A session bearer still relays unchanged — the refusal above must not have blocked
 // the console, which is what this head exists to serve.
 func TestSessionBearerStillRelays(t *testing.T) {
