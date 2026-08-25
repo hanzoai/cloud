@@ -444,7 +444,11 @@ func (o ops) presignDownload(ctx context.Context, in *objectRef) (*presignRespon
 	if !ok {
 		return nil, zip.ErrBadRequest("invalid bucket name")
 	}
-	key, ok := cleanKey(remainder(in.Key))
+	raw, ok := remainder(in.Key)
+	if !ok {
+		return nil, zip.ErrBadRequest("object key is not a decodable path")
+	}
+	key, ok := cleanKey(raw)
 	if !ok {
 		return nil, zip.ErrBadRequest("object key is required and must be a clean path")
 	}
@@ -485,7 +489,11 @@ func (o ops) deleteObject(ctx context.Context, in *objectRef) (*struct{}, error)
 	if !ok {
 		return nil, zip.ErrBadRequest("invalid bucket name")
 	}
-	key, ok := cleanKey(remainder(in.Key))
+	raw, ok := remainder(in.Key)
+	if !ok {
+		return nil, zip.ErrBadRequest("object key is not a decodable path")
+	}
+	key, ok := cleanKey(raw)
 	if !ok {
 		return nil, zip.ErrBadRequest("object key is required and must be a clean path")
 	}

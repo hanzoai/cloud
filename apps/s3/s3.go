@@ -61,6 +61,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -455,17 +456,33 @@ func friendlyParam(raw string) (string, bool) {
 }
 
 // remainder is the trailing path of an /objects/+ address as an object key: the
-// greedy capture with a leading separator taken off, so a doubled separator in
-// the URL (…/objects//a.txt) addresses the same key one separator does. It runs
-// before cleanKey and NOT inside it, because a leading separator reaching cleanKey
-// by any other route — an upload naming "/a.txt" in its body — is a caller writing
-// an absolute key, which is a 400.
+// greedy capture DECODED, then with a leading separator taken off, so a doubled
+// separator in the URL (…/objects//a.txt) addresses the same key one separator
+// does. The trim runs before cleanKey and NOT inside it, because a leading
+// separator reaching cleanKey by any other route — an upload naming "/a.txt" in
+// its body — is a caller writing an absolute key, which is a 400.
 //
 // It is applied to the BOUND FIELD rather than read off the request, so a caller
 // that addresses the operation by name is normalized by the same rule as one that
 // addresses it by URL.
-func remainder(raw string) string {
-	return strings.TrimPrefix(strings.TrimSpace(raw), "/")
+//
+// THE DECODE IS WHY THE SAME OBJECT HAS ONE KEY. The router hands a captured
+// segment over exactly as it arrived — measured, it decodes nothing, not %2F and
+// not %20 — while every client generated from this API percent-encodes a path
+// parameter (Go url.PathEscape, Python quote(safe=""), JS encodeURIComponent all
+// render "2019/summer/a.jpg" as "2019%2Fsummer%2Fa.jpg"). Undecoded, those two
+// spellings addressed two DIFFERENT keys and both answered success: a delete sent
+// by any SDK removed a key nobody had stored and reported 204 while the object it
+// named survived.
+//
+// ok is false for a malformed escape ("%zz"), which is a 400 rather than a key
+// containing a stray percent — the caller wrote an address that does not decode.
+func remainder(raw string) (string, bool) {
+	dec, err := url.PathUnescape(strings.TrimSpace(raw))
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimPrefix(dec, "/"), true
 }
 
 // cleanKey normalizes an object key and rejects any traversal or unsafe byte. An
