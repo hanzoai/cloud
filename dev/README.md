@@ -34,7 +34,7 @@ up at once. Every listener here is one somebody else's instance may already hold
 | the `/v1` API, all 117 capabilities | **yes** — `curl $BASE/v1` |
 | lazy start per capability | **yes** — a cold capability costs ~80ms on first use |
 | `<name>.localhost` reaching the site plane | **yes** — `CLOUD_SITES_APEX=localhost` |
-| serving the project's FILES | **needs object storage** |
+| serving the project's FILES | **yes**, with a store — see below |
 | TLS | **needs an ingress in front** |
 | egress | **runs elsewhere, on purpose** — see below |
 
@@ -42,10 +42,42 @@ The last two are not switches, so they are worth stating plainly.
 
 **Files.** `apps/projects` keeps a site's bytes in object storage and reads them
 back through the same client in both directions; there is no from-disk mode to
-fall back to. Without a store, the deploy answers 503 and the address answers
-"site not found". `apps/s3` is the DATA plane over a SeaweedFS gateway, not the
-gateway — cloud does not embed one. Point `S3_ACCESS_KEY` / `S3_SECRET_KEY` /
-`S3_ENDPOINT` at a store and the address serves.
+fall back to. `apps/s3` is the DATA plane over a SeaweedFS gateway, not the
+gateway — cloud embeds no store. `hanzoai/s3` IS that gateway, so the loop closes
+without anything outside the estate:
+
+```sh
+go build -o s3 ./s3                 # in ~/work/hanzo/s3
+cat > s3conf.json <<'JSON'
+{ "identities": [ { "name": "local",
+    "credentials": [ { "accessKey": "local", "secretKey": "local" } ],
+    "actions": ["Admin","Read","Write","List","Tagging"] } ] }
+JSON
+./s3 server -s3 -s3.port=29000 -s3.config=s3conf.json -dir=<data> -ip=127.0.0.1 \
+  -master.port=29333 -volume.port=29080 -filer.port=29888
+```
+
+Then run `make up` with the store named:
+
+```sh
+S3_ADMIN_ENDPOINT=127.0.0.1:29000 S3_ADMIN_ACCESS_KEY=local \
+S3_ADMIN_SECRET_KEY=local S3_SECURE=false S3_PUBLIC_SECURE=false make up
+```
+
+The identity file is not optional. Without it seaweedfs serves anonymous reads
+and refuses every SIGNED request, which is what cloud sends — the deploy fails
+with "Signed request requires setting up Hanzo S3 authentication" while a plain
+`curl` of the endpoint looks perfectly healthy. Its own ports also collide by
+default: the volume server derives its gRPC port as +10000, so a default `-volume.port=8080`
+takes 18080, which is where a cloud already is.
+
+**Deploying is metered.** $1.00 a deploy by default, and an unfunded org is
+refused 402 — the money plane working. Funding one locally is deliberately hard:
+a SuperAdmin grant needs a client in the reserved `admin` org, and IAM forbids
+exactly that on the public token endpoint (`policy.IsReservedOrg`). So `up.sh`
+takes the free tier the code already names — `CLOUD_HOSTING_FEE_CENTS=0`, which
+`gateHosting` documents as "un-gated" — because that is operator configuration
+rather than a way around a gate.
 
 **TLS.** zip terminates no TLS — there is no `tls.Config` in it — so this is
 plaintext on a loopback port. TLS belongs to `hanzoai/ingress` in front, which is
