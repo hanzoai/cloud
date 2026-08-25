@@ -75,9 +75,9 @@ var untypedByDesign = map[string]string{
 	// /api/* route at all, and queryRangeV3 has no caller left. They forwarded into
 	// the runtime's terminal /* catch-all. hanzoai/o11y's v5 querier answers at
 	// POST /v1/o11y/query_range now, typed.
-	"GET /v1/o11y/sessions": "a reverse proxy into the runtime's /api/sessions (sessions.go). The org gate " +
-		"runs at the cloud boundary, then the runtime's llmobstypes.GettableSessions body and its status " +
-		"ride through unchanged.",
+	"GET /v1/o11y/sessions": "a relay into the runtime's /v1/o11y/llm/sessions (sessions.go). The org is " +
+		"pinned at the cloud boundary, then the runtime's llmobstypes.GettableSessions body, its status " +
+		"and its headers ride through unchanged.",
 	"GET /v1/o11y/alerts/last": "answers text/plain, not JSON — c.String with the delivery ring joined by " +
 		"newlines so `curl … | tail` reads in arrival order, and \"(none)\" when empty. A typed op " +
 		"marshals JSON, which would break every operator's grep.",
