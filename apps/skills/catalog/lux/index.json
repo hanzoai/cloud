@@ -21,11 +21,11 @@
       "sha256": "5204fdba79e2ba0ab156dee787fc43cc31094bb1906a8c809d400689ac0d0be9"
     },
     {
-      "description": "Read account csrf: IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on every money write (mint/revoke a key, top up, onboard, and the billing/commerce write verbs)..",
+      "description": "Read account csrf: IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on every change it asks for..",
       "name": "account_csrf",
       "path": "account_csrf/SKILL.md",
       "service": "account",
-      "sha256": "546759833ec2a4b414371cda404e752b4c882cf8e0c841778babf7eebefca898"
+      "sha256": "ade65b517ea9b2e4f30005026852f3e27d58afc5ddfc43f45f986132058a1999"
     },
     {
       "description": "Read account embed: Reports whether one of this brand's shared embedded apps (cms, erp, help) may be framed by the caller and is actually running, so a console module can choose between the embed and the provision panel..",
