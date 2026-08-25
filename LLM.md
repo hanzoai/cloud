@@ -213,6 +213,41 @@ tidy` is stable. Do NOT commit a `go.work` here — it would flip the Dockerfile
 (`COPY go.mod go.sum` → `go mod download` → `COPY . .`) into workspace mode after
 its `-mod=readonly` download step.
 
+### `github.com/hanzoai/*` is ONE import path over TWO publishers, so resolution is a LADDER
+
+Measured on this go.mod: **51 hanzoai modules, 44 of which proxy.golang.org
+serves and 7 of which it does not** (amqp, licensing, plans, pricing, thinking,
+trust, zen — private repos the proxy has never been allowed to read). Each rung
+answers what the one before it cannot, and `hanzo.yml` installs all three:
+
+    proxy.golang.org    immutable, and the ONLY copy that survives a repository
+                        being RE-ROOTED
+    direct → github     a module the proxy may not read
+    direct → the forge  the same, reached with a git.hanzo.ai credential
+
+**`GOPRIVATE` alone gets this wrong, and the failure does not look like what it
+is.** GOPRIVATE is shorthand for BOTH `GONOPROXY` and the sumdb bypass, and only
+the second is wanted here — the sumdb has no entry for a module we publish, but
+the proxy is what still holds a version whose repository has since been
+clean-cut. Forcing `direct` made every gate step fetch from github, where
+`hanzoai/dataroom` and `hanzoai/sign` now hold NO COMMITS AT ALL, so v1.1.7 and
+v1.0.0 answered `unknown revision`, the module loaded empty, and the step
+reported **`invalid package name: ""`** — which reads as a code fault on a tree
+nobody changed. Every step that runs `go` therefore states `GONOPROXY=none`
+beside GOPRIVATE.
+
+**The ORDER is load-bearing rather than tidy.** The forge publishes a DIFFERENT
+commit at `sign v1.0.0` (`b49e3e74`) than the proxy does (`315a3fe6`), and it is
+the proxy's that this tree's go.sum verifies — so a blanket forge rewrite ahead
+of the proxy fails the build, and mirroring the forge's tags to github would
+have broken it rather than repaired it. Both were proposed before being
+measured. go.sum is the guarantee under every rung: a wrong lineage stops the
+build, it is never quietly built.
+
+**A warm module cache hides all of it**, which is why this stayed latent across
+releases pinning the same versions — only a cold cache asks the network. Reproduce
+with a throwaway `GOMODCACHE`, never from a warm one, or the tree will look fine.
+
 Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
 tests REQUIRE `CGO_ENABLED=1` + libsqlcipher; those run only in the
 Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
