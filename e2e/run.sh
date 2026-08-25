@@ -46,7 +46,7 @@ BASE="http://127.0.0.1:${HTTP_PORT}"
 # secret and password exist only inside this data dir, which is deleted on exit.
 ORG=hanzo
 OTHER_ORG=acme
-PASSWORD='***REMOVED***'
+PASSWORD="${PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -d '=+/')!aA1}"
 CLIENT_ID=hanzo-console
 SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64 | tr -d '=+/')"
 CLIENT_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '=+/')"
