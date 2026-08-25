@@ -18,6 +18,8 @@ import (
 	"github.com/hanzoai/base/apis"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // Pool sizing (env-overridable). A full Base app is heavier than a bare *sql.DB
@@ -41,6 +43,7 @@ const (
 type pool struct {
 	dir     string // {DataDir}/base
 	jwksURL string // IAM JWKS endpoint bound onto every per-org app (empty ⇒ unset)
+	log     luxlog.Logger
 
 	maxOpen int
 	idleTTL time.Duration
@@ -50,19 +53,19 @@ type pool struct {
 	lru *list.List           // *appEntry, front = most-recently-used, back = LRU
 }
 
-// appEntry is one pooled per-org Base app + its built mux. inUse counts in-flight
-// requests holding it; an entry is evictable only when inUse==0 (never close an
-// app mid-request).
+// appEntry is one pooled per-org Base app + the handler that answers for it,
+// compiled once when the app opens. inUse counts in-flight requests holding it;
+// an entry is evictable only when inUse==0 (never close an app mid-request).
 type appEntry struct {
 	seg      string
 	app      *baseapp.Base
-	handler  http.Handler
+	handler  zip.Handler
 	inUse    int
 	lastUsed time.Time
 	el       *list.Element
 }
 
-func newPool(root string, deps cloud.Deps) *pool {
+func newPool(root string, deps cloud.Deps, log luxlog.Logger) *pool {
 	// cloud.JWKSURLFor, never the suffix concatenated here: this rebuilt the URL
 	// inline and so ignored CLOUD_JWKS_URL, leaving an operator-pinned JWKS in
 	// force at the edge and not in the per-app pool that verifies the same tokens.
@@ -73,6 +76,7 @@ func newPool(root string, deps cloud.Deps) *pool {
 	return &pool{
 		dir:     root,
 		jwksURL: jwks,
+		log:     log,
 		maxOpen: envInt("CLOUD_BASE_MAX_APPS", defaultMaxApps),
 		idleTTL: time.Duration(envInt("CLOUD_BASE_IDLE_TTL_SEC", int(defaultIdleTTL/time.Second))) * time.Second,
 		m:       make(map[string]*appEntry),
@@ -80,11 +84,28 @@ func newPool(root string, deps cloud.Deps) *pool {
 	}
 }
 
-// acquire returns the org's Base mux (opening+migrating it on first use) PINNED
-// for one request, plus a release func the caller MUST call when the request
-// finishes. While pinned (inUse>0) the entry is never evicted, so the handler
-// stays valid for the whole request even if the pool is over capacity.
-func (p *pool) acquire(org string) (http.Handler, func(), error) {
+// serve answers one request from an org's Base.
+//
+// It is the ONE way a Base answers a request, and both lanes reach it: the
+// authenticated /v1/base/* lane, where the org comes from the validated
+// principal, and the published-site lane, where it comes from the host's
+// resolved Site. The org is the only thing that differs between them, so it is
+// the only thing they pass.
+func (p *pool) serve(org string, c *zip.Ctx) error {
+	h, release, err := p.acquire(org)
+	if err != nil {
+		p.log.Error("base: open org app failed", "err", err)
+		return zip.Errorf(http.StatusInternalServerError, "base unavailable")
+	}
+	defer release()
+	return h(c)
+}
+
+// acquire returns the org's Base handler (opening+migrating the app on first
+// use) PINNED for one request, plus a release func the caller MUST call when the
+// request finishes. While pinned (inUse>0) the entry is never evicted, so the
+// handler stays valid for the whole request even if the pool is over capacity.
+func (p *pool) acquire(org string) (zip.Handler, func(), error) {
 	if strings.TrimSpace(org) == "" {
 		return nil, nil, fmt.Errorf("base: empty org")
 	}
@@ -142,8 +163,8 @@ func (p *pool) releaser(e *appEntry) func() {
 }
 
 // openLocked makes room, then opens+configures+bootstraps+migrates a per-org
-// Base app and builds its mux, inserting the entry into the pool. Runs under
-// p.mu so an org is opened exactly once (single-flight). Caller holds p.mu.
+// Base app and compiles its handler, inserting the entry into the pool. Runs
+// under p.mu so an org is opened exactly once (single-flight). Caller holds p.mu.
 func (p *pool) openLocked(org, seg string) (*appEntry, error) {
 	p.evictToCapLocked()
 
@@ -169,10 +190,10 @@ func (p *pool) openLocked(org, seg string) (*appEntry, error) {
 		_ = app.ResetBootstrapState()
 		return nil, fmt.Errorf("base[%s]: migrations: %w", org, err)
 	}
-	h, err := buildMux(app)
+	h, err := handler(app)
 	if err != nil {
 		_ = app.ResetBootstrapState()
-		return nil, fmt.Errorf("base[%s]: build mux: %w", org, err)
+		return nil, fmt.Errorf("base[%s]: build handler: %w", org, err)
 	}
 
 	e := &appEntry{seg: seg, app: app, handler: h, lastUsed: time.Now()}
