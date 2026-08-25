@@ -12,21 +12,15 @@ package provisioning
 // why the paths below are spelled out per kind — one declaration per published
 // operation, which is what the projections key on.
 //
-// THE CREATES STAY UNTYPED, and it is a wire fact, not an omission. Every
-// POST /v1/<kind> runs the pre-provision balance gate and renders a denial with
-// cloud.DenyResource (provisioning.go), which answers the fleet's NESTED
-// {"error":{"code","message"}} at 402/503. A typed op can only refuse by
-// RETURNING an error, which zip renders as its flat {"status","code","error"}
-// HTTPError — errorHandler is the only path a typed op's error can take — and
-// writing the nested body from inside the op does not escape it either: a nil Out
-// makes zip stamp cmp.Or(op.Status, 204) over the 402 (zip typed.go:305). Moving
-// the gate into middleware does not rescue it, because middleware runs BEFORE the
-// body decode and would turn today's 400-on-a-bad-name into a 402. So the creates
-// keep their closure, and they DECLARE their bodies through openapi.Register
-// instead — the cost of staying untyped is exactly the three things zip's registry
-// supplies (prose, an MCP tool, a CLI command), and not a fourth, a document that
-// says the route takes no body. typed_wire_test.go holds that refusal as a
-// closed list so an eighth untyped route here goes red.
+// THE CREATES ARE HERE TOO. Every POST /v1/provisioning/<kind> runs the
+// pre-provision balance gate, and its 402/503 carries the fleet's NESTED
+// {"error":{"code","message"}} money body — which cloud.Denied carries off a
+// RETURNED error and DenyEnvelope (installed app-wide in cloud.Serve) renders, so
+// a domain-shaped refusal never needed a closure to write it. The half of that
+// argument that WAS load-bearing is kept in createOf: the gate runs LAST, after
+// the decode, so an unfunded org sending an invalid name is told 400 rather than
+// 402. typed_wire_test.go holds untypedByDesign as a closed — and currently
+// EMPTY — list, so a route registered here without a registry entry goes red.
 
 import (
 	"context"
@@ -645,10 +639,9 @@ func (o ops) dropS3(ctx context.Context, in *resourceRef) (*noContent, error) {
 // identity to file its prose under, so the doc comments above would reach neither
 // the document nor the MCP tool list.
 //
-// Registered on the *zip.App with absolute paths, which is the same address the
-// untyped POST beside it uses. cloud.Bridge is already installed app-wide by
-// Serve, ahead of every mount, which is what parks the request these ops resolve
-// their tenant from.
+// Registered on the *zip.App with absolute paths. cloud.Bridge is already
+// installed app-wide by Serve, ahead of every mount, which is what parks the
+// request these ops resolve their tenant from.
 //
 // The last two are the OPERATOR's, not a tenant's: they read the shared vector
 // backend whole, so they sit at /v1/admin/<name> where the public projection

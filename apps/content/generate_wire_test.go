@@ -17,7 +17,7 @@ import (
 // wire. It was the last raw handler on the /v1/content surface, and it stayed raw for
 // one specific reason: it answers a billing refusal with the FLEET'S money-wire body,
 // the nested {"error":{"code","message"}} every Hanzo paywall branches on — not zip's
-// flat {status,code,error} error envelope. A typed op that refused with an error would
+// RFC 9457 problem members. A typed op that refused with an error would
 // have swapped one for the other and broken every one of those clients while the build
 // stayed green, which is exactly the class of break a status-code assertion misses.
 //
@@ -140,9 +140,9 @@ func TestGenerate201IsByteIdentical(t *testing.T) {
 
 // TestGenerate402IsTheMoneyWireBody is the one that mattered. An out-of-funds org must
 // still receive the fleet's NESTED refusal — {"error":{"code","message"}} — because
-// that is what a paywall parses. zip's own error envelope is {"status","code","error"}
-// with `error` a STRING, so the two are distinguishable by shape alone and this
-// assertion cannot pass against the wrong one.
+// that is what a paywall parses. zip's own refusal writes the RFC 9457 members
+// (type/title/status/detail, plus code) and NO `error` member at all, so the two are
+// distinguishable by shape alone and this assertion cannot pass against the wrong one.
 func TestGenerate402IsTheMoneyWireBody(t *testing.T) {
 	const org = "brokebrand"
 	bal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

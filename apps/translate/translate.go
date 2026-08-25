@@ -257,15 +257,14 @@ type Response struct {
 // against the org's memory, send only the misses to the tier's engine, record what
 // the engine returned, and reply in input order.
 //
-// UNTYPED BY DESIGN — the bulk tier's SPEND DENIAL is a domain body, and a typed op
-// cannot write one. A gate or engine refusal answers cloud.DenyResource (below), the
-// fleet-wide NESTED {"error":{"code","message"}} contract at 402/503 that the console
-// routes to a top-up prompt. A typed op's ONLY refusal is a returned error, which
-// zip's errorHandler renders as the FLAT {"status","code","error"} HTTPError — and
-// writing the nested body from inside the op does not escape it either, since a nil
-// Out makes zip stamp cmp.Or(op.Status, 204) over the 402. Same class as apps/ml's
-// three creates and apps/company's POST /payment; it converts when zip can carry an
-// error that has a body (task #78).
+// UNTYPED BY DESIGN — the bulk tier's SPEND DENIAL is the money wire. A gate or
+// engine refusal answers cloud.DenyResource (below), the fleet-wide NESTED
+// {"error":{"code","message"}} contract at 402/503 that the console routes to a
+// top-up prompt, and DenyResource writes that object BARE. A typed op's ONLY refusal
+// is a returned error, which zip renders as RFC 9457 problem members
+// (type/title/status/detail, plus code): the nested body rides Detail intact and
+// gains those members beside it. Converting is therefore a change to the MONEY wire,
+// owned by whoever owns that wire — the same call apps/agents and apps/guide record.
 func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {

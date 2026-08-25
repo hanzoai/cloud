@@ -289,8 +289,8 @@ func mapErr(err error, notFoundMsg string) error {
 // mapPublishErr maps a publishPost control error to an honest HTTP status: not-found →
 // 404, provider-not-configured → 503 (with the missing-credentials detail), else 500.
 // Each is a returned zip error, which is what the untyped handler returned too — so
-// typing moved no refusal: zip renders the same flat {status,code,error} envelope it
-// already did (ctx.go:201, errorHandler at ctx.go:224).
+// typing moved no refusal: zip renders the same RFC 9457 problem members it already
+// did (zip problem.go).
 func mapPublishErr(err error) error {
 	switch {
 	case errors.Is(err, errNotFound):

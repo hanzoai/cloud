@@ -31,10 +31,10 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/account/csrf", zip.Doc{
-		Description: "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs). The token is bound to the caller's validated identity and expires,\nso one minted for one identity cannot authorize a write as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a write.",
+		Description: "IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on\nevery change it asks for. The token is bound to the caller's validated identity\nand expires, so one minted for one identity cannot authorize a change as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a change.",
 		Fields: map[string]string{
-			"csrfResp.csrfToken": "Token is the value to send back in the X-CSRF-Token header. It is bound to the\ncaller's identity, so it authorizes writes as them and as nobody else.",
-			"csrfResp.expiresIn": "ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;\na write with an expired token is refused.",
+			"csrfResp.csrfToken": "Token is the value to send back in the X-CSRF-Token header. It is bound to the\ncaller's identity, so it authorizes changes as them and as nobody else.",
+			"csrfResp.expiresIn": "ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;\na change with an expired token is refused.",
 		},
 	})
 	zip.Describe("GET /v1/account/embed", zip.Doc{

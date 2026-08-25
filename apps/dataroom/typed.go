@@ -197,7 +197,8 @@ type documentRef struct {
 
 // dataroomDocumentOne is one document's metadata.
 type dataroomDocumentOne struct {
-	// Document is the document itself.
+	// Document is the requested document's METADATA. Its bytes are a separate
+	// read, GET /v1/dataroom/documents/{id}/file.
 	Document dataroomDocument `json:"document"`
 }
 

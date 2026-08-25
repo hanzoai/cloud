@@ -295,14 +295,15 @@ func TestPayPathStaysReachable(t *testing.T) {
 	publish(t, &fakeLedger{credit: atto(0)})
 
 	for _, path := range []string{
-		"/v1/billing/plans",             // what to buy
-		"/v1/billing/subscribe",         // buying it
-		"/v1/billing/webhooks/stripe",   // the INBOUND payment callback — gating it loses money
-		"/v1/plan",                      // the @hanzo/plans catalog
-		"/v1/commerce/plans/entries",    // and the authority rows an operator prices it FROM
-		"/v1/entitlement",               // the shell's own upgrade projection
-		"/v1/iam/login",                 // signing in to pay at all
-		"/v1/signin", "/v1/get-account", // session bootstrap + the read AuthGate needs
+		"/v1/billing/plans",                            // what to buy
+		"/v1/billing/subscribe",                        // buying it
+		"/v1/billing/webhooks/stripe",                  // the INBOUND payment callback — gating it loses money
+		"/v1/plan",                                     // the @hanzo/plans catalog
+		"/v1/commerce/plans/entries",                   // and the authority rows an operator prices it FROM
+		"/v1/entitlement",                              // the shell's own upgrade projection
+		"/v1/iam/login",                                // signing in to pay at all
+		"/v1/signin", "/v1/signout", "/v1/get-account", // session bootstrap + the read AuthGate needs
+		"/v1/ai/signin", "/v1/ai/signout", "/v1/ai/account", // the namespaced spellings the gate also exempts
 		"/v1/entitlement/orgs/acme",    // which org am I buying for
 		"/v1/admin/flags",              // the cockpit holding this gate's kill switch
 		"/v1/waitlist",                 // admission's join API

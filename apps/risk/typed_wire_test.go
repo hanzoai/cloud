@@ -35,11 +35,6 @@ import (
 // invisible to all four. This one is missing on purpose. The address is written
 // the way the DOCUMENT writes it, which is the identity every projection keys on.
 var untypedByDesign = map[string]string{
-	// The REAL probe. It answers 503 CARRYING THE DEGRADED REPORT as its body
-	// (which component failed, and the real error), and that body is the whole
-	// point of a probe. A typed op reaches a non-2xx only by returning an error,
-	// and zip renders that as the flat {"status","code","error"} envelope, which
-	// drops exactly the detail the probe exists to deliver.
 	"GET /v1/risk/health": "a liveness probe, refused by THIS PACKAGE'S own invariant " +
 		"rather than by anything about zip. The reason it used to give — 503 carries the degraded " +
 		"REPORT as its body, which a typed op's error envelope would drop — has EXPIRED: WithStatus is " +

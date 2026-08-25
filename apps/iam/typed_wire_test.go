@@ -7,8 +7,8 @@ package iam
 // wildcards relaying a nested app through zip.AdaptNetHTTP, and "none of the five
 // can become a typed op … a structural fact about the mount, not a backlog item".
 // The fact was true and the reason was wrong: it was a property of the CLIENT, not of
-// iam. host.Use composes the App instead of adapting a handler, so the nested
-// registry arrives with it, and the refusal has nothing left to refuse.
+// iam. host.Use composes the App instead of adapting a handler (iam.go), so the
+// nested registry arrives with it, and the refusal has nothing left to refuse.
 //
 // What replaces it is a RATCHET pointing the other way. The typed ops cloud
 // publishes here are every typed op the nested app holds; what is left is iam's OWN
@@ -74,7 +74,7 @@ const (
 	// apply: this pair's REFUSALS are the {status, msg, code} envelope, and
 	// cloud's own key resolver parses `code` to tell a revoked key from an unknown
 	// one (auth_apikey.go). A typed op can only refuse by returning an error,
-	// which zip renders as its flat {status, code, error} — so converting them
+	// which zip renders as its RFC 9457 problem members — so converting them
 	// would move the wire on the authentication path, which is the exact thing
 	// serving both spellings exists to avoid.
 	//

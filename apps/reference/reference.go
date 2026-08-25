@@ -1109,7 +1109,7 @@ type ResolveReferenceOut struct {
 
 // ReferenceVersion is one set's identity at the moment it was consulted.
 type ReferenceVersion struct {
-	// Set is the set.
+	// Set is the name the consulted set is addressed by.
 	Set string `json:"set"`
 	// Version is every contributing publisher and its content digest.
 	Version string `json:"version,omitempty"`

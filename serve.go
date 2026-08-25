@@ -82,9 +82,8 @@ func Listen(plugins []Plugin, enable []string) error {
 	cfg.Role = resolvedRole
 
 	// Reader role: a transparent, always-ready reverse proxy to the writer. It
-	// opens NO stores (the KMS ZapDB store is not RO-shareable while the writer is
-	// live — clients/kms.TestConcurrentOpen_LiveWriterStoreIsNotROShareable) and
-	// forwards every request to CLOUD_WRITER_URL, retrying dial-only across the
+	// opens NO stores (it holds no writer pin; reader_proxy.go carries the reason)
+	// and forwards every request to CLOUD_WRITER_URL, retrying dial-only across the
 	// writer's roll gap so the edge never blips. Returns here — never reaches
 	// BuildDeps. Unset CLOUD_ROLE ⇒ Writer, so this is inert by default.
 	if cfg.Role.IsReader() {
@@ -102,9 +101,9 @@ func Listen(plugins []Plugin, enable []string) error {
 	//
 	// This used to be an acquire guarded by "am I not under a router", in the body
 	// that ONLY plugins run. That aimed a single-holder lock at the siblings rather
-	// than at the other pod generation, and cost api.hanzo.ai four minutes of 503
-	// on 2026-08-04; the guard added afterwards stopped the deadlock but left the
-	// lock in the hands of nobody, since the router does not run this code at all.
+	// than at the other pod generation — a deadlock among co-resident processes.
+	// The guard added afterwards stopped the deadlock but left the lock in the hands
+	// of nobody, since the router does not run this code at all.
 	//
 	// Released by the defer after app.Shutdown has run every subsystem teardown
 	// hook, which is the point at which this process holds nothing open. Unset

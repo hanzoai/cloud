@@ -26,7 +26,7 @@ func init() {
 			"adminAuthorView.status":            "Status is connected, approved or suspended. Only an approved author accrues;\na connected one may verify repos and collect deploy edges but earns nothing\nuntil a reviewer admits it.",
 			"adminAuthorView.suspendedAt":       "SuspendedAt is unix seconds of the most recent suspension. 0 means the author\nis not suspended: either never was, or was and has since been approved again,\nwhich clears this back to 0.",
 			"adminAuthorView.verified":          "Verified is IDENTITY proof of the login, NOT proof of any repository: true\nwhen the connect took the login from IAM's linked forge account (and for the\nseeded treasury author), false when the caller merely declared it. A false\nhere still earns — repository ownership is proven separately, per claim.",
-			"adminBook.data":                    "Data is the book.",
+			"adminBook.data":                    "Data is the envelope's payload: the author records and the fleet roll-up.",
 			"adminBook.msg":                     "Msg is the envelope's message slot, empty on success.",
 			"adminBook.status":                  "Status is \"ok\" — the operator console's envelope discriminator.",
 			"adminBookData.authors":             "Authors are the author records, with each one's repository and deploy counts.",

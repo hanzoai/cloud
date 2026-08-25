@@ -126,7 +126,7 @@ type Config struct {
 	// reader — internal/writerlease — because the answer depends on something a
 	// Config cannot see: this process's position in the pod's process tree. A
 	// bool parsed here would be true in every one of a pod's processes alike,
-	// which is precisely the reading that took api.hanzo.ai down on 2026-08-04.
+	// which is precisely the reading that must never be available.
 
 	// ShardPeers is the CLOUD_PEERS membership list ("id@addr,id2@addr2") of the
 	// horizontal-scale StatefulSet: the full, STABLE set of writer pods (each a
@@ -382,10 +382,9 @@ func LoadConfig() *Config {
 	// cfg.Enable is set by Listen from the app the plugin was built as — one
 	// process per app, and plugin/<app>/main.go names it. CLOUD_ENABLE/--enable
 	// used to state the same set a SECOND time, from the values file, and the
-	// only thing a second source of truth can add is disagreement: both devnet
-	// outages on 2026-08-02 were this list naming an app that does not exist
-	// ("plans") and omitting one that every other child needs ("kms"). Neither
-	// is representable now. Empty still means all, which is what production has
+	// only thing a second source of truth can add is disagreement: the list named
+	// an app that does not exist and omitted one every child needs. Neither is
+	// representable now. Empty still means all, which is what production has
 	// always run.
 	flagsOnce.Do(func() {
 		flag.StringVar(&cfg.Brand, "brand", cfg.Brand, "white-label brand")

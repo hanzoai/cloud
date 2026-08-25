@@ -392,7 +392,7 @@ func (o contentOps) postGenerate(ctx context.Context, in *GenerateInput) (*Gener
 		// the one refusal channel a typed op has — and cloud.DenyEnvelope (installed
 		// on the group) writes those bytes back verbatim, so this answers the SAME
 		// nested {"error":{"code","message"}} every Hanzo resource create emits
-		// rather than reshaping it into zip's flat {status,code,error}. Off the HTTP
+		// rather than reshaping it into zip's RFC 9457 problem members. Off the HTTP
 		// path (MCP, CLI) deniedErr.Unwrap keeps the status and the sentence.
 		if errors.Is(err, metering.ErrInsufficientBalance) || errors.Is(err, metering.ErrSpendCapExceeded) {
 			return nil, cloud.Denied(err)

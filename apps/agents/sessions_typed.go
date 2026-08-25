@@ -24,9 +24,9 @@ package agents
 // It is the right direction: EVERY other refusal in this fleet already renders
 // that way, because every propagated error goes through that one handler. The raw
 // handler's `error` key was one address answering in a vocabulary the other ~2400
-// do not use. TestRefusesASecretInATranscript asserts the whole body now — it used
-// to declare an `error` field and never check it, which is exactly how a key moves
-// unnoticed.
+// do not use. TestGuardRefusesSecretInTranscript (provenance_test.go) asserts the
+// whole body now — it used to declare an `error` field and never check it, which is
+// exactly how a key moves unnoticed.
 //
 // THE RESERVED SET IS type, title, status, detail AND code — measured, not
 // inherited. Members are copied FIRST and the problem-details envelope written

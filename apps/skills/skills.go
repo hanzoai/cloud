@@ -169,19 +169,17 @@ func (h *handler) brandFor(host string) string {
 // serveIndex answers GET /.well-known/agent-skills/index.json with the brand's
 // catalogue, exactly as generated.
 //
-// UNTYPED BY DESIGN — three independent wire facts a typed op cannot carry:
+// UNTYPED BY DESIGN — two independent wire facts a typed op cannot carry:
 //
 //  1. The response is the EMBEDDED FILE'S BYTES. index.json carries a sha256 per
 //     skill computed over the served SKILL.md, and the catalogue is the artifact
 //     plugin/gen-skills wrote; a typed Out re-marshals through
 //     encoding/json, which re-orders keys and re-indents, so the document a client
 //     verifies would no longer be the document that was signed.
-//  2. `Cache-Control: public, max-age=300`. zip's typed path writes the JSON body
-//     and the status and nothing else — it has no vocabulary for a response header,
-//     and this one is part of the discovery convention.
-//  3. A miss answers `{"error": "..."}` at 404. A typed op's only refusal is a
-//     returned error, which zip's errorHandler renders as the flat
-//     `{"status","code","error"}` — a different body for the same condition.
+//  2. A miss answers `{"error": "..."}` at 404. A typed op's only refusal is a
+//     returned error, which zip's errorHandler renders as RFC 9457 problem+json
+//     (type/title/status/detail, code as an extension member) — a different body
+//     for the same condition.
 func (h *handler) serveIndex(c *zip.Ctx) error {
 	brand := h.brandFor(c.Fiber().Hostname())
 	return h.serveFile(c, path.Join(brand, "index.json"), "application/json; charset=utf-8")

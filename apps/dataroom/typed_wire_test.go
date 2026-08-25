@@ -20,11 +20,11 @@ import (
 // owed; each entry names the fact, and none of them expires when zip gains a
 // capability — a byte stream stays a byte stream.
 //
-// Re-read against the pinned zip, v1.31.3: a typed op's only response path is
-// c.JSON(out) (typed.go:567), and op.invoke unmarshals every non-empty body as
-// JSON before the handler is entered (typed.go:242). Both are still true; what
-// v1.31.x DID add — variadic WithStatus + StatusCoder, response headers, and
-// HTTPError.Detail — touches statuses and error bodies, not raw bytes.
+// Re-read against the pinned zip: a typed op's only response path is c.JSON(out),
+// and its handler hands the raw body to jsonenc.Unmarshal before the op is entered
+// (both in zip's typed.go). Both still hold. What the releases since DID add —
+// variadic WithStatus + StatusCoder, WithResponseHeader, and HTTPError.Detail —
+// touches statuses, response headers and error bodies, not raw bytes.
 var untypedByDesign = map[string]string{
 	"POST /v1/dataroom/documents": "the request body IS the file: raw bytes under the caller's own " +
 		"Content-Type, named by ?name=. A typed In would have zip JSON-decode a PDF and answer 400.",

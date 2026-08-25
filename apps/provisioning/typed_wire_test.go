@@ -39,37 +39,18 @@ func mountDelete[In, Out any](path string, h zip.TypedHandler[In, Out]) func(*zi
 }
 
 // untypedByDesign is the CLOSED list of provisioning operations that are NOT
-// typed ops, each with the wire fact that keeps it out. Addresses are written the
-// way the DOCUMENT writes them, which is the identity every projection keys on.
-//
-// All seven are the same fact, once per kind: a create runs the pre-provision
-// balance gate and renders a denial through cloud.DenyResource
-// (provisioning.go's create), which answers the fleet-wide NESTED
-// {"error":{"code","message"}} at 402 or 503. A typed op can only refuse by
-// RETURNING an error, which zip renders as its flat {"status","code","error"}
-// HTTPError — errorHandler is the only path a typed op's error can take — and
-// writing the nested body from inside the op does not escape it either: a nil Out
-// makes zip stamp cmp.Or(op.Status, 204) over the 402. Moving the gate into
-// middleware does not rescue it, because middleware runs BEFORE the body decode
-// and would turn today's 400-on-a-bad-name into a 402.
-//
-// They do NOT publish nothing: each declares its request and success shapes
-// through openapi.Register (provisioning.go's init), so a generated SDK can
-// construct the call. What staying untyped costs is exactly the three things
-// zip's registry supplies — prose, an MCP tool and a CLI command.
-// untypedByDesign is the CLOSED list of provisioning operations that are NOT
-// typed ops. IT IS EMPTY, and the gate still runs: an entry added here owes the
-// wire fact that keeps a route raw, re-read against the PINNED zip rather than
+// typed ops. IT IS EMPTY, and the check still runs: an entry added here owes the
+// wire fact that keeps a route raw, re-read against the pinned zip rather than
 // inherited as prose, plus a test pinning the wire it protects.
 //
 // The seven creates filled it, for a reason that had stopped being true: it said
 // the pre-provision balance gate answers 402/503 through cloud.DenyResource with
-// the fleet's NESTED {"error":{"code","message"}} body, and a typed op's error
-// can only leave as zip's flat {status,code,error}. cloud.Denied carries that
-// nested body off a RETURNED error and serve.go installs DenyEnvelope app-wide,
-// so the capability was already there. The half of the reason that WAS right is
-// kept in createOf: the gate runs last, after the decode, so an unfunded org
-// sending an invalid name is still told 400 rather than 402.
+// the fleet's NESTED {"error":{"code","message"}} body, and a typed op's error can
+// only leave as zip's own refusal envelope. cloud.Denied carries that nested body
+// off a RETURNED error and serve.go installs DenyEnvelope app-wide, so the
+// capability was already there. The half of the reason that WAS right is kept in
+// createOf: the gate runs last, after the decode, so an unfunded org sending an
+// invalid name is still told 400 rather than 402.
 var untypedByDesign = map[string]string{}
 
 // surfaceApp mounts the WHOLE provisioning surface through the REAL routes(), so

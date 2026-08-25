@@ -455,8 +455,9 @@ func Reachable(path string) bool {
 	//
 	// Both spellings stay listed. This file's own rule is that the list is
 	// deliberately generous and anything ambiguous belongs on it: gating too little
-	// is a revenue leak, gating sign-in is an outage. Pinned by
-	// TestAuthRoutesAreAlwaysReachable + TestPayPathStaysReachable.
+	// is a revenue leak, gating sign-in is an outage. Every case below is pinned by
+	// apps/entitlement.TestPayPathStaysReachable, which sends each one through the
+	// enforcing gate and requires a 200.
 	switch path {
 	case "/v1/signin", // auth: session bootstrap (the console posts the OAuth code here).
 		"/v1/signout",

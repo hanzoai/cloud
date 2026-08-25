@@ -116,6 +116,80 @@ func TestVerify_PassesOnUntamperedChain(t *testing.T) {
 	}
 }
 
+// actorBeforeHome is Actor as the binary that sealed the existing trail declared
+// it: no Home. It exists so the hash-compatibility claim is checked against what
+// that binary actually marshaled instead of against the current code's own idea
+// of itself, which would agree with anything.
+type actorBeforeHome struct {
+	Org   string `json:"org"`
+	Sub   string `json:"sub"`
+	Email string `json:"email,omitempty"`
+}
+
+// TestVerify_HomeFieldIsHashCompatible proves actor_home could be added to a
+// SEALED chain at all, in the two places it had to hold.
+//
+// The hash: Home is omitempty, so an empty one marshals to nothing and the actor
+// an ordinary same-org record hashes over is byte-identical to what the pre-field
+// binary produced. Drop the omitempty and every record ever written verifies as
+// TAMPERED.
+//
+// The store: five records are sealed and the column is then dropped, which is the
+// table a pre-field binary leaves behind. Re-opening runs migrate, whose addColumn
+// puts it back, and the chain still verifies against the hashes already on disk.
+func TestVerify_HomeFieldIsHashCompatible(t *testing.T) {
+	now, was := Actor{Org: "acme", Sub: "z@hanzo.ai", Email: "z@hanzo.ai"},
+		actorBeforeHome{Org: "acme", Sub: "z@hanzo.ai", Email: "z@hanzo.ai"}
+	nowJSON, err := json.Marshal(now)
+	if err != nil {
+		t.Fatalf("marshal actor: %v", err)
+	}
+	wasJSON, err := json.Marshal(was)
+	if err != nil {
+		t.Fatalf("marshal pre-field actor: %v", err)
+	}
+	if string(nowJSON) != string(wasJSON) {
+		t.Fatalf("adding Home changed what a same-org record hashes over:\n now %s\n was %s", nowJSON, wasJSON)
+	}
+
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	rec, err := Open(dir, "audit", nil)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	for i := range 5 {
+		if _, err := rec.Append(ctx, sampleRecord("POST /v1/admin/roles")); err != nil {
+			t.Fatalf("append %d: %v", i, err)
+		}
+	}
+	_, head := rec.Head()
+	if err := rec.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// Same opener the Recorder uses, on a closed store — the pre-field schema.
+	tamperOutOfBand(t, dir, `ALTER TABLE audit_log DROP COLUMN actor_home`)
+
+	rec2, err := Open(dir, "audit", nil)
+	if err != nil {
+		t.Fatalf("re-Open on the pre-field schema: %v", err)
+	}
+	t.Cleanup(func() { _ = rec2.Close() })
+
+	iv, err := rec2.Verify(ctx)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if iv.Verdict != Intact {
+		t.Fatalf("a chain sealed before actor_home existed no longer verifies: broke at %d (%s)", iv.BrokenAt, iv.Reason)
+	}
+	if iv.Count != 5 || iv.Head != head {
+		t.Fatalf("head moved across the migration: (%d,%q), want (5,%q)", iv.Count, iv.Head, head)
+	}
+}
+
 // TestVerify_DetectsFieldTamper is the headline: an attacker with direct DB
 // access edits a record's content (flips a denied outcome to success, or changes
 // the actor). The stored hash no longer matches the recomputed hash, so Verify

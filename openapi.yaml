@@ -7635,7 +7635,7 @@ components:
           description: Refusal is why it could not be consulted, when it could not.
           type: string
         set:
-          description: Set is the set.
+          description: Set is the name the consulted set is addressed by.
           type: string
         stale:
           description: Stale is whether it is past its freshness bound.
@@ -14231,7 +14231,7 @@ components:
           description: Name is the class name.
           type: string
         shareClassId:
-          description: ShareClassID is the share class.
+          description: ShareClassID addresses the class this position is for.
           type: string
       type: object
     captableCompany:
@@ -14430,7 +14430,7 @@ components:
           description: Shares is the shares this stakeholder holds by certificate.
           type: integer
         stakeholderId:
-          description: StakeholderID is the stakeholder.
+          description: StakeholderID addresses the stakeholder these totals are for.
           type: string
       type: object
     captableInstrumentTotal:
@@ -14722,7 +14722,9 @@ components:
           type: array
         round:
           $ref: '#/components/schemas/captableRound'
-          description: Round is the round itself.
+          description: |-
+            Round is the round's own terms — name, type, valuation, target and status —
+            as against the investments beside it.
       type: object
     captableRoundIn:
       properties:
@@ -17335,12 +17337,12 @@ components:
         csrfToken:
           description: |-
             Token is the value to send back in the X-CSRF-Token header. It is bound to the
-            caller's identity, so it authorizes writes as them and as nobody else.
+            caller's identity, so it authorizes changes as them and as nobody else.
           type: string
         expiresIn:
           description: |-
             ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;
-            a write with an expired token is refused.
+            a change with an expired token is refused.
           type: integer
       type: object
     curateReq:
@@ -17498,7 +17500,9 @@ components:
       properties:
         document:
           $ref: '#/components/schemas/dataroomDocument'
-          description: Document is the document itself.
+          description: |-
+            Document is the requested document's METADATA. Its bytes are a separate
+            read, GET /v1/dataroom/documents/{id}/file.
       type: object
     dataroomDocuments:
       properties:
@@ -19261,7 +19265,7 @@ components:
             _signed once it is sealed.
           type: string
         id:
-          description: ID is the document.
+          description: ID is the document this PDF was rendered from.
           type: string
         pdfBase64:
           description: |-
@@ -20113,7 +20117,9 @@ components:
           description: Unit is what one clause is; Units is its plural.
           type: string
         units:
-          description: Units is the plural of Unit.
+          description: |-
+            Units is Unit's plural, carried so a caller renders "12 controls" without
+            having to pluralise a word it does not know.
           type: string
       type: object
     functionDetail:
@@ -27070,7 +27076,9 @@ components:
             or canceled. Empty opens into backlog.
           type: string
         title:
-          description: Title is required.
+          description: |-
+            Title is the one line the card is read by on the board. Blank or whitespace
+            is refused — an untitled card cannot be told apart from any other.
           type: string
       type: object
     newsResponse:
@@ -40224,7 +40232,9 @@ components:
     policyList:
       properties:
         policies:
-          description: Policies is the list.
+          description: |-
+            Policies is the organization's published policy documents, each as the
+            centre holds it.
           items: {}
           type: array
       type: object
@@ -49096,10 +49106,12 @@ components:
           description: ID addresses the item.
           type: string
         kind:
-          description: Kind is what it is.
+          description: |-
+            Kind is one of report, letter, policy, questionnaire, subprocessor, article
+            or update — the closed set the public centre knows how to draw.
           type: string
         name:
-          description: Name is its title.
+          description: Name is the label the centre lists it under.
           type: string
         retired:
           description: |-
@@ -50328,14 +50340,13 @@ paths:
   /v1/account/csrf:
     get:
       description: |-
-        IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on
-        every money write (mint/revoke a key, top up, onboard, and the billing/commerce
-        write verbs). The token is bound to the caller's validated identity and expires,
-        so one minted for one identity cannot authorize a write as another.
+        IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on
+        every change it asks for. The token is bound to the caller's validated identity
+        and expires, so one minted for one identity cannot authorize a change as another.
 
         It is answered no-store, so it is never cached by a shared proxy. This is the
         same-origin endpoint the embedded console reads — the Same-Origin Policy is what
-        stops a cross-site page from reading the response and forging a write.
+        stops a cross-site page from reading the response and forging a change.
       operationId: get_account_csrf
       responses:
         "200":
@@ -50344,9 +50355,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/csrfResp'
           description: ok
-      summary: IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token
-        on every money write (mint/revoke a key, top up, onboard, and the billing/commerce
-        write verbs).
+      summary: IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token
+        on every change it asks for.
       tags:
       - account
       x-app: account

@@ -16,6 +16,14 @@ import (
 // the moment it starts terminating.
 var Peers func(selector, port string) (org.Source, string, error)
 
+// membershipSource resolves the writer-membership Source the durability fencer and
+// the shard router both read. staticPeers is the fallback set (the caller folds this
+// process into it); selector is CLOUD_PEER_SELECTOR; port is the http port stamped
+// onto each live peer's Addr so the shard router can dial it.
+//
+// An empty selector, or no installed [Peers], yields the static set. A configured
+// live source that cannot be reached falls back to the static set LOUDLY rather than
+// failing the build, so the same composition runs in a cluster and on a laptop.
 func membershipSource(staticPeers []org.Member, selector, port string, log luxlog.Logger) org.Source {
 	static := org.StaticSource(staticPeers...)
 	if strings.TrimSpace(selector) == "" || Peers == nil {

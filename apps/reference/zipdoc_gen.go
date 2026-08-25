@@ -129,7 +129,7 @@ func init() {
 			"ReferenceAnswer.version":       "Version is the exact baseline version consulted, composed of each\ncontributing publisher and its content digest. It is what makes a decision\nreproducible: an auditor takes this string and knows precisely what was\nconsulted.",
 			"ReferenceVersion.asOf":         "AsOf is when the oldest of them was current, RFC 3339.",
 			"ReferenceVersion.refusal":      "Refusal is why it could not be consulted, when it could not.",
-			"ReferenceVersion.set":          "Set is the set.",
+			"ReferenceVersion.set":          "Set is the name the consulted set is addressed by.",
 			"ReferenceVersion.stale":        "Stale is whether it is past its freshness bound.",
 			"ReferenceVersion.version":      "Version is every contributing publisher and its content digest.",
 			"ResolveReferenceIn.keys":       "Keys are the values to look up, at most 100 per call: email addresses or\ndomains, IP addresses, card prefixes, user-agent strings, autonomous system\nnumbers, device digests.",

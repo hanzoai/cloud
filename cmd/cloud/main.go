@@ -216,8 +216,7 @@ func run(addr, zapAddr string) error {
 	// this binary never calls, so switching CLOUD_WRITER_LEASE on pointed a
 	// single-holder lock at the siblings: kms took it, pubsub and kafka waited for
 	// a handoff that could not come, nothing bound :8080, and the pod was killed by
-	// its own liveness probe and restarted into the same deadlock (2026-08-04,
-	// api.hanzo.ai, four minutes of 503).
+	// its own liveness probe and restarted into the same deadlock.
 	//
 	// HERE, before the mount loops, because the very next
 	// thing this function does is spawn children — and the whole point is that they
@@ -525,8 +524,8 @@ func run(addr, zapAddr string) error {
 // load.go: `if in, err = start(spec); err != nil { return … }`, surfaced by
 // service.go as "zip: Add service N"). Returning an error is a library telling
 // its caller the truth; escalating that error to os.Exit is a POLICY, and it was
-// this host's. On 2026-07-29 the policy cost 25 minutes of api.hanzo.ai and
-// cloud.hanzo.ai because one child could not open one SQLite file.
+// this host's — so one child that could not open one SQLite file took the whole
+// product down with it.
 //
 // So: a required app that will not start aborts, by name. Every other app
 // degrades to ABSENT — the mount stands with no process behind it, which is a
@@ -683,7 +682,7 @@ var draining atomic.Bool
 //
 // /healthz — LIVENESS. 200 while the process routes, always. The host is a
 // router, it is up, and 112 cold plugins are not a reason to restart it. Failing
-// liveness for a broken plugin recreates the 2026-07-29 outage one layer up: K8s
+// liveness for a broken plugin recreates that failure one layer up: K8s
 // would kill a pod that is serving every other subsystem correctly, and the
 // replacement would fail identically because the cause is in the image or the
 // config, not in the process. `absent` rides in the BODY with its reason —
@@ -691,10 +690,10 @@ var draining atomic.Bool
 //
 // /readyz — READINESS. 503 when the host is draining, or when a VITAL subsystem
 // is absent (manifest.App.Vital). This is the route that was missing, and its
-// absence is what let 2026-08-01 happen: `ai` — the greedy /v1 catch-all, i.e.
-// the entire product API — degraded to absent, main.go recorded the reason in
-// the `absent` FIELD, and the probe read the STATUS CODE, which was 200. The pod
-// stayed Ready with 0 restarts for ~30 minutes while /v1/models 503d.
+// absence is what let a total failure read as healthy: `ai` — the greedy /v1
+// catch-all, i.e. the entire product API — degrades to absent, main.go records
+// the reason in the `absent` FIELD, and a probe reading the STATUS CODE sees 200.
+// The pod stays Ready with 0 restarts while /v1/models 503s.
 //
 // A 503 here is not an outage, it is the outage becoming VISIBLE, and the timing
 // is what makes it cheap: a rollout whose new image cannot start `ai` never gets

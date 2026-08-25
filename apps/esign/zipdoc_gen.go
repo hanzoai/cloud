@@ -107,7 +107,7 @@ func init() {
 		Description: "Returns the document — the sealed PDF once it is complete.\n\nIt answers the document's current PDF as base64 with a sealed flag and a\nfilename. Before completion that is the original upload; once every signer has\nfinished it is the SEALED artifact, with the field values rendered onto the page\nand a real x509 PKCS#7 digital signature applied. There is one pdfBase64 field\neither way, so sealed is what tells you which you are holding.\n\nThe id is resolved in the caller's OWN tenant store, so another org's document\nid is a 404.",
 		Fields: map[string]string{
 			"esignPDF.filename":  "Filename is the name to save it under, built from the title and marked\n_signed once it is sealed.",
-			"esignPDF.id":        "ID is the document.",
+			"esignPDF.id":        "ID is the document this PDF was rendered from.",
 			"esignPDF.pdfBase64": "PdfBase64 is the PDF itself, base64-encoded. There is one field either way,\nso Sealed is what tells you which artifact you are holding.",
 			"esignPDF.sealed":    "Sealed is whether this is the SEALED artifact — the field values rendered\nonto the page and a real x509 PKCS#7 signature applied — rather than the\noriginal upload.",
 			"esignPDF.status":    "Status is the document's state at the moment it was read.",

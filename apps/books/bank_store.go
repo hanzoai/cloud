@@ -134,9 +134,9 @@ func scanBankTxns(rows *sql.Rows) ([]BankTxnRow, error) {
 }
 
 // BankQuestion is one open clarifying question about an unmatched bank inflow —
-// the persistence row. It adapts to the founder-facing canonical [Question]
-// (anomalies.go) via [BankQuestion.toQuestion] so the one /v1/books/questions
-// surface can present anomaly and bank questions through a single type.
+// the persistence row behind GET /v1/books/bank/unreconciled, published as itself
+// inside [unreconciledOut]. It is a different shape from the founder-facing
+// [Question] the anomaly detector raises (anomalies.go); the two are not unified.
 type BankQuestion struct {
 	// Connector names the feed the unplaceable line arrived on. With externalId it
 	// identifies both the question and the bank line it is about, so re-syncing the

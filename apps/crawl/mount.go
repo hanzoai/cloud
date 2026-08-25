@@ -62,9 +62,8 @@ type crawlResult struct {
 // It is the sanctioned way to spell this (zip typed.go, StatusCoder): the status
 // rides the value the handler already returns, so the document publishes 400 with
 // THIS schema and a generated client expects the body it will actually get. The
-// alternative, returning zip.ErrBadRequest, renders the flat {status,code,error}
-// envelope — a different body for a refusal this route has always answered in its
-// own shape.
+// alternative, returning zip.ErrBadRequest, renders the RFC 9457 problem members —
+// a different body for a refusal this route has always answered in its own shape.
 func (r *crawlResult) StatusCode() int {
 	if r.Success {
 		return http.StatusOK

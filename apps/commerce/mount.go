@@ -96,8 +96,7 @@ var Prefixes = []string{
 // libsqlcipher-linked build — correctly, it will not open money data unencrypted —
 // and the refusal is silent from out here: Mount never reaches transport.SetApp, so
 // every S2S billing read falls through to the network and DNS-resolves the
-// in-process placeholder. On 2026-07-27 that read as "Insufficient balance" on
-// funded accounts, fleet-wide.
+// in-process placeholder, which a funded account reads as "Insufficient balance".
 //
 // But a key this build CANNOT USE is its own failure, in the opposite direction.
 // commerce's stores need the LIVE libsqlcipher codec: its dual pool opens a

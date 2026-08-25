@@ -17,8 +17,8 @@ package index
 // THE ERRORS DID NOT MOVE EITHER, and that is the harder half. Meilisearch
 // answers every failure with {message, code, type, link} and its JS client
 // BRANCHES on `code` — index_not_found is how mongoMeili decides to create an
-// index — while zip renders a returned error as the flat {status, code, error}
-// that has no `message` and no dialect `code` at all. So an op returns a *fault
+// index — while zip renders a returned error as its RFC 9457 problem members,
+// which have no `message` and no dialect `code` at all. So an op returns a *fault
 // carrying the dialect body and envelope() writes it back. That is the same
 // shape apps/goja's BundleErr and cloud's own Denied take, and it is not an
 // escape from typing: the op still declares its In and its Out, so all five

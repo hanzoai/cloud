@@ -61,7 +61,7 @@ func TestCrawlWireSurvivedTyping(t *testing.T) {
 
 	// (1) BODY-TOLERANT, with a DOMAIN refusal body. An unparseable body and an
 	// empty url are the SAME answer, and it is this package's shape — not zip's
-	// flat {status,code,error}, which is what an op that refused by RETURNING an
+	// RFC 9457 problem members, which is what an op that refused by RETURNING an
 	// error would send.
 	for _, body := range []string{`{"url":""}`, `not json at all`, `{`} {
 		code, out := post(t, app, "/v1/crawl", body)

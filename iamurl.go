@@ -14,8 +14,8 @@ import (
 // 403s a server-side loopback POST with edge error 1006 — so an in-cluster
 // exchange against the public issuer fails and whatever depended on it (the KMS
 // login broker, AI M2M minting, per-tenant identity provisioning) silently stays
-// down (root-caused 2026-07-04: in-cluster POST to https://hanzo.id/... → 403,
-// while http://iam.hanzo.svc/... → 200).
+// down. Measured: an in-cluster POST to https://hanzo.id/... answers 403,
+// http://iam.hanzo.svc/... 200.
 //
 // Precedence: the in-cluster IAM service base (IAM_URL — already wired for
 // JWKS), then the public issuer as a last resort (single-process / no

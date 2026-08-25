@@ -922,7 +922,7 @@
         "properties": {
           "document": {
             "$ref": "#/components/schemas/dataroomDocument",
-            "description": "Document is the document itself."
+            "description": "Document is the requested document's METADATA. Its bytes are a separate\nread, GET /v1/dataroom/documents/{id}/file."
           }
         },
         "type": "object"
@@ -1615,11 +1615,11 @@
             "type": "string"
           },
           "kind": {
-            "description": "Kind is what it is.",
+            "description": "Kind is one of report, letter, policy, questionnaire, subprocessor, article\nor update — the closed set the public centre knows how to draw.",
             "type": "string"
           },
           "name": {
-            "description": "Name is its title.",
+            "description": "Name is the label the centre lists it under.",
             "type": "string"
           },
           "retired": {

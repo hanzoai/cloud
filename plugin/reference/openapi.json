@@ -613,7 +613,7 @@
             "type": "string"
           },
           "set": {
-            "description": "Set is the set.",
+            "description": "Set is the name the consulted set is addressed by.",
             "type": "string"
           },
           "stale": {

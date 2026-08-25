@@ -221,7 +221,7 @@ func init() {
 			"newIssue.key":          "Key is the board — the repository name, from the path.",
 			"newIssue.priority":     "Priority is one of none, urgent, high, medium or low.",
 			"newIssue.status":       "Status is the board column to open into: backlog, todo, in_progress, done\nor canceled. Empty opens into backlog.",
-			"newIssue.title":        "Title is required.",
+			"newIssue.title":        "Title is the one line the card is read by on the board. Blank or whitespace\nis refused — an untitled card cannot be told apart from any other.",
 		},
 	})
 	zip.Describe("POST /v1/todo/projects/:key/issues/:num/claim", zip.Doc{

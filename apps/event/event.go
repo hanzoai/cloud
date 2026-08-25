@@ -772,11 +772,12 @@ type door struct {
 // insights.hanzo.ai /e,/batch, /capture) now replacePaths onto /v1/event.
 //
 // Trying canonical first and falling back on an empty result is WRONG, and
-// TestMount_HostCarve_IngestsForSiteOrg refutes it: decodeIngest ACCEPTS a PostHog
-// body as a bare canonical Event and returns ONE event, which is then dropped whole
-// downstream (canonicalType("") is "event", which is not an allowlisted kind, and
-// $pageview is not an autocapture name — it is a KIND). The caller gets 200
-// and the event vanishes. A count of 1 is not evidence the body was understood.
+// TestPostHogWireRidesTheCanonicalDoor (obs_door_test.go) refutes it: decodeIngest
+// ACCEPTS a PostHog body as a bare canonical Event and returns ONE event, which is
+// then dropped whole downstream (canonicalType("") is "event", which is not an
+// allowlisted kind, and $pageview is not an autocapture name — it is a KIND). The
+// caller gets 200 and the event vanishes. A count of 1 is not evidence the body was
+// understood.
 //
 // The wires are distinguishable exactly, with no heuristic: canonical spells the field
 // `distinctId` (camel) and carries `type`; the PostHog wire spells it `distinct_id`

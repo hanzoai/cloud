@@ -1368,8 +1368,8 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	//
 	// This op used to hold its own copy of that rule, from before the fleet's meter
 	// had one. Both answered 403 with the identical sentence, so the only thing the
-	// copy still decided was the SHAPE — flat {"status","code","error"} from zip
-	// instead of the nested envelope — which made /v1/risk the one surface where a
+	// copy still decided was the SHAPE — zip's RFC 9457 problem members instead of
+	// the nested envelope — which made /v1/risk the one surface where a
 	// client reading error.code found nothing. Measured, both ways, on this
 	// package's own priced ops before it was removed.
 	//

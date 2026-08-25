@@ -611,7 +611,7 @@ type esignPDF struct {
 	// Filename is the name to save it under, built from the title and marked
 	// _signed once it is sealed.
 	Filename string `json:"filename"`
-	// ID is the document.
+	// ID is the document this PDF was rendered from.
 	ID string `json:"id"`
 	// PdfBase64 is the PDF itself, base64-encoded. There is one field either way,
 	// so Sealed is what tells you which artifact you are holding.
