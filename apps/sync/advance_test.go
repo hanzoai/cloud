@@ -284,6 +284,24 @@ func TestACredentialNeverRidesCleartext(t *testing.T) {
 	}
 }
 
+// TestTheEnvTokenIsPresentedTheWayItsHostAccepts: with no explicit credential the
+// token held FOR a host still has to be spelled the way that host reads it —
+// GitLab refuses a personal or OAuth token offered under any username but oauth2.
+// The explicit-credential path already asks mirrorBasicUser; so does this one.
+func TestTheEnvTokenIsPresentedTheWayItsHostAccepts(t *testing.T) {
+	t.Setenv("GIT_MIRROR_TOKEN_GITLAB_COM", "gl")
+	t.Setenv("GIT_MIRROR_TOKEN_GITHUB_COM", "gh")
+	for url, want := range map[string]string{
+		"https://gitlab.com/g/x.git": "oauth2:gl",
+		"https://github.com/a/b.git": "x-access-token:gh",
+	} {
+		got := credAuthHeader(url, gitCred{})
+		if want := base64.StdEncoding.EncodeToString([]byte(want)); got != want {
+			t.Errorf("%s: credential = %q, want %q", url, got, want)
+		}
+	}
+}
+
 // TestTheGitEnvKeepsEveryConfigKey: one environment, numbered ONCE.
 //
 // git reads its env config by COUNT — GIT_CONFIG_COUNT plus KEY_n/VALUE_n — and

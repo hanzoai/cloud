@@ -195,7 +195,7 @@ func outboundAuthHeader(ctx context.Context, org, host, target string) string {
 		// own owner rather than from the org alone: an org may mirror into several
 		// accounts, and each has its own installation.
 		if tok, err := integrations.InstallationToken(ctx, org, githubOwnerOf(target)); err == nil && tok != "" {
-			return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+			return base64.StdEncoding.EncodeToString([]byte(mirrorBasicUser(host) + ":" + tok))
 		}
 	}
 	// No per-org token (or a non-GitHub target) — fall back to the shared env token,
