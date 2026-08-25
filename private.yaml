@@ -21828,12 +21828,12 @@ components:
         csrfToken:
           description: |-
             Token is the value to send back in the X-CSRF-Token header. It is bound to the
-            caller's identity, so it authorizes writes as them and as nobody else.
+            caller's identity, so it authorizes changes as them and as nobody else.
           type: string
         expiresIn:
           description: |-
             ExpiresIn is the token's lifetime in seconds. Fetch a new one when it lapses;
-            a write with an expired token is refused.
+            a change with an expired token is refused.
           type: integer
       type: object
     curateReq:
@@ -56969,14 +56969,13 @@ paths:
   /v1/account/csrf:
     get:
       description: |-
-        IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on
-        every money write (mint/revoke a key, top up, onboard, and the billing/commerce
-        write verbs). The token is bound to the caller's validated identity and expires,
-        so one minted for one identity cannot authorize a write as another.
+        IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on
+        every change it asks for. The token is bound to the caller's validated identity
+        and expires, so one minted for one identity cannot authorize a change as another.
 
         It is answered no-store, so it is never cached by a shared proxy. This is the
         same-origin endpoint the embedded console reads — the Same-Origin Policy is what
-        stops a cross-site page from reading the response and forging a write.
+        stops a cross-site page from reading the response and forging a change.
       operationId: get_account_csrf
       responses:
         "200":
@@ -56985,9 +56984,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/csrfResp'
           description: ok
-      summary: IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token
-        on every money write (mint/revoke a key, top up, onboard, and the billing/commerce
-        write verbs).
+      summary: IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token
+        on every change it asks for.
       tags:
       - account
       x-app: account
