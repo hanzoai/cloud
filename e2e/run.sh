@@ -87,14 +87,16 @@ cleanup() {
 trap cleanup EXIT
 
 # ── preflight ────────────────────────────────────────────────────────────────
-# A bound port is not a warning here. 9999 in particular: it is the ONE
-# cluster-reachable tasks listener and still a compile-time constant, so a leftover
-# instance holding it stops this one from serving durable work to its consumers.
+# A bound port is not a warning here: this instance would come up unable to serve
+# on an address it needs, which is worth stopping for. It is not a statement that
+# one cloud per host is the limit — every port here is derived from one number
+# (dev/up.sh takes them from the project's `port`, and each is overridable), so a
+# second instance is a second port block. Measured: four coexisting on this host.
 # The per-process ingest engine now takes an ephemeral port, so it is not checked.
 for p in "$HTTP_PORT" "$HEALTH_PORT" "$ZAP_PORT" "$TASKS_GATED_PORT"; do
   if ss -ltn "sport = :$p" 2>/dev/null | grep -q LISTEN; then
     holder="$(ss -ltnp "sport = :$p" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)"
-    fail "port $p is in use by pid ${holder:-?} — another cloud instance is up. Stop it (\`kill -9 ${holder:-<pid>}\`). The gated tasks port $TASKS_GATED_PORT is a compile-time constant, so two instances can never coexist on one host."
+    fail "port $p is in use by pid ${holder:-?}. Either stop it, or run this instance on a different port block — every port here is derived from one number, so a second cloud is a second block (dev/up.sh: the project's \`port\`; here: HTTP_PORT, HEALTH_PORT, ZAP_PORT, TASKS_GATED_PORT)."
   fi
 done
 # The suite is only needed by the half of this script that runs specs. A local
