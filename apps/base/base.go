@@ -241,17 +241,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// LANE 1 — platform waitlist app (public /v1/waitlist/*). Raw because it
 	// relays the embedded Base engine's own bytes verbatim — the routes, shapes
 	// and refusals are that program's, not this package's to declare.
-	platformApp, waitlistMux, err := newPlatformApp(filepath.Join(root, platformSeg))
+	platformApp, h, err := newPlatformApp(filepath.Join(root, platformSeg))
 	if err != nil {
 		return fmt.Errorf("base.Mount: platform waitlist app: %w", err)
 	}
-	wh := zip.AdaptNetHTTP(waitlistMux)
-	app.All("/v1/waitlist", wh)
-	app.All("/v1/waitlist/*", wh)
+	app.All("/v1/waitlist", h)
+	app.All("/v1/waitlist/*", h)
 
 	// LANE 2 — per-org Base hosting (authenticated /v1/base/*). Raw for the same
-	// reason as the waitlist lane: each request is served by the org's own Base
-	// app's mux verbatim, so there is no shape here for a typed op to state.
+	// reason as the waitlist lane: each request is answered by the org's own Base
+	// verbatim, so there is no shape here for a typed op to state.
 	// ONE registration, because the org's Base now answers everything it serves
 	// under one root. Base's table wire moved beneath the mount prefix, so it is
 	// /v1/base/rest/{collection} and arrives here with the collections API rather
@@ -262,9 +261,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// So the org still comes from the validated principal, for both, because there
 	// is one handler and one prefix.
-	p := newPool(root, deps)
+	p := newPool(root, deps, log)
 
-	app.All("/v1/base/*", func(c *zip.Ctx) error { return serveOrg(p, log, c) })
+	app.All("/v1/base/*", func(c *zip.Ctx) error {
+		org, ok := principal.Org(c)
+		if !ok {
+			return principal.Refused(c)
+		}
+		return p.serve(org, c)
+	})
 
 	mounted = &subsystem{pool: p, platform: platformApp}
 
@@ -274,15 +279,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// by Base's collection rules. The org comes from the resolved site, never the
 	// caller. Absent the flag, site hosts serve only static files (unchanged).
 	if publicHostEnabled() {
-		sites.SetBaseHostHandler(func(org string, c *zip.Ctx) error {
-			h, release, err := p.acquire(org)
-			if err != nil {
-				log.Error("base: open org app failed", "err", err)
-				return zip.Errorf(http.StatusInternalServerError, "base unavailable")
-			}
-			defer release()
-			return zip.AdaptNetHTTP(h)(c)
-		})
+		sites.SetBaseHostHandler(p.serve)
 		log.Info("base public-host routing enabled", "flag", publicHostEnv)
 	}
 
@@ -304,30 +301,13 @@ func publicHostEnabled() bool {
 	}
 }
 
-// serveOrg resolves the caller's org from the validated principal, acquires that
-// org's pooled Base app (pinned for the request so eviction can't close it
-// mid-flight), and serves the request through the org's own Base mux.
-func serveOrg(p *pool, log interface{ Error(string, ...any) }, c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return principal.Refused(c)
-	}
-	h, release, err := p.acquire(org)
-	if err != nil {
-		log.Error("base: open org app failed", "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "base unavailable")
-	}
-	defer release()
-	return zip.AdaptNetHTTP(h)(c)
-}
-
 // newPlatformApp builds the single platform Base app carrying the waitlist
 // plugin and returns its handler (the FULL base mux; only /v1/waitlist/* is
 // mounted from it). Every waitlist knob resolves from the environment at boot
 // (see waitlist Config.resolve): TURNSTILE_SECRET_KEY, WAITLIST_ADMIN_SECRET,
 // WAITLIST_AWARD_SECRET, WAITLIST_DEFAULT_SLUGS, WAITLIST_ACCESS_CAPACITY,
 // WAITLIST_OPEN — secrets injected from KMS, never in code.
-func newPlatformApp(dir string) (*baseapp.Base, http.Handler, error) {
+func newPlatformApp(dir string) (*baseapp.Base, zip.Handler, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("mkdir %s: %w", dir, err)
 	}
@@ -340,27 +320,39 @@ func newPlatformApp(dir string) (*baseapp.Base, http.Handler, error) {
 		_ = bapp.ResetBootstrapState()
 		return nil, nil, fmt.Errorf("migrations: %w", err)
 	}
-	h, err := buildMux(bapp)
+	h, err := handler(bapp)
 	if err != nil {
 		_ = bapp.ResetBootstrapState()
-		return nil, nil, fmt.Errorf("build mux: %w", err)
+		return nil, nil, fmt.Errorf("build handler: %w", err)
 	}
 	return bapp, h, nil
 }
 
-// buildMux reproduces apis.Serve's handler construction without binding a
-// listener: build the base router, fire the OnServe hook so plugins register
-// their routes on it, then compile the mux. The SAME code path apis.Serve runs
-// inside its OnServe trigger, just without the net.Listen.
-func buildMux(app core.App) (http.Handler, error) {
+// handler compiles one Base into the handler that answers for it, and it is the
+// ONE place in this package where a Base meets zip.
+//
+// It reproduces apis.Serve's construction without binding a listener: build the
+// base router, fire the OnServe hook so plugins register their routes on it, then
+// compile the mux. The SAME code path apis.Serve runs inside its OnServe trigger,
+// just without the net.Listen.
+//
+// A Base routes with its own router (github.com/hanzoai/base/tools/router),
+// compiled to an *http.ServeMux whose handlers are unexported and whose chain
+// carries base's own middleware — its rate limit, its auth token, its security
+// headers, its JSON refusals. zip.Static takes an fs.FS, zip.Proxy takes an
+// address to dial, and App.Use takes a *zip.App; none of those is a thing a Base
+// has, so what is left is to adopt the handler. Adopting it HERE means it happens
+// once when a Base opens, so no request builds an adapter and both lanes serve
+// the same value.
+func handler(app core.App) (zip.Handler, error) {
 	router, err := apis.NewRouter(app)
 	if err != nil {
 		return nil, err
 	}
 
 	var (
-		once    sync.Once
-		handler http.Handler
+		once sync.Once
+		mux  http.Handler
 	)
 	serveEvent := new(core.ServeEvent)
 	serveEvent.App = app
@@ -368,20 +360,20 @@ func buildMux(app core.App) (http.Handler, error) {
 	serveEvent.Server = &http.Server{}
 
 	triggerErr := app.OnServe().Trigger(serveEvent, func(e *core.ServeEvent) error {
-		mux, err := e.Router.BuildMux()
+		built, err := e.Router.BuildMux()
 		if err != nil {
 			return err
 		}
-		once.Do(func() { handler = mux })
+		once.Do(func() { mux = built })
 		return nil
 	})
 	if triggerErr != nil {
 		return nil, triggerErr
 	}
-	if handler == nil {
+	if mux == nil {
 		return nil, fmt.Errorf("nil handler after OnServe")
 	}
-	return handler, nil
+	return zip.AdaptNetHTTP(mux), nil
 }
 
 // Shutdown releases the platform app + every pooled per-org app. Idempotent.
