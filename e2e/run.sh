@@ -48,8 +48,8 @@ ORG=hanzo
 OTHER_ORG=acme
 PASSWORD='***REMOVED***'
 CLIENT_ID=hanzo-console
-SERVICE_TOKEN="$(head -c 32 /dev/urandom | base64 | tr -d '=+/')"
-CLIENT_SECRET="$(head -c 32 /dev/urandom | base64 | tr -d '=+/')"
+SERVICE_TOKEN="${IAM_SERVICE_TOKEN:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
+CLIENT_SECRET="${E2E_CLIENT_SECRET:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
 
 say()  { printf '\033[36m>> %s\033[0m\n' "$*"; }
 fail() { printf '\033[31m!! %s\033[0m\n' "$*" >&2; exit 1; }
@@ -121,13 +121,13 @@ fi
 # fresh: a key that cannot reopen what it never wrote is not a problem, and no
 # long-lived key needs to exist in the tree. (A pinned key + a stale data dir is
 # the ONE combination that breaks — "unwrap DEK: message authentication failed".)
-export CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)"
+export CLOUD_KMS_MASTER_KEY_REF="${CLOUD_KMS_MASTER_KEY_REF:-$(head -c 32 /dev/urandom | base64 -w0)}"
 # The anti-forgery key is ONE key for the whole boot. A CSRF token is minted by
 # GET /v1/account/csrf in one process and checked in another, so an app that
 # resolves a key of its own can never accept a token anybody else minted — and
 # every app that checks one REFUSES TO MOUNT rather than hold a private key.
 # Random for the same reason the master key is: nothing outlives this run.
-export CONSOLE_CSRF_KEY="$(head -c 32 /dev/urandom | base64 -w0)"
+export CONSOLE_CSRF_KEY="${CONSOLE_CSRF_KEY:-$(head -c 32 /dev/urandom | base64 -w0)}"
 export CLOUD_DATA_DIR="$DATA_DIR"
 export CLOUD_ZAP_LISTEN=":$ZAP_PORT"
 export CLOUD_TASKS_GATED_PORT="$TASKS_GATED_PORT"
@@ -177,6 +177,11 @@ say "booting cloud on $BASE (data: $DATA_DIR)"
 # the seed fills it. A zero-byte file is not one — SQLite writes no header until
 # something is written — so this creates a table to force it.
 mkdir -p "$DATA_DIR/iam" "$DATA_DIR/signing"
+# ONLY for a directory that is new. A store that already exists is SQLCipher —
+# stock sqlite3 reads it as "file is not a database" — so staging one a second
+# time is both unnecessary and an error, and the refusals above are exactly the
+# case this stands in for: a volume that failed to mount, not one already filled.
+[ -s "$DATA_DIR/iam/iam.db" ] ||
 python3 - "$DATA_DIR/iam/iam.db" <<'PYEOF'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
@@ -195,6 +200,7 @@ import json, sys
 d = json.load(open(sys.argv[1]))
 print(" ".join(c["name"] for c in d.get("certs", []) if c.get("name")))
 ' "$initDataFile"); do
+  [ -s "$IAM_SIGNING_KEYS/$cert" ] && continue
   openssl genrsa -out "$IAM_SIGNING_KEYS/$cert" 2048 2>/dev/null
   chmod 0400 "$IAM_SIGNING_KEYS/$cert"
 done

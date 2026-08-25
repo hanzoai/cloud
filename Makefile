@@ -81,6 +81,23 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
+# WHICH ENGINE the app binaries link. Default is the pure-Go backend of the note
+# above. CODEC=1 builds them the way the Dockerfile does — cgo against a real
+# libsqlcipher — which is the engine the image ships and the one a KEYED process
+# requires: cloud.Held refuses to compose when a master key is held and no codec
+# is linked, because a keyed org file is then an envelope rather than a database.
+# So a local instance over a persistent CLOUD_KMS_MASTER_KEY_REF needs CODEC=1.
+# The tag alone selects the C engine; CODEC_CC names WHICH system sqlite it
+# resolves to, and is stated once, below, for this and for test-codec.
+# The host is deliberately absent: it opens no store and the image builds it
+# CGO_ENABLED=0.
+APP_ENV  = CGO_ENABLED=$(CGO_ENABLED)
+APP_TAGS =
+ifeq ($(CODEC),1)
+APP_ENV  = $(CODEC_CC) CGO_ENABLED=1
+APP_TAGS = libsqlite3 sqlite_fts5 sqlite_math_functions
+endif
+
 # ONE DOOR. mk/fleet.mk defines describe, documents and check, and
 # without this include they were reachable only as `make -f mk/fleet.mk <target>` —
 # a path nobody would guess and nothing in `make help` mentioned. Its own header
@@ -212,7 +229,7 @@ apps: $(APP_BINS) ## Build every app binary into ./bin. Parallelise: make -j app
 $(APP_BINS): bin/%:
 	@test -d plugin/$* || { echo "no plugin/$* — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
 	@mkdir -p bin
-	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS) $(STAMP)" -o $@ ./plugin/$*
+	GOFLAGS=-p=2 $(APP_ENV) $(GO) build -tags "$(APP_TAGS)" -ldflags="$(LDFLAGS) $(STAMP)" -o $@ ./plugin/$*
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
