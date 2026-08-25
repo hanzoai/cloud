@@ -30,6 +30,7 @@ package kms
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -291,7 +292,21 @@ func orgPath(org, sub string) string {
 // whether it arrived as a matched path tail or as an argument that spelled the
 // same address with a leading or trailing "/".
 func targetOf(org, sub string) (path, name string, ok bool) {
-	sub = strings.Trim(strings.TrimSpace(sub), "/")
+	// DECODED FIRST, so one secret has one address. The router hands a captured
+	// segment over exactly as it arrived — it decodes nothing — while every client
+	// generated from this API percent-encodes a path parameter, so a secret stored
+	// under a sub-path answered the console's spelling and 404'd the SDK's. Both
+	// callers pass the URL capture and nothing else, which is why the decode
+	// belongs here rather than at each of them.
+	//
+	// It is safe BEFORE the split because it is validated after: an encoded
+	// traversal decodes to "../", and ValidSubpath refuses a "." or ".." segment,
+	// so decoding widens what can be SPELLED and never what can be reached.
+	dec, err := url.PathUnescape(sub)
+	if err != nil {
+		return "", "", false
+	}
+	sub = strings.Trim(strings.TrimSpace(dec), "/")
 	var subpath string
 	if slash := strings.LastIndex(sub, "/"); slash >= 0 {
 		subpath, name = sub[:slash], sub[slash+1:]
