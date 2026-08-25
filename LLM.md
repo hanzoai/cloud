@@ -217,13 +217,23 @@ its `-mod=readonly` download step.
 
 Measured on this go.mod: **51 hanzoai modules, 44 of which proxy.golang.org
 serves and 7 of which it does not** (amqp, licensing, plans, pricing, thinking,
-trust, zen — private repos the proxy has never been allowed to read). Each rung
-answers what the one before it cannot, and `hanzo.yml` installs all three:
+trust, zen — private repos the proxy has never been allowed to read). TWO rungs,
+and the second answers exactly what the first cannot:
 
     proxy.golang.org    immutable, and the ONLY copy that survives a repository
                         being RE-ROOTED
-    direct → github     a module the proxy may not read
-    direct → the forge  the same, reached with a git.hanzo.ai credential
+    direct → github     a module the proxy may not read, on the GH_PAT credential
+
+**THERE IS NO THIRD RUNG, AND ADDING ONE MADE IT WORSE.** A git.hanzo.ai
+`insteadOf` looks like the obvious way to reach a version github lacks. It was
+written, shipped and reverted inside an hour, and the failure is worth keeping:
+git prefers the LONGEST matching rewrite, so one on `github.com/hanzoai/`
+outranks ci's own `github.com/` and captures the direct rung for EVERY hanzoai
+module — not just the missing one. Those repos are private ON THE FORGE TOO, and
+CI's machine identity is refused there, so six modules that had resolved fine
+began answering `fatal: repository 'https://git.hanzo.ai/hanzoai/plans/' not
+found` — a permission stated as a missing repo, arriving as `invalid package
+name: ""` two layers up. One publisher we can read beats two we cannot.
 
 **`GOPRIVATE` alone gets this wrong, and the failure does not look like what it
 is.** GOPRIVATE is shorthand for BOTH `GONOPROXY` and the sumdb bypass, and only
@@ -236,13 +246,21 @@ reported **`invalid package name: ""`** — which reads as a code fault on a tre
 nobody changed. Every step that runs `go` therefore states `GONOPROXY=none`
 beside GOPRIVATE.
 
-**The ORDER is load-bearing rather than tidy.** The forge publishes a DIFFERENT
-commit at `sign v1.0.0` (`b49e3e74`) than the proxy does (`315a3fe6`), and it is
-the proxy's that this tree's go.sum verifies — so a blanket forge rewrite ahead
-of the proxy fails the build, and mirroring the forge's tags to github would
-have broken it rather than repaired it. Both were proposed before being
-measured. go.sum is the guarantee under every rung: a wrong lineage stops the
-build, it is never quietly built.
+**MIRRORING A TAG IS RIGHT OR WRONG DEPENDING ON WHETHER THE TWO PUBLISHERS
+AGREE, so check before pushing one.** Both cases are live here:
+
+- `sign v1.0.0` — the forge says `b49e3e74`, the proxy says `315a3fe6`, and it is
+  the proxy's that go.sum verifies. These are two LINEAGES. Pushing the forge's
+  tag to github would have broken the build rather than repaired it.
+- `amqp v0.4.2` — github's private mirror was simply STALE: 4 commits behind,
+  missing v0.4.0/1/2, and its tip is an ANCESTOR of the forge's tag. One
+  fast-forward push (no `--force`, nothing rewritten) and the rung that already
+  works serves it.
+
+The test is `git merge-base --is-ancestor <github tip> <forge tag>`: an ancestor
+means stale and safe, a divergence means two lineages and hands off. go.sum is
+the backstop under either — a wrong lineage stops the build, it is never quietly
+built — but a backstop that fails the release is not a plan.
 
 **A warm module cache hides all of it**, which is why this stayed latent across
 releases pinning the same versions — only a cold cache asks the network. Reproduce
