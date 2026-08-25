@@ -225,12 +225,14 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // worst shape available, because the op then reads an empty address and the
 // document says it is fine. So the tag is measured here, not assumed.
 //
-// FOUR — the residual, which declaring the parameter does NOT fix. An OpenAPI
-// path parameter is one segment: a generated client fills `{wildcard1}` with the
-// slashes percent-encoded, no greedy segment matches that, and the route answers
-// 404. So a subpath'd secret is reachable by a client that builds the path
-// itself and not by one generated from this document. The declaration makes the
-// document self-consistent; it does not make the SDK able to call it.
+// FOUR — that a secret has ONE address however it is spelled. An OpenAPI path
+// parameter is one segment, so a generated client fills `{wildcard1}` with the
+// slashes percent-encoded; the router decodes nothing, so that spelling used to
+// reach no record and a subpath'd secret was addressable by a hand-built path and
+// by no SDK. targetOf decodes the capture before it becomes a coordinate, which
+// closes it — and safely, because the validators run AFTER the decode, so an
+// encoded traversal is refused by the same rule as a plain one
+// (TestAnEncodedTraversalIsStillRefused, kms_test.go).
 func TestTheWildcardAddress(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	g := app.Group("/v1/probe")
@@ -281,9 +283,16 @@ func TestTheWildcardAddress(t *testing.T) {
 	if s, _ := ask(t, live, http.MethodGet, "/v1/kms/secrets/ci/deploy/token?env=prod", "acme", false, ""); s != http.StatusOK {
 		t.Fatalf("the raw multi-segment address stopped reaching the record: %d", s)
 	}
-	if s, _ := ask(t, live, http.MethodGet, "/v1/kms/secrets/ci%2Fdeploy%2Ftoken?env=prod", "acme", false, ""); s != http.StatusNotFound {
-		t.Errorf("a percent-encoded single segment now reaches the record (%d) — the residual in "+
-			"proselessParams has closed and a generated client can address a subpath'd secret", s)
+	// FOUR's second half USED to assert a 404 here, and recorded it as the residual
+	// a declared parameter does not fix: an SDK fills a path parameter
+	// percent-encoded, and the encoded spelling reached no record. It is CLOSED —
+	// targetOf decodes the capture before it becomes a coordinate, so one secret
+	// has one address however it is spelled, and a generated client can address a
+	// subpath'd secret. Asserted in the direction it now holds, so a regression
+	// reads as one.
+	if s, _ := ask(t, live, http.MethodGet, "/v1/kms/secrets/ci%2Fdeploy%2Ftoken?env=prod", "acme", false, ""); s != http.StatusOK {
+		t.Errorf("the percent-encoded spelling answered %d — every generated client sends that "+
+			"form, so a subpath'd secret is unreachable from every SDK again", s)
 	}
 }
 

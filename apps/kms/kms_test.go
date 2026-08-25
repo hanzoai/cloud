@@ -372,3 +372,51 @@ func readAll(r io.Reader) string { b, _ := io.ReadAll(r); return string(b) }
 func bytesContains(haystack, needle []byte) bool {
 	return strings.Contains(string(haystack), string(needle))
 }
+
+// TestASecretHasOneAddressHoweverItIsSpelled stores a secret under a SUB-PATH and
+// reads it back the two ways a caller can spell that address.
+//
+// The router hands a captured segment over exactly as it arrived — it decodes
+// nothing — while every client cut from this API percent-encodes a path
+// parameter: Go's url.PathEscape, Python's quote(safe="") and JS's
+// encodeURIComponent all render "ci/deploy/TOKEN" as "ci%2Fdeploy%2FTOKEN". So a
+// secret filed under a sub-path answered the console and 404'd every SDK, and the
+// 404 read as "no such secret" rather than as "you cannot spell this".
+func TestASecretHasOneAddressHoweverItIsSpelled(t *testing.T) {
+	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
+	body, _ := json.Marshal(map[string]string{
+		"name": "TOKEN", "path": "ci/deploy", "value": "s3cret", "env": "default",
+	})
+	if r := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, asOrgAdmin); r.StatusCode != http.StatusOK {
+		t.Fatalf("store: %d %s", r.StatusCode, readAll(r.Body))
+	}
+	for _, spelling := range []string{
+		"/v1/kms/secrets/ci/deploy/TOKEN?env=default",
+		"/v1/kms/secrets/ci%2Fdeploy%2FTOKEN?env=default",
+	} {
+		if r := do(t, app, "GET", spelling, "hanzo", "", false, nil); r.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200 — the two spellings address one secret", spelling, r.StatusCode)
+		}
+	}
+}
+
+// TestAnEncodedTraversalIsStillRefused is the half that decoding could have cost
+// and does not.
+//
+// Decoding happens BEFORE the split and the validators run AFTER it, so an
+// encoded "../" becomes a real "../" and is then refused by the same rule that
+// refuses a plain one. Decoding widens what a caller may SPELL, never what a
+// caller may REACH — and on the credential broker that is the property worth a
+// test of its own rather than a sentence.
+func TestAnEncodedTraversalIsStillRefused(t *testing.T) {
+	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
+	for _, escape := range []string{
+		"/v1/kms/secrets/ci%2F..%2F..%2Fother%2FTOKEN?env=default",
+		"/v1/kms/secrets/%2E%2E%2F%2E%2E%2FTOKEN?env=default",
+	} {
+		if r := do(t, app, "GET", escape, "hanzo", "", false, nil); r.StatusCode != http.StatusBadRequest {
+			t.Errorf("GET %s = %d, want 400 — an encoded traversal must be refused by the same "+
+				"rule as a plain one", escape, r.StatusCode)
+		}
+	}
+}
