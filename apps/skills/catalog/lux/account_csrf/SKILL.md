@@ -1,7 +1,7 @@
 ---
 name: account_csrf
 version: "8.0.0"
-description: "Read account csrf: IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on every money write (mint/revoke a key, top up, onboard, and the billing/commerce write verbs).."
+description: "Read account csrf: IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on every change it asks for.."
 ---
 
 # Lux · ACCOUNT · csrf
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/account/csrf` — IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on every money write (mint/revoke a key, top up, onboard, and the billing/commerce write verbs).
+- `GET https://api.lux.network/v1/account/csrf` — IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on every change it asks for.
 
 ## Response
 
