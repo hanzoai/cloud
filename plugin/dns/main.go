@@ -20,6 +20,10 @@ func main() {
 		Name:  "dns",
 		Price: cloud.Free,
 		Mount: dns.Mount,
+		// The plane's own /v1/dns/health is one of the addresses Mount declares,
+		// so serve.go must not declare it too: one address claimed twice is a
+		// composition zip refuses outright, and the subsystem would not start.
+		OwnsHealth: true,
 	}}, []string{"dns"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
