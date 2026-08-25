@@ -1,23 +1,23 @@
 package iam
 
-// This file is the gate on what the GRAFT recovered, and it used to be the gate on
-// what the wildcard destroyed.
+// This file is the ratchet on what composing recovered, and it used to record what
+// the wildcard destroyed.
 //
 // It held a permanent refusal: iam was "a WHOLLY OPAQUE product", five `app.All`
 // wildcards relaying a nested app through zip.AdaptNetHTTP, and "none of the five
 // can become a typed op … a structural fact about the mount, not a backlog item".
 // The fact was true and the reason was wrong: it was a property of the CLIENT, not of
-// iam. zip.Graft composes the App instead of adapting a handler, so the nested
+// iam. host.Use composes the App instead of adapting a handler, so the nested
 // registry arrives with it, and the refusal has nothing left to refuse.
 //
-// What replaces it is a RATCHET pointing the other way. iam publishes 182
-// operations here; 94 of them are typed, which is every typed op the nested app
-// holds. The 88 that are not are iam's OWN untyped routes, in github.com/hanzoai/iam
-// — each one converted there lands in cloud's document on the next dependency bump,
-// with no change to this file and none to apps/iam. The numbers below may only move
-// in one direction, so that work cannot regress and cannot go unnoticed.
+// What replaces it is a RATCHET pointing the other way. The typed ops cloud
+// publishes here are every typed op the nested app holds; what is left is iam's OWN
+// untyped routes, in github.com/hanzoai/iam — each one converted there lands in
+// cloud's document on the next dependency bump, with no change to this file and none
+// to apps/iam. The floor and ceiling below may only move in one direction, so that
+// work cannot regress and cannot go unnoticed.
 //
-// It also still pins the two things a graft must not change: iam's own behaviour on
+// It also still pins the two things composing must not change: iam's own behaviour on
 // the wire, and the fail-closed half covering every address the mounted half serves.
 
 import (
@@ -47,7 +47,7 @@ import (
 // inequalities rather than equalities so a conversion in github.com/hanzoai/iam is
 // not a red build here; only a regression is.
 //
-// Before the graft these were 0 and 35: thirty-five placeholder operations across
+// Before composing these were 0 and 35: thirty-five placeholder operations across
 // five wildcard path keys, none with a schema, a tool, a command or a method.
 //
 // They were 94 and 88 at iam v1.33.37, and the ratchet did its job: ten canonical
@@ -156,16 +156,16 @@ func iamOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 	return served, typed
 }
 
-// TestGraftRecoveredTheNestedRegistry is the deliverable, measured: the nested app's
-// typed ops are cloud's typed ops, at their own absolute addresses, with their own
-// prose — and not one wildcard is left.
-func TestGraftRecoveredTheNestedRegistry(t *testing.T) {
+// TestComposingRecoveredTheNestedRegistry is the deliverable, measured: the nested
+// app's typed ops are cloud's typed ops, at their own absolute addresses, with their
+// own prose — and not one wildcard is left.
+func TestComposingRecoveredTheNestedRegistry(t *testing.T) {
 	served, typed := iamOps(t)
 	if len(served) == 0 {
 		t.Fatal("iam serves no operations at all — the mount did not register")
 	}
 
-	// A wildcard here means the graft did not happen and something relayed a subtree
+	// A wildcard here means the compose did not happen and something relayed a subtree
 	// again. It is the single most important assertion in the file: {wildcardN} is
 	// what a host publishes when it cannot see past a closure.
 	var wild []string
@@ -177,13 +177,13 @@ func TestGraftRecoveredTheNestedRegistry(t *testing.T) {
 	if len(wild) > 0 {
 		sort.Strings(wild)
 		t.Errorf("iam still publishes %d wildcard operation(s): %s\n"+
-			"A wildcard stands in for a surface the host cannot describe. safeMount grafts the app; "+
+			"A wildcard stands in for a surface the host cannot describe. Mount composes the app; "+
 			"if these are back, something is relaying a subtree through a handler again.",
 			len(wild), strings.Join(wild, ", "))
 	}
 
 	if len(typed) < typedOps {
-		t.Errorf("%d typed operations, want at least %d — the graft lost some of the nested registry",
+		t.Errorf("%d typed operations, want at least %d — composing lost some of the nested registry",
 			len(typed), typedOps)
 	}
 	// The backlog ceiling counts the CONVERTIBLE remainder, so the ceremony below
@@ -214,15 +214,15 @@ func TestGraftRecoveredTheNestedRegistry(t *testing.T) {
 	}
 	if len(bare) > 0 {
 		sort.Strings(bare)
-		t.Errorf("%d grafted op(s) carry no prose: %s", len(bare), strings.Join(bare[:min(5, len(bare))], ", "))
+		t.Errorf("%d composed op(s) carry no prose: %s", len(bare), strings.Join(bare[:min(5, len(bare))], ", "))
 	}
 }
 
-// TestGraftedOpsAreAddressedByTheirOwnPaths pins the two decisions that make the
+// TestComposedOpsAreAddressedByTheirOwnPaths pins the two decisions that make the
 // composed document usable: the child's absolute paths are untouched, and its
 // operationIds are untouched. Rewriting either at compose time would make an SDK
 // method name a function of where the app is deployed.
-func TestGraftedOpsAreAddressedByTheirOwnPaths(t *testing.T) {
+func TestComposedOpsAreAddressedByTheirOwnPaths(t *testing.T) {
 	_, typed := iamOps(t)
 	for _, want := range []string{
 		"GET /v1/iam/keys",           // the key entity iam owns, at iam's own address
@@ -240,11 +240,11 @@ func TestGraftedOpsAreAddressedByTheirOwnPaths(t *testing.T) {
 	}
 }
 
-// TestGraftPublishesTheNestedSchemas: the 94 component schemas arrive too, qualified
+// TestComposingPublishesTheNestedSchemas: the component schemas arrive too, qualified
 // by the app that declared them. Unqualified, iam's Application (an OAuth client, 83
 // properties) and the fleet's Application (a hiring application, 16) are one name
 // with two shapes, which every generated SDK would bind to whichever it read last.
-func TestGraftPublishesTheNestedSchemas(t *testing.T) {
+func TestComposingPublishesTheNestedSchemas(t *testing.T) {
 	app := mountApp(t)
 	reg, err := openapi.Typed(app)
 	if err != nil {
@@ -255,7 +255,7 @@ func TestGraftPublishesTheNestedSchemas(t *testing.T) {
 	}
 	for _, want := range []string{"iam.Application", "iam.Role"} {
 		if _, ok := reg.Schemas[want]; !ok {
-			t.Errorf("components.schemas has no %q — a grafted type must be qualified by its origin", want)
+			t.Errorf("components.schemas has no %q — a composed type must be qualified by its origin", want)
 		}
 	}
 	for _, unwanted := range []string{"Application", "Role"} {
@@ -265,7 +265,7 @@ func TestGraftPublishesTheNestedSchemas(t *testing.T) {
 	}
 }
 
-// TestServingIsUnchanged is the other half of the claim: a graft changes what cloud
+// TestServingIsUnchanged is the other half of the claim: composing changes what cloud
 // DESCRIBES and nothing about what it SERVES. Each body below is composed inside
 // github.com/hanzoai/iam and reaches the caller unchanged — iam's own error shape,
 // iam's own minted discovery document.
@@ -275,7 +275,7 @@ func TestServingIsUnchanged(t *testing.T) {
 	// The nested app's OWN Guard envelope reaches the caller unchanged. cloud's error
 	// shape is nested under "error"; this one is flat with a numeric "status", which is
 	// the tell that the response was composed inside github.com/hanzoai/iam — and it is
-	// the proof that the graft carried iam's app.Use(Guard) client with it rather than
+	// the proof that composing carried iam's app.Use(Guard) client with it rather than
 	// copying its routes out from under it.
 	status, body := get(t, app, "/v1/iam/users")
 	if status != http.StatusUnauthorized {
@@ -299,7 +299,7 @@ func TestServingIsUnchanged(t *testing.T) {
 		t.Errorf("discovery body = %q, want the RFC 8414 metadata the nested app mints", body)
 	}
 
-	// And the graft NARROWED the surface rather than widening it: a path under iam's
+	// And composing NARROWED the surface rather than widening it: a path under iam's
 	// prefix that iam does not declare falls through to cloud instead of reaching
 	// iam's 404. The wildcard swallowed the whole subtree; this is what replaced it.
 	if status, _ = get(t, app, "/v1/iam/no-such-address-anywhere"); status != http.StatusNotFound {

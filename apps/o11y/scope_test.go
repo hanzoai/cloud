@@ -92,7 +92,7 @@ func TestTypedOpsSeeTheirCallerThroughEveryDoor(t *testing.T) {
 		t.Fatalf("without cloud.Bridge: want 200 (the principal rides zip's caller), got %d %s", code, body)
 	}
 
-	// With it — the shape Mount installs — the SAME request is served.
+	// With it — the shape cloud.App installs — the SAME request is served.
 	if code, body := do(t, scopeApp(t), scopeReq("GET", path, "acme")); code != http.StatusOK {
 		t.Fatalf("with cloud.Bridge: want 200 for a validated caller, got %d %s", code, body)
 	}

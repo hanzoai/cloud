@@ -442,15 +442,15 @@ func mountRuntime(deps cloud.Deps) error {
 
 // Mount composes the whole observability surface into its host as ONE app,
 // through [zip.Router.Use] — the same client apps/iam composes identity through.
-// Use is the ONE composition verb, and an *App IS a Component, so the child below
-// is passed to it whole.
+// Use takes a [zip.Component], and an *App is one, so the child below is passed
+// to it whole.
 //
 // # Why the surface is an app and not a pile of routes on the host's router
 //
 // A composed op arrives carrying Origin = the child's AppName, and zip qualifies
 // every named type that op reaches as "<origin>.<Type>" — unconditionally, not on
 // collision, so a published name is never a function of who else is in the room
-// (zip schemaRegistry.nameFor). That is why identity's 95 schemas are iam.* and
+// (zip schemaRegistry.nameFor). That is why identity's 91 schemas are iam.* and
 // have never collided with anything.
 //
 // Registered straight onto the host, as this was, every one of these ops has an
@@ -494,17 +494,31 @@ func mountRuntime(deps cloud.Deps) error {
 // the validated org parked at /v1/o11y is the one every typed op behind it reads.
 // door_test.go is the end-to-end proof, over the real mount.
 //
+// # cloud.Bridge is not installed here
+//
+// No subsystem installs it. The typed ops below do need it — a zip.Get[In, Out]
+// handler receives a context and its decoded In and nothing else, so the validated
+// org reaches it only by being parked on that context — but the middleware belongs
+// to whoever COMPOSES this app. Only a composer knows that the identity boundary
+// has already run (the org is trustworthy only once [cloud.SanitizeIdentity] has
+// minted it) and that no route is registered ahead of it; see the install in
+// [cloud.App]. A second copy installed here could never run: each Group call makes
+// a fresh node, so the install lands on a node of its own at the prefix while the
+// routes live beneath the different node mountScope creates — and zip judges the
+// node, not the path, so it refuses middleware that cannot reach them.
+//
 // # Nothing is left on the host but the child
 //
-// [zip.App.Declaration] drops HEAD and OPTIONS unconditionally — they are the
-// shadows fiber generates for a GET and for CORS, and a host does not route those
-// on their own, so a route declared with All cannot compose intact. One
-// route needed that exception: the /v1/sentinel proxy, which answered OPTIONS as a
-// real method. It is gone — the runtime carries the error face at /v1/o11y/sentinel
-// now, twelve named paths with typed ops instead of a wildcard — so there is no
-// All left here and nothing to register on the host but the child itself.
-// Everything with a shape to name is in the child, which is where it always
-// belonged.
+// [zip.App.Declaration] expands All into the seven methods a host must route and
+// leaves HEAD and OPTIONS out of that expansion — under All they are
+// indistinguishable from the shadows fiber generates for a GET and for CORS, which
+// a host regenerates wherever it registers the GET — so a route declared with All
+// cannot reach the host intact. One route needed that exception: the /v1/sentinel
+// proxy, which answered OPTIONS as a real method. It is gone — the runtime carries
+// the error face at /v1/o11y/sentinel now, twelve named paths with typed ops
+// instead of a wildcard — so there is no All left here and nothing to register on
+// the host but the child itself. Everything with a shape to name is in the child,
+// which is where it always belonged.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	a := zip.New(zip.Config{
 		AppName:      "o11y",
@@ -591,33 +605,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := module.Mount(a); err != nil {
 		return err
 	}
-	// Use is the ONE composition verb, and an *App IS a Component. The
-	// address-conflict check runs at Build, over the whole program.
+	// Use is the ONE composition verb, and an *App IS a Component. Two claimants on
+	// one METHOD+pattern are refused over the whole program at build (zip walk.go:375),
+	// not at each inclusion.
 	app.Use(a)
 	return nil
 }
-
-// mount performs the ordered sub-mounts that make up the one observability
-// concept, onto the app that IS that concept. Every cloud-native /v1/o11y/* route
-// is registered here, BEFORE hanzoai/o11y's own table, so Fiber's in-order match
-// gives the specific routes precedence over the runtime relay.
-//
-// host is the router the child composes onto, and now takes nothing but the
-// child: the one route that could not cross — the /v1/sentinel wildcard — is
-// gone, folded into the module's own named routes under /v1/o11y/sentinel. See
-// [Mount].
-//
-// cloud.Bridge is NOT installed here, and no subsystem installs it. The typed ops
-// below do need it — a zip.Get[In, Out] handler receives a context and its decoded
-// In and nothing else, so the validated org reaches it only by being parked on
-// that context — but the middleware belongs to whoever COMPOSES this app. Only a
-// composer knows that the identity boundary has already run (the org is
-// trustworthy only once SanitizeIdentity has minted it) and that no route is
-// registered ahead of it; see the install in cloud.Serve. Installing a second copy
-// here is what took the surface down: each Group call makes a fresh node, so the
-// install went on a node of its own at the same prefix while the routes below live
-// beneath the different node mountScope creates — and zip judges the node, not the
-// path, so it refused to compose middleware that could never run.
 
 // shutdownO11y tears down the write-plane resources that hold process-lifetime
 // connections, in REVERSE mount order — plane ingest (trace sink + receivers),

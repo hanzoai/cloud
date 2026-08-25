@@ -792,9 +792,9 @@ func TestOnboard_Unauthenticated_403(t *testing.T) {
 // returns IAM's own {"status":401,"error":"authentication required"} from
 // server: zip, with no Deprecation header and no x-api-version.
 //
-// iam is GRAFTED now, so both would be EXACT routes at one address and the winner
-// would be registration order rather than specificity — silent, and zip.Graft
-// refuses it at compose time instead. The keys aliases are deleted and onboard is
+// iam is COMPOSED now, so both would be EXACT routes at one address and the winner
+// would be registration order rather than specificity — silent, and zip refuses a
+// duplicate at build instead. The keys aliases are deleted and onboard is
 // POST /v1/account/orgs, both named for the resource under the capability that
 // serves them — the same rule that moved the key surface off /v1/iam/keys in the
 // first place. This test is the ratchet on that: nothing account registers may sit
@@ -813,8 +813,8 @@ func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 	}
 	for _, r := range app.Fiber().GetRoutes(true) {
 		if strings.HasPrefix(r.Path, "/v1/iam") || strings.HasPrefix(r.Path, "/login/oauth") {
-			t.Errorf("account registers %s %s, inside a prefix iam owns — a graft refuses "+
-				"the duplicate at compose time and the whole subsystem fail-closes to 503",
+			t.Errorf("account registers %s %s, inside a prefix iam owns — zip refuses "+
+				"the duplicate at build and the whole subsystem fail-closes to 503",
 				r.Method, r.Path)
 		}
 	}

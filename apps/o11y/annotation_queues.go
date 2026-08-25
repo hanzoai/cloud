@@ -20,7 +20,7 @@ import (
 // surface the console's AnnotationQueuesModule consumes. The o11y span plane has
 // flat annotations but no queue entity, so this is a cloud-native relational
 // feature (annotation_store.go) registered BEFORE the hanzoai/o11y wildcard
-// (inside MountO11y, order 69) so Fiber's in-order match gives it precedence.
+// (inside Mount, order 69) so Fiber's in-order match gives it precedence.
 //
 //	GET    /v1/o11y/reviews              list queues (org+project scoped)
 //	POST   /v1/o11y/reviews              create a queue
@@ -70,7 +70,7 @@ type annService struct {
 var annQueues *annService
 
 // mountAnnotationQueues opens the queue metastore and registers the routes. Called
-// by MountO11y inside the one order-69 mount, so every route precedes the order-70
+// by Mount inside the one order-69 mount, so every route precedes the order-70
 // wildcard. A store-open failure fails the mount (a broken data plane must not
 // silently serve empty queues).
 func mountAnnotationQueues(a *zip.App, deps cloud.Deps) error {

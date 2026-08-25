@@ -43,8 +43,8 @@
 // account no longer names anything under /v1/iam. It used to — deprecated key
 // aliases and an onboard handler sitting inside IAM's prefix — and those were
 // unreachable in production, because api.hanzo.ai routes /v1/iam/* to IAM. Since
-// iam is GRAFTED rather than relayed through a wildcard, a duplicate address is
-// refused at compose time instead of being decided by registration order.
+// iam is COMPOSED rather than relayed through a wildcard, a duplicate address is
+// refused at build instead of being decided by registration order.
 package manifest
 
 var Apps = []App{
@@ -76,10 +76,10 @@ var Apps = []App{
 	{Name: "account", Prefixes: []string{"/v1/account"}},
 	// The three root /.well-known documents are named EXACTLY, one prefix each, and
 	// naming them at all is new: OIDC discovery and JWKS live at the ISSUER root by
-	// spec (RFC 8414 / OIDC Discovery 1.0), so before iam was grafted the only thing
+	// spec (RFC 8414 / OIDC Discovery 1.0), so while iam was relayed the only thing
 	// it could declare here was /.well-known/*, which would have taken the whole
 	// subtree from skills and from anything else that ever lands under it. A
-	// grafted child declares the addresses its router actually holds, so the host can
+	// composed child declares the addresses its router actually holds, so the host can
 	// route the three and nothing more. They were in manifest/router_test.go's
 	// `unreachable` ledger until now — a relying party's FIRST call, reaching no app.
 	{Name: "iam", Prefixes: []string{"/.well-known/jwks", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/login/oauth", "/v1/iam"}},
