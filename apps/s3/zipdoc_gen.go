@@ -13,7 +13,7 @@ func init() {
 			"bucketRef.bucket": "Bucket is the bucket's friendly name, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/s3/buckets/:bucket/objects/*", zip.Doc{
+	zip.Describe("DELETE /v1/s3/buckets/:bucket/objects/+", zip.Doc{
 		Description: "Removes one object and answers 204.\n\nIt removes ONE object and never a prefix: a key that looks like a folder deletes\nthe placeholder at that key, not the objects beneath it. The key is path-cleaned\nfirst, so the delete cannot reach outside the bucket it names, and a bucket the\ncaller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nobject is gone.",
 		Fields: map[string]string{
 			"objectRef.bucket": "Bucket is the bucket's friendly name, from the path.",
@@ -44,7 +44,7 @@ func init() {
 			"objectList.total":        "Total is how many entries came back. The listing is BOUNDED, so a bucket\nwith more keys than the cap answers the cap and this says so — it is not a\ncount of what the bucket holds.",
 		},
 	})
-	zip.Describe("GET /v1/s3/buckets/:bucket/objects/*", zip.Doc{
+	zip.Describe("GET /v1/s3/buckets/:bucket/objects/+", zip.Doc{
 		Description: "Mints a presigned GET URL the caller downloads from DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. It carries a content disposition of attachment\nnaming the object's file name, so a browser following it saves the object rather\nthan rendering it in place. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe download that follows it comes straight from the store and is not seen here.\nThe balance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
 		Fields: map[string]string{
 			"objectRef.bucket":          "Bucket is the bucket's friendly name, from the path.",

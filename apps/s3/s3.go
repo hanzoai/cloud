@@ -14,8 +14,8 @@
 //	DELETE /v1/s3/buckets/:bucket                     — delete an EMPTY bucket;           JWT, org-scoped
 //	GET    /v1/s3/buckets/:bucket/objects?prefix=&delimiter=/  — list objects (folders);  JWT, org-scoped
 //	POST   /v1/s3/buckets/:bucket/objects  {key}      — presigned PUT url (upload);       JWT, org-scoped
-//	GET    /v1/s3/buckets/:bucket/objects/*           — presigned GET url (download);     JWT, org-scoped
-//	DELETE /v1/s3/buckets/:bucket/objects/*           — delete one object;                JWT, org-scoped
+//	GET    /v1/s3/buckets/:bucket/objects/+           — presigned GET url (download);     JWT, org-scoped
+//	DELETE /v1/s3/buckets/:bucket/objects/+           — delete one object;                JWT, org-scoped
 //
 // ORG SCOPING — every tenant only ever sees or touches its OWN namespace. A
 // bucket's PHYSICAL name is derived server-side from the caller's validated org
@@ -191,8 +191,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Delete(g, "/buckets/:bucket", paid(s, o.deleteBucket))
 	zip.Get(g, "/buckets/:bucket/objects", paid(s, o.listObjects))
 	zip.Post(g, "/buckets/:bucket/objects", paid(s, o.presignUpload))
-	zip.Get(g, "/buckets/:bucket/objects/*", paid(s, o.presignDownload))
-	zip.Delete(g, "/buckets/:bucket/objects/*", paid(s, o.deleteObject))
+	// `+` and not `*`: a greedy `*` matches the EMPTY remainder and beats an exact
+	// sibling whichever order they register in, so /objects — the collection —
+	// arrived here as an object request with no key and was refused 400 before the
+	// store was ever asked. listObjects was unreachable over HTTP by every
+	// spelling. `+` requires at least one character after /objects/, which leaves
+	// the bare collection to the route above it.
+	//
+	// The published document does not move for this: fiber keys the capture "+1"
+	// where it keyed "*1", and the In binds that, but the segment's DOCUMENT name
+	// is positional — {wildcard1} either way.
+	zip.Get(g, "/buckets/:bucket/objects/+", paid(s, o.presignDownload))
+	zip.Delete(g, "/buckets/:bucket/objects/+", paid(s, o.deleteObject))
 
 	if !s.State.admin.Configured() {
 		s.Log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
@@ -444,7 +454,7 @@ func friendlyParam(raw string) (string, bool) {
 	return name, true
 }
 
-// remainder is the trailing path of an /objects/* address as an object key: the
+// remainder is the trailing path of an /objects/+ address as an object key: the
 // greedy capture with a leading separator taken off, so a doubled separator in
 // the URL (…/objects//a.txt) addresses the same key one separator does. It runs
 // before cleanKey and NOT inside it, because a leading separator reaching cleanKey
