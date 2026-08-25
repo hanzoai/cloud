@@ -52,16 +52,11 @@ const sessionsRoute = "/v1/o11y/llm/sessions"
 // indistinguishable from the address it aliases, which is what makes verbatim the
 // only correct answer here — and why there is no Go shape to declare.
 //
-// THIS DELEGATES; IT DOES NOT ADAPT. It used to adapt an http.Handler onto this
-// route after rewriting the path onto /api/sessions, and that address is served
-// by nothing: the runtime registers every route at its full public path and has
-// no /api/* route at all, so the request fell through to the runtime's terminal
-// console route and came back as the SPA shell — 200 text/html to a caller
-// reading JSON. The adapter is what made that look survivable: it hands over a
-// CLIENT request, whose RequestURI is empty by contract, and the in-process
-// backing forwards that field verbatim, so even a correct path arrived as "/".
-// Both are gone with it — the address is the one the runtime serves, and the
-// request is built server-shaped.
+// It delegates in process rather than adapting an http.Handler. The runtime
+// registers every route at its full public path, so the address above is the one
+// it serves and no rewrite stands between them. The request is built
+// server-shaped, which is what RequestURI needs: a CLIENT request leaves that
+// field empty by contract and the in-process backing forwards it verbatim.
 func sessionsHandler(c *zip.Ctx) error {
 	if _, ok := principal.Org(c); !ok {
 		return zip.ErrForbidden("a validated principal is required")
