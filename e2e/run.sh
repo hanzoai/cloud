@@ -46,11 +46,12 @@ BASE="http://127.0.0.1:${HTTP_PORT}"
 # secret and password exist only inside this data dir, which is deleted on exit.
 ORG=hanzo
 OTHER_ORG=acme
-# The house convention for the seeded superuser, and overridable for the same
-# reason the two credentials below are: a caller that boots this and then signs
-# in needs the password it was seeded with, and a second copy of the literal is
-# the thing that goes stale when this one changes.
-PASSWORD="${PASSWORD:-***REMOVED***}"
+# Minted per run, like the two credentials below, and for the same reason: a
+# password written into a file is a password on every disk that file reaches and
+# in every copy of this repository's history, forever, for an instance whose data
+# directory is deleted on exit. It is printed once at the end instead — that is
+# where a human reads it, and it exists nowhere else.
+PASSWORD="${PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -d '=+/')!aA1}"
 CLIENT_ID=hanzo-console
 # Fresh per run, unless the caller already has one. BOOT_ONLY leaves the instance
 # up for somebody else to talk to, and talking to it needs the credential it was

@@ -49,7 +49,9 @@ export KAFKA_PORT=$((port + 5))
 export AMQP_PORT=$((port + 6))
 # Chosen HERE so this script can talk to what it booted. run.sh randomises when
 # the caller sets nothing, which is still what every suite gets.
-export PASSWORD="${PASSWORD:-***REMOVED***}"
+# Minted here so this script can sign in with what it seeded, and nowhere on
+# disk. run.sh mints its own when a caller sets none.
+export PASSWORD="${PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -d '=+/')!aA1}"
 export CLIENT_SECRET="${CLIENT_SECRET:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
 export SERVICE_TOKEN="${SERVICE_TOKEN:-$(head -c 32 /dev/urandom | base64 | tr -d '=+/')}"
 BOOT_ONLY=1 ./e2e/run.sh
