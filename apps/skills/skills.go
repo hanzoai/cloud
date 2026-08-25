@@ -80,6 +80,19 @@ func init() {
 			"Brand resolution and caching are index.json's: the Host picks the catalogue, and the "+
 			"response is `Cache-Control: public, max-age=300`. Public — no bearer, no tenant "+
 			"scope.")
+
+	openapi.Describe(wellKnown+"/:product/index.json", http.MethodGet,
+		"One product's skills, as a catalogue in its own right",
+		"Serves the index for a single product — the same shape and the same fields as the "+
+			"brand catalogue, narrowed to the skills of one product, so a client that already "+
+			"walks the top document needs no second parser.\n\n"+
+			"The top catalogue lists 116 products beside its skills and gives each one this "+
+			"address; without it those links answer 404 and a reader looking for one "+
+			"capability is back to reading every skill. The segment is the product name "+
+			"prefixed `_` (`_account`), which is what keeps a product index and a skill "+
+			"distinguishable in one flat directory and is why the skill route rejects it.\n\n"+
+			"Brand resolution and caching are index.json's. Public — no bearer, no tenant "+
+			"scope. A product the serving brand does not carry is `{\"error\":…}` at 404.")
 }
 
 // Regenerate the FULL embedded catalog from the openapi SOT (delegates to the
@@ -92,6 +105,14 @@ var catalogFS embed.FS
 // skillID is the flat, service-prefixed skill identifier (e.g. `ai_models`).
 // One path segment, no separators that could escape the catalogue root.
 var skillID = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
+// productID is a product index directory (`_account`). The leading `_` is what
+// separates the two kinds of directory that share the catalogue root, and it is
+// load-bearing in BOTH directions: skillID refuses it, so a product can never be
+// served as a skill, and this refuses everything else, so a skill can never be
+// served as a product index. Same one-segment shape, so neither can address
+// anything outside the catalogue.
+var productID = regexp.MustCompile(`^_[a-z0-9][a-z0-9_-]*$`)
 
 const wellKnown = "/.well-known/agent-skills"
 
@@ -138,6 +159,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// else in this partition.
 	app.Get(wellKnown+"/index.json", h.serveIndex)
 	app.Get(wellKnown+"/:skill/SKILL.md", h.serveSkill)
+	// The product tier. Same reasoning as the two above — embedded bytes, served
+	// verbatim — and a separate route rather than a branch inside serveSkill
+	// because the two answer different documents at different addresses.
+	app.Get(wellKnown+"/:product/index.json", h.serveProduct)
 
 	// Register the deployment brand's skills into the unified tool plane (SourceSkill,
 	// discovery + activation only). Fall back to the default brand's catalogue.
@@ -192,6 +217,19 @@ func (h *handler) serveIndex(c *zip.Ctx) error {
 // DOCUMENT, not a JSON value. A typed op marshals its Out with c.JSON and always
 // answers application/json, so there is no shape of In/Out that serves this route's
 // wire at all. It also carries serveIndex's Cache-Control and its 404 body.
+// serveProduct answers GET /.well-known/agent-skills/<_product>/index.json with
+// the product's own catalogue. Embedded bytes, verbatim, for the reason
+// serveIndex serves them that way: the digests in it were computed over the
+// documents this binary carries, so re-deriving the JSON would invalidate them.
+func (h *handler) serveProduct(c *zip.Ctx) error {
+	brand := h.brandFor(c.Fiber().Hostname())
+	id := c.Param("product")
+	if !productID.MatchString(id) {
+		return c.JSON(404, map[string]string{"error": "unknown product"})
+	}
+	return h.serveFile(c, path.Join(brand, id, "index.json"), "application/json; charset=utf-8")
+}
+
 func (h *handler) serveSkill(c *zip.Ctx) error {
 	brand := h.brandFor(c.Fiber().Hostname())
 	id := c.Param("skill")

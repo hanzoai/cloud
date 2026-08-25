@@ -57039,6 +57039,25 @@ info:
   version: v1
 openapi: 3.1.0
 paths:
+  /.well-known/agent-skills/{product}/index.json:
+    get:
+      description: |-
+        Serves the index for a single product — the same shape and the same fields as the brand catalogue, narrowed to the skills of one product, so a client that already walks the top document needs no second parser.
+
+        The top catalogue lists 116 products beside its skills and gives each one this address; without it those links answer 404 and a reader looking for one capability is back to reading every skill. The segment is the product name prefixed `_` (`_account`), which is what keeps a product index and a skill distinguishable in one flat directory and is why the skill route rejects it.
+
+        Brand resolution and caching are index.json's. Public — no bearer, no tenant scope. A product the serving brand does not carry is `{"error":…}` at 404.
+      operationId: get_.well-known_agent-skills_by_product_index.json
+      parameters:
+      - in: path
+        name: product
+        required: true
+        schema:
+          type: string
+      summary: One product's skills, as a catalogue in its own right
+      tags:
+      - skills
+      x-app: skills
   /.well-known/agent-skills/{skill}/SKILL.md:
     get:
       description: |-
