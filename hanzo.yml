@@ -134,6 +134,62 @@
 # on a runner with a C toolchain (build.yml provisions one), so vet needs the tag
 # for the same reason go-unit does.
 test:
+  - name: forge-fallthrough
+    # WHERE A MODULE IS PUBLISHED IS NOT WHERE IT IS IMPORTED FROM, and this tree
+    # depends on both answers. `github.com/hanzoai/*` is one import path over two
+    # publishers, so resolution is a LADDER and each rung answers what the one
+    # before it cannot:
+    #
+    #   proxy.golang.org  immutable, and the only copy that survives a repository
+    #                     being re-rooted (dataroom v1.1.7, sign v1.0.0 — their
+    #                     github repos hold no commits at all now)
+    #   direct → github   a module the proxy has never been allowed to see
+    #   direct → THE FORGE  a version published only here (amqp v0.4.2: github
+    #                     carries that repo privately and stops at v0.3.1)
+    #
+    # This gate installs the last rung, and it is deliberately the LAST one: the
+    # rewrite is consulted only when the proxy has already declined, so a module
+    # the proxy serves is never taken from the forge. That ordering is doing real
+    # work rather than being tidy — the forge publishes a DIFFERENT commit at
+    # sign v1.0.0, and taking it would fail this tree's go.sum. Which is also the
+    # guarantee under all three rungs: go.sum verifies every hash whichever
+    # publisher answered, so a wrong lineage cannot be quietly built, it stops.
+    #
+    # It writes into the config FILE the reusable workflow already made for its
+    # github credential and exports, rather than a second file or a second
+    # mechanism — every later gate in this list runs in its own shell and
+    # inherits that one variable, so the rung is installed once and not eight
+    # times, and no token is ever spelled on a gate's own command line.
+    #
+    # No credential is not a failure HERE. It is only the third rung that goes
+    # missing, so this says so and lets the gate that actually needs a module be
+    # the one that fails, naming the module.
+    run: |
+      set -euo pipefail
+      TOKEN="${HANZO_API_TOKEN:-${FORGE_TOKEN:-}}"
+      if [ -z "$TOKEN" ]; then
+        echo "::warning::no git.hanzo.ai credential in this job, so a module published only on the forge cannot resolve. HANZO_API_TOKEN is minted by the KMS login in the reusable workflow; FORGE_TOKEN is the org secret. Everything the public proxy serves is unaffected."
+        exit 0
+      fi
+      echo "::add-mask::$TOKEN"
+      CFG="${GIT_CONFIG_GLOBAL:-${RUNNER_TEMP:-/tmp}/gitconfig-private}"
+      [ -f "$CFG" ] || : > "$CFG"
+      GIT_CONFIG_GLOBAL="$CFG" git config --global \
+        url."https://x-access-token:${TOKEN}@git.hanzo.ai/hanzoai/".insteadOf \
+        "https://github.com/hanzoai/"
+      {
+        echo "GIT_CONFIG_GLOBAL=$CFG"
+        echo "GIT_CONFIG_NOSYSTEM=1"
+      } >> "${GITHUB_ENV:-/dev/null}"
+      # Prove the rung rather than announce it: this is the module that sent us
+      # looking, and it exists at no other publisher.
+      if GIT_CONFIG_GLOBAL="$CFG" GIT_CONFIG_NOSYSTEM=1 \
+           git ls-remote https://github.com/hanzoai/amqp refs/tags/v0.4.2 2>/dev/null | grep -q .; then
+        echo "forge fallthrough OK"
+      else
+        echo "::warning::the git.hanzo.ai rewrite is installed but did not answer for a version only it publishes; a later gate will name the module it could not read"
+      fi
+
   - name: closure-current
     # FIRST, AND IT IS THE CHEAPEST THING THAT CAN BE KNOWN. `go list` over the whole
     # plugin closure — no compile, no link — is 2 seconds, against 6m39s for
