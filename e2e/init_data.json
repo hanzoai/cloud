@@ -2,6 +2,14 @@
   "organizations": [
     {
       "owner": "admin",
+      "name": "admin",
+      "displayName": "Hanzo Platform",
+      "passwordType": "argon2id",
+      "defaultApplication": "admin-console",
+      "languages": ["en"]
+    },
+    {
+      "owner": "admin",
       "name": "hanzo",
       "displayName": "Hanzo",
       "passwordType": "argon2id",
@@ -60,6 +68,22 @@
       "grantTypes": ["authorization_code", "refresh_token"],
       "redirectUris": ["${E2E_REDIRECT_URI}"],
       "expireInHours": 24
+    },
+    {
+      "owner": "admin",
+      "name": "admin-console",
+      "displayName": "Hanzo Admin Console",
+      "organization": "admin",
+      "cert": "cert-signing",
+      "isShared": false,
+      "enablePassword": true,
+      "enableSignUp": false,
+      "enableSigninSession": true,
+      "clientId": "admin-console",
+      "grantTypes": ["authorization_code", "refresh_token"],
+      "redirectUris": ["http://localhost:4000/auth/callback", "${E2E_REDIRECT_URI}"],
+      "expireInHours": 24,
+      "refreshExpireInHours": 168
     }
   ]
 }
