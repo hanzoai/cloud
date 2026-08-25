@@ -455,8 +455,14 @@ func render(sk skill, id, description string) string {
 	add("## When NOT to use this skill")
 	add("")
 	add("- You need to CREATE, UPDATE or DELETE — this skill is read-only (`GET`).")
-	add(fmt.Sprintf("- You need a different %s capability — consult the catalogue at "+
-		"`%s/.well-known/agent-skills/index.json`.", name, url))
+	// The NEAREST document first. A reader that wants a sibling capability wants
+	// this product's own index, which lists only its skills; the top catalogue is
+	// named second, for a capability in a DIFFERENT product. Pointing only at the
+	// top document made every onward step a walk of all 670.
+	add(fmt.Sprintf("- You need a different `%s` capability — that product's skills are listed at "+
+		"`%s/.well-known/agent-skills/_%s/index.json`.", sk.product, url, sk.product))
+	add(fmt.Sprintf("- You need a capability from another product — the catalogue at "+
+		"`%s/.well-known/agent-skills/index.json` names every product and links to each.", url))
 	add(fmt.Sprintf("- You are on a non-%s host — the base URL and issuer above apply only to `%s`.", name, url))
 	add("")
 	return strings.Join(L, "\n")
@@ -473,15 +479,30 @@ type entry struct {
 	Sha256      string `json:"sha256"`
 }
 
+// product is one row of the TOP index: a capability family, and where its own
+// index lives. It exists so a reader can find the handful of skills it wants
+// without first reading all 670 — the top document names 116 products, each
+// product document names only its own skills, and a skill names its product.
+// Fields are declared ALPHABETICALLY for the same reason entry is.
+type product struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	SkillCount int    `json:"skill_count"`
+}
+
 type index struct {
-	BaseURL     string  `json:"base_url"`
-	Brand       string  `json:"brand"`
-	GeneratedBy string  `json:"generated_by"`
-	Issuer      string  `json:"issuer"`
-	Schema      string  `json:"schema"`
-	SkillCount  int     `json:"skill_count"`
-	Skills      []entry `json:"skills"`
-	SpecVersion string  `json:"spec_version"`
+	BaseURL     string `json:"base_url"`
+	Brand       string `json:"brand"`
+	GeneratedBy string `json:"generated_by"`
+	Issuer      string `json:"issuer"`
+	Schema      string `json:"schema"`
+	// Products is the progressive tier, and it is ADDITIVE: Skills stays whole so
+	// a reader of the published discovery convention that already walks it keeps
+	// working unchanged. A reader that wants less reads Products instead.
+	Products    []product `json:"products,omitempty"`
+	SkillCount  int       `json:"skill_count"`
+	Skills      []entry   `json:"skills"`
+	SpecVersion string    `json:"spec_version"`
 }
 
 // marshal writes JSON the way the catalogue is read: indented, and with < > &
@@ -593,11 +614,59 @@ func main() {
 				Sha256:      sum,
 			})
 		}
+		// The progressive tier. entry.Service already names the product a skill
+		// belongs to, so grouping needs no second source and cannot disagree with
+		// the flat list it is derived from. Products are emitted in sorted order
+		// because a diff of a generated document should show what changed, not a
+		// map iterated in a new order.
+		byProduct := map[string][]entry{}
+		for _, e := range entries {
+			byProduct[e.Service] = append(byProduct[e.Service], e)
+		}
+		names := make([]string, 0, len(byProduct))
+		for n := range byProduct {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+
+		products := make([]product, 0, len(names))
+		for _, n := range names {
+			own := byProduct[n]
+			// Each product document is a full index in its own right — same shape,
+			// same fields — so a reader that already walks the top document needs no
+			// second parser to walk this one. Paths inside it stay relative to the
+			// catalogue root, so a skill resolves the same from either document.
+			pbody, err := marshal(index{
+				BaseURL:     baseURL(id),
+				Brand:       id,
+				GeneratedBy: generatedBy,
+				Issuer:      brand.For(id).IAMIssuer,
+				Schema:      schemaID,
+				SkillCount:  len(own),
+				Skills:      own,
+				SpecVersion: specVersion,
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "gen-skills: %v\n", err)
+				os.Exit(1)
+			}
+			if _, err := write(filepath.Join(out, id, "_"+n, "index.json"), pbody); err != nil {
+				fmt.Fprintf(os.Stderr, "gen-skills: %v\n", err)
+				os.Exit(1)
+			}
+			products = append(products, product{
+				Name:       n,
+				Path:       "_" + n + "/index.json",
+				SkillCount: len(own),
+			})
+		}
+
 		body, err := marshal(index{
 			BaseURL:     baseURL(id),
 			Brand:       id,
 			GeneratedBy: generatedBy,
 			Issuer:      brand.For(id).IAMIssuer,
+			Products:    products,
 			Schema:      schemaID,
 			SkillCount:  len(entries),
 			Skills:      entries,
@@ -611,6 +680,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "gen-skills: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("gen-skills: %s — %d skills\n", id, len(entries))
+		fmt.Printf("gen-skills: %s — %d skills in %d products\n", id, len(entries), len(products))
 	}
 }
