@@ -1,0 +1,67 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 8,
+  "skills": [
+    {
+      "description": "Read guide actions: Returns the caller org's Business AI action ledger, most recent first: every \"do it for me\" tool call, the arguments it ran with, its result and whether it succeeded..",
+      "name": "guide_actions",
+      "path": "guide_actions/SKILL.md",
+      "service": "guide",
+      "sha256": "ff5efe3348d73728d83c4d06fb43e6ccf0e3c6cadf02e44602a611b824947174"
+    },
+    {
+      "description": "Read guide analytics: Analytics returns the caller org's funnel from the analytics lens plus the GTM recommendations derived from it..",
+      "name": "guide_analytics",
+      "path": "guide_analytics/SKILL.md",
+      "service": "guide",
+      "sha256": "4f0d518ae29dc36853ab182cafb62e7af786a25902fc9e2c7dcbfaa3e1a055b8"
+    },
+    {
+      "description": "Read guide blueprint: Returns the FULL authored brand blueprint — every principle, section, step, strategy and template WITH its enabled flag made explicit, including the disabled items the org-facing reads never see — plus the active version number, the brand key it is stored un",
+      "name": "guide_blueprint",
+      "path": "guide_blueprint/SKILL.md",
+      "service": "guide",
+      "sha256": "c4256cdcb942370f667793d5511a28cecd30f505c5f3b7f20887e57204b7830a"
+    },
+    {
+      "description": "Read guide curriculum: Returns the journey the caller's org is actually running, and whether it comes from the org's OWN override (custom) or from the platform default — the brand blueprint, else the embedded fixture..",
+      "name": "guide_curriculum",
+      "path": "guide_curriculum/SKILL.md",
+      "service": "guide",
+      "sha256": "42d028a4355a9f2dded399ab73ff0b4f5fef9dabd36dcac4ca3fde956f56e7b4"
+    },
+    {
+      "description": "Read guide guide: Overview returns the caller org's launch journey: the active curriculum's version and title, every step with its state, whether it is available, what blocks it and whether the Business AI can run it, the done/total/percent progress with the next step to take, an",
+      "name": "guide_guide",
+      "path": "guide_guide/SKILL.md",
+      "service": "guide",
+      "sha256": "6f430a2028da3365ac245a1a53b47d1e81d68dfa6f85a37b3479692798632698"
+    },
+    {
+      "description": "Read guide profile: Profile returns the caller org's OBSERVED growth profile — the signal set, the classified growth stage, and the org's own key metrics..",
+      "name": "guide_profile",
+      "path": "guide_profile/SKILL.md",
+      "service": "guide",
+      "sha256": "9db25b8240ac4d9ac7669b26564c8aad78902a8139b3af9c9d0a3ce991c10b86"
+    },
+    {
+      "description": "Read guide strategies: Strategies returns the ENABLED tactics corpus for the caller's org: the tactics library narrowed by the explicit category/workload filters AND by the org's OBSERVED growth stage and capability signals (a tactic's tags are preconditions, so it surfaces only ",
+      "name": "guide_strategies",
+      "path": "guide_strategies/SKILL.md",
+      "service": "guide",
+      "sha256": "08cde9029a69b04d455b230dbcf79a6bcb196bd324bfc3710dda2c89f7d1f2dd"
+    },
+    {
+      "description": "Read guide suggest: Suggest returns the caller org's next-best quests: the available, non-terminal steps of its journey ranked by how much downstream work each unblocks, each with the grounded reason it is a good next move and whether the Business AI can run it, plus the org's fu",
+      "name": "guide_suggest",
+      "path": "guide_suggest/SKILL.md",
+      "service": "guide",
+      "sha256": "1ef6c4507bc7e01edd45f228271eb0b23882d188ad2c2fa59925e554b3535691"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
+      "name": "channels_allowlist",
+      "path": "channels_allowlist/SKILL.md",
+      "service": "channels",
+      "sha256": "81f3de2c95c4d15fafd8c25c8666e69a7b03fecd2c39dceaf13a488d669deb35"
+    },
+    {
+      "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",
+      "name": "channels_channels",
+      "path": "channels_channels/SKILL.md",
+      "service": "channels",
+      "sha256": "f447b5c4744f131b56d219575db60dd823d058e269827e793bc461d60f30280f"
+    },
+    {
+      "description": "Read channels inbox: Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into..",
+      "name": "channels_inbox",
+      "path": "channels_inbox/SKILL.md",
+      "service": "channels",
+      "sha256": "8f16996653a5bb0850d6beda9cefb6739d036cd6b93ac504e2e484503b962a0b"
+    },
+    {
+      "description": "Read channels pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet..",
+      "name": "channels_pairing",
+      "path": "channels_pairing/SKILL.md",
+      "service": "channels",
+      "sha256": "607bfb4bc1c25bad93eb32504019d33c584776bdd338cdeba723d00d0cb8c71f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

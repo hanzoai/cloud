@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
+      "name": "experiment_assign",
+      "path": "experiment_assign/SKILL.md",
+      "service": "experiment",
+      "sha256": "3f8b965f54cca6e16f0e54697b79b80da14c18c4d63c14e7c70ac97c551ff35d"
+    },
+    {
+      "description": "Read experiment experiment: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
+      "name": "experiment_experiment",
+      "path": "experiment_experiment/SKILL.md",
+      "service": "experiment",
+      "sha256": "f4fd1fe873d45ae76b1ee8c3966fc0e1322ff089150e32af7c76fb9ad9347e2c"
+    },
+    {
+      "description": "Read experiment health: Is whether the experiments subsystem is mounted and serving in this process..",
+      "name": "experiment_health",
+      "path": "experiment_health/SKILL.md",
+      "service": "experiment",
+      "sha256": "86c75b5b755c14e4e50d83875fd56dd4bd2702c58d4bea1bb4bb7d146d341ef8"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

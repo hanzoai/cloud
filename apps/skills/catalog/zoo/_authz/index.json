@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read authz health: Liveness of the policy engine.",
+      "name": "authz_health",
+      "path": "authz_health/SKILL.md",
+      "service": "authz",
+      "sha256": "55f7315fed97b954d99104f6bfd47e784ad8241c8e0c0624dcc7fd92829366bc"
+    },
+    {
+      "description": "Read authz readyz: Readiness of the policy engine.",
+      "name": "authz_readyz",
+      "path": "authz_readyz/SKILL.md",
+      "service": "authz",
+      "sha256": "f06c70a56ad6a112d35723bf0d93f6418f399b30540abf0de3bd778e48fc98d6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

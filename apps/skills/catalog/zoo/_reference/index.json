@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read reference reference: Lists every set this plane publishes, with its version and how fresh it is., Reference describes one set and lists your org's overrides in it..",
+      "name": "reference_reference",
+      "path": "reference_reference/SKILL.md",
+      "service": "reference",
+      "sha256": "eff03acf7beb28be3bb179bc2ced3298160652f326df16ee912826ed27e46256"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

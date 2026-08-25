@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read entitlement entitlement: Projection reports which console apps the CALLER's org may open, and the plan slug that decides it..",
+      "name": "entitlement_entitlement",
+      "path": "entitlement_entitlement/SKILL.md",
+      "service": "entitlement",
+      "sha256": "91424726eacf46111436ef24f8dee58a7e9fb559d4d5d42631256a48b84f7d98"
+    },
+    {
+      "description": "Read entitlement orgs: Get lists the products an org has ENABLED — its own intent, which the console's paid-product sidebar reads to decide what to show..",
+      "name": "entitlement_orgs",
+      "path": "entitlement_orgs/SKILL.md",
+      "service": "entitlement",
+      "sha256": "b82181f533d0ba1b7bfe51adf82c8d54a25a1767654540d51df839aea1d7f0c5"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

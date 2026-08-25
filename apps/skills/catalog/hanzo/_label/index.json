@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read label coverage: How much of the window has matured, and how much of that is judged.",
+      "name": "label_coverage",
+      "path": "label_coverage/SKILL.md",
+      "service": "label",
+      "sha256": "ae1c0621482536798636f9eac859bc8a599ef8553e2e510df5919c71079dafd3"
+    },
+    {
+      "description": "Read label label: Read the assertions this tenant has recorded.",
+      "name": "label_label",
+      "path": "label_label/SKILL.md",
+      "service": "label",
+      "sha256": "4285eda732e24c43ecc5e2ef2af4ced7426bbf005a71e68e8a00e286a1078f68"
+    },
+    {
+      "description": "Read label vocabulary: The closed vocabularies and the precedence rule that resolves a conflict.",
+      "name": "label_vocabulary",
+      "path": "label_vocabulary/SKILL.md",
+      "service": "label",
+      "sha256": "499584c5894e1768dcc2bd4b9922a92b2d95481766c1ba0599b4c55a3116aa80"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

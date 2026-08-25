@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read translate memory: List returns the org's own translation-memory entries, newest first, optionally narrowed to one target language and/or one position on the review ladder..",
+      "name": "translate_memory",
+      "path": "translate_memory/SKILL.md",
+      "service": "translate",
+      "sha256": "9669e056f51005c291c927f8b6ea4229e40281322020d1625757667c21f3956f"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

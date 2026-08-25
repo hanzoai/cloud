@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly.",
+      "name": "s3_buckets",
+      "path": "s3_buckets/SKILL.md",
+      "service": "s3",
+      "sha256": "ed63d09e8f6ae16efa13dc604d8459e6d7f5dc9e12df18f8f22cf3865636a98b"
+    },
+    {
+      "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
+      "name": "s3_health",
+      "path": "s3_health/SKILL.md",
+      "service": "s3",
+      "sha256": "03a43d05a176a605d1605282d462aa4190e963d0044dc586385000b92eec72e0"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

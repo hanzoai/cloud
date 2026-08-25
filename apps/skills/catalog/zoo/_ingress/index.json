@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read ingress middlewares: Returns every edge transform the caller's org has configured, ordered by id., Returns one of the caller org's edge transforms by id..",
+      "name": "ingress_middlewares",
+      "path": "ingress_middlewares/SKILL.md",
+      "service": "ingress",
+      "sha256": "cb28f483ebbd14188f50f53e06ad2365de5a60361396f9cf54f9bbf121c37b91"
+    },
+    {
+      "description": "Read ingress routes: Returns every routing rule the caller's org has configured, ordered by id., Returns one of the caller org's routing rules by id..",
+      "name": "ingress_routes",
+      "path": "ingress_routes/SKILL.md",
+      "service": "ingress",
+      "sha256": "2a50c38e0c8263c533e6cf82faec95f6cb71aec163bc14ed2699acb52dccd141"
+    },
+    {
+      "description": "Read ingress services: Returns every backend pool the caller's org has configured, ordered by id., Returns one of the caller org's backend pools by id..",
+      "name": "ingress_services",
+      "path": "ingress_services/SKILL.md",
+      "service": "ingress",
+      "sha256": "f5f84213304f558e23b07b3fecee015c337f9570a7c1030bfd8db61e6bf9b158"
+    },
+    {
+      "description": "Read ingress status: Status reports the ingress edge's live posture: the role this instance runs in (app or edge), whether its listeners are bound and on which addresses, the ACME posture (staging flag and certificate cache directory), how many hosts the compiled route table curr",
+      "name": "ingress_status",
+      "path": "ingress_status/SKILL.md",
+      "service": "ingress",
+      "sha256": "f753dd67cca3c35964f0d1c228f06bc5b21aceb1638e0a707c3b2faf4909fbea"
+    },
+    {
+      "description": "Read ingress tls: GetTLS returns the caller org's ACME intent together with the edge-wide TLS facts it lands in: which role this instance runs in, whether its listeners are bound, every host the ACME HostPolicy will issue a certificate for (the union across ALL orgs of TLS-marked",
+      "name": "ingress_tls",
+      "path": "ingress_tls/SKILL.md",
+      "service": "ingress",
+      "sha256": "5001e44f9214325164d7ed6ec1c8d0a56809515c2eb74afa8c1100acf62d5588"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

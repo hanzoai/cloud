@@ -1,0 +1,60 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read provisioning datastore: Lists the caller org's Lux Datastore warehouses., Returns one Lux Datastore warehouse's metadata..",
+      "name": "provisioning_datastore",
+      "path": "provisioning_datastore/SKILL.md",
+      "service": "provisioning",
+      "sha256": "8f8de029c4fd7f8626019e0b5cfe39972830322e1f0c490e37efc3ed26221ace"
+    },
+    {
+      "description": "Read provisioning docdb: ListDocDB lists the caller org's Lux DocDB document databases., GetDocDB returns one Lux DocDB database's metadata..",
+      "name": "provisioning_docdb",
+      "path": "provisioning_docdb/SKILL.md",
+      "service": "provisioning",
+      "sha256": "81eb242f540b1b2f829aafb44a6376423602c10b1906d32e52d7116460ad7c14"
+    },
+    {
+      "description": "Read provisioning kv: ListKV lists the caller org's Lux KV stores., GetKV returns one Lux KV store's metadata..",
+      "name": "provisioning_kv",
+      "path": "provisioning_kv/SKILL.md",
+      "service": "provisioning",
+      "sha256": "36bbcd3960d95bab867375cd92c3025ff4e5d1fd1b05ddcfd1ee80a0d6dfe42e"
+    },
+    {
+      "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
+      "name": "provisioning_s3",
+      "path": "provisioning_s3/SKILL.md",
+      "service": "provisioning",
+      "sha256": "6fa78f337919cc5a4506c5e13c851a0b92ea6fd7cf68fe4a348e63932363e55f"
+    },
+    {
+      "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
+      "name": "provisioning_search",
+      "path": "provisioning_search/SKILL.md",
+      "service": "provisioning",
+      "sha256": "b8dd52b1c6f2652d9eee198084b850f7a5178787eb29e3d7c65a7c33a7b5e8b3"
+    },
+    {
+      "description": "Read provisioning sql: ListSQL lists the caller org's Lux SQL databases., GetSQL returns one Lux SQL database's metadata..",
+      "name": "provisioning_sql",
+      "path": "provisioning_sql/SKILL.md",
+      "service": "provisioning",
+      "sha256": "3da74ad5fb0d7dc4fdf22020eca7e21975c93f04e6e1ea1ceff0f4a12110decd"
+    },
+    {
+      "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
+      "name": "provisioning_vector",
+      "path": "provisioning_vector/SKILL.md",
+      "service": "provisioning",
+      "sha256": "8381dfe7a2bd653c3c4fd68e0cc6ad4bc52ec50b188656b25bf1666ceda0d4f1"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

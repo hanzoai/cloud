@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read engine model: Read one model's load state on the serving runtime.",
+      "name": "engine_model",
+      "path": "engine_model/SKILL.md",
+      "service": "engine",
+      "sha256": "112bd740b87baf2b697aecb510a6d5d0d69da093cdd5c06f414c21fcaba732fe"
+    },
+    {
+      "description": "Read engine models: List the models the serving runtime holds, with each one's load state.",
+      "name": "engine_models",
+      "path": "engine_models/SKILL.md",
+      "service": "engine",
+      "sha256": "1b6f0ccd89e1bea7473a24b401c25c6691b5ecd82eb4b26fd9abad35fb9627e8"
+    },
+    {
+      "description": "Read engine status: Whether the serving runtime is reachable, and which build it runs.",
+      "name": "engine_status",
+      "path": "engine_status/SKILL.md",
+      "service": "engine",
+      "sha256": "1fc0b4078cd740e265a633b25e5663865d20d3841950256fa173d834ea822898"
+    },
+    {
+      "description": "Read engine system: The serving host's own inventory: devices, memory and build capabilities.",
+      "name": "engine_system",
+      "path": "engine_system/SKILL.md",
+      "service": "engine",
+      "sha256": "b10803de46cef1a5b792b927c07335eb51600d2488aa732bb4f9039398235c25"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

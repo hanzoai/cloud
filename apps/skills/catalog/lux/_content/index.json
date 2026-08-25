@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read content board: Aggregates the caller org's marketing content across every publishable content type into ONE queue board — the cross-type read the framework's per-DocType list cannot give..",
+      "name": "content_board",
+      "path": "content_board/SKILL.md",
+      "service": "content",
+      "sha256": "4054a38775b817c19d3295c8b2b50909adca120a765ee7aedf2bc76f2daa338b"
+    },
+    {
+      "description": "Read content channels: Lists the distribution channels the caller's org has connected — the social integrations a publish can target..",
+      "name": "content_channels",
+      "path": "content_channels/SKILL.md",
+      "service": "content",
+      "sha256": "679bb3a6e3d4f22c392ab56a5b8d4275a95a9c5301d74dafd899f48da83015c3"
+    },
+    {
+      "description": "Read content lifecycle: Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state..",
+      "name": "content_lifecycle",
+      "path": "content_lifecycle/SKILL.md",
+      "service": "content",
+      "sha256": "31c901b0b5ef82833447525daf062d205fcf85a5ffa592138e54f7f1b52b621d"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

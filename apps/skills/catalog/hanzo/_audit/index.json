@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read audit audit: List reads the caller's OWN org audit trail, newest first, with the total the filter matched so a console can page it..",
+      "name": "audit_audit",
+      "path": "audit_audit/SKILL.md",
+      "service": "audit",
+      "sha256": "91273c236bb2edaec7dad3ceaaca2392f9b861ce53bbf2107b93607b100c9ab4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

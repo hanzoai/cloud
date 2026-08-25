@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read x402 settlements: Settlement reads one x402 payment receipt by id..",
+      "name": "x402_settlements",
+      "path": "x402_settlements/SKILL.md",
+      "service": "x402",
+      "sha256": "d0fffcf5c3998182ca9f69958efedd6f5281c1ec4f48fe5f28e38e3db1691d56"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

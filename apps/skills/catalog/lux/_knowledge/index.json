@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",
+      "name": "knowledge_connectors",
+      "path": "knowledge_connectors/SKILL.md",
+      "service": "knowledge",
+      "sha256": "b678c73c2a62fd9932f7acc86d1a89df97dc9547a85a11d6d908fa9914cbb11b"
+    },
+    {
+      "description": "Read knowledge graph: Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges..",
+      "name": "knowledge_graph",
+      "path": "knowledge_graph/SKILL.md",
+      "service": "knowledge",
+      "sha256": "c758524fe64741679dbe24cc4598d468070b51b81e3d73ddd2038567ed1744b2"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

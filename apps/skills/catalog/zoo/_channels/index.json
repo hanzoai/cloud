@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
+      "name": "channels_allowlist",
+      "path": "channels_allowlist/SKILL.md",
+      "service": "channels",
+      "sha256": "e4624a1678dc85a2c99e60d5346ec3b4b7aafcf0d5cd6b6478f1920eeb17e97d"
+    },
+    {
+      "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",
+      "name": "channels_channels",
+      "path": "channels_channels/SKILL.md",
+      "service": "channels",
+      "sha256": "820d8514621047b4fe5678a5e01a428af4eb5f0e3e665684e122cd3a7d7d43cc"
+    },
+    {
+      "description": "Read channels inbox: Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into..",
+      "name": "channels_inbox",
+      "path": "channels_inbox/SKILL.md",
+      "service": "channels",
+      "sha256": "9e3423c656fd4c6b8298b0ef0244f5750be246d7fa9f45847f2251690f0b87ac"
+    },
+    {
+      "description": "Read channels pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet..",
+      "name": "channels_pairing",
+      "path": "channels_pairing/SKILL.md",
+      "service": "channels",
+      "sha256": "867c5371336377a940dcc065b1191cd70aa1035a616585b838ce8c128065bc09"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

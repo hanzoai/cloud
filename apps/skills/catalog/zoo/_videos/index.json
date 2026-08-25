@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read videos content: Implements GET /v1/videos/{id}/content — download the finished MP4..",
+      "name": "videos_content",
+      "path": "videos_content/SKILL.md",
+      "service": "videos",
+      "sha256": "0c55f8dd3eecae2e3c0e6dc906abe58e5f29840878c00c502cfbeddaab7b84ea"
+    },
+    {
+      "description": "Read videos videos: Implements GET /v1/videos/{id} — poll a job's status..",
+      "name": "videos_videos",
+      "path": "videos_videos/SKILL.md",
+      "service": "videos",
+      "sha256": "a7a3517c8c35808f972ea4a8dd44b00cd1911a43dbadeec5c129308ce1850596"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

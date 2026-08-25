@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
+      "name": "channels_allowlist",
+      "path": "channels_allowlist/SKILL.md",
+      "service": "channels",
+      "sha256": "840263975f7e5df8da181a5aee4ebdcecbbb76815e0c45220f191b4a471f3705"
+    },
+    {
+      "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",
+      "name": "channels_channels",
+      "path": "channels_channels/SKILL.md",
+      "service": "channels",
+      "sha256": "ceb572b8b9a461083230b87252167e0f5c7b91978a9b23a04a700e8c4c698651"
+    },
+    {
+      "description": "Read channels inbox: Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into..",
+      "name": "channels_inbox",
+      "path": "channels_inbox/SKILL.md",
+      "service": "channels",
+      "sha256": "a38491b527474d3497e2d60103b5f3be1cc18556c6ca97bbac6541d68960dfaf"
+    },
+    {
+      "description": "Read channels pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet..",
+      "name": "channels_pairing",
+      "path": "channels_pairing/SKILL.md",
+      "service": "channels",
+      "sha256": "e43e773274fd4d7e2f5c926ac5b9963a25f75691c173210397aa5807135bd66b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

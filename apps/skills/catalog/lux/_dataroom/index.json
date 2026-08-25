@@ -1,0 +1,60 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 7,
+  "skills": [
+    {
+      "description": "Read dataroom analytics: Rolls up every share link pointing at one data room: session and page-view totals for the room, plus the per-page breakdown for each link beneath it., Reports how one share link was actually read: total viewing sessions, total page views, and per page the",
+      "name": "dataroom_analytics",
+      "path": "dataroom_analytics/SKILL.md",
+      "service": "dataroom",
+      "sha256": "f0c3c7e51b74d3dcd7e1fed517813ce12466cbcd82779d8e9c0bcff68ceda5c0"
+    },
+    {
+      "description": "Read dataroom datarooms: Returns every data room in the caller org's own store, newest first, with its short public id, name, description and timestamps., Reads one of the caller org's data rooms together with every document in it, each carrying its membership id and order index.",
+      "name": "dataroom_datarooms",
+      "path": "dataroom_datarooms/SKILL.md",
+      "service": "dataroom",
+      "sha256": "de6750d332aeab9ad185b9dd19295b5d75fe94f8f81d908bfb326eb9c014dc21"
+    },
+    {
+      "description": "Read dataroom documents: Returns every document in the caller org's own store, newest first — name, opaque storage key, content type, page count, size and timestamps., Reads one of the caller org's documents — its name, opaque storage key, content type, page count, size and times",
+      "name": "dataroom_documents",
+      "path": "dataroom_documents/SKILL.md",
+      "service": "dataroom",
+      "sha256": "1587fb8047f3f67d0746339af3bb8d0d41c0ddd3f87a926d430018957369133b"
+    },
+    {
+      "description": "Read dataroom health: Health reports that the data room subsystem is up..",
+      "name": "dataroom_health",
+      "path": "dataroom_health/SKILL.md",
+      "service": "dataroom",
+      "sha256": "ce301636e4f1bfb360ee10b6199db497502599f75681f29f8aa2bcafaca0d433"
+    },
+    {
+      "description": "Read dataroom links: Returns every live share link in the caller org's own store, newest first, with the controls a visitor will meet: whether an address is required, whether a password is set, the allow and deny lists, whether download is permitted, and when the link expires..",
+      "name": "dataroom_links",
+      "path": "dataroom_links/SKILL.md",
+      "service": "dataroom",
+      "sha256": "becfee9467522e951134070be8b157aa6188676aa9c31b8e13379a6815d88062"
+    },
+    {
+      "description": "Read dataroom trust: Answers the caller org's OWN trust centre: its settings, every item it holds in both tiers, the requests waiting on it, and the grants it has made., Answers an org's public trust centre: its name, the text a party must accept to ask for a document, and every ",
+      "name": "dataroom_trust",
+      "path": "dataroom_trust/SKILL.md",
+      "service": "dataroom",
+      "sha256": "86bdc74a8607a356984043b7ae9cc390e16ca9e1c15529ebb75a0ddfd9d8f48b"
+    },
+    {
+      "description": "Read dataroom view: What a share link's visitor sees before authenticating, Read a document's bytes as an authorised link visitor.",
+      "name": "dataroom_view",
+      "path": "dataroom_view/SKILL.md",
+      "service": "dataroom",
+      "sha256": "cf1931e13088a12c129be3bebbed393f0201ab1cd5bacab5ab71fc6af97c6344"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

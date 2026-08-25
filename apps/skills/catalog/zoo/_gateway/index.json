@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read gateway config: Read returns the EFFECTIVE edge policy the caller is subject to: the platform CORS allowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated rate ceiling, edge-cache TTLs and accepted-method allowlist..",
+      "name": "gateway_config",
+      "path": "gateway_config/SKILL.md",
+      "service": "gateway",
+      "sha256": "e3f3e582ae74d8e327b40780d9a7f94f31a7f888da75d5d0ec25458e791b0393"
+    },
+    {
+      "description": "Read gateway traffic: Report who is calling this org's API right now.",
+      "name": "gateway_traffic",
+      "path": "gateway_traffic/SKILL.md",
+      "service": "gateway",
+      "sha256": "641392fe522fc0cf4a030d02a1e63396df058fe5a123a9668405c826b986e68c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read pref pref: Returns the signed-in caller's OWN preference document — the theme, density and pinned nav that follow them across every Hanzo surface..",
+      "name": "pref_pref",
+      "path": "pref_pref/SKILL.md",
+      "service": "pref",
+      "sha256": "c091c294729adb4f9cbd95c54e0a4737055b1ac4d51c8806a3c715a1f1d7d97c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

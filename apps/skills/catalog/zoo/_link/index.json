@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read link devices: Shows one machine: its accounts, usage and live sessions..",
+      "name": "link_devices",
+      "path": "link_devices/SKILL.md",
+      "service": "link",
+      "sha256": "925830593e90795f1fb17411f808d18acc72b8c51a7d5033226d8958b151c862"
+    },
+    {
+      "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
+      "name": "link_link",
+      "path": "link_link/SKILL.md",
+      "service": "link",
+      "sha256": "1254b2628f7b78b3a6c8bd8852dcdbf15d1392cfa2706490c63d8819a8ebd76c"
+    },
+    {
+      "description": "Read link route: Gets the failover order across your linked accounts..",
+      "name": "link_route",
+      "path": "link_route/SKILL.md",
+      "service": "link",
+      "sha256": "272134b307c70bd3b3745ee34fa8e66f119f361dded9509e4ebab547a66a315b"
+    },
+    {
+      "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Zoo spend side by side..",
+      "name": "link_usage",
+      "path": "link_usage/SKILL.md",
+      "service": "link",
+      "sha256": "54f9443abd616b418aece4e2986acbd9abec33ecc3dd52507b45c5b49eea7dac"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

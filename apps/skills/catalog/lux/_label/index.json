@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read label coverage: How much of the window has matured, and how much of that is judged.",
+      "name": "label_coverage",
+      "path": "label_coverage/SKILL.md",
+      "service": "label",
+      "sha256": "b9e107ccfca34289c5bdcae148bacc9fd14ee80f116b086ba9f088efa45e18c6"
+    },
+    {
+      "description": "Read label label: Read the assertions this tenant has recorded.",
+      "name": "label_label",
+      "path": "label_label/SKILL.md",
+      "service": "label",
+      "sha256": "0404c51ea01d68b4853395ae4583ac6252185a2a4dc3b0fafc14a450dd8478d3"
+    },
+    {
+      "description": "Read label vocabulary: The closed vocabularies and the precedence rule that resolves a conflict.",
+      "name": "label_vocabulary",
+      "path": "label_vocabulary/SKILL.md",
+      "service": "label",
+      "sha256": "a54750cf18087d26f96622a70ca84c48e21e6e777b5a068eaa453d56e41c9765"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

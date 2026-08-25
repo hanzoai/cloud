@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read explorer indexers: Reports the deployment's chain indexer(s) and how far each has indexed..",
+      "name": "explorer_indexers",
+      "path": "explorer_indexers/SKILL.md",
+      "service": "explorer",
+      "sha256": "5ca946accd7bc088941a15c0e26bf1493974ae0299ca05117dfe10a8f1f92bf0"
+    },
+    {
+      "description": "Read explorer oracles: Reports the on-chain price/data oracles from the graph's O-Chain PriceFeed registry..",
+      "name": "explorer_oracles",
+      "path": "explorer_oracles/SKILL.md",
+      "service": "explorer",
+      "sha256": "86c9fb5ed88f47f0e4bca1075a2cd9f80f69d92d6b93399e6aeb70dcfc1ca028"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,46 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read registry images: Images lists the org's container repositories, read live from the OCI catalog and filtered server-side to the org's namespace — the page can only ever hold the caller's own images..",
+      "name": "registry_images",
+      "path": "registry_images/SKILL.md",
+      "service": "registry",
+      "sha256": "2dda22df9ebd9f3b3589add52a5be5ffad8e43ef93b30deb491b4b03d691ae87"
+    },
+    {
+      "description": "Read registry packages: Packages lists the org's npm packages — `<org>` and `@<org>/…` — from the npm registry's search index, optionally narrowed by a query within that scope..",
+      "name": "registry_packages",
+      "path": "registry_packages/SKILL.md",
+      "service": "registry",
+      "sha256": "c5c5673a7a776df7e39943956ddef60c48c770fa97928e2c6eeb46832dbf7bed"
+    },
+    {
+      "description": "Read registry projects: Projects lists the namespaces the caller can see with what each holds: the org's slug, its repository count on the OCI catalog, and its package count on the npm registry..",
+      "name": "registry_projects",
+      "path": "registry_projects/SKILL.md",
+      "service": "registry",
+      "sha256": "0c1d7131e04c016c70220e2e4632cd24c4c21dc798ee28d0ebe4129f0c49c91a"
+    },
+    {
+      "description": "Read registry status: Status reports whether the OCI and npm registries are reachable and, when the OCI half is auth-gated, which token realm its challenge advertises — an honest lens for \"is the registry plane up\", never a fabricated ok..",
+      "name": "registry_status",
+      "path": "registry_status/SKILL.md",
+      "service": "registry",
+      "sha256": "34038c930618888e3ba960c93733548092d137af1839d368ce626235710c1347"
+    },
+    {
+      "description": "Read registry tags: Tags lists one org-owned repository's tags, read live from the OCI registry..",
+      "name": "registry_tags",
+      "path": "registry_tags/SKILL.md",
+      "service": "registry",
+      "sha256": "0fe8668d02037b1a8eb8d8c15c97bb606b403e7ebdc0e01de680b3970c8156e8"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

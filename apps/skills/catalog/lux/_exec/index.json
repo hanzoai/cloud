@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read exec download: Download a file from a session.",
+      "name": "exec_download",
+      "path": "exec_download/SKILL.md",
+      "service": "exec",
+      "sha256": "86478e63459c9d99e1185a5405881ed3e0cf95d80c5475dee2ed36b0dcb78f28"
+    },
+    {
+      "description": "Read exec files: Files lists what a session holds..",
+      "name": "exec_files",
+      "path": "exec_files/SKILL.md",
+      "service": "exec",
+      "sha256": "6e23defa611f438634170e526cbfd82d74bbaa1324087e5dd4fd54e15248ac15"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

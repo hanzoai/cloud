@@ -1,0 +1,39 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 4,
+  "skills": [
+    {
+      "description": "Read engine model: Read one model's load state on the serving runtime.",
+      "name": "engine_model",
+      "path": "engine_model/SKILL.md",
+      "service": "engine",
+      "sha256": "8fa6e2718c7d4c4cd6d228e95c3f84de61efb560eb73c5b3db8a4d0f20f2bf87"
+    },
+    {
+      "description": "Read engine models: List the models the serving runtime holds, with each one's load state.",
+      "name": "engine_models",
+      "path": "engine_models/SKILL.md",
+      "service": "engine",
+      "sha256": "5af7eab3cbc1324a7978fa16f243f7aeda6b9f8d8456233b019e30b0bcaf4825"
+    },
+    {
+      "description": "Read engine status: Whether the serving runtime is reachable, and which build it runs.",
+      "name": "engine_status",
+      "path": "engine_status/SKILL.md",
+      "service": "engine",
+      "sha256": "448613992187cc08ed2d4c2401d22b2e35711c7ee2ee480ed2408b6d1f48f61f"
+    },
+    {
+      "description": "Read engine system: The serving host's own inventory: devices, memory and build capabilities.",
+      "name": "engine_system",
+      "path": "engine_system/SKILL.md",
+      "service": "engine",
+      "sha256": "7d03e484428924b6e3582824a3f728e6b6671e95026d9ef7cf695798124b7787"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

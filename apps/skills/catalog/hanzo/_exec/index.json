@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read exec download: Download a file from a session.",
+      "name": "exec_download",
+      "path": "exec_download/SKILL.md",
+      "service": "exec",
+      "sha256": "5c647b307a8456b5569775a0a5ed91ce7ce24c7a559d08828fd966431acf4fea"
+    },
+    {
+      "description": "Read exec files: Files lists what a session holds..",
+      "name": "exec_files",
+      "path": "exec_files/SKILL.md",
+      "service": "exec",
+      "sha256": "8b8b0896f80bd9b403132e3488f6431abc7e4f0a3269f0909c5f601d73e9df59"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

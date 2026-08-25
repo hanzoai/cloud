@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read treasury accounts: Returns the ledger accounts the caller may see, with their balances..",
+      "name": "treasury_accounts",
+      "path": "treasury_accounts/SKILL.md",
+      "service": "treasury",
+      "sha256": "222e358dcadcfc089c14a75bbdd55c238226b8ef670b6ade3adb32f3d03b0038"
+    },
+    {
+      "description": "Read treasury treasury: Returns the reserve fund's health and the current revenue-share policy for any validated caller..",
+      "name": "treasury_treasury",
+      "path": "treasury_treasury/SKILL.md",
+      "service": "treasury",
+      "sha256": "e47adce0b60090fe80c83af0377f52130ec3c7fc00fd2cbc5995025b3a475332"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

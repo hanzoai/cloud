@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
+      "name": "network_network",
+      "path": "network_network/SKILL.md",
+      "service": "network",
+      "sha256": "2a1b145ddaba54de4120b78210ad21e1296f0bac5f8ef1798d0e7c34e70c34c1"
+    },
+    {
+      "description": "Read network routers: Returns the Zero Trust routers the caller's org owns..",
+      "name": "network_routers",
+      "path": "network_routers/SKILL.md",
+      "service": "network",
+      "sha256": "b233a946909b8a92fb0a679da0bc37bd89a3bb2b8ae0b19d03766e3756018537"
+    },
+    {
+      "description": "Read network services: Returns the Zero Trust edge services the caller's org owns..",
+      "name": "network_services",
+      "path": "network_services/SKILL.md",
+      "service": "network",
+      "sha256": "f23ab6082dcd4cc5751c68c7ee2f61813de90b9a8cf5d98ed68c87899e0e0d31"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read template template: Lists the public starter-kit catalog plus, for a validated caller, that org's own private kits., Returns one starter kit: the caller org's own by that slug, else the public catalog's..",
+      "name": "template_template",
+      "path": "template_template/SKILL.md",
+      "service": "template",
+      "sha256": "f2aff4cf268948d07938c9d8334a92af9c202cf61acdd40f11d7b3ceca5fb0b7"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

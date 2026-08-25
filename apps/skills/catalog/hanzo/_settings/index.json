@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read settings settings: Reads the caller org's configuration for one product, with every secret field MASKED — only the names of the set secrets come back, never their values, which live in KMS..",
+      "name": "settings_settings",
+      "path": "settings_settings/SKILL.md",
+      "service": "settings",
+      "sha256": "5742b92e5c9c68750eb53597d68cc381b4da223907cbb0132dad3afb5d453eb4"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

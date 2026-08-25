@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read share share: Returns the tunnel shares the caller's org currently has open, across every environment that org has enabled..",
+      "name": "share_share",
+      "path": "share_share/SKILL.md",
+      "service": "share",
+      "sha256": "487f426f48bd6167f25d050792053cb0c547b24936809cf108448c32e3b2d0b8"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read auto connectors: Connectors returns the connector catalogue..",
+      "name": "auto_connectors",
+      "path": "auto_connectors/SKILL.md",
+      "service": "auto",
+      "sha256": "83233a6732d398e4469a04f162a6cb6b5983ec1dba268facee66f409711d53ef"
+    },
+    {
+      "description": "Read auto flows: Returns the caller org's automations, most-recently-updated first., Returns one automation and its latest version., Returns one flow's versions, newest first..",
+      "name": "auto_flows",
+      "path": "auto_flows/SKILL.md",
+      "service": "auto",
+      "sha256": "dacf74e7d9e72124fa0b3fdc9565471561b0905fb109bc2a1cbbf96f8a38be92"
+    },
+    {
+      "description": "Read auto runs: Returns the caller org's run history, newest first., Returns one run..",
+      "name": "auto_runs",
+      "path": "auto_runs/SKILL.md",
+      "service": "auto",
+      "sha256": "fd057a0548dada59b5ec3748097334e1a028297cb2f577e78a0e406b8d0783d1"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

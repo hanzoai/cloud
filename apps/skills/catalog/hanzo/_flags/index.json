@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read flags activity: Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time..",
+      "name": "flags_activity",
+      "path": "flags_activity/SKILL.md",
+      "service": "flags",
+      "sha256": "94101c2ef57ff3cdef55bd588fdb1508c32e8b617d873de19d01ccfbd8184795"
+    },
+    {
+      "description": "Read flags defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
+      "name": "flags_defs",
+      "path": "flags_defs/SKILL.md",
+      "service": "flags",
+      "sha256": "7f4c410ba068e53bb45cad4b77ee7dd3c3a01b8980dd8f33b6a0a867287e3d30"
+    },
+    {
+      "description": "Read flags health: Health reports that the flag engine is serving..",
+      "name": "flags_health",
+      "path": "flags_health/SKILL.md",
+      "service": "flags",
+      "sha256": "07dd84f7dccfa2fee143211cbc19f7eff37f2041536fdfa193655d9c31d00826"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

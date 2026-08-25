@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read auto connectors: Connectors returns the connector catalogue..",
+      "name": "auto_connectors",
+      "path": "auto_connectors/SKILL.md",
+      "service": "auto",
+      "sha256": "a5de906222e5cb7cc45ba113876cecc60592804e7e408ab78c25f25a660a83a7"
+    },
+    {
+      "description": "Read auto flows: Returns the caller org's automations, most-recently-updated first., Returns one automation and its latest version., Returns one flow's versions, newest first..",
+      "name": "auto_flows",
+      "path": "auto_flows/SKILL.md",
+      "service": "auto",
+      "sha256": "f4dee8c36dd9f3e58ec25afe63d6fc03af7fdf68c3656e235364362577fcee7e"
+    },
+    {
+      "description": "Read auto runs: Returns the caller org's run history, newest first., Returns one run..",
+      "name": "auto_runs",
+      "path": "auto_runs/SKILL.md",
+      "service": "auto",
+      "sha256": "a7454955200bb2da9c1e7f26875576c9454ef1d4078d6c82952cfeb65d908175"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

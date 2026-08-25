@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read company company: Get returns the caller org's formation and the stages reachable from it, or 404 when the org has not begun one..",
+      "name": "company_company",
+      "path": "company_company/SKILL.md",
+      "service": "company",
+      "sha256": "8f0b1824427101552e72b28b60686418619b9da70ca49b18d52026b575b2d01a"
+    },
+    {
+      "description": "Read company register: Returns the platform's whole formation register, newest activity first — every org's formation, not the caller's., Counts the platform's formations by stage — the register's shape in one read, so a queue that is growing is visible as a number rather than in",
+      "name": "company_register",
+      "path": "company_register/SKILL.md",
+      "service": "company",
+      "sha256": "6a30309883659c1ce22d9282c825c79c3463dc943a0df8cee30b3fa3e5f55c61"
+    },
+    {
+      "description": "Read company review: Reports the founders whose KYC is not yet settled, oldest formation first, so the queue drains in the order founders have been waiting..",
+      "name": "company_review",
+      "path": "company_review/SKILL.md",
+      "service": "company",
+      "sha256": "388ddbb99bb48d06824f657ba07a56017700c0f59cec80068155bf3e63576ebd"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

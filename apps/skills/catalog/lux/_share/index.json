@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read share share: Returns the tunnel shares the caller's org currently has open, across every environment that org has enabled..",
+      "name": "share_share",
+      "path": "share_share/SKILL.md",
+      "service": "share",
+      "sha256": "eed80fb770e50e75931ca9a5d563c929b897876f87c0e529c85fbbd30f9b1df5"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

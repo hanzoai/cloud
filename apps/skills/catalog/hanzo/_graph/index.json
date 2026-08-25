@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read graph graph: Read the assertions this organization has recorded.",
+      "name": "graph_graph",
+      "path": "graph_graph/SKILL.md",
+      "service": "graph",
+      "sha256": "b0e189f0d39e4c8c54c0a6e562e54217f916f7ec3e6a08b3417d98108c7c5f7c"
+    },
+    {
+      "description": "Read graph search: Find assertions by their text rather than by an entity key.",
+      "name": "graph_search",
+      "path": "graph_search/SKILL.md",
+      "service": "graph",
+      "sha256": "929a773747885d78218c9634d32ee5cf56ac51de05d2357f6f252a8ac11db55f"
+    },
+    {
+      "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",
+      "name": "graph_vocabulary",
+      "path": "graph_vocabulary/SKILL.md",
+      "service": "graph",
+      "sha256": "057ef73f79c12855a1eebd71ec1da77faf655a6fefd8bbe60805bbb0963348c1"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

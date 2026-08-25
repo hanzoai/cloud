@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read flags activity: Returns the caller's flag change log newest-first: every create, update and delete, with the actor and the time..",
+      "name": "flags_activity",
+      "path": "flags_activity/SKILL.md",
+      "service": "flags",
+      "sha256": "3a99b627ddca2df548523d0cb03f90e4bb66619a9121dbfb4efa5e0a88ee22c2"
+    },
+    {
+      "description": "Read flags defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
+      "name": "flags_defs",
+      "path": "flags_defs/SKILL.md",
+      "service": "flags",
+      "sha256": "8bfe7630d81a276fac0bc25daed96d7669a584f1f41fd91a5805df3c53673f31"
+    },
+    {
+      "description": "Read flags health: Health reports that the flag engine is serving..",
+      "name": "flags_health",
+      "path": "flags_health/SKILL.md",
+      "service": "flags",
+      "sha256": "c4ea4963ba6b285e8435613ea606304034d3df7d34d31eb5efe3e3b9001cf241"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

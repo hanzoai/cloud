@@ -1,0 +1,25 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read videos content: Implements GET /v1/videos/{id}/content — download the finished MP4..",
+      "name": "videos_content",
+      "path": "videos_content/SKILL.md",
+      "service": "videos",
+      "sha256": "8b6b0428617a2db2cf3a945ed44cdb07337cb0c5f8f0c173588f74cd97bd0dab"
+    },
+    {
+      "description": "Read videos videos: Implements GET /v1/videos/{id} — poll a job's status..",
+      "name": "videos_videos",
+      "path": "videos_videos/SKILL.md",
+      "service": "videos",
+      "sha256": "4b43c34d3d199f19b4a854bbee1c9e17924e9db8fe9a6fd1e7eaa97465f5ac37"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

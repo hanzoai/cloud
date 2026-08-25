@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read audit audit: List reads the caller's OWN org audit trail, newest first, with the total the filter matched so a console can page it..",
+      "name": "audit_audit",
+      "path": "audit_audit/SKILL.md",
+      "service": "audit",
+      "sha256": "265b31530ec498eada165c7941111f67c048f86bd412106155946cbf14ce6793"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

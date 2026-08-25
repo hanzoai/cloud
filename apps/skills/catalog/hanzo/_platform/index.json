@@ -1,0 +1,81 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 10,
+  "skills": [
+    {
+      "description": "Read platform apps: Answers what this organisation has declared, joined with what the delivery plane has done about it., Answers ONE declaration — what git says this app is, before the delivery plane has had any say in it., Answers ONE app's reconciliation alone — the poll a depl",
+      "name": "platform_apps",
+      "path": "platform_apps/SKILL.md",
+      "service": "platform",
+      "sha256": "3f44db9771ebf857d325e6343d0080cb657b42a92eff8c7d95041b0393abf43f"
+    },
+    {
+      "description": "Read platform builds: Returns real build records for your org..",
+      "name": "platform_builds",
+      "path": "platform_builds/SKILL.md",
+      "service": "platform",
+      "sha256": "2d7c198dac1078c557a3d6083687f305b6ee0b8461ee2b0f8516caf526c29829"
+    },
+    {
+      "description": "Read platform cd: Answers every Application the delivery plane holds..",
+      "name": "platform_cd",
+      "path": "platform_cd/SKILL.md",
+      "service": "platform",
+      "sha256": "33788f1578f62ef21276884749877fe3f4d9a87fb2f469a4d22dabd17a5d8e83"
+    },
+    {
+      "description": "Read platform ci: Continuous integration (not wired).",
+      "name": "platform_ci",
+      "path": "platform_ci/SKILL.md",
+      "service": "platform",
+      "sha256": "d308b98e18268126e974428a14c2b26fb8471986305a9451f02b110646caaeee"
+    },
+    {
+      "description": "Read platform environments: Returns your deploy targets, and what is running on each..",
+      "name": "platform_environments",
+      "path": "platform_environments/SKILL.md",
+      "service": "platform",
+      "sha256": "eba7b9d0716afcea563987e45ce68cd7e955d37555f422d18f8340bb023e7230"
+    },
+    {
+      "description": "Read platform fleet: Returns the platform's own service tier, and where it has drifted., Returns one platform service, resolved to production by default..",
+      "name": "platform_fleet",
+      "path": "platform_fleet/SKILL.md",
+      "service": "platform",
+      "sha256": "ca4d9da077cef1e69ac5ac5c50143f6879e8707860f2f6997dec6dbe030e2a35"
+    },
+    {
+      "description": "Read platform health: Reports whether this control plane can actually deploy anything..",
+      "name": "platform_health",
+      "path": "platform_health/SKILL.md",
+      "service": "platform",
+      "sha256": "d093977d99074e618ff432aa88063ff51d6871bf2fd176b895ed81f3fd010884"
+    },
+    {
+      "description": "Read platform pipelines: Returns one build-and-deploy pipeline per app, with its latest run..",
+      "name": "platform_pipelines",
+      "path": "platform_pipelines/SKILL.md",
+      "service": "platform",
+      "sha256": "3c5651d04c4f5ea97625f9b592414f630c4db67e906a98495b81d243c63b7af5"
+    },
+    {
+      "description": "Read platform projects: Returns your org's projects, each with how many apps live under it., Returns one project and its app count., Returns the applications in one project, with what the cluster says about them..",
+      "name": "platform_projects",
+      "path": "platform_projects/SKILL.md",
+      "service": "platform",
+      "sha256": "2f0ae98d7aee67696356482b183c5418db54200eab9022854540ec95cfbec51a"
+    },
+    {
+      "description": "Read platform releases: Returns the versions that actually reached the cluster..",
+      "name": "platform_releases",
+      "path": "platform_releases/SKILL.md",
+      "service": "platform",
+      "sha256": "cf0ece23e90ce867d8f7e0dafbee4d126d443d47c13c7b5c19529cd71058c4b5"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

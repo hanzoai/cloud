@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read meet health: Health reports whether the office can mint join tokens..",
+      "name": "meet_health",
+      "path": "meet_health/SKILL.md",
+      "service": "meet",
+      "sha256": "e316d52ce93b99073d0d1fbf29e3e44f59eaa4e9a23335b58fe20f982cbd9e2a"
+    },
+    {
+      "description": "Read meet record: What is being recorded in a room, and where the file goes.",
+      "name": "meet_record",
+      "path": "meet_record/SKILL.md",
+      "service": "meet",
+      "sha256": "fc200f743fc469b3cb8370d70192548c6a49a7aa727bed9ef5395c9bc039b95b"
+    },
+    {
+      "description": "Read meet session: What this caller may open a room in.",
+      "name": "meet_session",
+      "path": "meet_session/SKILL.md",
+      "service": "meet",
+      "sha256": "ea13e6af44a752360cf3d985a098b33649bfbb8dd8b4d93fbe86215bd89ec165"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

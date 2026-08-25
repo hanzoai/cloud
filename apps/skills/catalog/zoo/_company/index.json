@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read company company: Get returns the caller org's formation and the stages reachable from it, or 404 when the org has not begun one..",
+      "name": "company_company",
+      "path": "company_company/SKILL.md",
+      "service": "company",
+      "sha256": "13597c8cff45f3e854e3aa66fffd8ea72407b673cd43317cb482be1fc698c351"
+    },
+    {
+      "description": "Read company register: Returns the platform's whole formation register, newest activity first — every org's formation, not the caller's., Counts the platform's formations by stage — the register's shape in one read, so a queue that is growing is visible as a number rather than in",
+      "name": "company_register",
+      "path": "company_register/SKILL.md",
+      "service": "company",
+      "sha256": "55c14b30b7e9c0516c3ab30c748312930531bfbf3d88953bdfdccb0f607db8f6"
+    },
+    {
+      "description": "Read company review: Reports the founders whose KYC is not yet settled, oldest formation first, so the queue drains in the order founders have been waiting..",
+      "name": "company_review",
+      "path": "company_review/SKILL.md",
+      "service": "company",
+      "sha256": "fcbd464775b819b3a89139dd39a09e8dc0ee6a1d78e9fe27f46103d43504286c"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read settings settings: Reads the caller org's configuration for one product, with every secret field MASKED — only the names of the set secrets come back, never their values, which live in KMS..",
+      "name": "settings_settings",
+      "path": "settings_settings/SKILL.md",
+      "service": "settings",
+      "sha256": "4bd6a689c001dae8ef5bc579d70ff15e08f6853c0d81e650e14268c868160036"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

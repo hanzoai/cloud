@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read content board: Aggregates the caller org's marketing content across every publishable content type into ONE queue board — the cross-type read the framework's per-DocType list cannot give..",
+      "name": "content_board",
+      "path": "content_board/SKILL.md",
+      "service": "content",
+      "sha256": "60e935bde9e8311919dfca508e036cc5d9860fd9a77995af05f4bb985d807095"
+    },
+    {
+      "description": "Read content channels: Lists the distribution channels the caller's org has connected — the social integrations a publish can target..",
+      "name": "content_channels",
+      "path": "content_channels/SKILL.md",
+      "service": "content",
+      "sha256": "90b576d332e9a6d0cdea34d5c616abf943a6e4196e6b454013be7f79f6e934b1"
+    },
+    {
+      "description": "Read content lifecycle: Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state..",
+      "name": "content_lifecycle",
+      "path": "content_lifecycle/SKILL.md",
+      "service": "content",
+      "sha256": "c145aab6680d27e92ca1181458f25ea6354ea21954d525345b8618b81c101902"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

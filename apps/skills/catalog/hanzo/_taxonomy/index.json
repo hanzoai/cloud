@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read taxonomy taxonomy: Read returns the product catalogue as this caller sees it: the PLATFORM catalogue — Hanzo's own products, the part that is true for everyone — plus the caller's own org's rows, every category in display order and each carrying the products filed under it i",
+      "name": "taxonomy_taxonomy",
+      "path": "taxonomy_taxonomy/SKILL.md",
+      "service": "taxonomy",
+      "sha256": "7a31e302abc73cc8aff3aac29f2ed73e68e2899cb82247adef8de92ea1aecb17"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

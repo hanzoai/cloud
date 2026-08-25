@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read dataset dataset: List this org's datasets, Describe every version of one dataset.",
+      "name": "dataset_dataset",
+      "path": "dataset_dataset/SKILL.md",
+      "service": "dataset",
+      "sha256": "0a05265e2b66a6ad0de34508fadcf57c3f74ce17bbeea24dcd736bb13e4d0052"
+    },
+    {
+      "description": "Read dataset export: Read a version's rows back, one page at a time.",
+      "name": "dataset_export",
+      "path": "dataset_export/SKILL.md",
+      "service": "dataset",
+      "sha256": "78b450253a5b5b1a1d45ce90157f76afc27f81b4b3f47c618cc9686313617b88"
+    },
+    {
+      "description": "Read dataset lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
+      "name": "dataset_lineage",
+      "path": "dataset_lineage/SKILL.md",
+      "service": "dataset",
+      "sha256": "ea77e22cf665bf784ca096bcff2bcb24f463292449aab9432453635c64e7c47a"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

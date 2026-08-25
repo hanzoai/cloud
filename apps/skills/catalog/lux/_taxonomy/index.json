@@ -1,0 +1,18 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read taxonomy taxonomy: Read returns the product catalogue as this caller sees it: the PLATFORM catalogue — Lux's own products, the part that is true for everyone — plus the caller's own org's rows, every category in display order and each carrying the products filed under it in ",
+      "name": "taxonomy_taxonomy",
+      "path": "taxonomy_taxonomy/SKILL.md",
+      "service": "taxonomy",
+      "sha256": "8fa9a20621e270f4d6b2783d5ade230d2da3469d32cef593e3bd591ff328abed"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read esign documents: Returns your org's documents, newest first., Returns one document with its recipients and field layout., Returns the document's full audit trail, oldest first..",
+      "name": "esign_documents",
+      "path": "esign_documents/SKILL.md",
+      "service": "esign",
+      "sha256": "5ff2725012ca22f698a78fd1de87f6ae9a34b324ebe274a0b833bb51bfacce8b"
+    },
+    {
+      "description": "Read esign health: Reports whether the e-signature surface is mounted..",
+      "name": "esign_health",
+      "path": "esign_health/SKILL.md",
+      "service": "esign",
+      "sha256": "d3a743cf7683ecb4b2875f8eb309927a103cc2d383190470393ead72fa574631"
+    },
+    {
+      "description": "Read esign o: Opens a document you were asked to sign, using your signing link..",
+      "name": "esign_o",
+      "path": "esign_o/SKILL.md",
+      "service": "esign",
+      "sha256": "6e5af25caa2435253802e58c3c9c6203c0cc7a1d13e30801454a83cddd202e8b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
