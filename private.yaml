@@ -83077,97 +83077,236 @@ paths:
       x-app: destination
       x-public: true
       x-tool: true
-  /v1/dns/{wildcard1}:
-    delete:
-      description: |-
-        Removes a DNS zone or record from the Hanzo DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
-
-        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
-
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
-      operationId: delete_dns_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Delete a DNS zone or record
-      tags:
-      - dns
-      x-app: dns
+  /v1/dns/health:
     get:
       description: |-
-        Reads DNS state — a zone, a record, a listing — from the Hanzo DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+        Reports whether the DNS control plane is answering. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
         Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
-      operationId: get_dns_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Read your org's DNS zones and records
+      operationId: get_dns_health
+      summary: Check the DNS control plane
       tags:
       - dns
       x-app: dns
-    patch:
-      description: |-
-        Amends a DNS zone or record on the Hanzo DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
-
-        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
-
-        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
-      operationId: patch_dns_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Amend a DNS zone or record
-      tags:
-      - dns
-      x-app: dns
+      x-public: true
+  /v1/dns/sync:
     post:
       description: |-
-        Creates DNS state — a zone, a record — on the Hanzo DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+        Replaces the calling org's zones and their records in bulk. The owning org is the caller's own validated claim, never the body, so a sync reaches nobody else's zones. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
         Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
-      operationId: post_dns_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      summary: Create a DNS zone or record
+      operationId: post_dns_sync
+      summary: Push a set of zones and records in one call
       tags:
       - dns
       x-app: dns
+      x-public: true
+  /v1/dns/zones:
+    get:
+      description: |-
+        Lists every DNS zone the calling org holds, authoritative and provider-backed alike. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: get_dns_zones
+      summary: List your org's DNS zones
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+    post:
+      description: |-
+        Creates a zone for the calling org — authoritative, or backed by a DNS provider the org has connected. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: post_dns_zones
+      summary: Create a DNS zone
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+  /v1/dns/zones/{zone}:
+    delete:
+      description: |-
+        Removes one of the calling org's zones, and the records in it, from the DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: delete_dns_zones_by_zone
+      parameters:
+      - in: path
+        name: zone
+        required: true
+        schema:
+          type: string
+      summary: Delete a DNS zone
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+    get:
+      description: |-
+        Reads one of the calling org's zones by name. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: get_dns_zones_by_zone
+      parameters:
+      - in: path
+        name: zone
+        required: true
+        schema:
+          type: string
+      summary: Read one DNS zone
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+  /v1/dns/zones/{zone}/records:
+    get:
+      description: |-
+        Lists the records in one zone. A provider-backed zone is read from the provider, which is its source of truth. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: get_dns_zones_by_zone_records
+      parameters:
+      - in: path
+        name: zone
+        required: true
+        schema:
+          type: string
+      summary: List a zone's DNS records
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+    post:
+      description: |-
+        Creates a record in one zone. A provider-backed zone is written at the provider first, then mirrored locally so the resolver serves it. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: post_dns_zones_by_zone_records
+      parameters:
+      - in: path
+        name: zone
+        required: true
+        schema:
+          type: string
+      summary: Create a DNS record
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+  /v1/dns/zones/{zone}/records/{record}:
+    delete:
+      description: |-
+        Removes one record from one zone. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: delete_dns_zones_by_zone_records_by_record
+      parameters:
+      - in: path
+        name: zone
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: record
+        required: true
+        schema:
+          type: string
+      summary: Delete a DNS record
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+    get:
+      description: |-
+        Reads one record of one zone by its id. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: get_dns_zones_by_zone_records_by_record
+      parameters:
+      - in: path
+        name: zone
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: record
+        required: true
+        schema:
+          type: string
+      summary: Read one DNS record
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
+    patch:
+      description: |-
+        Amends one record of one zone. Only the fields the body carries change; the rest keep the values they hold at the plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+
+        It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
+
+        Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
+      operationId: patch_dns_zones_by_zone_records_by_record
+      parameters:
+      - in: path
+        name: zone
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: record
+        required: true
+        schema:
+          type: string
+      summary: Amend a DNS record
+      tags:
+      - dns
+      x-app: dns
+      x-public: true
     put:
       description: |-
-        Replaces a DNS zone or record on the Hanzo DNS control plane. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The sub-path after /v1/dns and the query string ARE the plane's own API address, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
+        Amends one record of one zone. Only the fields the body carries change; this is the same partial update PATCH performs, not a replacement of the whole record. The plane owns the authoritative zone and record store behind every name pointed at Hanzo; this head keeps none of it. The address and the query string ARE the plane's own, relayed verbatim, and the plane's answer comes back unchanged — its status code, its Content-Type, and its Location on a redirect this head never follows.
 
         It travels under the CALLER'S OWN identity and substitutes no service credential, which would collapse tenants: the caller's validated session bearer goes upstream as Authorization and the server-validated org as X-Org-Id, so a caller in one org reaches only that org's zones, exactly as if it had called the plane directly. The upstream host comes only from deployment config, never from the request, so no path can re-target another host.
 
         Fails closed before a byte leaves cloud: no validated principal is 403; an API key is 401, because a pk-/sk- key is not a JWT the OIDC-gated plane can validate and there is no substitute credential to send in its place; a path that normalizes outside /v1/dns, or still carries a percent-escape or a `..` after one decode, is 400; an unconfigured plane is 503 and an unreachable one 502.
-      operationId: put_dns_by_wildcard1
+      operationId: put_dns_zones_by_zone_records_by_record
       parameters:
       - in: path
-        name: wildcard1
+        name: zone
         required: true
         schema:
           type: string
-      summary: Replace a DNS zone or record
+      - in: path
+        name: record
+        required: true
+        schema:
+          type: string
+      summary: Amend a DNS record
       tags:
       - dns
       x-app: dns
+      x-public: true
   /v1/domain/availability:
     get:
       description: |-

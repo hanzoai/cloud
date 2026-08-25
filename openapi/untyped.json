@@ -1,5 +1,5 @@
 {
-  "operations": 745,
+  "operations": 752,
   "products": {
     "account": 2,
     "ad": 1,
@@ -23,7 +23,7 @@
     "dataroom": 7,
     "deploy": 5,
     "destination": 1,
-    "dns": 5,
+    "dns": 12,
     "event": 5,
     "exec": 2,
     "framework": 2,
