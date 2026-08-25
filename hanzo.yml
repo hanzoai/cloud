@@ -134,76 +134,6 @@
 # on a runner with a C toolchain (build.yml provisions one), so vet needs the tag
 # for the same reason go-unit does.
 test:
-  - name: forge-fallthrough
-    # WHERE A MODULE IS PUBLISHED IS NOT WHERE IT IS IMPORTED FROM, and this tree
-    # depends on both answers. `github.com/hanzoai/*` is one import path over two
-    # publishers, so resolution is a LADDER and each rung answers what the one
-    # before it cannot:
-    #
-    #   proxy.golang.org  immutable, and the only copy that survives a repository
-    #                     being re-rooted (dataroom v1.1.7, sign v1.0.0 — their
-    #                     github repos hold no commits at all now)
-    #   direct → github   a module the proxy has never been allowed to see
-    #   direct → THE FORGE  a module the credential on the github rung cannot
-    #                     read either. 7 of this tree's 51 hanzoai modules are
-    #                     PRIVATE — amqp, licensing, plans, pricing, thinking,
-    #                     trust, zen — so the proxy has never been allowed to
-    #                     see them (it answers 404 with `could not read
-    #                     Username`), and github answers `unknown revision` to a
-    #                     credential without access, which is the same sentence
-    #                     a deleted tag produces. The tag is THERE; the reader
-    #                     was not admitted. Do not read that error as absence.
-    #
-    # This gate installs the last rung, and it is deliberately the LAST one: the
-    # rewrite is consulted only when the proxy has already declined, so a module
-    # the proxy serves is never taken from the forge. That ordering is doing real
-    # work rather than being tidy — the forge publishes a DIFFERENT commit at
-    # sign v1.0.0, and taking it would fail this tree's go.sum. Which is also the
-    # guarantee under all three rungs: go.sum verifies every hash whichever
-    # publisher answered, so a wrong lineage cannot be quietly built, it stops.
-    #
-    # It writes into the config FILE the reusable workflow already made for its
-    # github credential and exports, rather than a second file or a second
-    # mechanism — every later gate in this list runs in its own shell and
-    # inherits that one variable, so the rung is installed once and not eight
-    # times, and no token is ever spelled on a gate's own command line.
-    #
-    # No credential is not a failure HERE. It is only the third rung that goes
-    # missing, so this says so and lets the gate that actually needs a module be
-    # the one that fails, naming the module.
-    run: |
-      set -euo pipefail
-      TOKEN="${HANZO_API_TOKEN:-${FORGE_TOKEN:-}}"
-      if [ -z "$TOKEN" ]; then
-        echo "::warning::no git.hanzo.ai credential in this job, so a module published only on the forge cannot resolve. HANZO_API_TOKEN is minted by the KMS login in the reusable workflow; FORGE_TOKEN is the org secret. Everything the public proxy serves is unaffected."
-        exit 0
-      fi
-      echo "::add-mask::$TOKEN"
-      CFG="${GIT_CONFIG_GLOBAL:-${RUNNER_TEMP:-/tmp}/gitconfig-private}"
-      [ -f "$CFG" ] || : > "$CFG"
-      GIT_CONFIG_GLOBAL="$CFG" git config --global \
-        url."https://x-access-token:${TOKEN}@git.hanzo.ai/hanzoai/".insteadOf \
-        "https://github.com/hanzoai/"
-      {
-        echo "GIT_CONFIG_GLOBAL=$CFG"
-        echo "GIT_CONFIG_NOSYSTEM=1"
-      } >> "${GITHUB_ENV:-/dev/null}"
-      # Report what this step can actually ESTABLISH, which is that the rewrite
-      # is in the config git will read — not that some particular module is
-      # readable. Reaching for a repo instead conflates two different answers:
-      # a rewrite that failed to install, and a credential this one repo does
-      # not admit. The first version of this gate did exactly that and warned on
-      # a run whose modules all resolved, which is a warning nobody can act on.
-      #
-      # The rung is LAST, so a module it cannot read is one an earlier rung
-      # already served or one a later gate will name, with the module in hand.
-      if GIT_CONFIG_GLOBAL="$CFG" GIT_CONFIG_NOSYSTEM=1 \
-           git config --get-regexp '^url\..*git\.hanzo\.ai.*\.insteadof$' >/dev/null 2>&1; then
-        echo "forge rung installed"
-      else
-        echo "::warning::the git.hanzo.ai rewrite did not take; only the proxy and github will answer, so a module published solely on the forge will be named by a later gate"
-      fi
-
   - name: closure-current
     # FIRST, AND IT IS THE CHEAPEST THING THAT CAN BE KNOWN. `go list` over the whole
     # plugin closure — no compile, no link — is 2 seconds, against 6m39s for
@@ -242,10 +172,19 @@ test:
       # Nothing is trusted MORE for it: go.sum verifies every hash either way,
       # and that is also what says the proxy's copy is the right one — the forge
       # publishes a DIFFERENT commit at sign v1.0.0, and that copy does not
-      # verify against this tree. Mirroring the forge's tags to GitHub would
-      # therefore have broken the build rather than fixed it. A genuinely
-      # private module answers 410 at the proxy and falls through to `direct`
-      # on the GH_PAT credential, which is what the comma in GOPROXY is for.
+      # verify against this tree.
+      #
+      # The 7 PRIVATE modules (amqp, licensing, plans, pricing, thinking, trust,
+      # zen) the proxy may not read answer 404 there and fall through to `direct`
+      # on the GH_PAT credential, which is what the comma in GOPROXY is for. Do
+      # NOT add a git.hanzo.ai `insteadOf` to reach them. It was tried, and it
+      # made things worse in a way worth keeping written down: git prefers the
+      # LONGEST matching rewrite, so one on `github.com/hanzoai/` outranks ci's
+      # own `github.com/` and captures the direct rung for EVERY hanzoai module —
+      # and those repos are private on the forge as well, where CI's machine
+      # identity is refused. Six modules that had resolved fine then failed with
+      # `repository not found`, which does not name a permission and reads like a
+      # missing repo. One publisher we can read beats two we cannot.
       export GOPRIVATE='github.com/hanzoai/*' GONOPROXY=none GOWORK=off
       # A STABLE cache home. setup-go's cache writes to the Actions cache
       # backend, which a self-hosted Hanzo Git runner may not provide — and when it
@@ -534,10 +473,13 @@ test:
       # for the same sha. The release did not fail; it stopped being possible.
       #
       # So resolve first, under a bound of its own, and say which of the two it was.
-      # Private modules here come from git.hanzo.ai, so "the host is down" and "the
-      # code is wrong" are different sentences and only one of them is about us.
+      # Most modules come from proxy.golang.org; the 7 private ones come from
+      # github.com on the GH_PAT credential, NOT from the forge — measured, after
+      # a forge rewrite here broke six of them. So "a publisher is down", "this
+      # credential is not admitted" and "the code is wrong" are three sentences
+      # and only the last is about us.
       timeout 10m go mod download || {
-        echo "::error::modules did not resolve in 10m. Private modules come from git.hanzo.ai — check the forge is serving before reading this as a code failure."
+        echo "::error::modules did not resolve in 10m. Most come from proxy.golang.org and the 7 private ones from github.com on GH_PAT — check that a publisher is serving, and that this job's credential is admitted, before reading this as a code failure."
         exit 1
       }
       go test -timeout 30m -tags "sqlite_fts5 sqlite_math_functions" \
