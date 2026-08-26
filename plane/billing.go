@@ -25,21 +25,20 @@ package plane
 
 import "encoding/json"
 
-// ---- billing.invoices — raise, issue, collect, void ------------------------
+// ---- billing.invoices — what a customer may read ---------------------------
+//
+// The acts that raised a demand and collected it — draft, issue, collect, void —
+// are gone with the arrears model they served. This platform prices work before it
+// does it: a customer funds a wallet and spends it down, so an invoice sent after
+// the fact bills money already taken. Collect ended in a charge against the card on
+// file, which is what a prepaid balance exists to make unnecessary.
 
 const (
 	// BillingInvoices lists the caller's invoices.
 	BillingInvoices = "billing_invoices"
 
-	// The lifecycle. Raising and issuing are separate acts on purpose: a raised
-	// invoice is a DRAFT and is not collectible, and issuing is what turns it
-	// into a demand for payment and gives it its number. An op that did both at
-	// once could never let a human read a draft before it went out.
-	BillingInvoiceRaise   = "billing_invoice_raise"
-	BillingInvoiceRead    = "billing_invoice_read"
-	BillingInvoiceIssue   = "billing_invoice_issue"
-	BillingInvoiceCollect = "billing_invoice_collect"
-	BillingInvoiceVoid    = "billing_invoice_void"
+	// BillingInvoiceRead reads one of them.
+	BillingInvoiceRead = "billing_invoice_read"
 
 	// BillingInvoicePDF renders one invoice as an attachment. It is the one op
 	// on this plane whose answer is not a JSON value, and it is here anyway
@@ -69,21 +68,6 @@ type InvoiceLine struct {
 	UnitPrice int64 `json:"unitPrice,omitempty"`
 }
 
-// RaiseIn is a draft invoice to raise against a customer.
-type RaiseIn struct {
-	// UserID identifies the customer being billed, within the caller's own org.
-	// Required — an invoice with no addressee is not an invoice.
-	UserID string `json:"userId"`
-	// CustomerEmail is where the invoice is sent. Optional.
-	CustomerEmail string `json:"customerEmail,omitempty"`
-	// Currency is the ISO 4217 code, lower-cased. Empty means usd.
-	Currency string `json:"currency,omitempty"`
-	// Lines are the charges. The invoice subtotal and amount due are COMPUTED
-	// from these — there is no total field to send, because a total that
-	// disagreed with its own lines would bill a number nobody could derive.
-	Lines []InvoiceLine `json:"lines,omitempty"`
-}
-
 // InvoiceRef names one invoice to act on.
 type InvoiceRef struct {
 	// ID is the invoice id.
@@ -92,7 +76,7 @@ type InvoiceRef struct {
 
 // Invoice is an invoice.
 type Invoice struct {
-	// ID is the invoice id — what the issue, collect and void ops address.
+	// ID is the invoice id.
 	ID string `json:"id"`
 	// Number is the human-facing invoice number, e.g. "INV-0042". A draft has
 	// none; issuing assigns it.
@@ -118,27 +102,6 @@ type Invoice struct {
 	PaymentRef string `json:"paymentRef,omitempty"`
 	// CreatedAt is when the draft was raised, RFC3339.
 	CreatedAt string `json:"createdAt,omitempty"`
-}
-
-// Collected is the outcome of attempting to collect an invoice.
-type Collected struct {
-	// Invoice is the invoice AFTER the attempt — its status is the authority on
-	// what happened, not this struct's other fields.
-	Invoice *Invoice `json:"invoice"`
-	// Paid reports whether the invoice is now settled in full. A false here with
-	// no error is a DECLINE: the invoice stays open and may be collected again.
-	Paid bool `json:"paid"`
-	// CreditUsedCents is how much was covered by credit grants.
-	CreditUsedCents int64 `json:"creditUsedCents"`
-	// BalanceUsedCents is how much was covered by prepaid balance.
-	BalanceUsedCents int64 `json:"balanceUsedCents"`
-	// CardChargedCents is how much was charged to the card on file.
-	CardChargedCents int64 `json:"cardChargedCents"`
-	// ProcessorRef is the processor's reference for any card charge — the field
-	// that proves money moved at the gateway rather than only in our ledger.
-	ProcessorRef string `json:"processorRef,omitempty"`
-	// Reason explains a decline or partial collection. Empty on success.
-	Reason string `json:"reason,omitempty"`
 }
 
 // ---- billing.invoices — the listing ---------------------------------------

@@ -439,10 +439,6 @@
    "doc": "Ends a subscription.\n\nIt cancels at the END OF THE PAID PERIOD by default, because a customer who\ncancels has already paid for the period they are in and taking it away is\ntaking money for nothing. `atPeriodEnd: false` ends it at once, which is the\ncaller asking for that.\n\nA subscription from another org is not found rather than refused, so an id\ncannot be probed for existence.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
   {
-   "id": "collectInvoice",
-   "doc": "Collects an issued invoice: credit grants first, then prepaid balance, then the\ncard on file — the same waterfall the dunning workflow runs.\n\nA DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the\ninvoice still open, because a declined collection is a normal business outcome\nthat must remain retryable — and because sealing it as a failure would wedge\ndunning behind a replayed decline. Only a successful collection is sealed, so a\nretry of a paid invoice replays the receipt instead of charging again.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
    "id": "delete_billing_alerts_by_id",
    "doc": "Removes one of the caller's spend caps and answers 204.\n\nRemoving a cap RAISES what the org may spend, so it takes the same authority\nsetting one does. The caps that remain still bind: this drops one, never the\nwhole policy."
   },
@@ -555,10 +551,6 @@
    "read": true
   },
   {
-   "id": "issueInvoice",
-   "doc": "Issues a draft invoice: moves it to OPEN, assigns its number, and makes it\ncollectible.\n\nOnly a draft can be issued. An invoice already open, paid or void is refused\nwith the state machine's own reason rather than being silently re-issued, which\nwould mint a second number for one debt.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
    "id": "patch_billing_alerts_by_id",
    "doc": "Changes one spend cap: raise or lower the ceiling, flip enforcement, retune\nthe rate limit.\n\nOnly the fields the body carries move. Every mutable field is optional, and an\nabsent one is PRESERVED rather than reset — so a change that flips enforcement\ncannot silently wipe the threshold it enforces.\n\nA cap belonging to another org is a 404, not a 403: a guessed id must not\nbecome an oracle for what anyone else holds.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
@@ -587,16 +579,8 @@
    "doc": "Charges a single-use card token and credits the caller's\nbalance.\n\nThe token comes from the payment form and is vaulted as part of the charge, so\nno card number reaches this service and none is stored here. The receipt names\nthe ledger entry, the new balance, and the PROCESSOR's own reference — which is\nthe only field that proves money moved at the gateway rather than only in our\nledger.\n\nRetry-safe on X-Idempotency-Key: the same key settles one charge and returns\nthe first receipt."
   },
   {
-   "id": "raiseInvoice",
-   "doc": "Raises a DRAFT invoice against a customer in the caller's own org.\n\nThe invoice is not collectible yet: a draft exists so it can be read and\ncorrected, and issueInvoice is the separate act that turns it into a demand for\npayment. The subtotal and amount due are computed from the lines, so there is\nno total to send and none to get wrong.\n\nThe billing org is the caller's, taken from the validated principal, so an\ninvoice can only ever be raised on the caller's own books.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
    "id": "reactivateSubscription",
    "doc": "Puts a canceled subscription back on its plan.\n\nWhat asks for this is usually a recovered payment method or a support tool\nrather than a browser, which is most of the argument for it having an address\nat all. The engine decides whether the move is legal; a row it will not\nreactivate comes back with its own reason.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
-   "id": "voidInvoice",
-   "doc": "Voids a draft or issued invoice — the cancel.\n\nA paid invoice cannot be voided: money has moved, and the correction for that\nis a refund, not an erasure. The state machine refuses it and that refusal is\nthe answer.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   }
  ],
  "blueprint": [

@@ -1,7 +1,18 @@
 package billing
 
-// invoices.go serves the invoice family of /v1/billing — the list, the five
-// lifecycle acts, and the PDF.
+// invoices.go serves what a customer may READ of an invoice under /v1/billing —
+// the list, one row, and the PDF.
+//
+// READS ONLY, because the money here is prepaid. The acts that raised a demand and
+// then collected it — draft, issue, collect, void — were the arrears half of a model
+// this platform does not run: a customer funds a wallet and spends it down, so a bill
+// sent after the fact has nothing to bill for. Nothing in this repo ever produced one
+// (the cycle that renders invoices from metered usage lives in the commerce module and
+// is not mounted here), and collect ended in a charge against the card on file, which
+// is the one thing a prepaid balance exists to make unnecessary.
+//
+// The reads stay because a customer's own history is theirs to read and reading it
+// moves nothing. They answer an empty list to an org that was never billed.
 //
 // Every one of them is a relay. The rows are in commerce's per-tenant datastore,
 // which has ONE owner, so this app asks that owner BY NAME and answers with what
@@ -21,7 +32,6 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
@@ -32,22 +42,9 @@ import (
 func mountInvoices(app cloud.Router, o ops) {
 	zapp := cloud.ZipApp(app)
 	zip.Get(zapp, "/v1/billing/invoices", o.invoices)
-	zip.Post(zapp, "/v1/billing/invoices", o.raiseInvoice,
-		zip.WithOperationID("raiseInvoice"),
-		zip.WithSummary("Raise a draft invoice against a customer"),
-		zip.WithStatus(http.StatusCreated))
 	zip.Get(zapp, "/v1/billing/invoices/:id", o.invoice,
 		zip.WithOperationID("getInvoice"),
 		zip.WithSummary("Read one invoice"))
-	zip.Post(zapp, "/v1/billing/invoices/:id/issue", o.issueInvoice,
-		zip.WithOperationID("issueInvoice"),
-		zip.WithSummary("Issue a draft invoice, making it collectible"))
-	zip.Post(zapp, "/v1/billing/invoices/:id/collect", o.collectInvoice,
-		zip.WithOperationID("collectInvoice"),
-		zip.WithSummary("Collect an issued invoice from credits, balance, then card"))
-	zip.Post(zapp, "/v1/billing/invoices/:id/void", o.voidInvoice,
-		zip.WithOperationID("voidInvoice"),
-		zip.WithSummary("Void a draft or issued invoice"))
 	app.Get("/v1/billing/invoices/:id/pdf", invoicePDF)
 }
 
@@ -60,8 +57,8 @@ func init() {
 		"Download one invoice as a PDF",
 		"Answers the invoice as an attachment — `application/pdf` under a "+
 			"Content-Disposition naming the invoice number — rather than as a JSON "+
-			"value, which is why this one route is untyped where its five siblings "+
-			"are typed: a PDF is bytes with a filename, and the two headers are the "+
+			"value, which is why this one route is untyped where its siblings are "+
+			"typed: a PDF is bytes with a filename, and the two headers are the "+
 			"whole contract.\n\n"+
 			"The render is a PURE function of the invoice: one page, no timestamps "+
 			"and no random ids, so the same invoice renders the same bytes however "+
@@ -91,30 +88,6 @@ func (o ops) invoices(ctx context.Context, _ *noInput) (*plane.Invoices, error) 
 	})
 }
 
-// Raises a DRAFT invoice against a customer in the caller's own org.
-//
-// The invoice is not collectible yet: a draft exists so it can be read and
-// corrected, and issueInvoice is the separate act that turns it into a demand for
-// payment. The subtotal and amount due are computed from the lines, so there is
-// no total to send and none to get wrong.
-//
-// The billing org is the caller's, taken from the validated principal, so an
-// invoice can only ever be raised on the caller's own books.
-//
-// A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) raiseInvoice(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
-	if err := account.CSRF(ctx); err != nil {
-		return nil, err
-	}
-	org, _, err := payer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return ask(ctx, org, "raise invoice", func(ctx context.Context) (*plane.Invoice, error) {
-		return commercepeer.BillingInvoiceRaise(ctx, in)
-	})
-}
-
 // Reads one invoice out of the caller's org.
 //
 // The org scopes the read by construction — the store is namespaced to it — so an
@@ -128,69 +101,5 @@ func (o ops) invoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice,
 	}
 	return ask(ctx, org, "read invoice", func(ctx context.Context) (*plane.Invoice, error) {
 		return commercepeer.BillingInvoiceRead(ctx, in)
-	})
-}
-
-// Issues a draft invoice: moves it to OPEN, assigns its number, and makes it
-// collectible.
-//
-// Only a draft can be issued. An invoice already open, paid or void is refused
-// with the state machine's own reason rather than being silently re-issued, which
-// would mint a second number for one debt.
-//
-// A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) issueInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	if err := account.CSRF(ctx); err != nil {
-		return nil, err
-	}
-	org, _, err := payer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return ask(ctx, org, "issue invoice", func(ctx context.Context) (*plane.Invoice, error) {
-		return commercepeer.BillingInvoiceIssue(ctx, in)
-	})
-}
-
-// Voids a draft or issued invoice — the cancel.
-//
-// A paid invoice cannot be voided: money has moved, and the correction for that
-// is a refund, not an erasure. The state machine refuses it and that refusal is
-// the answer.
-//
-// A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) voidInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	if err := account.CSRF(ctx); err != nil {
-		return nil, err
-	}
-	org, _, err := payer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return ask(ctx, org, "void invoice", func(ctx context.Context) (*plane.Invoice, error) {
-		return commercepeer.BillingInvoiceVoid(ctx, in)
-	})
-}
-
-// Collects an issued invoice: credit grants first, then prepaid balance, then the
-// card on file — the same waterfall the dunning workflow runs.
-//
-// A DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the
-// invoice still open, because a declined collection is a normal business outcome
-// that must remain retryable — and because sealing it as a failure would wedge
-// dunning behind a replayed decline. Only a successful collection is sealed, so a
-// retry of a paid invoice replays the receipt instead of charging again.
-//
-// A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) collectInvoice(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
-	if err := account.CSRF(ctx); err != nil {
-		return nil, err
-	}
-	org, _, err := payer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return ask(ctx, org, "collect invoice", func(ctx context.Context) (*plane.Collected, error) {
-		return commercepeer.BillingInvoiceCollect(ctx, in)
 	})
 }

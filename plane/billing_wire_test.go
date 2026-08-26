@@ -40,8 +40,7 @@ import (
 var billingWire = []any{
 	// invoices
 	plane.InvoicesIn{}, plane.Invoices{}, plane.BillingInvoice{}, plane.InvoiceLineItem{},
-	plane.RaiseIn{}, plane.InvoiceRef{}, plane.Invoice{}, plane.InvoiceLine{},
-	plane.Collected{}, plane.Document{},
+	plane.InvoiceRef{}, plane.Invoice{}, plane.InvoiceLine{}, plane.Document{},
 	// statement
 	plane.CallerIn{}, plane.Accounts{}, plane.BillingAccount{},
 	plane.HoldersIn{}, plane.Holders{}, plane.Holder{},

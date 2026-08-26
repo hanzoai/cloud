@@ -163,69 +163,52 @@ func TestPaymentOpsRefuseAnonymousCallers(t *testing.T) {
 	}
 }
 
-// TestInvoiceLifecycleIsTools pins that the WHOLE lifecycle is callable, not just
-// the half that reads. Before this, cloud mounted the invoice list and the PDF
-// and nothing that could raise one — an org could read invoices it had no way to
-// create, and no invoice tool existed at any address.
+// TestInvoiceReadsAreTools pins that what a customer may read of an invoice is
+// callable by name — the list, one row, the PDF.
 //
-// The names it pins are the PLANE's, because that is where the lifecycle is
-// published now: this app keeps the store and answers by name, and the money
-// endpoint in apps/billing is what an agent calls. Both halves have to exist for the
-// lifecycle to be reachable, and this is the half that would go missing without
-// anything else noticing — an endpoint relaying an op nobody publishes is a 503 that
-// reads like an outage.
-func TestInvoiceLifecycleIsTools(t *testing.T) {
+// The names it pins are the PLANE's, because that is where they are published:
+// this app keeps the store and answers by name, and the money endpoint in
+// apps/billing is what an agent calls. Both halves have to exist for a read to be
+// reachable, and this is the half that would go missing without anything else
+// noticing — an endpoint relaying an op nobody publishes is a 503 that reads like
+// an outage.
+//
+// The acts that raised a demand and collected it are absent on purpose, and their
+// absence is asserted below: the money here is prepaid, so there is nothing to bill
+// after the fact and nothing to collect from a card in arrears.
+func TestInvoiceReadsAreTools(t *testing.T) {
 	tools := toolsFor(t)
 	for _, want := range []string{
-		plane.BillingInvoiceRaise, plane.BillingInvoiceIssue, plane.BillingInvoiceCollect,
-		plane.BillingInvoiceVoid, plane.BillingInvoiceRead, plane.BillingInvoices,
-		plane.BillingInvoicePDF,
+		plane.BillingInvoiceRead, plane.BillingInvoices, plane.BillingInvoicePDF,
 	} {
 		if _, ok := tools[want]; !ok {
-			t.Errorf("tool %q missing — the invoice lifecycle is not fully callable", want)
+			t.Errorf("tool %q missing — a customer cannot read their own invoices", want)
+		}
+	}
+	// The arrears half, by the names it answered to. An op removed from the source
+	// but left published is still callable, and collect ended in a card charge.
+	for _, gone := range []string{
+		"billing_invoice_raise", "billing_invoice_issue",
+		"billing_invoice_collect", "billing_invoice_void",
+	} {
+		if _, ok := tools[gone]; ok {
+			t.Errorf("tool %q is still published — the money here is prepaid, so nothing bills after the fact", gone)
 		}
 	}
 }
 
-// TestRaiseInvoiceIsTyped pins the one input that is structurally hard to publish
-// and therefore the one most likely to silently degrade to a blob: the LINE ITEMS.
-// A lines array that lost its element schema still compiles and still serves, and
-// an agent handed it can only guess what a line looks like.
-func TestRaiseInvoiceIsTyped(t *testing.T) {
-	tool, ok := toolsFor(t)[plane.BillingInvoiceRaise]
-	if !ok {
-		t.Fatal(plane.BillingInvoiceRaise + " not registered")
-	}
-	schema, _ := json.Marshal(tool["inputSchema"])
-	for _, want := range []string{`"userId"`, `"lines"`, `"$defs"`, `"description"`, `"amount"`} {
-		if !strings.Contains(string(schema), want) {
-			t.Errorf("the raise-invoice schema is missing %s — an agent cannot construct a line item from it; schema=%s", want, schema)
-		}
-	}
-	// A caller-named org would be a cross-tenant invoice.
-	if strings.Contains(string(schema), `"org"`) {
-		t.Errorf("raiseInvoice publishes org as an input; schema=%s", schema)
-	}
-}
-
-// TestInvoiceOpsRefuseAnonymousCallers is the tenancy half: every lifecycle op
-// must refuse a caller with no validated org rather than defaulting to one.
+// TestInvoiceOpsRefuseAnonymousCallers is the tenancy half: every op must refuse a
+// caller with no validated org rather than defaulting to one.
 func TestInvoiceOpsRefuseAnonymousCallers(t *testing.T) {
 	o := invoiceOps{}
 	ctx := context.Background()
-	if _, err := o.raise(ctx, &plane.RaiseIn{UserID: "someone"}); err == nil {
-		t.Error("raise accepted a call with no validated org")
-	}
-	if _, err := o.issue(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
-		t.Error("issue accepted a call with no validated org")
-	}
-	if _, err := o.collect(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
-		t.Error("collect accepted a call with no validated org")
-	}
-	if _, err := o.void(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
-		t.Error("void accepted a call with no validated org")
-	}
 	if _, err := o.read(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
 		t.Error("read accepted a call with no validated org")
+	}
+	if _, err := o.list(ctx, &plane.InvoicesIn{}); err == nil {
+		t.Error("list accepted a call with no validated org")
+	}
+	if _, err := o.pdf(ctx, &plane.InvoiceRef{ID: "x"}); err == nil {
+		t.Error("pdf accepted a call with no validated org")
 	}
 }

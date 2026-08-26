@@ -41,10 +41,6 @@ var changesSomething = map[string]string{
 	"POST /v1/billing/crypto/deposit":                "mints and records a deposit intent and its address",
 	"POST /v1/billing/subscriptions/{id}/cancel":     "ends a plan",
 	"POST /v1/billing/subscriptions/{id}/reactivate": "restores a plan, so billing resumes",
-	"POST /v1/billing/invoices":                      "raises an invoice",
-	"POST /v1/billing/invoices/{id}/issue":           "issues an invoice and mints its number",
-	"POST /v1/billing/invoices/{id}/void":            "cancels an invoice",
-	"POST /v1/billing/invoices/{id}/collect":         "moves money: credits, then balance, then the card",
 	"POST /v1/billing/methods":                       "vaults an instrument at the processor and records it",
 	"POST /v1/billing/portal/methods":                "the same act at the hosted-checkout address",
 	"POST /v1/billing/subscribe/card":                "vaults a card, charges the first period and opens a subscription",
@@ -226,4 +222,42 @@ func clip(s string) string {
 		return s[:160] + "…"
 	}
 	return s
+}
+
+// The money here is PREPAID, so nothing bills after the fact: a customer funds a
+// wallet and spends it down, and an invoice raised afterwards charges for work
+// already paid for. The arrears half of the invoice family — raise a draft, issue
+// it as a demand, void it, collect it — is gone with the model it served, and
+// collect is why it went rather than was left: it ran credits, then balance, then
+// the CARD ON FILE, which is the one thing a funded wallet exists to make
+// unnecessary.
+//
+// Named by address rather than by absence of a handler, because a route can come
+// back three ways — a registration here, an op published on the plane, a relay
+// added to a sibling file — and only the address is common to all three. The reads
+// are asserted mounted a file away (relay_routes_test.go); this says the writes
+// are not.
+func TestTheArrearsHalfIsGone(t *testing.T) {
+	all := registeredHere(t)
+	for _, addr := range []string{
+		"POST /v1/billing/invoices",
+		"POST /v1/billing/invoices/{id}/issue",
+		"POST /v1/billing/invoices/{id}/collect",
+		"POST /v1/billing/invoices/{id}/void",
+	} {
+		if contains(all, addr) {
+			t.Errorf("%s is registered — this platform is prepaid and has no debt to demand", addr)
+		}
+	}
+	// The other direction, so the assertion above cannot be satisfied by an invoice
+	// family that stopped existing: a customer's own history stays readable.
+	for _, addr := range []string{
+		"GET /v1/billing/invoices",
+		"GET /v1/billing/invoices/{id}",
+		"GET /v1/billing/invoices/{id}/pdf",
+	} {
+		if !contains(all, addr) {
+			t.Errorf("%s is not registered — a customer cannot read their own invoices", addr)
+		}
+	}
 }

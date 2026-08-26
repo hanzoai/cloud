@@ -2775,36 +2775,6 @@ components:
             otherwise.
           type: string
       type: object
-    Collected:
-      properties:
-        balanceUsedCents:
-          description: BalanceUsedCents is how much was covered by prepaid balance.
-          type: integer
-        cardChargedCents:
-          description: CardChargedCents is how much was charged to the card on file.
-          type: integer
-        creditUsedCents:
-          description: CreditUsedCents is how much was covered by credit grants.
-          type: integer
-        invoice:
-          $ref: '#/components/schemas/Invoice'
-          description: |-
-            Invoice is the invoice AFTER the attempt — its status is the authority on
-            what happened, not this struct's other fields.
-        paid:
-          description: |-
-            Paid reports whether the invoice is now settled in full. A false here with
-            no error is a DECLINE: the invoice stays open and may be collected again.
-          type: boolean
-        processorRef:
-          description: |-
-            ProcessorRef is the processor's reference for any card charge — the field
-            that proves money moved at the gateway rather than only in our ledger.
-          type: string
-        reason:
-          description: Reason explains a decline or partial collection. Empty on success.
-          type: string
-      type: object
     CommerceOverview:
       properties:
         aov:
@@ -5997,8 +5967,7 @@ components:
           description: CustomerEmail is where it is sent.
           type: string
         id:
-          description: ID is the invoice id — what the issue, collect and void ops
-            address.
+          description: ID is the invoice id.
           type: string
         lines:
           description: Lines are the charges on the invoice.
@@ -8932,28 +8901,6 @@ components:
             only bites on team, the one per-seat plan — pro and max are single-seat and
             ignore it.
           type: integer
-      type: object
-    RaiseIn:
-      properties:
-        currency:
-          description: Currency is the ISO 4217 code, lower-cased. Empty means usd.
-          type: string
-        customerEmail:
-          description: CustomerEmail is where the invoice is sent. Optional.
-          type: string
-        lines:
-          description: |-
-            Lines are the charges. The invoice subtotal and amount due are COMPUTED
-            from these — there is no total field to send, because a total that
-            disagreed with its own lines would bill a number nobody could derive.
-          items:
-            $ref: '#/components/schemas/InvoiceLine'
-          type: array
-        userId:
-          description: |-
-            UserID identifies the customer being billed, within the caller's own org.
-            Required — an invoice with no addressee is not an invoice.
-          type: string
       type: object
     Ran:
       properties:
@@ -69157,39 +69104,6 @@ paths:
       x-app: billing
       x-public: true
       x-tool: true
-    post:
-      description: |-
-        Raises a DRAFT invoice against a customer in the caller's own org.
-
-        The invoice is not collectible yet: a draft exists so it can be read and
-        corrected, and issueInvoice is the separate act that turns it into a demand for
-        payment. The subtotal and amount due are computed from the lines, so there is
-        no total to send and none to get wrong.
-
-        The billing org is the caller's, taken from the validated principal, so an
-        invoice can only ever be raised on the caller's own books.
-
-        A named handler, not a closure, so zipdoc can lift this prose into the registry.
-      operationId: raiseInvoice
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RaiseIn'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Invoice'
-          description: created
-      summary: Raise a draft invoice against a customer
-      tags:
-      - billing
-      x-app: billing
-      x-public: true
-      x-tool: true
   /v1/billing/invoices/{id}:
     get:
       description: |-
@@ -69220,76 +69134,10 @@ paths:
       x-app: billing
       x-public: true
       x-tool: true
-  /v1/billing/invoices/{id}/collect:
-    post:
-      description: |-
-        Collects an issued invoice: credit grants first, then prepaid balance, then the
-        card on file — the same waterfall the dunning workflow runs.
-
-        A DECLINE IS NOT AN ERROR. It answers with paid=false, a reason, and the
-        invoice still open, because a declined collection is a normal business outcome
-        that must remain retryable — and because sealing it as a failure would wedge
-        dunning behind a replayed decline. Only a successful collection is sealed, so a
-        retry of a paid invoice replays the receipt instead of charging again.
-
-        A named handler, not a closure, so zipdoc can lift this prose into the registry.
-      operationId: collectInvoice
-      parameters:
-      - description: ID is the invoice id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Collected'
-          description: ok
-      summary: Collect an issued invoice from credits, balance, then card
-      tags:
-      - billing
-      x-app: billing
-      x-public: true
-      x-tool: true
-  /v1/billing/invoices/{id}/issue:
-    post:
-      description: |-
-        Issues a draft invoice: moves it to OPEN, assigns its number, and makes it
-        collectible.
-
-        Only a draft can be issued. An invoice already open, paid or void is refused
-        with the state machine's own reason rather than being silently re-issued, which
-        would mint a second number for one debt.
-
-        A named handler, not a closure, so zipdoc can lift this prose into the registry.
-      operationId: issueInvoice
-      parameters:
-      - description: ID is the invoice id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Invoice'
-          description: ok
-      summary: Issue a draft invoice, making it collectible
-      tags:
-      - billing
-      x-app: billing
-      x-public: true
-      x-tool: true
   /v1/billing/invoices/{id}/pdf:
     get:
       description: |-
-        Answers the invoice as an attachment — `application/pdf` under a Content-Disposition naming the invoice number — rather than as a JSON value, which is why this one route is untyped where its five siblings are typed: a PDF is bytes with a filename, and the two headers are the whole contract.
+        Answers the invoice as an attachment — `application/pdf` under a Content-Disposition naming the invoice number — rather than as a JSON value, which is why this one route is untyped where its siblings are typed: a PDF is bytes with a filename, and the two headers are the whole contract.
 
         The render is a PURE function of the invoice: one page, no timestamps and no random ids, so the same invoice renders the same bytes however often it is asked for and a retry after a dropped connection costs a re-render and nothing else.
 
@@ -69306,37 +69154,6 @@ paths:
       - billing
       x-app: billing
       x-public: true
-  /v1/billing/invoices/{id}/void:
-    post:
-      description: |-
-        Voids a draft or issued invoice — the cancel.
-
-        A paid invoice cannot be voided: money has moved, and the correction for that
-        is a refund, not an erasure. The state machine refuses it and that refusal is
-        the answer.
-
-        A named handler, not a closure, so zipdoc can lift this prose into the registry.
-      operationId: voidInvoice
-      parameters:
-      - description: ID is the invoice id.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Invoice'
-          description: ok
-      summary: Void a draft or issued invoice
-      tags:
-      - billing
-      x-app: billing
-      x-public: true
-      x-tool: true
   /v1/billing/ledger:
     get:
       description: |-

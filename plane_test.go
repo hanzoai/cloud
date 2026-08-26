@@ -139,7 +139,7 @@ func TestNoPlaneInputCanNameAnOrg(t *testing.T) {
 		// org the caller already pinned. One field named Org beside it and the
 		// same input would name the tenant instead of an account within it.
 		plane.SubjectIn{}, plane.CallerIn{}, plane.HoldersIn{},
-		plane.TransactionsIn{}, plane.InvoicesIn{}, plane.RaiseIn{}, plane.InvoiceRef{},
+		plane.TransactionsIn{}, plane.InvoicesIn{}, plane.InvoiceRef{},
 		plane.AlertSpec{}, plane.AlertPatch{}, plane.AlertRef{}, plane.CapIn{},
 		plane.CryptoMintIn{}, plane.CryptoDepositIn{}, plane.WireIn{},
 	}

@@ -43,12 +43,8 @@ var Ops = []string{
 	plane.BillingCryptoDeposit,
 	plane.BillingCryptoMint,
 	plane.BillingCryptoOptions,
-	plane.BillingInvoiceCollect,
-	plane.BillingInvoiceIssue,
 	plane.BillingInvoicePDF,
-	plane.BillingInvoiceRaise,
 	plane.BillingInvoiceRead,
-	plane.BillingInvoiceVoid,
 	plane.BillingInvoices,
 	plane.BillingMethodDetach,
 	plane.BillingMethodSave,
@@ -174,20 +170,6 @@ func BillingCryptoOptions(ctx context.Context) (*plane.CryptoOptions, error) {
 	return plane.Ask[struct{}, plane.CryptoOptions](ctx, App, plane.BillingCryptoOptions, &struct{}{})
 }
 
-// BillingInvoiceCollect collect an issued invoice from credits, balance, then card.
-//
-// Calls plane.BillingInvoiceCollect on commerce over the peer plane.
-func BillingInvoiceCollect(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
-	return plane.Ask[plane.InvoiceRef, plane.Collected](ctx, App, plane.BillingInvoiceCollect, in)
-}
-
-// BillingInvoiceIssue issue a draft invoice, making it collectible.
-//
-// Calls plane.BillingInvoiceIssue on commerce over the peer plane.
-func BillingInvoiceIssue(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	return plane.Ask[plane.InvoiceRef, plane.Invoice](ctx, App, plane.BillingInvoiceIssue, in)
-}
-
 // BillingInvoicePDF render one invoice as a PDF.
 //
 // Calls plane.BillingInvoicePDF on commerce over the peer plane.
@@ -195,25 +177,11 @@ func BillingInvoicePDF(ctx context.Context, in *plane.InvoiceRef) (*plane.Docume
 	return plane.Ask[plane.InvoiceRef, plane.Document](ctx, App, plane.BillingInvoicePDF, in)
 }
 
-// BillingInvoiceRaise raise a draft invoice against a customer.
-//
-// Calls plane.BillingInvoiceRaise on commerce over the peer plane.
-func BillingInvoiceRaise(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
-	return plane.Ask[plane.RaiseIn, plane.Invoice](ctx, App, plane.BillingInvoiceRaise, in)
-}
-
 // BillingInvoiceRead read one invoice.
 //
 // Calls plane.BillingInvoiceRead on commerce over the peer plane.
 func BillingInvoiceRead(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
 	return plane.Ask[plane.InvoiceRef, plane.Invoice](ctx, App, plane.BillingInvoiceRead, in)
-}
-
-// BillingInvoiceVoid void a draft or issued invoice.
-//
-// Calls plane.BillingInvoiceVoid on commerce over the peer plane.
-func BillingInvoiceVoid(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	return plane.Ask[plane.InvoiceRef, plane.Invoice](ctx, App, plane.BillingInvoiceVoid, in)
 }
 
 // BillingInvoices invoices for this subject.
