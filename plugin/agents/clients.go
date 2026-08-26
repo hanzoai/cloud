@@ -125,8 +125,12 @@ func planeRouteRun(ctx context.Context, in *plane.RouteRunIn) (*plane.CodingAck,
 // codingLog is how coding talks in this process. Deps used to carry a logger and
 // no longer does — a logger is not a fact about a deployment — so the subsystem
 // names itself here, once, rather than at each call.
-var codingLog = luxlog.New("agents").New("subsystem", "coding")
+//
+// Resolved per call, not at init: a package variable is built before the
+// composition root installs the process default, so it would pin a logger that
+// writes to stderr and nowhere else.
+func codingLog() luxlog.Logger { return luxlog.Default().New("subsystem", "coding") }
 
 // routeLog carries coding's best-effort failures (a dropped session mirror, a PR
 // that would not file) into this process's log instead of dropping them.
-func routeLog(msg string, kv ...any) { codingLog.Warn(msg, kv...) }
+func routeLog(msg string, kv ...any) { codingLog().Warn(msg, kv...) }

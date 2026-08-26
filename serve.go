@@ -120,7 +120,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// hook, which is the point at which this process holds nothing open. Unset
 	// CLOUD_WRITER_LEASE ⇒ this does nothing, which is what production runs.
 	releaseLease, lerr := writerlease.Hold(cfg.DataDir, writerlease.DefaultWait,
-		luxlog.New("cloud").New("subsystem", "writer-lease").Info)
+		luxlog.Default().New("subsystem", "writer-lease").Info)
 	if lerr != nil {
 		return lerr
 	}

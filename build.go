@@ -58,7 +58,12 @@ import (
 // (plane.Ask — ZAP bytes on the peer's own socket, addressed by name). JSON
 // happens only at the gateway/ingress edge, through the zip jsonenc helper.
 func BuildDeps(cfg *Config) Deps {
-	logger := luxlog.New("cloud")
+	// TWO destinations, one logger. stderr is where an operator reads this process
+	// live; planeLog is where the fleet reads it afterwards, joined to the span
+	// that carries the same trace id (logsink.go). Wrapping the writer rather than
+	// adding a second call is what makes it reach every package that logs: 127 of
+	// them log through the default set below, and none of them names a sink.
+	logger := luxlog.New("cloud").Output(luxlog.MultiLevelWriter(os.Stderr, planeLog))
 
 	// ONE logger, and this is where it becomes reachable without being carried.
 	//

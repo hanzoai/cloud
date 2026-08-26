@@ -138,8 +138,12 @@ func mapError(err error) *zip.HTTPError {
 }
 
 // faultLog is where a 5xx's detail goes now that it no longer goes to the client.
-// Package-scoped so rendering an error costs no logger construction.
-var faultLog = luxlog.New("cloud").New("subsystem", "errmap")
+//
+// Resolved per call rather than at init, because a package variable is built
+// BEFORE the composition root installs the process default, and would pin the
+// logger that existed then — one that writes to stderr and nowhere else. The
+// cost is a child logger per fault, which is a 5xx-rate cost.
+func faultLog() luxlog.Logger { return luxlog.Default().New("subsystem", "errmap") }
 
 // ErrorHandler renders any error a handler propagates. Give it to zip.Config so
 // the app has one, rather than the default that reads only *zip.HTTPError.
@@ -151,7 +155,7 @@ var faultLog = luxlog.New("cloud").New("subsystem", "errmap")
 func ErrorHandler(c fiber.Ctx, err error) error {
 	he := mapError(err)
 	if he.Status >= 500 {
-		faultLog.Error("request failed",
+		faultLog().Error("request failed",
 			"status", he.Status,
 			"method", c.Method(),
 			"path", c.Path(),

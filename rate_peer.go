@@ -83,7 +83,7 @@ func RateNano(ctx context.Context, product, meter string, floor int64) int64 {
 		// is a price that is stale rather than money that went missing — and it
 		// is per metered act, so an outage must not write a line per charge at
 		// error level.
-		luxlog.New("cloud").New("subsystem", "rate").Warn(
+		luxlog.Default().New("subsystem", "rate").Warn(
 			"price unreadable, charging the compiled floor",
 			"product", product, "meter", meter, "floor_nano", floor, "err", err)
 		return floor

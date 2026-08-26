@@ -198,6 +198,18 @@ func TraceInprocEnabled() bool {
 	}
 }
 
+// PlaneDSN names the telemetry store this deployment writes to, or "" when it
+// runs none. It is the ONE fact that answers "is there a plane here", and it is
+// owned here so that two packages cannot answer it differently: apps/o11y reads
+// it to decide whether to bind the plane's span and log ears (planesink.go), and
+// the log leg reads it to decide whether there is an ear to send to.
+//
+// Two spellings, because the o11y module's own configuration names it the second
+// way and a deployment that set only that one is still a deployment with a store.
+func PlaneDSN() string {
+	return cmp.Or(environ.Or("O11Y_DATASTORE_DSN", ""), environ.Or("O11Y_TELEMETRYSTORE_DATASTORE_DSN", ""))
+}
+
 // metricRegistry is where this process's measurements are collected. It is
 // private and NOT prometheus.DefaultRegisterer: the default is a global that any
 // linked library can also write to, and the exposition served from it is a
@@ -289,7 +301,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// Telemetry is never allowed to take the process down, and that starts with
 	// its own arguments: a root that has no logger yet still gets a provider.
 	if log == nil {
-		log = luxlog.New("cloud")
+		log = luxlog.Default()
 	}
 	log = log.New("subsystem", "telemetry")
 
@@ -315,6 +327,18 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// Two signals, two destinations, two decisions.
 	mp, stopMeter := installMeter(log, res)
 
+	// LOGS, and on their OWN decision, for exactly the reason stated above about
+	// metrics: a line's destination has nothing to do with a span's, and braiding
+	// them is how turning off one signal silently turns off another. The leg is
+	// installed here rather than in BuildDeps because THIS is where the service
+	// name and resource a batch is filed under are resolved — the writer went in
+	// at BuildDeps, and what it held since then flushes now. See logsink.go.
+	stopLogs := installLogSink(log, res, serviceName, planeLogEndpoint)
+	stopSignals := func(ctx context.Context) {
+		stopLogs(ctx)
+		stopMeter(ctx)
+	}
+
 	// Seed the data-plane instruments the moment the provider exists.
 	//
 	// This call is the difference between a rule that can say "ingest stopped"
@@ -333,9 +357,9 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	zapEndpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_ZAP_ENDPOINT"))
 	legacy := cmp.Or(environ.Or("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), environ.Or("OTEL_EXPORTER_OTLP_ENDPOINT", ""))
 	if zapEndpoint == "" && legacy == "" && !TraceInprocEnabled() {
-		log.Info("tracing disabled: no span destination configured (metrics are unaffected)",
+		log.Info("tracing disabled: no span destination configured (logs and metrics are unaffected)",
 			"hint", "set O11Y_TRACES_ZAP_INPROCESS=true (o11y linked in) or OTEL_EXPORTER_ZAP_ENDPOINT=<host:port> (o11y as a plugin or remote)")
-		return stopMeter
+		return stopSignals
 	}
 
 	wireEndpoint := wireEndpointFor(zapEndpoint, legacy, TraceInprocEnabled())
@@ -426,7 +450,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 		if err := tp.Shutdown(ctx); err != nil {
 			log.Warn("tracer provider shutdown", "err", err)
 		}
-		stopMeter(ctx)
+		stopSignals(ctx)
 		tracerProviderInstalled.Store(false)
 	}
 }

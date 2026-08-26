@@ -60,7 +60,7 @@ import (
 // error. Serve dispatches here when CLOUD_ROLE=reader, BEFORE BuildDeps, so a
 // reader never opens the KMS/audit/per-org stores.
 func serveReaderProxy(cfg *Config) error {
-	log := luxlog.New("cloud").New("subsystem", "reader")
+	log := luxlog.Default().New("subsystem", "reader")
 
 	rp, err := newReaderProxy(cfg, log)
 	if err != nil {
