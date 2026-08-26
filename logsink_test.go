@@ -2,11 +2,18 @@ package cloud
 
 import (
 	"context"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -281,8 +288,18 @@ func TestTheParserReadsWhatTheLoggerWrites(t *testing.T) {
 // sink's own voice (breaking the amplification loop), and a test helper that has
 // no composition root to inherit from.
 //
-// Files are read whole rather than searched by tool: a single NUL byte makes
-// grep skip a source file silently, and a check that cannot run reads as passed.
+// The check PARSES rather than searches, and the difference is the whole of
+// whether it holds. A search matches the spelling `luxlog.New(`, and a spelling
+// is a convention: the same construction under a different import alias, or
+// under no alias at all, is the same logger and a different string. Parsing asks
+// the question the compiler asks — which import does this identifier bind, and
+// what is being called on it — so the answer does not depend on how anyone typed
+// it. Redirecting a logger (Default().Output) is not construction and is not
+// caught: it inherits the install point and then says where its own lines go.
+//
+// A file that will not parse is REPORTED, never skipped. That is the same rule
+// the whole-file read was here for — one NUL byte makes a search skip a source
+// file silently — and an instrument that cannot run must not read as a pass.
 func TestOnlyOnePlaceBuildsALogger(t *testing.T) {
 	allowed := map[string]bool{
 		"logsink.go":                            true,
@@ -302,18 +319,21 @@ func TestOnlyOnePlaceBuildsALogger(t *testing.T) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || allowed[filepath.ToSlash(path)] {
+		path = filepath.ToSlash(path)
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || allowed[path] {
 			return nil
 		}
 		body, err := os.ReadFile(path)
 		if err != nil {
+			offenders = append(offenders, path+": unreadable: "+err.Error())
 			return nil
 		}
-		for _, l := range strings.Split(string(body), "\n") {
-			if strings.Contains(l, "luxlog.New(") && !strings.HasPrefix(strings.TrimSpace(l), "//") {
-				offenders = append(offenders, path+": "+strings.TrimSpace(l))
-			}
+		found, err := loggerBuilds(path, body)
+		if err != nil {
+			offenders = append(offenders, path+": unparseable, so nothing about it is known: "+err.Error())
+			return nil
 		}
+		offenders = append(offenders, found...)
 		return nil
 	})
 	if err != nil {
@@ -322,5 +342,128 @@ func TestOnlyOnePlaceBuildsALogger(t *testing.T) {
 	if len(offenders) > 0 {
 		t.Errorf("these build their own logger, so their lines reach stderr and nothing else "+
 			"— take luxlog.Default() instead:\n\t%s", strings.Join(offenders, "\n\t"))
+	}
+}
+
+// logPath is the package the invariant is about, and builders are the calls in
+// it that return a logger with a destination of its own. Default() is not one:
+// it returns the logger the install point already built.
+const logPath = "github.com/luxfi/log"
+
+var builders = map[string]bool{"New": true, "NewWriter": true}
+
+// logName is the identifier an UNALIASED import of logPath binds — the package's
+// own name, asked of the toolchain rather than guessed from the path, because a
+// guess is the convention this check exists to stop relying on.
+var logName = sync.OnceValues(func() (string, error) {
+	out, err := exec.Command("go", "list", "-f", "{{.Name}}", logPath).Output()
+	return strings.TrimSpace(string(out)), err
+})
+
+// loggerBuilds reports every construction of a logger in one source file, by
+// the name the file itself binds the log package to.
+func loggerBuilds(path string, src []byte) ([]string, error) {
+	name, err := logName()
+	if err != nil {
+		return nil, err
+	}
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, src, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	local := ""
+	for _, spec := range f.Imports {
+		if p, err := strconv.Unquote(spec.Path.Value); err != nil || p != logPath {
+			continue
+		}
+		switch {
+		case spec.Name == nil:
+			local = name
+		case spec.Name.Name == "_":
+			// Imported for a side effect; it binds no identifier and can
+			// construct nothing.
+		case spec.Name.Name == ".":
+			// Every exported name lands unqualified, so a construction here is
+			// spelled like anything else in the file and only the type checker
+			// could tell them apart. The import is the finding.
+			return []string{fmt.Sprintf("%s:%d: dot-imports %s, which puts its constructors in scope unqualified",
+				path, fset.Position(spec.Pos()).Line, logPath)}, nil
+		default:
+			local = spec.Name.Name
+		}
+	}
+	if local == "" {
+		return nil, nil
+	}
+
+	var found []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || !builders[sel.Sel.Name] {
+			return true
+		}
+		if id, ok := sel.X.(*ast.Ident); ok && id.Name == local {
+			found = append(found, fmt.Sprintf("%s:%d: %s.%s(...)",
+				path, fset.Position(call.Pos()).Line, local, sel.Sel.Name))
+		}
+		return true
+	})
+	return found, nil
+}
+
+// THE INSTRUMENT ITSELF, against known positives and known negatives. A guard
+// that has quietly stopped matching is indistinguishable from a tree that has
+// nothing to match, and the alias case is exactly the one the previous spelling
+// search let through — so it is pinned here rather than assumed.
+func TestTheLoggerGuardCatchesEveryAlias(t *testing.T) {
+	for _, c := range []struct {
+		what string
+		src  string
+		want int
+	}{
+		{"the alias this repo uses", `package p
+import luxlog "github.com/luxfi/log"
+func f() { _ = luxlog.New("x") }`, 1},
+		{"no alias at all", `package p
+import "github.com/luxfi/log"
+func f() { _ = log.New("x") }`, 1},
+		{"an alias nobody would guess", `package p
+import zz "github.com/luxfi/log"
+func f() { _ = zz.New("x") }`, 1},
+		{"a writer of its own", `package p
+import luxlog "github.com/luxfi/log"
+import "os"
+func f() { _ = luxlog.NewWriter(os.Stderr) }`, 1},
+		{"unqualified through a dot import", `package p
+import . "github.com/luxfi/log"
+func f() { _ = New("x") }`, 1},
+		{"the install point's logger, redirected", `package p
+import luxlog "github.com/luxfi/log"
+import "os"
+func f() { _ = luxlog.Default().Output(os.Stderr).New("subsystem", "s") }`, 0},
+		{"the same spelling in a comment and a string", `package p
+// luxlog.New("x")
+const s = "luxlog.New(\"x\")"
+func f() {}`, 0},
+		{"the standard library, which is a different log", `package p
+import "log"
+import "os"
+func f() { _ = log.New(os.Stderr, "", 0) }`, 0},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			got, err := loggerBuilds("fixture.go", []byte(c.src))
+			if err != nil {
+				t.Fatalf("loggerBuilds: %v", err)
+			}
+			if len(got) != c.want {
+				t.Errorf("found %d constructions %v, want %d", len(got), got, c.want)
+			}
+		})
 	}
 }
