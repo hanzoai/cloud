@@ -15,7 +15,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	planeops "github.com/hanzoai/cloud/plane"
+	module "github.com/hanzoai/o11y"
 	"github.com/hanzoai/o11y/pkg/community"
+	"github.com/hanzoai/o11y/pkg/factory"
 	"github.com/hanzoai/o11y/pkg/modules/sentry/implsentry"
 	o11yrt "github.com/hanzoai/o11y/pkg/o11y"
 	o11yapp "github.com/hanzoai/o11y/pkg/query-service/app"
@@ -110,6 +112,13 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	// the process and is reclaimed on exit, mirroring cloud's embeddedTasks. We never
 	// call server.Start (binds the standalone listeners) — cloud owns its own HTTP.
 	runtime.Start(ctx)
+
+	// The three probes answer off the module's own route group (health.go), which
+	// dispatches on this handler and otherwise falls through to the delegated
+	// runtime — and the runtime has no route at those addresses, so without this
+	// call livez, healthz and readyz all answer 404. Only the host can make it:
+	// the registry does not exist until the runtime is built here.
+	module.SetHealth(factory.NewHandler(runtime.Registry))
 
 	embeddedRuntime = runtime
 	embeddedServer = server
