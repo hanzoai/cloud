@@ -137,6 +137,16 @@ func init() {
 	zip.Describe("GET /v1/o11y/sessions", zip.Doc{
 		Description: "GET /v1/o11y/sessions — the flat, org-gated public path for the LLM-obs sessions\nlist (traces grouped by session.id on the gen_ai span plane). The console's\nSessionsModule reads this; session DETAIL is composed client-side from this list\n+ the traces list filtered by session, so there is no /sessions/:id backing route\n(the embedded runtime serves only the list) and none is registered here.\n\nWhy an explicit cloud route rather than only the order-70 wildcard: this pins the\npublic flat path to the runtime's internal /api/sessions route SERVER-SIDE AND\nenforces the tenant gate at the cloud boundary — an org-less caller gets a clean 403 here before the\nrequest reaches the runtime, and the org the runtime binds (gen_ai.hanzo.org_id\nfrom X-Org-Id) is the SAME validated tenant this handler refuses to proceed\nwithout. Registered by mountScope (order 69), so it precedes the wildcard.\n\nThis used to cite query.go's composite-query pin as the precedent for the move.\nThat file is GONE — it pinned POST /v1/o11y/query_range to the v3 engine, and when\nit went the module's v5 querier took the address, whose composite accepts only\n{queries:[…]}. The console still sent the v3 {queryType,panelType,builderQueries}\nenvelope and every Logs page 400'd on \"unknown field \\\"queryType\\\" in composite\nquery\". Citing a deleted pin as the discipline to follow is how the next route\ninherits the same break, so the reference is removed rather than reworded: this\nroute stands on its OWN pin, three lines below, which is still here.\n\nThe list query (?limit=&offset=) rides through unchanged; the runtime returns the\nllmobstypes.GettableSessions {items,offset,limit} under the {status,data} envelope\nthe console's O11yApi.sessions already unwraps.",
 	})
+	zip.Describe("GET /v1/o11y/signals", zip.Doc{
+		Description: "Lists the telemetry signals this deployment carries: for each one,\nthe durable store its rows land in and the single address it is read at.\n\nIt answers 200 to any caller and is the same for all of them — the shape of\nthe plane, not anyone's telemetry. It replaces the three probes the retired\nmetrics module served, which reported a per-process in-memory map that held\nnothing; everything they described is on the event plane now.",
+		Fields: map[string]string{
+			"Signal.read":       "Read is the one address it is read at.",
+			"Signal.signal":     "Name is the signal, as the plane names it.",
+			"Signal.store":      "Store is the event-plane stream its rows land in.",
+			"Telemetry.signals": "Signals is one entry per signal, in the order they were built.",
+		},
+		Example: json.RawMessage(`{}`),
+	})
 	zip.Describe("GET /v1/o11y/status", zip.Doc{
 		Description: "Reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
 		Fields: map[string]string{

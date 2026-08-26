@@ -1229,7 +1229,7 @@ jobs:
             sleep 1
           done
           cat /tmp/boot.log
-          if grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App' /tmp/boot.log; then echo 'SMOKE FAIL: startup-crash signature'; exit 1; fi
+          if grep -Eiq 'panic|want \*zip\.App' /tmp/boot.log; then echo 'SMOKE FAIL: startup-crash signature'; exit 1; fi
           if [ "$listening" -ne 1 ]; then echo 'SMOKE FAIL: never reached listening'; exit 1; fi
           kill -0 "$pid" 2>/dev/null || { echo 'SMOKE FAIL: exited after listening'; exit 1; }
           # The AI instance mounts LAZILY: a boot that never touches /v1 proves

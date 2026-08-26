@@ -12735,6 +12735,30 @@
         "x-tool": true
       }
     },
+    "/v1/o11y/signals": {
+      "get": {
+        "operationId": "get_o11y_signals",
+        "summary": "Lists the telemetry signals this deployment carries: for each one, the durable store its rows land in and the single address it is read at.",
+        "description": "Lists the telemetry signals this deployment carries: for each one,\nthe durable store its rows land in and the single address it is read at.\n\nIt answers 200 to any caller and is the same for all of them — the shape of\nthe plane, not anyone's telemetry. It replaces the three probes the retired\nmetrics module served, which reported a per-process in-memory map that held\nnothing; everything they described is on the event plane now.",
+        "tags": [
+          "o11y"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/o11y.Telemetry"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/o11y/span_mapper_groups": {
       "get": {
         "operationId": "ListSpanMapperGroups",
@@ -30211,6 +30235,23 @@
         },
         "type": "object"
       },
+      "o11y.Signal": {
+        "properties": {
+          "read": {
+            "description": "Read is the one address it is read at.",
+            "type": "string"
+          },
+          "signal": {
+            "description": "Name is the signal, as the plane names it.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Store is the event-plane stream its rows land in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "o11y.SignalConnectionStatus": {
         "properties": {
           "last_received_from": {
@@ -30977,6 +31018,18 @@
           "token": {},
           "token_file": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "o11y.Telemetry": {
+        "properties": {
+          "signals": {
+            "description": "Signals is one entry per signal, in the order they were built.",
+            "items": {
+              "$ref": "#/components/schemas/o11y.Signal"
+            },
+            "type": "array"
           }
         },
         "type": "object"

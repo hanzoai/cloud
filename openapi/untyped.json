@@ -1,5 +1,5 @@
 {
-  "operations": 759,
+  "operations": 748,
   "products": {
     "account": 2,
     "ad": 1,
@@ -37,7 +37,6 @@
     "knowledge": 1,
     "legal": 1,
     "meet": 2,
-    "metrics": 11,
     "ml": 3,
     "node": 3,
     "o11y": 15,

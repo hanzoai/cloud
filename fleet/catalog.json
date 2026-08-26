@@ -3584,7 +3584,6 @@
    "doc": "Ends a room's recording — EVERY one of them.\n\nWhoever the room admits may stop it, including someone who did not start it:\na person being recorded has to be able to end it, and a rule that only the\nstarter may stop would deny exactly that. Stopping is free — a caller made to\npay to stop being recorded would be paying for the wrong thing.\n\n200 MEANS THE ROOM IS NOT BEING RECORDED, and that is why this ends all of them\nrather than the first. \"At most one per room\" is an invariant this surface wants\nand cannot impose: reading the list and starting are two calls, and two replicas\nracing through that window both start. When the list comes back holding two, two\nis the truth — and ending one while answering 200 tells the person withdrawing\nconsent that it stopped while a second worker keeps writing. A stop that cannot\nfinish the job says so instead.\n\nStopping a room that is not being recorded is not an error. The answer names the\nroom with no recording on it, which is the state the caller asked for."
   }
  ],
- "metrics": [],
  "ml": [
   {
    "id": "delete_ml_models_by_name",
@@ -5024,6 +5023,11 @@
   {
    "id": "get_o11y_settings_ttl",
    "doc": "Returns the org's current retention policy: default TTL, custom\nper-label rules, and cold-storage settings where configured.\n\nCallers need the viewer role; the runtime's own gate enforces it.",
+   "read": true
+  },
+  {
+   "id": "get_o11y_signals",
+   "doc": "Lists the telemetry signals this deployment carries: for each one,\nthe durable store its rows land in and the single address it is read at.\n\nIt answers 200 to any caller and is the same for all of them — the shape of\nthe plane, not anyone's telemetry. It replaces the three probes the retired\nmetrics module served, which reported a per-process in-memory map that held\nnothing; everything they described is on the event plane now.",
    "read": true
   },
   {

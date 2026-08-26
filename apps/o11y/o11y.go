@@ -558,6 +558,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// before the terminal wildcard like every other specific route. Unauthenticated
 	// and tenant-free by construction; see summary.go.
 	mountSummary(a, deps)
+	// The three probe addresses the retired metrics module served, now naming the
+	// durable store that holds each signal (signals.go). Beside the summary for the
+	// same reasons: anonymous, tenant-free, and ahead of the wildcard.
+	mountSignals(a)
 	// TERMINAL sub-mount: the hanzoai/o11y module wildcard /v1/o11y/* — the runtime
 	// route surface, delegating to the SAME gated handler mountRuntime installed via
 	// module.SetHandler. Registered LAST (after every specific /v1/o11y/* route above) so

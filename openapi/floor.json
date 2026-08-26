@@ -1,6 +1,6 @@
 {
-  "paths": 1721,
-  "operations": 2384,
+  "paths": 1711,
+  "operations": 2374,
   "products": {
     "account": 10,
     "ad": 7,
@@ -72,13 +72,12 @@
     "marketing": 35,
     "marketplace": 6,
     "meet": 6,
-    "metrics": 11,
     "ml": 7,
     "mq": 15,
     "network": 4,
     "node": 4,
     "notify": 4,
-    "o11y": 381,
+    "o11y": 382,
     "openapi": 6,
     "plan": 14,
     "platform": 37,

@@ -66,12 +66,6 @@ var Apps = []App{
 	{Name: "skills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
-	// One store, three signals, one root: the logs and traces endpoints fold under
-	// /v1/metrics (HIP-1241), so the capability's routes are all under its own
-	// name. The code moved with them — github.com/hanzoai/metrics is retired and
-	// its endpoint now ships in github.com/hanzoai/o11y/metrics — but the capability
-	// did not: a shared module is shared code, not a second owner of the address.
-	{Name: "metrics", Prefixes: []string{"/v1/metrics"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
 	{Name: "account", Prefixes: []string{"/v1/account"}},
 	// The three root /.well-known documents are named EXACTLY, one prefix each, and
@@ -95,7 +89,23 @@ var Apps = []App{
 	// and a long poll are one address in two protocols. The public status
 	// document was the third, and it is cloud's own route at /v1/o11y/summary —
 	// apps/o11y/summary.go.
-	{Name: "o11y", Prefixes: []string{"/v1/o11y"}, Eager: true},
+	// FOUR prefixes for one capability, and the last three are what is left of an
+	// app that no longer exists. o11y is where telemetry is stored and read; the
+	// `metrics` app was a SECOND store for the same three signals over an
+	// in-process map, and it is deleted. Its three probe addresses are kept and
+	// answered here (apps/o11y/signals.go), because an address that answered 200
+	// for years is a contract with callers this repository cannot enumerate.
+	//
+	// /v1/metrics is claimed WHOLE rather than at its one served leaf, and that is
+	// a routing fact, not tidiness: a prefix nobody claims falls to ai's `/v1`
+	// remainder, ai's own router registers /v1/metrics, and it 404s today only
+	// because a sibling receives that prefix and declines it. Unclaimed, the fleet
+	// would begin serving a module's internal exposition at a public address. The
+	// eight retired doors under it answer 404 from the app that owns the address.
+	//
+	// /v1/logs and /v1/traces are claimed at the LEAF, because ai registers nothing
+	// under either and the leaf is exactly what is served.
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/metrics", "/v1/logs/health", "/v1/traces/health"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// ONE ROOT. As "/v1" this row was the fleet's route of last resort: every path
 	// no app named deeper — the whole OpenAI-compatible surface among them — landed

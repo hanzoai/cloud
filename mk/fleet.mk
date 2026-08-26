@@ -53,13 +53,13 @@ DIST := $(ROOT)/dist
 # one-platform check is `PLATFORMS=linux/amd64 make dist`.
 PLATFORMS ?= linux/amd64 linux/arm64
 
-# Three apps in the manifest have a plugin/<app> here and no source directory: they
-# are external modules (hanzoai/authz, hanzoai/licensing, hanzoai/o11y/metrics) wired
-# into apps.Wire() by import. There is nothing for a per-app Makefile to sit
-# beside, so they are named here and run through the SAME mk/plugin.mk recipe by
-# name instead of by location. When those repos publish their own documents this
-# list goes away and the `app` function below stops needing its second branch.
-EXTERNAL := authz licensing metrics
+# Two apps in the manifest have a plugin/<app> here and no source directory: they
+# are external modules (hanzoai/authz, hanzoai/licensing) wired into apps.Wire()
+# by import. There is nothing for a per-app Makefile to sit beside, so they are
+# named here and run through the SAME mk/plugin.mk recipe by name instead of by
+# location. When those repos publish their own documents this list goes away and
+# the `app` function below stops needing its second branch.
+EXTERNAL := authz licensing
 
 # THE FLEET: every app that ships as a binary, by name. The directory name is the
 # app name for all but the four packages that back a differently-named mount
