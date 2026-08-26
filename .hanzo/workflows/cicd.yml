@@ -1095,9 +1095,24 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=v${{ steps.ver.outputs.version }}
             org.opencontainers.image.source=${{ steps.ver.outputs.remote }}
+          # FORGE_TOKEN belongs here because the Dockerfile MOUNTS it
+          # (`--mount=type=secret,id=FORGE_TOKEN`) and installs the git.hanzo.ai
+          # rewrite from it. Passing only GIT_AUTH_TOKEN left
+          # /run/secrets/FORGE_TOKEN empty, so `[ -s ... ]` was false, the rewrite
+          # never installed, and `go mod download` resolved github.com/hanzoai/*
+          # at GitHub — where the private modules do not exist. It surfaced as
+          # `unknown revision v1.1.7` for hanzoai/dataroom, a tag that IS published
+          # on the forge, so it read as a bad version rather than a missing
+          # credential.
+          #
+          # The Dockerfile calls both secrets optional and says absence falls back
+          # to previous behaviour. That holds only for modules GitHub can still
+          # serve; for one published solely on the forge there is no previous
+          # behaviour to fall back to, and the build cannot resolve it at all.
           secrets: |
             GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
             GIT_TOKEN=${{ github.token }}
+            FORGE_TOKEN=${{ secrets.FORGE_TOKEN }}
 
       # build-push-action can exit 0 before the manifest resolves, so a green run
       # could still mean a future ImagePullBackOff. Prove it pulls BEFORE the pin
