@@ -296,11 +296,36 @@ func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, ro
 
 var embeddedPlaneSink *planeSink
 
+// receiverLog is the plane ingest's own voice, on stderr and only stderr. It is
+// the receiving half of the rule cloud's log sink states for the sending half,
+// and it is the same rule for the same reason.
+//
+// The process logger writes to stderr AND to the plane, which is what puts every
+// package's lines on the wire without a call of its own. This receiver is what
+// that wire arrives at. So a warning it writes through the process logger is a
+// line it hands to itself: a failing plane write reports the failure, the report
+// is carried to the plane, the carry fails, and the whole of what bounds it is
+// that a warning is slightly smaller than what produced it. One line per failure
+// is a diagnostic; a line that reproduces is an outage, and it reproduces
+// precisely when the plane is already in trouble.
+//
+// Output redirects the logger the install point built rather than building a
+// second one, so the level, the hooks and the fields all still come from the one
+// place that decides them — only the destination is this component's own.
+//
+// It is ONE function because the ingest threads this logger through everything
+// it starts: both row buffers, both TCP receivers, both socket receivers, and
+// the insert paths under them. A second construction anywhere in that fan-out
+// would be a leg back into the loop, and there would be no way to see it.
+func receiverLog() luxlog.Logger {
+	return luxlog.Default().Output(os.Stderr).New("subsystem", "o11y-plane-ingest")
+}
+
 // mountPlaneIngest starts the ZAP span+log receivers writing to the event
 // plane, and registers the in-process trace sink when its flag is on. Called
 // by mountO11y; order-independent (no Fiber route). Fail-soft at every branch.
 func mountPlaneIngest(deps cloud.Deps) error {
-	log := luxlog.Default().New("subsystem", "o11y-plane-ingest")
+	log := receiverLog()
 
 	dsn := embeddedDSN()
 	if dsn == "" {

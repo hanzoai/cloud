@@ -16,12 +16,15 @@ package o11y
 import (
 	"context"
 	jsonpkg "encoding/json"
+	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
+	luxlog "github.com/luxfi/log"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -615,5 +618,39 @@ func TestLogRowsCarryTheirResourceIdentity(t *testing.T) {
 	at := time.Unix(1786672000, 0).UTC()
 	if got := logResourceRowsOf(b, at)[0][3].(int64); got != 1786671000 {
 		t.Errorf("bucket = %d, want 1786671000 (floor to %ds)", got, resourceBucket)
+	}
+}
+
+// THE AMPLIFICATION LOOP, RECEIVING END. The process logger writes to stderr AND
+// to the plane; this receiver is what that wire arrives at. A warning it writes
+// through the process logger is therefore a line it hands to itself, and a
+// failing plane write is exactly the condition that produces one. So the
+// receiver's own voice must reach stderr and nothing else.
+//
+// The default logger is wired to a catching writer exactly as the composition
+// root wires it to the log sink, the receiver's logger says something, and the
+// catcher must be empty.
+func TestThePlaneIngestDoesNotFeedItself(t *testing.T) {
+	var caught strings.Builder
+	prev := luxlog.Default()
+	luxlog.SetDefault(luxlog.New("cloud").Output(luxlog.MultiLevelWriter(io.Discard, &caught)))
+	t.Cleanup(func() { luxlog.SetDefault(prev) })
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr := os.Stderr
+	os.Stderr = w
+	receiverLog().Warn("the plane write failed")
+	os.Stderr = stderr
+	_ = w.Close()
+	out, _ := io.ReadAll(r)
+
+	if !strings.Contains(string(out), "the plane write failed") {
+		t.Errorf("stderr = %q, want the receiver's own line — it has nowhere else to say it", out)
+	}
+	if caught.Len() != 0 {
+		t.Errorf("the plane leg caught the receiver's own line (%q) — that is the loop", caught.String())
 	}
 }
