@@ -159,6 +159,35 @@ func TestWhatIsHeldIsBounded(t *testing.T) {
 	}
 }
 
+// AND BOUNDED IN BYTES, which is the bound an operator can actually spend. The
+// line count says how much history is kept; only the byte ceiling says what
+// keeping it costs, and the two diverge exactly when a line carries a
+// serialized value rather than a sentence. Here the lines are long enough that
+// the ceiling stops the hold while the count is still nowhere near its own.
+func TestWhatIsHeldIsBoundedInBytes(t *testing.T) {
+	s := &logSink{}
+	big := []byte(`{"level":"info","message":"` + strings.Repeat("x", 64<<10) + `"}`)
+	fit := holdBytes / len(big)
+	for i := 0; i < fit+10; i++ {
+		_, _ = s.Write(big)
+	}
+	if n := holding(s); n != fit {
+		t.Errorf("held %d lines, want the %d that fit under the byte ceiling", n, fit)
+	}
+	if n := holding(s); n >= holdMax {
+		t.Fatalf("held %d lines — the COUNT did the bounding, so this proves nothing about bytes", n)
+	}
+	s.mu.Lock()
+	bytes, lost := s.bytes, s.lost
+	s.mu.Unlock()
+	if bytes > holdBytes {
+		t.Errorf("holding %d bytes, past the %d ceiling", bytes, holdBytes)
+	}
+	if lost != 10 {
+		t.Errorf("lost = %d, want the 10 that did not fit counted", lost)
+	}
+}
+
 // A deployment with no plane closes the sink, and a closed sink neither holds
 // nor emits — but still answers every write.
 func TestAClosedSinkHoldsNothing(t *testing.T) {

@@ -80,12 +80,25 @@ import (
 // while delivering nothing. Two ports because two receivers.
 const planeLogEndpoint = "127.0.0.1:4318"
 
-// holdMax bounds what the sink keeps while it has no transport. The window is
-// BuildDeps to InstallTelemetry — stores opening, subsystems mounting — which is
-// hundreds of lines, not thousands. Past the bound the NEWEST are dropped and
-// counted, because in a boot window the first lines are the ones that say why
+// holdMax and holdBytes bound what the sink keeps while it has no transport, and
+// it takes BOTH because they bound different things. The window is BuildDeps to
+// InstallTelemetry — stores opening, subsystems mounting — which is hundreds of
+// lines, not thousands, and a line is usually a few hundred bytes.
+//
+// Usually. A line carrying a serialized value is as long as that value, and a
+// count alone converts to no amount of memory an operator can reason about: the
+// same 2048 lines is a few hundred kilobytes of ordinary boot chatter or two
+// orders of magnitude more of something else, and the process learns which only
+// under the conditions that produce the long ones. So the count bounds how much
+// history is worth keeping and the byte ceiling bounds what keeping it costs.
+//
+// Whichever is reached first stops the hold. Past either, the NEWEST are dropped
+// and counted, because in a boot window the first lines are the ones that say why
 // the rest happened.
-const holdMax = 2048
+const (
+	holdMax   = 2048
+	holdBytes = 8 << 20
+)
 
 // planeLog is this process's log leg. One per process, like the logger it wraps:
 // the writer installs once (BuildDeps), the transport attaches once
@@ -101,6 +114,7 @@ type logSink struct {
 	mu     sync.Mutex
 	out    otellog.Logger // nil until attach
 	held   []line
+	bytes  int
 	lost   int
 	closed bool
 }
@@ -108,9 +122,16 @@ type logSink struct {
 // line is a parsed record with the context its trace and span ids live in. The
 // SDK reads those two off the CONTEXT and never off the record, so they travel
 // together or they do not travel.
+//
+// size is the length of the line this was parsed from, kept because it is the
+// one honest measure of what holding the record costs and it is already in hand
+// at the only moment it is free to take. An OTel record answers no question
+// about its own footprint, and a hold bounded by a number nobody can convert to
+// memory is bounded in name.
 type line struct {
-	ctx context.Context
-	rec otellog.Record
+	ctx  context.Context
+	rec  otellog.Record
+	size int
 }
 
 // Write parses one log line and carries it to the plane. It reports the full
@@ -133,8 +154,9 @@ func (s *logSink) emit(l line) {
 		out := s.out
 		s.mu.Unlock()
 		out.Emit(l.ctx, l.rec)
-	case len(s.held) < holdMax:
+	case len(s.held) < holdMax && s.bytes+l.size <= holdBytes:
 		s.held = append(s.held, l)
+		s.bytes += l.size
 		s.mu.Unlock()
 	default:
 		s.lost++
@@ -150,7 +172,7 @@ func (s *logSink) attach(out otellog.Logger) {
 		return
 	}
 	held, lost := s.held, s.lost
-	s.out, s.held, s.lost = out, nil, 0
+	s.out, s.held, s.bytes, s.lost = out, nil, 0, 0
 	s.mu.Unlock()
 
 	for _, l := range held {
@@ -166,7 +188,7 @@ func (s *logSink) attach(out otellog.Logger) {
 // process with no destination never carries a boot window it cannot spend.
 func (s *logSink) close() {
 	s.mu.Lock()
-	s.closed, s.out, s.held = true, nil, nil
+	s.closed, s.out, s.held, s.bytes = true, nil, nil, 0
 	s.mu.Unlock()
 }
 
@@ -181,7 +203,7 @@ func sinkLog() luxlog.Logger {
 // descriptor — is not this leg's to carry, and reporting each one would be the
 // amplification loop wearing a different hat.
 func decode(p []byte) (line, bool) {
-	var l line
+	l := line{size: len(p)}
 	text := strings.TrimSpace(string(p))
 	if !strings.HasPrefix(text, "{") {
 		return l, false
