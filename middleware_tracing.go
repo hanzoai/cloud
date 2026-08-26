@@ -168,7 +168,8 @@ func TracingMiddleware() zip.Handler {
 		// rate / error rate / latency / last-error fall out of the trace table the
 		// admin board already reads, with no per-package instrumentation and no second
 		// metrics path. Empty (nothing owns the path) means no label, never a guess.
-		if sub := SubsystemOf(path); sub != "" {
+		sub := SubsystemOf(path)
+		if sub != "" {
 			span.SetAttributes(attribute.String("hanzo.subsystem", sub))
 		}
 
@@ -202,7 +203,10 @@ func TracingMiddleware() zip.Handler {
 		// "/v1/event is 5xx" was unalertable while the Sentry envelope returned
 		// 503 for a day with nobody paged. A metric nothing calls is not
 		// instrumentation, it is a comment.
-		observeRequest(productFromPath(path), org, status, time.Since(start))
+		// The subsystem stamped on the span above is the value the metric carries
+		// too — one prefix scan per request, read twice, so a request's series and
+		// its span name one app or neither does.
+		observeRequest(sub, productFromPath(path), org, status, time.Since(start))
 		switch {
 		case err != nil:
 			span.RecordError(err)

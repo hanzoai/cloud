@@ -1216,6 +1216,13 @@ func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 		if spec.Shutdown != nil {
 			app.OnShutdown(spec.Shutdown)
 		}
+		// The app's request series, at zero, the moment it is MOUNTED — here
+		// rather than at Declare above, because Declare states what this process
+		// is configured to serve while this line is reached only by a subsystem
+		// that actually composed. Seeded, an app that serves nothing for half an
+		// hour is distinguishable from an app that never came up; unseeded, both
+		// are the same absence and no rule can tell them apart. See seedApp.
+		seedApp(spec.Name)
 		logger.Info("mounted subsystem", "name", spec.Name)
 	}
 	return keyed(app, Deployed())
