@@ -171,8 +171,15 @@ COPY . .
 # could silently be the wrong bytes. The equivalent question ("is a real console
 # live?") moved to where it can actually be answered: the site's ACTIVE RELEASE,
 # which the binary refuses to boot without (cmd/cloud) and re-checks on a poll.
+# ANCHORED AT THE MARGIN, and that is the whole of it: the catalogue grew a
+# product tier, so `skill_count` appears 117 times — once at the top level and
+# once per product — and an unanchored match returned all 117. That is not a
+# number, so the test errored and this gate failed a catalogue that was correct.
+# Worse than failing: `products` sorts before `skill_count`, so the FIRST value
+# is some product's 5, and taking one of them would have made the gate pass while
+# measuring the wrong thing. The top-level key is the only one at two spaces.
 RUN set -eu; \
-    n="$(sed -n 's/.*"skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/skills/catalog/hanzo/index.json)"; \
+    n="$(sed -n 's/^  "skill_count":[[:space:]]*\([0-9]*\).*/\1/p' /src/apps/skills/catalog/hanzo/index.json)"; \
     [ "${n:-0}" -gt 1 ] || { echo "SKILLS-GATE FAIL: apps/skills/catalog holds ${n:-0} skills — run \`make skills\` to regenerate it from this repo's own specs"; exit 1; }; \
     echo ">> catalog: $n skills/brand"
 # RED gate — modernc double-registration guard: 0 modernc under CGO=1 ACROSS EVERY
