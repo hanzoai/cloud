@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -175,8 +176,6 @@ func TracingMiddleware() zip.Handler {
 
 		err := c.Continue()
 
-		// Identity headers are validated upstream (IdentityMiddleware) before the
-		// handler runs, so by here c.Org() reflects the authenticated org.
 		status := c.Fiber().Response().StatusCode()
 		// A handler that RETURNS an error has not written a response yet: fiber
 		// unwinds the chain and calls ErrorHandler after, so the response object
@@ -188,14 +187,33 @@ func TracingMiddleware() zip.Handler {
 			status = mapError(err).Status
 		}
 		span.SetAttributes(attribute.Int("http.response.status_code", status))
-		org := strings.Clone(c.Org())
+
+		// A request's telemetry names the org its identity was VALIDATED for, or
+		// none. That org is principal.Minted — the attestation the identity
+		// boundary parks in a request-local slot, which is server-side state: it
+		// is not a header, it does not cross the wire, and there is no request
+		// that creates one. So it is the org for a caller the boundary resolved,
+		// and empty for a caller it did not, in both cases independently of where
+		// in a chain this middleware sits or whether a boundary ran at all.
+		//
+		// It is read HERE rather than from c.Org(), which answers a different
+		// question: that header carries the org a request ACTS IN for the data
+		// path, and on the bearer-less path the boundary restores the caller's own
+		// value into it (middleware_identity.go, the Phase-1 residual). Telemetry
+		// asks who this request was PROVED to be, and only the attestation
+		// answers that. Both signals take the one value, so a span's tenant and
+		// its metric series name the same org or neither does — the row's tenant
+		// column is read straight off this attribute (apps/o11y planeOrg), and a
+		// span carrying none is the platform's own.
+		p, _ := principal.Minted(c)
+		org := p.Org
 		if org != "" {
 			span.SetAttributes(attribute.String("hanzo.org", org))
 		}
 
 		// The METRIC half of the same observation. It belongs here and nowhere
 		// else: this is the one place every /v1 request already has its path,
-		// its status and its VALIDATED org in hand, and computing them twice in
+		// its status and its attested org in hand, and computing them twice in
 		// a second middleware would be the same fact measured two ways.
 		//
 		// It had been written (metrics_http.go) and never called, so

@@ -1,8 +1,11 @@
 package cloud
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -13,6 +16,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // TestMain installs this process's meter BEFORE any test runs, which is the only
@@ -220,4 +224,84 @@ func TestTheRequestChainNamesTheAppOnBothSignals(t *testing.T) {
 		t.Errorf("series %q = %v, want 1 — the metric must name the subsystem the span names\ngot: %v",
 			want, got[want], got)
 	}
+}
+
+// THE ORG ON BOTH SIGNALS IS THE ONE THE IDENTITY WAS VALIDATED FOR.
+//
+// A metric label and a span attribute are two different costs and this one value
+// pays both: the label is a standing time series, and the attribute IS the tenant
+// column apps/o11y files the row under (planeOrg). So the value has to come from
+// the identity boundary's own attestation and from nothing a caller can send —
+// an org taken off the wire would let any reachable caller open a series per
+// string it types AND file its request under a tenant that is not its own.
+//
+// This drives the REAL chain — the tracing middleware in front of the real
+// SanitizeIdentity — twice: once with no credential and a chosen X-Org-Id, once
+// with a signed token for a real org.
+func TestTelemetryNamesTheOrgTheIdentityWasValidatedFor(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+
+	Declare([]Plugin{{Name: "ledger", Prefixes: []string{"/v1/ledger"}}}, &Config{Enable: []string{"ledger"}})
+
+	newApp := func() *zip.App {
+		app := zip.New(zip.Config{Logger: luxlog.New("cloud").Output(io.Discard)})
+		app.Use(TracingMiddleware())
+		app.Use(SanitizeIdentity(v))
+		app.Get("/v1/ledger/entries", func(c *zip.Ctx) error {
+			return c.JSON(200, map[string]string{"ok": "yes"})
+		})
+		return app
+	}
+	call := func(t *testing.T, mutate func(*http.Request)) sdktrace.ReadOnlySpan {
+		t.Helper()
+		sr := newRecordingTracer(t)
+		req := httptest.NewRequest("GET", "/v1/ledger/entries", nil)
+		if mutate != nil {
+			mutate(req)
+		}
+		if _, err := newApp().Test(req); err != nil {
+			t.Fatalf("app.Test: %v", err)
+		}
+		spans := sr.Ended()
+		if len(spans) != 1 {
+			t.Fatalf("recorded %d spans, want 1", len(spans))
+		}
+		return spans[0]
+	}
+
+	t.Run("no credential names no org", func(t *testing.T) {
+		span := call(t, setHdr(map[string]string{"X-Org-Id": "chosen-corp"}))
+
+		if org, stamped := attrOf(span, "hanzo.org"); stamped {
+			t.Errorf("span carries hanzo.org=%v — the row would be filed under a tenant nobody proved", org)
+		}
+		got := gathered(t, "hanzo_http_requests_total")
+		if got["app=ledger,org=-,product=ledger,status=2xx"] != 1 {
+			t.Errorf("want one request in the org=- bucket, got: %v", got)
+		}
+		for series := range got {
+			if strings.Contains(series, "org=chosen-corp") {
+				t.Errorf("series %q exists — a caller opened a time series by sending a header", series)
+			}
+		}
+	})
+
+	t.Run("a validated token names its own org", func(t *testing.T) {
+		tok := signWith(t, key, tokenClaims("hanzo-console", "ledger-co", "joe@ledger.co", false, time.Now().Add(time.Hour)))
+		span := call(t, both(bearer(tok), setHdr(map[string]string{"X-Org-Id": "chosen-corp"})))
+
+		org, stamped := attrOf(span, "hanzo.org")
+		if !stamped || org.AsString() != "ledger-co" {
+			t.Errorf("span org = %v (stamped=%v), want the org the token was signed for", org, stamped)
+		}
+		got := gathered(t, "hanzo_http_requests_total")
+		if got["app=ledger,org=ledger-co,product=ledger,status=2xx"] != 1 {
+			t.Errorf("want one request under the validated org, got: %v", got)
+		}
+	})
 }

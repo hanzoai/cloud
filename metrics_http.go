@@ -23,8 +23,9 @@ import (
 // instruments themselves have never changed.
 //
 // This is the emit side of the per-org observability story: cloud tags every /v1
-// request with the app that served it, the product (route group) and the
-// validated org, so a per-app and per-org request/error/latency series exists.
+// request with the app that served it, the product (route group) and the org its
+// identity was validated for, so a per-app and per-org request/error/latency
+// series exists.
 //
 // `app` is the SUBSYSTEM the fleet delivers the path to, and it is not the same
 // question as `product`: product is the first segment of the address, while app
@@ -35,11 +36,13 @@ import (
 //
 // CARDINALITY. `app` is bounded by the manifest's own rows; `product` is bounded
 // by the finite route table; `status` is bounded to four classes
-// (2xx/3xx/4xx/5xx); `org` is the VALIDATED IAM owner claim, NOT a client-chosen
-// string — so a caller cannot inflate cardinality with arbitrary values (an
-// unauthenticated request folds to a single "-" bucket). Cardinality is bounded
-// by real orgs × products, the same envelope the eval per-org limiter reasons
-// about.
+// (2xx/3xx/4xx/5xx); `org` is the org the identity boundary ATTESTED for the
+// request — principal.Minted, a request-local slot the boundary alone writes and
+// nothing on the wire can reach (middleware_tracing.go reads it) — and a request
+// it resolved nobody for folds to a single "-" bucket. That attestation is the
+// whole of the bound: a header a caller chooses reaches this label by no path, so
+// the series count is real orgs × products, the same envelope the eval per-org
+// limiter reasons about.
 //
 // There is no `route` dimension and there must not be: the route this middleware
 // holds is the REQUEST PATH, ids and all, so a per-route series would be one
@@ -82,9 +85,9 @@ func instruments() (metric.Int64Counter, metric.Float64Histogram) {
 }
 
 // observeRequest records one /v1 request. Called from the request-observability
-// middleware AFTER the handler runs, so org reflects the validated principal
-// (empty ⇒ "-"). app is the serving subsystem, product the route group; status is
-// folded to its class to bound cardinality.
+// middleware AFTER the handler runs, with the org the identity boundary attested
+// for it (empty ⇒ "-"). app is the serving subsystem, product the route group;
+// status is folded to its class to bound cardinality.
 func observeRequest(app, product, org string, status int, dur time.Duration) {
 	if product == "" {
 		product = "unknown"
