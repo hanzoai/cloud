@@ -70,3 +70,29 @@ func TestDeployedDecidesWhichKeyTheMinterMayHold(t *testing.T) {
 		t.Fatal("a test binary reports itself a deployment; the minter's fallback is then untestable")
 	}
 }
+
+// A user's keys are addressed as a COLLECTION UNDER THE USER, which means the id
+// this client holds is not a field any more — it is the PATH. So a composite that
+// does not name a pair cannot be sent: `admin` alone would address
+// /v1/iam/users/admin/keys, and an id carrying a second slash would address a
+// deeper route, both of them somebody else's if they resolved at all.
+//
+// The two halves are escaped rather than trusted, so a name holding a slash names
+// one segment instead of two.
+func TestUserKeysPathNamesAPair(t *testing.T) {
+	for _, id := range []string{"", "admin", "/alice", "acme/", "/"} {
+		if got, err := userKeysPath(id); err == nil {
+			t.Errorf("userKeysPath(%q) = %q, want a refusal — it does not name <owner>/<user>", id, got)
+		}
+	}
+	got, err := userKeysPath("acme/alice")
+	if err != nil {
+		t.Fatalf("userKeysPath(acme/alice): %v", err)
+	}
+	if want := "/v1/iam/users/acme/alice/keys"; got != want {
+		t.Errorf("userKeysPath = %q, want %q — the address IAM serves (internal/oidc)", got, want)
+	}
+	if got, _ := userKeysPath("acme/a b/c"); !strings.Contains(got, "a%20b%2Fc") {
+		t.Errorf("userKeysPath escaped = %q, want the user rendered as ONE segment", got)
+	}
+}

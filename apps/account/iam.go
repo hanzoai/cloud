@@ -276,14 +276,18 @@ func keyBelongsTo(k userKey, owner, user string) bool {
 // sk- half; a publishable key returns its pk- (and IAM stores no secret for it at
 // all), which is the credential a browser bundle carries.
 func (c *iamClient) mintUserKey(ctx context.Context, id, typ, scope string) (string, error) {
-	form := url.Values{"id": {id}, "type": {typ}}
+	path, err := userKeysPath(id)
+	if err != nil {
+		return "", err
+	}
+	q := url.Values{"type": {typ}}
 	// Sent only when there is one: an empty scope would OVERWRITE the class IAM
 	// derives for a publishable key, turning a browser key into a key that resolves
 	// to a principal.
 	if scope != "" {
-		form.Set("scope", scope)
+		q.Set("scope", scope)
 	}
-	env, err := c.do(ctx, http.MethodPost, "/v1/iam/keys/mint", form, nil)
+	env, err := c.do(ctx, http.MethodPost, path, q, nil)
 	if err != nil {
 		return "", err
 	}
@@ -323,8 +327,28 @@ func prefixForType(typ string) string {
 // revokeUserKey clears the user's key of `typ` (immediate revoke; the gateway key
 // cache lapses within ~5m). Scoped by the same field the mint takes.
 func (c *iamClient) revokeUserKey(ctx context.Context, id, typ string) error {
-	_, err := c.do(ctx, http.MethodPost, "/v1/iam/keys/revoke", url.Values{"id": {id}, "type": {typ}}, nil)
+	path, err := userKeysPath(id)
+	if err != nil {
+		return err
+	}
+	_, err = c.do(ctx, http.MethodDelete, path, url.Values{"type": {typ}}, nil)
 	return err
+}
+
+// userKeysPath addresses a user's keys the way IAM serves them: as a collection
+// UNDER the user, /v1/iam/users/{owner}/{name}/keys, where POST (re)generates the
+// key of a type and DELETE clears it.
+//
+// The id this client holds is the composite `<owner>/<name>` that caller.keyID
+// builds, and it is the whole address — so a composite that is not a pair cannot
+// name a row and is refused here rather than sent as a path that would read as
+// some other user's.
+func userKeysPath(id string) (string, error) {
+	owner, name, ok := strings.Cut(id, "/")
+	if !ok || owner == "" || name == "" {
+		return "", fmt.Errorf("iam: %q does not name <owner>/<user>", id)
+	}
+	return "/v1/iam/users/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/keys", nil
 }
 
 // ── organizations (onboarding) ───────────────────────────────────────────────

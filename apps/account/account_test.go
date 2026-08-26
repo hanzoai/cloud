@@ -152,9 +152,15 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		ok(w, map[string]any{"keys": rows})
 	})
 
-	mux.HandleFunc("/v1/iam/keys/mint", func(w http.ResponseWriter, r *http.Request) {
+	// The user's keys are a COLLECTION UNDER THE USER, which is how IAM serves them
+	// (internal/oidc: POST and DELETE /v1/iam/users/:owner/:name/keys). The pair of
+	// verb paths this used to model — /v1/iam/keys/mint and /keys/revoke — is not
+	// registered anywhere in IAM any more, so a client that still calls them gets a
+	// 404, and a fake that answers them would be the only place in the estate where
+	// they still work. Left unregistered, this mux 404s exactly as IAM does.
+	mux.HandleFunc("POST /v1/iam/users/{owner}/{name}/keys", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
+		id, typ := r.PathValue("owner")+"/"+r.PathValue("name"), fakeKeyType(r)
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if f.ignoreKeyType {
@@ -176,9 +182,9 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		ok(w, map[string]any{"accessKey": key})
 	})
 
-	mux.HandleFunc("/v1/iam/keys/revoke", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /v1/iam/users/{owner}/{name}/keys", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
+		id, typ := r.PathValue("owner")+"/"+r.PathValue("name"), fakeKeyType(r)
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.revokedFor = append(f.revokedFor, id)
