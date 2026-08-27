@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // A live agent-session is a running invocation — a cloud agent run, a bot loop,
@@ -76,6 +77,19 @@ type Session struct {
 	// public route no matter who asks.
 	Project   string
 	Published bool
+
+	// Room is the collaborative room this session was started IN (HIP-0523) — the
+	// room a person mentioned an agent in, so a workspace view can ask "what has
+	// been run in #bugfix-1010" and a run can be read back to the conversation that
+	// asked for it.
+	//
+	// It is a LABEL the starting surface reports, exactly as Repo and Host are,
+	// and it is deliberately not resolved: the channel lives in another app's
+	// per-workspace document store, and a session that outlives its channel
+	// should keep saying where it came from rather than losing its provenance to
+	// a dangling reference. Empty means the run has no room — a CLI session, a
+	// schedule, an API call — which is most of them.
+	Room string
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -178,6 +192,9 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		// session exactly as it was: untagged, and NOT published.
 		"project":   "TEXT NOT NULL DEFAULT ''",
 		"published": "INTEGER NOT NULL DEFAULT 0",
+		// The room a run was started in. Default keeps every pre-existing session
+		// exactly as it was: attributed to no room.
+		"room": "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
 		return err
 	}
@@ -190,7 +207,8 @@ CREATE INDEX IF NOT EXISTS ix_sessions_org_target ON agent_sessions(org, target)
 CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_account ON agent_sessions(org, provider, account);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_project ON agent_sessions(org, project, created_at);
-CREATE INDEX IF NOT EXISTS ix_sessions_published ON agent_sessions(published, updated_at);`); err != nil {
+CREATE INDEX IF NOT EXISTS ix_sessions_published ON agent_sessions(published, updated_at);
+CREATE INDEX IF NOT EXISTS ix_sessions_org_room ON agent_sessions(org, room, created_at);`); err != nil {
 		return fmt.Errorf("migrate sessions indexes: %w", err)
 	}
 	return nil
@@ -200,14 +218,29 @@ CREATE INDEX IF NOT EXISTS ix_sessions_published ON agent_sessions(published, up
 // is: four statements read or write it and a fifth (the legacy fan-out) copies it.
 const eventCols = `id,session_id,org,seq,kind,actor,payload,created_at`
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room`
+
+// sessionVals is sessionCols' placeholder list, DERIVED from it rather than
+// written out beside it. Two INSERTs use it — the ordinary create and the legacy
+// fan-out — and both used to spell the run of `?` by hand against a column list
+// that is named once. That is a column count in three places, and adding the
+// twenty-fourth column proved it: the create was updated, the fan-out was not,
+// and the failure was `23 values for 24 columns` at RUN time in a migration path
+// that only executes on an upgrade over a pre-split database. Derived, the
+// arithmetic cannot disagree with the columns.
+var sessionVals = placeholders(sessionCols)
+
+// placeholders renders one `?` per comma-separated column in cols.
+func placeholders(cols string) string {
+	return strings.TrimSuffix(strings.Repeat("?,", strings.Count(cols, ",")+1), ",")
+}
 
 func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	var x Session
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
 		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Terminal, &x.Target,
-		&x.Provider, &x.Account, &x.Project, &x.Published)
+		&x.Provider, &x.Account, &x.Project, &x.Published, &x.Room)
 	return x, err
 }
 
@@ -232,10 +265,11 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		}
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (`+sessionVals+`)`,
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
-		x.Host, x.Cwd, x.Repo, x.Terminal, x.Target, x.Provider, x.Account, x.Project, x.Published)
+		x.Host, x.Cwd, x.Repo, x.Terminal, x.Target, x.Provider, x.Account, x.Project, x.Published,
+		x.Room)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -274,7 +308,10 @@ type SessionFilter struct {
 	Status    string
 	Project   string
 	Published bool
-	Limit     int
+	// Room narrows to the sessions started in one collaborative room, which is what
+	// makes "the runs of #bugfix-1010" a query rather than a scan.
+	Room  string
+	Limit int
 }
 
 // ListSessions returns an org's sessions per filter, newest first, capped.
@@ -302,6 +339,10 @@ func (s *Store) ListSessions(ctx context.Context, org string, f SessionFilter) (
 	if f.Project != "" {
 		where += " AND project=?"
 		args = append(args, f.Project)
+	}
+	if f.Room != "" {
+		where += " AND room=?"
+		args = append(args, f.Room)
 	}
 	if f.Published {
 		where += " AND published=1"
