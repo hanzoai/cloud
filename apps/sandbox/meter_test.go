@@ -10,6 +10,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -248,5 +249,52 @@ func TestABusyLeaseIsExtended(t *testing.T) {
 	}
 	if back, _ = st.Get(ctx, "acme", "m_1"); back.ExpiresAt != start+3600 {
 		t.Fatalf("a stale extend moved the lease backwards to %d", back.ExpiresAt)
+	}
+}
+
+// TestAFreeHourStillMovesTheClock — a published price of zero is a PRICE, and the
+// span it covers has to be accounted for or restoring the price bills it all again.
+//
+// The promo week, seen from the tenant's side: runtime is free Monday to Friday, an
+// operator retunes the rate on Saturday, and every lease held through the promotion
+// is charged for all of it at the new rate, in one debit.
+//
+// The two end-of-lease paths never had this — they call [bill] unconditionally —
+// which is why the sweep was the one place it hid.
+//
+// MUTATION: restore `if rate <= 0 { return }` at the top of meterRuntime and the
+// watermark never leaves the start of the promotion.
+func TestAFreeHourStillMovesTheClock(t *testing.T) {
+	ctx := context.Background()
+	stores := cloud.NewOrgStore[*Store](cloud.Base{DataDir: t.TempDir()}, "sandbox", openStore)
+	t.Cleanup(func() { _ = stores.CloseAll() })
+	s := &Service{Base: cloud.Base{Log: luxlog.NewNoOpLogger()}, State: state{stores: stores}}
+
+	st, err := storeFor(s, "acme")
+	if err != nil {
+		t.Fatalf("storeFor: %v", err)
+	}
+	start := time.Now().Unix() - 5*3600
+	m := lease(t, st, "m_free", "acme", "acme", start)
+
+	paid := cloud.RuntimeRate
+	t.Cleanup(func() { cloud.RuntimeRate = paid })
+	cloud.RuntimeRate = func(context.Context) int64 { return 0 }
+	meterRuntime(ctx, s)
+	cloud.RuntimeRate = paid
+
+	after, err := st.Get(ctx, m.Org, m.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if after.MeteredAt <= start {
+		t.Fatalf("five free hours left the watermark at %d (the lease was taken at %d): the day the "+
+			"price returns, all five are billed at the new rate", after.MeteredAt, start)
+	}
+
+	// The price returns. The next span may cost only what has run SINCE.
+	l := &ledger{}
+	if got := charge(t, st, after, after.MeteredAt+3600, cloud.RuntimeHourMicros, l); got != cloud.RuntimeHourMicros {
+		t.Fatalf("the first paid hour billed %d µ$, want %d — the free hours are in there", got, cloud.RuntimeHourMicros)
 	}
 }

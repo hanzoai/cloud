@@ -7,8 +7,10 @@ package agents
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -325,5 +327,142 @@ func TestTheSweepSurvivesAnUnreadableStore(t *testing.T) {
 	meterRuntime(context.Background(), st, luxlog.NewNoOpLogger(), nil)
 	if b.len() != 0 {
 		t.Fatal("the harness emitted through the wrong path")
+	}
+}
+
+// TestAFreeHourStillMovesTheClock — a published price of zero is a PRICE, and the
+// span it covers has to be accounted for or restoring the price bills it all again.
+//
+// This is the promo week seen from the other side: runtime is free Monday to
+// Friday, an operator retunes the rate on Saturday, and every tenant is charged for
+// the free week at the new rate in one debit.
+//
+// MUTATION: restore `if rate <= 0 { return }` at the top of meterRuntime and the
+// watermark never leaves the start of the promotion, so the first paid tick below
+// bills six hours instead of one.
+func TestAFreeHourStillMovesTheClock(t *testing.T) {
+	st, sto := meterStore(t)
+	ctx := context.Background()
+	now := time.Now().Unix()
+	start := now - 5*hour
+	x := open(t, sto, "sess_promo", "acme", start)
+
+	paid := cloud.RuntimeRate
+	t.Cleanup(func() { cloud.RuntimeRate = paid })
+	cloud.RuntimeRate = func(context.Context) int64 { return 0 }
+	meterRuntime(ctx, st, luxlog.NewNoOpLogger(), nil)
+	cloud.RuntimeRate = paid
+
+	after, err := sto.GetSession(ctx, "acme", x.ID)
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if after.MeteredAt <= start {
+		t.Fatalf("five free hours left the watermark at %d (the session opened at %d): the day the "+
+			"price returns, all five are billed at the new rate", after.MeteredAt, start)
+	}
+
+	// The price returns. The next tick may bill only what has run SINCE.
+	b := &books{}
+	sweep(t, st, after.MeteredAt+hour, cloud.RuntimeHourMicros, b)
+	if want := cloud.RuntimeCost(cloud.RuntimeHourMicros, hour); b.micros() != want {
+		t.Fatalf("the first paid hour billed %d µ$, want %d — the free hours are in there", b.micros(), want)
+	}
+}
+
+// TestLeavingResidencyBillsTheTail — a bot that stops being resident takes its
+// unbilled hours with it unless somebody charges them on the way out, because the
+// sweep bills what Resident can see.
+//
+// Two ordinary tenant PATCHes are the whole exploit: one-shot, then long-running.
+// The first drops the row out of the sweep's set with its tail unbilled; the second
+// calls Stamp, which resets the watermark to now over the tail nobody charged. Run
+// on a loop, a resident bot costs approximately nothing however long it runs.
+//
+// MUTATION: delete the closeResidency call in the patch handler and the watermark
+// after the transition out is still the five-hours-ago value this test rewound it to.
+func TestLeavingResidencyBillsTheTail(t *testing.T) {
+	app := mountApp(t, &fakeAI{content: "x"})
+	ctx := context.Background()
+
+	if code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+		map[string]any{"name": "watcher", "model": "m", "executionMode": "long-running",
+			"schedule": "*/5 * * * *"}); code != http.StatusCreated {
+		t.Fatalf("create long-running: %d (%s)", code, body)
+	}
+	sto := storeOf(t, &mounted.State, "acme")
+
+	// It has been resident for five hours.
+	ran := time.Now().Unix() - 5*hour
+	if err := sto.Stamp(ctx, "acme", "watcher", "acme", ran); err != nil {
+		t.Fatalf("stamp: %v", err)
+	}
+
+	if code, body := do(t, app, http.MethodPatch, "/v1/agents/watcher", "acme",
+		map[string]any{"executionMode": "one-shot"}); code != http.StatusOK {
+		t.Fatalf("patch to one-shot: %d (%s)", code, body)
+	}
+
+	a, err := sto.Get(ctx, "acme", "watcher")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	if a.MeteredAt <= ran {
+		t.Fatalf("a bot resident for five hours left residency with its watermark still at %d: "+
+			"the PATCH back to long-running stamps over the tail and the bot runs free", a.MeteredAt)
+	}
+	if a.ExecutionMode == ModeLongRunning {
+		t.Fatalf("the agent is still resident, so this test measured nothing")
+	}
+}
+
+// TestCloseResidencyTakesTheTailOnceAndOnlyOnce tests the function BOTH exits from
+// the billable set share — the PATCH above and the delete beside it. Direct,
+// because the delete's own witness is gone with the row it deletes: the watermark
+// is on the agent, and the agent is the thing being removed. What the delete call
+// site adds over this is one line calling this function before Store.Delete, and it
+// is reviewed rather than measured; this is the half that can be.
+//
+// MUTATION: drop the `advance` before the emit in cloud.RuntimeCharge and the
+// second call below charges the same five hours again.
+func TestCloseResidencyTakesTheTailOnceAndOnlyOnce(t *testing.T) {
+	app := mountApp(t, &fakeAI{content: "x"})
+	ctx := context.Background()
+
+	if code, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+		map[string]any{"name": "watcher", "model": "m", "executionMode": "long-running",
+			"schedule": "*/5 * * * *"}); code != http.StatusCreated {
+		t.Fatalf("create long-running: %d (%s)", code, body)
+	}
+	sto := storeOf(t, &mounted.State, "acme")
+	ran := time.Now().Unix() - 5*hour
+	if err := sto.Stamp(ctx, "acme", "watcher", "acme", ran); err != nil {
+		t.Fatalf("stamp: %v", err)
+	}
+
+	a, err := sto.Get(ctx, "acme", "watcher")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	closeResidency(ctx, mounted, sto, "acme", a)
+
+	moved, err := sto.Get(ctx, "acme", "watcher")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	if moved.MeteredAt <= ran {
+		t.Fatalf("the close left the watermark at %d, so the five resident hours are unaccounted for", moved.MeteredAt)
+	}
+
+	// Asked again with the STALE row — the shape a retry or a racing tick has — the
+	// compare-and-set refuses and nothing moves a second time.
+	closeResidency(ctx, mounted, sto, "acme", a)
+	again, err := sto.Get(ctx, "acme", "watcher")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	if again.MeteredAt != moved.MeteredAt {
+		t.Fatalf("a second close moved the watermark from %d to %d — the span would be billed twice",
+			moved.MeteredAt, again.MeteredAt)
 	}
 }

@@ -33,24 +33,10 @@ import (
 	"github.com/hanzoai/namespace"
 )
 
-// meterEvery is how often runtime money moves. The charge is (now − watermark),
-// so this decides FRESHNESS and never the amount: a longer interval bills the same
-// total in fewer, larger debits. Fifteen minutes keeps a resident bot's ledger
-// within a quarter-hour of the truth without writing a row per minute per bot.
-const meterEvery = 15 * time.Minute
-
-// meterFirst is how long after mount the FIRST sweep runs, and it is short for a
-// reason measured rather than assumed: this app is LAZY, so its process lives from
-// the first request to its prefix until the host goes down, and a fleet whose pods
-// turn over faster than meterEvery would never reach a tick at all — every debit
-// deferred indefinitely while the watermarks sit still. No money is lost when that
-// happens (the watermark is durable, so the next process bills the whole gap at
-// once), but "eventually, if a pod lives long enough" is not a billing cadence.
-//
-// It is not ZERO either: a crashlooping pod would then sweep on every boot, and a
-// span of seconds is a real debit at micro-USD precision. A minute is longer than a
-// crashloop's cycle and far shorter than a healthy pod's life.
-const meterFirst = time.Minute
+// The cadence this pass runs on is not its own: it shares one loop with the reaper
+// (reap.go startSweep), because a session's runtime and a session's END are two
+// readings of the same rows and a second timer would let them disagree about when
+// one of them stopped.
 
 // payerOf is the wallet a runtime charge lands in.
 //
@@ -109,19 +95,53 @@ func endOf(x Session, now int64) int64 {
 	return now
 }
 
+// closeResidency charges a bot's unbilled tail at the moment it stops being one.
+//
+// LEAVING THE SET IS A CLOSE. The sweep bills what Resident can SEE, so a row that
+// leaves that set takes its final span with it unless somebody charges it on the
+// way out — the rule apps/sandbox already states for a lease whose row is deleted,
+// applied to a row that merely stops matching. Two exits reach it: a PATCH to
+// one-shot, and a delete.
+//
+// The mode flap is why it is not merely untidy. Stamp resets the watermark to now
+// on the transition IN, so `executionMode: one-shot` followed by
+// `executionMode: long-running` — two ordinary tenant calls, no privilege — would
+// otherwise discard the tail each time and make a resident bot cost approximately
+// nothing however long it ran.
+//
+// CHARGED BEFORE THE WRITE that removes the row from the set, for the reason
+// apps/sandbox charges before its delete: crash after the charge and the row is
+// still resident with an advanced watermark, which bills nothing twice; crash after
+// the write and the span is gone. A failure is logged and dropped — the same
+// posture MeterUsage takes — because a debit that could not be recorded must not
+// turn a working mode change into a refusal.
+func closeResidency(ctx context.Context, s *cloud.Service[state], sto *Store, org string, a Agent) {
+	_, err := cloud.RuntimeCharge(ctx, botRunning(a), time.Now().Unix(), cloud.RuntimeRate(ctx),
+		func(ctx context.Context, id string, was, at int64) (bool, error) {
+			return sto.Advance(ctx, org, a.Name, was, at)
+		},
+		func(payer string, u metering.Usage) { s.Bill.MeterUsage(payer, meterKind, u) })
+	if err != nil {
+		s.Log.Warn("runtime meter: a bot left residency unbilled", "org", org, "agent", a.Name, "err", err)
+	}
+}
+
 // meterRuntime bills every org's open sessions and resident bots for the span
 // since the last tick. The ticker fires it; Shutdown's context ends it.
 //
 // A store that could not be opened or read is REPORTED and skipped, never read as
 // "this org has nothing running" — the same rule the sandbox orphan sweep states,
 // for the same reason: silence is not an answer.
-func meterRuntime(ctx context.Context, st *state, log interface {
-	Warn(string, ...any)
-}, bill *cloud.ResourceMeter) {
+func meterRuntime(ctx context.Context, st *state, log logger, bill *cloud.ResourceMeter) {
+	// A PUBLISHED ZERO IS A PRICE, AND A PRICE STILL MOVES THE CLOCK. Runtime is
+	// free this week, so nothing is charged — but the span still HAPPENED, and the
+	// watermark is what says it is accounted for. Returning here instead left the
+	// watermark where it was, so restoring the price on Monday billed every free
+	// hour of the promotion RETROACTIVELY at the new rate, in one debit, to every
+	// tenant. cloud.RuntimeCharge already does the right thing with a zero: it
+	// advances first and emits only when the span is worth something, so the whole
+	// fix is to let it be asked.
 	rate := cloud.RuntimeRate(ctx)
-	if rate <= 0 {
-		return // a published zero is a price: runtime is free, so nothing is charged.
-	}
 	now := time.Now().Unix()
 	emit := func(payer string, u metering.Usage) { bill.MeterUsage(payer, meterKind, u) }
 
@@ -164,29 +184,4 @@ func meterRuntime(ctx context.Context, st *state, log interface {
 			}
 		}
 	})
-}
-
-// startMeter runs the runtime meter until the returned stop is called. It is
-// started by Mount and stopped by Shutdown, ahead of CloseAll.
-//
-// A TIMER RESET IN THE LOOP, not a ticker, because the first interval and every
-// one after it are different questions — see [meterFirst]. Nothing waits behind
-// either: the loop is a goroutine, so Mount returns before the first sweep starts
-// however soon it is scheduled.
-func startMeter(s *cloud.Service[state]) func() {
-	ctx, stop := context.WithCancel(context.Background())
-	go func() {
-		t := time.NewTimer(meterFirst)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				meterRuntime(ctx, &s.State, s.Log, s.Bill)
-				t.Reset(meterEvery)
-			}
-		}
-	}()
-	return stop
 }

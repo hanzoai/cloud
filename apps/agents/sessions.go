@@ -1165,9 +1165,14 @@ func runTitle(input string) string {
 
 // ---- stream publish helpers (nil-safe: a bus-less Service, e.g. a direct-construct
 // unit test, simply skips the live fan-out; the store is still the truth) ----
+//
+// A NIL SERVICE is that same case one step further out, and is answered the same
+// way: a test that drives a pass over a bare *state (meter_test.go, reap_test.go)
+// holds no Service at all, and a stream with no subscriber is nothing to publish
+// to. It is never production — the passes are started by Mount, which sets it.
 
 func publishSession(s *cloud.Service[state], x Session, events, children int) {
-	if s.State.bus == nil {
+	if s == nil || s.State.bus == nil {
 		return
 	}
 	v := toSessionView(x, events, children)
@@ -1175,7 +1180,7 @@ func publishSession(s *cloud.Service[state], x Session, events, children int) {
 }
 
 func publishEvent(s *cloud.Service[state], org, rootID string, e Event) {
-	if s.State.bus == nil {
+	if s == nil || s.State.bus == nil {
 		return
 	}
 	v := toEventView(e)
