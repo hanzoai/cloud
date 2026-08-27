@@ -34,6 +34,12 @@ const (
 )
 
 // NetworkEnv names the one variable that decides it.
+//
+// One underscore from CLOUD_NETWORK_ADDR, which is unrelated: the app once called
+// `zt` is called `network` now, and the plugin resolver reserves CLOUD_<APP>_ADDR
+// and CLOUD_<APP>_BIN for reaching it. Go matches an environment name exactly so
+// nothing can read one for the other, but an operator scanning a single env block
+// can, which is why the two are pinned apart in network_test.go.
 const NetworkEnv = "CLOUD_NETWORK"
 
 // NetworkOf answers which network this deployment is.
