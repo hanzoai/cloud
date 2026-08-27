@@ -222,7 +222,10 @@ func newClustersCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(list, get)
+	// up and status are THIS MACHINE as a node; list and get are the org's
+	// clusters. One noun, because they are one question asked from two ends —
+	// a second top-level verb would make `cluster` ambiguous with its own alias.
+	cmd.AddCommand(list, get, newClusterUpCmd(envOf), newClusterStatusCmd(envOf))
 	return cmd
 }
 
