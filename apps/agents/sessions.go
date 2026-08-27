@@ -25,7 +25,7 @@ import (
 //	GET    /v1/agents/sessions/:id          detail + direct children + recent events -> SessionDetail
 //	PATCH  /v1/agents/sessions/:id          update status/title -> Session
 //	GET    /v1/agents/sessions/:id/tree     the full subagent-flow graph -> TreeNode
-//	POST   /v1/agents/sessions/:id/events   append an event (message/tool-call/spawn/log) -> Event
+//	POST   /v1/agents/sessions/:id/events   append an event (message/tool-call/spawn/log/progress) -> Event
 //	POST   /v1/agents/sessions/:id/{pause,resume,stop,message}  control command -> {command,event,forwarded}
 //
 // Every route is org-scoped through principal.Org (a validated principal AND
@@ -39,6 +39,12 @@ const (
 	KindLog      = "log"
 	KindStatus   = "status"
 	KindControl  = "control"
+	// KindProgress is the run REPORTING ITS OWN PROGRESS — pct, phase and a line
+	// saying what it is doing, as the run itself understands them. It is the one
+	// kind whose payload this surface reads (progress.go): the shape is ours, so
+	// a malformed one is refused rather than stored, and a well-formed one lands
+	// on the session's progress as GROUND TRUTH, outranking the model estimate.
+	KindProgress = "progress"
 )
 
 // Control commands — the closed vocabulary of remote steering.
@@ -72,7 +78,7 @@ const (
 
 func validKind(k string) bool {
 	switch k {
-	case KindMessage, KindToolCall, KindSpawn, KindLog, KindStatus, KindControl:
+	case KindMessage, KindToolCall, KindSpawn, KindLog, KindStatus, KindControl, KindProgress:
 		return true
 	}
 	return false
@@ -882,7 +888,8 @@ func (o sessionOps) progress(ctx context.Context, in *sessionRef) (*sessionProgr
 	if prog := s.State.prog; prog.stale(x, time.Now().Unix()) && prog.claim(org, id) {
 		defer prog.release(org, id)
 		if p, err := prog.measure(ctx, sto, org, x); err == nil {
-			x.ProgressPct, x.ProgressPhase, x.ProgressActivity, x.ProgressAt = p.Pct, p.Phase, p.Activity, p.At
+			x.ProgressPct, x.ProgressPhase, x.ProgressActivity = p.Pct, p.Phase, p.Activity
+			x.ProgressAt, x.ProgressEstimated = p.At, p.Estimated
 		}
 	}
 	v := progressOf(x)

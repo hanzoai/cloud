@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
+	"github.com/zap-proto/zip"
 )
 
 // progress.go answers the one question a fleet board asks and no column can:
@@ -59,6 +61,18 @@ const (
 	phaseUnknown = "unknown"
 )
 
+// validPhase is the closed set, and BOTH producers go through it — the model's
+// reply and the run's own report. One vocabulary, so a board branches on three
+// words whoever said them, and a self-report cannot introduce a fourth that a
+// model may not use.
+func validPhase(p string) bool {
+	switch p {
+	case phaseRunning, phaseBlocked, phaseDone:
+		return true
+	}
+	return false
+}
+
 // pctUnknown is the stored pct of a run whose progress is INDETERMINATE, and it
 // is -1 rather than 0 because those are different facts. It never reaches the
 // wire: progressOf omits the key entirely rather than publishing a sentinel a
@@ -104,6 +118,10 @@ type Progress struct {
 	Phase    string
 	Activity string
 	At       int64
+	// Estimated says a MODEL produced this rather than the run itself. It is the
+	// wire field spelled once — the column, the value and the published key are
+	// one fact, so no projection can disagree about whether a number was guessed.
+	Estimated bool
 }
 
 // sessionProgress is how far along a run is, as every read of it publishes it.
@@ -162,7 +180,7 @@ func progressOf(x Session) sessionProgress {
 		Phase:     x.ProgressPhase,
 		Activity:  x.ProgressActivity,
 		At:        rfc3339(x.ProgressAt),
-		Estimated: true,
+		Estimated: x.ProgressEstimated,
 	}
 	if x.ProgressPct >= 0 {
 		pct := x.ProgressPct
@@ -241,7 +259,8 @@ func (e *estimator) measure(ctx context.Context, sto *Store, org string, x Sessi
 	now := time.Now().Unix()
 	// Carry the previous estimate forward as the floor: every path below either
 	// replaces it wholesale or leaves it standing with a newer stamp.
-	kept := Progress{Pct: x.ProgressPct, Phase: x.ProgressPhase, Activity: x.ProgressActivity, At: now}
+	kept := Progress{Pct: x.ProgressPct, Phase: x.ProgressPhase, Activity: x.ProgressActivity,
+		At: now, Estimated: x.ProgressEstimated}
 	if kept.Phase == "" {
 		kept.Pct = pctUnknown
 	}
@@ -275,7 +294,7 @@ func (e *estimator) measure(ctx context.Context, sto *Store, org string, x Sessi
 		MaxTokens:  progressReply,
 	})
 	if err != nil {
-		_ = sto.SetProgress(ctx, org, x.ID, kept)
+		_, _ = sto.SetEstimate(ctx, org, x.ID, kept, x.ProgressAt)
 		return kept, fmt.Errorf("progress estimate: %w", err)
 	}
 	p, ok := parseEstimate(resContent(res))
@@ -283,12 +302,18 @@ func (e *estimator) measure(ctx context.Context, sto *Store, org string, x Sessi
 		// The model answered and we could not read it. Same treatment as an
 		// outage, for the same reason: an unusable reply is not an estimate, and
 		// it must not displace one.
-		_ = sto.SetProgress(ctx, org, x.ID, kept)
+		_, _ = sto.SetEstimate(ctx, org, x.ID, kept, x.ProgressAt)
 		return kept, fmt.Errorf("progress estimate: unreadable reply")
 	}
 	p.At = now
-	if err := sto.SetProgress(ctx, org, x.ID, p); err != nil {
+	// A compare-and-set, because the model thought for seconds and the run may
+	// have REPORTED in the meantime. A guess formed before the run spoke must not
+	// land on top of what the run said about itself; losing the race costs this
+	// estimate and nothing else, and the newer word is already the better one.
+	if wrote, err := sto.SetEstimate(ctx, org, x.ID, p, x.ProgressAt); err != nil {
 		return kept, fmt.Errorf("progress persist: %w", err)
+	} else if !wrote {
+		return kept, nil
 	}
 	return p, nil
 }
@@ -425,15 +450,8 @@ func parseEstimate(s string) (Progress, bool) {
 	if err := json.Unmarshal([]byte(s[open:shut+1]), &raw); err != nil {
 		return Progress{}, false
 	}
-	p := Progress{Pct: pctUnknown, Activity: clip(collapse(raw.Activity), progressLine)}
-	switch strings.ToLower(strings.TrimSpace(raw.Phase)) {
-	case phaseRunning:
-		p.Phase = phaseRunning
-	case phaseBlocked:
-		p.Phase = phaseBlocked
-	case phaseDone:
-		p.Phase = phaseDone
-	default:
+	p := Progress{Pct: pctUnknown, Activity: clip(collapse(raw.Activity), progressLine), Estimated: true}
+	if p.Phase = strings.ToLower(strings.TrimSpace(raw.Phase)); !validPhase(p.Phase) {
 		return Progress{}, false
 	}
 	// A pct outside 0..100 — including the -1 the prompt asks for when the run
@@ -450,4 +468,67 @@ func parseEstimate(s string) (Progress, bool) {
 		p.Pct = 100
 	}
 	return p, true
+}
+
+// ---- what the run says about itself ----
+
+// A run REPORTS its own progress by appending a `progress` turn to its
+// transcript — the same route, the same guard, the same bound, the same stream
+// as every other turn:
+//
+//	POST /v1/agents/sessions/{id}/events
+//	{"kind":"progress","payload":{"pct":60,"phase":"running","activity":"…"}}
+//
+// It is an event kind rather than a route of its own because progress IS
+// something that happened in the run, and the transcript is where what happened
+// is recorded. That buys the whole feature for free: the append is already
+// typed, already org-scoped, already scanned for credentials, already bounded,
+// already sequenced, and already fanned out to every live subscriber — so a
+// self-report reaches a board the instant the run emits it, with no poll and no
+// second write path to keep in step. It also becomes DURABLE history: how a run's
+// own sense of its progress moved is replayable, which an estimate overwritten in
+// place could never be.
+//
+// This is the ONE payload this surface reads. Every other kind's body belongs to
+// whoever wrote it and is stored opaque — the rule the estimator's brief also
+// obeys. A `progress` payload is different in kind: the shape is OURS, published
+// in the append op's own prose, so interpreting it is reading our own contract
+// rather than guessing at somebody else's.
+
+// parseReport reads a run's own progress payload. It is STRICT where the model
+// parser is forgiving, and the asymmetry is the point: a model is a text
+// generator whose output we salvage, while a client is a caller holding a
+// published contract — telling it 400 is how it learns, and silently keeping the
+// half we understood would let a run believe it reported something it did not.
+func parseReport(payload []byte) (Progress, error) {
+	if len(payload) == 0 {
+		return Progress{}, zip.ErrBadRequest("a progress turn needs a payload: {pct, phase, activity}")
+	}
+	var raw struct {
+		Pct      *int   `json:"pct"`
+		Phase    string `json:"phase"`
+		Activity string `json:"activity"`
+	}
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return Progress{}, zip.ErrBadRequest("progress payload: " + err.Error())
+	}
+	p := Progress{Pct: pctUnknown, Phase: strings.ToLower(strings.TrimSpace(raw.Phase))}
+	if !validPhase(p.Phase) {
+		return Progress{}, zip.ErrBadRequest("progress phase must be running|blocked|done")
+	}
+	// pct is OPTIONAL, so a run that knows it is blocked and does not know how far
+	// along it is can say the half it knows. Absent leaves it indeterminate; out of
+	// range is refused rather than clamped, because clamping accepts a report whose
+	// author was computing something else.
+	if raw.Pct != nil {
+		if *raw.Pct < 0 || *raw.Pct > 100 {
+			return Progress{}, zip.ErrBadRequest("progress pct must be 0-100")
+		}
+		p.Pct = *raw.Pct
+	}
+	if p.Activity = collapse(raw.Activity); len(p.Activity) > progressLine {
+		return Progress{}, zip.Errorf(http.StatusBadRequest,
+			"progress activity is %d bytes; the limit is %d", len(p.Activity), progressLine)
+	}
+	return p, nil
 }

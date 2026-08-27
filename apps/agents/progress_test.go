@@ -290,7 +290,8 @@ func setClocks(t *testing.T, org, id string, updatedAt, progressAt int64) {
 		t.Fatalf("set updated_at: %v", err)
 	}
 	if err := sto.SetProgress(ctx, org, id, Progress{
-		Pct: x.ProgressPct, Phase: x.ProgressPhase, Activity: x.ProgressActivity, At: progressAt,
+		Pct: x.ProgressPct, Phase: x.ProgressPhase, Activity: x.ProgressActivity,
+		At: progressAt, Estimated: x.ProgressEstimated,
 	}); err != nil {
 		t.Fatalf("set progress_at: %v", err)
 	}
@@ -459,7 +460,8 @@ func TestAnEstimateIsOnlyReplacedByAnEstimate(t *testing.T) {
 			x, _ := sto.GetSession(ctx, "acme", id)
 			aged := time.Now().Add(-2 * progressInterval).Unix()
 			if err := sto.SetProgress(ctx, "acme", id, Progress{
-				Pct: x.ProgressPct, Phase: x.ProgressPhase, Activity: x.ProgressActivity, At: aged,
+				Pct: x.ProgressPct, Phase: x.ProgressPhase, Activity: x.ProgressActivity,
+				At: aged, Estimated: x.ProgressEstimated,
 			}); err != nil {
 				t.Fatalf("age: %v", err)
 			}
@@ -588,5 +590,315 @@ func TestConcurrentEstimatesAreBounded(t *testing.T) {
 	}
 	if !e.claim("acme", "one-too-many") {
 		t.Fatal("the ceiling must free up again")
+	}
+}
+
+// ---- the run's own word ----
+
+// report appends a `progress` turn — the run reporting on itself — and returns
+// the append's status and body so a test can assert a refusal too.
+func report(t *testing.T, app *zip.App, org, id, payload string) (int, []byte) {
+	t.Helper()
+	return do(t, app, http.MethodPost, "/v1/agents/sessions/"+id+"/events", org,
+		map[string]any{"kind": KindProgress, "payload": json.RawMessage(payload)})
+}
+
+// TestASelfReportIsGroundTruth: a run's own report lands on the session read
+// marked NOT estimated, and it costs no completion. `estimated` is the whole
+// point — the same field, the same shape, and the reader learns which produced it.
+func TestASelfReportIsGroundTruth(t *testing.T) {
+	ai := &progressAI{reply: `{"pct":10,"phase":"running","activity":"a guess"}`}
+	app := mountApp(t, ai)
+	id := openSession(t, app, "acme", "ship the reaper")
+
+	if code, body := report(t, app, "acme", id,
+		`{"pct":60,"phase":"running","activity":"writing the reaper"}`); code != http.StatusCreated {
+		t.Fatalf("report: %d %s", code, body)
+	}
+
+	p, _ := progressInList(t, app, "acme", id)
+	if p.Pct == nil || *p.Pct != 60 || p.Phase != phaseRunning || p.Activity != "writing the reaper" {
+		t.Fatalf("the board must carry the run's own report, got %+v", p)
+	}
+	if p.Estimated {
+		t.Fatal("the RUN said this, so `estimated` must be false")
+	}
+	if ai.count() != 0 {
+		t.Fatalf("a run that reports for itself must cost no completion: %d calls", ai.count())
+	}
+}
+
+// TestASelfReportBeatsTheEstimate is the precedence rule, driven in the order it
+// actually happens: the model estimates first, then the run reports, and the
+// board carries the run's word.
+//
+// Mutation-checked: make the append skip SetProgress and the estimate stands.
+func TestASelfReportBeatsTheEstimate(t *testing.T) {
+	ai := &progressAI{reply: `{"pct":25,"phase":"running","activity":"the guess"}`}
+	app := mountApp(t, ai)
+	id := openSession(t, app, "acme", "a run")
+	logTurn(t, app, "acme", id, KindLog, `{"line":"one"}`)
+
+	est, _ := readProgress(t, app, "acme", id)
+	if est.Pct == nil || *est.Pct != 25 || !est.Estimated {
+		t.Fatalf("seed estimate = %+v", est)
+	}
+
+	if code, body := report(t, app, "acme", id,
+		`{"pct":80,"phase":"running","activity":"the truth"}`); code != http.StatusCreated {
+		t.Fatalf("report: %d %s", code, body)
+	}
+	got, _ := progressInList(t, app, "acme", id)
+	if got.Pct == nil || *got.Pct != 80 || got.Activity != "the truth" || got.Estimated {
+		t.Fatalf("the run's report must outrank the estimate, got %+v", got)
+	}
+}
+
+// TestAFreshSelfReportIsTheLastWord: the estimator does not re-guess over a run
+// that has just reported, because the report IS the transcript's newest turn —
+// so the two terms of `stale` already say no, with no third rule to keep.
+//
+// Then the run logs something else without reporting, the interval elapses, and
+// the estimate takes over again: a self-report holds the field while it is the
+// last thing the run said, and no longer.
+func TestAFreshSelfReportIsTheLastWord(t *testing.T) {
+	ai := &progressAI{reply: `{"pct":90,"phase":"running","activity":"the guess"}`}
+	app := mountApp(t, ai)
+	id := openSession(t, app, "acme", "a run")
+	report(t, app, "acme", id, `{"pct":40,"phase":"blocked","activity":"waiting on review"}`)
+
+	p, _ := readProgress(t, app, "acme", id)
+	if p.Estimated || p.Phase != phaseBlocked {
+		t.Fatalf("a fresh report must not be re-guessed, got %+v", p)
+	}
+	if ai.count() != 0 {
+		t.Fatalf("no completion should have been bought: %d", ai.count())
+	}
+
+	// The run moves on without reporting, and the interval passes.
+	logTurn(t, app, "acme", id, KindLog, `{"line":"kept going"}`)
+	now := time.Now().Unix()
+	setClocks(t, "acme", id, now, now-int64(2*progressInterval/time.Second))
+
+	p, _ = readProgress(t, app, "acme", id)
+	if !p.Estimated || p.Pct == nil || *p.Pct != 90 {
+		t.Fatalf("a stale report must fall back to the estimate, got %+v", p)
+	}
+}
+
+// TestAnEstimateInFlightCannotClobberAReport is the RACE, and it is the reason
+// the estimator writes with a compare-and-set. The model is asked over a
+// transcript read before the run reported; by the time it answers, the run has
+// spoken. The guess must lose.
+//
+// Mutation-checked: turn SetEstimate's write back into an unconditional
+// SetProgress and the report is overwritten by a number formed before it.
+func TestAnEstimateInFlightCannotClobberAReport(t *testing.T) {
+	ctx := context.Background()
+	app := mountApp(t, &progressAI{reply: `{"pct":5,"phase":"running","activity":"stale guess"}`})
+	id := openSession(t, app, "acme", "a run")
+	logTurn(t, app, "acme", id, KindLog, `{"line":"one"}`)
+
+	sto := storeOf(t, &mounted.State, "acme")
+	before, err := sto.GetSession(ctx, "acme", id) // the snapshot an estimate is formed over
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+
+	// The run reports while the model is thinking.
+	if code, body := report(t, app, "acme", id,
+		`{"pct":70,"phase":"running","activity":"the truth"}`); code != http.StatusCreated {
+		t.Fatalf("report: %d %s", code, body)
+	}
+
+	// The estimate lands afterwards, carrying the stamp it read.
+	wrote, err := sto.SetEstimate(ctx, "acme", id,
+		Progress{Pct: 5, Phase: phaseRunning, Activity: "stale guess", At: time.Now().Unix(), Estimated: true},
+		before.ProgressAt)
+	if err != nil {
+		t.Fatalf("set estimate: %v", err)
+	}
+	if wrote {
+		t.Fatal("an estimate formed before the run reported must not write")
+	}
+	got, _ := progressInList(t, app, "acme", id)
+	if got.Pct == nil || *got.Pct != 70 || got.Estimated {
+		t.Fatalf("the run's report must survive the late estimate, got %+v", got)
+	}
+}
+
+// TestASelfReportStreamsLive: the report reaches an open subscriber as a SESSION
+// frame carrying the new progress — so a board's bar moves without polling, and
+// with nothing new for a client to parse.
+func TestASelfReportStreamsLive(t *testing.T) {
+	app := mountApp(t, &progressAI{})
+	id := openSession(t, app, "acme", "a run")
+
+	sub, cancel := mounted.State.bus.subscribe("acme")
+	defer cancel()
+
+	if code, body := report(t, app, "acme", id,
+		`{"pct":55,"phase":"blocked","activity":"waiting on a credential"}`); code != http.StatusCreated {
+		t.Fatalf("report: %d %s", code, body)
+	}
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case u, ok := <-sub:
+			if !ok {
+				t.Fatal("the subscription closed before the session frame arrived")
+			}
+			if u.Type != "session" || u.Session == nil || u.Session.ID != id {
+				continue // the event frame rides the same bus; keep reading
+			}
+			p := u.Session.Progress
+			if p.Pct == nil || *p.Pct != 55 || p.Phase != phaseBlocked || p.Estimated {
+				t.Fatalf("the streamed session must carry the report, got %+v", p)
+			}
+			return
+		case <-deadline:
+			t.Fatal("no session frame carried the progress; a board would have to poll")
+		}
+	}
+}
+
+// TestAMalformedReportIsRefusedAndStoresNothing: the payload shape is OURS, so a
+// client that gets it wrong is told, rather than having half its meaning kept —
+// and the turn does not reach the transcript, so a run cannot believe it reported.
+func TestAMalformedReportIsRefusedAndStoresNothing(t *testing.T) {
+	app := mountApp(t, &progressAI{})
+	for _, tc := range []struct{ name, payload string }{
+		{"no phase", `{"pct":50}`},
+		{"a phase we do not have", `{"phase":"vibing"}`},
+		{"pct over 100", `{"pct":101,"phase":"running"}`},
+		{"pct below zero", `{"pct":-1,"phase":"running"}`},
+		{"pct is prose", `{"pct":"most of it","phase":"running"}`},
+		{"no payload at all", ``},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			id := openSession(t, app, "acme", "a run")
+			code, body := report(t, app, "acme", id, tc.payload)
+			if code != http.StatusBadRequest {
+				t.Fatalf("want 400, got %d %s", code, body)
+			}
+			if n, _ := storeOf(t, &mounted.State, "acme").CountEvents(context.Background(), "acme", id); n != 0 {
+				t.Fatalf("a refused report must leave no turn behind, got %d", n)
+			}
+			p, raw := progressInList(t, app, "acme", id)
+			if p.Phase != phaseUnknown || strings.Contains(string(raw), `"pct"`) {
+				t.Fatalf("a refused report must move nothing: %+v", p)
+			}
+		})
+	}
+}
+
+// TestAReportMayNameAPhaseWithoutANumber: a run that knows it is stuck and does
+// not know how far along it is says the half it knows — and the wire still
+// carries NO pct, which is the house law holding for the ground-truth path too.
+func TestAReportMayNameAPhaseWithoutANumber(t *testing.T) {
+	app := mountApp(t, &progressAI{})
+	id := openSession(t, app, "acme", "a run")
+	if code, body := report(t, app, "acme", id,
+		`{"phase":"blocked","activity":"waiting on an approval"}`); code != http.StatusCreated {
+		t.Fatalf("report: %d %s", code, body)
+	}
+	p, raw := progressInList(t, app, "acme", id)
+	if p.Phase != phaseBlocked || p.Activity != "waiting on an approval" || p.Estimated {
+		t.Fatalf("progress = %+v", p)
+	}
+	if p.Pct != nil {
+		t.Fatalf("a report with no number must carry none, got %d", *p.Pct)
+	}
+	if strings.Contains(string(raw), `"pct"`) {
+		t.Fatalf("unknown must not render as zero on the ground-truth path either: %s", raw)
+	}
+}
+
+// TestAReportIsDurableHistory: the turn stays in the transcript, so how a run's
+// own sense of its progress MOVED is replayable — which an estimate overwritten
+// in place could never be.
+func TestAReportIsDurableHistory(t *testing.T) {
+	app := mountApp(t, &progressAI{})
+	id := openSession(t, app, "acme", "a run")
+	for _, pct := range []string{"10", "40", "90"} {
+		if code, body := report(t, app, "acme", id,
+			`{"pct":`+pct+`,"phase":"running","activity":"step"}`); code != http.StatusCreated {
+			t.Fatalf("report %s: %d %s", pct, code, body)
+		}
+	}
+	events, err := storeOf(t, &mounted.State, "acme").ListEvents(context.Background(), "acme", id, 0, 10)
+	if err != nil {
+		t.Fatalf("events: %v", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("want 3 progress turns in the transcript, got %d", len(events))
+	}
+	for i, want := range []string{`"pct":10`, `"pct":40`, `"pct":90`} {
+		if events[i].Kind != KindProgress || !strings.Contains(events[i].Payload, want) {
+			t.Fatalf("turn %d = %s %s, want a progress turn carrying %s", i, events[i].Kind, events[i].Payload, want)
+		}
+	}
+}
+
+// TestAReportIsOrgScopedAndGuarded: the report rides the append route, so it
+// inherits that route's tenancy and its credential scan rather than restating
+// either. Asserted because inheriting a gate is only worth anything if the gate
+// is shown to still be there.
+func TestAReportIsOrgScopedAndGuarded(t *testing.T) {
+	app := mountApp(t, &progressAI{})
+	id := openSession(t, app, "acme", "a run")
+
+	if code, _ := report(t, app, "other", id, `{"pct":50,"phase":"running"}`); code != http.StatusNotFound {
+		t.Fatalf("another org must not report on this session, got %d", code)
+	}
+	if code, _ := report(t, app, "", id, `{"pct":50,"phase":"running"}`); code != http.StatusForbidden {
+		t.Fatalf("anonymous must be refused, got %d", code)
+	}
+	code, body := report(t, app, "acme", id,
+		`{"pct":50,"phase":"running","activity":"AKIAIOSFODNN7EXAMPLE"}`)
+	if code != http.StatusUnprocessableEntity {
+		t.Fatalf("a secret in a report must be refused by the same guard: %d %s", code, body)
+	}
+}
+
+// TestAnOutageDoesNotRelabelAReportAsAGuess: the estimator advances the clock
+// over a value it could not replace, and that write must not change WHO said it.
+// Stamping "estimated" on the keep path would turn a run's own report into a
+// guess the first time the gateway hiccuped — the honesty law running backwards.
+//
+// Mutation-checked: write a literal 1 for the provenance in SetEstimate and this
+// goes red while every other test stays green, which is why it is its own test.
+func TestAnOutageDoesNotRelabelAReportAsAGuess(t *testing.T) {
+	ai := &progressAI{reply: `{"pct":30,"phase":"running","activity":"a guess"}`}
+	app := mountApp(t, ai)
+	id := openSession(t, app, "acme", "a run")
+	if code, body := report(t, app, "acme", id,
+		`{"pct":65,"phase":"running","activity":"the run's own word"}`); code != http.StatusCreated {
+		t.Fatalf("report: %d %s", code, body)
+	}
+
+	// The run moves on, the interval elapses, and the gateway is down.
+	logTurn(t, app, "acme", id, KindLog, `{"line":"kept going"}`)
+	now := time.Now().Unix()
+	setClocks(t, "acme", id, now, now-int64(2*progressInterval/time.Second))
+	ai.err = errUpstreamForTest
+
+	p, _ := readProgress(t, app, "acme", id)
+	if p.Pct == nil || *p.Pct != 65 || p.Activity != "the run's own word" {
+		t.Fatalf("the report must survive the outage, got %+v", p)
+	}
+	if p.Estimated {
+		t.Fatal("a failed estimate must not re-label the run's own report as a guess")
+	}
+	x, err := storeOf(t, &mounted.State, "acme").GetSession(context.Background(), "acme", id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if x.ProgressEstimated {
+		t.Fatal("the stored provenance moved on a write that produced no value")
+	}
+	if x.ProgressAt <= now-int64(2*progressInterval/time.Second) {
+		t.Fatal("the clock must still advance, or every poll retries into the outage")
 	}
 }
