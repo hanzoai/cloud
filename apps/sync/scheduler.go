@@ -31,12 +31,18 @@ import (
 // the scheduler and the API never collectively exceed the git plane's concurrency
 // ceiling.
 //
-// Leader-safe by construction: subsystems mount ONLY on the single writer (a Reader
-// role is a store-less reverse proxy; a surge writer blocks on the writer lease before
-// MountAll), so exactly one scheduler exists per writer — the same single-writer
-// guarantee social relies on. Under horizontal sharding (CLOUD_PEERS) each writer's
-// RWO PVC holds only the orgs routed to it, so the filesystem enumeration below sweeps
-// exactly this writer's orgs — no cross-pod double-reconcile.
+// LEADER-SAFE BY ELECTION, and it used to say by construction. The claim here was
+// that subsystems mount only on the single writer and that each writer's PVC holds
+// only its own orgs, so the filesystem enumeration could not reach another pod's.
+// Neither half survives the plugin fleet: every pod mounts every subsystem, and with
+// the durable plane an org's file is on whichever replica has hydrated it — which is
+// every replica anything has asked. So both pods swept every org, and a poll sync is
+// an OUTBOUND FETCH: the customer's upstream saw two of everything, against their
+// rate limit, every interval. The cursor writes were harmless (a non-owner's ship is
+// refused) and the fetches were not.
+//
+// The org's elected writer reconciles it, and the others leave it alone — the same
+// gate the runtime meter and the sandbox reaper ask before they act.
 
 const (
 	// reconcileIntervalEnv sets the sweep cadence (a Go duration). Empty / "0" / "off"
@@ -182,6 +188,9 @@ func sweep(s *cloud.Service[state], ctx context.Context) {
 		if openErr != nil {
 			s.Log.Warn("sync reconcile: open store", "namespace", ns, "err", openErr)
 			return
+		}
+		if !s.State.stores.Owned(ns) {
+			return // another replica reconciles this org's syncs
 		}
 		syncs, err := st.ListAll(ctx)
 		if err != nil {
