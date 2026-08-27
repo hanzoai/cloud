@@ -5387,12 +5387,30 @@ back. It validates first (DNS-1123 name, clean-semver via `splitReleaseImage`,
 App exists in the namespace) so the refusal is specific rather than generic, and
 names the remedy: **commit the tag to that file.**
 
-So a green pipeline ends at `release tag minted (receipt for a pushed,
-smoke-passed image)` followed by `release failed … reached: tagged`. That pair is
-NOT a broken build — the image is real and proven, it simply has no declared state
-pointing at it. Production moves when someone bumps `tag:` in
-`universe/infra/k8s/operator/crs/cloud.yaml`. Four tags (`.267`–`.270`)
-accumulated behind that once, with prod healthy on `.266` the whole time.
+⚠ **A RELEASE RUN DEPLOYS. It does not stop at a tag, and this paragraph used to
+say it did.** The `image` job's last step is titled "THE PIN — THE LAST ACT OF THE
+JOB THAT PROVED THE BYTES": it reads `UNIVERSE_PIN_TOKEN` from KMS, clones
+`git.hanzo.ai/hanzo/universe`, and runs `charts/app/pin.sh cloud "$VERSION"`,
+which resolves tag and digest from the registry and moves the pin. The `live` job
+then POLLS `api.hanzo.ai` until it answers with that version and FAILS the run if
+it never does. So triggering a build — by push or by `workflow_dispatch` — is
+triggering a production rollout.
+
+The pin moved INTO that job on purpose: it used to be the first step of the next
+job, and a job that has not started can be cancelled, so `.543` and `.544` each
+built, smoked and tagged and then lost the pin — production served `.542` for
+three and a half hours with proven images sitting unreferenced. The gap was
+removed rather than narrowed.
+
+What is still true is the sentence above it: `clients/paas.releaseService` refuses
+to patch an operator App CR, because CD would revert it. That is a different
+writer from this one. The stale claim was reading that refusal as though it were
+the whole release story, and the cost of believing it is triggering a rollout
+while thinking you are only producing bytes — which is exactly what nearly
+happened when this was last read. The historical note it replaced (four tags
+`.267`–`.270` accumulating behind a hand-bumped
+`infra/k8s/operator/crs/cloud.yaml`) describes an arrangement the pin step ended;
+the file the train writes now is `charts/app/values/hanzo/cloud.yaml`.
 
 It used to write twice — a CR patch plus a `repository_dispatch` mirror at
 `hanzoai/universe` — composed best-effort so the step passed if EITHER landed. Two
