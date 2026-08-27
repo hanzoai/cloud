@@ -194,7 +194,7 @@ func TestChannelsList(t *testing.T) {
 		} `json:"channels"`
 	}
 	decodeJSON(t, res.Body, &typed)
-	want := []string{"discord", "slack", "teams", "telegram"}
+	want := []string{"discord", "slack", "teams", "telegram", "whatsapp"}
 	if len(typed.Channels) != len(want) {
 		t.Fatalf("channels = %s, want the closed registry", res.Body)
 	}
@@ -369,5 +369,74 @@ func TestSendNoSecretsAtRest(t *testing.T) {
 	}
 	if strings.Contains(e.logs.String(), planted) {
 		t.Fatal("token bytes found in logs")
+	}
+}
+
+// WhatsApp is a direct-message channel and the route gate is what makes replying
+// to one legitimate: a channel_route row exists only after an ALLOWED inbound
+// message from that number, so its presence is both the tenancy check and the
+// evidence that the person wrote first. That matters more here than elsewhere —
+// Meta only accepts free-form text inside 24 hours of an inbound message, so a
+// send with no route is one this org was never in a position to make.
+func TestSendWhatsAppRouteCapability(t *testing.T) {
+	e := newApp(t)
+	wa := spyWhatsApp(t)
+	ctx := context.Background()
+	st := e.store(t)
+	body := map[string]any{"room": map[string]any{"id": "15551234567"}, "text": "x"}
+
+	if r := req(t, e, http.MethodPost, "/v1/channels/whatsapp/send", "acme", body); r.Code != http.StatusConflict {
+		t.Fatalf("routeless send: %d, want 409", r.Code)
+	}
+	if wa.count() != 0 {
+		t.Fatal("binding gate must precede the transport")
+	}
+
+	if err := st.upsertRoute(ctx, "acme", "whatsapp", "15551234567", "", time.Now().Unix()); err != nil {
+		t.Fatalf("seed route: %v", err)
+	}
+	res := req(t, e, http.MethodPost, "/v1/channels/whatsapp/send", "acme", body)
+	if res.Code != http.StatusOK {
+		t.Fatalf("send: %d (%s)", res.Code, res.Body)
+	}
+	var d Delivery
+	decodeJSON(t, res.Body, &d)
+	if d.MessageID != "wamid.1" || wa.count() != 1 {
+		t.Fatalf("delivery = %+v after %d transport calls", d, wa.count())
+	}
+
+	// Another org's route is not this org's capability, even for the same number.
+	if r := req(t, e, http.MethodPost, "/v1/channels/whatsapp/send", "beta", body); r.Code != http.StatusConflict {
+		t.Fatalf("cross-org send: %d, want 409", r.Code)
+	}
+}
+
+// The room a WhatsApp message arrives in IS the person who sent it, and it is a
+// DM. There is no group the Cloud API can be posted into unprompted, so a
+// normalize that reported one would advertise a capability routes.go would then
+// let an org try.
+func TestWhatsAppNormalizeIsAlwaysADM(t *testing.T) {
+	tr, ok := transportFor("whatsapp")
+	if !ok {
+		t.Fatal("whatsapp transport is not registered")
+	}
+	m, ok := tr.normalize(ingressEv("acme", "whatsapp", "PHONE_ID", "15551234567", "15551234567", "", "hi", "wamid.in", ""))
+	if !ok {
+		t.Fatal("normalize refused a well-formed inbound")
+	}
+	if m.Room.Kind != RoomDM {
+		t.Fatalf("room kind = %v, want DM", m.Room.Kind)
+	}
+	if m.Room.ID != "15551234567" {
+		t.Fatalf("room id = %q, want the sender's number", m.Room.ID)
+	}
+	if m.Account != "phone_id" {
+		t.Fatalf("account = %q, want the lowercased business number id", m.Account)
+	}
+
+	// No reply target is not a message: an inbound the API could not be answered
+	// through is refused rather than stored as unreachable.
+	if _, ok := tr.normalize(ingressEv("acme", "whatsapp", "PHONE_ID", "u", "", "", "hi", "k", "")); ok {
+		t.Fatal("normalize accepted an inbound with no room to reply to")
 	}
 }
