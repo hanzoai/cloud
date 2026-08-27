@@ -394,6 +394,18 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 		zip.WithOperationID("meetRecordRead"),
 		zip.WithSummary("What is being recorded in a room, and where the file goes"))
 
+	// Where a collaboration room's call happens (room.go). It answers the media
+	// room a (workspace, room) pair resolves to, so a surface rendering a channel
+	// asks for the call instead of composing the name itself — one spelling of that
+	// rule, here, rather than one per client.
+	//
+	// A READ, so it is free and carries no anti-CSRF gate: it changes nothing, and
+	// its whole answer is already narrower than the mint it precedes. The seat is
+	// what costs, and getToken still charges for it.
+	zip.Get(g, "/call", o.resolve,
+		zip.WithOperationID("meetCall"),
+		zip.WithSummary("Where a room's call happens"))
+
 	// THE CLIENT IS NOT HERE. It is its own image (ghcr.io/hanzoai/meet, built from
 	// hanzoai/admin apps/meet at base '/') on its own host, meet.hanzo.ai — three
 	// planes with three lifecycles: the bundle is static bytes, this binary mints
@@ -660,8 +672,10 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 // "<workspaceUuid>_<roomName>_<roomId>", so the workspace is the leading segment.
 // This is the ONLY thing binding a room to a tenant, which is why admits compares it
 // against the SIGNED workspace claim and not against anything in the body.
+// It is the PARSING half of roomName (room.go), which composes the same shape from
+// a collaboration room's own address; sep is shared so the two cannot disagree.
 func workspace(room string) string {
-	ws, _, _ := strings.Cut(room, "_")
+	ws, _, _ := strings.Cut(room, sep)
 	return ws
 }
 
