@@ -90,6 +90,18 @@ type Session struct {
 	// a dangling reference. Empty means the run has no room — a CLI session, a
 	// schedule, an API call — which is most of them.
 	Room string
+
+	// Payer is WHOSE BOOKS pay for this session's runtime — the wallet
+	// cloud.PayerOf resolved for the act that opened it. Not the org: a platform
+	// SuperAdmin working inside somebody else's org spends their own.
+	//
+	// A session opened before the runtime meter carries none, and the meter reads
+	// the org's own pool for those rather than guessing a person.
+	Payer string
+	// MeteredAt is the second through which this session's runtime has been
+	// billed — cloud.Running.MeteredAt. Zero means the meter has never seen it,
+	// which starts the clock at now and charges nothing for the time before.
+	MeteredAt int64
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -195,6 +207,13 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		// The room a run was started in. Default keeps every pre-existing session
 		// exactly as it was: attributed to no room.
 		"room": "TEXT NOT NULL DEFAULT ''",
+		// The runtime meter. Both defaults are REFUSALS rather than values: a
+		// session that predates the meter names no payer, so its runtime is
+		// charged to its org's own pool, and carries no watermark, so its clock
+		// starts at the first tick that sees it and it is never billed for the
+		// hours it ran before anybody was counting.
+		"payer":      "TEXT NOT NULL DEFAULT ''",
+		"metered_at": "INTEGER NOT NULL DEFAULT 0",
 	}); err != nil {
 		return err
 	}
@@ -208,7 +227,8 @@ CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_account ON agent_sessions(org, provider, account);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_project ON agent_sessions(org, project, created_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_published ON agent_sessions(published, updated_at);
-CREATE INDEX IF NOT EXISTS ix_sessions_org_room ON agent_sessions(org, room, created_at);`); err != nil {
+CREATE INDEX IF NOT EXISTS ix_sessions_org_room ON agent_sessions(org, room, created_at);
+CREATE INDEX IF NOT EXISTS ix_sessions_meter ON agent_sessions(org, ended_at, metered_at);`); err != nil {
 		return fmt.Errorf("migrate sessions indexes: %w", err)
 	}
 	return nil
@@ -218,10 +238,13 @@ CREATE INDEX IF NOT EXISTS ix_sessions_org_room ON agent_sessions(org, room, cre
 // is: four statements read or write it and a fifth (the legacy fan-out) copies it.
 const eventCols = `id,session_id,org,seq,kind,actor,payload,created_at`
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room,payer,metered_at`
 
 // sessionVals is sessionCols' placeholder list, DERIVED from it rather than
-// written out beside it. Two INSERTs use it — the ordinary create and the legacy
+// written out beside it. Every INSERT over a named column list now does the same
+// — see legacy.go, where four more were spelled by hand until the runtime meter's
+// two columns made three of them fail with `14 values for 16 columns`, which is
+// this comment's own prediction arriving on schedule. Two INSERTs use it — the ordinary create and the legacy
 // fan-out — and both used to spell the run of `?` by hand against a column list
 // that is named once. That is a column count in three places, and adding the
 // twenty-fourth column proved it: the create was updated, the fan-out was not,
@@ -240,7 +263,7 @@ func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
 		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Terminal, &x.Target,
-		&x.Provider, &x.Account, &x.Project, &x.Published, &x.Room)
+		&x.Provider, &x.Account, &x.Project, &x.Published, &x.Room, &x.Payer, &x.MeteredAt)
 	return x, err
 }
 
@@ -269,7 +292,7 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
 		x.Host, x.Cwd, x.Repo, x.Terminal, x.Target, x.Provider, x.Account, x.Project, x.Published,
-		x.Room)
+		x.Room, x.Payer, x.MeteredAt)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -573,4 +596,55 @@ func (s *Store) LastEvent(ctx context.Context, org, sessionID string) (Event, bo
 		return Event{}, false, fmt.Errorf("last event: %w", err)
 	}
 	return e, true, nil
+}
+
+// AdvanceSession moves one session's runtime watermark from was to now and reports
+// whether THIS caller moved it. See Store.Advance for why the compare is the whole
+// of it, and cloud.RuntimeCharge for the order it is called in.
+//
+// UpdateSession deliberately does not touch this column: it writes a struct read
+// at the top of a handler, and a tick landing in between would be undone.
+func (s *Store) AdvanceSession(ctx context.Context, org, id string, was, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE agent_sessions SET metered_at=? WHERE org=? AND id=? AND metered_at=?`,
+		now, org, id, was)
+	if err != nil {
+		return false, fmt.Errorf("advance session meter: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// Unbilled is every session of this org that still owes runtime, with NO LIMIT.
+//
+// TWO SHAPES, ONE QUERY, and the second is why a close needs no code of its own:
+//
+//	ended_at = 0                          still open — bills up to now, every tick
+//	metered_at > 0 AND ended_at > metered_at   ended, and its tail is unbilled
+//
+// A session billed through its own end satisfies neither and leaves the set for
+// good, so the set shrinks to the open sessions plus whatever closed since the
+// last tick. That is what lets the close path be nothing at all: a session that
+// ends is picked up by the next sweep, charged [watermark, ended], and drops out —
+// rather than four writers of ended_at each having to remember to bill.
+//
+// The `metered_at > 0` on the second shape excludes sessions that ENDED before
+// this meter existed, so shipping it does not walk an org's whole history.
+func (s *Store) Unbilled(ctx context.Context, org string) ([]Session, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+sessionCols+` FROM agent_sessions
+		 WHERE org=? AND (ended_at=0 OR (metered_at>0 AND ended_at>metered_at))`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list unbilled sessions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Session{}
+	for rows.Next() {
+		x, err := scanSession(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan unbilled session: %w", err)
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
 }

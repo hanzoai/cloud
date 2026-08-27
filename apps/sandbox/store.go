@@ -97,6 +97,19 @@ type Sandbox struct {
 	// the sandbox at any time; it is a deadline, not a guarantee of survival until
 	// then, since an idle sandbox goes sooner.
 	ExpiresAt int64 `json:"expiresAt,omitempty"`
+	// Payer is WHOSE BOOKS pay for the time this lease is held — principal.Ledger
+	// at the act that took it, which is not the same value as Org: a platform
+	// SuperAdmin leasing inside somebody else's org spends their own. The one-shot
+	// lease fee already lands on it (api.go), and the recurring runtime charge has
+	// to land on the same wallet or one lease is billed to two payers.
+	//
+	// It is `json:"-"`: a caller cannot choose it, and reading back whose ledger a
+	// lease is charged to is the billing surface's job, not this row's.
+	Payer string `json:"-"`
+	// MeteredAt is the second through which this lease's runtime has been billed —
+	// [cloud.Running.MeteredAt]. Zero means the meter has never seen it, which is
+	// charged as nothing rather than as a debt back to the epoch.
+	MeteredAt int64 `json:"-"`
 }
 
 // Store is one org's sandbox registry — ONE SQLite file per org at
@@ -131,7 +144,9 @@ CREATE TABLE IF NOT EXISTS sandbox (
   created_at   INTEGER NOT NULL,
   last_used_at INTEGER NOT NULL,
   connected_at INTEGER NOT NULL DEFAULT 0,
-  expires_at   INTEGER NOT NULL DEFAULT 0
+  expires_at   INTEGER NOT NULL DEFAULT 0,
+  payer        TEXT NOT NULL DEFAULT '',
+  metered_at   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ix_machines_org_project ON sandbox(org, project);
 CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON sandbox(org, status);
@@ -155,6 +170,20 @@ CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON sandbox(org, status);
 		!strings.Contains(err.Error(), "duplicate column") {
 		return fmt.Errorf("migrate connected_at column: %w", err)
 	}
+	// payer + metered_at: the runtime meter. A lease that predates the meter reads
+	// payer "" and metered_at 0, and BOTH of those are refusals rather than
+	// defaults — cloud.RuntimeCharge bills nothing for a row with no payer, and
+	// starts the clock at now for a row with no watermark. So shipping the meter
+	// charges nobody for hours that were free when they ran, and never guesses
+	// whose wallet an old lease belonged to.
+	for _, ddl := range []string{
+		`ALTER TABLE sandbox ADD COLUMN payer TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE sandbox ADD COLUMN metered_at INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := s.db.Exec(ddl); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate runtime meter columns: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -162,14 +191,14 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Put(ctx context.Context, m Sandbox) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at,payer,metered_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   status=excluded.status, image=excluded.image, pod=excluded.pod, runtime=excluded.runtime,
   volume=excluded.volume,
   error=excluded.error, last_used_at=excluded.last_used_at, expires_at=excluded.expires_at`,
 		m.ID, m.Org, m.Kind, m.Class, m.Project, m.Status, m.Image, m.Pod, m.Runtime, m.Volume,
-		m.Error, m.CreatedAt, m.LastUsedAt, m.ConnectedAt, m.ExpiresAt)
+		m.Error, m.CreatedAt, m.LastUsedAt, m.ConnectedAt, m.ExpiresAt, m.Payer, m.MeteredAt)
 	return err
 }
 
@@ -210,7 +239,8 @@ func (s *Store) List(ctx context.Context, org, project, status string) ([]Sandbo
 	for rows.Next() {
 		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt, &m.ExpiresAt); err != nil {
+			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
+			&m.ExpiresAt, &m.Payer, &m.MeteredAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -253,7 +283,7 @@ func (s *Store) Watched(ctx context.Context, org, id string, at int64) error {
 
 func (s *Store) Extend(ctx context.Context, org, id string, at int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE sandboxes SET expires_at=? WHERE org=? AND id=? AND expires_at>0 AND expires_at<?`,
+		`UPDATE sandbox SET expires_at=? WHERE org=? AND id=? AND expires_at>0 AND expires_at<?`,
 		at, org, id, at)
 	return err
 }
@@ -284,17 +314,69 @@ func (s *Store) IDs(ctx context.Context, org string) (map[string]bool, error) {
 	return out, rows.Err()
 }
 
+// Held is every lease this org is currently HOLDING — the rows the runtime meter
+// bills — with NO LIMIT, for the same reason IDs has none.
+//
+// List's `LIMIT 200` is right for a page a human reads and wrong for a set money
+// is computed over: truncation there does not mean "a shorter page", it means
+// every lease past row 200 is free.
+//
+// The predicate is `holding`, the same one Live and LiveOfClass use for "this
+// sandbox is holding a pod", so what the fleet counts as occupied capacity and
+// what it charges for cannot disagree.
+func (s *Store) Held(ctx context.Context, org string) ([]Sandbox, error) {
+	rows, err := s.db.QueryContext(ctx,
+		selectCols+` WHERE org=? AND status IN ('running','pending')`, org)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Sandbox{}
+	for rows.Next() {
+		var m Sandbox
+		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
+			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
+			&m.ExpiresAt, &m.Payer, &m.MeteredAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// Advance moves one lease's runtime watermark from was to now, and reports
+// whether THIS caller is the one that moved it.
+//
+// The `metered_at=?` in the WHERE clause is the whole of it: two sweeps that read
+// the same watermark both try to advance it, exactly one row is affected, and the
+// loser charges nothing. It is what makes a span billable once however many
+// sweepers, pods or retries run it — see [cloud.RuntimeCharge], which calls this
+// BEFORE it emits a debit and never after.
+//
+// Put deliberately does not write this column on conflict, the same rule
+// connected_at states one function up: one writer per fact.
+func (s *Store) Advance(ctx context.Context, org, id string, was, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE sandbox SET metered_at=? WHERE org=? AND id=? AND metered_at=?`, now, org, id, was)
+	if err != nil {
+		return false, fmt.Errorf("advance runtime meter: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 func (s *Store) Delete(ctx context.Context, org, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sandbox WHERE org=? AND id=?`, org, id)
 	return err
 }
 
-const selectCols = `SELECT id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at FROM sandbox`
+const selectCols = `SELECT id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at,payer,metered_at FROM sandbox`
 
 func scanMachine(row *sql.Row) (Sandbox, error) {
 	var m Sandbox
 	err := row.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-		&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt, &m.ExpiresAt)
+		&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
+		&m.ExpiresAt, &m.Payer, &m.MeteredAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sandbox{}, errNotFound
 	}

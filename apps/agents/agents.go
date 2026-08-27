@@ -150,6 +150,12 @@ type state struct {
 	// sched is the long-running-agent scheduler; nil until started, stopped on
 	// Shutdown. It shares the Service so it runs agents through the SAME runAgent path.
 	sched *scheduler
+
+	// stopMeter ends the runtime-meter ticker. Separate from the scheduler's
+	// cancel because the two answer different questions: the scheduler needs
+	// inference to have anything to run, and a session accrues wall-clock whether
+	// or not this deployment can serve a completion.
+	stopMeter func()
 	// bus is the in-process fan-out behind the live session/event stream (SSE +
 	// ZAP). Set in Mount; nil-safe (a direct-construct unit test skips fan-out).
 	bus *bus
@@ -553,6 +559,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		s.State.sched.start()
 	}
 
+	// The runtime meter. It is NOT gated on s.Bill.Enabled(): once every app is
+	// its own binary that predicate is false in every process but commerce's, so
+	// gating on it would silence the meter across the whole fleet — the exact
+	// shape of "a store has one owner, and everyone else asks" that turned six
+	// other subsystems into silent no-ops. MeterUsage reaches the ledger over the
+	// plane from here; a deployment that genuinely runs no commerce answers
+	// ErrNoPeer and the debit is logged, not lost to a branch nobody took.
+	s.State.stopMeter = startMeter(s)
+
 	// Register agents into the unified tool plane (SourceAgent): an agent is callable
 	// as a tool via RunOnBehalf, activation-gated by the plane.
 	tools.Register(agentToolProvider{})
@@ -746,6 +761,14 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 		Status: "ready", ExecutionMode: mode, Schedule: schedule,
 		ComputeRef: computeRef, ServiceAccountID: serviceAccountID,
 		CreatedAt: now, UpdatedAt: now,
+		// A bot born RESIDENT starts accruing now. A one-shot agent starts no
+		// clock at all — it costs its per-run fee when it is invoked and nothing
+		// while it sits in the roster — so its watermark stays zero and the sweep
+		// never sees it.
+		Payer: payerOf(ctx, org),
+	}
+	if mode == ModeLongRunning {
+		a.MeteredAt = now
 	}
 	if err := sto.Create(ctx, a); err != nil {
 		if err == errConflict {
@@ -937,6 +960,18 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 			return nil, zip.ErrNotFound("agent not found")
 		}
 		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+	}
+	// A TRANSITION into residency starts the runtime clock — and only a
+	// transition does. Stamping on every save would be a second writer of a
+	// watermark the sweep is moving, and stamping nothing would bill a
+	// month-old one-shot agent for the month it was not a bot. Update writes
+	// neither column for exactly that reason; this is the one place a mode
+	// change reaches them. Same shape as the cap check above, and gated on the
+	// same `!wasLongRunning`.
+	if a.ExecutionMode == ModeLongRunning && !wasLongRunning {
+		if serr := sto.Stamp(ctx, org, a.Name, payerOf(ctx, org), a.UpdatedAt); serr != nil {
+			s.Log.Warn("runtime meter: a bot went resident unstamped", "org", org, "agent", a.Name, "err", serr)
+		}
 	}
 	n, _ := sto.CountRuns(ctx, org, a.Name)
 	v := toView(a, n)
@@ -1797,6 +1832,11 @@ func Shutdown(ctx context.Context) error {
 	}
 	if mounted.State.sched != nil {
 		mounted.State.sched.stop(ctx)
+	}
+	// Before CloseAll: the meter reads every org's store, and a tick in flight
+	// against a closed store is an error line for money nobody lost.
+	if mounted.State.stopMeter != nil {
+		mounted.State.stopMeter()
 	}
 	// Close the live-stream bus so every open SSE/ZAP subscriber's loop returns
 	// and its handler unblocks within the shutdown deadline.

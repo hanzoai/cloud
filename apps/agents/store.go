@@ -50,6 +50,21 @@ type Agent struct {
 	ServiceAccountID string
 	CreatedAt        int64
 	UpdatedAt        int64
+
+	// Payer and MeteredAt are the runtime meter's two facts about a RESIDENT bot.
+	//
+	// A long-running agent is a bot sitting resident, which the published catalog
+	// prices exactly as it prices a coding session: "every hour an agent runs
+	// bills at agentHourUSD, whether it is writing code, answering in a chat
+	// session, or sitting resident as a bot" (@hanzo/plans seats.json). So the
+	// row that says an agent is long-running is the row that accrues, and the
+	// watermark is stamped on every transition INTO that mode — not at creation —
+	// so a one-shot agent's whole life before it became a bot is not a debt.
+	//
+	// A one-shot agent runs only when it is POSTed, which the per-run fee already
+	// charges for, and accrues nothing here.
+	Payer     string
+	MeteredAt int64
 }
 
 // Execution modes. One-shot agents run only on an explicit POST; long-running
@@ -193,6 +208,11 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_created ON agent_runs(org, created_at);
 		"schedule":           "TEXT NOT NULL DEFAULT ''",
 		"compute_ref":        "TEXT NOT NULL DEFAULT ''",
 		"service_account_id": "TEXT NOT NULL DEFAULT ''",
+		// The runtime meter, same refusal-shaped defaults as agent_sessions: no
+		// payer means the org's own pool, and no watermark means the clock starts
+		// at the first tick that sees the bot resident.
+		"payer":      "TEXT NOT NULL DEFAULT ''",
+		"metered_at": "INTEGER NOT NULL DEFAULT 0",
 	}); err != nil {
 		return err
 	}
@@ -372,7 +392,7 @@ func decodeList(s string) []string {
 	return xs
 }
 
-const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,created_at,updated_at`
+const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,created_at,updated_at,payer,metered_at`
 
 // runCols is the run projection, named ONCE so the insert, the two reads and the
 // legacy fan-out cannot drift apart on a column added to only some of them.
@@ -383,7 +403,7 @@ func scanAgent(sc interface{ Scan(...any) error }) (Agent, error) {
 	var tools string
 	err := sc.Scan(&a.ID, &a.Org, &a.Name, &a.Model, &a.Instructions, &a.Description,
 		&tools, &a.Status, &a.ExecutionMode, &a.Schedule, &a.ComputeRef, &a.ServiceAccountID,
-		&a.CreatedAt, &a.UpdatedAt)
+		&a.CreatedAt, &a.UpdatedAt, &a.Payer, &a.MeteredAt)
 	a.Tools = decodeList(tools)
 	return a, err
 }
@@ -403,10 +423,10 @@ func normalizeMode(m string) string {
 func (s *Store) Create(ctx context.Context, a Agent) error {
 	a.ExecutionMode = normalizeMode(a.ExecutionMode)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Org, a.Name, a.Model, a.Instructions, a.Description,
 		encodeList(a.Tools), a.Status, a.ExecutionMode, a.Schedule, a.ComputeRef,
-		a.ServiceAccountID, a.CreatedAt, a.UpdatedAt)
+		a.ServiceAccountID, a.CreatedAt, a.UpdatedAt, a.Payer, a.MeteredAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -634,4 +654,63 @@ func (s *Store) CountRuns(ctx context.Context, org, agent string) (int, error) {
 		return 0, fmt.Errorf("count runs: %w", err)
 	}
 	return n, nil
+}
+
+// ── the runtime meter's store ops ───────────────────────────────────────────────
+//
+// Three writers, one column each, which is what keeps the watermark honest:
+// Create writes it at birth, Stamp writes it at the transition INTO residency,
+// and Advance moves it forward. Update deliberately writes NEITHER — it carries a
+// struct read at the top of a handler, and a tick landing in between would be
+// undone, re-billing the span it had already charged for.
+
+// Stamp starts a resident bot's runtime clock, and names the wallet that pays for
+// it. Called on the transition INTO long-running, never at every save: an agent
+// that has been one-shot for a month owes nothing for that month, and starting the
+// clock at `at` is what says so.
+func (s *Store) Stamp(ctx context.Context, org, name, payer string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE agents SET payer=?, metered_at=? WHERE org=? AND name=?`, payer, at, org, name)
+	if err != nil {
+		return fmt.Errorf("stamp agent meter: %w", err)
+	}
+	return nil
+}
+
+// Advance moves one agent's runtime watermark from was to now and reports whether
+// THIS caller moved it. The `metered_at=?` in the WHERE clause is the whole of the
+// exactly-once property — see cloud.RuntimeCharge, which calls it before it emits.
+func (s *Store) Advance(ctx context.Context, org, name string, was, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE agents SET metered_at=? WHERE org=? AND name=? AND metered_at=?`, now, org, name, was)
+	if err != nil {
+		return false, fmt.Errorf("advance agent meter: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// Resident is every bot this org is keeping alive — the rows the runtime meter
+// bills, with NO LIMIT.
+//
+// It is a wider set than the scheduler's ListLongRunning, which additionally
+// requires a schedule: a bot bound to compute with no cron is still resident and
+// still costs, and reusing the scheduler's query would have made a bot free by
+// leaving its Schedule blank.
+func (s *Store) Resident(ctx context.Context, org string) ([]Agent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+agentCols+` FROM agents WHERE org=? AND execution_mode=?`, org, ModeLongRunning)
+	if err != nil {
+		return nil, fmt.Errorf("list resident agents: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Agent{}
+	for rows.Next() {
+		a, err := scanAgent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan resident agent: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }

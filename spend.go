@@ -318,7 +318,7 @@ var meteredApps = []string{
 	// app then called automations, and the entry priced no surface while still
 	// gating one — it cost nobody a charge and cost somebody a 402. The name is
 	// back and it is the app's now, so the entry gates exactly the tree it prices.
-	"agents",       // per-run agent fee.
+	"agents",       // the per-run fee, and RUNTIME by the hour — an open session or a resident bot (apps/agents/meter.go).
 	"ai",           // LLM token costs (ai self-meters).
 	"ask",          // the answer engine's per-question fee.
 	"auto",         // per-run automation fee.
@@ -342,7 +342,7 @@ var meteredApps = []string{
 	"provisioning", // sql/kv/vector/docdb/s3/search/datastore creates.
 	"risk",         // per-screen fee inside each op.
 	"s3",           // object-storage data plane.
-	"sandbox",      // the lease, gated and debited around the pod (currently priced at zero).
+	"sandbox",      // the lease, gated and debited around the pod (priced at zero), and the time it is HELD, at the agent-hour rate (apps/sandbox/meter.go).
 	"security",     // scan fee.
 	"share",        // one tunnel account provisioned on the fabric; reading it back is free.
 	"seo",          // measurement resold at the vendor's own per-call price.
