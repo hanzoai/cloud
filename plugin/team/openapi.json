@@ -485,6 +485,83 @@
         "x-public": true
       }
     },
+    "/v1/team/rooms": {
+      "get": {
+        "operationId": "get_team_rooms",
+        "summary": "Returns every room of the caller's org, across the workspaces it owns, with the work facet each carries.",
+        "description": "Returns every room of the caller's org, across the workspaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
+        "tags": [
+          "team"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/teamRooms"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/team/rooms/{id}": {
+      "put": {
+        "operationId": "put_team_rooms_by_id",
+        "summary": "States what a room is for: its lifecycle intent, and what it is about.",
+        "description": "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open workspace\nrather than on the next reload.",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the room to bind, from the path. The URL is the authority; a body\ncarrying another id cannot redirect the write.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bindings": [
+                  "repo:hanzoai/cloud",
+                  "issue:1010"
+                ],
+                "life": "bound",
+                "workspace": "0e3c…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/teamRoomBind"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/teamRoom"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/team/transactor/api/v1/statistics": {
       "get": {
         "operationId": "get_team_transactor_api_v1_statistics",
@@ -776,6 +853,93 @@
           "userId": {
             "description": "UserID is the account the session is authenticated as.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "teamRoom": {
+        "properties": {
+          "archived": {
+            "description": "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
+            "type": "boolean"
+          },
+          "bindings": {
+            "description": "Bindings are what this room is ABOUT, each a \"\u003ckind\u003e:\u003cref\u003e\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "direct": {
+            "description": "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a workspace, not across the org.",
+            "type": "string"
+          },
+          "life": {
+            "description": "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
+            "type": "string"
+          },
+          "members": {
+            "description": "Members are the account uuids in the room, agents included: an agent\nprojects as a workspace member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
+            "type": "string"
+          },
+          "private": {
+            "description": "Private reports that the room is restricted to its members.",
+            "type": "boolean"
+          },
+          "topic": {
+            "description": "Topic is the room's own one-line subject, as the Team client sets it.",
+            "type": "string"
+          },
+          "workspace": {
+            "description": "Workspace is the workspace uuid holding this room. It is part of the\nroom's address: two workspaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "teamRoomBind": {
+        "properties": {
+          "bindings": {
+            "description": "Bindings REPLACES what the room is about, wholly. It is a replace and\nnot a merge because a caller that cannot remove a binding would have no way\nto correct a wrong one, and an empty list sent explicitly is how a room\nis unbound. Absent (null) leaves the existing list alone.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the room to bind, from the path. The URL is the authority; a body\ncarrying another id cannot redirect the write.",
+            "type": "string"
+          },
+          "life": {
+            "description": "Life sets the lifecycle intent: \"standing\" or \"bound\". Any other\nvalue is refused rather than stored, so a reader never has to interpret a\nthird one. Empty leaves the current intent unchanged.",
+            "type": "string"
+          },
+          "workspace": {
+            "description": "Workspace names the workspace holding the room. It is required, because\na room id is unique only within one and searching every workspace for a\nmatching id would make the write's target depend on iteration order.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "teamRooms": {
+        "properties": {
+          "rooms": {
+            "description": "Rooms is every room of every workspace the caller's org owns, each\nwith the work facet it carries.",
+            "items": {
+              "$ref": "#/components/schemas/teamRoom"
+            },
+            "type": "array"
           }
         },
         "type": "object"

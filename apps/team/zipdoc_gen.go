@@ -70,6 +70,23 @@ func init() {
 	zip.Describe("GET /v1/team/files/:workspace/:filename", zip.Doc{
 		Description: "Streams a blob by its client id (?file=). The served Content-Type is\nderived from the STORED BYTES via a strict image allow-list — NEVER from the\nclient :filename (Red F-B: a crafted .svg name would otherwise force\nimage/svg+xml → active XSS). Anything not a recognized raster image is served\ninert: application/octet-stream + attachment + nosniff.",
 	})
+	zip.Describe("GET /v1/team/rooms", zip.Doc{
+		Description: "Returns every room of the caller's org, across the workspaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
+		Fields: map[string]string{
+			"teamRoom.archived":  "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
+			"teamRoom.bindings":  "Bindings are what this room is ABOUT, each a \"<kind>:<ref>\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
+			"teamRoom.direct":    "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
+			"teamRoom.id":        "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a workspace, not across the org.",
+			"teamRoom.life":      "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
+			"teamRoom.members":   "Members are the account uuids in the room, agents included: an agent\nprojects as a workspace member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.name":      "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
+			"teamRoom.private":   "Private reports that the room is restricted to its members.",
+			"teamRoom.topic":     "Topic is the room's own one-line subject, as the Team client sets it.",
+			"teamRoom.workspace": "Workspace is the workspace uuid holding this room. It is part of the\nroom's address: two workspaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
+			"teamRooms.rooms":    "Rooms is every room of every workspace the caller's org owns, each\nwith the work facet it carries.",
+		},
+		Example: json.RawMessage(`{"rooms":[{"id":"6543","name":"bugfix-1010","life":"bound","bindings":["repo:hanzoai/cloud"]}]}`),
+	})
 	zip.Describe("GET /v1/team/transactor/:token", zip.Doc{
 		Description: "AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a\nrefusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs\nthe frame loop. The org is the VERIFIED tenant — the key for every store path —\nnever a client header.\n\nThe path segment carries whichever lane the caller is on, and a UUID is not a\nJWT so the two can never be read as each other:\n\nTHE PATH SEGMENT IS THE CREDENTIAL — the workspace token selectWorkspace minted,\nwhose signed claims name both the account and the workspace. Nothing ambient\nauthorizes this socket; see admitWS for why it must stay that way and what the\nIAM lane here will look like.",
 	})
@@ -140,5 +157,25 @@ func init() {
 	})
 	zip.Describe("POST /v1/team/files/:workspace", zip.Doc{
 		Description: "Stores the uploaded bytes under the CLIENT-supplied blob uuid (the\nmultipart file's filename). The server does NOT mint the id — the front owns it\n(front.ts: formData.append('file', file, uuid)). Response body is irrelevant\n(uploadFile discards it); we echo the id for curl/debug.",
+	})
+	zip.Describe("PUT /v1/team/rooms/:id", zip.Doc{
+		Description: "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open workspace\nrather than on the next reload.",
+		Fields: map[string]string{
+			"teamRoom.archived":      "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
+			"teamRoom.bindings":      "Bindings are what this room is ABOUT, each a \"<kind>:<ref>\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
+			"teamRoom.direct":        "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
+			"teamRoom.id":            "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a workspace, not across the org.",
+			"teamRoom.life":          "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
+			"teamRoom.members":       "Members are the account uuids in the room, agents included: an agent\nprojects as a workspace member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.name":          "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
+			"teamRoom.private":       "Private reports that the room is restricted to its members.",
+			"teamRoom.topic":         "Topic is the room's own one-line subject, as the Team client sets it.",
+			"teamRoom.workspace":     "Workspace is the workspace uuid holding this room. It is part of the\nroom's address: two workspaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
+			"teamRoomBind.bindings":  "Bindings REPLACES what the room is about, wholly. It is a replace and\nnot a merge because a caller that cannot remove a binding would have no way\nto correct a wrong one, and an empty list sent explicitly is how a room\nis unbound. Absent (null) leaves the existing list alone.",
+			"teamRoomBind.id":        "ID is the room to bind, from the path. The URL is the authority; a body\ncarrying another id cannot redirect the write.",
+			"teamRoomBind.life":      "Life sets the lifecycle intent: \"standing\" or \"bound\". Any other\nvalue is refused rather than stored, so a reader never has to interpret a\nthird one. Empty leaves the current intent unchanged.",
+			"teamRoomBind.workspace": "Workspace names the workspace holding the room. It is required, because\na room id is unique only within one and searching every workspace for a\nmatching id would make the write's target depend on iteration order.",
+		},
+		Example: json.RawMessage(`{"workspace":"0e3c…","life":"bound","bindings":["repo:hanzoai/cloud","issue:1010"]}`),
 	})
 }
