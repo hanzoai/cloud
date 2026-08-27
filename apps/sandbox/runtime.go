@@ -508,6 +508,13 @@ func sorted() []string { return slices.Sorted(maps.Keys(runtimes)) }
 
 func runtimeNames() string { return strings.Join(sorted(), ", ") }
 
+// Boundaries names every isolation boundary this cloud runs, in one order —
+// the same closed set runtimeFor decides over. A node installer reads it so
+// what a machine INSTALLS and what the scheduler will ACCEPT cannot drift into
+// two lists: a handler nobody schedules is dead weight, and a class the node
+// cannot run is a pod that waits Pending with no explanation.
+func Boundaries() []string { return sorted() }
+
 // confine asks the CLUSTER whether it keeps a boundary to NODES OF ITS OWN, and
 // it is what stands between "runc is the fastest thing we run" and "somebody's
 // model output is on the node's kernel next to another tenant".
