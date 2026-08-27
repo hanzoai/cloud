@@ -39,6 +39,19 @@ import (
 // within a quarter-hour of the truth without writing a row per minute per bot.
 const meterEvery = 15 * time.Minute
 
+// meterFirst is how long after mount the FIRST sweep runs, and it is short for a
+// reason measured rather than assumed: this app is LAZY, so its process lives from
+// the first request to its prefix until the host goes down, and a fleet whose pods
+// turn over faster than meterEvery would never reach a tick at all — every debit
+// deferred indefinitely while the watermarks sit still. No money is lost when that
+// happens (the watermark is durable, so the next process bills the whole gap at
+// once), but "eventually, if a pod lives long enough" is not a billing cadence.
+//
+// It is not ZERO either: a crashlooping pod would then sweep on every boot, and a
+// span of seconds is a real debit at micro-USD precision. A minute is longer than a
+// crashloop's cycle and far shorter than a healthy pod's life.
+const meterFirst = time.Minute
+
 // payerOf is the wallet a runtime charge lands in.
 //
 // cloud.PayerOf is the ONE payer resolver and it answers from a request or from a
@@ -153,16 +166,17 @@ func meterRuntime(ctx context.Context, st *state, log interface {
 	})
 }
 
-// startMeter runs the runtime meter on a ticker until the returned stop is
-// called. It is started by Mount and stopped by Shutdown, ahead of CloseAll.
+// startMeter runs the runtime meter until the returned stop is called. It is
+// started by Mount and stopped by Shutdown, ahead of CloseAll.
 //
-// The FIRST tick is one interval away, deliberately: Mount is on the request path
-// of a lazily-started plugin, and a sweep of every org's store is not something a
-// caller's first request should wait behind.
+// A TIMER RESET IN THE LOOP, not a ticker, because the first interval and every
+// one after it are different questions — see [meterFirst]. Nothing waits behind
+// either: the loop is a goroutine, so Mount returns before the first sweep starts
+// however soon it is scheduled.
 func startMeter(s *cloud.Service[state]) func() {
 	ctx, stop := context.WithCancel(context.Background())
 	go func() {
-		t := time.NewTicker(meterEvery)
+		t := time.NewTimer(meterFirst)
 		defer t.Stop()
 		for {
 			select {
@@ -170,6 +184,7 @@ func startMeter(s *cloud.Service[state]) func() {
 				return
 			case <-t.C:
 				meterRuntime(ctx, &s.State, s.Log, s.Bill)
+				t.Reset(meterEvery)
 			}
 		}
 	}()
