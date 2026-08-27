@@ -12,9 +12,10 @@ func init() {
 		Fields: map[string]string{
 			"Allowance.limit":  "calls the plan allows per period; 0 = unbounded",
 			"Allowance.plan":   "the tier the limit came from",
-			"Allowance.resets": "unix seconds; when the count starts again",
+			"Allowance.resets": "unix seconds; when THAT window starts again",
 			"Allowance.spent":  "the subject is at the limit",
 			"Allowance.used":   "Used is how many zero-priced calls this subject has been SERVED in the period\nending at Resets — the UTC calendar day. Only a served call counts, so an\nadmission check, a refusal, or a vendor that never answered leaves it where it\nstood. It stops AT Limit rather than climbing past it, so Limit-Used is what\nremains and never goes negative.",
+			"Allowance.window": "Window is which ceiling these numbers describe — \"hour\" or \"day\" — because a\ncaller is held to both and only one of them is the answer. It is the window\nthat REFUSED where one did, and otherwise the one with least left, so\nLimit-Used is always the number that will actually stop them next. Empty\nwhere no window bounds the subject at all.",
 		},
 	})
 	zip.Describe("POST /allowance/read", zip.Doc{
@@ -22,9 +23,10 @@ func init() {
 		Fields: map[string]string{
 			"Allowance.limit":  "calls the plan allows per period; 0 = unbounded",
 			"Allowance.plan":   "the tier the limit came from",
-			"Allowance.resets": "unix seconds; when the count starts again",
+			"Allowance.resets": "unix seconds; when THAT window starts again",
 			"Allowance.spent":  "the subject is at the limit",
 			"Allowance.used":   "Used is how many zero-priced calls this subject has been SERVED in the period\nending at Resets — the UTC calendar day. Only a served call counts, so an\nadmission check, a refusal, or a vendor that never answered leaves it where it\nstood. It stops AT Limit rather than climbing past it, so Limit-Used is what\nremains and never goes negative.",
+			"Allowance.window": "Window is which ceiling these numbers describe — \"hour\" or \"day\" — because a\ncaller is held to both and only one of them is the answer. It is the window\nthat REFUSED where one did, and otherwise the one with least left, so\nLimit-Used is always the number that will actually stop them next. Empty\nwhere no window bounds the subject at all.",
 		},
 	})
 	zip.Describe("POST /allowance/take", zip.Doc{
@@ -32,9 +34,10 @@ func init() {
 		Fields: map[string]string{
 			"Allowance.limit":  "calls the plan allows per period; 0 = unbounded",
 			"Allowance.plan":   "the tier the limit came from",
-			"Allowance.resets": "unix seconds; when the count starts again",
+			"Allowance.resets": "unix seconds; when THAT window starts again",
 			"Allowance.spent":  "the subject is at the limit",
 			"Allowance.used":   "Used is how many zero-priced calls this subject has been SERVED in the period\nending at Resets — the UTC calendar day. Only a served call counts, so an\nadmission check, a refusal, or a vendor that never answered leaves it where it\nstood. It stops AT Limit rather than climbing past it, so Limit-Used is what\nremains and never goes negative.",
+			"Allowance.window": "Window is which ceiling these numbers describe — \"hour\" or \"day\" — because a\ncaller is held to both and only one of them is the answer. It is the window\nthat REFUSED where one did, and otherwise the one with least left, so\nLimit-Used is always the number that will actually stop them next. Empty\nwhere no window bounds the subject at all.",
 		},
 	})
 }

@@ -62,16 +62,70 @@ func openStore(dir string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
+	// A subject now holds one row PER WINDOW, so an hourly rate and a daily quota
+	// each keep their own period and each turn over by being read — the property
+	// this store is built on, once per window instead of once.
+	//
+	// The old table keyed on subject alone and its rows are all daily counts, so
+	// they carry over as window='day'. A count that survives the migration is the
+	// right answer: dropping them would hand every subject who called today a
+	// fresh day.
 	const ddl = `
 CREATE TABLE IF NOT EXISTS allowance (
-  subject TEXT NOT NULL PRIMARY KEY,
+  subject TEXT NOT NULL,
+  window  TEXT NOT NULL,
   period  TEXT NOT NULL,
-  used    INTEGER NOT NULL
+  used    INTEGER NOT NULL,
+  PRIMARY KEY (subject, window)
 );`
+	legacy, err := s.legacyShape()
+	if err != nil {
+		return err
+	}
+	if legacy {
+		const move = `
+ALTER TABLE allowance RENAME TO allowance_by_subject;
+` + ddl + `
+INSERT INTO allowance (subject, window, period, used)
+  SELECT subject, 'day', period, used FROM allowance_by_subject;
+DROP TABLE allowance_by_subject;`
+		if _, err := s.db.Exec(move); err != nil {
+			return fmt.Errorf("migrate to per-window rows: %w", err)
+		}
+		return nil
+	}
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	return nil
+}
+
+// legacyShape reports whether the table is the one-row-per-subject original: it
+// exists and has no `window` column. Asked of the schema rather than tracked in a
+// version row, so a store built fresh by the DDL above and a store migrated into
+// that shape are indistinguishable afterwards, which is what makes this safe to
+// run on every open.
+func (s *Store) legacyShape() (bool, error) {
+	rows, err := s.db.Query(`PRAGMA table_info(allowance)`)
+	if err != nil {
+		return false, fmt.Errorf("inspect allowance: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	any, windowed := false, false
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			return false, fmt.Errorf("inspect allowance: %w", err)
+		}
+		any = true
+		if name == "window" {
+			windowed = true
+		}
+	}
+	return any && !windowed, rows.Err()
 }
 
 // Close releases the underlying database.
@@ -81,6 +135,17 @@ func (s *Store) Close() error { return s.db.Close() }
 // timezone — a period that moved with the caller would let a traveller take two
 // days' worth in one afternoon.
 func Day(t time.Time) string { return t.UTC().Format("2006-01-02") }
+
+// Hour is the period an hourly count belongs to: the UTC calendar hour. Same one
+// rule and one timezone as Day, for the same reason — a window that moved with the
+// caller would let a traveller take two of them.
+func Hour(t time.Time) string { return t.UTC().Format("2006-01-02T15") }
+
+// NextHour is when an hourly count starts again: the top of the next UTC hour.
+func NextHour(t time.Time) time.Time {
+	u := t.UTC()
+	return time.Date(u.Year(), u.Month(), u.Day(), u.Hour(), 0, 0, 0, time.UTC).Add(time.Hour)
+}
 
 // Midnight is when the current period ends and counting starts again: the first
 // instant of the next UTC day. It is what the product shows as "resets at".
@@ -105,7 +170,7 @@ func Midnight(t time.Time) time.Time {
 // limit <= 0 means the plan does not bound this subject. Nothing is written and
 // nothing is counted: a plan without a ceiling has no state to keep, so an
 // unlimited caller costs this store no rows at all.
-func (s *Store) Take(ctx context.Context, subject, period string, limit int64) (used int64, spent bool, err error) {
+func (s *Store) Take(ctx context.Context, subject, window, period string, limit int64) (used int64, spent bool, err error) {
 	if limit <= 0 {
 		return 0, false, nil
 	}
@@ -115,7 +180,7 @@ func (s *Store) Take(ctx context.Context, subject, period string, limit int64) (
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	used, err = readUsed(ctx, tx, subject, period)
+	used, err = readUsed(ctx, tx, subject, window, period)
 	if err != nil {
 		return 0, false, err
 	}
@@ -124,9 +189,9 @@ func (s *Store) Take(ctx context.Context, subject, period string, limit int64) (
 	}
 	used++
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO allowance (subject, period, used) VALUES (?,?,?)
-		 ON CONFLICT(subject) DO UPDATE SET period=excluded.period, used=excluded.used`,
-		subject, period, used); err != nil {
+		`INSERT INTO allowance (subject, window, period, used) VALUES (?,?,?,?)
+		 ON CONFLICT(subject, window) DO UPDATE SET period=excluded.period, used=excluded.used`,
+		subject, window, period, used); err != nil {
 		return 0, false, fmt.Errorf("take allowance: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -138,8 +203,8 @@ func (s *Store) Take(ctx context.Context, subject, period string, limit int64) (
 // Read answers what subject has taken in period, without taking anything. It is the
 // product's read — the number behind "3 of 20 left today" — and a subject who has
 // never called, or whose only row belongs to an earlier period, has taken nothing.
-func (s *Store) Read(ctx context.Context, subject, period string) (int64, error) {
-	return readUsed(ctx, s.db, subject, period)
+func (s *Store) Read(ctx context.Context, subject, window, period string) (int64, error) {
+	return readUsed(ctx, s.db, subject, window, period)
 }
 
 // rows is the narrow half of *sql.DB and *sql.Tx that readUsed needs, so the same
@@ -150,11 +215,11 @@ type rows interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-func readUsed(ctx context.Context, r rows, subject, period string) (int64, error) {
+func readUsed(ctx context.Context, r rows, subject, window, period string) (int64, error) {
 	var storedPeriod string
 	var used int64
 	err := r.QueryRowContext(ctx,
-		`SELECT period, used FROM allowance WHERE subject=?`, subject).Scan(&storedPeriod, &used)
+		`SELECT period, used FROM allowance WHERE subject=? AND window=?`, subject, window).Scan(&storedPeriod, &used)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return 0, nil
