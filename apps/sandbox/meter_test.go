@@ -184,7 +184,7 @@ func TestALeaseThatNeverCameUpIsNotBilled(t *testing.T) {
 	if err := st.Put(ctx, m); err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	bill(&Service{Base: cloud.Base{Log: luxlog.NewNoOpLogger()}}, ctx, st, m, cloud.RuntimeHourMicros)
+	bill(&Service{Base: cloud.Base{Log: luxlog.NewNoOpLogger()}}, ctx, st, m)
 	if l.len() != 0 {
 		t.Fatalf("a lease that never came up was billed %d times", l.len())
 	}

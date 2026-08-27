@@ -111,19 +111,36 @@ type class struct {
 	// reaches a pod as an extended resource, so a node without the plugin simply
 	// never receives this class rather than running it a thousand times slower.
 	kvm bool
+	// micros is what one hour of this class costs, in micro-USD, when the platform
+	// has published no price for it. It sits in the SAME row as the envelope
+	// because it is a fact about the same thing: a class is one image tag, one
+	// resource envelope, and what an hour of that envelope costs. Held apart, a
+	// class that doubled its memory would keep the price of the one it replaced.
+	micros int64
 }
 
 // classes is the CLOSED set of sandbox shapes.
+// The DEFAULT ENVELOPE is 250m/512Mi/2Gi (runtime.go), and it is what a class
+// that names no resources gets. Three of the four take it, so three of the four
+// are the same size and cost the same hour — the price follows the reservation,
+// not the name, which is why `dev` is not more expensive than `exec` for being
+// longer-lived. A lease is charged for the hours it is HELD either way.
+//
+// `android` is the one that differs: 2 CPU against 250m is eight times the cores,
+// and 6Gi against 512Mi is twelve times the memory. Twelve is the multiplier
+// because memory is what bounds a node — the fleet packs sixteen 512Mi pods onto
+// one, and an android pod displaces twelve of them. Pricing it at the default
+// rate would sell three quarters of a node for the price of a sixteenth.
 var classes = map[string]class{
-	"exec":    {ttl: 900},
-	"dev":     {ttl: 14400},
-	"desktop": {ttl: 14400, screen: true},
+	"exec":    {ttl: 900, micros: cloud.RuntimeHourMicros},
+	"dev":     {ttl: 14400, micros: cloud.RuntimeHourMicros},
+	"desktop": {ttl: 14400, screen: true, micros: cloud.RuntimeHourMicros},
 	// An emulator is a whole guest machine: 4Gi for the phone's own RAM plus the
 	// SDK, the emulator process and the X stack around it. Requesting the fleet
 	// default and using this much is the eviction bug written down elsewhere in
 	// this file — a pod that asks for less than it takes is permanently first in
 	// line when the node runs short.
-	"android": {ttl: 14400, screen: true, kvm: true, cpu: "2", mem: "6Gi", disk: "12Gi"},
+	"android": {ttl: 14400, screen: true, kvm: true, cpu: "2", mem: "6Gi", disk: "12Gi", micros: 12 * cloud.RuntimeHourMicros},
 }
 
 // classNames lists the classes, sorted, for the messages that have to enumerate

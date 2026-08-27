@@ -173,7 +173,7 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 func end(ctx context.Context, s *cloud.Service[state], st *Store, m Sandbox, why string) {
 	// The tail, BEFORE the delete — the same reason End states: the watermark
 	// lives on the row, so a span not charged here is a span nothing can recover.
-	bill(s, ctx, st, m, cloud.RuntimeRate(ctx))
+	bill(s, ctx, st, m)
 	if serr := s.State.rt.stop(ctx, m); serr != nil {
 		s.Log.Warn("reap: stop", "id", m.ID, "err", serr)
 	}

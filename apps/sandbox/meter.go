@@ -1,7 +1,19 @@
 package sandbox
 
 // meter.go — a sandbox somebody is HOLDING is an agent running, so it is billed by
-// the hour at the platform's one agentic-runtime rate ([cloud.RuntimeRate]).
+// the hour, at the price of the ENVELOPE it is holding.
+//
+// PER CLASS, because the classes are not one size. The runtime rate is the
+// platform's one agentic-runtime price and it is what an agent session and a
+// resident bot pay; a sandbox pays it too where it holds the default envelope,
+// and more where it holds more. An android lease holds twelve times the memory
+// of an exec lease, and charging both the same hour would sell most of a node
+// for the price of a sixteenth of one.
+//
+// The RULE is [cloud.RateMicros] and only the DEFAULT is local, which is the
+// shape ResourceFee already uses one file over: an operator retunes any class at
+// admin.hanzo.ai with an audit trail, and until they do the floor written in the
+// class table is charged.
 //
 // TWO ACTS, TWO CHARGES, and they are deliberately not folded together. The LEASE
 // FEE (api.go, ResourceFee) is what taking a sandbox costs, once, and it is zero
@@ -47,6 +59,18 @@ func running(m Sandbox) cloud.Running {
 	}
 }
 
+// rate is the published price of one hour of `class`, in micro-USD, falling back
+// to the floor the class table carries. A class nobody has heard of is not free:
+// it falls back to the platform runtime rate, because an unknown envelope is at
+// least an envelope, and billing it nothing is the one answer certainly wrong.
+func rate(ctx context.Context, class string) int64 {
+	floor := cloud.RuntimeHourMicros
+	if c, ok := classes[class]; ok && c.micros > 0 {
+		floor = c.micros
+	}
+	return cloud.RateMicros(ctx, cloud.RuntimeProduct, cloud.RuntimeMeter+"-"+class, floor)
+}
+
 // bill charges one lease for the time since it was last billed, and is the ONE
 // place this package moves runtime money. Both the sweep and the two end-of-lease
 // paths go through it, so there is one arithmetic, one act name and one debit
@@ -55,11 +79,14 @@ func running(m Sandbox) cloud.Running {
 // A failure is logged and dropped rather than returned: the lease has already been
 // taken or already ended, and a debit that could not be recorded must never turn a
 // working sandbox into a refusal. It is the same posture MeterUsage takes.
-func bill(s *Service, ctx context.Context, st *Store, m Sandbox, rate int64) {
+// It reads the rate ITSELF rather than being handed one, so the three call sites
+// cannot disagree about which class they are pricing — the sweep holds many
+// classes at once, and one rate read per tick was one rate for all of them.
+func bill(s *Service, ctx context.Context, st *Store, m Sandbox) {
 	if !holding(m) {
 		return
 	}
-	_, err := cloud.RuntimeCharge(ctx, running(m), time.Now().Unix(), rate,
+	_, err := cloud.RuntimeCharge(ctx, running(m), time.Now().Unix(), rate(ctx, m.Class),
 		func(ctx context.Context, id string, was, now int64) (bool, error) {
 			return st.Advance(ctx, m.Org, id, was, now)
 		},
@@ -87,7 +114,6 @@ func meterRuntime(ctx context.Context, s *Service) {
 	// a zero: it advances first and emits only when the span is worth something, so
 	// the whole fix is to let it be asked. The two end-of-lease paths never had this
 	// bug — they call bill() unconditionally — which is why it showed up here alone.
-	rate := cloud.RuntimeRate(ctx)
 	_ = s.State.stores.Each(func(ns namespace.Namespace, st *Store, openErr error) {
 		if ctx.Err() != nil {
 			return
@@ -104,7 +130,7 @@ func meterRuntime(ctx context.Context, s *Service) {
 			return
 		}
 		for _, m := range held {
-			bill(s, ctx, st, m, rate)
+			bill(s, ctx, st, m)
 		}
 	})
 }

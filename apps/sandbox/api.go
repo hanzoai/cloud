@@ -527,7 +527,7 @@ func End(s *Service, ctx context.Context, org, id string, purge bool) error {
 	}
 	// The tail, BEFORE the delete. The row carries the watermark, so once it is
 	// gone there is nothing left to say how much of this lease was never billed.
-	bill(s, ctx, store, m, cloud.RuntimeRate(ctx))
+	bill(s, ctx, store, m)
 	if err := store.Delete(ctx, m.Org, m.ID); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
