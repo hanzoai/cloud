@@ -93,7 +93,7 @@ func newWhatsappMock(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"verified_name":"Acme Inc","display_phone_number":"+1 555 0100","id":"` + whatsappPhon + `"}`))
+		_, _ = w.Write([]byte(`{"verified_name":"AgentCo, LLC","display_phone_number":"+1 555 0100","id":"` + whatsappPhon + `"}`))
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("WHATSAPP_API_BASE", srv.URL)

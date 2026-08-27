@@ -235,7 +235,7 @@ type templateOverride struct {
 // UNDECLARED merge field is refused with 400 rather than stored and rendered blank
 // into a contract months later.
 //
-// Example: {"id": "nda", "title": "Acme Mutual NDA", "body": "…{{.counterparty}}…",
+// Example: {"id": "nda", "title": "AgentCo Mutual NDA", "body": "…{{.counterparty}}…",
 // "fields": [{"key": "counterparty", "label": "Counterparty"}]}
 func (o ops) overrideTemplate(ctx context.Context, in *templateOverride) (*templateReply, error) {
 	org, err := principal.Acting(ctx)
@@ -393,7 +393,7 @@ type generateRequest struct {
 // The document is a DRAFT. Hanzo Legal manages documents; it does not give legal
 // advice and does not determine that a document is valid or sufficient.
 //
-// Example: {"templateId": "nda", "data": {"counterparty": "Acme, Inc.", "date": "2026-07-30"}}
+// Example: {"templateId": "nda", "data": {"counterparty": "AgentCo, LLC", "date": "2026-07-30"}}
 func (o ops) generateDocument(ctx context.Context, in *generateRequest) (*documentReply, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {

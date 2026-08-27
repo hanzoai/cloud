@@ -143,7 +143,7 @@ func init() {
 			"formationView.formation":       "Formation is the org's one incorporation record.",
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
-		Example: json.RawMessage(`{"structure":"c-corp","jurisdiction":"DE","name":"Acme Inc."}`),
+		Example: json.RawMessage(`{"structure":"c-corp","jurisdiction":"DE","name":"AgentCo, LLC"}`),
 	})
 	zip.Describe("POST /v1/company/advance", zip.Doc{
 		Description: "Advance runs the ONE guarded transition of the formation machine. It is the\nonly endpoint between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted.",
@@ -859,6 +859,6 @@ func init() {
 			"structureIn.name":              "Name is the proposed company name.",
 			"structureIn.structure":         "Structure is the legal entity: c-corp, llc or dao-llc.",
 		},
-		Example: json.RawMessage(`{"structure":"c-corp","jurisdiction":"DE","name":"Acme Inc."}`),
+		Example: json.RawMessage(`{"structure":"c-corp","jurisdiction":"DE","name":"AgentCo, LLC"}`),
 	})
 }

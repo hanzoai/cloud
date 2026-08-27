@@ -201,11 +201,11 @@ func TestLeaderboard_GlobalNonSuperOnlyOptedInOrgs(t *testing.T) {
 	}
 
 	// Opt acme in → it appears, by its chosen display.
-	seedOrgOptin(t, "acme", "Acme Inc", true)
+	seedOrgOptin(t, "acme", "AgentCo, LLC", true)
 	_, body2 := doGet(t, app, "/v1/leaderboard?scope=global&metric=tokens", principalHeaders("acme", "alice"))
 	var v2 LeaderboardView
 	_ = json.Unmarshal(body2, &v2)
-	if len(v2.Rows) != 1 || v2.Rows[0].Handle != "Acme Inc" {
+	if len(v2.Rows) != 1 || v2.Rows[0].Handle != "AgentCo, LLC" {
 		t.Fatalf("opted-in org must appear as its display: %+v", v2.Rows)
 	}
 }

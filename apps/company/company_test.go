@@ -238,7 +238,7 @@ func TestHTTPFormationFlow(t *testing.T) {
 	const org = "acme"
 
 	if code, _ := do(t, app, http.MethodPost, "/v1/company", org, map[string]any{
-		"structure": "c-corp", "jurisdiction": "DE", "name": "Acme Inc.",
+		"structure": "c-corp", "jurisdiction": "DE", "name": "AgentCo, LLC",
 	}); code != http.StatusCreated {
 		t.Fatalf("begin want 201, got %d", code)
 	}
@@ -462,7 +462,7 @@ func TestHTTPFundraiseRound(t *testing.T) {
 func TestGenesisIdempotent(t *testing.T) {
 	app, _, ct := mountFake(t)
 	const org = "acme"
-	do(t, app, http.MethodPost, "/v1/company", org, map[string]any{"structure": "c-corp", "jurisdiction": "DE", "name": "Acme Inc."})
+	do(t, app, http.MethodPost, "/v1/company", org, map[string]any{"structure": "c-corp", "jurisdiction": "DE", "name": "AgentCo, LLC"})
 	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "founders"})
 	do(t, app, http.MethodPost, "/v1/company/founders", org, map[string]any{
 		"founders": []map[string]any{{"name": "Ada", "email": "ada@acme.com", "equityBps": 10000}},

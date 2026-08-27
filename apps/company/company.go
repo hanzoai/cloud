@@ -361,7 +361,7 @@ type beginIn struct {
 // from it. It is idempotent: an org that already has a formation gets that one
 // back with 200, while a first call creates it and answers 201.
 //
-// Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "Acme Inc."}
+// Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "AgentCo, LLC"}
 func (o ops) begin(ctx context.Context, in *beginIn) (*formationView, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
@@ -420,7 +420,7 @@ type structureIn struct {
 // name. Available only at the structure stage; an unknown structure or
 // jurisdiction, or an empty name, is refused with 400.
 //
-// Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "Acme Inc."}
+// Example: {"structure": "c-corp", "jurisdiction": "DE", "name": "AgentCo, LLC"}
 func (o ops) setStructure(ctx context.Context, in *structureIn) (*formationView, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err

@@ -20,7 +20,7 @@ func fullFormation() *Formation {
 		Org:          "acme",
 		Structure:    StructureCCorp,
 		Jurisdiction: JurisdictionDE,
-		Name:         "Acme Inc.",
+		Name:         "AgentCo, LLC",
 		Stage:        StageStructure,
 		Founders:     []Founder{verifiedFounder()},
 	}

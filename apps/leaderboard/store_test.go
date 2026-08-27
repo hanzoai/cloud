@@ -81,7 +81,7 @@ func TestOptinStore_UserListingIsolatedByOrg(t *testing.T) {
 func TestOptinStore_OrgListing(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	if err := s.PutOrg(ctx, orgOptin{Org: "acme", Display: "Acme Inc", Listed: true}, 1); err != nil {
+	if err := s.PutOrg(ctx, orgOptin{Org: "acme", Display: "AgentCo, LLC", Listed: true}, 1); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.PutOrg(ctx, orgOptin{Org: "quiet", Display: "Quiet Co", Listed: false}, 1); err != nil {
@@ -91,11 +91,11 @@ func TestOptinStore_OrgListing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(o) != 1 || o["acme"] != "Acme Inc" {
+	if len(o) != 1 || o["acme"] != "AgentCo, LLC" {
 		t.Fatalf("org listing = %v (private org must not appear)", o)
 	}
 	got, err := s.GetOrg(ctx, "acme")
-	if err != nil || !got.Listed || got.Display != "Acme Inc" {
+	if err != nil || !got.Listed || got.Display != "AgentCo, LLC" {
 		t.Fatalf("get org = %+v %v", got, err)
 	}
 }

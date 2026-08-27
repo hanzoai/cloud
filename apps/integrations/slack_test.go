@@ -24,7 +24,7 @@ func stubSlackAPI(t *testing.T) {
 				"access_token": "xoxb-real-token",
 				"scope":        "chat:write,users:read",
 				"bot_user_id":  "U0BOT",
-				"team":         map[string]string{"id": "T0TEAM", "name": "Acme Inc"},
+				"team":         map[string]string{"id": "T0TEAM", "name": "AgentCo, LLC"},
 			})
 			return
 		}
@@ -87,7 +87,7 @@ func TestSlackExchangeParsesOK(t *testing.T) {
 	if got := res.Tokens[slackBotTokenSecret]; got != "xoxb-real-token" {
 		t.Fatalf("bot_token: %q", got)
 	}
-	if res.ExternalID != "T0TEAM" || res.AccountLabel != "Acme Inc" || res.BotUserID != "U0BOT" {
+	if res.ExternalID != "T0TEAM" || res.AccountLabel != "AgentCo, LLC" || res.BotUserID != "U0BOT" {
 		t.Fatalf("metadata parse mismatch: %+v", res)
 	}
 	if len(res.Scopes) != 2 || res.Scopes[0] != "chat:write" {

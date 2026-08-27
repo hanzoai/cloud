@@ -31,7 +31,7 @@ func TestFacadeSeedAndRound(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme"
 
-	if err := SetIncorporation(ctx, org, "Acme Inc.", "c-corp", "US", "DE"); err != nil {
+	if err := SetIncorporation(ctx, org, "AgentCo, LLC", "c-corp", "US", "DE"); err != nil {
 		t.Fatalf("SetIncorporation: %v", err)
 	}
 
