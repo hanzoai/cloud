@@ -478,9 +478,11 @@ func healthMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}
+	// ONE liveness address, and it is /healthz. "/health" was a second name for the
+	// same handler, so one probe answered to two spellings. A caller on the old name
+	// now gets a 404 that claims no endpoint, which is the honest answer.
 	mux.HandleFunc("/healthz", ok)
 	mux.HandleFunc("/readyz", ok)
-	mux.HandleFunc("/health", ok)
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		_, _ = w.Write([]byte("# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n"))
