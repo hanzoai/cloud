@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -131,11 +130,11 @@ func inspect() Report {
 		case strings.HasPrefix(b, "kata-") && !r.KVM:
 			st.Why = "no /dev/kvm — this machine cannot boot a guest kernel"
 		case !hypervisor(b):
-			// The kata release for this architecture ships no such VMM. Said
-			// plainly, because the alternative is an operator re-running `up`
-			// forever against a boundary no download will ever provide.
-			st.Why = "the kata release for " + r.Arch + " ships no " +
-				filepath.Base(handlers[b].hypervisor)
+			// The VMM is not here YET, which is not the same as unavailable:
+			// `up` supplies a firecracker that kata's own bundle omits. So this
+			// names what is missing and stays a repairable state — a Why is for
+			// something no download will fix, and only /dev/kvm is that.
+			st.Why = ""
 		}
 		r.Boundaries = append(r.Boundaries, st)
 	}
@@ -340,6 +339,35 @@ curl -sfLO "https://github.com/kata-containers/kata-containers/releases/download
   { echo "kata: $v publishes no $f" >&2; exit 1; }
 tar --zstd -xf "$f" -C / ||
   { echo "kata: $f did not unpack" >&2; exit 1; }
+# KATA'S BUNDLE IS NOT FIRECRACKER'S RELEASE. kata-static ships a firecracker
+# binary for amd64 and, at 4.1.0, none for arm64 — while still shipping
+# configuration-rs-fc.toml, which names /opt/kata/bin/firecracker. Firecracker
+# itself has published aarch64 since 2020; it is the bundle that is partial, not
+# the hypervisor. So where kata left the slot empty, fill it from upstream and
+# the boundary is native on both arches rather than absent on one.
+if [ ! -x /opt/kata/bin/firecracker ]; then
+  case "$(uname -m)" in x86_64) fa=x86_64 ;; aarch64|arm64) fa=aarch64 ;; *) fa="" ;; esac
+  if [ -n "$fa" ]; then
+    fu=$(curl -sIL -o /dev/null -w '%{url_effective}' https://github.com/firecracker-microvm/firecracker/releases/latest) || fu=""
+    fv=${fu##*/tag/}
+    case "$fv" in ""|*/*) fv="" ;; esac
+    if [ -n "$fv" ]; then
+      ft=$(mktemp -d)
+      if curl -sfL -o "$ft/fc.tgz" \
+           "https://github.com/firecracker-microvm/firecracker/releases/download/${fv}/firecracker-${fv}-${fa}.tgz"; then
+        tar -xzf "$ft/fc.tgz" -C "$ft"
+        # jailer is OPTIONAL to kata (unset means no jail) so it is copied when
+        # present and never required.
+        for n in firecracker jailer; do
+          b=$(find "$ft" -type f -name "${n}-${fv}-${fa}" | head -1)
+          [ -n "$b" ] && install -m 0755 "$b" "/opt/kata/bin/${n}"
+        done
+        echo "kata: supplied firecracker ${fv} (${fa}) that this kata release omits" >&2
+      fi
+      rm -rf "$ft"
+    fi
+  fi
+fi
 shim=""
 for c in /opt/kata/runtime-rs/bin/containerd-shim-kata-v2 /opt/kata/bin/containerd-shim-kata-v2; do
   [ -x "$c" ] && { shim="$c"; break; }
@@ -426,6 +454,17 @@ func restartK3s(ctx context.Context) error {
 // writeClasses names every boundary in the cluster, mapping OUR name to the
 // handler that runs it.
 //
+// IT WRITES ONLY TO A LOCAL k3s SERVER, and never to whatever kubeconfig is
+// lying around. A RuntimeClass is CLUSTER-scoped, so it is the server's to
+// declare and an agent has no business declaring one — an agent needs the
+// binaries and the containerd config, which is all the steps above give it.
+// This used to fall back to ~/.kube/config when /etc/rancher/k3s/k3s.yaml was
+// absent, which is exactly the agent case, and on the first agent it ran on
+// that file named a PRODUCTION cluster. It got as far as the apiserver and was
+// stopped by an expired credential, which is luck and not a design. A node
+// installer may configure the node it is running on; reaching a cluster it was
+// merely pointed at is a different act, and one nobody asked for.
+//
 // runc gets no class. It is the node's own runtime, and apps/sandbox offers it
 // only where the cluster keeps it to a pool of its own — a nodeSelector AND a
 // toleration, on a pool no other boundary shares. That topology is a fleet
@@ -433,21 +472,22 @@ func restartK3s(ctx context.Context) error {
 // can honestly draw, so this writes the boundaries that isolate and leaves runc
 // to the operator who can draw the pool.
 func writeClasses(ctx context.Context) error {
+	const kube = "/etc/rancher/k3s/k3s.yaml"
+	if _, err := os.Stat(kube); err != nil {
+		fmt.Println("   this node runs no k3s server, so its RuntimeClasses are the server's to declare — " +
+			"the boundaries are installed and containerd knows them")
+		return nil
+	}
 	var b strings.Builder
 	for _, name := range boundary.Names {
 		if name == "runc" || !present(name) {
 			continue
 		}
-		fmt.Fprintf(&b, "---\napiVersion: node.k8s.io/v1\nkind: RuntimeClass\nmetadata:\n  name: %s\nhandler: %s\n", name, handlers[name].handler)
+		fmt.Fprintf(&b, "---\napiVersion: node.k8s.io/v1\nkind: RuntimeClass\nmetadata:\n  name: %s\nhandler: %s\n",
+			name, handlers[name].handler)
 	}
 	if b.Len() == 0 {
 		return fmt.Errorf("no boundary is installed, so there is no class to write")
-	}
-	kube := "/etc/rancher/k3s/k3s.yaml"
-	if _, err := os.Stat(kube); err != nil {
-		if home, e := os.UserHomeDir(); e == nil {
-			kube = filepath.Join(home, ".kube", "config")
-		}
 	}
 	c := exec.CommandContext(ctx, "sudo", "env", "KUBECONFIG="+kube, "kubectl", "apply", "-f", "-")
 	c.Stdin, c.Stdout, c.Stderr = strings.NewReader(b.String()), os.Stdout, os.Stderr
