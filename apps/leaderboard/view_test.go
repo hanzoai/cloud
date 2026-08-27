@@ -35,11 +35,11 @@ func TestDisplayUser_PrivacyPolicy(t *testing.T) {
 }
 
 func TestDisplayOrg(t *testing.T) {
-	displays := map[string]string{"acme": "Acme Inc"}
+	displays := map[string]string{"acme": "AgentCo, LLC"}
 	if got := displayOrg("acme", true, displays); got != "acme" {
 		t.Fatalf("super sees slug: %q", got)
 	}
-	if got := displayOrg("acme", false, displays); got != "Acme Inc" {
+	if got := displayOrg("acme", false, displays); got != "AgentCo, LLC" {
 		t.Fatalf("non-super sees display: %q", got)
 	}
 	if got := displayOrg("beta", false, displays); got != "beta" {
@@ -87,10 +87,10 @@ func TestBuildUserRows_CostVisibility(t *testing.T) {
 
 func TestBuildOrgRows(t *testing.T) {
 	aggs := []aggRow{{id: "acme", requests: 9, tokens: 900, costCents: 90}, {id: "beta", requests: 3, tokens: 100, costCents: 10}}
-	displays := map[string]string{"acme": "Acme Inc", "beta": "Beta LLC"}
+	displays := map[string]string{"acme": "AgentCo, LLC", "beta": "Beta LLC"}
 	// non-super: displays used, cost withheld.
 	rows := buildOrgRows(aggs, "tokens", false, displays, false)
-	if rows[0].Handle != "Acme Inc" || rows[0].CostCents != 0 {
+	if rows[0].Handle != "AgentCo, LLC" || rows[0].CostCents != 0 {
 		t.Fatalf("non-super org row: %+v", rows[0])
 	}
 	// super: slugs + cost visible.

@@ -297,7 +297,7 @@ func newFakeIAM() *fakeIAM {
 		case r.URL.Path == "/v1/iam/organizations":
 			io.WriteString(w, `{"organizations":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
-				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":"2021-02-02T00:00:00Z"}
+				{"owner":"admin","name":"acme","displayName":"AgentCo, LLC","createdTime":"2021-02-02T00:00:00Z"}
 			],"count":2}`)
 		case r.URL.Path == "/v1/iam/users":
 			// The roster is OWNER-SCOPED — that is the tenancy boundary IAM enforces —
@@ -490,8 +490,8 @@ func TestOrgs_RealAggregation(t *testing.T) {
 	}
 	// Rows are sorted by org name: acme, hanzo.
 	acme := env.Data[0]
-	if acme.Org != "acme" || acme.Display != "Acme Inc" {
-		t.Errorf("org row[0] = %+v, want acme/Acme Inc", acme)
+	if acme.Org != "acme" || acme.Display != "AgentCo, LLC" {
+		t.Errorf("org row[0] = %+v, want acme/AgentCo, LLC", acme)
 	}
 	if acme.Users != 4 {
 		t.Errorf("org acme users = %d, want 4 (acme's OWN members, not the fleet total)", acme.Users)

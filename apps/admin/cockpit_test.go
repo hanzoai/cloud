@@ -106,7 +106,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		switch {
 		case r.URL.Path == "/v1/iam/organizations":
 			fmt.Fprintf(w, `{"organizations":[
-				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":%q},
+				{"owner":"admin","name":"acme","displayName":"AgentCo, LLC","createdTime":%q},
 				{"owner":"admin","name":"globex","displayName":"Globex","createdTime":%q}
 			],"count":2}`, acmeCreated, globexCreated)
 		case r.URL.Path == "/v1/iam/users":

@@ -21,7 +21,7 @@ func TestStorePerOrgIsolation(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
 
-	acme := &Formation{Org: "acme", Stage: StageStructure, Structure: StructureCCorp, Name: "Acme Inc.", CreatedAt: 1, UpdatedAt: 1}
+	acme := &Formation{Org: "acme", Stage: StageStructure, Structure: StructureCCorp, Name: "AgentCo, LLC", CreatedAt: 1, UpdatedAt: 1}
 	if err := s.Put(ctx, acme); err != nil {
 		t.Fatalf("put acme: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestStorePerOrgIsolation(t *testing.T) {
 
 	// acme reads its own back, with fields intact.
 	got, err := s.Get(ctx, "acme")
-	if err != nil || got.Name != "Acme Inc." || got.Structure != StructureCCorp {
+	if err != nil || got.Name != "AgentCo, LLC" || got.Structure != StructureCCorp {
 		t.Fatalf("acme read-back: %+v err=%v", got, err)
 	}
 }
@@ -46,7 +46,7 @@ func TestStoreRoundTrip(t *testing.T) {
 
 	in := &Formation{
 		Org: "acme", Stage: StageGenesis, Structure: StructureCCorp, Jurisdiction: JurisdictionDE,
-		Name: "Acme Inc.", Paid: true, PaymentRef: "pay_1", Signed: true, EsignRef: "es_1",
+		Name: "AgentCo, LLC", Paid: true, PaymentRef: "pay_1", Signed: true, EsignRef: "es_1",
 		Founders: []Founder{
 			{Name: "Ada", Email: "ada@acme.com", EquityBps: 6000, KYCStatus: KYCVerified},
 			{Name: "Bo", Email: "bo@acme.com", EquityBps: 4000, KYCStatus: KYCVerified},

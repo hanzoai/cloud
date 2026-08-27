@@ -242,7 +242,7 @@ func TestIntegrationsCallbackHappyPath(t *testing.T) {
 
 	// The connection row (non-secret metadata) landed.
 	conn, ok := ConnectionFor("acme", "slack", "")
-	if !ok || conn.ExternalID != "T0TEAM" || conn.AccountLabel != "Acme Inc" {
+	if !ok || conn.ExternalID != "T0TEAM" || conn.AccountLabel != "AgentCo, LLC" {
 		t.Fatalf("connection row: ok=%v %+v", ok, conn)
 	}
 	if conn.BotUserID != "U0BOT" {
@@ -270,7 +270,7 @@ func TestIntegrationsCallbackHappyPath(t *testing.T) {
 	for _, p := range out.Providers {
 		if p.ID == "slack" {
 			seen = true
-			if !p.Connected || p.Connection == nil || p.Connection.Account != "Acme Inc" {
+			if !p.Connected || p.Connection == nil || p.Connection.Account != "AgentCo, LLC" {
 				t.Fatalf("slack card must show connected+account: %+v", p)
 			}
 		}

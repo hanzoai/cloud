@@ -11,7 +11,7 @@ func seedBook(t *testing.T, s *Store) context.Context {
 	t.Helper()
 	ctx := context.Background()
 	book := []*Formation{
-		{Org: "acme", Stage: StageFounders, Structure: StructureCCorp, Name: "Acme Inc.", CreatedAt: 10, UpdatedAt: 40,
+		{Org: "acme", Stage: StageFounders, Structure: StructureCCorp, Name: "AgentCo, LLC", CreatedAt: 10, UpdatedAt: 40,
 			Founders: []Founder{
 				{Name: "Ada", Email: "ada@acme.test", KYCStatus: KYCPending},
 				{Name: "Grace", Email: "grace@acme.test", KYCStatus: KYCVerified},

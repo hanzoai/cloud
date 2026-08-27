@@ -54,7 +54,7 @@ func TestTypedOpsPreserveTheLegalWire(t *testing.T) {
 	code, out := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
 		"templateId": "nda",
 		"data": map[string]string{
-			"effective_date": "2026-01-01", "company_name": "Acme Inc.",
+			"effective_date": "2026-01-01", "company_name": "AgentCo, LLC",
 			"counterparty_name": "Beta LLC", "governing_law": "Delaware",
 		},
 	})
@@ -220,7 +220,7 @@ func TestCompleteSignIgnoresAnUnparseableBody(t *testing.T) {
 	code, out := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
 		"templateId": "nda",
 		"data": map[string]string{
-			"effective_date": "2026-01-01", "company_name": "Acme Inc.",
+			"effective_date": "2026-01-01", "company_name": "AgentCo, LLC",
 			"counterparty_name": "Beta LLC", "governing_law": "Delaware",
 		},
 	})

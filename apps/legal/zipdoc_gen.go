@@ -108,7 +108,7 @@ func init() {
 			"generateRequest.data":            "Data supplies every merge field the template declares, keyed by field key.\nEvery declared field is REQUIRED: a missing one is refused with 400 rather\nthan rendered as a blank into a contract.",
 			"generateRequest.templateId":      "TemplateID is the template to render. Required; resolved for the caller's\norg, so an override wins over the built-in.",
 		},
-		Example: json.RawMessage(`{"templateId":"nda","data":{"counterparty":"Acme, Inc.","date":"2026-07-30"}}`),
+		Example: json.RawMessage(`{"templateId":"nda","data":{"counterparty":"AgentCo, LLC","date":"2026-07-30"}}`),
 	})
 	zip.Describe("POST /v1/legal/documents/:id/sign", zip.Doc{
 		Description: "Opens an e-signature request over one document and moves it\nto out_for_signature, returning the provider's reference for the request.\n\nThe provider is whatever this deployment has wired. The honest default is\n\"manual\": the request is recorded and the org fulfils it out of band — nothing\nhere fabricates a signature, and the stub never reports itself complete.",
@@ -158,6 +158,6 @@ func init() {
 			"templateReply.disclaimer":       "Disclaimer is the boundary made visible on the wire.",
 			"templateReply.template":         "Template is the resolved template — the org's override if it has one, else\nthe built-in.",
 		},
-		Example: json.RawMessage(`{"id":"nda","title":"Acme Mutual NDA","body":"…{{.counterparty}}…","fields":[{"key":"counterparty","label":"Counterparty"}]}`),
+		Example: json.RawMessage(`{"id":"nda","title":"AgentCo Mutual NDA","body":"…{{.counterparty}}…","fields":[{"key":"counterparty","label":"Counterparty"}]}`),
 	})
 }

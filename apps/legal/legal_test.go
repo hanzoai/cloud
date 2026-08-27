@@ -31,7 +31,7 @@ const testTimeout = 30 * time.Second
 func TestRenderIsDeterministic(t *testing.T) {
 	tmpl, _ := builtin("nda")
 	data := map[string]string{
-		"effective_date": "2026-01-01", "company_name": "Acme Inc.",
+		"effective_date": "2026-01-01", "company_name": "AgentCo, LLC",
 		"counterparty_name": "Beta LLC", "governing_law": "Delaware",
 	}
 	a, err := Render(tmpl, data)
@@ -45,7 +45,7 @@ func TestRenderIsDeterministic(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Fatalf("render is not deterministic:\n%s\n---\n%s", a, b)
 	}
-	if !strings.Contains(string(a), "Acme Inc.") || !strings.Contains(string(a), "Beta LLC") {
+	if !strings.Contains(string(a), "AgentCo, LLC") || !strings.Contains(string(a), "Beta LLC") {
 		t.Fatalf("merge fields not substituted: %s", a)
 	}
 }
@@ -54,7 +54,7 @@ func TestRenderIsDeterministic(t *testing.T) {
 // it — never a blank rendered into a contract.
 func TestRenderFailsClosedOnMissingField(t *testing.T) {
 	tmpl, _ := builtin("nda")
-	_, err := Render(tmpl, map[string]string{"company_name": "Acme"})
+	_, err := Render(tmpl, map[string]string{"company_name": "AgentCo"})
 	if err == nil {
 		t.Fatalf("expected a missing-field error")
 	}
@@ -70,7 +70,7 @@ func TestRenderFailsClosedOnMissingField(t *testing.T) {
 func TestCounselNoticeOnSecurities(t *testing.T) {
 	safe, _ := builtin("safe")
 	out, err := Render(safe, map[string]string{
-		"date": "2026-01-01", "company_name": "Acme", "investor_name": "VC", "purchase_amount": "$100,000",
+		"date": "2026-01-01", "company_name": "AgentCo", "investor_name": "VC", "purchase_amount": "$100,000",
 		"valuation_cap": "$10,000,000", "discount_rate": "20%", "governing_law": "Delaware",
 	})
 	if err != nil {
@@ -150,14 +150,14 @@ func TestGenerateAndFailClosed(t *testing.T) {
 
 	// Missing fields → 400.
 	if code, _ := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
-		"templateId": "nda", "data": map[string]string{"company_name": "Acme"},
+		"templateId": "nda", "data": map[string]string{"company_name": "AgentCo"},
 	}); code != http.StatusBadRequest {
 		t.Fatalf("missing fields want 400, got %d", code)
 	}
 	// Complete data → 201 with a rendered body.
 	code, m := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
 		"templateId": "nda",
-		"data": map[string]string{"effective_date": "2026-01-01", "company_name": "Acme Inc.",
+		"data": map[string]string{"effective_date": "2026-01-01", "company_name": "AgentCo, LLC",
 			"counterparty_name": "Beta LLC", "governing_law": "Delaware"},
 	})
 	if code != http.StatusCreated {
@@ -167,7 +167,7 @@ func TestGenerateAndFailClosed(t *testing.T) {
 	if doc["status"] != string(StatusDraft) {
 		t.Fatalf("new doc status = %v, want draft", doc["status"])
 	}
-	if !strings.Contains(mapStr(doc, "body"), "Acme Inc.") {
+	if !strings.Contains(mapStr(doc, "body"), "AgentCo, LLC") {
 		t.Fatalf("rendered body missing merge value: %v", doc["body"])
 	}
 	if mapStr(m, "disclaimer") == "" {
@@ -196,9 +196,9 @@ func TestOrgOverrideResolution(t *testing.T) {
 	}
 	// Generation uses the override body + its (reduced) field set.
 	_, m := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
-		"templateId": "nda", "data": map[string]string{"company_name": "Acme"},
+		"templateId": "nda", "data": map[string]string{"company_name": "AgentCo"},
 	})
-	if !strings.Contains(mapStr(docFrom(m), "body"), "Custom NDA for Acme") {
+	if !strings.Contains(mapStr(docFrom(m), "body"), "Custom NDA for AgentCo") {
 		t.Fatalf("generated doc did not use the override: %v", docFrom(m)["body"])
 	}
 	// Another org still sees the builtin.
@@ -226,7 +226,7 @@ func TestOverrideCannotDropCounselReview(t *testing.T) {
 	}
 	// And the rendered override still carries the counsel notice.
 	_, gen := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
-		"templateId": "safe", "data": map[string]string{"company_name": "Acme"},
+		"templateId": "safe", "data": map[string]string{"company_name": "AgentCo"},
 	})
 	if !strings.HasPrefix(mapStr(docFrom(gen), "body"), CounselNotice) {
 		t.Fatalf("override SAFE lost the counsel notice")
@@ -252,7 +252,7 @@ func TestNewEquityTemplateForcesCounselNotice(t *testing.T) {
 		t.Fatalf("a NEW equity template must be forced counsel-review, got %v", tpl["counselReview"])
 	}
 	_, gen := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
-		"templateId": "our-safe", "data": map[string]string{"company_name": "Acme"},
+		"templateId": "our-safe", "data": map[string]string{"company_name": "AgentCo"},
 	})
 	if !strings.HasPrefix(mapStr(docFrom(gen), "body"), CounselNotice) {
 		t.Fatalf("new equity doc must lead with the counsel notice")
@@ -333,7 +333,7 @@ func TestAuditCarriesNoBody(t *testing.T) {
 	const org = "acme"
 	_, m := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
 		"templateId": "nda",
-		"data": map[string]string{"effective_date": "2026-01-01", "company_name": "Acme Inc.",
+		"data": map[string]string{"effective_date": "2026-01-01", "company_name": "AgentCo, LLC",
 			"counterparty_name": "Secret Counterparty LLC", "governing_law": "Delaware"},
 	})
 	docID := mapStr(docFrom(m), "id")
@@ -359,7 +359,7 @@ func TestEsignLifecycle(t *testing.T) {
 	const org = "acme"
 	_, m := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
 		"templateId": "nda",
-		"data": map[string]string{"effective_date": "2026-01-01", "company_name": "Acme",
+		"data": map[string]string{"effective_date": "2026-01-01", "company_name": "AgentCo",
 			"counterparty_name": "Beta", "governing_law": "Delaware"},
 	})
 	docID := mapStr(docFrom(m), "id")
@@ -389,7 +389,7 @@ func TestFilingHonestManual(t *testing.T) {
 	const org = "acme"
 	_, m := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
 		"templateId": "ip-assignment",
-		"data":       map[string]string{"date": "2026-01-01", "company_name": "Acme", "assignor_name": "Ada", "governing_law": "Delaware"},
+		"data":       map[string]string{"date": "2026-01-01", "company_name": "AgentCo", "assignor_name": "Ada", "governing_law": "Delaware"},
 	})
 	docID := mapStr(docFrom(m), "id")
 	code, fm := do(t, app, http.MethodPost, "/v1/legal/filings", org, map[string]any{
