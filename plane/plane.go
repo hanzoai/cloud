@@ -341,6 +341,14 @@ const (
 	// global — can only ever answer when agents happens to be co-resident. It was
 	// not, and every @hanzo turn in Slack died on ErrNoPeer.
 	AgentsRunOnBehalf = "agents_run_on_behalf"
+	// AgentsRoster is the READ half of the same fact AgentsRunOnBehalf is the write
+	// half of, and it was missing for exactly as long. agents.ListForOrg gates on
+	// the same per-process `mounted` global, so a surface that projects agents as
+	// members — apps/team's Chunter roster — read an empty list in every deployment
+	// where agents is its own process, which is every deployment. Worse than the
+	// run's ErrNoPeer, because the caller renders absence as "this org has no
+	// agents" rather than as a failure.
+	AgentsRoster = "agents_roster"
 
 	// ChannelsIngest carries one authenticated inbound chat event from the platform
 	// adapters to the channels inbox. It replaces integrations.RegisterIngress — a
@@ -2379,6 +2387,36 @@ type Turn struct {
 // order the store returns.
 type Recent struct {
 	Turns []Turn `json:"turns"`
+}
+
+// RosterIn asks agents for the caller's own agents. It carries NOTHING, and the
+// emptiness is the design: the tenant is the caller's, stated on the wire before
+// the hop, because an org a caller could name is an org whose agents a caller
+// could enumerate. The one field this type will never grow is Org.
+type RosterIn struct{}
+
+// AgentRoster is an org's agents, as much of each as a membership projection
+// needs and no more. It is deliberately NOT the agents.Agent row: a roster
+// reader wants to name an agent and say whether it is live, and shipping the
+// instructions, model and tool grants across the plane would put an agent's
+// whole configuration on a wire that only needs its name.
+type AgentRoster struct {
+	Agents []AgentBrief `json:"agents"`
+}
+
+// AgentBrief is one agent, named and classified.
+type AgentBrief struct {
+	// ID is the agent id — the ref a run names and the value a member id derives
+	// from, so it must be stable across a reconcile.
+	ID string `json:"id"`
+	// Name is the display name a person reads in a member list.
+	Name string `json:"name"`
+	// Status is the registry status VERBATIM, never a boolean. The caller decides
+	// what counts as live: apps/team reads empty/active/ready as a live member and
+	// anything else as one that keeps its authorship and drops out of the roster,
+	// and folding that judgement into a bool here would move the policy to the
+	// wrong side of the wire.
+	Status string `json:"status"`
 }
 
 // RunOnBehalfOut is one finished turn.

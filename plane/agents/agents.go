@@ -30,9 +30,17 @@ const App = "agents"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.AgentsRoster,
 	plane.AgentsRunOnBehalf,
 	plane.AgentsSessionsCount,
 	plane.AgentsSessionsStop,
+}
+
+// AgentsRoster the agents of the caller's org, as a membership projection reads them.
+//
+// Calls plane.AgentsRoster on agents over the peer plane.
+func AgentsRoster(ctx context.Context, in *plane.RosterIn) (*plane.AgentRoster, error) {
+	return plane.Ask[plane.RosterIn, plane.AgentRoster](ctx, App, plane.AgentsRoster, in)
 }
 
 // AgentsRunOnBehalf run one agent turn as a linked user, for a chat bridge in another pr....

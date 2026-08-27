@@ -489,6 +489,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// in it — two endpoints onto the ONE StopSessions (sessions_rpc.go).
 	exposeSessions()
 	exposeRunOnBehalf()
+	exposeRoster()
 
 	o := agentOps{s: s}
 	// Bridge FIRST, and at the entry point this SUBSYSTEM is, not on one node inside
