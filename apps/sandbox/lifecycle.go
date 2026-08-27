@@ -139,6 +139,30 @@ func (c clocks) watched(m Sandbox, now time.Time) bool {
 // Order is deliberate: the ABSOLUTE cap is asked first, so a bug in the presence
 // path can delay a reap by at most the ceiling and never past it.
 func (c clocks) over(m Sandbox, now time.Time) (bool, string) {
+	// A FAILED START IS OVER, AND IT IS OVER FIRST, because it is the one state
+	// with no future: nothing retries it, no route resumes it (Lease mints a fresh
+	// sandbox rather than returning a row in error), so no clock below can ever
+	// make it live again.
+	//
+	// It is a leak until something says so. `start` gives up WAITING for the pod;
+	// it does not stop the pod. So a container image that pulls for longer than
+	// SANDBOX_START_TIMEOUT_SEC leaves a pod that comes up afterwards and runs the
+	// caller's code — unbilled, because `holding` reads pending|running and this
+	// row is neither; uncounted, because the per-class ceiling reads the same
+	// predicate; and, worst, PROTECTED from the orphan sweep, which skips any pod
+	// whose id a row still claims. Three defences that each read "not running" as
+	// "not there". Ending the row here is what puts the pod back in reach of the
+	// one thing that can stop it.
+	//
+	// There is no grace. A grace would be time for a state to change, and this one
+	// does not change; the pod is stopped and the row is deleted at the next sweep,
+	// which is at most a minute after the start gave up. What the OPERATOR needs —
+	// which image was asked for and what the cluster said about it — is not lost
+	// with the row: `start` records the reason and answers 503 with it in the same
+	// breath, so the caller has it, and the failure is a log line either way.
+	if m.Status == "error" {
+		return true, "start-failed"
+	}
 	if c.absolute > 0 && m.CreatedAt > 0 && now.Sub(time.Unix(m.CreatedAt, 0)) > c.absolute {
 		return true, "max-life"
 	}

@@ -16,7 +16,7 @@ import (
 func BenchmarkListUsage(b *testing.B) {
 	for _, n := range []int{100, 1000, 5000} {
 		b.Run(fmt.Sprintf("entries=%d", n), func(b *testing.B) {
-			f := New(b.TempDir())
+			f := New(Local(b.TempDir()))
 			ctx := context.Background()
 			for i := range n {
 				if err := f.RecordUsage(ctx, types.UsageInput{

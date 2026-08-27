@@ -55,7 +55,7 @@ func servePeerLedger(t *testing.T) finance.Client {
 	t.Cleanup(func() { os.RemoveAll(sockDir) })
 	t.Setenv("ZIP_RUNTIME_DIR", sockDir)
 
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil) })
 

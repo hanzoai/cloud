@@ -171,7 +171,7 @@ func TestFirstSightStartsTheClockAndChargesNothing(t *testing.T) {
 	const now = 1_800_000_000
 
 	micros, err := RuntimeCharge(context.Background(),
-		Running{ID: "s1", Payer: "acme", Model: "session"}, now, RuntimeHourMicros, w.advance, d.emit)
+		Running{ID: "s1", Payer: "acme", Model: "session", Rate: RuntimeHourMicros}, now, w.advance, d.emit)
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
@@ -203,8 +203,8 @@ func TestASpanIsChargedOnceHoweverManySweepersRunIt(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, _ = RuntimeCharge(context.Background(),
-				Running{ID: "s1", Payer: "acme", Model: "session", MeteredAt: start},
-				now, RuntimeHourMicros, w.advance, d.emit)
+				Running{ID: "s1", Payer: "acme", Model: "session", Rate: RuntimeHourMicros, MeteredAt: start},
+				now, w.advance, d.emit)
 		}()
 	}
 	wg.Wait()
@@ -233,8 +233,8 @@ func TestOneSpanIsOneActAtTheLedger(t *testing.T) {
 		w := newWatermarks()
 		w.at["s1"] = start
 		if _, err := RuntimeCharge(context.Background(),
-			Running{ID: "s1", Payer: "acme", Model: "session", MeteredAt: start},
-			now, RuntimeHourMicros, w.advance, d.emit); err != nil {
+			Running{ID: "s1", Payer: "acme", Model: "session", Rate: RuntimeHourMicros, MeteredAt: start},
+			now, w.advance, d.emit); err != nil {
 			t.Fatalf("charge: %v", err)
 		}
 	}
@@ -264,8 +264,8 @@ func TestTwoSpansOfOneRowAreTwoActs(t *testing.T) {
 
 	for _, span := range [][2]int64{{t0, t1}, {t1, t2}} {
 		if _, err := RuntimeCharge(context.Background(),
-			Running{ID: "s1", Payer: "acme", Model: "session", MeteredAt: span[0]},
-			span[1], RuntimeHourMicros, w.advance, d.emit); err != nil {
+			Running{ID: "s1", Payer: "acme", Model: "session", Rate: RuntimeHourMicros, MeteredAt: span[0]},
+			span[1], w.advance, d.emit); err != nil {
 			t.Fatalf("charge: %v", err)
 		}
 	}
@@ -291,13 +291,13 @@ func TestACloseBillsTheTailAndNeverTheSweptSpan(t *testing.T) {
 	w.at["s1"] = start
 
 	if _, err := RuntimeCharge(context.Background(),
-		Running{ID: "s1", Payer: "acme", Model: "session", MeteredAt: start},
-		swept, RuntimeHourMicros, w.advance, d.emit); err != nil {
+		Running{ID: "s1", Payer: "acme", Model: "session", Rate: RuntimeHourMicros, MeteredAt: start},
+		swept, w.advance, d.emit); err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
 	if _, err := RuntimeCharge(context.Background(),
-		Running{ID: "s1", Payer: "acme", Model: "session", MeteredAt: w.at["s1"]},
-		closed, RuntimeHourMicros, w.advance, d.emit); err != nil {
+		Running{ID: "s1", Payer: "acme", Model: "session", Rate: RuntimeHourMicros, MeteredAt: w.at["s1"]},
+		closed, w.advance, d.emit); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 	want := RuntimeCost(RuntimeHourMicros, closed-start)
@@ -306,21 +306,30 @@ func TestACloseBillsTheTailAndNeverTheSweptSpan(t *testing.T) {
 	}
 }
 
+// shipped is a ship that acked — the ordinary case, so a test about arithmetic
+// says nothing about durability. The tests that are about the ship supply their
+// own.
+func shipped() (bool, error) { return true, nil }
+
 // TestSweepChargesEveryRowAndCountsOnlyThePaidOnes.
 func TestSweepChargesEveryRowAndCountsOnlyThePaidOnes(t *testing.T) {
 	w, d := newWatermarks(), &debits{}
 	const start, now = 1_800_000_000, 1_800_003_600
 	w.at["a"], w.at["b"] = start, start
 
+	// Each row states its own price, because the rate is a fact about what is
+	// running: a pass holds rows of different kinds and one rate for all of them is
+	// how an expensive envelope is sold at a cheap one's price.
+	const hr = RuntimeHourMicros
 	rows := []Running{
-		{ID: "a", Payer: "acme", Model: "session", MeteredAt: start},
-		{ID: "b", Payer: "hanzo/z", Model: "bot", MeteredAt: start},
-		{ID: "c", Payer: "acme", Model: "session"},    // first sight: clock starts, no charge
-		{ID: "d", Model: "session", MeteredAt: start}, // no payer: nothing to bill
-		{ID: "", Payer: "acme", MeteredAt: start},     // no row id: nothing to bill
-		{ID: "e", Payer: "acme", MeteredAt: now + 60}, // watermark ahead of now
+		{ID: "a", Payer: "acme", Model: "session", Rate: hr, MeteredAt: start},
+		{ID: "b", Payer: "hanzo/z", Model: "bot", Rate: hr, MeteredAt: start},
+		{ID: "c", Payer: "acme", Model: "session", Rate: hr},    // first sight: clock starts, no charge
+		{ID: "d", Model: "session", Rate: hr, MeteredAt: start}, // no payer: nothing to bill
+		{ID: "", Payer: "acme", Rate: hr, MeteredAt: start},     // no row id: nothing to bill
+		{ID: "e", Payer: "acme", Rate: hr, MeteredAt: now + 60}, // watermark ahead of now
 	}
-	n, err := RuntimeSweep(context.Background(), rows, now, RuntimeHourMicros, w.advance, d.emit)
+	n, err := RuntimeSweep(context.Background(), rows, now, w.advance, shipped, d.emit)
 	if err != nil {
 		t.Fatalf("sweep: %v", err)
 	}
@@ -344,8 +353,8 @@ func TestAPublishedZeroIsFree(t *testing.T) {
 	w.at["s1"] = start
 
 	micros, err := RuntimeCharge(context.Background(),
-		Running{ID: "s1", Payer: "acme", Model: "session", MeteredAt: start},
-		now, 0, w.advance, d.emit)
+		Running{ID: "s1", Payer: "acme", Model: "session", Rate: 0, MeteredAt: start},
+		now, w.advance, d.emit)
 	if err != nil {
 		t.Fatalf("charge: %v", err)
 	}
@@ -365,8 +374,8 @@ func TestTheDebitCarriesTheScopeTheCapSumsOver(t *testing.T) {
 	w.at["s1"] = start
 
 	if _, err := RuntimeCharge(context.Background(),
-		Running{ID: "s1", Payer: "acme", Project: "atlas", Model: "sandbox/dev", MeteredAt: start},
-		now, RuntimeHourMicros, w.advance, d.emit); err != nil {
+		Running{ID: "s1", Payer: "acme", Project: "atlas", Model: "sandbox/dev", Rate: RuntimeHourMicros, MeteredAt: start},
+		now, w.advance, d.emit); err != nil {
 		t.Fatalf("charge: %v", err)
 	}
 	u := d.rows[0]

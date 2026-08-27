@@ -60,6 +60,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/namespace"
 )
 
@@ -177,13 +178,21 @@ func (c clocks) over(x Session, now time.Time) (bool, string) {
 	return false, ""
 }
 
-// reap ends every session whose time is up, in every org that has a store.
+// reap ends every session whose time is up, in every org THIS REPLICA OWNS.
 //
 // Errors are per-org and never abort the pass: one org with an unreadable file must
 // not keep every other org's leaked sessions alive. A store that could not be
 // opened or listed is REPORTED and skipped, never read as "this org has nothing
 // running" — the rule the sandbox orphan sweep states, for the same reason: silence
 // is not an answer.
+//
+// OWNERSHIP IS A GATE ON THE ACT, NOT ON THE WRITE. A reap is terminal — a control
+// event the surface stops on, a terminal status, an ended_at — and none of that can
+// be taken back. Every pod holds every org's file its volume carries, so an ungated
+// pass is every pod ending every org's sessions: the loser's write is discarded on
+// the next hydrate, but the person whose agent stopped mid-run does not get it back,
+// and the control event has already been consumed. So the org's elected writer is
+// the one that decides when its sessions end, and the others leave them alone.
 func reap(ctx context.Context, st *state, log logger, clk clocks) {
 	now := time.Now()
 	_ = st.eachStore(func(ns namespace.Namespace, sto *Store, openErr error) {
@@ -193,6 +202,9 @@ func reap(ctx context.Context, st *state, log logger, clk clocks) {
 		if openErr != nil {
 			log.Warn("reap: open store", "namespace", ns, "err", openErr)
 			return
+		}
+		if !st.stores.Owned(ns) {
+			return // another replica ends this org's sessions
 		}
 		org := ns.ID()
 		live, err := sto.Live(ctx, org)
@@ -241,6 +253,7 @@ func startSweep(s *cloud.Service[state]) func() {
 	// The policy is read ONCE here rather than per pass, so every row in every
 	// sweep is judged by the same numbers.
 	clk := newClocks()
+	cloud.SayDurability(s.Log, s.Base, "agent runtime")
 	go func() {
 		t := time.NewTimer(sweepFirst)
 		defer t.Stop()
@@ -250,7 +263,8 @@ func startSweep(s *cloud.Service[state]) func() {
 				return
 			case <-t.C:
 				reap(ctx, &s.State, s.Log, clk)
-				meterRuntime(ctx, &s.State, s.Log, s.Bill)
+				meterRuntime(ctx, &s.State, s.Log, time.Now().Unix(),
+					func(payer string, u metering.Usage) { s.Bill.MeterUsage(payer, meterKind, u) })
 				t.Reset(sweepEvery)
 			}
 		}

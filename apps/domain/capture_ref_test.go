@@ -24,7 +24,7 @@ import (
 // and say nothing about whether three charges were taken.
 func fundedBiller(t *testing.T, seedCents int64) (finance.Client, *meterBiller) {
 	t.Helper()
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil); _ = fin.Close() })
 	if _, err := fin.Deposit(context.Background(), types.DepositInput{

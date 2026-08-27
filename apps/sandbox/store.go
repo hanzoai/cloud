@@ -325,8 +325,33 @@ func (s *Store) IDs(ctx context.Context, org string) (map[string]bool, error) {
 // sandbox is holding a pod", so what the fleet counts as occupied capacity and
 // what it charges for cannot disagree.
 func (s *Store) Held(ctx context.Context, org string) ([]Sandbox, error) {
-	rows, err := s.db.QueryContext(ctx,
-		selectCols+` WHERE org=? AND status IN ('running','pending')`, org)
+	return s.rows(ctx, ` WHERE org=? AND status IN ('running','pending')`, org)
+}
+
+// Rows is every sandbox this org has, with NO LIMIT — the set the REAPER sweeps.
+//
+// It is wider than Held, and the difference is the whole point. Held answers "what
+// is this org being charged for", which is `holding` and excludes a sandbox whose
+// start failed. The reaper asks a different question — "what might still have a POD
+// behind it" — and the answer includes exactly those failed rows: a start that
+// timed out left the pod running and only gave up WAITING for it, so a set that
+// stops at `holding` leaves that pod alive with nothing left that will ever ask
+// about it. Two questions, two queries, neither borrowing the other's predicate.
+//
+// It is also why this is not `List`. List is `ORDER BY created_at DESC LIMIT 200`,
+// so past two hundred sandboxes it returns the NEWEST two hundred and drops the
+// oldest — which are precisely the ones most likely to be over their lease. The
+// reaper reading it billed those forever and ended them never; a sweep is a set to
+// difference against, not a page to show, and every set here is unbounded for that
+// reason (IDs, Held, and now this one).
+func (s *Store) Rows(ctx context.Context, org string) ([]Sandbox, error) {
+	return s.rows(ctx, ` WHERE org=?`, org)
+}
+
+// rows is the scan every unbounded set above shares, so a column added to the table
+// is added to one scan rather than to three that must be kept in step.
+func (s *Store) rows(ctx context.Context, where string, args ...any) ([]Sandbox, error) {
+	rows, err := s.db.QueryContext(ctx, selectCols+where, args...)
 	if err != nil {
 		return nil, err
 	}

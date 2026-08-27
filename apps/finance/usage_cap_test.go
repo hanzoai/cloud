@@ -15,7 +15,7 @@ import (
 // makes the cap enforce on the finance ledger (where the unified binary records
 // usage) instead of the empty commerce transaction store.
 func TestSumUsageSince_OrgTotal(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	ctx := context.Background()
 	const org = "cap-org"
 
@@ -59,7 +59,7 @@ func TestSumUsageSince_OrgTotal(t *testing.T) {
 // The usage hook fires after a committed debit — the client the cap's alert-fire rides,
 // carrying org + test + scope, WITHOUT finance importing commerce.
 func TestUsageHook_FiresAfterDebit(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	ctx := context.Background()
 
 	var mu sync.Mutex
@@ -101,7 +101,7 @@ func TestUsageHook_FiresAfterDebit(t *testing.T) {
 // a page of zeros that summed to zero. The row now carries both; the exact
 // value is the source, the cents its rendering.
 func TestListUsage_CarriesTheExactDebit(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	ctx := context.Background()
 	const org = "exact-org"
 

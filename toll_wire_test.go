@@ -214,20 +214,20 @@ func TestTheProgramArmsItsRule(t *testing.T) {
 	// program speaks: no gate is installed here, the operation itself returns a
 	// value, and the seam carries no route middleware.
 	priced := post(t, app, zip.CallPath+"probe_run", zip.CallContentType, "")
-	if !money(priced) {
+	if !refusal(priced) {
 		t.Fatalf("the program served a 500c operation against an empty ledger and answered %q — "+
 			"its own app is not under its money rule", priced)
 	}
 	// The control: unpriced work over the same seam still runs, so the refusal above
 	// is the PRICE being asked about and not the seam being broken.
-	if free := post(t, app, zip.CallPath+"audit_write", zip.CallContentType, ""); money(free) {
+	if free := post(t, app, zip.CallPath+"audit_write", zip.CallContentType, ""); refusal(free) {
 		t.Fatalf("unpriced work was refused for money too (%q), so the row above measured a broken seam", free)
 	}
 }
 
-// money reports whether an answer speaks the fleet's money wire — the codes
+// refusal reports whether an answer speaks the fleet's money wire — the codes
 // cloud.Denied renders, and the only vocabulary the toll has.
-func money(answer string) bool {
+func refusal(answer string) bool {
 	for _, code := range []string{"insufficient_balance", "spend_cap_exceeded", "balance_unavailable"} {
 		if strings.Contains(answer, code) {
 			return true

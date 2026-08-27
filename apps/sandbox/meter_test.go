@@ -42,6 +42,14 @@ func (l *ledger) micros() int64 {
 
 func (l *ledger) len() int { l.mu.Lock(); defer l.mu.Unlock(); return len(l.rows) }
 
+// reset forgets what has been billed so far, so a test can measure ONE phase of a
+// sequence rather than a running total.
+func (l *ledger) reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.rows, l.who = nil, nil
+}
+
 // lease writes one lease this org is holding, already metered through `at`.
 func lease(t *testing.T, st *Store, id, org, payer string, at int64) Sandbox {
 	t.Helper()
@@ -58,7 +66,9 @@ func lease(t *testing.T, st *Store, id, org, payer string, at int64) Sandbox {
 // charge runs one span through the real store the way [bill] does.
 func charge(t *testing.T, st *Store, m Sandbox, now, rate int64, l *ledger) int64 {
 	t.Helper()
-	micros, err := cloud.RuntimeCharge(context.Background(), running(m), now, rate,
+	r := running(context.Background(), m)
+	r.Rate = rate
+	micros, err := cloud.RuntimeCharge(context.Background(), r, now,
 		func(ctx context.Context, id string, was, at int64) (bool, error) {
 			return st.Advance(ctx, m.Org, id, was, at)
 		}, l.emit)
@@ -111,7 +121,7 @@ func TestOnlyOneSweeperOwnsASpan(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = cloud.RuntimeCharge(context.Background(), running(m), now, cloud.RuntimeHourMicros,
+			_, _ = cloud.RuntimeCharge(context.Background(), running(context.Background(), m), now,
 				func(ctx context.Context, id string, was, at int64) (bool, error) {
 					return st.Advance(ctx, m.Org, id, was, at)
 				}, l.emit)
@@ -268,7 +278,8 @@ func TestAFreeHourStillMovesTheClock(t *testing.T) {
 	ctx := context.Background()
 	stores := cloud.NewOrgStore[*Store](cloud.Base{DataDir: t.TempDir()}, "sandbox", openStore)
 	t.Cleanup(func() { _ = stores.CloseAll() })
-	s := &Service{Base: cloud.Base{Log: luxlog.NewNoOpLogger()}, State: state{stores: stores}}
+	s := &Service{Base: cloud.Base{Log: luxlog.NewNoOpLogger()},
+		State: state{stores: stores, debit: func(string, metering.Usage) {}}}
 
 	st, err := storeFor(s, "acme")
 	if err != nil {

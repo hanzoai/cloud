@@ -115,7 +115,7 @@ func runChild(role string) int {
 		// The ledger, and the ONE process that opens it. metering resolves the
 		// co-resident ledger natively (finance.Current), so the payer debit this
 		// process serves on the plane is a real entry in a real store.
-		finance.Publish(finance.New(filepath.Join(dir, "ledger")))
+		finance.Publish(finance.New(finance.Local(filepath.Join(dir, "ledger"))))
 		meter, err := metering.New(metering.Config{BaseURL: "http://commerce.split", HTTPClient: refusingDoer{}})
 		if err != nil {
 			return childFail("metering.New: %v", err)

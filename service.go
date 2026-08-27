@@ -39,6 +39,14 @@ type Base struct {
 	// subsystem opens survives rolling deploys/replicas without the subsystem
 	// having to know that it should.
 	Durable *org.Durability
+	// Peers says this deployment runs MORE THAN ONE writer, and it is the answer
+	// to a question the fence cannot be asked when there is no fence: WITHOUT
+	// Durable, who owns an org? A single-writer deployment owns all of them and a
+	// multi-writer one can prove nothing, so [OrgStore.Owned] reads this and
+	// nothing else on the local-only path. It is the same value buildDurability
+	// already computes to decide how loudly to report a disabled plane, so the log
+	// line and the gate cannot disagree.
+	Peers bool
 }
 
 // NewBase derives the shared deps for a named subsystem: a scoped child logger,
@@ -59,6 +67,7 @@ func NewBase(deps Deps, name string) Base {
 		Domain:  deps.Domain,
 		DataDir: deps.DataDir,
 		Durable: deps.Durable,
+		Peers:   deps.Peers,
 	}
 }
 

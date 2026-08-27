@@ -63,7 +63,7 @@ const (
 // process-wide money client and returns it, restoring the previous client after.
 func realLedger(t *testing.T) *ledgerReader {
 	t.Helper()
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	prev := finance.Current()
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(prev) })

@@ -19,7 +19,7 @@ import (
 // that a repeated RequestID is NOT a replay.
 func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	ctx := context.Background()
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	defer finance.Publish(nil)
 

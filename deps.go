@@ -94,6 +94,18 @@ type Deps struct {
 	// dev/single-node), and every OrgStore is exactly the pre-durability cache.
 	Durable *org.Durability
 
+	// Peers says this deployment runs MORE THAN ONE writer. It is a fact about the
+	// deployment, read from the same peer list buildDurability already parses, and
+	// it exists for the one question the fence cannot answer when there is no
+	// fence: on the local-only path, who owns an org? See [OrgStore.Owned].
+	//
+	// It is stated in the POSITIVE — "there are others" — so the zero value is the
+	// single-writer deployment, which owns everything it holds. A process that
+	// builds its own Base (a test, a subsystem with its own composition root) is
+	// then an owner by default, which is what a lone process IS; the dangerous
+	// arrangement is the one that has to say so.
+	Peers bool
+
 	// LiveMembers reads the CURRENT live writer set (the SAME ha.Membership snapshot the
 	// durability fencer elects over). Non-nil ONLY when the durable plane is active — the
 	// shard router then routes on the live set, so a draining/dead pod's orgs go to the

@@ -12,7 +12,7 @@ import (
 // RecordUsage wrote (magnitude + model), most-recent-first, and excludes deposits —
 // so /v1/billing/usage can answer from the ledger instead of self-dispatching.
 func TestListUsage(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	ctx := context.Background()
 	const org = "acme"
 
@@ -87,7 +87,7 @@ func TestListUsage(t *testing.T) {
 // for absence: alice reads her own two entries and none of bob's, and the standing
 // balance over the same wallet agrees with them.
 func TestListEntriesAnswersOneWallet(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	ctx := context.Background()
 	const org = "hanzo" // the shared signup org: strangers, one file, a wallet each
 
@@ -172,7 +172,7 @@ func TestListEntriesAnswersOneWallet(t *testing.T) {
 // its money sits there — the customer sees no ledger at all. Page the WALLET and the
 // limit means what the caller asked for.
 func TestListEntriesPagesTheWalletNotTheFile(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	ctx := context.Background()
 	const org = "hanzo"
 

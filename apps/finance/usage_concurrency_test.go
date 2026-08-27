@@ -20,7 +20,7 @@ import (
 // (RecordUsageOnce), so two concurrent replays cannot both read posted=true.
 func TestUsageIsExactlyOnceUnderConcurrency(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	if _, err := f.Deposit(ctx, types.DepositInput{

@@ -333,7 +333,26 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// A failure to start is RECORDED on the row and answered 503 — the row stays so
 	// an operator can see what was asked for and why it did not happen, rather than
 	// the request vanishing with the evidence.
+	//
+	// AND THE POD GOES, because `start` gives up WAITING and does not stop what it
+	// started. A create makes the pod first and then polls it for
+	// SANDBOX_START_TIMEOUT_SEC; past that the caller is answered 503 and the pod is
+	// left in the cluster, still pulling. When the pull finishes it RUNS — the
+	// caller's own image, the caller's own code — and nothing is left that will ever
+	// stop it: the meter skips it (`holding` reads pending|running), the per-class
+	// ceiling skips it for the same reason, and the orphan sweep PROTECTS it, since
+	// a row still claims its id. Three defences that each read "not running" as "not
+	// there", and the row this line writes is what switches all three off.
+	//
+	// So the two halves of the failure are separated: the ROW is the evidence and it
+	// stays, the POD is the cost and it is released here. A stop that itself fails is
+	// logged and not retried — the reaper reaches the row now (clocks.over refuses an
+	// error row at the first clause) and takes the pod with it on the next pass.
 	if err := s.State.rt.start(ctx, m, cr); err != nil {
+		if serr := s.State.rt.stop(ctx, m); serr != nil {
+			s.Log.Warn("the sandbox could not be started and its pod could not be stopped",
+				"sandbox", m.ID, "org", org, "start", err, "stop", serr)
+		}
 		m.Status, m.Error = "error", err.Error()
 		_ = store.Put(ctx, m)
 		return Sandbox{}, zip.Errorf(http.StatusServiceUnavailable, "start sandbox: %v", err)

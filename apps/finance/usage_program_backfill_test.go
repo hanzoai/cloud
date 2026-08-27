@@ -31,7 +31,7 @@ func TestBackfilledProgramStopsTheSecondDebit(t *testing.T) {
 	dir := t.TempDir()
 
 	const stable = "domain:renew:acme.ai" // a ref a caller holds across the deploy
-	before := New(dir)
+	before := New(Local(dir))
 	if _, err := before.Deposit(ctx, types.DepositInput{
 		Org: "acme", Subject: "acme", Amount: money.FromCents(100),
 	}); err != nil {
@@ -45,7 +45,7 @@ func TestBackfilledProgramStopsTheSecondDebit(t *testing.T) {
 
 	// THE DEPLOY: a new process opens the same file, so the migration — and the backfill
 	// — runs, and the act is re-recorded under the ref its caller still holds.
-	after := New(dir)
+	after := New(Local(dir))
 	defer func() { _ = after.Close() }()
 	if err := after.RecordUsage(ctx, types.UsageInput{
 		Org: "acme", Subject: "acme", Amount: money.FromCents(5), Ref: stable,
@@ -62,7 +62,7 @@ func TestBackfillKeepsDistinctActsDistinct(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	before := New(dir)
+	before := New(Local(dir))
 	if _, err := before.Deposit(ctx, types.DepositInput{
 		Org: "acme", Subject: "acme/bob", Amount: money.FromCents(100),
 	}); err != nil {
@@ -75,7 +75,7 @@ func TestBackfillKeepsDistinctActsDistinct(t *testing.T) {
 		t.Fatalf("close pre-deploy client: %v", err)
 	}
 
-	after := New(dir)
+	after := New(Local(dir))
 	defer func() { _ = after.Close() }()
 	// Both old acts replay (no further money moves) and a NEW act bills.
 	for _, tc := range []struct {
@@ -111,7 +111,7 @@ func TestARepairedRefBelongsToThePayerAlone(t *testing.T) {
 	dir := t.TempDir()
 
 	const shared = "act_shared"
-	before := New(dir)
+	before := New(Local(dir))
 	for _, subject := range []string{"acme", "acme/bob"} {
 		if _, err := before.Deposit(ctx, types.DepositInput{
 			Org: "acme", Subject: subject, Amount: money.FromCents(100),
@@ -125,7 +125,7 @@ func TestARepairedRefBelongsToThePayerAlone(t *testing.T) {
 		t.Fatalf("close pre-deploy client: %v", err)
 	}
 
-	after := New(dir)
+	after := New(Local(dir))
 	defer func() { _ = after.Close() }()
 
 	// The payer replays into its own repaired entry: no second debit.

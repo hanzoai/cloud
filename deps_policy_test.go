@@ -42,8 +42,10 @@ var depsFieldRationale = map[string]string{
 	"DataDir":   "the on-disk root every per-org store opens beneath; resolved before config so credz can place its socket there",
 
 	// --- roots that must exist before any store opens ---
-	"MasterKey":   "the 32-byte at-rest KEK, decoded once so subsystems that seal their own stores do not each provision a key",
-	"Durable":     "the HA-durability factory every OrgStore routes through; nil means local-only, which is a capability, not a setting",
+	"MasterKey": "the 32-byte at-rest KEK, decoded once so subsystems that seal their own stores do not each provision a key",
+	"Durable":   "the HA-durability factory every OrgStore routes through; nil means local-only, which is a capability, not a setting",
+	"Peers": "whether this deployment runs more than one writer — the ONLY thing that can answer who owns an org when Durable is nil, " +
+		"and a fact about the deployment's topology that no subsystem can look up from inside the process",
 	"LiveMembers": "the live writer set the shard router routes on; non-nil only when the durable plane is up",
 
 	// --- clients: the bootstrap proper. Each is handed in because acquiring it

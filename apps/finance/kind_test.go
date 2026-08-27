@@ -33,7 +33,7 @@ func TestKind_SurvivesTheWire(t *testing.T) {
 // came to render empty against a wallet full of grants — and it fails nothing, anywhere,
 // unless something asserts it here.
 func TestKind_WrittenKindsReadBack(t *testing.T) {
-	fin := New(t.TempDir())
+	fin := New(Local(t.TempDir()))
 	ctx := context.Background()
 	if _, err := fin.Deposit(ctx, types.DepositInput{
 		Org: "acme", Subject: "acme", Amount: money.FromCents(500), Currency: "usd", Ref: "d1",
@@ -69,7 +69,7 @@ func TestKind_WrittenKindsReadBack(t *testing.T) {
 // GPU charge tells a replay from a first charge by this flag alone, and it comes from
 // inside the insert's own transaction, so two concurrent replays cannot both act.
 func TestRecordUsageOnce_AnswersTheLedgersOwnKey(t *testing.T) {
-	fin := New(t.TempDir())
+	fin := New(Local(t.TempDir()))
 	ctx := context.Background()
 	if _, err := fin.Deposit(ctx, types.DepositInput{
 		Org: "acme", Subject: "acme", Amount: money.FromCents(50_000), Currency: "usd", Ref: "float",

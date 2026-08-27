@@ -82,7 +82,7 @@ func reopen(t *testing.T, s *Store, dir string) *Store {
 	if err := s.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	next, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
+	next, err := Open(namespace.System(), "treasury", dir, kindUsage)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -98,7 +98,7 @@ func reopen(t *testing.T, s *Store, dir string) *Store {
 // TestBackfilledProgramStopsTheSecondDebit, which charges the money.
 func TestBackfillUsageProgramNamesTheDebitedWallet(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
+	s, err := Open(namespace.System(), "treasury", dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestBackfillUsageProgramNamesTheDebitedWallet(t *testing.T) {
 // one writer's key, not about every entry that happens to have no program.
 func TestBackfillLeavesEveryOtherKindAlone(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
+	s, err := Open(namespace.System(), "treasury", dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestBackfillLeavesEveryOtherKindAlone(t *testing.T) {
 // touched at all.
 func TestBackfillUsageProgramIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
+	s, err := Open(namespace.System(), "treasury", dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestBackfillUsageProgramIsIdempotent(t *testing.T) {
 // mode a repair must never have.
 func TestBackfillSkipsAnEntryWithNoDebitedLeg(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
+	s, err := Open(namespace.System(), "treasury", dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestBackfillSkipsAnEntryWithNoDebitedLeg(t *testing.T) {
 func TestBackfillSkipsAnActAlreadyNamedUnderItsWallet(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	s, err := Open(namespace.System(), houseSubsystem, dir, kindUsage)
+	s, err := Open(namespace.System(), "treasury", dir, kindUsage)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

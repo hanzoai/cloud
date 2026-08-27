@@ -46,7 +46,7 @@ func serveLedger(t *testing.T) {
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
 
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil) })
 

@@ -51,6 +51,7 @@ package treasury
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -91,9 +92,32 @@ const (
 // state is treasury's own data; shared deps live in the embedded cloud.Base.
 type state struct {
 	store      *sqlstore.Store // native store: policy config always, journal when native backend
+	stores     *cloud.OrgStore[*sqlstore.Store]
 	record     ledger.Backend  // the ledger of record — native (default) or Formance
 	auditStore *audit.Recorder // best-effort debit/policy audit; nil disables it
 	anchor     *anchorer       // Hanzo L1 anchor (Phase 2); nil-safe
+}
+
+// ship makes the house book durable, and a write that cannot reach it is REFUSED
+// rather than reported done — the rule apps/finance states for a customer's books,
+// applied to the deployment's own. `acked` false means this replica no longer
+// holds the reserve; the caller retries on the one that does.
+func (s state) ship() error {
+	// A state with no plane is a store somebody opened directly, which is a lone
+	// process — the same case OrgStore.Sync answers with a successful no-op when
+	// the deployment has no object store. It cannot arise from Mount: the store
+	// this state holds COMES from the plane, so a live one always has both.
+	if s.stores == nil {
+		return nil
+	}
+	acked, err := s.stores.Sync(namespace.System())
+	if err != nil {
+		return fmt.Errorf("treasury: the entry was written and could not be made durable: %w", err)
+	}
+	if !acked {
+		return fmt.Errorf("treasury: the entry was written and not acknowledged — this replica no longer holds the reserve; retry on its writer")
+	}
+	return nil
 }
 
 // mounted is the process singleton the Reserve helper resolves. Set at Mount; nil
@@ -116,10 +140,22 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("treasury.Mount: data dir: %w", err)
 	}
-	// Platform-level, not per-org: the treasury is the fleet's own book. Its kinds
-	// (accrual, seed, payout) are all scoped by the book itself rather than by a
-	// wallet, so it opens with no wallet-scoped kind.
-	store, err := sqlstore.Open(namespace.System(), "treasury", deps.DataDir, "")
+	// ON THE DURABLE PLANE, like every other store the fleet keeps. The reserve is
+	// ONE file and the deployment may run several pods; without a fence each of
+	// them posts accruals into its own copy and the last to ship replaces the rest,
+	// so the fund's balance depends on which pod shut down last. It is the
+	// platform's own money rather than a customer's, which changes who is harmed
+	// and not whether the arithmetic is wrong.
+	//
+	// The election key is the SYSTEM namespace, so exactly one replica writes the
+	// house book at a time — the same rule an org's books get, applied to the
+	// deployment's own. It takes no wallet-scoped kind: the reserve's kinds
+	// (accrual, seed, payout) are scoped by the book itself.
+	base := cloud.NewBase(deps, "treasury")
+	stores := cloud.NewOrgStore(base, "treasury", func(db *sql.DB) (*sqlstore.Store, error) {
+		return sqlstore.On(db, "")
+	})
+	store, err := stores.For(namespace.System())
 	if err != nil {
 		return fmt.Errorf("treasury.Mount: open store: %w", err)
 	}
@@ -139,6 +175,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		Base: cloud.NewBase(deps, "treasury"),
 		State: state{
 			store:      store,
+			stores:     stores,
 			record:     record,
 			auditStore: deps.Audit,
 			anchor:     newAnchorer(deps, log),
@@ -420,6 +457,13 @@ func (o ops) adminSetPolicy(ctx context.Context, in *policyRequest) (*policyOut,
 	if err != nil {
 		return nil, zip.ErrBadRequest(err.Error())
 	}
+	// SHIPPED BEFORE IT IS REPORTED SET, and before the audit line says it was: a
+	// policy that never reached the durable copy governs the NEXT sweep on this pod
+	// and no sweep on its successor, so the share a period accrues would depend on
+	// which replica ran it.
+	if err := o.s.State.ship(); err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+	}
 	emitAudit(o.s, ctx, "treasury.policy", "", "", map[string]any{"revenueShareBps": pol.RevenueShareBps})
 	return &policyOut{Status: "ok", Data: policyData{Policy: pol}}, nil
 }
@@ -479,6 +523,14 @@ func (o ops) adminSweep(ctx context.Context, in *sweepRequest) (*sweepOut, error
 	entry, created, err := o.s.State.record.Accrue(ctx, period, in.RevenueCents, time.Now().Unix())
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "sweep: %v", err)
+	}
+	// An accrual that is not durable is a period the successor will sweep again —
+	// the accrual is idempotent PER PERIOD, and that idempotency lives in the file
+	// this ships. Unshipped, the guard is gone with it and the period double-accrues.
+	if created {
+		if err := o.s.State.ship(); err != nil {
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+		}
 	}
 	if created {
 		emitAudit(o.s, ctx, "treasury.sweep", "", entry.ID, map[string]any{
@@ -551,6 +603,14 @@ func (o ops) adminSeed(ctx context.Context, in *seedRequest) (*seedOut, error) {
 	entry, created, err := o.s.State.record.Seed(ctx, ref, memo, in.AmountCents, time.Now().Unix())
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "seed: %v", err)
+	}
+	// Capital reported into the fund and not made durable is capital the fund does
+	// not hold — and the ref that makes a re-seed idempotent is in the same file, so
+	// an unshipped seed can be injected twice.
+	if created {
+		if err := o.s.State.ship(); err != nil {
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+		}
 	}
 	if created {
 		emitAudit(o.s, ctx, "treasury.seed", "", entry.ID, map[string]any{

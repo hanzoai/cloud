@@ -14,7 +14,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/namespace"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -69,42 +68,26 @@ func meterStore(t *testing.T) (*state, *Store) {
 	return st, sto
 }
 
-// sweep runs one tick against a capturing emit — the whole selection, watermark
-// and debit path with no commerce.
+// sweep runs one tick of THE METER — meterRuntime itself, over a real store,
+// against a capturing emit.
+//
+// It used to reassemble the loop here: list the unbilled, charge each row, list
+// the residents, charge each of those. That harness answered a question nobody
+// was asking. It could not see the owner gate, because it had no gate; it could
+// not see the ship, because it emitted straight to the books; and it kept passing
+// while the function it was named after grew both. A test that rebuilds its
+// subject proves the arithmetic of a meter the fleet does not run.
+//
+// `rate` is the published price, driven through cloud.RuntimeRate the way the
+// meter reads it, so a test can say "runtime is free this week" in the same
+// vocabulary production does.
 func sweep(t *testing.T, st *state, now, rate int64, b *books) {
 	t.Helper()
-	_ = st.eachStore(func(ns namespace.Namespace, sto *Store, openErr error) {
-		if openErr != nil {
-			t.Fatalf("open %s: %v", ns, openErr)
-		}
-		org := ns.ID()
-		owed, err := sto.Unbilled(context.Background(), org)
-		if err != nil {
-			t.Fatalf("unbilled: %v", err)
-		}
-		for _, x := range owed {
-			_, err := cloud.RuntimeCharge(context.Background(), sessionRunning(x), endOf(x, now), rate,
-				func(ctx context.Context, id string, was, at int64) (bool, error) {
-					return sto.AdvanceSession(ctx, org, id, was, at)
-				}, b.emit)
-			if err != nil {
-				t.Fatalf("charge session: %v", err)
-			}
-		}
-		bots, err := sto.Resident(context.Background(), org)
-		if err != nil {
-			t.Fatalf("resident: %v", err)
-		}
-		for _, a := range bots {
-			_, err := cloud.RuntimeCharge(context.Background(), botRunning(a), now, rate,
-				func(ctx context.Context, id string, was, at int64) (bool, error) {
-					return sto.Advance(ctx, org, a.Name, was, at)
-				}, b.emit)
-			if err != nil {
-				t.Fatalf("charge bot: %v", err)
-			}
-		}
-	})
+	paid := cloud.RuntimeRate
+	t.Cleanup(func() { cloud.RuntimeRate = paid })
+	cloud.RuntimeRate = func(context.Context) int64 { return rate }
+	meterRuntime(context.Background(), st, luxlog.NewNoOpLogger(), now, b.emit)
+	cloud.RuntimeRate = paid
 }
 
 func open(t *testing.T, sto *Store, id, payer string, at int64) Session {
@@ -249,7 +232,7 @@ func TestOneSweeperOwnsASessionSpan(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = cloud.RuntimeCharge(context.Background(), sessionRunning(x), now, cloud.RuntimeHourMicros,
+			_, _ = cloud.RuntimeCharge(context.Background(), sessionRunning(x, cloud.RuntimeHourMicros), now,
 				func(ctx context.Context, id string, was, at int64) (bool, error) {
 					return sto.AdvanceSession(ctx, "acme", id, was, at)
 				}, b.emit)
@@ -324,7 +307,7 @@ func TestTheSweepSurvivesAnUnreadableStore(t *testing.T) {
 	open(t, sto, "sess_1", "acme", start)
 
 	// meterRuntime with a rate of zero is the free-runtime branch: nothing moves.
-	meterRuntime(context.Background(), st, luxlog.NewNoOpLogger(), nil)
+	meterRuntime(context.Background(), st, luxlog.NewNoOpLogger(), time.Now().Unix(), nil)
 	if b.len() != 0 {
 		t.Fatal("the harness emitted through the wrong path")
 	}
@@ -350,7 +333,7 @@ func TestAFreeHourStillMovesTheClock(t *testing.T) {
 	paid := cloud.RuntimeRate
 	t.Cleanup(func() { cloud.RuntimeRate = paid })
 	cloud.RuntimeRate = func(context.Context) int64 { return 0 }
-	meterRuntime(ctx, st, luxlog.NewNoOpLogger(), nil)
+	meterRuntime(ctx, st, luxlog.NewNoOpLogger(), time.Now().Unix(), nil)
 	cloud.RuntimeRate = paid
 
 	after, err := sto.GetSession(ctx, "acme", x.ID)
