@@ -71,7 +71,17 @@ func Open(ns namespace.Namespace, subsystem, dir, usageKind string) (*Store, err
 		return nil, fmt.Errorf("open %s ledger for %s: %w", subsystem, ns, err)
 	}
 	sqlpool.Single(db)
-	return On(db, usageKind)
+	st, err := On(db, usageKind)
+	if err != nil {
+		// Open made this handle, so Open closes it. On must not: it is handed a
+		// database somebody else owns, and on the durable plane that owner closes it
+		// too — a double close on a failed migration, which is the kind of tidiness
+		// that reads as harmless right up until the second closer is doing something
+		// else with the handle.
+		_ = db.Close()
+		return nil, err
+	}
+	return st, nil
 }
 
 // On is [Open] over a database somebody else opened — the migration and the
@@ -87,10 +97,11 @@ func Open(ns namespace.Namespace, subsystem, dir, usageKind string) (*Store, err
 //
 // The split is the whole of the change: everything a ledger IS lives below this
 // line, and everything about WHERE it lives is above it.
+// The handle stays the CALLER's on every exit, success or not: this function did
+// not open it and does not know who else holds it.
 func On(db *sql.DB, usageKind string) (*Store, error) {
 	s := &Store{db: db, usageKind: usageKind}
 	if err := s.migrate(); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	return s, nil
