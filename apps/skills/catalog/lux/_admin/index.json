@@ -249,7 +249,7 @@
       "name": "admin_subsystems",
       "path": "admin_subsystems/SKILL.md",
       "service": "admin",
-      "sha256": "b1661ed5a2ddf5cd52b10b22bed15b1c9d3956f62e7c868866f2a2f9f071f98e"
+      "sha256": "58486793147be8d364bc4b837a7b161dab9189627737105dabbcba904325bdce"
     },
     {
       "description": "Read admin treasury: Returns the whole treasury board for a SuperAdmin: the reserve fund report, the recent double-entry journal, and the Lux L1 anchor status of the ledger root..",

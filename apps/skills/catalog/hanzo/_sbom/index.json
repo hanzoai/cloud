@@ -14,11 +14,11 @@
       "sha256": "ee223fe69dd9fdf28b1da903f4354329675f8daeee47a4944599ea6f8d66efe1"
     },
     {
-      "description": "Read sbom sbom: Resolve everything inside a container image.",
+      "description": "Read sbom sbom: Resolve returns everything inside one container image, addressed by its digest or by its image ref..",
       "name": "sbom_sbom",
       "path": "sbom_sbom/SKILL.md",
       "service": "sbom",
-      "sha256": "f94c328acc0732a7c7ae09e4eb9fc913c62b5865b864c47bee3fb1d6deb058ee"
+      "sha256": "39b214b344e3ef48565051264d60487ddbcbc9d8366fd1621c95f634624051a6"
     }
   ],
   "spec_version": "8.0.0"

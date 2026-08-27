@@ -7,11 +7,11 @@
   "skill_count": 2,
   "skills": [
     {
-      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly.",
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Mints a presigned GET URL the caller downloads from DIRECTLY..",
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "50b08b225c64462acd3ee1306d96a92cf39d80406854733a6050f2f0132068b6"
+      "sha256": "8e3bafeb018386686eb50d4c11520c89b535a1fa1d2e953b0ac19f36bc93655a"
     },
     {
       "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
