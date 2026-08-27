@@ -392,3 +392,66 @@ func TestTheDebitCarriesTheScopeTheCapSumsOver(t *testing.T) {
 		t.Fatal("runtime bills in micro-USD; a cents field set beside it is a second amount")
 	}
 }
+
+// TestAFreeSpanIsStillShipped — the ship follows the WATERMARK, not the debit.
+//
+// A published price of zero is a price: something the platform meters and gives
+// away. Nothing is charged and the span still HAPPENED, so the watermark moves,
+// because the watermark is what says the span is accounted for.
+//
+// Shipping only when money was emitted leaves every one of those advances local.
+// The durable watermark stays at the start of the promotion, and the first replica
+// to open the org afterwards bills the whole free week at whatever the price is by
+// then, in one debit, to every tenant — the retroactive charge RuntimeCharge
+// already refuses inside a process, arriving across pods instead.
+//
+// MUTATION: gate the ship on `len(held) == 0` rather than on `moved` and this
+// fails: the watermarks move and nothing carries them.
+func TestAFreeSpanIsStillShipped(t *testing.T) {
+	w, d := newWatermarks(), &debits{}
+	const start, now = 1_800_000_000, 1_800_003_600
+	w.at["s1"], w.at["s2"] = start, start
+
+	ships := 0
+	ship := func() (bool, error) { ships++; return true, nil }
+
+	rows := []Running{
+		{ID: "s1", Payer: "acme", Model: "session", Rate: 0, MeteredAt: start},
+		{ID: "s2", Payer: "acme", Model: "session", Rate: 0, MeteredAt: start},
+	}
+	n, err := RuntimeSweep(context.Background(), rows, now, w.advance, ship, d.emit)
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if n != 0 || d.len() != 0 {
+		t.Fatalf("a free hour billed %d rows / %d debits, want none", n, d.len())
+	}
+	if w.at["s1"] != now || w.at["s2"] != now {
+		t.Fatalf("a free hour left the watermarks at %d/%d, want %d", w.at["s1"], w.at["s2"], now)
+	}
+	if ships != 1 {
+		t.Fatalf("two free spans shipped %d times, want exactly 1 — an advance nothing carries "+
+			"is an advance the next owner has never seen", ships)
+	}
+}
+
+// TestAPassThatClaimsNothingShipsNothing is the other side of that rule: a sweep
+// over rows already billed through `now` writes nothing, so it owes no round trip
+// to an object store. Without it every idle org would ship its whole database
+// every tick for no reason.
+func TestAPassThatClaimsNothingShipsNothing(t *testing.T) {
+	w, d := newWatermarks(), &debits{}
+	const now = 1_800_003_600
+	w.at["s1"] = now
+
+	ships := 0
+	ship := func() (bool, error) { ships++; return true, nil }
+
+	rows := []Running{{ID: "s1", Payer: "acme", Model: "session", Rate: RuntimeHourMicros, MeteredAt: now}}
+	if _, err := RuntimeSweep(context.Background(), rows, now, w.advance, ship, d.emit); err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if ships != 0 {
+		t.Fatalf("a pass that claimed nothing shipped %d times, want 0", ships)
+	}
+}
