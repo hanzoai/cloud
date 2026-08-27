@@ -10,13 +10,15 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/agents"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
+	agentsplane "github.com/hanzoai/cloud/plane/agents"
 )
 
 // botsBridge holds the transactor + account stores the bots routes read/write.
@@ -84,10 +86,21 @@ func (b *botsBridge) listBots(ctx context.Context, _ *none) (*botRoster, error) 
 	if err != nil {
 		return nil, err
 	}
-	bots, err := agentsBotLister(ctx, org)
-	if err != nil {
-		// A missing/disabled agents subsystem is an honest empty list, not a 500.
+	// Through the transactor's OWN lister, which is the same client the mention
+	// responder reads. It used to call agentsBotLister directly — a second path to
+	// one fact, so the read surface and the responder could disagree about an
+	// org's agents, and only one of them was reachable from a test.
+	bots, err := b.trans.bots(ctx, org)
+	if errors.Is(err, cloud.ErrNoPeer) {
+		// A deployment that runs no agents subsystem HAS no agents, and an empty
+		// list is the honest answer to "who are this org's bots".
 		return &botRoster{Bots: []botMember{}}, nil
+	}
+	if err != nil {
+		// Anything else is a peer that ANSWERED BADLY, and the two must not look
+		// alike. Rendering this as an empty list is what let a roster that failed
+		// on every call report "this org has no agents" for months.
+		return nil, zip.Errorf(http.StatusBadGateway, "team: agent roster unavailable: %v", err)
 	}
 	out := make([]botMember, 0, len(bots))
 	for _, bt := range bots {
@@ -143,22 +156,47 @@ func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 	return touched, nil
 }
 
-// agentsBotLister is the ONE in-process client to the canonical agent registry: it
-// reads the org's agents via agents.ListForOrg (org-scoped, no HTTP hop) and maps
-// each to the minimal Bot shape the roster reconcile projects. A retired/archived
-// agent (Status not active/ready) projects as an inactive Employee (drops out of
-// the Team list while its authorship survives).
-func agentsBotLister(ctx context.Context, org string) ([]Bot, error) {
-	ags, err := agents.ListForOrg(ctx, org)
+// agentsBotLister is the ONE client to the canonical agent registry, and it asks
+// the agents PROCESS rather than calling into it. A retired/archived agent
+// (Status not active/ready) projects as an inactive Employee (drops out of the
+// Team list while its authorship survives).
+//
+// It used to be `agents.ListForOrg`, an in-process call, and the comment above it
+// called that "org-scoped, no HTTP hop" — which was true and beside the point.
+// That function gates on agents' `mounted` package global, and a package global
+// is per-PROCESS: team and agents are separate manifest rows and therefore
+// separate plugin binaries, so it answered ErrNoPeer in every real deployment.
+// The cost was not an outage but something quieter — listBots renders an error as
+// an EMPTY ROSTER, so `GET /v1/team/bots` answered `[]` for an org holding
+// agents, no bot was ever projected as a workspace member, and the mention
+// responder found nobody to address and stayed silent while the boot log said it
+// was ENABLED. One global, three symptoms.
+//
+// The org rides the CALLER, not the argument, and it must be stated on a DETACHED
+// context: zip reads a stated caller only where there is NO request behind the
+// context (caller.go), so stating it on a live request's context is silently
+// discarded and the peer answers "org required". This is the same shape
+// apps/integrations uses at its own plane.Ask, and the reason is written out at
+// apps/agents/onbehalf_rpc.go — the one place it was learned the expensive way.
+func agentsBotLister(_ context.Context, org string) ([]Bot, error) {
+	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), rosterTimeout)
+	defer cancel()
+	roster, err := agentsplane.AgentsRoster(ctx, &plane.RosterIn{})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Bot, 0, len(ags))
-	for _, a := range ags {
+	out := make([]Bot, 0, len(roster.Agents))
+	for _, a := range roster.Agents {
 		out = append(out, Bot{ID: a.ID, Name: a.Name, Active: botActive(a.Status)})
 	}
 	return out, nil
 }
+
+// rosterTimeout bounds one roster read. It is short because every caller is on a
+// latency path a person is waiting on — a member list render, or the mention
+// gate that runs before an agent can answer — and a roster that has not arrived
+// in this long is not going to change the answer.
+const rosterTimeout = 5 * time.Second
 
 // botActive maps an agent status to Employee.active. Empty / "active" / "ready"
 // are live; anything else (archived/retired) is inactive.
@@ -166,14 +204,28 @@ func botActive(status string) bool {
 	return status == "" || status == "active" || status == "ready"
 }
 
-// agentReplyRunner is the ONE in-process client the Chunter responder (chat.go) uses
-// to make a bot answer: it runs the agent through agents.RunOnBehalf — the SAME
-// billed/metered/recorded run path the HTTP POST /v1/agents/:id/run handler uses —
-// on behalf of the human who addressed it, and returns the model's text. A run that
-// executed but whose model errored (nil error, error-status Run) surfaces as an
-// error so the responder posts nothing rather than an empty bubble.
-func agentReplyRunner(ctx context.Context, org, userSub, agentID, input string) (string, error) {
-	run, err := agents.RunOnBehalf(ctx, org, userSub, agentID, input)
+// agentReplyRunner is the ONE client the Chunter responder (chat.go) uses to make
+// a bot answer: it runs the agent through the SAME billed/metered/recorded run
+// path the HTTP POST /v1/agents/:id/run handler uses, on behalf of the human who
+// addressed it, and returns the model's text. A run that executed but whose model
+// errored (nil error, error-status Run) surfaces as an error so the responder
+// posts nothing rather than an empty bubble.
+//
+// It asks the agents PROCESS, for the reason agentsBotLister does and with the
+// same consequence if it did not: agents.RunOnBehalf gates on that package's
+// `mounted` global, which is nil here. apps/channels and apps/integrations took
+// this leg long ago; team is the third bridge and was the one still calling in.
+//
+// The ORG is on the wire AND stated on the context, and both are load-bearing for
+// different halves: the stated one authorizes the run's balance gate (which reads
+// the caller's identity, never an argument), and the payload one is what the run
+// RECORD is filed under.
+func agentReplyRunner(_ context.Context, org, userSub, agentID, input string) (string, error) {
+	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), agentReplyTimeout)
+	defer cancel()
+	run, err := agentsplane.AgentsRunOnBehalf(ctx, &plane.RunOnBehalfIn{
+		Org: org, Subject: userSub, Ref: agentID, Input: input,
+	})
 	if err != nil {
 		return "", err
 	}
