@@ -996,6 +996,8 @@ github.com/hanzoai/agent v1.0.6 h1:fOTziUUcwdP82BU0+UfiCy3x7YMpcjwgSdiyebNltYI=
 github.com/hanzoai/agent v1.0.6/go.mod h1:3bqSx+EkF4Lm0BxJEEb7TbV0Ck1EsBgt6tteHJmX1nk=
 github.com/hanzoai/ai v1.833.206 h1:FXNcmfnNwa0uXi51nNgvNbqFjGjy0LbGlVpMwrbh9jI=
 github.com/hanzoai/ai v1.833.206/go.mod h1:Vc4ZpE1QbgNYtPWZUa7zuvM4/lX+2v9dZshN8q9zRgI=
+github.com/hanzoai/ai v1.833.207 h1:40P0az6kkpc712HwGxjGD0Ajh4xyCRAvnk6QXLFjMV8=
+github.com/hanzoai/ai v1.833.207/go.mod h1:Vc4ZpE1QbgNYtPWZUa7zuvM4/lX+2v9dZshN8q9zRgI=
 github.com/hanzoai/amqp v0.4.2 h1:I6LQ/r5nxQtn8cpZZC4yqnp716zpH+25fvMnQ0Bc45w=
 github.com/hanzoai/amqp v0.4.2/go.mod h1:FMNChjApLRLwH3IUkPtHCtPlvb7fZ1/5JC4KLaUSCGE=
 github.com/hanzoai/authz v1.10.34 h1:XM/5A9Rey9JjWvOADrHI7FUn/k8sUp76h57BWAe0Sew=
@@ -1044,6 +1046,8 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.2.0 h1:zgIbr3mjeuFfF26lkIKf/47ZM5kYBubWIPjEA24Yu7g=
 github.com/hanzoai/ha v0.2.0/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
+github.com/hanzoai/iam v1.34.87 h1:mngsyjuUmptfYVsIvUmHAbxrePPNouDEoX3MJD6ZLz8=
+github.com/hanzoai/iam v1.34.87/go.mod h1:5nssW6NO4XeSNHpiA2eROw86PZNYTypZTbH8D/NNIbI=
 github.com/hanzoai/kafka v1.3.2 h1:oiU77wsU7lWuXAOmCfzkcaT2RTX4PdLqzw1vRMHM44A=
 github.com/hanzoai/kafka v1.3.2/go.mod h1:bKmdzWPqZ5vjtpD7pOCd1qgC6iVJjKczrPKHib0vlQQ=
 github.com/hanzoai/licensing v0.1.16 h1:CXsNnJpEUAqVX03K+VyP3RX76utiS9HVh9CgXhWiTUE=
