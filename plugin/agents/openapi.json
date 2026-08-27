@@ -621,7 +621,7 @@
       "post": {
         "operationId": "post_agents_sessions_by_id_events",
         "summary": "Records one turn of a session's transcript and answers 201 with it.",
-        "description": "Records one turn of a session's transcript and answers 201 with it.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer.",
+        "description": "Records one turn of a session's transcript and answers 201 with it.\n\nA `progress` turn additionally MOVES THE SESSION'S PROGRESS, marked as the run's\nown word rather than an estimate, and pushes the updated session onto the live\nstream — so a board's bar follows the run without polling and without a second\nwrite path. See progress.go.\n\nTHE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security\nsurface runs reads the payload at this boundary, and a credential in it refuses\nthe append with 422 rather than redacting it — a redacted transcript is one\nthat still had the secret in it once, and this way the author learns which\nvalue to rotate. The refusal carries every finding: the rule, the severity, the\nline, a MASKED preview and the fingerprint. The secret is never in the answer.",
         "tags": [
           "agents"
         ],
@@ -2076,11 +2076,11 @@
             "type": "string"
           },
           "kind": {
-            "description": "Kind is what this turn IS: message, tool-call, spawn, log, status or\ncontrol. Anything else is refused — the vocabulary is closed so a reader\ncan branch on it.",
+            "description": "Kind is what this turn IS: message, tool-call, spawn, log, status, control\nor progress. Anything else is refused — the vocabulary is closed so a\nreader can branch on it.",
             "type": "string"
           },
           "payload": {
-            "description": "Payload is the turn's own body, any valid JSON up to 64 KiB. It is SCANNED\nfor credentials before it is stored, and a hit refuses the whole append with\n422 and the findings — this plane never redacts a secret into a transcript\nit then keeps."
+            "description": "Payload is the turn's own body, any valid JSON up to 64 KiB. It is SCANNED\nfor credentials before it is stored, and a hit refuses the whole append with\n422 and the findings — this plane never redacts a secret into a transcript\nit then keeps.\n\nIts SHAPE is the writer's business for every kind but one: a `progress`\nturn is the run reporting on itself in a shape this surface publishes —\n{\"pct\":0-100 (optional), \"phase\":\"running|blocked|done\",\n\"activity\":\"≤120 chars\"} — so a malformed one is refused with 400 instead\nof being stored as prose nobody reads."
           }
         },
         "type": "object"

@@ -111,10 +111,17 @@ type Session struct {
 	// which is a DIFFERENT fact from 0 and must never render as one; ProgressAt is
 	// zero until something has estimated it, and doubles as the debounce clock, so
 	// nothing else may write it.
-	ProgressPct      int
-	ProgressPhase    string
-	ProgressActivity string
-	ProgressAt       int64
+	//
+	// ProgressEstimated says a MODEL produced the value rather than the run
+	// itself. A run REPORTS its own progress by appending a `progress` turn
+	// (progress.go), which is ground truth and outranks a guess; the estimator
+	// only ever writes where a self-report has not, so the two never contend for
+	// one row.
+	ProgressPct       int
+	ProgressPhase     string
+	ProgressActivity  string
+	ProgressAt        int64
+	ProgressEstimated bool
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -232,10 +239,11 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		// INDETERMINATE (0 would say it has done none of its work, which is a
 		// claim about every session that predates this column), and 0 on the
 		// stamp says nothing has read its transcript yet.
-		"progress_pct":      "INTEGER NOT NULL DEFAULT -1",
-		"progress_phase":    "TEXT NOT NULL DEFAULT ''",
-		"progress_activity": "TEXT NOT NULL DEFAULT ''",
-		"progress_at":       "INTEGER NOT NULL DEFAULT 0",
+		"progress_pct":       "INTEGER NOT NULL DEFAULT -1",
+		"progress_phase":     "TEXT NOT NULL DEFAULT ''",
+		"progress_activity":  "TEXT NOT NULL DEFAULT ''",
+		"progress_at":        "INTEGER NOT NULL DEFAULT 0",
+		"progress_estimated": "INTEGER NOT NULL DEFAULT 1",
 	}); err != nil {
 		return err
 	}
@@ -260,7 +268,7 @@ CREATE INDEX IF NOT EXISTS ix_sessions_meter ON agent_sessions(org, ended_at, me
 // is: four statements read or write it and a fifth (the legacy fan-out) copies it.
 const eventCols = `id,session_id,org,seq,kind,actor,payload,created_at`
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room,payer,metered_at,progress_pct,progress_phase,progress_activity,progress_at`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room,payer,metered_at,progress_pct,progress_phase,progress_activity,progress_at,progress_estimated`
 
 // sessionVals is sessionCols' placeholder list, DERIVED from it rather than
 // written out beside it. Every INSERT over a named column list now does the same
@@ -286,7 +294,7 @@ func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
 		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Terminal, &x.Target,
 		&x.Provider, &x.Account, &x.Project, &x.Published, &x.Room, &x.Payer, &x.MeteredAt,
-		&x.ProgressPct, &x.ProgressPhase, &x.ProgressActivity, &x.ProgressAt)
+		&x.ProgressPct, &x.ProgressPhase, &x.ProgressActivity, &x.ProgressAt, &x.ProgressEstimated)
 	return x, err
 }
 
@@ -317,6 +325,11 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 	// as zero" hold by construction instead of by every register path remembering.
 	if x.ProgressPhase == "" && x.ProgressAt == 0 {
 		x.ProgressPct = pctUnknown
+		// Nothing has estimated it and nothing has reported it, so neither word is
+		// the row's. progressOf reads the phase first and answers "unknown"
+		// regardless; this keeps the column from asserting a provenance for a
+		// value that does not exist.
+		x.ProgressEstimated = false
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (`+sessionVals+`)`,
@@ -324,7 +337,7 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
 		x.Host, x.Cwd, x.Repo, x.Terminal, x.Target, x.Provider, x.Account, x.Project, x.Published,
 		x.Room, x.Payer, x.MeteredAt,
-		x.ProgressPct, x.ProgressPhase, x.ProgressActivity, x.ProgressAt)
+		x.ProgressPct, x.ProgressPhase, x.ProgressActivity, x.ProgressAt, x.ProgressEstimated)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -697,9 +710,10 @@ func (s *Store) AdvanceSession(ctx context.Context, org, id string, was, now int
 // or the clock without the estimate, would have two facts where there is one.
 func (s *Store) SetProgress(ctx context.Context, org, id string, p Progress) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agent_sessions SET progress_pct=?, progress_phase=?, progress_activity=?, progress_at=?
+		`UPDATE agent_sessions SET progress_pct=?, progress_phase=?, progress_activity=?,
+		        progress_at=?, progress_estimated=?
 		 WHERE org=? AND id=?`,
-		p.Pct, p.Phase, p.Activity, p.At, org, id)
+		p.Pct, p.Phase, p.Activity, p.At, p.Estimated, org, id)
 	if err != nil {
 		return fmt.Errorf("set progress: %w", err)
 	}
@@ -708,6 +722,36 @@ func (s *Store) SetProgress(ctx context.Context, org, id string, p Progress) err
 		return errSessionNotFound
 	}
 	return nil
+}
+
+// SetEstimate writes a MODEL estimate, and only if nothing has written progress
+// since `was`. It reports whether THIS caller wrote — the same compare-and-set
+// shape AdvanceSession uses on the meter's watermark, for the same reason.
+//
+// The unconditional SetProgress above is the RUN's own word, which always wins at
+// the instant it is written. An estimate is formed from a transcript read seconds
+// earlier, so it may arrive after a self-report that supersedes it; the compare is
+// what makes "a fresh self-report outranks a guess" true of the RACE and not only
+// of the read. A caller that loses keeps its own answer and writes nothing, which
+// is correct twice over — the newer word is better, and the stamp it did not move
+// is already newer than the interval.
+//
+// It writes p's OWN provenance rather than a literal 1, because the estimator
+// also calls it to KEEP a value it could not replace: an outage advances the
+// clock over whatever was there, and stamping "estimated" would re-label the
+// run's own report as a guess the first time the gateway hiccuped. The column
+// says who produced the VALUE, and this write produces none.
+func (s *Store) SetEstimate(ctx context.Context, org, id string, p Progress, was int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE agent_sessions SET progress_pct=?, progress_phase=?, progress_activity=?,
+		        progress_at=?, progress_estimated=?
+		 WHERE org=? AND id=? AND progress_at=?`,
+		p.Pct, p.Phase, p.Activity, p.At, p.Estimated, org, id, was)
+	if err != nil {
+		return false, fmt.Errorf("set estimate: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 // Live is every session of this org that has not ended: the set the reaper reads.

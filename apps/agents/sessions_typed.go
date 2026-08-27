@@ -78,14 +78,20 @@ func refusedLeak(f []leakFinding) error {
 type eventIn struct {
 	// ID is the session to append to, from the path.
 	ID string `json:"id"`
-	// Kind is what this turn IS: message, tool-call, spawn, log, status or
-	// control. Anything else is refused — the vocabulary is closed so a reader
-	// can branch on it.
+	// Kind is what this turn IS: message, tool-call, spawn, log, status, control
+	// or progress. Anything else is refused — the vocabulary is closed so a
+	// reader can branch on it.
 	Kind string `json:"kind" url:"-"`
 	// Payload is the turn's own body, any valid JSON up to 64 KiB. It is SCANNED
 	// for credentials before it is stored, and a hit refuses the whole append with
 	// 422 and the findings — this plane never redacts a secret into a transcript
 	// it then keeps.
+	//
+	// Its SHAPE is the writer's business for every kind but one: a `progress`
+	// turn is the run reporting on itself in a shape this surface publishes —
+	// {"pct":0-100 (optional), "phase":"running|blocked|done",
+	// "activity":"≤120 chars"} — so a malformed one is refused with 400 instead
+	// of being stored as prose nobody reads.
 	Payload json.RawMessage `json:"payload,omitempty" url:"-"`
 	// Actor is who produced the turn. Empty takes the validated caller, which is
 	// what an agent writing its own transcript wants; naming one is for a surface
@@ -94,6 +100,11 @@ type eventIn struct {
 }
 
 // AppendEvent records one turn of a session's transcript and answers 201 with it.
+//
+// A `progress` turn additionally MOVES THE SESSION'S PROGRESS, marked as the run's
+// own word rather than an estimate, and pushes the updated session onto the live
+// stream — so a board's bar follows the run without polling and without a second
+// write path. See progress.go.
 //
 // THE TURN IS SCANNED BEFORE IT IS STORED. The same engine the code-security
 // surface runs reads the payload at this boundary, and a credential in it refuses
@@ -126,6 +137,17 @@ func (o sessionOps) appendEvent(ctx context.Context, in *eventIn) (*eventView, e
 	if leaks := guardEvent(string(in.Payload)); leaks != nil {
 		return nil, refusedLeak(leaks)
 	}
+	// A progress turn is read BEFORE it is stored, so a malformed report is
+	// refused whole rather than landing in the transcript as a turn that moved
+	// nothing. Every other kind's payload stays opaque.
+	var report Progress
+	if kind == KindProgress {
+		p, perr := parseReport(in.Payload)
+		if perr != nil {
+			return nil, perr
+		}
+		report = p
+	}
 	actor := strings.TrimSpace(in.Actor)
 	if actor == "" {
 		actor = billingActor(org, callerUser(ctx))
@@ -141,6 +163,25 @@ func (o sessionOps) appendEvent(ctx context.Context, in *eventIn) (*eventView, e
 		return nil, zip.Errorf(http.StatusInternalServerError, "append: %v", err)
 	}
 	publishEvent(o.s, org, x.RootID, e)
+	if kind == KindProgress {
+		// The turn's own stamp, so the transcript clock and the progress clock are
+		// ONE reading: AppendEvent bumped updated_at to it, and the estimator's
+		// staleness rule is "has the run said anything SINCE its progress was
+		// written" — equal stamps mean the run's report is the last word until it
+		// speaks again.
+		report.At = e.CreatedAt
+		if err := sto.SetProgress(ctx, org, in.ID, report); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "progress: %v", err)
+		}
+		x.ProgressPct, x.ProgressPhase, x.ProgressActivity = report.Pct, report.Phase, report.Activity
+		x.ProgressAt, x.ProgressEstimated, x.UpdatedAt = report.At, false, e.CreatedAt
+		// A SESSION frame, not a second event frame: the session view already
+		// carries `progress`, so a subscriber's existing handler moves the bar with
+		// nothing new to parse.
+		ev, _ := sto.CountEvents(ctx, org, in.ID)
+		ch, _ := sto.CountChildren(ctx, org, in.ID)
+		publishSession(o.s, x, ev, ch)
+	}
 	v := toEventView(e)
 	return &v, nil
 }

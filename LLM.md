@@ -7201,6 +7201,65 @@ Measured against a real 4B model on this host: a run whose transcript showed
 three of four planned steps done answered `{"pct":67,"phase":"running",
 "activity":"writing tests"}`.
 
+### The run's own word outranks the guess (`KindProgress`)
+
+An estimate is what you fall back to when the run will not say. A run that KNOWS
+how far along it is should say so, and most agent harnesses do — they keep a
+checklist. So a run REPORTS by appending a `progress` turn to its own transcript:
+
+    POST /v1/agents/sessions/{id}/events
+    {"kind":"progress","payload":{"pct":60,"phase":"running","activity":"…"}}
+
+**It is an event KIND rather than a route of its own, and that is the whole
+design.** Progress is something that HAPPENED in the run, and the transcript is
+where what happened is recorded — so the append route already carries every
+property a second route would have had to restate: typed and `x-tool`, org-scoped
+by the same `tenantStore`, credential-scanned by the same `guardEvent`,
+size-bounded, sequenced, and FANNED OUT to every live subscriber. It also makes
+the reports DURABLE HISTORY: how a run's own sense of its progress moved is
+replayable, which an estimate overwritten in place never was.
+
+- **`estimated` is the discriminator and there is no second field.** A report
+  writes the same four columns marked NOT estimated; the wire is unchanged in
+  shape and gains only a value it could always have carried. The column says who
+  produced the VALUE.
+- **Live, without polling.** The append publishes a SESSION frame beside the
+  event frame, and `sessionView` already carries `progress` — so a subscriber's
+  existing handler moves the bar with nothing new to parse. A second event-shaped
+  payload would have made every client parse the same fact twice.
+- **PRECEDENCE NEEDED NO THIRD RULE.** A report bumps `updated_at` and
+  `progress_at` to ONE stamp, and `stale` already reads "has the run said
+  anything since its progress was written" — so a fresh report is the last word
+  by construction, and stops being one the moment the run says something else. A
+  report holds the field while it is the newest turn, and no longer.
+- **The RACE is what needed code**: an estimate is formed over a transcript read
+  seconds earlier, so it can land after a report that supersedes it.
+  `Store.SetEstimate` is therefore a compare-and-set on `progress_at` — the shape
+  `AdvanceSession` already uses — and `SetProgress` stays unconditional because
+  the run's own word wins at the instant it is written. Losing the CAS costs that
+  estimate and nothing else.
+- **`SetEstimate` writes p's OWN provenance, never a literal 1**, and this was a
+  live bug in the first draft: the estimator also calls it to KEEP a value it
+  could not replace, so stamping "estimated" there re-labelled the run's own
+  report as a guess the first time the gateway hiccuped — the honesty law running
+  backwards. Found by reading a live run's third measurement, not by a test;
+  `TestAnOutageDoesNotRelabelAReportAsAGuess` gates it now.
+- **The payload is the ONE this surface reads, and it is refused rather than
+  salvaged.** Every other kind's body belongs to whoever wrote it. A `progress`
+  body is OURS — published in the append op's own prose — so parsing it is
+  reading our own contract, and a malformed one is a 400 that stores NO turn: a
+  run must not believe it reported. That is the opposite of the model parser,
+  which salvages what it can, and the asymmetry is deliberate — a model is a text
+  generator whose output we rescue, a client is a caller holding a contract.
+- `pct` is optional on a report, so a run that knows it is BLOCKED and does not
+  know how far along it is says the half it knows — and the wire still carries no
+  `pct`, which is the unknown-never-zero law holding on the ground-truth path too.
+- The estimator sees the reports in the transcript like any other turn, so a
+  model is anchored by the run's own numbers rather than guessing past them.
+  Measured against the real 4B model: with no report it answered 50%; after the
+  run reported 75% the board carried 75% `estimated:false`; once that report went
+  stale the model took the field back and answered 75% itself.
+
 ## The sandbox sweep is bounded by construction (`apps/sandbox/bound.go`)
 
 An agent's sandbox cleanup deleted every sandbox on a node, **including
