@@ -67,7 +67,7 @@
             "application/json": {
               "example": {
                 "data": {
-                  "counterparty": "Acme, Inc.",
+                  "counterparty": "AgentCo, LLC",
                   "date": "2026-07-30"
                 },
                 "templateId": "nda"
@@ -392,7 +392,7 @@
                   }
                 ],
                 "id": "nda",
-                "title": "Acme Mutual NDA"
+                "title": "AgentCo Mutual NDA"
               },
               "schema": {
                 "$ref": "#/components/schemas/templateOverride"
