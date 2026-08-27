@@ -126,3 +126,27 @@ func TestUnboundedStandingReadsWithoutAStore(t *testing.T) {
 		}
 	}
 }
+
+// TestTheShippedCeilingsAreThePolicy states the two numbers outright.
+//
+// Every other test here names `strangers` and `seed` symbolically, which is right
+// for an invariant — "the public lane uses the floor" stays true whatever the floor
+// is — and is exactly why both numbers could be edited without a single failure.
+// They are not implementation detail: they are what a visitor and a free subscriber
+// are given per day, and a change to either is a product decision that should be
+// argued in a review rather than noticed in production.
+//
+// A paid tier is deliberately absent: 0 there means unbounded, which
+// TestOnlyANamedPaidTierIsUnbounded already holds as the property it is.
+func TestTheShippedCeilingsAreThePolicy(t *testing.T) {
+	if strangers != 3 {
+		t.Errorf("an anonymous visitor gets %d calls a day, want 3", strangers)
+	}
+	if seed["free"] != 10 {
+		t.Errorf("a signed-in free subscriber gets %d calls a day, want 10", seed["free"])
+	}
+	if !(seed["free"] > strangers) {
+		t.Errorf("free (%d) must exceed anonymous (%d), or signing in buys nothing",
+			seed["free"], strangers)
+	}
+}

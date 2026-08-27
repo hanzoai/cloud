@@ -96,7 +96,7 @@ const publicKey = "ai_allowance_public"
 // back to when the switch is unset or non-positive. Small on purpose: a stranger is
 // not a customer, and the free pool can end at a vendor who bills us whatever the
 // route's stated price is.
-const strangers = 5
+const strangers = 3
 
 // seed is the shipped default for each tier the commerce taxonomy answers with.
 //
@@ -108,7 +108,7 @@ const strangers = 5
 // These are the runtime DEFAULTS; the flag store is authoritative once an admin
 // edits one in the cockpit.
 var seed = map[string]int{
-	"free": 20, "starter": 0, "pro": 0, "enterprise": 0,
+	"free": 10, "starter": 0, "pro": 0, "enterprise": 0,
 }
 
 func init() {
