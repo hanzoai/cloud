@@ -94,6 +94,10 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"ok": true})
 	case "push":
 		// handled below
+	case "repository":
+		// A repo entering the granted set is an OFFER to import, not an import
+		// (github_repository.go). Same installation -> org resolution as push.
+		return handleGitHubRepositoryEvent(c, body)
 	case "issues", "issue_comment":
 		// Issue lifecycle → native todo mirror (github_issues.go). Same signed
 		// installation → org resolution as push; the todo sink is idempotent by

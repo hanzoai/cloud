@@ -721,7 +721,9 @@ func init() {
 		"The address the GitHub App delivers events to. A push is handed to the repository "+
 			"sync engine, and an issue or issue-comment event is mirrored into the native "+
 			"todo — idempotently, so the same issue re-syncs to one row however many "+
-			"times it is edited, closed or reopened.\n\n"+
+			"times it is edited, closed or reopened. A repository event that puts a repo "+
+			"INTO the granted set (created, transferred, unarchived) raises one todo "+
+			"offering to import it; accepting means POSTing that repo to /v1/integrations/github/import. It never imports on its own.\n\n"+
 			"It answers a benign 200 for everything it does not act on — the ping, other "+
 			"event types, an unknown installation — deliberately, so GitHub does not enter a "+
 			"retry storm over events that were never going to do anything. Only a bad "+
