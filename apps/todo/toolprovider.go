@@ -104,6 +104,7 @@ var (
 "status":{"type":"string","enum":` + statusEnum + `,"description":"Defaults to backlog."},
 "priority":{"type":"string","enum":` + priorityEnum + `},
 "assignee":{"type":"string","description":"Who holds it."},
+"room":{"type":"string","description":"The channel this work belongs to, as \"<workspace>_<room>\". Binds the item to that channel's todo list."},
 "labels":{"type":"string","description":"Comma-separated labels."}},
 "required":["title"],"additionalProperties":false}`)
 
@@ -280,6 +281,12 @@ func createItem(ctx context.Context, store *Store, p tools.Principal, args map[s
 		Status:      status,
 		Priority:    str(args, "priority"),
 		Assignee:    str(args, "assignee"),
+		// The room the work belongs to, if the agent was asked in one. Unlike
+		// Source above this IS the caller's to state: an agent mentioned in
+		// #bugfix-1010 is the only party that knows which room it was addressed
+		// in, and binding it wrongly costs a list entry rather than a claim about
+		// who did the work.
+		Room:        strings.TrimSpace(str(args, "room")),
 		Labels:      str(args, "labels"),
 	}
 	created, err := store.CreateIssue(ctx, i)

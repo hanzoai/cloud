@@ -286,6 +286,13 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/issues", o.searchIssues)
 	zip.Post(g, "/projects/:key/issues/:num/claim", o.claimIssue)
 
+	// A CHANNEL'S WORK, AT A GLANCE (room.go). Same store and same filter as
+	// /issues?room=, projected to counts instead of rows, so the header a channel
+	// renders and the list beneath it are two readings of one query rather than
+	// two answers to it. It reads the local index and needs no forge, which is
+	// what lets a channel show its work in an org that has no forge namespace.
+	zip.Get(g, "/rooms/:room", o.roomWorkOf)
+
 }
 
 // changes and reads say what an operation DOES, so no call site carries a bare

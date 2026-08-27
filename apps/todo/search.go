@@ -36,6 +36,12 @@ type issueSearch struct {
 	Kind string `json:"kind"`
 	// Repo keeps issues bound to one git repository.
 	Repo string `json:"repo"`
+	// Room keeps issues bound to one collaboration room, spelled
+	// "<workspace>_<room>" — the exact value GET /v1/meet/call answers with, so a
+	// channel's call and its todo list name the room the same way. This is the
+	// read a channel view runs to draw its own list; it spans every board of the
+	// org, because the work a channel is about is not confined to one board.
+	Room string `json:"room"`
 	// Source keeps one origin: team, git, crm, helpdesk, cms, agent. "git" is
 	// how you ask for the mirrored GitHub issues specifically.
 	Source string `json:"source"`
@@ -66,6 +72,11 @@ type issueHit struct {
 	// Repo is the git repository the issue is bound to, empty when it is not
 	// repo-bound.
 	Repo string `json:"repo"`
+	// Room is the collaboration room the issue belongs to, spelled
+	// "<workspace>_<room>" — empty when it is not room-bound, which is most of
+	// them. It is here so an org-wide search says which channel each item came
+	// from without a second read.
+	Room string `json:"room,omitempty"`
 	// Title is the issue's one-line summary — what the q filter matched, along with
 	// the description.
 	Title string `json:"title"`
@@ -144,7 +155,7 @@ func (o ops) searchIssues(ctx context.Context, in *issueSearch) (*issueHits, err
 		return nil, err
 	}
 	rows, err := store.ListIssues(ctx, org, "", IssueFilter{
-		Status: in.Status, Kind: in.Kind, Repo: in.Repo,
+		Status: in.Status, Kind: in.Kind, Repo: in.Repo, Room: strings.TrimSpace(in.Room),
 		Source: in.Source, Assignee: assignee, Text: in.Q,
 	})
 	if err != nil {
@@ -163,7 +174,7 @@ func (o ops) searchIssues(ctx context.Context, in *issueSearch) (*issueHits, err
 		}
 		out.Issues = append(out.Issues, issueHit{
 			Project: key[r.ProjectID], Number: r.Number, Kind: r.Kind, Source: r.Source,
-			Repo: r.Repo, Title: r.Title, Status: r.Status, Priority: r.Priority,
+			Repo: r.Repo, Room: r.Room, Title: r.Title, Status: r.Status, Priority: r.Priority,
 			Assignee: r.Assignee, URL: r.ExtRef,
 		})
 	}
@@ -238,7 +249,7 @@ func (o ops) claimIssue(ctx context.Context, in *issueClaim) (*issueHit, error) 
 		}
 		return &issueHit{
 			Project: names[r.ProjectID], Number: r.Number, Kind: r.Kind, Source: r.Source,
-			Repo: r.Repo, Title: r.Title, Status: r.Status, Priority: r.Priority,
+			Repo: r.Repo, Room: r.Room, Title: r.Title, Status: r.Status, Priority: r.Priority,
 			Assignee: r.Assignee, URL: r.ExtRef,
 		}, nil
 	}

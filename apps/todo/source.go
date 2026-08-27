@@ -956,8 +956,11 @@ func (o ops) forgePatchIssue(ctx context.Context, in *issueEdit) (*issueView, er
 			if !statuses[in.Status] {
 				return nil, zip.ErrBadRequest("unknown status")
 			}
+			// settled (room.go) is the ONE predicate for "this status ends the
+			// work", so the forge issue this closes and the open count a channel
+			// header shows cannot disagree about which columns are finished.
 			state := "open"
-			if in.Status == "done" || in.Status == "canceled" {
+			if settled(in.Status) {
 				state = "closed"
 			}
 			patch.State = &state

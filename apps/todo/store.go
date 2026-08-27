@@ -70,6 +70,21 @@ type Issue struct {
 	Kind        string // issue | pr | epic (default "issue")
 	Source      string // team | git | crm | helpdesk | cms | agent (default "team")
 	Repo        string // git repo binding; "" = not repo-bound
+	// Room binding — the collaboration room this item belongs to (HIP-0523),
+	// spelled "<workspace>_<room>"; "" = not room-bound.
+	//
+	// It sits BESIDE Repo rather than inside ExtRef or Labels, and both of those
+	// were tried on paper first. ExtRef is single-valued and is the mirror's
+	// idempotency key, so a room written there displaces the anchor a GitHub
+	// redelivery finds its own row by. A label is destroyed by any PATCH that
+	// names a status or priority, because columnLabels replaces the whole set —
+	// so the binding would vanish the first time somebody moved the card.
+	//
+	// The DIRECTION is the point: the ITEM names its room, and the room holds
+	// nothing about the item. A room carrying a list of issues would be the
+	// parallel work-item store HIP-1160 §1 forbids, and it would drift the first
+	// time an item was closed anywhere else.
+	Room        string
 	ExtRef      string // external anchor (PR branch, or link into another plane)
 	Title       string
 	Description string
@@ -165,6 +180,10 @@ CREATE INDEX IF NOT EXISTS ix_issues_org_project_status ON issues(org, project_i
 		// timeline is additive to a live todo rather than a rewrite of it.
 		`ALTER TABLE issues ADD COLUMN start_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE issues ADD COLUMN due_at   INTEGER NOT NULL DEFAULT 0`,
+		// The room binding, forward-added the same way: an existing row reads as
+		// bound to no room and renders on every board exactly as before, so a
+		// channel's todo list is additive to a live todo rather than a rewrite.
+		`ALTER TABLE issues ADD COLUMN room    TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("migrate add column: %w", err)
@@ -187,6 +206,12 @@ CREATE INDEX IF NOT EXISTS ix_issues_extref ON issues(org, project_id, ext_ref);
 -- board costs the index nothing (every row shares the 0 key) and a scheduled one
 -- reads its window without touching the rows that have no dates.
 CREATE INDEX IF NOT EXISTS ix_issues_org_project_due ON issues(org, project_id, due_at);
+-- A channel's todo list: one room's items, read straight out of the tenant's own
+-- index. It is keyed (org, room) rather than (org, project, room) because a room
+-- is addressed across every board of the org — the work a channel is about does
+-- not have to live on one repository's board, and asking board by board is the
+-- question this index exists to avoid.
+CREATE INDEX IF NOT EXISTS ix_issues_org_room ON issues(org, room);
 `
 	if _, err := s.db.Exec(spineIdx); err != nil {
 		return fmt.Errorf("migrate spine index: %w", err)
@@ -298,12 +323,12 @@ func (s *Store) DeleteProject(ctx context.Context, org, key string) (bool, error
 	return true, nil
 }
 
-const issueCols = `id,project_id,org,number,kind,source,repo,ext_ref,title,description,status,priority,assignee,labels,start_at,due_at,created_at,updated_at`
+const issueCols = `id,project_id,org,number,kind,source,repo,room,ext_ref,title,description,status,priority,assignee,labels,start_at,due_at,created_at,updated_at`
 
 func scanIssue(sc interface{ Scan(...any) error }) (Issue, error) {
 	var i Issue
 	err := sc.Scan(&i.ID, &i.ProjectID, &i.Org, &i.Number, &i.Kind, &i.Source, &i.Repo,
-		&i.ExtRef, &i.Title, &i.Description, &i.Status, &i.Priority, &i.Assignee,
+		&i.Room, &i.ExtRef, &i.Title, &i.Description, &i.Status, &i.Priority, &i.Assignee,
 		&i.Labels, &i.StartAt, &i.DueAt, &i.CreatedAt, &i.UpdatedAt)
 	return i, err
 }
@@ -332,8 +357,8 @@ func (s *Store) CreateIssue(ctx context.Context, i Issue) (Issue, error) {
 		i.Source = "team"
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO issues (`+issueCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		i.ID, i.ProjectID, i.Org, i.Number, i.Kind, i.Source, i.Repo, i.ExtRef,
+		`INSERT INTO issues (`+issueCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		i.ID, i.ProjectID, i.Org, i.Number, i.Kind, i.Source, i.Repo, i.Room, i.ExtRef,
 		i.Title, i.Description, i.Status, i.Priority, i.Assignee, i.Labels,
 		i.StartAt, i.DueAt, i.CreatedAt, i.UpdatedAt); err != nil {
 		return Issue{}, fmt.Errorf("insert issue: %w", err)
@@ -392,6 +417,10 @@ type IssueFilter struct {
 	Status string
 	Kind   string
 	Repo   string
+	// Room keeps only items bound to that collaboration room — the query a
+	// channel view runs to draw its own todo list. It spans every board in the
+	// store, because a room's work is not confined to one repository's board.
+	Room   string
 	Source string
 	// Scheduled keeps only rows that carry a schedule (a start, a due date, or
 	// both) — the timeline's slice. It is the one filter that is a predicate
@@ -430,6 +459,7 @@ func (s *Store) ListIssues(ctx context.Context, org, projectID string, f IssueFi
 	add("status", f.Status)
 	add("kind", f.Kind)
 	add("repo", f.Repo)
+	add("room", f.Room)
 	add("source", f.Source)
 	add("assignee", f.Assignee)
 	if f.Scheduled {
