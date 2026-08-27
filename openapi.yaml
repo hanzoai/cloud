@@ -411,7 +411,7 @@ components:
           description: the tier the limit came from
           type: string
         resets:
-          description: unix seconds; when the count starts again
+          description: unix seconds; when THAT window starts again
           type: integer
         spent:
           description: the subject is at the limit
@@ -424,6 +424,14 @@ components:
             stood. It stops AT Limit rather than climbing past it, so Limit-Used is what
             remains and never goes negative.
           type: integer
+        window:
+          description: |-
+            Window is which ceiling these numbers describe — "hour" or "day" — because a
+            caller is held to both and only one of them is the answer. It is the window
+            that REFUSED where one did, and otherwise the one with least left, so
+            Limit-Used is always the number that will actually stop them next. Empty
+            where no window bounds the subject at all.
+          type: string
       type: object
     Analysis:
       properties:
@@ -13835,6 +13843,29 @@ components:
             when a worker is missing a field a newer registration reports.
           type: string
       type: object
+    call:
+      properties:
+        name:
+          description: |-
+            Name is the media room to join: the value POST /v1/meet/getToken takes as
+            roomName, and the value the media server keys participants on.
+          type: string
+        ready:
+          description: |-
+            Ready reports that this deployment can mint a join token for this room. It
+            is false on a deployment holding no media-server key, where Name is still
+            correct — the name is a property of the room and the key is a property of
+            the deployment, so a caller learns the room's identity either way and
+            learns not to offer a join button.
+          type: boolean
+        ws:
+          description: |-
+            WS is where the media plane is — the address a client opens its own
+            browser-to-server connection to. Empty when this deployment has not been
+            told where its media server lives, which is reported rather than refused:
+            a surface can say a call is unavailable without a second request.
+          type: string
+      type: object
     callInput:
       properties:
         agent:
@@ -25140,6 +25171,13 @@ components:
           description: |-
             Repo is the git repository the issue is bound to, empty when it is not
             repo-bound.
+          type: string
+        room:
+          description: |-
+            Room is the collaboration room the issue belongs to, spelled
+            "<workspace>_<room>" — empty when it is not room-bound, which is most of
+            them. It is here so an org-wide search says which channel each item came
+            from without a second read.
           type: string
         source:
           description: |-
@@ -42582,6 +42620,13 @@ components:
             Repo is the code being worked on, up to 512 characters. A label the surface
             states; nothing resolves it against the forge.
           type: string
+        room:
+          description: |-
+            Room is the collaborative room this run was started in (HIP-0523), so a
+            workspace view can list the sessions of one room. It is PROVENANCE and is set
+            only here: there is deliberately no way to move a session to another room, so
+            it is absent from the patch input and from UpdateSession's SET list.
+          type: string
         status:
           description: |-
             Status opens the session in one of running, paused, done or error. Empty means
@@ -45217,6 +45262,39 @@ components:
             path.
           type: string
       type: object
+    roomWork:
+      properties:
+        open:
+          description: |-
+            Open is how many items are still work: everything whose status does not
+            end it. It is the number a channel header shows.
+          type: integer
+        room:
+          description: Room is the room these counts are for, echoed back as it was
+            resolved.
+          type: string
+        status:
+          additionalProperties:
+            type: integer
+          description: |-
+            Status is the count per board column, carrying EVERY column this surface
+            knows — an empty column reads 0 rather than being absent, so a caller can
+            render the board without inventing the vocabulary. The keys are the same
+            closed set every other operation here validates against.
+          type: object
+        total:
+          description: |-
+            Total is every item bound to this room, settled ones included, so Total
+            minus Open is what the room has finished.
+          type: integer
+        updated:
+          description: |-
+            Updated is when anything in this room's work last moved, in unix seconds.
+            ABSENT when the room has no work at all: zero would read as the epoch, and
+            a room nobody has filed anything in has no last activity rather than an
+            infinitely old one. Total is 0 in exactly that case.
+          type: integer
+      type: object
     roundOut:
       properties:
         roundId:
@@ -46704,6 +46782,8 @@ components:
           type: array
         repo:
           type: string
+        room:
+          type: string
         rootSessionId:
           type: string
         startedAt:
@@ -46881,6 +46961,12 @@ components:
           description: |-
             Repo is the code the session is working on, as the surface reported it. It is
             truth the SURFACE states, so it is a label rather than something resolved here.
+          type: string
+        room:
+          description: |-
+            Room is the collaborative room this run was started in (HIP-0523), empty
+            when it came from anywhere else — a CLI, a schedule, an API call. It is what
+            lets a workspace view show the runs of one room beside its messages.
           type: string
         rootSessionId:
           description: |-
@@ -48326,6 +48412,110 @@ components:
           description: Tags are free-form labels for search and grouping across categories.
           items:
             type: string
+          type: array
+      type: object
+    teamRoom:
+      properties:
+        archived:
+          description: |-
+            Archived reports that the room has been closed. It is the platform's own
+            Space attribute — the same one the Team client writes — and NOT a field of
+            the work facet, so there is exactly one answer to "is this room open".
+          type: boolean
+        bindings:
+          description: |-
+            Bindings are what this room is ABOUT, each a "<kind>:<ref>" string —
+            "project:acme/web", "repo:hanzoai/cloud", "issue:1010". One list rather
+            than one field per kind, because the next thing a room can be about should
+            not be a schema change; and a bound value is opaque here on purpose, since
+            the app that owns a project is the app that can resolve one. HIP-0523 §2:
+            a binding is a REFERENCE, never a copy — a room holding an issue's title or
+            status would be the parallel work-item store HIP-1160 §1 forbids.
+          items:
+            type: string
+          type: array
+        direct:
+          description: |-
+            Direct reports that this is a room between people rather than a named
+            room. It is derived from the document's class, so it cannot disagree
+            with what the client will render.
+          type: boolean
+        id:
+          description: |-
+            ID is the room document's own id, and the value the bind op addresses.
+            It is unique within a workspace, not across the org.
+          type: string
+        life:
+          description: |-
+            Life is the room's lifecycle INTENT — "standing" or "bound" (HIP-0523 §2).
+            Absent on the document it reads "standing": a room nobody classified is one
+            that persists.
+          type: string
+        members:
+          description: |-
+            Members are the account uuids in the room, agents included: an agent
+            projects as a workspace member under a uuid derived from its id, so a
+            caller comparing this against GET /v1/team/bots learns which rooms an
+            agent is in.
+          items:
+            type: string
+          type: array
+        name:
+          description: |-
+            Name is what a person sees in a sidebar. A direct message carries none, so
+            this is empty for one — the members are its name.
+          type: string
+        private:
+          description: Private reports that the room is restricted to its members.
+          type: boolean
+        topic:
+          description: Topic is the room's own one-line subject, as the Team client
+            sets it.
+          type: string
+        workspace:
+          description: |-
+            Workspace is the workspace uuid holding this room. It is part of the
+            room's address: two workspaces of one org may each hold a room with
+            the same name, and only the pair identifies one.
+          type: string
+      type: object
+    teamRoomBind:
+      properties:
+        bindings:
+          description: |-
+            Bindings REPLACES what the room is about, wholly. It is a replace and
+            not a merge because a caller that cannot remove a binding would have no way
+            to correct a wrong one, and an empty list sent explicitly is how a room
+            is unbound. Absent (null) leaves the existing list alone.
+          items:
+            type: string
+          type: array
+        id:
+          description: |-
+            ID is the room to bind, from the path. The URL is the authority; a body
+            carrying another id cannot redirect the write.
+          type: string
+        life:
+          description: |-
+            Life sets the lifecycle intent: "standing" or "bound". Any other
+            value is refused rather than stored, so a reader never has to interpret a
+            third one. Empty leaves the current intent unchanged.
+          type: string
+        workspace:
+          description: |-
+            Workspace names the workspace holding the room. It is required, because
+            a room id is unique only within one and searching every workspace for a
+            matching id would make the write's target depend on iteration order.
+          type: string
+      type: object
+    teamRooms:
+      properties:
+        rooms:
+          description: |-
+            Rooms is every room of every workspace the caller's org owns, each
+            with the work facet it carries.
+          items:
+            $ref: '#/components/schemas/teamRoom'
           type: array
       type: object
     templateCatalog:
@@ -51630,6 +51820,14 @@ paths:
       - description: Project filters to the sessions tagged with one product slug.
         in: query
         name: project
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Room filters to the sessions started in one collaborative room — the query a
+          workspace view runs to show what has been run in it.
+        in: query
+        name: room
         required: false
         schema:
           type: string
@@ -89277,6 +89475,61 @@ paths:
       - openapi
       x-app: openapi
       x-public: true
+  /v1/meet/call:
+    get:
+      description: |-
+        Answers where a room's call happens, for a caller who may join it.
+
+        It is the "resolved at render" half of HIP-0523 §12: a surface showing a channel
+        asks for the room's call at the moment it draws one, rather than reading a media
+        room name someone stored on the room. Nothing here is persisted and nothing is
+        created — a media room begins existing when the first participant connects and
+        stops when the last leaves, so there is no call to create and none to clean up.
+
+        AUTHORIZATION IS THE JOIN DECISION, unchanged and shared. It delegates to
+        state.admits, the same function POST /v1/meet/getToken and all three recording
+        operations admit on, so a caller who is told where a call is, is a caller who
+        could have joined it. Answering the address to someone who cannot join would make
+        this a workspace-membership oracle for anyone who can guess a room id.
+
+        It deliberately does NOT report whether a call is in progress. That is a fact the
+        media server holds and this binary would have to ask for it over the network,
+        which is a different decision with a different failure mode — and reporting
+        "nobody is in this call" when the question could not be asked would be exactly the
+        unknown-rendered-as-zero this surface refuses elsewhere.
+      operationId: meetCall
+      parameters:
+      - description: |-
+          Workspace is the workspace uuid holding the room, as GET /v1/team/rooms
+          reports it. It is the segment the caller's membership is checked against.
+        in: query
+        name: workspace
+        required: true
+        schema:
+          type: string
+      - description: |-
+          Room is the room's own id within that workspace, as GET /v1/team/rooms
+          reports it. It is opaque here: meet keeps no rooms and cannot say whether
+          one exists, only whether this caller may be seated in the workspace holding
+          it.
+        in: query
+        name: room
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/call'
+          description: ok
+      summary: Where a room's call happens
+      tags:
+      - meet
+      x-app: meet
+      x-public: true
+      x-tool: true
   /v1/meet/getToken:
     post:
       description: |-
@@ -111206,6 +111459,76 @@ paths:
       - team
       x-app: team
       x-public: true
+  /v1/team/rooms:
+    get:
+      description: |-
+        Returns every room of the caller's org, across the workspaces
+        it owns, with the work facet each carries.
+
+        It reads the SAME Chunter documents the transactor serves, so a room opened
+        in the Team client appears here with no sync, and a facet written here is read
+        by anything holding the document. Direct messages are included: a room between
+        two people is a room with no name, not a different kind of thing.
+      operationId: get_team_rooms
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/teamRooms'
+          description: ok
+      summary: Returns every room of the caller's org, across the workspaces it owns,
+        with the work facet each carries.
+      tags:
+      - team
+      x-app: team
+      x-public: true
+      x-tool: true
+  /v1/team/rooms/{id}:
+    put:
+      description: |-
+        States what a room is for: its lifecycle intent, and what it is
+        about. It answers the room as it now stands.
+
+        The write is a platform MIXIN on the room document, applied through the
+        SAME applyTx path the Team client's own writes take and broadcast to every
+        connected client — so a room bound here updates live in an open workspace
+        rather than on the next reload.
+      operationId: put_team_rooms_by_id
+      parameters:
+      - description: |-
+          ID is the room to bind, from the path. The URL is the authority; a body
+          carrying another id cannot redirect the write.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              bindings:
+              - repo:hanzoai/cloud
+              - issue:1010
+              life: bound
+              workspace: 0e3c…
+            schema:
+              $ref: '#/components/schemas/teamRoomBind'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/teamRoom'
+          description: ok
+      summary: 'States what a room is for: its lifecycle intent, and what it is about.'
+      tags:
+      - team
+      x-app: team
+      x-public: true
+      x-tool: true
   /v1/team/transactor/{token}:
     get:
       description: |-
@@ -111834,6 +112157,17 @@ paths:
         schema:
           type: string
       - description: |-
+          Room keeps issues bound to one collaboration room, spelled
+          "<workspace>_<room>" — the exact value GET /v1/meet/call answers with, so a
+          channel's call and its todo list name the room the same way. This is the
+          read a channel view runs to draw its own list; it spans every board of the
+          org, because the work a channel is about is not confined to one board.
+        in: query
+        name: room
+        required: false
+        schema:
+          type: string
+      - description: |-
           Source keeps one origin: team, git, crm, helpdesk, cms, agent. "git" is
           how you ask for the mirrored GitHub issues specifically.
         in: query
@@ -112236,6 +112570,45 @@ paths:
                 $ref: '#/components/schemas/issueHit'
           description: ok
       summary: 'Takes an issue: it becomes yours and it moves to in_progress.'
+      tags:
+      - todo
+      x-app: todo
+      x-public: true
+      x-tool: true
+  /v1/todo/rooms/{room}:
+    get:
+      description: |-
+        Summarises one room's work.
+
+        The room is opaque here and is deliberately not resolved: this package cannot
+        say whether a room exists — apps/team owns that document — so an unknown room
+        answers an EMPTY board rather than a 404. That is the honest answer and the
+        useful one: a channel that has never had an item filed in it and a channel id
+        that was mistyped both have no work, and inventing a distinction would require
+        this surface to hold a second copy of the room list (HIP-0523 §2 forbids it,
+        and it would drift the first time a room was renamed).
+
+        Tenancy is the validated principal's org and nothing else, so a caller cannot
+        read another tenant's channel by naming its room.
+      operationId: get_todo_rooms_by_room
+      parameters:
+      - description: |-
+          Room is the room, spelled "<workspace>_<room>" — the same value
+          GET /v1/meet/call answers with, so a channel's call and its work name the
+          room identically. From the path.
+        in: path
+        name: room
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/roomWork'
+          description: ok
+      summary: Summarises one room's work.
       tags:
       - todo
       x-app: todo
