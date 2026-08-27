@@ -256,6 +256,12 @@ func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOu
 		}
 		id, err := SendSlackAt(ctx, in.Org, in.Room, in.ReplyTo, "", in.Text)
 		return &plane.ChatSendOut{MessageID: id}, err
+	case "whatsapp":
+		// Every WhatsApp message IS private — one person, one number, no room a
+		// third party can see — so the flag has nothing to switch on and asking
+		// for a public one would be asking for something the API cannot do.
+		id, err := SendWhatsApp(ctx, in.Org, in.Room, in.ReplyTo, in.Text)
+		return &plane.ChatSendOut{MessageID: id}, err
 	case "discord":
 		if in.Private {
 			return nil, fmt.Errorf("integrations: discord has no private reply here")
