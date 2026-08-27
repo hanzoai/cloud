@@ -153,7 +153,7 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	// A settlement is a ledger entry on BOTH sides, so every test gets a real
 	// co-resident ledger — there is no "settled" to assert without one.
-	ledger := &halfDown{Client: finance.New(t.TempDir())}
+	ledger := &halfDown{Client: finance.New(finance.Local(t.TempDir()))}
 	finance.Publish(ledger)
 	t.Cleanup(func() { finance.Publish(nil); _ = wallet.Shutdown(); _ = Shutdown() })
 

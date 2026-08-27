@@ -16,7 +16,7 @@ import (
 // client whose commerce fake must never be reached. It returns the ledger and the client.
 func meteredWallet(t *testing.T, seedCents int64) (finance.Client, *metering.Client) {
 	t.Helper()
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil); _ = fin.Close() })
 

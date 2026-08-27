@@ -88,6 +88,30 @@ const (
 	labProject = "hanzo.ai/sandbox-project"
 )
 
+// orgKey is the value labOrg carries: the name of the org's STORE, which is the
+// same name its ownership is elected on.
+//
+// It is not slug(). slug is this package's DNS fold and it is LOSSY on purpose —
+// it is right for a volume name, where the hash beside it keeps two tenants apart.
+// A label an OWNERSHIP decision reads has no such hash, and the two folds do not
+// agree: `namespace.Sanitize` is the identity on a clean lowercase label and
+// otherwise appends a digest of the exact input, so `acme` folds the same way
+// through both and `acme.co` becomes "acme-co-<digest>" here and "acme-co" there.
+// Comparing those two would have matched most orgs and silently missed the rest —
+// which for the orphan sweep means it quietly stops collecting their pods.
+//
+// So the label carries the store's own name and the sweep compares it to the store
+// names it owns. One fold, one value, one meaning, and no second answer to "which
+// org is this object's". An org that names no namespace gets no label rather than a
+// guessed one — an object nothing can account for is one nothing may delete.
+func orgKey(org string) string {
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return ""
+	}
+	return ns.ID()
+}
+
 // annLeased is the DATE a disk was last leased, UTC, on the disk itself.
 //
 // A disk outlives every object that could account for it — the pod by an hour,
@@ -732,7 +756,7 @@ func (r *runtime) ensureVolume(ctx context.Context, m Sandbox) error {
 		"metadata": map[string]any{
 			"name":        m.Volume,
 			"namespace":   r.ns,
-			"labels":      map[string]any{labOrg: slug(m.Org), labProject: slug(m.Project)},
+			"labels":      map[string]any{labOrg: orgKey(m.Org), labProject: slug(m.Project)},
 			"annotations": map[string]any{annLeased: today},
 		},
 		"spec": map[string]any{
@@ -993,7 +1017,7 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 			"namespace": r.ns,
 			"labels": map[string]any{
 				labSandbox: m.ID,
-				labOrg:     slug(m.Org),
+				labOrg:     orgKey(m.Org),
 				labClass:   m.Class,
 			},
 		},

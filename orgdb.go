@@ -131,7 +131,10 @@ type OrgStore[T io.Closer] struct {
 	// that got to answer it per store was answering a question it cannot know,
 	// and eleven of the fifteen answered it by omission.
 	dur *org.Durability
-	log luxlog.Logger
+	// peers is Base.Peers — the deployment has more than one writer. Read only
+	// where dur is nil, which is the one case Owned cannot ask a fence about.
+	peers bool
+	log   luxlog.Logger
 
 	mu       sync.Mutex
 	byNS     map[namespace.Namespace]T
@@ -202,6 +205,7 @@ func NewOrgStore[T io.Closer](b Base, subsystem string, open func(*sql.DB) (T, e
 		subsystem: subsystem,
 		open:      open,
 		dur:       b.Durable,
+		peers:     b.Peers,
 		log:       b.Log,
 		byNS:      map[namespace.Namespace]T{},
 		durables:  map[namespace.Namespace]*org.Durable{},
@@ -593,6 +597,72 @@ func (c *OrgStore[T]) Sync(ns namespace.Namespace) (acked bool, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
 	defer cancel()
 	return d.Sync(ctx)
+}
+
+// Owned reports whether this replica may ACT for the org — write its file, and
+// take the actions outside the file that follow from what the file says.
+//
+// TWO GATES, TWO JOBS, AND NEITHER SUBSTITUTES FOR THE OTHER. Sync's fenced ship
+// is the AUTHORITATIVE gate on a write: it settles ownership atomically at the
+// lease round, and money is emitted only on its ack. This is the CHEAP gate ahead
+// of it, and it answers the question a ship cannot be asked at all — whether to
+// do the work in the first place. A sweep that meters and reaps every org on
+// every pod does most of that work twice, and its reaper DELETES KUBERNETES PODS,
+// which no file ship can fence: by the time a ship could refuse, somebody else's
+// tenant's sandbox is already gone. So the rule is: ask this before acting, ask
+// Sync before believing.
+//
+// Being stale is bounded and is the safe direction. The lease can move between
+// this answer and the act, which is exactly why the debit still waits on the ship
+// — but a pod that has lost an org stops sweeping it within one refresh, where
+// today every pod sweeps every org for ever.
+//
+// THE LOCAL-ONLY PATH IS NOT A NO-OP HERE, AND THAT IS THE DIFFERENCE FROM Sync.
+// Sync acks trivially without a Durability because a write is then already as
+// durable as the deployment is configured to be. Ownership has no such trivial
+// answer: with no fence, one writer owns everything and several writers can prove
+// nothing about which of them owns what. So this reads Peers — and a multi-writer
+// deployment whose store could not be proven at boot owns NOTHING, which stops
+// the sweep rather than letting two pods bill one span. That is a deferred debit,
+// not a lost one: no watermark moves, so the plane bills the whole gap once
+// durability returns.
+func (c *OrgStore[T]) Owned(ns namespace.Namespace) bool {
+	if c.dur == nil {
+		return !c.peers
+	}
+	c.mu.Lock()
+	d := c.durables[ns]
+	c.mu.Unlock()
+	// No Durable means the store is not open on this replica, so there is nothing
+	// here to own — never a nil dereference, and never an assumed yes.
+	return d != nil && d.Owned()
+}
+
+// SayDurability reports, once, which regime a money-moving sweep is running in.
+//
+// It exists because the regime is invisible from outside and decides whether the
+// plane can bill at all. buildDurability already says whether the deployment has a
+// fence, but it says it in the process that built the deps — and a sweep runs in
+// its own plugin binary, on its own schedule, so "is THIS meter fenced" was a
+// question with no answer anywhere in a log. Three regimes, each said plainly:
+//
+//	durable      a fence decides who bills an org; a debit waits on its ship
+//	solo         one writer, no fence: this process bills every org it holds
+//	unprovable   several writers, no fence: NOBODY bills, and spans defer until
+//	             the object store is provable again
+//
+// The third is an ERROR, because it is a deployment that intends to be durable and
+// is not, and its symptom is silence — no debits, no double-bill, and no complaint
+// unless something says so here.
+func SayDurability(log luxlog.Logger, b Base, what string) {
+	switch {
+	case b.Durable != nil:
+		log.Info(what + ": durable — the fence decides which orgs this replica bills, and a debit waits on its ship")
+	case !b.Peers:
+		log.Info(what + ": local-only, single writer — this process bills every org it holds, and a debit is as durable as its volume")
+	default:
+		log.Error(what + ": local-only on a MULTI-WRITER deployment — no fence can say which replica owns an org, so NOTHING is billed and every span defers until the durable plane is provable. Configure S3_ADMIN_* to enable it.")
+	}
 }
 
 // orgsRoot is the directory every namespace's file lives under: the first

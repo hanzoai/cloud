@@ -39,7 +39,7 @@ func serveCommerce(t *testing.T, seedSubject string, seedCents int64) finance.Cl
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)
 
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil); _ = fin.Close() })
 	if _, err := fin.Deposit(context.Background(), types.DepositInput{

@@ -32,7 +32,7 @@ import (
 // debited nobody.
 func TestUsageRefIsScopedToTheWallet(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	// Two people, ONE org — so ONE ledger file, which is exactly where the refs used to
@@ -74,7 +74,7 @@ func TestUsageRefIsScopedToTheWallet(t *testing.T) {
 // the wallet keeps its $5.00.
 func TestUsageRefIsOneChargeAndNotJustOneKey(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	if _, err := f.Deposit(ctx, types.DepositInput{
@@ -114,7 +114,7 @@ func TestUsageRefIsOneChargeAndNotJustOneKey(t *testing.T) {
 // all still bills exactly once, never zero and never twice.
 func TestUsageWithoutARefStandsAlone(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	if _, err := f.Deposit(ctx, types.DepositInput{

@@ -70,6 +70,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
@@ -185,6 +186,23 @@ type state struct {
 	// The lifetime policy, read ONCE here so a sweep cannot see two policies
 	// halfway through a pass. See lifecycle.go.
 	clk clocks
+	// debit is WHERE this package's runtime money goes, resolved once at mount for
+	// the same reason the policy above is: it is a fact about the deployment, not a
+	// decision a sweep makes per row.
+	//
+	// It is a value rather than a reach through s.Bill because the sink is the one
+	// thing a money test has to be able to WATCH, and the alternative watches the
+	// wrong thing. MeterUsage posts to commerce on a background goroutine, so a
+	// test that observed it there would be timing a network client while trying to
+	// measure whether a span was billed once — and would go green on a debit that
+	// was emitted twice and lost once in flight.
+	debit func(payer string, u metering.Usage)
+}
+
+// debit is the deployment's money sink: the runtime meter's debits, on the org's
+// commerce ledger, under this package's own name.
+func debit(b cloud.Base) func(string, metering.Usage) {
+	return func(payer string, u metering.Usage) { b.Bill.MeterUsage(payer, "sandbox", u) }
 }
 
 // storeFor is the ONE way this package reaches a store, through
@@ -219,6 +237,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		tickets: newTickets(),
 		work:    newWork(),
 		clk:     newClocks(),
+		debit:   debit(b),
 	}}
 	Routes(app, s)
 	// The peer half. Registered beside the routes because they are two adapters
@@ -359,6 +378,7 @@ func New(deps cloud.Deps) (*Service, error) {
 		tickets: newTickets(),
 		work:    newWork(),
 		clk:     newClocks(),
+		debit:   debit(b),
 	}}, nil
 }
 

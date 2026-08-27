@@ -56,7 +56,7 @@ func payerOf(ctx context.Context, org string) string {
 // The payer falls back to the ORG for a session opened before this meter existed:
 // those rows name no wallet, and billing an org's own pool is right where the org
 // is the payer and merely coarse where it is not — which beats not billing.
-func sessionRunning(x Session) cloud.Running {
+func sessionRunning(x Session, rate int64) cloud.Running {
 	payer := x.Payer
 	if payer == "" {
 		payer = x.Org
@@ -67,12 +67,14 @@ func sessionRunning(x Session) cloud.Running {
 		Project:   x.Project,
 		Model:     "session",
 		MeteredAt: x.MeteredAt,
+		EndedAt:   x.EndedAt,
+		Rate:      rate,
 	}
 }
 
 // botRunning describes one resident bot. Model says "bot" rather than "session"
 // so an invoice distinguishes the two things this rate covers.
-func botRunning(a Agent) cloud.Running {
+func botRunning(a Agent, rate int64) cloud.Running {
 	payer := a.Payer
 	if payer == "" {
 		payer = a.Org
@@ -82,18 +84,14 @@ func botRunning(a Agent) cloud.Running {
 		Payer:     payer,
 		Model:     "bot",
 		MeteredAt: a.MeteredAt,
+		Rate:      rate,
 	}
 }
 
-// endOf is a session's right-hand edge: the moment it ended, or now while it is
-// still open. Clamping to ended_at is what stops a closed session accruing
-// forever, and it is why the sweep can bill a close without a close hook.
-func endOf(x Session, now int64) int64 {
-	if x.EndedAt > 0 && x.EndedAt < now {
-		return x.EndedAt
-	}
-	return now
-}
+// A session's right-hand edge — the moment it ended, or now while it is still
+// open — used to be computed here. It is [cloud.Running.EndedAt] now, because the
+// sweep needs it per row to bill a batch in one pass, and one rule for "where does
+// this span end" beats one per subsystem.
 
 // closeResidency charges a bot's unbilled tail at the moment it stops being one.
 //
@@ -116,10 +114,21 @@ func endOf(x Session, now int64) int64 {
 // posture MeterUsage takes — because a debit that could not be recorded must not
 // turn a working mode change into a refusal.
 func closeResidency(ctx context.Context, s *cloud.Service[state], sto *Store, org string, a Agent) {
-	_, err := cloud.RuntimeCharge(ctx, botRunning(a), time.Now().Unix(), cloud.RuntimeRate(ctx),
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		s.Log.Warn("runtime meter: a bot left residency unbilled", "org", org, "agent", a.Name, "err", err)
+		return
+	}
+	// The SAME sweep the tick runs, over one row: the tail is claimed, the
+	// watermark is shipped, and only then is the debit emitted. A mode change is
+	// a write by a request, and a request only reaches this store on the replica
+	// that owns it — so there is no owner gate here, and the ship is still what
+	// decides whether the charge is real.
+	_, err = cloud.RuntimeSweep(ctx, []cloud.Running{botRunning(a, cloud.RuntimeRate(ctx))}, time.Now().Unix(),
 		func(ctx context.Context, id string, was, at int64) (bool, error) {
 			return sto.Advance(ctx, org, a.Name, was, at)
 		},
+		func() (bool, error) { return s.State.stores.Sync(ns) },
 		func(payer string, u metering.Usage) { s.Bill.MeterUsage(payer, meterKind, u) })
 	if err != nil {
 		s.Log.Warn("runtime meter: a bot left residency unbilled", "org", org, "agent", a.Name, "err", err)
@@ -132,7 +141,19 @@ func closeResidency(ctx context.Context, s *cloud.Service[state], sto *Store, or
 // A store that could not be opened or read is REPORTED and skipped, never read as
 // "this org has nothing running" — the same rule the sandbox orphan sweep states,
 // for the same reason: silence is not an answer.
-func meterRuntime(ctx context.Context, st *state, log logger, bill *cloud.ResourceMeter) {
+//
+// IT METERS THE ORGS THIS REPLICA OWNS AND NO OTHERS. Every pod holds every org's
+// file that its volume carries, so an ungated sweep is every pod billing every
+// org: two pods, one span, two debits, and the local watermark CAS cannot stop it
+// because the two pods are CASing two different files. Ownership is the fence's
+// answer (stores.Owned) and the ship is what settles it.
+//
+// It takes `now` and `emit` rather than reading a clock and holding a
+// ResourceMeter, so a test drives THIS function over a real store instead of
+// reassembling it — which is the shape a reassembled harness gets wrong: the
+// owner gate and the ship are what this pass IS, and a copy of the loop that
+// predates them proves the arithmetic of a meter nobody runs.
+func meterRuntime(ctx context.Context, st *state, log logger, now int64, emit func(payer string, u metering.Usage)) {
 	// A PUBLISHED ZERO IS A PRICE, AND A PRICE STILL MOVES THE CLOCK. Runtime is
 	// free this week, so nothing is charged — but the span still HAPPENED, and the
 	// watermark is what says it is accounted for. Returning here instead left the
@@ -142,9 +163,6 @@ func meterRuntime(ctx context.Context, st *state, log logger, bill *cloud.Resour
 	// advances first and emits only when the span is worth something, so the whole
 	// fix is to let it be asked.
 	rate := cloud.RuntimeRate(ctx)
-	now := time.Now().Unix()
-	emit := func(payer string, u metering.Usage) { bill.MeterUsage(payer, meterKind, u) }
-
 	_ = st.eachStore(func(ns namespace.Namespace, sto *Store, openErr error) {
 		if ctx.Err() != nil {
 			return
@@ -154,18 +172,28 @@ func meterRuntime(ctx context.Context, st *state, log logger, bill *cloud.Resour
 			return
 		}
 		org := ns.ID()
+		if !st.stores.Owned(ns) {
+			return // another replica bills this org, or nobody can prove who does
+		}
+		ship := func() (bool, error) { return st.stores.Sync(ns) }
 
+		// SESSIONS AND BOTS ARE TWO SPANS ON ONE FILE, so they are two passes and
+		// two ships. Folding them into one would mean an unreadable bot list held
+		// back the sessions that were already claimed, which is a debit deferred
+		// for a reason that has nothing to do with it.
 		owed, err := sto.Unbilled(ctx, org)
 		if err != nil {
 			log.Warn("runtime meter: list unbilled sessions", "org", org, "err", err)
 		}
+		sessions := make([]cloud.Running, 0, len(owed))
 		for _, x := range owed {
-			advance := func(ctx context.Context, id string, was, at int64) (bool, error) {
-				return sto.AdvanceSession(ctx, org, id, was, at)
-			}
-			if _, err := cloud.RuntimeCharge(ctx, sessionRunning(x), endOf(x, now), rate, advance, emit); err != nil {
-				log.Warn("runtime meter: session watermark would not move", "session", x.ID, "org", org, "err", err)
-			}
+			sessions = append(sessions, sessionRunning(x, rate))
+		}
+		advanceSession := func(ctx context.Context, id string, was, at int64) (bool, error) {
+			return sto.AdvanceSession(ctx, org, id, was, at)
+		}
+		if _, err := cloud.RuntimeSweep(ctx, sessions, now, advanceSession, ship, emit); err != nil {
+			log.Warn("runtime meter: session spans not billed", "org", org, "err", err)
 		}
 
 		bots, err := sto.Resident(ctx, org)
@@ -173,15 +201,25 @@ func meterRuntime(ctx context.Context, st *state, log logger, bill *cloud.Resour
 			log.Warn("runtime meter: list resident bots", "org", org, "err", err)
 			return
 		}
+		// A BOT IS ADDRESSED BY TWO DIFFERENT NAMES AND BOTH ARE RIGHT. The LEDGER
+		// keys a debit on the agent's id, because that is the row's identity and
+		// what a ref has to survive a rename with; the STORE keys the watermark on
+		// the agent's NAME, because that is its primary key. A per-row closure hid
+		// the difference by capturing the agent and ignoring the id it was handed —
+		// which is fine until the pass is batched and the closure has to serve every
+		// row, at which point advancing by id silently moves nothing and every
+		// resident bot runs free. So the two names are carried together, explicitly.
+		residents := make([]cloud.Running, 0, len(bots))
+		named := make(map[string]string, len(bots))
 		for _, a := range bots {
-			advance := func(ctx context.Context, id string, was, at int64) (bool, error) {
-				// Agents are addressed by NAME in their own store; the id rides the
-				// act's name so the ledger's key is still the row's own identity.
-				return sto.Advance(ctx, org, a.Name, was, at)
-			}
-			if _, err := cloud.RuntimeCharge(ctx, botRunning(a), now, rate, advance, emit); err != nil {
-				log.Warn("runtime meter: bot watermark would not move", "agent", a.Name, "org", org, "err", err)
-			}
+			residents = append(residents, botRunning(a, rate))
+			named[a.ID] = a.Name
+		}
+		advanceBot := func(ctx context.Context, id string, was, at int64) (bool, error) {
+			return sto.Advance(ctx, org, named[id], was, at)
+		}
+		if _, err := cloud.RuntimeSweep(ctx, residents, now, advanceBot, ship, emit); err != nil {
+			log.Warn("runtime meter: bot spans not billed", "org", org, "err", err)
 		}
 	})
 }

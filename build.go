@@ -114,6 +114,10 @@ func BuildDeps(cfg *Config) Deps {
 	// the embedded KMS builds per-org stores that want it. Discovered late, it could
 	// not reach them, and KMS's files were local-only for no reason anyone chose.
 	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
+	// Peers is read from the SAME peer list buildDurability parses. It matters only
+	// where Durable is nil: with no fence, ownership of an org is decided by how
+	// many writers the deployment has, and nothing else can decide it.
+	deps.Peers = len(parsePeers(cfg.ShardPeers)) > 1
 	deps.IAM = pick(cfg, logger, "iam", "IAM", clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, deps.Durable, logger)
 	deps.Commerce = pickCommerceClient(cfg, logger)
@@ -131,7 +135,7 @@ func BuildDeps(cfg *Config) Deps {
 	// least-privilege for a read-only call). Both meter through the ONE commerce path.
 	deps.AI = meteredAIClient(pickCompletionsClient(cfg, logger), deps)
 	deps.Embed = meteredAIClient(pickEmbedClient(cfg, logger), deps)
-	installFinance(cfg, logger)
+	installFinance(cfg, deps, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 
@@ -268,11 +272,11 @@ func installTierReader(m *metering.Client, log luxlog.Logger) {
 // principal is gated on a positive prepaid balance, fail-closed. MUST run before
 // ai.Mount (the ai gate reads the hook per request; the hook must be installed first)
 // — which BuildDeps guarantees (deps are built before MountAll).
-func installFinance(cfg *Config, log luxlog.Logger) {
+func installFinance(cfg *Config, deps Deps, log luxlog.Logger) {
 	if !cfg.Enabled("commerce") {
 		return // money layer not co-resident (split-deploy); ai falls back to HTTP.
 	}
-	fin := finance.New(cfg.DataDir)
+	fin := finance.New(CustomerBooks(deps))
 	finance.Publish(fin)
 	// Money is billed to the SUBJECT's wallet, inside the org's ledger.
 	//

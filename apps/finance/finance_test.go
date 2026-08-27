@@ -36,7 +36,7 @@ func TestWalletAcct(t *testing.T) {
 // deposit, debit, idempotent replay, and per-user wallet isolation within the one file.
 func TestPrepaidWalletLedger(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	// Deposit 1000 into acme's org pool.
@@ -74,7 +74,7 @@ func TestPrepaidWalletLedger(t *testing.T) {
 // empty-Ref deposits stay additive (each stacks).
 func TestDepositRefIdempotent(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	// Same non-empty Ref → credited once.
@@ -143,7 +143,7 @@ func TestDepositRefIsOnePaymentAndNotJustOneKey(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			f := New(t.TempDir())
+			f := New(Local(t.TempDir()))
 			defer func() { _ = f.Close() }()
 
 			posted, err := f.Deposit(ctx, alice)
@@ -203,7 +203,7 @@ func TestDepositRefIsOnePaymentAndNotJustOneKey(t *testing.T) {
 // entry id for bob's $500 over a wallet holding nothing.
 func TestDepositRecoveryIsNotSomebodyElsesCredit(t *testing.T) {
 	const org, ref = "acme", "SHARED"
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	alice := types.DepositInput{Org: org, Subject: "acme/alice", Amount: money.FromCents(100), Ref: ref}
@@ -248,7 +248,7 @@ func TestDepositRecoveryIsNotSomebodyElsesCredit(t *testing.T) {
 // caller's own dying context instead of a detached one — and this fails with
 // "begin tx: context canceled" on a wallet holding the money.
 func TestDepositAlreadyCreditedIsNotAFailure(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 	in := types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(4200), Ref: "sq_pay_9Xk2"}
 
@@ -288,7 +288,7 @@ func TestDepositAlreadyCreditedIsNotAFailure(t *testing.T) {
 // Ref, so every one of them must be told the money is there and the wallet must hold
 // it once.
 func TestDepositConcurrentSettlementsOfOneRef(t *testing.T) {
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 	in := types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(4200), Ref: "sq_pay_9Xk2"}
 
@@ -325,7 +325,7 @@ func TestDepositConcurrentSettlementsOfOneRef(t *testing.T) {
 // "backfill:<org>" ref dedupes the second run), and a non-positive balance is skipped.
 func TestMigrateOrgIdempotent(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 	Publish(f)
 	defer Publish(nil)
@@ -385,7 +385,7 @@ func TestMigrateOrgIdempotent(t *testing.T) {
 // instead and it fails on the balance, which is the money half.
 func TestMigrateOrgRerunAfterTheBalanceMoved(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 	Publish(f)
 	defer Publish(nil)
@@ -435,7 +435,7 @@ func TestMigrateOrgRerunAfterTheBalanceMoved(t *testing.T) {
 // funded customer $0 and made the prepaid AI gate refuse a funded org.
 func TestBalanceReadErrorSurfaces(t *testing.T) {
 	ctx := context.Background()
-	f := New(t.TempDir())
+	f := New(Local(t.TempDir()))
 	defer func() { _ = f.Close() }()
 
 	// Fund acme so the store + a real balance row exist; confirm the happy read.

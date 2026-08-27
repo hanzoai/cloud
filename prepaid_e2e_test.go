@@ -135,7 +135,7 @@ func e2eToken(t *testing.T, key *rsa.PrivateKey, owner, name string) string {
 // e2eLedger publishes a real finance ledger on the process-wide money client.
 func e2eLedger(t *testing.T) *ledgerReader {
 	t.Helper()
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	prev := finance.Current()
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(prev) })

@@ -95,11 +95,17 @@ func reap(ctx context.Context, s *cloud.Service[state]) {
 	}
 }
 
-// sweep is one pass over every org's sandboxes.
+// sweep is one pass over the sandboxes of every org THIS REPLICA OWNS.
 //
 // Errors are per-org and never abort the pass: one org with an unopenable store
 // must not stop every other org's leases from ending. `Each` hands us the error
 // rather than throwing, which is what makes that the easy shape to write.
+//
+// OWNERSHIP GATES THE ACT, and here the act reaches outside the file: `end` stops a
+// POD. A file write can be fenced after the fact — the loser's ship is refused and
+// its copy discarded — but a pod that has been deleted is not coming back, and the
+// work inside it is gone. So the org's elected writer is the one that ends its
+// leases, and the others do not touch them.
 func sweep(ctx context.Context, s *cloud.Service[state]) {
 	now := time.Now()
 	_ = s.State.stores.Each(func(ns namespace.Namespace, st *Store, openErr error) {
@@ -110,6 +116,9 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 			s.Log.Warn("reap: open store", "namespace", ns, "err", openErr)
 			return
 		}
+		if !s.State.stores.Owned(ns) {
+			return // another replica ends this org's leases
+		}
 		// WHEN a sandbox ends is not a query the store answers. The store holds
 		// facts — the stamps — and lifecycle.go holds the policy that reads them,
 		// which is why there is one list here and not one per reason: the expiry
@@ -119,12 +128,19 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 		// `over` is that rule, and it hands back which clock ran out. The string
 		// is what the row's last line says, and it is the only thing an operator
 		// has when asked why a sandbox went away.
-		running, err := st.List(ctx, ns.ID(), "", "running")
+		// EVERY ROW, AND NO LIMIT. This read was `List(org, "", "running")`, which
+		// got both halves wrong. `List` is `ORDER BY created_at DESC LIMIT 200`, so
+		// an org past two hundred sandboxes had its OLDEST — the ones furthest past
+		// their lease — dropped from every sweep: billed for ever, ended never. And
+		// filtering to `running` skipped the rows whose start failed, which are the
+		// ones still holding a pod nothing else will stop (see clocks.over).
+		// `Rows` is the sweep's own set, unbounded, like IDs and Held beside it.
+		rows, err := st.Rows(ctx, ns.ID())
 		if err != nil {
-			s.Log.Warn("reap: list running", "namespace", ns, "err", err)
+			s.Log.Warn("reap: list sandboxes", "namespace", ns, "err", err)
 			return
 		}
-		for _, m := range running {
+		for _, m := range rows {
 			// END IS ASKED FIRST, and `over` is the whole of it (lifecycle.go):
 			// the ceiling from creation, the lease, and the untouched-allowance
 			// that is a different length depending on whether anybody is watching.
@@ -207,11 +223,21 @@ func end(ctx context.Context, s *cloud.Service[state], st *Store, m Sandbox, why
 // window is what it is, and why it is its own number rather than borrowed from a
 // lifetime clock.
 //
-// ONE DEPLOYMENT PER SANDBOX NAMESPACE. This sweep's whole claim is "no row of ours
-// names this pod", so a second cloud pointed at the same SANDBOX_NAMESPACE would
-// read the first one's live sandboxes as orphans. That is the same invariant the
-// stores already have — one writer per store — and it is stated here because this is
-// where breaking it deletes something.
+// ONE REPLICA PER ORG, WHICH IS WHY THE POD'S OWN ORG LABEL DECIDES. This sweep's
+// claim is "no row of ours names this pod", and on more than one pod that claim is
+// only true about the orgs THIS replica owns: a peer holds the rows for the orgs it
+// owns, so a pod belonging to one of those is unclaimed HERE and very much alive
+// there. Reading the whole namespace and differencing it against a partial set is
+// how one pod deletes another's live sandboxes — the same shape as the incident
+// this file's bound was written for, one layer up.
+//
+// The fix needs no completeness assumption, because the answer is already ON the
+// object: every sandbox pod carries `hanzo.ai/org`, written at create from the
+// validated org. A pod whose org this replica does not own is not this replica's to
+// judge, so it is skipped before any question about rows is asked. A pod with no
+// org label predates the label and is likewise left alone — an unlabelled pod is a
+// pod whose owner cannot be established, and this sweep deletes only what it can
+// account for.
 func orphans(ctx context.Context, s *cloud.Service[state]) {
 	rt := s.State.rt
 	if err := rt.ready(); err != nil {
@@ -222,7 +248,7 @@ func orphans(ctx context.Context, s *cloud.Service[state]) {
 		s.Log.Warn("reap: list sandbox pods", "namespace", rt.bound.Namespace, "err", err)
 		return
 	}
-	claimed := known(ctx, s)
+	claimed, mine := known(ctx, s)
 	if claimed == nil {
 		// Not "no sandboxes are claimed" — the stores could not be read, and treating
 		// an unreadable store as an empty one would delete every live sandbox in the
@@ -234,6 +260,9 @@ func orphans(ctx context.Context, s *cloud.Service[state]) {
 		id := p.GetLabels()[labSandbox]
 		if id == "" || claimed[id] {
 			continue
+		}
+		if !mine[p.GetLabels()[labOrg]] {
+			continue // another replica owns this org, so its pods are not ours to judge
 		}
 		if age := time.Since(p.GetCreationTimestamp().Time); age < orphanGrace {
 			continue
@@ -368,11 +397,20 @@ func mountedDisks(ctx context.Context, s *cloud.Service[state]) map[string]bool 
 	return out
 }
 
-// known is every sandbox id the stores still claim, or nil when they could not all
-// be read. nil is the load-bearing value: a partial answer here is indistinguishable
-// from "these sandboxes are orphans", and acting on it would delete live work.
-func known(ctx context.Context, s *cloud.Service[state]) map[string]bool {
-	out, failed := map[string]bool{}, false
+// known is every sandbox id the stores still claim, beside the set of orgs this
+// replica OWNS — or (nil, nil) when the stores could not all be read.
+//
+// nil is the load-bearing value: a partial answer here is indistinguishable from
+// "these sandboxes are orphans", and acting on it would delete live work.
+//
+// The two answers come back together because they are read in one pass and are only
+// meaningful together. The id set says which pods are accounted for; the org set
+// says which pods this replica is entitled to have an opinion about. Claimed ids
+// are collected for EVERY org on the volume, owned or not — a pod claimed by a row
+// we can see is not an orphan whoever owns it, and that direction can only ever
+// protect a pod.
+func known(ctx context.Context, s *cloud.Service[state]) (claimed, owned map[string]bool) {
+	out, mine, failed := map[string]bool{}, map[string]bool{}, false
 	_ = s.State.stores.Each(func(ns namespace.Namespace, st *Store, openErr error) {
 		if openErr != nil {
 			s.Log.Warn("reap: open store", "namespace", ns, "err", openErr)
@@ -388,9 +426,15 @@ func known(ctx context.Context, s *cloud.Service[state]) map[string]bool {
 		for id := range ids {
 			out[id] = true
 		}
+		if s.State.stores.Owned(ns) {
+			// ns.ID() is the store's name AND the value labOrg carries (orgKey), so
+			// this is a comparison of one fold against itself — see orgKey for what
+			// comparing two different folds would have cost.
+			mine[ns.ID()] = true
+		}
 	})
 	if failed {
-		return nil
+		return nil, nil
 	}
-	return out
+	return out, mine
 }

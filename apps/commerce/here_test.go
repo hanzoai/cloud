@@ -87,7 +87,7 @@ func serveNested(t *testing.T, org string, cents int64) string {
 	plane.Unbind()
 	t.Cleanup(plane.Unbind)
 
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil) })
 	if _, err := fin.Deposit(context.Background(), types.DepositInput{

@@ -58,7 +58,7 @@ const gateCents int64 = 4200
 // an endpoint that refuses.
 func funded(t *testing.T) finance.Client {
 	t.Helper()
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	t.Cleanup(func() { finance.Publish(nil) })
 	return fin

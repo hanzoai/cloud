@@ -37,7 +37,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -100,63 +99,73 @@ const (
 	acctWallet  = "wallet"           // the org pool wallet; a per-user subject is "wallet:<user>"
 )
 
-// ledgerFinance implements types.FinanceClient over one native ledger file per org.
-type ledgerFinance struct {
-	dataDir string
-
-	mu     sync.Mutex
-	stores map[ledgerName]*sqlstore.Store
-}
-
-// ledgerName is WHICH ledger file: whose it is, and whether it is the sandbox
-// one. It is the cache key and it is also exactly what the opener takes, so a
-// hit and a miss can never resolve to different files.
-type ledgerName struct {
-	ns        namespace.Namespace
-	subsystem string
-}
+// ledgerFinance implements types.FinanceClient over one native ledger per org.
+//
+// WHERE those ledgers live is not this type's business — see ledgers.go. It holds
+// the port and nothing else, so the same money rules run over a lone process's
+// files and over the fenced per-org plane without one line of this file knowing
+// which it got.
+type ledgerFinance struct{ books Ledgers }
 
 // compile-time proof ledgerFinance is the money client.
 var _ types.FinanceClient = (*ledgerFinance)(nil)
 
-// New returns a finance client rooting each org's prepaid wallet ledger under
-// dataDir, in that org's own namespace ("finance", or "finance-test" in sandbox
-// mode). Files open lazily on first use.
-func New(dataDir string) *ledgerFinance {
-	return &ledgerFinance{dataDir: dataDir, stores: map[ledgerName]*sqlstore.Store{}}
+// New returns a finance client over the given books.
+//
+// A lone process passes [Local]; a deployment with a fenced per-org plane passes
+// that. The client is the same either way, which is the point of the port.
+func New(books Ledgers) *ledgerFinance { return &ledgerFinance{books: books} }
+
+// storeFor resolves the org's ledger. test picks the sandbox book, so sandbox
+// money never mixes with live.
+func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error) {
+	return f.books.For(org, test)
 }
 
-// storeFor resolves (opening + caching on first use) the org's ledger file. test picks
-// the sandbox ledger so sandbox money never mixes with live.
+// nameOf folds an org into the name its ledger file is keyed by.
 //
-// The org becomes a NAMESPACE first — the one injective slugger, which is also what
-// keys the file — so it can never traverse the path, reach another tenant's ledger,
-// or fold two distinct orgs onto one wallet.
-func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error) {
+// IT LIVES HERE BECAUSE THIS FILE IS THE DOOR. Every namespace in the tree comes
+// from one of two places — cloud's OrgNamespace, and this file, which is the
+// second only because cloud imports this package and so the arrow cannot point
+// back (TestOnlyOrgnsBuildsANamespace holds both). A third place is not a thing to
+// add: the fold is injective, so a second implementation of it does not fail —
+// it opens an empty ledger beside a real one and reports the customer's balance as
+// zero. [Local] reaches through here for that reason rather than folding its own.
+func nameOf(org string) (namespace.Namespace, error) {
 	ns, err := namespace.OrgProject(org, "")
 	if err != nil {
-		return nil, fmt.Errorf("finance: %w", err)
+		return namespace.Namespace{}, fmt.Errorf("finance: %w", err)
 	}
-	name := ledgerName{ns: ns, subsystem: "finance"}
-	if test {
-		name.subsystem = "finance-test"
-	}
+	return ns, nil
+}
 
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if s, ok := f.stores[name]; ok {
-		return s, nil
-	}
-	// KindUsage travels WITH the open, because a usage ref is unique per wallet and the
-	// store has to know which of its kinds that is to repair the rows written before it
-	// was. Passing the constant means a rename here follows into the repair instead of
-	// silently turning it into a no-op that bills one act twice.
-	s, err := sqlstore.Open(name.ns, name.subsystem, f.dataDir, string(KindUsage))
+// settle is what makes a write REAL, and every write in this file ends in it.
+//
+// A committed transaction is a fact about this process's copy of the ledger. On a
+// deployment with one writer that is the whole story and Ship says so. On a
+// deployment with several, the copy has to reach the object store under the lease
+// round that elected this replica before anybody may be told the money moved —
+// because a successor opens the last ACKED state, and an entry that never shipped
+// is an entry the successor has never heard of.
+//
+// So a ship that does not ack FAILS THE WRITE. The transaction stays committed
+// locally, which sounds wrong and is the only safe answer available: an unacked
+// ship is not a failed ship — the object may have landed and only the reply been
+// lost — so a caller that deleted the entry on a timeout would drop a charge the
+// durable copy holds. Left standing, the entry is either already durable or is
+// discarded whole when this store next hydrates, and in both cases the CALLER was
+// told no. A charge reported as failed and silently applied is the one outcome a
+// customer can neither see nor dispute; a charge reported as failed and not
+// applied is a retry.
+func (f *ledgerFinance) settle(org string, test bool, what string) error {
+	acked, err := f.books.Ship(org, test)
 	if err != nil {
-		return nil, fmt.Errorf("finance: open %s ledger for %s: %w", name.subsystem, name.ns, err)
+		return fmt.Errorf("finance: %s for %s was written and could not be made durable: %w", what, org, err)
 	}
-	f.stores[name] = s
-	return s, nil
+	if !acked {
+		return fmt.Errorf("finance: %s for %s was written and not acknowledged — this replica no longer holds the org's books; retry on its writer", what, org)
+	}
+	return nil
 }
 
 // Balance returns subject's settled prepaid balance as an exact 18-decimal USD money value
@@ -254,6 +263,9 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 			return posted, nil
 		}
 		return "", fmt.Errorf("finance: deposit: %w", err)
+	}
+	if err := f.settle(in.Org, in.Test, "the deposit"); err != nil {
+		return "", err
 	}
 	return entryID, nil
 }
@@ -509,6 +521,12 @@ func (f *ledgerFinance) RecordUsageOnce(ctx context.Context, in types.UsageInput
 	}); terr != nil {
 		return "", false, terr
 	}
+	// SHIPPED BEFORE THE ALERT, not after. The alert reads the org's spend and may
+	// suspend the account on it, so firing on a debit that never became durable
+	// would cap a customer on money the books do not hold.
+	if serr := f.settle(in.Org, in.Test, "the usage debit"); serr != nil {
+		return "", false, serr
+	}
 
 	// The debit is committed — fire the usage-cap alert on this crossing (async,
 	// off the money path). Debounced inside FireSpendAlerts, so firing on an
@@ -522,16 +540,13 @@ func (f *ledgerFinance) RecordUsageOnce(ctx context.Context, in types.UsageInput
 
 // Close closes every cached org store (best-effort), returning the first error.
 func (f *ledgerFinance) Close() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var firstErr error
-	for path, s := range f.stores {
-		if err := s.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-		delete(f.stores, path)
+	if c, ok := f.books.(interface{ Close() error }); ok {
+		return c.Close()
 	}
-	return firstErr
+	// The durable plane's books are the deployment's, not this client's: closing
+	// them here would ship and release every org's lease out from under whoever
+	// else holds a handle. Their close is CloseAll, on the shutdown path.
+	return nil
 }
 
 // walletAcct maps a billing subject to its account WITHIN the per-org file. The file IS

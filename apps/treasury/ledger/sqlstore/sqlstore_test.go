@@ -7,13 +7,19 @@ import (
 
 	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
+	// devmaster keys this test binary: cek opens nothing without a master, and a
+	// process with no KMS mints its own. It says so ONCE for the package, which is
+	// why it sits in the file every test here reaches through rather than in the
+	// one that happened to be written first — this import lived in a file that was
+	// deleted, and every test in the package failed to open a database.
+	_ "github.com/hanzoai/cloud/internal/devmaster"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/namespace"
 )
 
 func open(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(namespace.System(), houseSubsystem, t.TempDir(), "")
+	s, err := Open(namespace.System(), "treasury", t.TempDir(), "")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

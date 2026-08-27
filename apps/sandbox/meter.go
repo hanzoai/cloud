@@ -34,7 +34,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/namespace"
 )
 
@@ -49,13 +48,16 @@ func holding(m Sandbox) bool { return m.Status == "running" || m.Status == "pend
 // running describes one lease to the runtime meter. Payer, never Org: the lease fee
 // landed on the ledger the caller was gated against, and a recurring charge on a
 // different wallet would bill one lease to two payers.
-func running(m Sandbox) cloud.Running {
+// The rate rides the ROW rather than the pass, because a sweep holds many classes
+// at once and one rate read per tick was one rate for all of them.
+func running(ctx context.Context, m Sandbox) cloud.Running {
 	return cloud.Running{
 		ID:        m.ID,
 		Payer:     m.Payer,
 		Project:   m.Project,
 		Model:     "sandbox/" + m.Class,
 		MeteredAt: m.MeteredAt,
+		Rate:      rate(ctx, m.Class),
 	}
 }
 
@@ -76,24 +78,38 @@ func rate(ctx context.Context, class string) int64 {
 // paths go through it, so there is one arithmetic, one act name and one debit
 // shape whatever ended the lease.
 //
+// SHIP BEFORE EMIT, at the end of a lease as much as during one. It is tempting to
+// read the end paths as exempt — the row is deleted a line later, so what does its
+// watermark matter? It matters because the DELETE is not durable either: a pod that
+// emits the tail and dies before the ship leaves a successor hydrating a snapshot
+// where the lease is still running with its old watermark, and that successor bills
+// the same tail again. The customer pays twice for the last hour of a sandbox they
+// already stopped.
+//
 // A failure is logged and dropped rather than returned: the lease has already been
 // taken or already ended, and a debit that could not be recorded must never turn a
 // working sandbox into a refusal. It is the same posture MeterUsage takes.
-// It reads the rate ITSELF rather than being handed one, so the three call sites
-// cannot disagree about which class they are pricing — the sweep holds many
-// classes at once, and one rate read per tick was one rate for all of them.
+// The rate rides the ROW (running), so the three call sites cannot disagree about
+// which class they are pricing.
 func bill(s *Service, ctx context.Context, st *Store, m Sandbox) {
 	if !holding(m) {
 		return
 	}
-	_, err := cloud.RuntimeCharge(ctx, running(m), time.Now().Unix(), rate(ctx, m.Class),
+	ns, err := cloud.OrgNamespace(m.Org, "")
+	if err != nil {
+		s.Log.Warn("runtime meter: the lease names no namespace (lease held, not billed)",
+			"sandbox", m.ID, "org", m.Org, "err", err)
+		return
+	}
+	_, err = cloud.RuntimeSweep(ctx, []cloud.Running{running(ctx, m)}, time.Now().Unix(),
 		func(ctx context.Context, id string, was, now int64) (bool, error) {
 			return st.Advance(ctx, m.Org, id, was, now)
 		},
-		func(payer string, u metering.Usage) { s.Bill.MeterUsage(payer, "sandbox", u) },
+		func() (bool, error) { return s.State.stores.Sync(ns) },
+		s.State.debit,
 	)
 	if err != nil {
-		s.Log.Warn("runtime meter: the watermark would not move (lease held, not billed)",
+		s.Log.Warn("runtime meter: the span was claimed and not billed (the watermark is not durable, so the next owner bills it)",
 			"sandbox", m.ID, "org", m.Org, "err", err)
 	}
 }
@@ -104,6 +120,11 @@ func bill(s *Service, ctx context.Context, st *Store, m Sandbox) {
 //
 // It reads Held and NOT List, because List is LIMIT 200 — right for a page, and for
 // a set money is computed over it means every lease past row 200 is free.
+//
+// IT BILLS THE ORGS THIS REPLICA OWNS AND NO OTHERS. Every pod holds every org's
+// file its volume carries, so an ungated sweep is two pods billing one span twice —
+// and the watermark CAS cannot stop it, because the two pods are CASing two
+// different files. The fence answers who owns the org; the ship settles it.
 func meterRuntime(ctx context.Context, s *Service) {
 	// A PUBLISHED ZERO IS A PRICE, AND A PRICE STILL MOVES THE CLOCK. Runtime is
 	// free this week, so nothing is charged — but the span still HAPPENED, and the
@@ -124,13 +145,33 @@ func meterRuntime(ctx context.Context, s *Service) {
 			s.Log.Warn("runtime meter: open store", "namespace", ns, "err", openErr)
 			return
 		}
+		if !s.State.stores.Owned(ns) {
+			return // another replica bills this org, or nobody can prove who does
+		}
 		held, err := st.Held(ctx, ns.ID())
 		if err != nil {
 			s.Log.Warn("runtime meter: list held leases", "namespace", ns, "err", err)
 			return
 		}
+		// ONE SHIP FOR THE WHOLE ORG, not one per lease. A ship copies the org's
+		// whole database to the object store, so an org holding two hundred leases
+		// would otherwise send that file two hundred times to bill one minute. Each
+		// row carries its own class rate, so batching prices nothing wrong.
+		rows := make([]cloud.Running, 0, len(held))
 		for _, m := range held {
-			bill(s, ctx, st, m)
+			rows = append(rows, running(ctx, m))
+		}
+		org := ns.ID()
+		_, err = cloud.RuntimeSweep(ctx, rows, time.Now().Unix(),
+			func(ctx context.Context, id string, was, now int64) (bool, error) {
+				return st.Advance(ctx, org, id, was, now)
+			},
+			func() (bool, error) { return s.State.stores.Sync(ns) },
+			s.State.debit,
+		)
+		if err != nil {
+			s.Log.Warn("runtime meter: the org's spans were claimed and not billed (the watermarks are not durable, so the next owner bills them)",
+				"namespace", ns, "err", err)
 		}
 	})
 }

@@ -96,7 +96,7 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 	// A settlement is two ledger entries that agree, so the ledger is co-resident
 	// and the metering spine (which is how the PAYER is debited) posts into it
 	// natively. Both halves present, or x402 refuses to settle at all.
-	fin := finance.New(t.TempDir())
+	fin := finance.New(finance.Local(t.TempDir()))
 	finance.Publish(fin)
 	meter, err := metering.New(metering.Config{BaseURL: "http://commerce.test", HTTPClient: refusingDoer{}})
 	if err != nil {

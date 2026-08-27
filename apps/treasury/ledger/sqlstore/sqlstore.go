@@ -71,6 +71,23 @@ func Open(ns namespace.Namespace, subsystem, dir, usageKind string) (*Store, err
 		return nil, fmt.Errorf("open %s ledger for %s: %w", subsystem, ns, err)
 	}
 	sqlpool.Single(db)
+	return On(db, usageKind)
+}
+
+// On is [Open] over a database somebody else opened — the migration and the
+// repair, with no opinion about where the file is or how it got there.
+//
+// It exists because the ledger has TWO openers and only one of them may choose a
+// path. Open resolves (ns, subsystem, dir) itself, which is right for a lone
+// process. A ledger on the durable plane is opened by that plane instead — which
+// hydrates the entity's snapshot from the object store, claims the writer lease,
+// and only then hands over a handle — so the path, the pool and the key are all
+// settled before this package sees anything, and choosing them a second time here
+// would open an empty database beside the real one.
+//
+// The split is the whole of the change: everything a ledger IS lives below this
+// line, and everything about WHERE it lives is above it.
+func On(db *sql.DB, usageKind string) (*Store, error) {
 	s := &Store{db: db, usageKind: usageKind}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
