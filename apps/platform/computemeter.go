@@ -59,9 +59,6 @@ const (
 	// it collapses a rapid double-tick to a single charge. Well under the hourly
 	// default, so a normal tick always crosses it.
 	minComputeMeterSecs int64 = 60
-
-	// secsPerHour converts the per-hour rate card to a per-second charge.
-	secsPerHour int64 = 3600
 )
 
 // computeMeterInterval resolves the cadence from env. "0"/"off"/"false" disables; an
@@ -83,15 +80,11 @@ func computeMeterInterval(log luxlog.Logger) time.Duration {
 	return d
 }
 
-// computeMicros prices an elapsed live span at a per-hour microdollar rate, integer-
-// exact with half-up rounding: micros = round(ratePerHour × elapsedSecs / 3600). A
-// non-positive span or rate yields 0 (→ no debit). Mirrors buildMinutesCents.
-func computeMicros(microPerHour, elapsedSecs int64) int64 {
-	if microPerHour <= 0 || elapsedSecs <= 0 {
-		return 0
-	}
-	return (microPerHour*elapsedSecs + secsPerHour/2) / secsPerHour
-}
+// What an elapsed span costs at a per-hour rate is ONE piece of arithmetic and it
+// lives in ONE place: [cloud.RuntimeCost]. This file held its own copy — same
+// half-up rounding, same guards, same factor of 3600 written a second time — and a
+// factor written twice is a factor that eventually differs in one of them. The rate
+// stays per-app (blueprintRate below); only the arithmetic is shared.
 
 // runningImage is the image ref used to classify an app's footprint: the image the
 // container actually runs (image apps) or the built image (git apps), falling back
@@ -157,7 +150,7 @@ func sweepComputeMeter(ctx context.Context, store *Store, now int64, rate func(A
 		if !won {
 			continue
 		}
-		micros := computeMicros(r, elapsed)
+		micros := cloud.RuntimeCost(r, elapsed)
 		if micros <= 0 {
 			continue
 		}

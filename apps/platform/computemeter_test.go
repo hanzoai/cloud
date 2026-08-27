@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/blueprint"
 	"github.com/hanzoai/cloud/apps/metering"
 )
@@ -58,7 +59,9 @@ func (h *meterHarness) seedLiveApp(t *testing.T, org, slug, image string, replic
 }
 
 // TestComputeMicros is the meter's arithmetic: micros = round(ratePerHour × secs /
-// 3600), integer-exact, 0 for any non-billable span or rate.
+// 3600), integer-exact, 0 for any non-billable span or rate. It asks it of
+// [cloud.RuntimeCost], the one implementation, which this package used to keep a
+// second copy of.
 func TestComputeMicros(t *testing.T) {
 	for _, tc := range []struct {
 		name              string
@@ -76,8 +79,8 @@ func TestComputeMicros(t *testing.T) {
 		{"negative rate", -5, 3600, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := computeMicros(tc.ratePerHour, tc.secs); got != tc.want {
-				t.Fatalf("computeMicros(%d,%d) = %d, want %d", tc.ratePerHour, tc.secs, got, tc.want)
+			if got := cloud.RuntimeCost(tc.ratePerHour, tc.secs); got != tc.want {
+				t.Fatalf("RuntimeCost(%d,%d) = %d, want %d", tc.ratePerHour, tc.secs, got, tc.want)
 			}
 		})
 	}

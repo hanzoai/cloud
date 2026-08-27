@@ -87,6 +87,7 @@ func reap(ctx context.Context, s *cloud.Service[state]) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			meterRuntime(ctx, s)
 			sweep(ctx, s)
 			orphans(ctx, s)
 			reclaim(ctx, s)
@@ -170,6 +171,9 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 // end retires a sandbox whose lease is over: the pod goes, the row goes, the
 // volume stays.
 func end(ctx context.Context, s *cloud.Service[state], st *Store, m Sandbox, why string) {
+	// The tail, BEFORE the delete — the same reason End states: the watermark
+	// lives on the row, so a span not charged here is a span nothing can recover.
+	bill(s, ctx, st, m, cloud.RuntimeRate(ctx))
 	if serr := s.State.rt.stop(ctx, m); serr != nil {
 		s.Log.Warn("reap: stop", "id", m.ID, "err", serr)
 	}

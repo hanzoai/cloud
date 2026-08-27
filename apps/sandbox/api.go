@@ -298,6 +298,16 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 		ID: id, Org: org, Kind: KindSandbox, Class: class, Project: project,
 		Image: cmp.Or(strings.TrimSpace(spec.Image), s.State.rt.imageFor(class, super)),
 		Pod:   podName(id), Status: "pending",
+		// The runtime meter's two facts, both settled HERE because both are facts
+		// about the act that took the lease. Payer is the wallet this lease was
+		// gated against, so the recurring charge lands where the fee did; the
+		// watermark starts NOW rather than at zero, because a lease is held from
+		// the moment it is taken and a zero would make the first tick read this as
+		// a row it had never seen and charge nothing at all — which for an exec
+		// sandbox, whose whole life is shorter than one tick, is every exec
+		// sandbox running free.
+		Payer:     ledger,
+		MeteredAt: now,
 		CreatedAt: now, LastUsedAt: now,
 	}
 	if project != "" {
@@ -515,6 +525,9 @@ func End(s *Service, ctx context.Context, org, id string, purge bool) error {
 			s.Log.Warn("purge volume", "volume", m.Volume, "err", perr)
 		}
 	}
+	// The tail, BEFORE the delete. The row carries the watermark, so once it is
+	// gone there is nothing left to say how much of this lease was never billed.
+	bill(s, ctx, store, m, cloud.RuntimeRate(ctx))
 	if err := store.Delete(ctx, m.Org, m.ID); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
