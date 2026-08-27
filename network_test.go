@@ -1,6 +1,7 @@
 package cloud_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -49,5 +50,32 @@ func TestMainnetLeavesThePostureToTheCaller(t *testing.T) {
 	t.Setenv(cloud.NetworkEnv, string(cloud.Mainnet))
 	if cloud.SandboxOnly() {
 		t.Fatal("mainnet reported sandbox-only: every real charge would be booked as fake")
+	}
+}
+
+// CLOUD_NETWORK IS NOT THE `network` APP'S ADDRESS OVERRIDE.
+//
+// The app once called `zt` is called `network` now, and the plugin resolver
+// reserves CLOUD_<APP>_ADDR and CLOUD_<APP>_BIN — so CLOUD_NETWORK_ADDR already
+// means "the network app is already listening there". This variable sits one
+// underscore away from it and means something else entirely: which money-and-chain
+// world the whole deployment is.
+//
+// Go matches an environment name exactly, so the two cannot be confused by the
+// code. They CAN be confused by a person reading one env block, which is why the
+// independence is pinned here rather than left to whoever reads the two names next.
+func TestTheNetworkAppAddressIsADifferentVariable(t *testing.T) {
+	t.Setenv("CLOUD_NETWORK_ADDR", "10.0.0.1:9000")
+	t.Setenv(cloud.NetworkEnv, string(cloud.Testnet))
+	if got := cloud.NetworkOf(); got != cloud.Testnet {
+		t.Errorf("the app address override changed the deployment network: got %q", got)
+	}
+
+	// And the reverse: naming the world must not look like an address to the
+	// resolver, which is the direction that would send a plugin somewhere.
+	t.Setenv("CLOUD_NETWORK_ADDR", "")
+	t.Setenv(cloud.NetworkEnv, string(cloud.Devnet))
+	if v := os.Getenv("CLOUD_NETWORK_ADDR"); v != "" {
+		t.Errorf("CLOUD_NETWORK leaked into the app address override: %q", v)
 	}
 }
