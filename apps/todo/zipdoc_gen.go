@@ -49,6 +49,7 @@ func init() {
 			"issueHit.priority":    "Priority is urgent, high, medium, low or none. Never empty — an unset\npriority is the value \"none\".",
 			"issueHit.project":     "Project is the board key the issue is on. It and Number are the issue's\naddress in every other route on this surface, which is why a hit carries it.",
 			"issueHit.repo":        "Repo is the git repository the issue is bound to, empty when it is not\nrepo-bound.",
+			"issueHit.room":        "Room is the collaboration room the issue belongs to, spelled\n\"<workspace>_<room>\" — empty when it is not room-bound, which is most of\nthem. It is here so an org-wide search says which channel each item came\nfrom without a second read.",
 			"issueHit.source":      "Source is which surface opened it: team, git, crm, helpdesk, cms or agent.\n\"git\" is how the mirrored forge and GitHub rows are spelled.",
 			"issueHit.status":      "Status is the board column: backlog, todo, in_progress, done or canceled.\nClaiming moves backlog and todo to in_progress and leaves the other three\nwhere they are.",
 			"issueHit.title":       "Title is the issue's one-line summary — what the q filter matched, along with\nthe description.",
@@ -61,6 +62,7 @@ func init() {
 			"issueSearch.project":  "Project narrows to one team key; \"\" searches every project in the org,\nwhich is the point of this op.",
 			"issueSearch.q":        "Q matches an issue's title or description. A word from the issue, which is\nwhat someone remembers — not its number, which is what they are looking up.",
 			"issueSearch.repo":     "Repo keeps issues bound to one git repository.",
+			"issueSearch.room":     "Room keeps issues bound to one collaboration room, spelled\n\"<workspace>_<room>\" — the exact value GET /v1/meet/call answers with, so a\nchannel's call and its todo list name the room the same way. This is the\nread a channel view runs to draw its own list; it spans every board of the\norg, because the work a channel is about is not confined to one board.",
 			"issueSearch.source":   "Source keeps one origin: team, git, crm, helpdesk, cms, agent. \"git\" is\nhow you ask for the mirrored GitHub issues specifically.",
 			"issueSearch.status":   "Status keeps one board column: backlog, todo, in_progress, done, canceled.",
 		},
@@ -143,6 +145,18 @@ func init() {
 			"issueView.status":      "Status is the board column: backlog, todo, in_progress, done or canceled, and\nnothing else. On a forge row it is read off a LABEL, so relabelling in the\nforge web UI moves the card here and vice versa — and a CLOSED forge issue\nreads done whatever its labels say. Never empty: \"backlog\" when nothing names\na column.",
 			"issueView.title":       "Title is the item's one-line summary.",
 			"issueView.updatedAt":   "UpdatedAt is when it last changed, in unix seconds.",
+		},
+	})
+	zip.Describe("GET /v1/todo/rooms/:room", zip.Doc{
+		Description: "Summarises one room's work.\n\nThe room is opaque here and is deliberately not resolved: this package cannot\nsay whether a room exists — apps/team owns that document — so an unknown room\nanswers an EMPTY board rather than a 404. That is the honest answer and the\nuseful one: a channel that has never had an item filed in it and a channel id\nthat was mistyped both have no work, and inventing a distinction would require\nthis surface to hold a second copy of the room list (HIP-0523 §2 forbids it,\nand it would drift the first time a room was renamed).\n\nTenancy is the validated principal's org and nothing else, so a caller cannot\nread another tenant's channel by naming its room.",
+		Fields: map[string]string{
+			"roomRef.project":  "Project is the IAM project whose index to read; empty reads the org's\ndefault, which is where every mirrored source lands. It is the same\ndefaulting GET /v1/todo/issues does, deliberately: this rollup must count\nexactly the rows that listing returns, and two different defaults would let\na channel's header disagree with its own list.",
+			"roomRef.room":     "Room is the room, spelled \"<workspace>_<room>\" — the same value\nGET /v1/meet/call answers with, so a channel's call and its work name the\nroom identically. From the path.",
+			"roomWork.open":    "Open is how many items are still work: everything whose status does not\nend it. It is the number a channel header shows.",
+			"roomWork.room":    "Room is the room these counts are for, echoed back as it was resolved.",
+			"roomWork.status":  "Status is the count per board column, carrying EVERY column this surface\nknows — an empty column reads 0 rather than being absent, so a caller can\nrender the board without inventing the vocabulary. The keys are the same\nclosed set every other operation here validates against.",
+			"roomWork.total":   "Total is every item bound to this room, settled ones included, so Total\nminus Open is what the room has finished.",
+			"roomWork.updated": "Updated is when anything in this room's work last moved, in unix seconds.\nABSENT when the room has no work at all: zero would read as the epoch, and\na room nobody has filed anything in has no last activity rather than an\ninfinitely old one. Total is 0 in exactly that case.",
 		},
 	})
 	zip.Describe("PATCH /v1/todo/projects/:key", zip.Doc{
@@ -233,6 +247,7 @@ func init() {
 			"issueHit.priority": "Priority is urgent, high, medium, low or none. Never empty — an unset\npriority is the value \"none\".",
 			"issueHit.project":  "Project is the board key the issue is on. It and Number are the issue's\naddress in every other route on this surface, which is why a hit carries it.",
 			"issueHit.repo":     "Repo is the git repository the issue is bound to, empty when it is not\nrepo-bound.",
+			"issueHit.room":     "Room is the collaboration room the issue belongs to, spelled\n\"<workspace>_<room>\" — empty when it is not room-bound, which is most of\nthem. It is here so an org-wide search says which channel each item came\nfrom without a second read.",
 			"issueHit.source":   "Source is which surface opened it: team, git, crm, helpdesk, cms or agent.\n\"git\" is how the mirrored forge and GitHub rows are spelled.",
 			"issueHit.status":   "Status is the board column: backlog, todo, in_progress, done or canceled.\nClaiming moves backlog and todo to in_progress and leaves the other three\nwhere they are.",
 			"issueHit.title":    "Title is the issue's one-line summary — what the q filter matched, along with\nthe description.",
