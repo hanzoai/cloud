@@ -30,7 +30,7 @@ func TestTakeAdmitsExactlyTheLimit(t *testing.T) {
 	const day = "2026-08-15"
 
 	for i := int64(1); i <= 3; i++ {
-		used, spent, err := s.Take(ctx, "hanzo/z", day, 3)
+		used, spent, err := s.Take(ctx, "hanzo/z", "day", day, 3)
 		if err != nil {
 			t.Fatalf("take %d: %v", i, err)
 		}
@@ -42,7 +42,7 @@ func TestTakeAdmitsExactlyTheLimit(t *testing.T) {
 		}
 	}
 	for i := 0; i < 5; i++ {
-		used, spent, err := s.Take(ctx, "hanzo/z", day, 3)
+		used, spent, err := s.Take(ctx, "hanzo/z", "day", day, 3)
 		if err != nil {
 			t.Fatalf("take past the ceiling: %v", err)
 		}
@@ -62,15 +62,15 @@ func TestAnotherPeriodCountsAsNone(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		if _, _, err := s.Take(ctx, "hanzo/z", "2026-08-15", 3); err != nil {
+		if _, _, err := s.Take(ctx, "hanzo/z", "day", "2026-08-15", 3); err != nil {
 			t.Fatalf("take: %v", err)
 		}
 	}
-	if _, spent, _ := s.Take(ctx, "hanzo/z", "2026-08-15", 3); !spent {
+	if _, spent, _ := s.Take(ctx, "hanzo/z", "day", "2026-08-15", 3); !spent {
 		t.Fatal("the subject should be out on the day they spent it")
 	}
 
-	used, spent, err := s.Take(ctx, "hanzo/z", "2026-08-16", 3)
+	used, spent, err := s.Take(ctx, "hanzo/z", "day", "2026-08-16", 3)
 	if err != nil {
 		t.Fatalf("take on the next day: %v", err)
 	}
@@ -89,13 +89,13 @@ func TestSubjectsDoNotShare(t *testing.T) {
 	ctx := context.Background()
 	const day = "2026-08-15"
 
-	if _, _, err := s.Take(ctx, "hanzo/a", day, 1); err != nil {
+	if _, _, err := s.Take(ctx, "hanzo/a", "day", day, 1); err != nil {
 		t.Fatalf("take: %v", err)
 	}
-	if _, spent, _ := s.Take(ctx, "hanzo/a", day, 1); !spent {
+	if _, spent, _ := s.Take(ctx, "hanzo/a", "day", day, 1); !spent {
 		t.Fatal("a should be out")
 	}
-	if _, spent, _ := s.Take(ctx, "hanzo/b", day, 1); spent {
+	if _, spent, _ := s.Take(ctx, "hanzo/b", "day", day, 1); spent {
 		t.Fatal("b was refused for a's spending — the buckets are shared")
 	}
 }
@@ -114,7 +114,7 @@ func TestTheLastUnitGoesToExactlyOneCaller(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, spent, err := s.Take(ctx, "hanzo/z", day, limit)
+			_, spent, err := s.Take(ctx, "hanzo/z", "day", day, limit)
 			admitted[i] = err == nil && !spent
 		}(i)
 	}
@@ -129,7 +129,7 @@ func TestTheLastUnitGoesToExactlyOneCaller(t *testing.T) {
 	if int64(got) != limit {
 		t.Fatalf("%d callers were admitted against a limit of %d", got, limit)
 	}
-	used, err := s.Read(ctx, "hanzo/z", day)
+	used, err := s.Read(ctx, "hanzo/z", "day", day)
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestNoLimitCountsNothing(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		used, spent, err := s.Take(ctx, "hanzo/z", "2026-08-15", 0)
+		used, spent, err := s.Take(ctx, "hanzo/z", "day", "2026-08-15", 0)
 		if err != nil {
 			t.Fatalf("take: %v", err)
 		}
@@ -153,7 +153,7 @@ func TestNoLimitCountsNothing(t *testing.T) {
 			t.Fatalf("an unbounded caller was counted: used=%d spent=%v", used, spent)
 		}
 	}
-	if used, _ := s.Read(ctx, "hanzo/z", "2026-08-15"); used != 0 {
+	if used, _ := s.Read(ctx, "hanzo/z", "day", "2026-08-15"); used != 0 {
 		t.Fatalf("an unbounded caller left %d behind", used)
 	}
 }
@@ -165,11 +165,11 @@ func TestReadTakesNothing(t *testing.T) {
 	const day = "2026-08-15"
 
 	for i := 0; i < 10; i++ {
-		if used, err := s.Read(ctx, "hanzo/z", day); err != nil || used != 0 {
+		if used, err := s.Read(ctx, "hanzo/z", "day", day); err != nil || used != 0 {
 			t.Fatalf("read %d: used=%d err=%v", i, used, err)
 		}
 	}
-	if _, spent, _ := s.Take(ctx, "hanzo/z", day, 1); spent {
+	if _, spent, _ := s.Take(ctx, "hanzo/z", "day", day, 1); spent {
 		t.Fatal("reads consumed the allowance")
 	}
 }
@@ -192,5 +192,56 @@ func TestPeriodIsTheUTCDay(t *testing.T) {
 	}
 	if got := Midnight(time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)); !got.Equal(want) {
 		t.Fatalf("Midnight at the start of the day = %v, want %v", got, want)
+	}
+}
+
+// TestARefusedCallBurnsNoOtherWindow is why take asks every window before it
+// charges any.
+//
+// Charging hour-then-day would spend an hourly slot on a call the daily quota then
+// refuses — so a caller sitting at their daily ceiling would burn an hour's worth
+// of rate on every attempt, and the hour would never recover while they kept
+// trying. The refusal has to cost nothing, in every window.
+func TestARefusedCallBurnsNoOtherWindow(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	const subject = "hanzo/z"
+
+	// A free subscriber: bounded in BOTH windows, which is the only case where one
+	// window can be spent on a call the other refuses.
+	svc := &service{
+		store: s,
+		tier:  func(context.Context, string, string) (string, error) { return "free", nil },
+	}
+
+	// At the daily ceiling, with the hour untouched.
+	for i := 0; i < seed["free"]; i++ {
+		if _, spent, err := s.Take(ctx, subject, "day", "2026-08-27", int64(seed["free"])); err != nil || spent {
+			t.Fatalf("seeding the day: spent=%v err=%v", spent, err)
+		}
+	}
+	before, err := s.Read(ctx, subject, "hour", "2026-08-27T19")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before != 0 {
+		t.Fatalf("the hour starts at %d, want 0", before)
+	}
+
+	// A service take now refuses on the day. The hour must be untouched.
+	out, err := svc.take(ctx, "hanzo", subject, time.Date(2026, 8, 27, 19, 30, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Spent {
+		t.Fatal("the day was full, yet the call was allowed")
+	}
+	after, err := s.Read(ctx, subject, "hour", "2026-08-27T19")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Errorf("a refused call moved the hour from %d to %d — the rate was spent on nothing",
+			before, after)
 	}
 }

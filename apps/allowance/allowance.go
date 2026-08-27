@@ -62,6 +62,7 @@ package allowance
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -87,6 +88,16 @@ import (
 // subscriber they can name — never an answer anybody falls into.
 func limitKey(tier string) string { return "ai_allowance_" + tier }
 
+// rateKey names the per-hour switch for a tier. Separate keys rather than one
+// key with two numbers, because an admin tunes a rate and a quota for different
+// reasons: the rate is about a burst, the quota is about a day's cost.
+func rateKey(tier string) string {
+	if tier == "" {
+		tier = tenant.Public
+	}
+	return "ai_rate_" + tier
+}
+
 // publicKey is the ceiling for a caller nobody can name: the reserved public lane,
 // and any subject whose tier did not resolve. See floor — this switch tunes the
 // number and CANNOT turn it off.
@@ -108,7 +119,39 @@ const strangers = 3
 // These are the runtime DEFAULTS; the flag store is authoritative once an admin
 // edits one in the cockpit.
 var seed = map[string]int{
-	"free": 10, "starter": 0, "pro": 0, "enterprise": 0,
+	"free": 50, "starter": 0, "pro": 0, "enterprise": 0,
+}
+
+// rate is the per-HOUR ceiling, where a tier has one. A daily quota alone is a bad
+// shape for a free tier — fifty a day is fifty in the first minute — so free is
+// also held to ten an hour, which is what makes the fifty last a day rather than a
+// lunch break. A paid tier has no rate here for the same reason it has no quota:
+// its spend is bounded by a wallet.
+var rate = map[string]int{
+	"free": 10,
+}
+
+// strangersRate is the anonymous hourly ceiling. Zero: three a day is already
+// tighter than any hour could usefully be, and a second window would only be a
+// second thing to reason about for a caller who gets three.
+const strangersRate = 0
+
+// tiers is the seeded tier names, sorted, so registration order is stable.
+func tiers() []string {
+	out := make([]string, 0, len(seed))
+	for t := range seed {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// rateFor is a tier's shipped hourly ceiling, and the public lane's.
+func rateFor(tier string) int {
+	if tier == tenant.Public {
+		return strangersRate
+	}
+	return rate[tier]
 }
 
 func init() {
@@ -124,6 +167,18 @@ func init() {
 			Key: limitKey(tier), Category: "Gateway", Type: flags.TypeInt, Default: strconv.Itoa(calls),
 			Label: "Free calls per day — " + tier,
 			Desc:  "Zero-priced AI calls a " + tier + " caller may make per UTC day. 0 = unbounded.",
+		})
+	}
+	// The hourly rate, for every tier plus the public lane, so a switch exists for
+	// each even where the shipped value is 0 (that window does not bound them).
+	// Registering only the tiers that HAVE a rate would leave an admin unable to
+	// add one without a release, which is the thing this table exists to avoid.
+	for _, tier := range append(tiers(), tenant.Public) {
+		flags.Register(flags.Def{
+			Key: rateKey(tier), Category: "Gateway", Type: flags.TypeInt, Default: strconv.Itoa(rateFor(tier)),
+			Label: "Free calls per hour — " + tier,
+			Desc: "Zero-priced AI calls a " + tier + " caller may make per UTC hour, which is what keeps " +
+				"a day's quota from being spent in a minute. 0 = this window does not bound them.",
 		})
 	}
 }
@@ -218,34 +273,116 @@ func (o ops) get(ctx context.Context, _ *noArgs) (*plane.Allowance, error) {
 	return o.s.read(ctx, w.Ledger, w.Account, time.Now())
 }
 
+// bound is one ceiling over one window: the rate, or the quota.
+type bound struct {
+	window string // "hour" | "day" — the store's row key, and what the answer names
+	period string // the instant's place in that window; a row from another one reads as zero
+	limit  int64  // 0 or less: this window does not bound the subject
+	resets time.Time
+}
+
+// bounds are the windows a subject is held to, TIGHTEST FIRST.
+//
+// Two of them, because a daily quota alone is a bad shape for a free tier: fifty a
+// day is fifty in the first minute, which is a script's afternoon rather than a
+// person's. The hourly rate is what makes the daily number last, and the daily
+// number is what stops twenty-four good hours costing us a day's inference.
+//
+// Order is the answer's order: the first window that refuses is the one the caller
+// is told about, so "ten an hour" is what a person who just sent ten reads —
+// naming the daily fifty there would be true and useless.
+func (s *service) bounds(ctx context.Context, subject, org string, now time.Time) (tier string, out []bound) {
+	tier, hourly, daily := s.limits(ctx, subject, org)
+	return tier, []bound{
+		{window: "hour", period: Hour(now), limit: hourly, resets: NextHour(now)},
+		{window: "day", period: Day(now), limit: daily, resets: Midnight(now)},
+	}
+}
+
+// standing turns a set of windows into the one answer the wire carries: the window
+// that BINDS. A refused window binds; otherwise the one with least left does, so a
+// caller reading "3 of 10" is reading the number that will actually stop them.
+func standing(tier string, bs []bound, used map[string]int64, now time.Time) *plane.Allowance {
+	out := &plane.Allowance{Plan: tier}
+	var chosen *bound
+	var chosenUsed int64
+	for i := range bs {
+		b := &bs[i]
+		if b.limit <= 0 {
+			continue
+		}
+		u := used[b.window]
+		switch {
+		case u >= b.limit:
+			// Refused. The first such window wins because bounds is tightest-first.
+			out.Window, out.Limit, out.Used, out.Spent, out.Resets = b.window, b.limit, u, true, b.resets.Unix()
+			return out
+		case chosen == nil || b.limit-u < chosen.limit-chosenUsed:
+			chosen, chosenUsed = b, u
+		}
+	}
+	if chosen == nil {
+		// No window bounds this subject: a named paid tier. Limit 0 has always been
+		// this answer's word for unbounded, and Resets still says when a count that
+		// does not exist would have turned over — off the CALLER's clock, because a
+		// service handed an instant may not go asking the wall what time it is.
+		out.Resets = Midnight(now).Unix()
+		return out
+	}
+	out.Window, out.Limit, out.Used, out.Resets = chosen.window, chosen.limit, chosenUsed, chosen.resets.Unix()
+	return out
+}
+
 // read answers subject's standing without taking anything.
 func (s *service) read(ctx context.Context, org, subject string, now time.Time) (*plane.Allowance, error) {
-	tier, limit := s.limit(ctx, subject, org)
-	out := &plane.Allowance{Plan: tier, Limit: limit, Resets: Midnight(now).Unix()}
-	if limit <= 0 {
-		return out, nil
+	tier, bs := s.bounds(ctx, subject, org, now)
+	used := map[string]int64{}
+	for _, b := range bs {
+		if b.limit <= 0 {
+			continue
+		}
+		u, err := s.store.Read(ctx, subject, b.window, b.period)
+		if err != nil {
+			return nil, err
+		}
+		used[b.window] = u
 	}
-	used, err := s.store.Read(ctx, subject, Day(now))
-	if err != nil {
-		return nil, err
-	}
-	out.Used, out.Spent = used, used >= limit
-	return out, nil
+	return standing(tier, bs, used, now), nil
 }
 
 // take counts one call and answers the standing that follows it.
+//
+// EVERY WINDOW IS ASKED BEFORE ANY IS CHARGED. Taking hour-then-day would spend the
+// hour on a call the day then refuses, so a caller at their daily ceiling would burn
+// an hourly slot every time they were turned away — and the hour would never
+// recover while they kept trying.
 func (s *service) take(ctx context.Context, org, subject string, now time.Time) (*plane.Allowance, error) {
-	tier, limit := s.limit(ctx, subject, org)
-	out := &plane.Allowance{Plan: tier, Limit: limit, Resets: Midnight(now).Unix()}
-	if limit <= 0 {
-		return out, nil
+	tier, bs := s.bounds(ctx, subject, org, now)
+	used := map[string]int64{}
+	for _, b := range bs {
+		if b.limit <= 0 {
+			continue
+		}
+		u, err := s.store.Read(ctx, subject, b.window, b.period)
+		if err != nil {
+			return nil, err
+		}
+		used[b.window] = u
+		if u >= b.limit {
+			return standing(tier, bs, used, now), nil
+		}
 	}
-	used, spent, err := s.store.Take(ctx, subject, Day(now), limit)
-	if err != nil {
-		return nil, err
+	for _, b := range bs {
+		if b.limit <= 0 {
+			continue
+		}
+		u, _, err := s.store.Take(ctx, subject, b.window, b.period, b.limit)
+		if err != nil {
+			return nil, err
+		}
+		used[b.window] = u
 	}
-	out.Used, out.Spent = used, spent
-	return out, nil
+	return standing(tier, bs, used, now), nil
 }
 
 // limit resolves which ceiling applies to a subject.
@@ -263,18 +400,18 @@ func (s *service) take(ctx context.Context, org, subject string, now time.Time) 
 // The cost of failing closed here is bounded and short: during a commerce blip a
 // paying caller keeps every PRICED route (their own gate, with its own fallback) and
 // is briefly held to the visitor ceiling on the free pool alone.
-func (s *service) limit(ctx context.Context, subject, org string) (tier string, limit int64) {
+func (s *service) limits(ctx context.Context, subject, org string) (tier string, hourly, daily int64) {
 	// The public lane has no plan to look up and no lookup that could fail, so it
 	// never asks. The org is minted by the identity boundary and never by a client.
 	if org == tenant.Public {
-		return tenant.Public, s.floor()
+		return tenant.Public, int64(flags.Int(rateKey(tenant.Public))), s.floor()
 	}
 	if s.tier == nil {
-		return "", s.floor()
+		return "", int64(flags.Int(rateKey(""))), s.floor()
 	}
 	name, err := s.tier(ctx, subject, org)
 	if err != nil || name == "" {
-		return "", s.floor()
+		return "", int64(flags.Int(rateKey(""))), s.floor()
 	}
 	// A tier this app has never had an opinion about is not an opinion. seed is that
 	// list, and a name outside it means commerce's taxonomy has grown past ours —
@@ -282,9 +419,10 @@ func (s *service) limit(ctx context.Context, subject, org string) (tier string, 
 	// strict one. It is also loud: the operator sees the cap and registers the
 	// switch, rather than discovering a new tier was free all along.
 	if _, decided := seed[name]; !decided {
-		return name, s.floor()
+		return name, int64(flags.Int(rateKey(name))), s.floor()
 	}
-	return name, int64(flags.Int(limitKey(name))) // 0 here is an admin's explicit unbounded
+	// 0 in either is an admin's explicit unbounded for that window.
+	return name, int64(flags.Int(rateKey(name))), int64(flags.Int(limitKey(name)))
 }
 
 // floor is the ceiling for a caller nobody could name: the switch, read through the

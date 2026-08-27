@@ -24,12 +24,12 @@ func tiered(name string, err error) *service {
 func TestOnlyANamedPaidTierIsUnbounded(t *testing.T) {
 	for _, name := range []string{"starter", "pro", "enterprise"} {
 		s := tiered(name, nil)
-		if _, limit := s.limit(context.Background(), "hanzo/z", "hanzo"); limit != 0 {
+		if _, _, limit := s.limits(context.Background(), "hanzo/z", "hanzo"); limit != 0 {
 			t.Errorf("tier %q is bounded at %d — a paying caller's free calls must not be counted", name, limit)
 		}
 	}
 	s := tiered("free", nil)
-	tier, limit := s.limit(context.Background(), "hanzo/z", "hanzo")
+	tier, _, limit := s.limits(context.Background(), "hanzo/z", "hanzo")
 	if tier != "free" {
 		t.Errorf("tier = %q, want free", tier)
 	}
@@ -57,7 +57,7 @@ func TestAnUnnamedCallerIsNeverUnbounded(t *testing.T) {
 		"unlisted tier":    {tiered("some-future-plan", nil), "hanzo"},
 	}
 	for what, c := range cases {
-		_, limit := c.s.limit(context.Background(), "hanzo/z", c.org)
+		_, _, limit := c.s.limits(context.Background(), "hanzo/z", c.org)
 		if limit <= 0 {
 			t.Errorf("%s resolved to %d — an unnamed caller must never be unbounded", what, limit)
 		}
@@ -91,7 +91,7 @@ func TestThePublicLaneNeverAsks(t *testing.T) {
 		asked = true
 		return "pro", nil
 	}}
-	tier, limit := s.limit(context.Background(), tenant.Public+"/v-abc", tenant.Public)
+	tier, _, limit := s.limits(context.Background(), tenant.Public+"/v-abc", tenant.Public)
 	if asked {
 		t.Error("the public lane asked commerce for a plan a visitor cannot have")
 	}
@@ -142,11 +142,92 @@ func TestTheShippedCeilingsAreThePolicy(t *testing.T) {
 	if strangers != 3 {
 		t.Errorf("an anonymous visitor gets %d calls a day, want 3", strangers)
 	}
-	if seed["free"] != 10 {
-		t.Errorf("a signed-in free subscriber gets %d calls a day, want 10", seed["free"])
+	if seed["free"] != 50 {
+		t.Errorf("a signed-in free subscriber gets %d calls a day, want 50", seed["free"])
+	}
+	if rate["free"] != 10 {
+		t.Errorf("a signed-in free subscriber gets %d calls an hour, want 10", rate["free"])
 	}
 	if !(seed["free"] > strangers) {
-		t.Errorf("free (%d) must exceed anonymous (%d), or signing in buys nothing",
+		t.Errorf("free (%d/day) must exceed anonymous (%d/day), or signing in buys nothing",
 			seed["free"], strangers)
+	}
+	// The rate has to be the tighter of the two or it bounds nothing: a subject who
+	// can take the whole daily quota inside one hour is held only by the quota, and
+	// the hourly window is decoration.
+	if !(int64(rate["free"]) < int64(seed["free"])) {
+		t.Errorf("the hourly rate (%d) must be under the daily quota (%d), or it never binds",
+			rate["free"], seed["free"])
+	}
+}
+
+// TestTheHourlyWindowBindsBeforeTheDaily is the shape of a free tier: ten an hour
+// inside fifty a day. A caller who sends ten in one hour is stopped by the RATE and
+// told so, with fifty still unspent — naming the daily quota there would be true
+// and useless.
+func TestTheHourlyWindowBindsBeforeTheDaily(t *testing.T) {
+	bs := []bound{
+		{window: "hour", period: "2026-08-27T19", limit: 10, resets: time.Unix(100, 0)},
+		{window: "day", period: "2026-08-27", limit: 50, resets: time.Unix(900, 0)},
+	}
+	out := standing("free", bs, map[string]int64{"hour": 10, "day": 10}, time.Unix(0, 0))
+	if !out.Spent {
+		t.Fatal("ten of ten in the hour is not spent")
+	}
+	if out.Window != "hour" {
+		t.Errorf("refused on the %q window, want hour", out.Window)
+	}
+	if out.Limit != 10 || out.Used != 10 {
+		t.Errorf("reported %d of %d, want 10 of 10 — the hour's numbers", out.Used, out.Limit)
+	}
+	if out.Resets != 100 {
+		t.Errorf("resets at %d, want the top of the hour (100), not midnight", out.Resets)
+	}
+}
+
+// TestTheDailyWindowBindsWhenTheHourIsFresh: the same caller an hour later is held
+// by the quota instead, and the answer switches to it on its own.
+func TestTheDailyWindowBindsWhenTheHourIsFresh(t *testing.T) {
+	bs := []bound{
+		{window: "hour", period: "2026-08-27T20", limit: 10, resets: time.Unix(100, 0)},
+		{window: "day", period: "2026-08-27", limit: 50, resets: time.Unix(900, 0)},
+	}
+	out := standing("free", bs, map[string]int64{"hour": 0, "day": 50}, time.Unix(0, 0))
+	if !out.Spent || out.Window != "day" {
+		t.Fatalf("spent=%v on %q, want spent on day", out.Spent, out.Window)
+	}
+	if out.Resets != 900 {
+		t.Errorf("resets at %d, want midnight (900)", out.Resets)
+	}
+}
+
+// TestTheAnswerNamesTheWindowThatWillStopYou: with neither window refused, the one
+// with LEAST LEFT is reported, so Limit-Used is the number that actually runs out
+// next. Nine of fifty daily is 41 left; four of ten hourly is 6.
+func TestTheAnswerNamesTheWindowThatWillStopYou(t *testing.T) {
+	bs := []bound{
+		{window: "hour", period: "h", limit: 10, resets: time.Unix(100, 0)},
+		{window: "day", period: "d", limit: 50, resets: time.Unix(900, 0)},
+	}
+	out := standing("free", bs, map[string]int64{"hour": 4, "day": 9}, time.Unix(0, 0))
+	if out.Spent {
+		t.Fatal("nothing is exhausted, yet it reads as spent")
+	}
+	if out.Window != "hour" || out.Limit-out.Used != 6 {
+		t.Errorf("named %q with %d left, want hour with 6", out.Window, out.Limit-out.Used)
+	}
+}
+
+// TestAnUnboundedTierNamesNoWindow: a paid subscriber is held by a wallet, not by
+// a counter, so there is no window to name and nothing to report as remaining.
+func TestAnUnboundedTierNamesNoWindow(t *testing.T) {
+	bs := []bound{
+		{window: "hour", period: "h", limit: 0},
+		{window: "day", period: "d", limit: 0},
+	}
+	out := standing("pro", bs, map[string]int64{}, time.Unix(0, 0))
+	if out.Spent || out.Limit != 0 || out.Window != "" {
+		t.Errorf("pro reads limit=%d window=%q spent=%v, want unbounded and unnamed",
+			out.Limit, out.Window, out.Spent)
 	}
 }

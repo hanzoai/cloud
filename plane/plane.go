@@ -742,9 +742,15 @@ type Allowance struct {
 	// admission check, a refusal, or a vendor that never answered leaves it where it
 	// stood. It stops AT Limit rather than climbing past it, so Limit-Used is what
 	// remains and never goes negative.
-	Used   int64 `json:"used"`
-	Spent  bool  `json:"spent"`  // the subject is at the limit
-	Resets int64 `json:"resets"` // unix seconds; when the count starts again
+	Used  int64 `json:"used"`
+	Spent bool  `json:"spent"` // the subject is at the limit
+	// Window is which ceiling these numbers describe — "hour" or "day" — because a
+	// caller is held to both and only one of them is the answer. It is the window
+	// that REFUSED where one did, and otherwise the one with least left, so
+	// Limit-Used is always the number that will actually stop them next. Empty
+	// where no window bounds the subject at all.
+	Window string `json:"window,omitempty"`
+	Resets int64  `json:"resets"` // unix seconds; when THAT window starts again
 }
 
 // Balance is what is left to spend.
