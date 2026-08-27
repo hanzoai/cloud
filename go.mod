@@ -689,7 +689,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.6
-	github.com/hanzoai/ai v1.833.183
+	github.com/hanzoai/ai v1.833.206
 	github.com/hanzoai/authz v1.10.34
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16
@@ -776,3 +776,5 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.36.1
 	k8s.io/sample-controller => k8s.io/sample-controller v0.36.1
 )
+
+replace github.com/hanzoai/iam => /home/z/work/hanzo/iam
