@@ -1,10 +1,10 @@
 ---
-name: dns_dns
+name: dns_health
 version: "8.0.0"
-description: "Read dns dns: Read your org's DNS zones and records."
+description: "Read dns health: Check the DNS control plane."
 ---
 
-# Lux · DNS · dns
+# Lux · DNS · health
 
 Read-only Lux capability derived from the `dns` OpenAPI product. Base URL `https://api.lux.network`.
 
@@ -14,22 +14,16 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/dns/{wildcard1}` — Read your org's DNS zones and records
-
-## Parameters
-
-| Name | In | Required | Type | Description |
-|---|---|---|---|---|
-| `wildcard1` | path | yes | string |  |
+- `GET https://api.lux.network/v1/dns/health` — Check the DNS control plane
 
 ## Response
 
-- `/v1/dns/{wildcard1}` → JSON object.
+- `/v1/dns/health` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/v1/dns/{wildcard1}" \
+curl -sS "https://api.lux.network/v1/dns/health" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

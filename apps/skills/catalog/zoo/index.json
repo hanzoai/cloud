@@ -173,7 +173,7 @@
     {
       "name": "dns",
       "path": "_dns/index.json",
-      "skill_count": 1
+      "skill_count": 2
     },
     {
       "name": "domain",
@@ -586,7 +586,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 670,
+  "skill_count": 671,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -880,7 +880,7 @@
       "name": "admin_subsystems",
       "path": "admin_subsystems/SKILL.md",
       "service": "admin",
-      "sha256": "02a5897cac89fc3f12d3c254a2c7f67016771441622e119ed677be541750b396"
+      "sha256": "48d9c65ca85fffcd4aa01b5787ee44837d01a39cd2f9302474fd464d777c157c"
     },
     {
       "description": "Read admin treasury: Returns the whole treasury board for a SuperAdmin: the reserve fund report, the recent double-entry journal, and the Zoo L1 anchor status of the ledger root..",
@@ -2339,11 +2339,18 @@
       "sha256": "d62279888e2c19e8c573893d48a8727df28496297bd9d233f7b3bb26784d9157"
     },
     {
-      "description": "Read dns dns: Read your org's DNS zones and records.",
-      "name": "dns_dns",
-      "path": "dns_dns/SKILL.md",
+      "description": "Read dns health: Check the DNS control plane.",
+      "name": "dns_health",
+      "path": "dns_health/SKILL.md",
       "service": "dns",
-      "sha256": "228434e7bc799fe04b1650fd9488e72b10dcee90675fa5f6b014789ee89c0a73"
+      "sha256": "15066285f7a4cc9871a52cabbb438e9bac0c1228b880afe3ac713184fdd8fefe"
+    },
+    {
+      "description": "Read dns zones: List your org's DNS zones, Read one DNS zone, List a zone's DNS records.",
+      "name": "dns_zones",
+      "path": "dns_zones/SKILL.md",
+      "service": "dns",
+      "sha256": "e11ea012770bde53ed2370b901b4966e1e80b8a1a87eb81480406517140b8703"
     },
     {
       "description": "Read domain availability: Checks exact names rather than searching for them, and answers the same quote shape search does — purchasable, premium, first-term and renewal price in cents..",
@@ -2542,11 +2549,11 @@
       "sha256": "78d9e5b9efabedc98e56802136fba7a15ded33191d7554aeb062cb892b0311f0"
     },
     {
-      "description": "Read exec files: Files lists what a session holds..",
+      "description": "Read exec files: Lists the files in an execution session..",
       "name": "exec_files",
       "path": "exec_files/SKILL.md",
       "service": "exec",
-      "sha256": "6ce47a7e385f11432922f972e8104c595636c45b24a19e1d264775ac741c3cf4"
+      "sha256": "6d5540c83b3119e526ad5a2f1f88aa11c98487c93dc34d05f0a01d3ea483b48f"
     },
     {
       "description": "Read experiment assign: Is the variant one subject is bucketed into, and the payload that variant carries..",
@@ -3221,11 +3228,11 @@
       "sha256": "0dce8e4d2dc90f2a1fccd1aa223fb9093937b31f43bd5b64b2fbf2ad65a87976"
     },
     {
-      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Read one secret's value.",
+      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Reads one secret's value from your org..",
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "aa32701a1a283c082f7be00ce7ef91f968982c4a8a345d5cbd79f06867d9a80b"
+      "sha256": "ca6441867b63deaac1806217ecf69887cfb7c08c502d159158b86aaa9873355a"
     },
     {
       "description": "Read knowledge connectors: Returns every supported knowledge connector with THIS org's connection state and the REAL number of documents each has ingested into the org's store., Returns the ONE catalog of everything a caller can connect: every first-party connector and every long",
@@ -4691,11 +4698,11 @@
       "sha256": "884cf7dac1db6cb3b649416a23440b19816065993ddac24099bb7c7158a04e01"
     },
     {
-      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Get a URL to download one object directly.",
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Mints a presigned GET URL the caller downloads from DIRECTLY..",
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "87b0ee553711eb18eed37e1b26ae557d8dc4386c1eb1573fa261267548ea70c2"
+      "sha256": "c10575c86bc0012d4d78abf005fc4911078d7631f2bef1049756235ea64b712d"
     },
     {
       "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
@@ -4740,11 +4747,11 @@
       "sha256": "fc8f12d8f920eb8aaaf444a9ea0595ad0f1dfc408fc1f078464c46d25c968da8"
     },
     {
-      "description": "Read sbom sbom: Resolve everything inside a container image.",
+      "description": "Read sbom sbom: Resolve returns everything inside one container image, addressed by its digest or by its image ref..",
       "name": "sbom_sbom",
       "path": "sbom_sbom/SKILL.md",
       "service": "sbom",
-      "sha256": "23a327d19db063dac45b4ca2e852a04cfba5e030fdd39a4e5b6d5dab50a733cf"
+      "sha256": "b770eea31192bfdb862eb6f90a684c0acfc56cd24b08bfc3f45540942625d416"
     },
     {
       "description": "Read security findings: Is the org's findings — rule, severity, path, line, masked preview and fingerprint — newest first, across scans or within one., Returns a single finding: which rule fired, where (path and line), the masked preview and the SHA-256 fingerprint of the secret ",

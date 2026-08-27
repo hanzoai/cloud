@@ -14,11 +14,11 @@
       "sha256": "78d9e5b9efabedc98e56802136fba7a15ded33191d7554aeb062cb892b0311f0"
     },
     {
-      "description": "Read exec files: Files lists what a session holds..",
+      "description": "Read exec files: Lists the files in an execution session..",
       "name": "exec_files",
       "path": "exec_files/SKILL.md",
       "service": "exec",
-      "sha256": "6ce47a7e385f11432922f972e8104c595636c45b24a19e1d264775ac741c3cf4"
+      "sha256": "6d5540c83b3119e526ad5a2f1f88aa11c98487c93dc34d05f0a01d3ea483b48f"
     }
   ],
   "spec_version": "8.0.0"

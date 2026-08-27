@@ -4,14 +4,21 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 1,
+  "skill_count": 2,
   "skills": [
     {
-      "description": "Read dns dns: Read your org's DNS zones and records.",
-      "name": "dns_dns",
-      "path": "dns_dns/SKILL.md",
+      "description": "Read dns health: Check the DNS control plane.",
+      "name": "dns_health",
+      "path": "dns_health/SKILL.md",
       "service": "dns",
-      "sha256": "11e10f66dd228a4c9a7a7ed2d6799177d2251cd2f6a7913fc38415dbf3371b9a"
+      "sha256": "063e614a4d38ffd182a5a2b0fe236d5bbe33ab91486d12614d53306e9d02e5de"
+    },
+    {
+      "description": "Read dns zones: List your org's DNS zones, Read one DNS zone, List a zone's DNS records.",
+      "name": "dns_zones",
+      "path": "dns_zones/SKILL.md",
+      "service": "dns",
+      "sha256": "08f9f5955b70620d93879960924ff062404f0ae6cdfe890fb81f3976bdf6f6a9"
     }
   ],
   "spec_version": "8.0.0"

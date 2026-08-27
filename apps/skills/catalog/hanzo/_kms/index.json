@@ -21,11 +21,11 @@
       "sha256": "8c56fdd25a04632d4c931ecacf263105dc1bfe79c2da1e87bd0d5a9e871afec9"
     },
     {
-      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Read one secret's value.",
+      "description": "Read kms secrets: Lists the secrets your org holds, without their values., Reads one secret's value from your org..",
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "6124da8236808c8a9f41ca97dedf2a61211f45385cb617434930a3d14edf8203"
+      "sha256": "d08b8765d448c6cc617a8d5e696f99c568815d66169859bab2e29eb155fc1ce3"
     }
   ],
   "spec_version": "8.0.0"

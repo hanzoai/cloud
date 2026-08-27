@@ -4,14 +4,21 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 1,
+  "skill_count": 2,
   "skills": [
     {
-      "description": "Read dns dns: Read your org's DNS zones and records.",
-      "name": "dns_dns",
-      "path": "dns_dns/SKILL.md",
+      "description": "Read dns health: Check the DNS control plane.",
+      "name": "dns_health",
+      "path": "dns_health/SKILL.md",
       "service": "dns",
-      "sha256": "228434e7bc799fe04b1650fd9488e72b10dcee90675fa5f6b014789ee89c0a73"
+      "sha256": "15066285f7a4cc9871a52cabbb438e9bac0c1228b880afe3ac713184fdd8fefe"
+    },
+    {
+      "description": "Read dns zones: List your org's DNS zones, Read one DNS zone, List a zone's DNS records.",
+      "name": "dns_zones",
+      "path": "dns_zones/SKILL.md",
+      "service": "dns",
+      "sha256": "e11ea012770bde53ed2370b901b4966e1e80b8a1a87eb81480406517140b8703"
     }
   ],
   "spec_version": "8.0.0"
