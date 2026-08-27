@@ -615,6 +615,40 @@ func (s *Store) AdvanceSession(ctx context.Context, org, id string, was, now int
 	return n > 0, nil
 }
 
+// Live is every session of this org that has not ended: the set the reaper reads.
+//
+// ONE FACT AND NO POLICY. `ended_at = 0` is the row's own statement that it has not
+// ended — the same predicate Unbilled below uses for the same word — and nothing
+// else is asked here. Whether one of them is OVER is clocks.over's question
+// (reap.go), answered in Go over the stamps this returns; the status is one of its
+// terms and so belongs there. That split is apps/sandbox's, in as many words: an
+// expiry half in a WHERE clause and half in a loop is one rule living in two places
+// that cannot see each other.
+//
+// Adding `status IN (running, paused)` beside it looks like defence and is not: a
+// terminal row always carries an end, so the two clauses select the same rows, and
+// a second spelling of one fact is only somewhere for the two to disagree later.
+//
+// NO LIMIT, for the reason Unbilled has none — the set IS the org's live sessions,
+// which is the quantity the pass reading it exists to bound.
+func (s *Store) Live(ctx context.Context, org string) ([]Session, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+sessionCols+` FROM agent_sessions WHERE org=? AND ended_at=0`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list live sessions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Session{}
+	for rows.Next() {
+		x, err := scanSession(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan live session: %w", err)
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
 // Unbilled is every session of this org that still owes runtime, with NO LIMIT.
 //
 // TWO SHAPES, ONE QUERY, and the second is why a close needs no code of its own:

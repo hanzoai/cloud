@@ -119,7 +119,7 @@ func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) 
 	}
 	stopped := 0
 	for _, x := range live {
-		if err := stopOne(ctx, sto, x); err != nil {
+		if err := stopOne(ctx, sto, x, "account logged out via login manager"); err != nil {
 			// Best-effort per session: a failure on one does not abort the rest, so a
 			// revoke tears down as many as it can and reports the true count.
 			mounted.Log.Warn("agents: stop session", "org", org, "session", x.ID, "err", err)
@@ -131,14 +131,19 @@ func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) 
 }
 
 // stopOne records a stop control event on a live session and moves it to a
-// terminal (error) state — the forced-teardown transition. A session already
-// terminal is skipped (monotonic terminal rule).
-func stopOne(ctx context.Context, sto *Store, x Session) error {
+// terminal (error) state — the forced-teardown transition, whatever forced it. A
+// session already terminal is skipped (monotonic terminal rule).
+//
+// `why` is the sentence carried on the control event, so the surface consuming it
+// can say what happened to a run its user did not stop. There are two callers and
+// they are the same act under different causes: the login-manager revoke above, and
+// the reaper (reap.go), which ends a session nobody is driving any more.
+func stopOne(ctx context.Context, sto *Store, x Session, why string) error {
 	if isTerminalStatus(x.Status) {
 		return nil
 	}
 	now := time.Now().Unix()
-	payload, _ := json.Marshal(controlPayload{Command: CmdStop, Message: "account logged out via login manager"})
+	payload, _ := json.Marshal(controlPayload{Command: CmdStop, Message: why})
 	e, aerr := sto.AppendEvent(ctx, Event{
 		ID: mint.ID("evt"), SessionID: x.ID, Org: x.Org, Kind: KindControl,
 		Actor: billingActor(x.Org, ""), Payload: string(payload), CreatedAt: now,

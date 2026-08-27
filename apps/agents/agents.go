@@ -151,11 +151,13 @@ type state struct {
 	// Shutdown. It shares the Service so it runs agents through the SAME runAgent path.
 	sched *scheduler
 
-	// stopMeter ends the runtime-meter ticker. Separate from the scheduler's
+	// stopSweep ends the periodic pass that reaps finished sessions and bills the
+	// runtime of the ones still open (reap.go). Separate from the scheduler's
 	// cancel because the two answer different questions: the scheduler needs
-	// inference to have anything to run, and a session accrues wall-clock whether
-	// or not this deployment can serve a completion.
-	stopMeter func()
+	// inference to have anything to run, while a session accrues wall-clock — and
+	// leaks when its client dies — whether or not this deployment can serve a
+	// completion.
+	stopSweep func()
 	// bus is the in-process fan-out behind the live session/event stream (SSE +
 	// ZAP). Set in Mount; nil-safe (a direct-construct unit test skips fan-out).
 	bus *bus
@@ -559,14 +561,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		s.State.sched.start()
 	}
 
-	// The runtime meter. It is NOT gated on s.Bill.Enabled(): once every app is
-	// its own binary that predicate is false in every process but commerce's, so
-	// gating on it would silence the meter across the whole fleet — the exact
-	// shape of "a store has one owner, and everyone else asks" that turned six
-	// other subsystems into silent no-ops. MeterUsage reaches the ledger over the
-	// plane from here; a deployment that genuinely runs no commerce answers
-	// ErrNoPeer and the debit is logged, not lost to a branch nobody took.
-	s.State.stopMeter = startMeter(s)
+	// The periodic pass: reap the sessions nobody is driving any more, then bill
+	// the runtime of the ones still open (reap.go). It is NOT gated on
+	// s.Bill.Enabled(): once every app is its own binary that predicate is false in
+	// every process but commerce's, so gating on it would silence the meter across
+	// the whole fleet — the exact shape of "a store has one owner, and everyone else
+	// asks" that turned six other subsystems into silent no-ops. MeterUsage reaches
+	// the ledger over the plane from here; a deployment that genuinely runs no
+	// commerce answers ErrNoPeer and the debit is logged, not lost to a branch
+	// nobody took. The reap half is not money at all and runs regardless.
+	s.State.stopSweep = startSweep(s)
 
 	// Register agents into the unified tool plane (SourceAgent): an agent is callable
 	// as a tool via RunOnBehalf, activation-gated by the plane.
@@ -955,6 +959,13 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 		}
 	}
 	a.UpdatedAt = time.Now().Unix()
+	// A TRANSITION OUT of residency is a CLOSE, billed before the write that makes
+	// it one: Update carries the new mode, and the moment it lands the row is
+	// outside Resident and nothing will ever bill its tail. See closeResidency —
+	// this is the exit a tenant can drive twice to make a bot free.
+	if wasLongRunning && a.ExecutionMode != ModeLongRunning {
+		closeResidency(ctx, s, sto, org, a)
+	}
 	if err := sto.Update(ctx, a); err != nil {
 		if err == errNotFound {
 			return nil, zip.ErrNotFound("agent not found")
@@ -996,6 +1007,12 @@ func (o agentOps) del(ctx context.Context, in *agentRef) (*noContent, error) {
 	}
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
+	}
+	// The same close as the mode change above, at the other exit from the billable
+	// set: a resident bot's row is about to stop existing, so its tail is charged
+	// while there is still a row to charge it against.
+	if a.ExecutionMode == ModeLongRunning {
+		closeResidency(ctx, s, sto, org, a)
 	}
 	deleted, err := sto.Delete(ctx, org, a.Name)
 	if err != nil {
@@ -1833,10 +1850,11 @@ func Shutdown(ctx context.Context) error {
 	if mounted.State.sched != nil {
 		mounted.State.sched.stop(ctx)
 	}
-	// Before CloseAll: the meter reads every org's store, and a tick in flight
-	// against a closed store is an error line for money nobody lost.
-	if mounted.State.stopMeter != nil {
-		mounted.State.stopMeter()
+	// Before CloseAll: the pass reads every org's store, and a tick in flight
+	// against a closed store is an error line for money nobody lost and a session
+	// nobody left running.
+	if mounted.State.stopSweep != nil {
+		mounted.State.stopSweep()
 	}
 	// Close the live-stream bus so every open SSE/ZAP subscriber's loop returns
 	// and its handler unblocks within the shutdown deadline.

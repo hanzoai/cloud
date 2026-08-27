@@ -78,10 +78,16 @@ func bill(s *Service, ctx context.Context, st *Store, m Sandbox, rate int64) {
 // It reads Held and NOT List, because List is LIMIT 200 — right for a page, and for
 // a set money is computed over it means every lease past row 200 is free.
 func meterRuntime(ctx context.Context, s *Service) {
+	// A PUBLISHED ZERO IS A PRICE, AND A PRICE STILL MOVES THE CLOCK. Runtime is
+	// free this week, so nothing is charged — but the span still HAPPENED, and the
+	// watermark is what says it is accounted for. Returning here instead left the
+	// watermark where it was, so restoring the price on Monday billed every free
+	// hour of the promotion RETROACTIVELY at the new rate, in one debit, to every
+	// tenant holding a lease. cloud.RuntimeCharge already does the right thing with
+	// a zero: it advances first and emits only when the span is worth something, so
+	// the whole fix is to let it be asked. The two end-of-lease paths never had this
+	// bug — they call bill() unconditionally — which is why it showed up here alone.
 	rate := cloud.RuntimeRate(ctx)
-	if rate <= 0 {
-		return // a published zero is a price: runtime is free, so nothing is charged.
-	}
 	_ = s.State.stores.Each(func(ns namespace.Namespace, st *Store, openErr error) {
 		if ctx.Err() != nil {
 			return
