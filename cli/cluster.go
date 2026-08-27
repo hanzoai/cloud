@@ -36,14 +36,37 @@ import (
 // Every step is idempotent. `up` on a node that is already up installs nothing
 // and says so.
 
-// handlers maps a boundary to the containerd handler that runs it and the file
-// whose presence proves the handler is installed. runc is the node's own
-// runtime: k3s ships it, so it is never installed and never absent.
-var handlers = map[string]struct{ handler, proof string }{
-	"runc":     {"runc", ""},
-	"gvisor":   {"runsc", "/usr/local/bin/runsc"},
-	"kata-fc":  {"kata-fc", "/opt/kata/bin/containerd-shim-kata-fc-v2"},
-	"kata-clh": {"kata-clh", "/opt/kata/bin/containerd-shim-kata-clh-v2"},
+// handlers maps a boundary to the containerd handler that runs it, the file
+// whose presence proves the handler is installed, and — for a microVM — the
+// HYPERVISOR that actually boots the guest.
+//
+// The hypervisor is a separate fact because a kata release ships the two
+// independently, and the arm64 release proves why that matters: it carries
+// `configuration-rs-fc.toml` and NO firecracker binary. A boundary judged by
+// its config alone would report installed, schedule a pod, and fail when the
+// shim looked for a VMM that is not there. runc names none: it IS the node's
+// runtime, so k3s ships it and it is never installed and never absent.
+var handlers = map[string]struct {
+	handler, proof, hypervisor string
+}{
+	"runc":     {"runc", "", ""},
+	"gvisor":   {"runsc", "/usr/local/bin/runsc", ""},
+	"kata-fc":  {"kata-fc", "/usr/local/bin/containerd-shim-kata-fc-v2", "/opt/kata/bin/firecracker"},
+	"kata-clh": {"kata-clh", "/usr/local/bin/containerd-shim-kata-clh-v2", "/opt/kata/bin/cloud-hypervisor"},
+}
+
+// hypervisor reports whether a boundary's VMM is on this machine. A boundary
+// with none to name (runc, gvisor) always has it.
+func hypervisor(boundary string) bool {
+	h, ok := handlers[boundary]
+	if !ok {
+		return false
+	}
+	if h.hypervisor == "" {
+		return true
+	}
+	_, err := os.Stat(h.hypervisor)
+	return err == nil
 }
 
 // present reports whether a boundary's handler is installed on this machine.
@@ -103,8 +126,16 @@ func inspect() Report {
 	r.Cluster = err == nil
 	for _, b := range boundary.Names {
 		st := BoundaryState{Name: b, Handler: handlers[b].handler, Installed: present(b)}
-		if !st.Installed && strings.HasPrefix(b, "kata-") && !r.KVM {
+		switch {
+		case st.Installed:
+		case strings.HasPrefix(b, "kata-") && !r.KVM:
 			st.Why = "no /dev/kvm — this machine cannot boot a guest kernel"
+		case !hypervisor(b):
+			// The kata release for this architecture ships no such VMM. Said
+			// plainly, because the alternative is an operator re-running `up`
+			// forever against a boundary no download will ever provide.
+			st.Why = "the kata release for " + r.Arch + " ships no " +
+				filepath.Base(handlers[b].hypervisor)
 		}
 		r.Boundaries = append(r.Boundaries, st)
 	}
@@ -201,10 +232,17 @@ func clusterUp(ctx context.Context, w io.Writer, dry bool) error {
 			}
 		}
 	}
-	// The classes are written every time, not only when a boundary was just
-	// installed: a class deleted out from under a working handler is exactly
-	// the drift this repairs, and writing an identical class costs nothing.
-	steps = append(steps, step{"write RuntimeClasses", writeClasses})
+	// These two run EVERY time, not only when something was just installed,
+	// and the reason is the same for both: they are what a boundary IS to the
+	// cluster, and either can be lost while the handler on disk stays perfect.
+	// A machine whose binaries are all present and whose containerd knows none
+	// of them is exactly the state this was written in — `up` reported nothing
+	// to do while every sandbox sat ContainerCreating. Declaring is also what
+	// restarts k3s, so the restart happens ONCE at the end rather than once per
+	// installer, and it happens after the last binary has landed.
+	steps = append(steps,
+		step{"declare containerd runtimes", restartK3s},
+		step{"write RuntimeClasses", writeClasses})
 
 	if dry {
 		fmt.Fprintln(w, "would run:")
@@ -270,42 +308,118 @@ wget -q "${url}/runsc" "${url}/runsc.sha512" "${url}/containerd-shim-runsc-v1" "
 sha512sum -c runsc.sha512 -c containerd-shim-runsc-v1.sha512
 install -o root -g root -m 0755 runsc containerd-shim-runsc-v1 /usr/local/bin/
 rm -rf "$tmp"`
-	if err := sh(ctx, script); err != nil {
-		return err
-	}
-	return restartK3s(ctx)
+	return sh(ctx, script)
 }
 
 // installKata installs both microVM boundaries — Firecracker and
 // Cloud-Hypervisor arrive in one release, so this is one download.
+//
+// The release is resolved from the REDIRECT that /releases/latest issues, not
+// from api.github.com. The API is rate-limited to 60 unauthenticated requests an
+// hour per address, and a machine that has been installing things all morning
+// gets a 403 where it expects a version — measured at 3 remaining on the box
+// this was written on. The redirect costs no quota and answers the same tag.
+//
+// The asset is `.tar.zst`. It was `.tar.xz` and the release stopped carrying
+// one; a missing asset is an HTTP 404, which `curl -f` reports as exit 22 and
+// nothing else, so each step says what it was doing when it failed.
 func installKata(ctx context.Context) error {
 	const script = `set -eu
 case "$(uname -m)" in
   x86_64) a=amd64 ;;
   aarch64|arm64) a=arm64 ;;
-  *) echo "kata: unsupported arch $(uname -m)" >&2; exit 1 ;;
+  *) echo "kata: no release is published for $(uname -m)" >&2; exit 1 ;;
 esac
-v=$(curl -sfL https://api.github.com/repos/kata-containers/kata-containers/releases/latest | grep -m1 '"tag_name"' | cut -d'"' -f4)
-[ -n "$v" ] || { echo "kata: could not resolve the latest release" >&2; exit 1; }
+u=$(curl -sIL -o /dev/null -w '%{url_effective}' https://github.com/kata-containers/kata-containers/releases/latest) ||
+  { echo "kata: could not reach github to resolve the latest release" >&2; exit 1; }
+v=${u##*/tag/}
+case "$v" in ""|*/*) echo "kata: could not read a version out of $u" >&2; exit 1 ;; esac
 tmp=$(mktemp -d); cd "$tmp"
-curl -sfLO "https://github.com/kata-containers/kata-containers/releases/download/${v}/kata-static-${v}-${a}.tar.xz"
-tar -xJf "kata-static-${v}-${a}.tar.xz" -C /
-for h in fc clh; do
-  ln -sf /opt/kata/bin/containerd-shim-kata-v2 "/opt/kata/bin/containerd-shim-kata-${h}-v2"
-  ln -sf "/opt/kata/bin/containerd-shim-kata-${h}-v2" "/usr/local/bin/containerd-shim-kata-${h}-v2"
+f="kata-static-${v}-${a}.tar.zst"
+curl -sfLO "https://github.com/kata-containers/kata-containers/releases/download/${v}/${f}" ||
+  { echo "kata: $v publishes no $f" >&2; exit 1; }
+tar --zstd -xf "$f" -C / ||
+  { echo "kata: $f did not unpack" >&2; exit 1; }
+shim=""
+for c in /opt/kata/runtime-rs/bin/containerd-shim-kata-v2 /opt/kata/bin/containerd-shim-kata-v2; do
+  [ -x "$c" ] && { shim="$c"; break; }
 done
+[ -n "$shim" ] || { echo "kata: $v unpacked no containerd-shim-kata-v2" >&2; exit 1; }
+linked=0
+for pair in "fc:firecracker" "clh:cloud-hypervisor"; do
+  h=${pair%%:*}; vmm=${pair#*:}
+  l="/usr/local/bin/containerd-shim-kata-${h}-v2"
+  if [ -x "/opt/kata/bin/${vmm}" ]; then
+    ln -sf "$shim" "$l"; linked=$((linked+1))
+  else
+    # No VMM, no handler. A shim linked over a missing hypervisor is a
+    # RuntimeClass that schedules and then cannot boot a guest, which is a
+    # worse answer than saying this arch does not carry that boundary.
+    rm -f "$l"
+    echo "kata: $(uname -m) carries no ${vmm}, so kata-${h} is not installed" >&2
+  fi
+done
+[ "$linked" -gt 0 ] || { echo "kata: $v has no hypervisor this machine can run" >&2; exit 1; }
 rm -rf "$tmp"`
-	if err := sh(ctx, script); err != nil {
-		return err
-	}
-	return restartK3s(ctx)
+	return sh(ctx, script)
 }
 
-// restartK3s is how a newly-installed handler becomes a containerd runtime:
-// k3s reads PATH at start. Agents run a different unit from servers, and a
+// declareRuntimes writes the containerd runtimes k3s is to serve, and it exists
+// because AUTO-DETECTION IS NOT A CONTRACT. k3s does detect runtimes at start —
+// it logs "Found nvidia container runtime at /usr/bin/nvidia-container-runtime"
+// on this very machine — but it searches paths of its own choosing, and it found
+// neither runsc in /usr/local/bin nor kata, whose 4.x shim moved to
+// /opt/kata/runtime-rs/bin. The symptom is not a warning: containerd simply has
+// no such runtime, the RuntimeClass admits the pod anyway, and the kubelet loops
+// on "unable to get OCI runtime for sandbox" while the pod sits ContainerCreating
+// forever. Measured exactly that way before this function existed.
+//
+// So the boundaries are DECLARED, from the same list everything else here reads.
+// containerd resolves a runtime_type `io.containerd.<name>.<ver>` to a binary
+// `containerd-shim-<name>-<ver>` on its PATH, which is the shape the installer
+// above links into /usr/local/bin — one naming rule, stated once at each end.
+//
+// `config-v3.toml.tmpl` is k3s's own extension point for a version-3 config, and
+// `{{ template "base" . }}` keeps everything k3s would have written: this ADDS
+// runtimes, it does not replace a config we would then have to maintain.
+func declareRuntimes(ctx context.Context) error {
+	var b strings.Builder
+	b.WriteString("{{ template \"base\" . }}\n")
+	for _, name := range boundary.Names {
+		if name == "runc" || !present(name) {
+			continue
+		}
+		// THE RUNTIME IS NAMED BY ITS HANDLER, NOT BY THE BOUNDARY. A
+		// RuntimeClass carries a `handler`, and that string is what containerd
+		// is asked for — so a runtime declared under the boundary's own name is
+		// a class that admits the pod and a kubelet that then loops on
+		// `no runtime for "runsc" is configured`. gvisor is the case that
+		// proves it: the boundary is `gvisor`, the handler is `runsc`, and only
+		// one of those two names may appear here. Production agrees — its
+		// containerd carries runtimes.runsc, never runtimes.gvisor.
+		h := handlers[name].handler
+		typ := "io.containerd." + h + ".v2"
+		if h == "runsc" {
+			typ = "io.containerd.runsc.v1" // runsc's shim is v1, and only its own
+		}
+		fmt.Fprintf(&b, "\n[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.%s]\n"+
+			"  runtime_type = %q\n", h, typ)
+	}
+	const dir = "/var/lib/rancher/k3s/agent/etc/containerd"
+	c := exec.CommandContext(ctx, "sudo", "sh", "-c",
+		"mkdir -p "+dir+" && cat > "+dir+"/config-v3.toml.tmpl")
+	c.Stdin, c.Stdout, c.Stderr = strings.NewReader(b.String()), os.Stdout, os.Stderr
+	return c.Run()
+}
+
+// restartK3s is what makes a declared runtime real: k3s renders the template and
+// containerd reloads at start. Agents run a different unit from servers, and a
 // machine is one or the other, so both are asked and the one that is not
 // installed is not an error.
 func restartK3s(ctx context.Context) error {
+	if err := declareRuntimes(ctx); err != nil {
+		return err
+	}
 	return sh(ctx, "systemctl restart k3s 2>/dev/null || systemctl restart k3s-agent 2>/dev/null || true")
 }
 
