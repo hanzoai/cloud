@@ -4,8 +4,15 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 3,
+  "skill_count": 4,
   "skills": [
+    {
+      "description": "Read meet call: Where a room's call happens.",
+      "name": "meet_call",
+      "path": "meet_call/SKILL.md",
+      "service": "meet",
+      "sha256": "b23bdcb7f42ddd6675968eeef8fa809cf6d186399cb050384ea3b321dc94fc3d"
+    },
     {
       "description": "Read meet health: Health reports whether the office can mint join tokens..",
       "name": "meet_health",

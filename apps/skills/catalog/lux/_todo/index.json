@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 3,
+  "skill_count": 4,
   "skills": [
     {
       "description": "Read todo board: Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
@@ -18,7 +18,7 @@
       "name": "todo_issues",
       "path": "todo_issues/SKILL.md",
       "service": "todo",
-      "sha256": "a6597370d85ad1947587bb229194b10258006da314559828dd31ed6b9c32189e"
+      "sha256": "fc4a63e16705f3c864272ceef28e4a3625d41251db840ece3c583e9a7798062c"
     },
     {
       "description": "Read todo projects: Returns the boards of your org — the places your work actually is., Returns one board of your org by its key — the repository name., Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
@@ -26,6 +26,13 @@
       "path": "todo_projects/SKILL.md",
       "service": "todo",
       "sha256": "7eeb40d14667a6911be73ec9caf0e68b29e6f4ef6d4226ada83ffb0509f69893"
+    },
+    {
+      "description": "Read todo rooms: Summarises one room's work..",
+      "name": "todo_rooms",
+      "path": "todo_rooms/SKILL.md",
+      "service": "todo",
+      "sha256": "cf5a0adbedb4e143368a698589efcb82b01d0b4b0ba73a5875aa4c58843347e6"
     }
   ],
   "spec_version": "8.0.0"

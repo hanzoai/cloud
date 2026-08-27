@@ -3619,6 +3619,11 @@
    "read": true
   },
   {
+   "id": "meetCall",
+   "doc": "Answers where a room's call happens, for a caller who may join it.\n\nIt is the \"resolved at render\" half of HIP-0523 §12: a surface showing a channel\nasks for the room's call at the moment it draws one, rather than reading a media\nroom name someone stored on the room. Nothing here is persisted and nothing is\ncreated — a media room begins existing when the first participant connects and\nstops when the last leaves, so there is no call to create and none to clean up.\n\nAUTHORIZATION IS THE JOIN DECISION, unchanged and shared. It delegates to\nstate.admits, the same function POST /v1/meet/getToken and all three recording\noperations admit on, so a caller who is told where a call is, is a caller who\ncould have joined it. Answering the address to someone who cannot join would make\nthis a workspace-membership oracle for anyone who can guess a room id.\n\nIt deliberately does NOT report whether a call is in progress. That is a fact the\nmedia server holds and this binary would have to ask for it over the network,\nwhich is a different decision with a different failure mode — and reporting\n\"nobody is in this call\" when the question could not be asked would be exactly the\nunknown-rendered-as-zero this surface refuses elsewhere.",
+   "read": true
+  },
+  {
    "id": "meetRecordRead",
    "doc": "Answers what is being recorded in a room, and where the file went.\n\nIt reports the recording that is RUNNING, and once none is, the most recent one\nthe media server still holds — with its final status and its object. That second\ncase is the one that matters for finding a file: the answer to a start is the\nonly other place the location appears, and a client that lost it, or a colleague\nwho was not the one to press record, has nowhere else to look.\n\nIt is behind the same check as starting one: where a recording of a private\nconversation is kept is a fact about that conversation, so it is told to the\npeople the room admits and to nobody else.",
    "read": true
@@ -6510,6 +6515,11 @@
    "read": true
   },
   {
+   "id": "get_team_rooms",
+   "doc": "Returns every room of the caller's org, across the workspaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
+   "read": true
+  },
+  {
    "id": "get_team_transactor_api_v1_statistics",
    "doc": "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
    "read": true
@@ -6526,6 +6536,10 @@
   {
    "id": "post_team_collaborator_rpc_by_documentid",
    "doc": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists."
+  },
+  {
+   "id": "put_team_rooms_by_id",
+   "doc": "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open workspace\nrather than on the next reload."
   }
  ],
  "tel": [
@@ -6628,6 +6642,11 @@
   {
    "id": "get_todo_projects_by_key_issues_by_num",
    "doc": "Returns ONE work item in full — its description included.\n\nThe list reads answer a board, and a board is a summary: the description is\nwhere the actual content of a work item lives — what an issue asks for, what\nan epic's acceptance criteria are — and no read on this surface returned it.\nThe address is the one PATCH already accepts, so an item you can move is now\nan item you can read.\n\nIt reads the forge directly rather than filtering the org fan-out, then falls\nback to the index for a board the forge has never heard of — the same order,\nand the same reason, as GetProject: a row is one kind of thing however it came\nto exist, so a caller does not have to know which store it is in to fetch it.",
+   "read": true
+  },
+  {
+   "id": "get_todo_rooms_by_room",
+   "doc": "Summarises one room's work.\n\nThe room is opaque here and is deliberately not resolved: this package cannot\nsay whether a room exists — apps/team owns that document — so an unknown room\nanswers an EMPTY board rather than a 404. That is the honest answer and the\nuseful one: a channel that has never had an item filed in it and a channel id\nthat was mistyped both have no work, and inventing a distinction would require\nthis surface to hold a second copy of the room list (HIP-0523 §2 forbids it,\nand it would drift the first time a room was renamed).\n\nTenancy is the validated principal's org and nothing else, so a caller cannot\nread another tenant's channel by naming its room.",
    "read": true
   },
   {

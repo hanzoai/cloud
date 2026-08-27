@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 6,
+  "skill_count": 7,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at hanzo.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -40,6 +40,13 @@
       "path": "team_files/SKILL.md",
       "service": "team",
       "sha256": "266e41b0d589a4092b5271462bf1eeed2c134f29dcf8c5903f152630ed4043b5"
+    },
+    {
+      "description": "Read team rooms: Returns every room of the caller's org, across the workspaces it owns, with the work facet each carries..",
+      "name": "team_rooms",
+      "path": "team_rooms/SKILL.md",
+      "service": "team",
+      "sha256": "bd1c30ac40511c96965df92c7bcae32a6f39b7f99b6b8a1f7b98dd01cb8ad52b"
     },
     {
       "description": "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Statistics returns the transactor's live sessions for the workspace",
