@@ -71,7 +71,7 @@ func (ledger) Credit(ctx context.Context, in creditledger.CreditInput) (string, 
 		Notes:    in.Reason,
 		Tags:     tag,
 		Ref:      in.IdempotencyKey,
-		Test:     in.Test,
+		Test:     sandboxed(in.Test),
 	})
 	if err != nil {
 		return "", 0, err
@@ -80,7 +80,7 @@ func (ledger) Credit(ctx context.Context, in creditledger.CreditInput) (string, 
 	// books — reporting a pool balance after crediting a member, or a live balance
 	// after crediting the sandbox, is how a caller concludes the grant vanished. The
 	// read repeats the deposit's whole address, one value at a time.
-	bal, berr := fin.Balance(ctx, in.Org, subject, cur, in.Test)
+	bal, berr := fin.Balance(ctx, in.Org, subject, cur, sandboxed(in.Test))
 	if berr != nil {
 		return id, 0, berr
 	}
@@ -106,7 +106,7 @@ func (ledger) Balance(ctx context.Context, org, subject, currency string, test b
 	if subject == "" {
 		subject = org // pooled org: the slug IS the pool account the gate reads
 	}
-	bal, err := fin.Balance(ctx, org, subject, currency, test)
+	bal, err := fin.Balance(ctx, org, subject, currency, sandboxed(test))
 	if err != nil {
 		return 0, err
 	}
