@@ -298,6 +298,23 @@ var allowedRequestUses = map[string]string{
 		"recordings land under another's. Neither may be an In field — a caller that could name its own " +
 		"tenant would write there. ONE function, which all three ops ask; it fails closed off the HTTP " +
 		"path, where there is no attested caller and therefore nobody who is in the room.",
+	"apps/meet/room.go": "resolve — where a room's call happens, and it authorizes on the SAME decision " +
+		"the recording surface and POST /v1/meet/getToken make about the same room (state.admits), asked " +
+		"rather than re-derived: a caller told where a call is, is a caller who could have joined it. It " +
+		"needs the REQUEST for the two facts that decision is built from, neither of which any ctx " +
+		"accessor carries. principal.Minted is the identity boundary's OWN attestation and is parked on " +
+		"the request — apps/principal publishes it for *zip.Ctx and for nothing else, so there is no " +
+		"context-side twin to read. cloud.As re-points the workspace-membership Ask at that ATTESTED org, " +
+		"which is what keeps the peer answering about the caller's own tenant. The ctx-side facts a typed " +
+		"op CAN read (OrgFrom / ValidatedFrom) derive from headers nothing strips in a hand-written " +
+		"plugin main, which is this app and is exactly the forgeable signal admits was fixed to stop " +
+		"selecting on; reading the weaker one here would tell a client-set header where a colleague's " +
+		"call is. It is its own entry rather than record.go's because the two surfaces spend different " +
+		"halves of that one decision — recording lifts the ORG off the attestation to prefix the object " +
+		"key, this read wants only the seat. The workspace and the room stay In fields: they are the " +
+		"ADDRESS the membership check runs against, not identity, and the composition of the two is the " +
+		"thing being published. Fails closed off the HTTP path, where there is no attested caller and so " +
+		"nobody who is in the room.",
 	"apps/ml/typed.go": "tenantFrom — ml's tenant boundary is a per-org(+project) KUBERNETES NAMESPACE, and " +
 		"deriving it takes two facts principal.OrgFrom does not carry: the org SUB-SCOPE (X-Project-Id, " +
 		"which suffixes the namespace) and platform-admin-ness (X-User-IsAdmin, which buckets an org-less " +
