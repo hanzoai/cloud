@@ -404,6 +404,15 @@
             }
           },
           {
+            "name": "room",
+            "in": "query",
+            "required": false,
+            "description": "Room filters to the sessions started in one collaborative room — the query a\nworkspace view runs to show what has been run in it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -2233,6 +2242,10 @@
             "description": "Repo is the code being worked on, up to 512 characters. A label the surface\nstates; nothing resolves it against the forge.",
             "type": "string"
           },
+          "room": {
+            "description": "Room is the collaborative room this run was started in (HIP-0523), so a\nworkspace view can list the sessions of one room. It is PROVENANCE and is set\nonly here: there is deliberately no way to move a session to another room, so\nit is absent from the patch input and from UpdateSession's SET list.",
+            "type": "string"
+          },
           "status": {
             "description": "Status opens the session in one of running, paused, done or error. Empty means\nrunning. A TERMINAL status here (done, error) records a session that has\nalready finished — its end time is stamped now — and nothing can move it\nafterwards.",
             "type": "string"
@@ -2472,6 +2485,9 @@
           "repo": {
             "type": "string"
           },
+          "room": {
+            "type": "string"
+          },
           "rootSessionId": {
             "type": "string"
           },
@@ -2582,6 +2598,10 @@
           },
           "repo": {
             "description": "Repo is the code the session is working on, as the surface reported it. It is\ntruth the SURFACE states, so it is a label rather than something resolved here.",
+            "type": "string"
+          },
+          "room": {
+            "description": "Room is the collaborative room this run was started in (HIP-0523), empty\nwhen it came from anywhere else — a CLI, a schedule, an API call. It is what\nlets a workspace view show the runs of one room beside its messages.",
             "type": "string"
           },
           "rootSessionId": {

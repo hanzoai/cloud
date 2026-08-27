@@ -65,6 +65,9 @@ const (
 	maxTerminal     = 512
 	maxProvider     = 64
 	maxAccount      = 256
+	// maxRoom bounds the room label. A team room is addressed by document id and
+	// workspace uuid, so this is generous for the pair and still a bound.
+	maxRoom = 256
 )
 
 func validKind(k string) bool {
@@ -146,6 +149,10 @@ type sessionView struct {
 	// Together with Provider it is what a login revoke matches on to stop the
 	// sessions a withdrawn account was paying for.
 	Account string `json:"account,omitempty"`
+	// Room is the collaborative room this run was started in (HIP-0523), empty
+	// when it came from anywhere else — a CLI, a schedule, an API call. It is what
+	// lets a workspace view show the runs of one room beside its messages.
+	Room string `json:"room,omitempty"`
 	// The readable build: the product this session built and whether its story
 	// is public (provenance.go).
 	Project string `json:"project,omitempty"`
@@ -288,6 +295,7 @@ func toSessionView(x Session, events, children int) sessionView {
 		TaskWorkflowID: x.TaskWorkflowID, TaskRunID: x.TaskRunID,
 		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Terminal: x.Terminal, Target: x.Target,
 		Provider: x.Provider, Account: x.Account,
+		Room:    x.Room,
 		Project: x.Project, Published: x.Published,
 		Events: events, Children: children,
 		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
@@ -475,6 +483,9 @@ type sessionQuery struct {
 	Status string `json:"status"`
 	// Project filters to the sessions tagged with one product slug.
 	Project string `json:"project"`
+	// Room filters to the sessions started in one collaborative room — the query a
+	// workspace view runs to show what has been run in it.
+	Room string `json:"room"`
 	// Limit caps the page. Absent, zero or over 500 reads as 100.
 	Limit int `json:"limit"`
 }
@@ -539,6 +550,11 @@ type registerReq struct {
 	// run, up to 256 characters. It is what lets a revoke of that login stop exactly
 	// the sessions it was paying for.
 	Account string `json:"account"`
+	// Room is the collaborative room this run was started in (HIP-0523), so a
+	// workspace view can list the sessions of one room. It is PROVENANCE and is set
+	// only here: there is deliberately no way to move a session to another room, so
+	// it is absent from the patch input and from UpdateSession's SET list.
+	Room string `json:"room"`
 	// The readable build (provenance.go): which product this session builds, and
 	// whether its story may be read by the world.
 	Project string `json:"project"`
@@ -613,6 +629,10 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 	if body.Published && project == "" {
 		return nil, zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
 	}
+	room := strings.TrimSpace(body.Room)
+	if len(room) > maxRoom {
+		return nil, zip.ErrBadRequest("room too long")
+	}
 
 	id := mint.ID("sess")
 	now := time.Now().Unix()
@@ -623,6 +643,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 		TaskRunID:      strings.TrimSpace(body.TaskRunID),
 		Host:           host, Cwd: cwd, Repo: repo, Terminal: terminal, Target: target,
 		Provider: provider, Account: account,
+		Room:    room,
 		Project: project, Published: body.Published,
 		StartedAt: now, CreatedAt: now, UpdatedAt: now,
 	}
@@ -727,6 +748,7 @@ func (o sessionOps) list(ctx context.Context, in *sessionQuery) (*sessionList, e
 		Parent:  trimField(in.Parent),
 		Status:  trimField(in.Status),
 		Project: trimField(in.Project),
+		Room:    trimField(in.Room),
 		// ListSessions owns the page bound: it reads 0 (absent) and anything over
 		// 500 as its own 100, which is what an unparseable ?limit= produced before.
 		Limit: in.Limit,
