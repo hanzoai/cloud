@@ -141,7 +141,13 @@ func TestOpsListenerReportsTheRevision(t *testing.T) {
 	srv := httptest.NewServer(healthMux())
 	t.Cleanup(srv.Close)
 
-	for _, path := range []string{"/healthz", "/readyz", "/health"} {
+	// The routes this listener SERVES, which is what the sentence above claims.
+	// "/health" was here and is not a route any more: d3a32b4447 made /healthz the
+	// one liveness address and left this list asking for the other, so the test
+	// read ServeMux's own `404 page not found` — a body that begins with a digit,
+	// which decodes as the NUMBER 404 and fails as "cannot unmarshal number into
+	// map". A test that names an address nobody serves measures the 404 handler.
+	for _, path := range []string{"/healthz", "/readyz"} {
 		resp, err := http.Get(srv.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
