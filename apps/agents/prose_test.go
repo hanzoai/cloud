@@ -67,6 +67,7 @@ var proseless = map[string]bool{
 	"sessionDetail.lastEvent":       true,
 	"sessionDetail.org":             true,
 	"sessionDetail.parentSessionId": true,
+	"sessionDetail.progress":        true,
 	"sessionDetail.project":         true,
 	"sessionDetail.provider":        true,
 	"sessionDetail.published":       true,

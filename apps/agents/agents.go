@@ -165,6 +165,12 @@ type state struct {
 	// commands forward to for task-backed sessions. Defaults to the disabled
 	// controller (record-only) until a live tasks client is wired in Mount.
 	tasks TaskController
+	// prog estimates how far along a live run is, from its own transcript, so a
+	// board can show a bar and a human can tell a run that is nearly done from one
+	// that is stuck (progress.go). Nil-safe throughout: a state built directly by
+	// a unit test, or a deployment with no AI plane, leaves every run reading
+	// "unknown", which is the honest answer rather than a fabricated zero.
+	prog *estimator
 }
 
 var mounted *cloud.Service[state]
@@ -483,6 +489,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			// from github.com/hanzoai/tasks/pkg/sdk/client here makes control forward
 			// to the engine's Signal/Cancel API (see sessions_tasks.go).
 			tasks: disabledTaskController{},
+			prog:  newEstimator(deps.AI),
 		},
 	}
 	// Split a pre-existing fleet-wide agents database into per-org files BEFORE a

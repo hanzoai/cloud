@@ -7115,6 +7115,74 @@ telemetry plane as its opening move. That is a least-authority preference, not a
 containment claim — containment is `refuse()` plus run-stated identity, and both
 hold whichever way this goes.
 
+## A run says how far along it is, and says that it is a GUESS (`apps/agents/progress.go`)
+
+A session's `status` is what the SURFACE reported — running, paused, done, error
+— and "running" is equally true of a run three turns in and of one that has been
+waiting forty minutes for an approval nobody will give. Both render the same on a
+board, so a human scanning fifty runs cannot tell which one needs them. The
+difference between those two is not in the row; it is in the transcript, which is
+prose, which is what a model reads.
+
+So `sessionView.progress` is ESTIMATED on `cloud.DefaultModel` from the run's own
+goal and the tail of its log, and it rides every session read — list, detail,
+tree, register, patch — plus one typed op of its own, `GET
+/v1/agents/sessions/{id}/progress`, which is the same value and the one address
+that WAITS for a fresh reading. The wire is `{pct?, phase, activity?, at?,
+estimated}`, one `sessionProgress` component `$ref`d from both.
+
+- **`estimated` is the whole design, not a caveat on it.** A fabricated 90% that
+  reads as a measurement tells a human to leave a stuck run alone. It is true
+  only where a model produced the number; a TERMINAL session reports the row's
+  own word and is marked false — a finished run is 100% because it finished.
+- **`pct` IS ABSENT when progress is indeterminate**, and the omission is the
+  mechanism rather than a convention: a Go zero and a missing key decode
+  identically, so `sessionProgress.Pct` is a `*int` and the tests assert on the
+  BYTES. `CreateSession` writes the -1 sentinel itself, so the law holds by
+  construction instead of by every register path remembering.
+- **`blocked` is what earns the field.** It is the one state the surface running
+  an agent will never report, because a run that is stuck does not know it is.
+  `done` from a model on a still-open run is the other half: a run somebody
+  forgot to close. `error` only ever comes from the row.
+- **Two terms decide a re-estimate and they bound different things**: the
+  interval (30s) bounds COST, the transcript (`UpdatedAt > ProgressAt`) bounds
+  WASTE — re-reading an unchanged log returns the same answer from the same
+  input, which is what makes a fleet of mostly-idle runs nearly free. `progress_at`
+  is the clock AND the stamp, so `SetProgress` is its only writer.
+  **The test that covers this passed with the interval term DELETED** until
+  `setClocks` existed: the stamps are second-granular, so inside one test both
+  terms are true together and either alone satisfies it. Move one clock at a time
+  or the invariant is declared and unasserted.
+- **An estimate is only ever replaced by another estimate.** An outage or an
+  unreadable reply advances the clock — not doing so would retry on every poll,
+  exactly when the gateway is already unwell — and leaves the last good answer
+  standing, whose growing age is published as `at`.
+- The reply parser is FORGIVING about prose around the object and about a `pct`
+  it cannot use, and STRICT about the phase: a word outside the closed four is
+  refused whole, because treating an unknown one as "running" publishes a state
+  nobody chose. A bad `pct` costs its own field only, so a `blocked` is never
+  lost to a number.
+- Cost is bounded three ways with no sweep of its own: the clock, a single-flight
+  claim per run, and a process-wide ceiling of 8 in flight — the in-flight map
+  cannot outgrow the ceiling and every claim is released, so nothing reclaims it.
+  The completion is charged to the wallet the session already named
+  (`Payer`, else the org); an empty billing scope would make it EXEMPT from the
+  meter, and a board makes a lot of these.
+- **There is no todo parser and there must not be one.** A run that keeps a
+  checklist writes it as a tool call whose payload shape belongs to whoever wrote
+  it, and this surface has never interpreted a payload. The turns are handed over
+  as they are; reading a checklist out of prose is the one thing the model is
+  unambiguously better at than a regexp. Payloads are already safe to forward —
+  `guardEvent` refuses a credential at the append.
+- `Store.TailEvents` exists because `ListEvents` pages FORWARD from a cursor, so
+  asking it for twenty turns with no cursor answers with a run's FIRST twenty —
+  the opposite end of the log from the question. A short run cannot see the
+  difference, which is why the test that catches it is long.
+
+Measured against a real 4B model on this host: a run whose transcript showed
+three of four planned steps done answered `{"pct":67,"phase":"running",
+"activity":"writing tests"}`.
+
 ## The sandbox sweep is bounded by construction (`apps/sandbox/bound.go`)
 
 An agent's sandbox cleanup deleted every sandbox on a node, **including
