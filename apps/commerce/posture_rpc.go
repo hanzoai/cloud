@@ -86,6 +86,14 @@ func planeMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Off mainnet there is no live posture to move to: this deployment has its
+	// own chain and its own coin and no rail to a card, so an org that could
+	// leave sandbox here would be asking to settle against books nothing can
+	// settle. Refused rather than silently ignored — a posture that reports it
+	// changed and did not is how an operator concludes real money is armed.
+	if !in.TestMode && cloud.SandboxOnly() {
+		return nil, zip.ErrForbidden("this network has no live money; real charges exist on mainnet only")
+	}
 	m, merr := commercebilling.SetTestMode(ctx, org, in.TestMode)
 	if merr != nil {
 		return nil, zip.Errorf(500, "failed to set test mode")
