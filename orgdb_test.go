@@ -325,3 +325,66 @@ func TestSanitizeInjectiveAndSafe(t *testing.T) {
 		t.Fatalf("non-identity owner must be re-suffixed, got %q", got)
 	}
 }
+
+// TestOwnedOnTheLocalOnlyPath — who owns an org when there is no fence to ask.
+//
+// It is the one question Sync cannot answer. Sync acks trivially without a
+// Durability, because a write is then already as durable as the deployment is
+// configured to be. Ownership has no such trivial answer: one writer owns
+// everything and several writers can prove nothing about which of them owns what.
+//
+// MUTATION: return true unconditionally when dur is nil and the multi-writer row
+// goes green — which is two pods each billing every org, the whole C-1 defect,
+// reintroduced under the configuration where the object store is down.
+func TestOwnedOnTheLocalOnlyPath(t *testing.T) {
+	ns := MustOrgNamespace("acme", "")
+	for _, c := range []struct {
+		name  string
+		peers bool
+		want  bool
+	}{
+		{"a lone writer owns everything it holds", false, true},
+		{"several writers with no fence own nothing", true, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			st := NewOrgStore(Base{DataDir: t.TempDir(), Peers: c.peers}, "probe",
+				func(db *sql.DB) (*sql.DB, error) { return db, nil })
+			t.Cleanup(func() { _ = st.CloseAll() })
+			if got := st.Owned(ns); got != c.want {
+				t.Fatalf("Owned = %v, want %v", got, c.want)
+			}
+			// Sync is unchanged either way: it is not the gate being asked here, and a
+			// test that let the two blur would not notice one standing in for the other.
+			if acked, err := st.Sync(ns); !acked || err != nil {
+				t.Fatalf("Sync on a local-only store = (%v, %v), want (true, nil)", acked, err)
+			}
+		})
+	}
+}
+
+// TestPeersIsEitherSignal. A production deployment declares its writers one of two
+// ways, and reading only the static list is a hole in the live one: an in-cluster
+// deployment names CLOUD_PEER_SELECTOR and routinely names no CLOUD_PEERS at all.
+//
+// MUTATION: drop the PeerSelector clause from build.go and the last row here goes
+// green — two pods that each believe they are alone.
+func TestPeersIsEitherSignal(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		peers    string
+		selector string
+		want     bool
+	}{
+		{"a lone pod, no selector", "", "", false},
+		{"one named peer is this pod itself", "a@a:1", "", false},
+		{"two named peers", "a@a:1,b@b:1", "", true},
+		{"a selector names writers a list does not", "", "app=cloud", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := peered(&Config{ShardPeers: c.peers, PeerSelector: c.selector})
+			if got != c.want {
+				t.Fatalf("peers(%q, %q) = %v, want %v", c.peers, c.selector, got, c.want)
+			}
+		})
+	}
+}

@@ -114,10 +114,7 @@ func BuildDeps(cfg *Config) Deps {
 	// the embedded KMS builds per-org stores that want it. Discovered late, it could
 	// not reach them, and KMS's files were local-only for no reason anyone chose.
 	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
-	// Peers is read from the SAME peer list buildDurability parses. It matters only
-	// where Durable is nil: with no fence, ownership of an org is decided by how
-	// many writers the deployment has, and nothing else can decide it.
-	deps.Peers = len(parsePeers(cfg.ShardPeers)) > 1
+	deps.Peers = peered(cfg)
 	deps.IAM = pick(cfg, logger, "iam", "IAM", clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, deps.Durable, logger)
 	deps.Commerce = pickCommerceClient(cfg, logger)
@@ -862,6 +859,34 @@ const durableBucket = "org-db"
 // (org.ProbeCAS writes one per boot) away from the orgs/ tree. A bucket lifecycle rule
 // may reap ".probe/*"; the objects are tiny and never read after the probe.
 const durableProbePrefix = ".probe/cas-"
+
+// peered reports whether this deployment runs MORE THAN ONE writer.
+//
+// It matters only where the durable plane is off: with no fence, ownership of an
+// org is decided by how many writers the deployment has and nothing else can
+// decide it (see OrgStore.Owned).
+//
+// TWO SIGNALS, EITHER OF WHICH MEANS PEERS, and reading only the first is a hole
+// in exactly the deployment that matters. A static CLOUD_PEERS names the writers
+// outright. A live in-cluster deployment does not have to: CLOUD_PEER_SELECTOR is
+// how it says "my writers are whichever pods match this", and membership is then
+// read from the K8s API — so a two-replica production deployment routinely names a
+// selector and NO peer list. Read from the list alone, both of its pods would
+// answer "I am the only writer" the moment the object store went away, and each
+// would bill every org: the double charge the gate exists to stop, arriving under
+// the one configuration where it is most expensive.
+//
+// A selector is a DECLARATION of peers whether or not any are up yet, so it is read
+// as one. The two errors are not the same size: over-detecting defers a debit until
+// the plane is provable again, under-detecting bills it twice.
+//
+// It is a FUNCTION and not an expression at the call site because it is a rule
+// about money and a rule nothing can call is a rule nothing can test — the first
+// version of this was inline, and the test written for it recomputed the same
+// expression and would have stayed green through any change to the real one.
+func peered(cfg *Config) bool {
+	return len(parsePeers(cfg.ShardPeers)) > 1 || strings.TrimSpace(cfg.PeerSelector) != ""
+}
 
 // buildDurability constructs the deployment's HA-durability factory, or nil when the
 // deployment has no object store to be durable against (dev/single-node — every
