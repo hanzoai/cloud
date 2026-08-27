@@ -730,6 +730,11 @@ func healthMux() *http.ServeMux {
 	ok := func(w http.ResponseWriter, _ *http.Request) {
 		writeHealth(w, http.StatusOK, "ok")
 	}
+	// ONE liveness address, and it is /healthz. "/health" was a second name for this
+	// same handler, kept because a monitor reaches for it first — which made two
+	// spellings of one probe. It stays in webui.apiPrefixes, so the console never
+	// claims it and a caller on the old name gets a 404 that names no endpoint
+	// rather than HTML that pretends to be one.
 	mux.HandleFunc("/healthz", ok) // liveness: stays 200 while draining (finish the drain).
 	// readiness: 503 once draining so K8s marks the pod NotReady — removed from endpoints
 	// AND from every peer's writer election — before it stops serving (graceful handoff).
@@ -740,7 +745,6 @@ func healthMux() *http.ServeMux {
 		}
 		ok(w, r)
 	})
-	mux.HandleFunc("/health", ok)
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		_, _ = w.Write([]byte("# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n"))

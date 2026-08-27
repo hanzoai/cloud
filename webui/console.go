@@ -65,7 +65,18 @@ import (
 // a monitor reaches for first. Without it the catch-all below claimed the
 // address and answered console HTML — 200 when the API was unreachable, and 503
 // when only the static bundle was.
-var apiPrefixes = []string{"/v1/", "/api/", "/zap", "/health", "/healthz", "/readyz"}
+// "/.well-known/" is a PROTOCOL namespace, not a product one. RFC 8615 reserves
+// it for discovery, and every client that reaches it — an OIDC relying party, an
+// SDK generator, a crawler — parses the answer as JSON. Left out of this list the
+// catch-all claimed the whole namespace, so an address nothing serves answered
+// with the SPA: 200 of console HTML where the bundle is present, 503 where it is
+// not. Both are worse than a 404, because a relying party reads them as "the
+// issuer exists and is broken" rather than "that document is not here", and a
+// generator that reads HTML as a spec emits an empty client AND REPORTS SUCCESS.
+// The documents that ARE served here (openid-configuration,
+// oauth-authorization-server, jwks, openapi.json) register before the catch-all
+// and win as usual; this only decides the answer for the ones that do not.
+var apiPrefixes = []string{"/v1/", "/api/", "/zap", "/health", "/healthz", "/readyz", "/.well-known/"}
 
 // consoleTitleRe matches the single <head> <title>…</title> element (any
 // attributes, any inner text, across newlines) so serveIndex can rewrite it to
