@@ -73,7 +73,7 @@ type transport struct {
 
 // transports is the closed set; elements are package vars in their transport
 // files. Fixed alphabetical order — the deterministic GET /v1/channels listing.
-var transports = []transport{discordTransport, slackTransport, teamsTransport, telegramTransport}
+var transports = []transport{discordTransport, slackTransport, teamsTransport, telegramTransport, whatsappTransport}
 
 func transportFor(id string) (transport, bool) {
 	for _, t := range transports {
