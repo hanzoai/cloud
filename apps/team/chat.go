@@ -153,8 +153,21 @@ func (srv *transServer) maybeAgentReply(org, workspace string, applied []json.Ra
 		return
 	}
 	bots, err := srv.bots(context.Background(), org)
-	if err != nil || len(bots) == 0 {
+	if err != nil {
+		// SAY SO. This was `if err != nil || len(bots) == 0 { return }`, which read
+		// as prudence and was the reason a broken responder was invisible: the
+		// roster read failed on every message in every deployment (a per-process
+		// global, now the plane), and a discarded error left the boot line "Chunter
+		// agent responder ENABLED" as the only thing anyone could see. An enabled
+		// responder that cannot list the org's agents is a FAULT, and a fault that
+		// is never reported is one nobody fixes.
+		if srv.log != nil {
+			srv.log.Warn("team: agent roster unavailable, no mention can be answered", "org", org, "err", err)
+		}
 		return
+	}
+	if len(bots) == 0 {
+		return // this org genuinely has no agents — not a fault, and not worth a line
 	}
 	byUID := make(map[string]Bot, len(bots))
 	for _, b := range bots {
