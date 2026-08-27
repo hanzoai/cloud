@@ -189,6 +189,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	bridge := &botsBridge{trans: trans, accounts: accounts, degraded: degraded}
 	bridge.register(app)
 
+	// The channel surface: the same Chunter rooms the transactor serves, readable
+	// without speaking the transactor protocol, plus the one write that says what
+	// a channel is for. See channel.go.
+	channels := &roomBridge{trans: trans, accounts: accounts, degraded: degraded}
+	channels.register(app)
+
 	// Files plane: the workspace blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS client (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
