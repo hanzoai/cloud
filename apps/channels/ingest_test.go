@@ -282,6 +282,17 @@ func spyDiscord(t *testing.T) *doorRec {
 	return rec
 }
 
+func spyWhatsApp(t *testing.T) *doorRec {
+	t.Helper()
+	rec := &doorRec{id: "wamid.1"}
+	saved := whatsappDoor
+	whatsappDoor = func(_ context.Context, to, replyTo, text string) (string, error) {
+		return rec.hit(doorCall{room: to, replyTo: replyTo, text: text})
+	}
+	t.Cleanup(func() { whatsappDoor = saved })
+	return rec
+}
+
 // ingressEv builds one client event; realistic per-transport values live at the
 // call sites.
 func ingressEv(org, provider, externalID, user, channel, thread, text, key, replyRoot string) plane.ChannelsIngestIn {
