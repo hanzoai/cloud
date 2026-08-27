@@ -102,6 +102,19 @@ type Session struct {
 	// billed — cloud.Running.MeteredAt. Zero means the meter has never seen it,
 	// which starts the clock at now and charges nothing for the time before.
 	MeteredAt int64
+
+	// The last ESTIMATE of how far this run has got (progress.go): the share of
+	// its goal that is done, what shape it is in, the one line saying what it is
+	// doing, and when a model last read the transcript to say so.
+	//
+	// ProgressPct is pctUnknown (-1) for a run whose progress is indeterminate,
+	// which is a DIFFERENT fact from 0 and must never render as one; ProgressAt is
+	// zero until something has estimated it, and doubles as the debounce clock, so
+	// nothing else may write it.
+	ProgressPct      int
+	ProgressPhase    string
+	ProgressActivity string
+	ProgressAt       int64
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -214,6 +227,15 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		// hours it ran before anybody was counting.
 		"payer":      "TEXT NOT NULL DEFAULT ''",
 		"metered_at": "INTEGER NOT NULL DEFAULT 0",
+		// The progress estimate. Every default is a REFUSAL, like the meter's two
+		// above: -1 says nothing has estimated this run and its progress is
+		// INDETERMINATE (0 would say it has done none of its work, which is a
+		// claim about every session that predates this column), and 0 on the
+		// stamp says nothing has read its transcript yet.
+		"progress_pct":      "INTEGER NOT NULL DEFAULT -1",
+		"progress_phase":    "TEXT NOT NULL DEFAULT ''",
+		"progress_activity": "TEXT NOT NULL DEFAULT ''",
+		"progress_at":       "INTEGER NOT NULL DEFAULT 0",
 	}); err != nil {
 		return err
 	}
@@ -238,7 +260,7 @@ CREATE INDEX IF NOT EXISTS ix_sessions_meter ON agent_sessions(org, ended_at, me
 // is: four statements read or write it and a fifth (the legacy fan-out) copies it.
 const eventCols = `id,session_id,org,seq,kind,actor,payload,created_at`
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room,payer,metered_at`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,terminal,target,provider,account,project,published,room,payer,metered_at,progress_pct,progress_phase,progress_activity,progress_at`
 
 // sessionVals is sessionCols' placeholder list, DERIVED from it rather than
 // written out beside it. Every INSERT over a named column list now does the same
@@ -263,7 +285,8 @@ func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
 		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Terminal, &x.Target,
-		&x.Provider, &x.Account, &x.Project, &x.Published, &x.Room, &x.Payer, &x.MeteredAt)
+		&x.Provider, &x.Account, &x.Project, &x.Published, &x.Room, &x.Payer, &x.MeteredAt,
+		&x.ProgressPct, &x.ProgressPhase, &x.ProgressActivity, &x.ProgressAt)
 	return x, err
 }
 
@@ -287,12 +310,21 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 			return fmt.Errorf("verify parent: %w", err)
 		}
 	}
+	// A session is born with INDETERMINATE progress, and the store settles that
+	// rather than trusting the caller to: Go's zero value for ProgressPct is 0,
+	// which on this column means "none of the work is done" — a claim about a run
+	// that has not started. Writing it here is what makes "unknown never renders
+	// as zero" hold by construction instead of by every register path remembering.
+	if x.ProgressPhase == "" && x.ProgressAt == 0 {
+		x.ProgressPct = pctUnknown
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (`+sessionVals+`)`,
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
 		x.Host, x.Cwd, x.Repo, x.Terminal, x.Target, x.Provider, x.Account, x.Project, x.Published,
-		x.Room, x.Payer, x.MeteredAt)
+		x.Room, x.Payer, x.MeteredAt,
+		x.ProgressPct, x.ProgressPhase, x.ProgressActivity, x.ProgressAt)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -540,6 +572,43 @@ func (s *Store) ListEvents(ctx context.Context, org, sessionID string, since int
 	return out, rows.Err()
 }
 
+// TailEvents returns a session's most recent events, OLDEST of those first, so a
+// reader gets a transcript to read down rather than a reversed one.
+//
+// It is not ListEvents with a bigger limit, and the difference is the one that
+// bites: ListEvents pages FORWARD from a cursor, so asking it for 20 with no
+// cursor answers with a run's first twenty turns — the opposite end of the log
+// from the one "what is it doing NOW" is asked about. The DESC scan rides the
+// same (session_id, seq) index the ASC one does.
+func (s *Store) TailEvents(ctx context.Context, org, sessionID string, limit int) ([]Event, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+eventCols+` FROM agent_session_events WHERE org=? AND session_id=?
+		 ORDER BY seq DESC LIMIT ?`, org, sessionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("tail events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Event
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.ID, &e.SessionID, &e.Org, &e.Seq, &e.Kind, &e.Actor,
+			&e.Payload, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan tail event: %w", err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
 // EventCountsByRoot returns per-session event counts for EVERY session in one
 // org's tree (root_id == root) in a SINGLE grouped query — so materialising a
 // tree of N nodes with real per-node event counts costs one round trip, not N,
@@ -613,6 +682,32 @@ func (s *Store) AdvanceSession(ctx context.Context, org, id string, was, now int
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// SetProgress writes one session's estimate and the instant it was made.
+//
+// It is a targeted UPDATE for exactly the reason AdvanceSession is: UpdateSession
+// writes a struct read at the top of a handler, so an estimate landing between
+// that read and that write would be silently undone — and this one is written by
+// a goroutine that runs beside every read, which is precisely when that race is
+// most likely rather than least.
+//
+// progress_at is the debounce clock as well as the stamp, so this is the ONLY
+// writer of it. A caller that could move the estimate without moving the clock,
+// or the clock without the estimate, would have two facts where there is one.
+func (s *Store) SetProgress(ctx context.Context, org, id string, p Progress) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE agent_sessions SET progress_pct=?, progress_phase=?, progress_activity=?, progress_at=?
+		 WHERE org=? AND id=?`,
+		p.Pct, p.Phase, p.Activity, p.At, org, id)
+	if err != nil {
+		return fmt.Errorf("set progress: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errSessionNotFound
+	}
+	return nil
 }
 
 // Live is every session of this org that has not ended: the set the reaper reads.

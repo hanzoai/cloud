@@ -180,6 +180,11 @@
    "read": true
   },
   {
+   "id": "get_agents_sessions_by_id_progress",
+   "doc": "Returns how far along one run is: the share of its goal that\nis done, whether it is running, blocked or finished, and a line saying what it\nis doing right now.\n\nIt is a MODEL ESTIMATE read off the run's own transcript, not a measurement —\n`estimated` says so on every answer, and a run whose progress cannot be told\nreports phase \"unknown\" with no percentage rather than a zero it does not\nmean. A session that has already finished answers from its own status instead,\nand is marked not estimated.\n\nThe list and detail reads carry the same value; this address is the one that\nWAITS. Where the stored estimate has gone stale it is remade before answering,\nso a human deciding whether to step into a run gets a current reading rather\nthan the last poll's — which costs one small completion, charged to the same\nwallet the session already names, at most once every thirty seconds per run.",
+   "read": true
+  },
+  {
    "id": "get_agents_sessions_by_id_tree",
    "doc": "Returns the subagent-flow graph rooted at this session: the session,\nits children, their children, each node carrying its own event count. One\nindexed read pulls the whole flow (every node of a flow shares a root id), so\nthe shape is assembled in memory rather than by walking the store per node.",
    "read": true

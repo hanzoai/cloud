@@ -188,6 +188,12 @@ type sessionView struct {
 	// register/patch/tree responses; set by list + detail). It lets a swipe card show
 	// a live one-line preview without fetching full detail.
 	LastEvent *lastEventView `json:"lastEvent,omitempty"`
+	// Progress is how far along this run is — a share of its goal, a phase, and a
+	// line saying what it is doing. Always present, so a board never branches on
+	// whether it is there; `phase` says "unknown" when nothing has estimated it.
+	// It is a MODEL ESTIMATE wherever `estimated` is true, and the row's own word
+	// where it is false. See progress.go.
+	Progress sessionProgress `json:"progress"`
 }
 
 // lastEventView is the one-line latest-activity a mission-control card renders in
@@ -300,6 +306,7 @@ func toSessionView(x Session, events, children int) sessionView {
 		Events: events, Children: children,
 		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
 		CreatedAt: rfc3339(x.CreatedAt), UpdatedAt: rfc3339(x.UpdatedAt),
+		Progress: progressOf(x),
 	}
 }
 
@@ -335,6 +342,7 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	zip.Get(g, "/sessions/:id", o.get)
 	zip.Patch(g, "/sessions/:id", o.patch)
 	zip.Get(g, "/sessions/:id/tree", o.tree)
+	zip.Get(g, "/sessions/:id/progress", o.progress)
 	// All five were raw because the guard gate answers 422 IN BAND with the
 	// findings that refused the write, and zip's error carried a sentence and no
 	// body — so a typed op would have dropped the array that tells an author WHICH
@@ -771,6 +779,11 @@ func (o sessionOps) list(ctx context.Context, in *sessionQuery) (*sessionList, e
 		if last, ok, _ := sto.LastEvent(ctx, org, x.ID); ok {
 			v.LastEvent = toLastEventView(last)
 		}
+		// Answer from the row and bring the estimate up to date BEHIND the answer,
+		// so a board stays a read and gains the new number on its next poll. Most
+		// calls do nothing at all: refresh returns immediately for a run that is
+		// terminal, recently estimated, or has said nothing since. See progress.go.
+		s.State.prog.refresh(sto, org, x)
 		out = append(out, v)
 	}
 	return &sessionList{Sessions: out}, nil
@@ -818,11 +831,62 @@ func (o sessionOps) get(ctx context.Context, in *sessionRef) (*sessionDetail, er
 	for _, e := range events {
 		evViews = append(evViews, toEventView(e))
 	}
+	s.State.prog.refresh(sto, org, x)
 	return &sessionDetail{
 		sessionView:  toSessionView(x, evCount, len(kids)),
 		Children:     kidViews,
 		RecentEvents: evViews,
 	}, nil
+}
+
+// ---- progress ----
+
+// SessionProgress returns how far along one run is: the share of its goal that
+// is done, whether it is running, blocked or finished, and a line saying what it
+// is doing right now.
+//
+// It is a MODEL ESTIMATE read off the run's own transcript, not a measurement —
+// `estimated` says so on every answer, and a run whose progress cannot be told
+// reports phase "unknown" with no percentage rather than a zero it does not
+// mean. A session that has already finished answers from its own status instead,
+// and is marked not estimated.
+//
+// The list and detail reads carry the same value; this address is the one that
+// WAITS. Where the stored estimate has gone stale it is remade before answering,
+// so a human deciding whether to step into a run gets a current reading rather
+// than the last poll's — which costs one small completion, charged to the same
+// wallet the session already names, at most once every thirty seconds per run.
+//
+// Example: {"id": "sess_1"}
+func (o sessionOps) progress(ctx context.Context, in *sessionRef) (*sessionProgress, error) {
+	s := o.s
+	sto, org, err := tenantStore(ctx, &s.State)
+	if err != nil {
+		return nil, err
+	}
+	id := in.ID
+	if len(id) > maxSessionID {
+		return nil, zip.ErrNotFound("session not found")
+	}
+	x, err := sto.GetSession(ctx, org, id)
+	if err == errSessionNotFound {
+		return nil, zip.ErrNotFound("session not found")
+	}
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	// The estimate is remade in line, not behind the answer. A stale reading is
+	// still returned when it cannot be — measure keeps the last good estimate and
+	// publishes its age — so a gateway that is down costs freshness, never the
+	// address.
+	if prog := s.State.prog; prog.stale(x, time.Now().Unix()) && prog.claim(org, id) {
+		defer prog.release(org, id)
+		if p, err := prog.measure(ctx, sto, org, x); err == nil {
+			x.ProgressPct, x.ProgressPhase, x.ProgressActivity, x.ProgressAt = p.Pct, p.Phase, p.Activity, p.At
+		}
+	}
+	v := progressOf(x)
+	return &v, nil
 }
 
 // ---- tree ----

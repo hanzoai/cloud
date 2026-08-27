@@ -992,7 +992,7 @@
       "name": "agents_sessions",
       "path": "agents_sessions/SKILL.md",
       "service": "agents",
-      "sha256": "694254856f4fba3a01f79e229cc7728ab572dabd3dfbacf39ed306965c88ec5b"
+      "sha256": "4f92a009de7815293665cc288d240268b14ea628187979c9766ced9fa17167a5"
     },
     {
       "description": "Read agents targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load..",

@@ -18,6 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 - `GET https://api.zoo.ngo/v1/agents/sessions/stream` — Live session and event updates for the caller's org, as Server-Sent Events.
 - `GET https://api.zoo.ngo/v1/agents/sessions/{id}` — Returns one session with its direct child sessions and its 50 most recent events, oldest of those first.
 - `GET https://api.zoo.ngo/v1/agents/sessions/{id}/control` — Returns the steering commands (pause/resume/stop/message) recorded against the caller's own session that are newer than the cursor, oldest first, with the cursor to poll from next.
+- `GET https://api.zoo.ngo/v1/agents/sessions/{id}/progress` — Returns how far along one run is: the share of its goal that is done, whether it is running, blocked or finished, and a line saying what it is doing right now.
 - `GET https://api.zoo.ngo/v1/agents/sessions/{id}/tree` — Returns the subagent-flow graph rooted at this session: the session, its children, their children, each node carrying its own event count.
 
 ## Parameters
@@ -39,6 +40,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 - `/v1/agents/sessions/stream` → JSON object.
 - `/v1/agents/sessions/{id}` → `sessionDetail` object with fields: `account`, `actor`, `agent`, `childSessions`, `children`, `createdAt`, `cwd`, `endedAt`, `events`, `host`, `id`, `lastEvent`.
 - `/v1/agents/sessions/{id}/control` → `controlDrain` object with fields: `commands`, `cursor`.
+- `/v1/agents/sessions/{id}/progress` → `sessionProgress` object with fields: `activity`, `at`, `estimated`, `pct`, `phase`.
 - `/v1/agents/sessions/{id}/tree` → `treeNode` object with fields: `children`, `session`.
 
 ## Example
