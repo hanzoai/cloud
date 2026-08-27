@@ -230,12 +230,32 @@ func RuntimeSweep(
 ) (int, error) {
 	var held []debit
 	keep := func(payer string, u metering.Usage) { held = append(held, debit{payer, u}) }
+	// THE SHIP FOLLOWS THE WATERMARK, NOT THE DEBIT, and the difference is a whole
+	// class of wrong bill. A published price of ZERO is a price — runtime is free
+	// this week — and a free span still moves the watermark, because the watermark is
+	// what says the span is accounted for. Shipping only when money was emitted would
+	// leave every free advance local: the durable watermark stays at the start of the
+	// promotion, and the moment the org moves to another replica it bills the whole
+	// free week at whatever the price is by then, in one debit, to every tenant. That
+	// is the retroactive charge the meter already refuses within a process, arriving
+	// across pods instead.
+	//
+	// So the question is "did anything get written", which is the same question the
+	// CAS already answers, read here rather than inferred from the money.
+	moved := false
+	claim := func(ctx context.Context, id string, was, at int64) (bool, error) {
+		won, err := advance(ctx, id, was, at)
+		if won {
+			moved = true
+		}
+		return won, err
+	}
 	for _, r := range rows {
-		if _, err := RuntimeCharge(ctx, r, r.edge(now), advance, keep); err != nil {
+		if _, err := RuntimeCharge(ctx, r, r.edge(now), claim, keep); err != nil {
 			return 0, err
 		}
 	}
-	if len(held) == 0 {
+	if !moved {
 		// Nothing was claimed, so nothing was written that a ship would carry. A
 		// pass over rows that all read as already-billed owes no round trip.
 		return 0, nil
