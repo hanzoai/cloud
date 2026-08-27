@@ -124,9 +124,17 @@ ARG VERSION=dev
 # -mod=readonly means the committed go.sum is the SOLE source of truth: any drift
 # (a needed hash not present) FAILS the build instead of being silently
 # re-recorded. CGO_CFLAGS/LDFLAGS enable the SQLCipher codec + URI keying.
+# GONOPROXY=none is the load-bearing half of the module environment. GOPRIVATE is
+# shorthand for BOTH the sumdb bypass and GONOPROXY, and only the first is wanted:
+# the sumdb has no entry for a module we publish, but the module PROXY is the only
+# source that survives a repository being re-rooted. github.com/hanzoai/sign@v1.0.0
+# is the live case — that tag is not on GitHub, so resolving it direct answers
+# "unknown revision" while the proxy serves it. hanzo.yml states the same rule on
+# every one of its steps; this is the build that also needs it.
 ENV CGO_CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher" \
     CGO_LDFLAGS="-lsqlcipher" \
     GOPRIVATE=github.com/hanzoai/* \
+    GONOPROXY=none \
     GOPROXY=https://proxy.golang.org,direct \
     GOFLAGS=-mod=readonly
 COPY go.mod go.sum ./
