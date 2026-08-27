@@ -26,6 +26,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 | `project` | query | no | string | Project narrows to one team key; "" searches every project in the org, which is the point of this op. |
 | `q` | query | no | string | Q matches an issue's title or description. A word from the issue, which is what someone remembers — not its number, which is what they are looking up. |
 | `repo` | query | no | string | Repo keeps issues bound to one git repository. |
+| `room` | query | no | string | Room keeps issues bound to one collaboration room, spelled "<workspace>_<room>" — the exact value GET /v1/meet/call answers with, so a channel's call and its todo list name the room the same way. This is the read a channel view runs to draw its own list; it spans every board of the org, because the work a channel is about is not confined to one board. |
 | `source` | query | no | string | Source keeps one origin: team, git, crm, helpdesk, cms, agent. "git" is how you ask for the mirrored GitHub issues specifically. |
 | `status` | query | no | string | Status keeps one board column: backlog, todo, in_progress, done, canceled. |
 

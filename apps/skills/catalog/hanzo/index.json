@@ -338,7 +338,7 @@
     {
       "name": "meet",
       "path": "_meet/index.json",
-      "skill_count": 3
+      "skill_count": 4
     },
     {
       "name": "metrics",
@@ -498,7 +498,7 @@
     {
       "name": "team",
       "path": "_team/index.json",
-      "skill_count": 6
+      "skill_count": 7
     },
     {
       "name": "tel",
@@ -513,7 +513,7 @@
     {
       "name": "todo",
       "path": "_todo/index.json",
-      "skill_count": 3
+      "skill_count": 4
     },
     {
       "name": "tools",
@@ -586,7 +586,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 671,
+  "skill_count": 674,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -992,7 +992,7 @@
       "name": "agents_sessions",
       "path": "agents_sessions/SKILL.md",
       "service": "agents",
-      "sha256": "bffdaba174a65cafec21b9bed88d279ad94ace134ee6daf75fff0ed0af74ab9f"
+      "sha256": "694254856f4fba3a01f79e229cc7728ab572dabd3dfbacf39ed306965c88ec5b"
     },
     {
       "description": "Read agents targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load..",
@@ -1286,7 +1286,7 @@
       "name": "allowance_allowance",
       "path": "allowance_allowance/SKILL.md",
       "service": "allowance",
-      "sha256": "4f71424697c5e282eb40e3d0ecb7144d45dc3da5eaae0eb4c36c9e968826a0ad"
+      "sha256": "ca7184cacdcfc06547aa434bbe1117ed64dbc7bdef4dec8f6aea5d64811f7fdb"
     },
     {
       "description": "Read audit audit: List reads the caller's OWN org audit trail, newest first, with the total the filter matched so a console can page it..",
@@ -3466,6 +3466,13 @@
       "sha256": "6e3fc0e21ffe2a67041560dbbdb0c6b230a1159a514ac34ecb3c505f856271e4"
     },
     {
+      "description": "Read meet call: Where a room's call happens.",
+      "name": "meet_call",
+      "path": "meet_call/SKILL.md",
+      "service": "meet",
+      "sha256": "2faed32e4e0bd899e47db54604e9dd845f7e98355b3ddfd0910191aad0c6fed0"
+    },
+    {
       "description": "Read meet health: Health reports whether the office can mint join tokens..",
       "name": "meet_health",
       "path": "meet_health/SKILL.md",
@@ -4887,6 +4894,13 @@
       "sha256": "266e41b0d589a4092b5271462bf1eeed2c134f29dcf8c5903f152630ed4043b5"
     },
     {
+      "description": "Read team rooms: Returns every room of the caller's org, across the workspaces it owns, with the work facet each carries..",
+      "name": "team_rooms",
+      "path": "team_rooms/SKILL.md",
+      "service": "team",
+      "sha256": "bd1c30ac40511c96965df92c7bcae32a6f39b7f99b6b8a1f7b98dd01cb8ad52b"
+    },
+    {
       "description": "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Statistics returns the transactor's live sessions for the workspace",
       "name": "team_transactor",
       "path": "team_transactor/SKILL.md",
@@ -4940,7 +4954,7 @@
       "name": "todo_issues",
       "path": "todo_issues/SKILL.md",
       "service": "todo",
-      "sha256": "3f97bc56bc7414494722d3b514b5c7623beaaa330c64661dffd13d04fad68762"
+      "sha256": "1d9719348b9a6ac40ca5cffc1132aa886774611a487b1f077ed419589b2f5188"
     },
     {
       "description": "Read todo projects: Returns the boards of your org — the places your work actually is., Returns one board of your org by its key — the repository name., Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
@@ -4948,6 +4962,13 @@
       "path": "todo_projects/SKILL.md",
       "service": "todo",
       "sha256": "5e4df47920969cef3f4b7e46bbb6a585b7cde42a02100bc241e6408304b01732"
+    },
+    {
+      "description": "Read todo rooms: Summarises one room's work..",
+      "name": "todo_rooms",
+      "path": "todo_rooms/SKILL.md",
+      "service": "todo",
+      "sha256": "8e44ed66bc6e474612e435c7469a6dd85c3a5b1a13e6952f1a31cb70b664cfc6"
     },
     {
       "description": "Read tools activation: Reports which tools are switched on for the caller's org and project..",

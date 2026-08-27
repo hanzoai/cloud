@@ -29,6 +29,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 | `limit` | query | no | integer | Limit caps the page. Absent, zero or over 500 reads as 100. |
 | `parent` | query | no | string | Parent scopes the page to the direct children of one session. Ignored when root is set; with neither, only ROOT sessions come back. |
 | `project` | query | no | string | Project filters to the sessions tagged with one product slug. |
+| `room` | query | no | string | Room filters to the sessions started in one collaborative room — the query a workspace view runs to show what has been run in it. |
 | `root` | query | no | string | Root scopes the page to one subagent tree (its root session id). |
 | `status` | query | no | string | Status filters to running, paused, done or error. |
 

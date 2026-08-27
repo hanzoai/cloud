@@ -4,8 +4,15 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 3,
+  "skill_count": 4,
   "skills": [
+    {
+      "description": "Read meet call: Where a room's call happens.",
+      "name": "meet_call",
+      "path": "meet_call/SKILL.md",
+      "service": "meet",
+      "sha256": "ab6c0f73b5882c92af3287e5066310fc3616743eba096c4b182413103e99b4fd"
+    },
     {
       "description": "Read meet health: Health reports whether the office can mint join tokens..",
       "name": "meet_health",
