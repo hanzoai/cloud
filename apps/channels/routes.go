@@ -129,8 +129,8 @@ func requireOrgAdmin(ctx context.Context) error {
 // channelView is one chat transport as this org sees it: the fixed transport
 // facts, the org's connection to it, and the org's access policy for it.
 type channelView struct {
-	// ID is the fixed transport identifier — discord, slack, teams or telegram —
-	// and the value every route on this surface names a channel by, including the
+	// ID is the fixed transport identifier — discord, slack, teams, telegram or
+	// whatsapp — and the value every route on this surface names a channel by, including the
 	// `:channel` segment of the send path. The listing is always in that order.
 	ID string `json:"id"`
 	// Connected is whether integrations holds a connection for (this org, this
@@ -297,8 +297,8 @@ type allowlistView struct {
 	// AccessGroups is the org's named sender sets, as group name -> channel ->
 	// member entries, held once for the whole org. A DM or Group entry written
 	// `accessGroup:<name>` admits any sender listed under that name for THIS
-	// channel, or under the channel `*`, which is how one set covers all four
-	// transports. Replaced wholesale by the PUT.
+	// channel, or under the channel `*`, which is how one set covers every
+	// transport at once. Replaced wholesale by the PUT.
 	AccessGroups map[string]map[string][]string `json:"accessGroups"`
 }
 
@@ -519,7 +519,8 @@ func (o ops) pairingList(ctx context.Context, _ *noInput) (*pairingQueue, error)
 // `?code=` would approve a pairing the body never asked for, from a URL that
 // lands in access logs.
 type approvePairingIn struct {
-	// Channel is the transport the request came in on: discord, slack, teams or telegram.
+	// Channel is the transport the request came in on: discord, slack, teams,
+	// telegram or whatsapp.
 	Channel string `json:"channel" url:"-"`
 	// Code is the pairing code from GET /v1/channels/pairing. It is a capability:
 	// holding it is what authorises the approval, alongside org admin.
@@ -569,7 +570,7 @@ func (o ops) pairingApprove(ctx context.Context, in *approvePairingIn) (*pairing
 
 // allowlistRef names the channel whose access policy to read.
 type allowlistRef struct {
-	// Channel is the transport to read: discord, slack, teams or telegram.
+	// Channel is the transport to read: discord, slack, teams, telegram or whatsapp.
 	// Required; an unknown value is a 404.
 	Channel string `json:"channel"`
 }
@@ -614,7 +615,7 @@ func (o ops) allowlistGet(ctx context.Context, in *allowlistRef) (*allowlistView
 // taken a policy there — without the opt-out `?dmPolicy=open` would open an
 // org's DMs from a URL.
 type allowlistPutIn struct {
-	// Channel is the transport to edit: discord, slack, teams or telegram.
+	// Channel is the transport to edit: discord, slack, teams, telegram or whatsapp.
 	// Required; an unknown value is a 404.
 	Channel string `json:"channel" url:"-"`
 	// DMPolicy sets how direct messages are admitted: "pairing" (a person must be
@@ -779,7 +780,7 @@ func init() {
 	openapi.Describe("/v1/channels/:channel/send", http.MethodPost,
 		"Send a message from your org's bot to one chat room",
 		"Delivers text, attachments and actions to one room on a connected chat transport — "+
-			"discord, slack, teams or telegram — and answers that transport's own receipt, the "+
+			"discord, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the "+
 			"`messageId` it assigned and the Unix second it landed. An unknown channel is a 404.\n\n"+
 			"The body is the envelope's NARROW outbound projection: `room`, `text`, `attachments`, "+
 			"`actions`, `replyTo` and `idempotency`, and nothing else. Identity is not a field — the "+
@@ -790,12 +791,14 @@ func init() {
 			"Requires a validated principal; 403 without one. The room must already belong to the "+
 			"caller's org — each transport verifies the binding itself, so a room this org has not "+
 			"bound is 403 and a room whose route the bot has never learned is 409, meaning someone "+
-			"has to message the bot there first. A transport that fails answers 502 carrying status "+
-			"and shape only, never a token.\n\n"+
+			"has to message the bot there first. A route learned only so a pairing reply could be "+
+			"delivered lasts exactly as long as that pairing request does, so a room whose sender "+
+			"was never approved goes back to 409 within the hour. A transport that fails answers "+
+			"502 carrying status and shape only, never a token.\n\n"+
 			"Sending is at-most-once only if you ask for it: pass an `idempotency` string and a "+
 			"replay answers 200 with the PRIOR receipt instead of sending twice, while a send that "+
-			"fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. All "+
-			"four transports currently render text only, so attachments and actions are flattened "+
+			"fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. Every "+
+			"transport currently renders text only, so attachments and actions are flattened "+
 			"deterministically to one line each after the text rather than dropped.")
 }
 

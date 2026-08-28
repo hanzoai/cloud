@@ -82,38 +82,20 @@ func discordInteractions(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return discordEphemeral(c, "This server isn't connected to Hanzo yet.")
 	}
-	// SHED BEFORE the dedupe write (Red M-1): acquire a pool slot first. Discord does
-	// NOT auto-retry a non-2xx, so a capacity shed is a user-visible ask-to-retry
-	// (an ephemeral message) — nothing is recorded, so the next /hanzo runs cleanly.
-	if !channelLim.acquire(org) {
-		s.Log.Warn("discord: at capacity, shedding", "org", org)
-		return discordEphemeral(c, "Hanzo is at capacity — please run /hanzo again in a moment.")
-	}
-	// Slot held. DURABLE dedupe (billed path) on interaction id: release on every
-	// path that does NOT dispatch. Fail CLOSED on error.
-	fresh, err := s.State.store.MarkEvent(c.Context(), "discord", it.ID)
-	if err != nil {
-		channelLim.release(org)
-		s.Log.Warn("discord: dedupe error", "err", err)
-		return discordEphemeral(c, "Sorry — please try again.")
-	}
-	if !fresh {
-		// Duplicate delivery: the original already answered. Release the slot and ack
-		// deferred so Discord is satisfied; no second run.
-		channelLim.release(org)
-		return discordDeferredEphemeral(c)
-	}
-	if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
-		s.Log.Warn("discord: dedupe gc", "err", gerr)
-	}
 	in := Inbound{
 		Provider: "discord", ExternalID: it.GuildID, User: it.User,
 		Channel: it.ChannelID, Text: it.Prompt, DedupeKey: it.ID,
 	}
-	emitIngress(org, in, "")
-	// The turn runs in channels now — emitIngress above is the whole dispatch.
+	// Discord does NOT auto-retry a non-2xx, so an event we did not take is a
+	// user-visible ask-to-run-it-again rather than a retriable failure. Nothing
+	// was recorded either way, so the next /hanzo runs cleanly.
+	if !emitIngress(c.Context(), s, org, in, "") {
+		return discordEphemeral(c, "Hanzo could not take that just now — please run /hanzo again in a moment.")
+	}
 	// Ack SYNC with a deferred EPHEMERAL response (flags 64) — the async edit stays
-	// ephemeral, so a link URL is never shown to the whole channel.
+	// ephemeral, so a link URL is never shown to the whole channel. A duplicate
+	// delivery lands here too: the original already answered, and this ack is all
+	// Discord is waiting for.
 	return discordDeferredEphemeral(c)
 }
 

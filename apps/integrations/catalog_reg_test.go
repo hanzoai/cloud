@@ -13,7 +13,7 @@ import "testing"
 func TestCatalogProvidersAreRegistered(t *testing.T) {
 	want := []string{
 		// social
-		"x", "linkedin", "facebook", "instagram", "threads", "pinterest", "reddit", "tiktok",
+		"linkedin", "facebook", "instagram", "threads", "pinterest", "reddit", "tiktok",
 		// video
 		"youtube", "twitch",
 		// productivity

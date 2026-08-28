@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	// sqlpool.Open is the ONE opener: it renders this subsystem's path from the
 	// system namespace, opens it under the key cek derives for that name, and
@@ -136,17 +137,35 @@ CREATE TABLE IF NOT EXISTS channel_send (
 -- upserted ONLY from allowed inbound, so an org can drive only rooms it was
 -- messaged from. reply_root='' for discord; teams stores the JWT-verified
 -- serviceURL.
+--
+-- expires_at is when that capability lapses, in Unix seconds, and 0 means it
+-- does not: a route minted by an ALLOWED sender lasts, a route minted so a
+-- PAIRING REPLY can be delivered lasts exactly as long as the pairing request
+-- does. Without it a stranger the org never approved left behind a permanent
+-- reply target, since an unapproved pairing lapses and nothing else here ever
+-- deletes a route.
 CREATE TABLE IF NOT EXISTS channel_route (
   org        TEXT NOT NULL,
   channel    TEXT NOT NULL,
   room_id    TEXT NOT NULL,
   reply_root TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (org, channel, room_id)
 );
 `
-	_, err := st.db.Exec(ddl)
-	return err
+	if _, err := st.db.Exec(ddl); err != nil {
+		return err
+	}
+	// A file written before routes could expire has the table without the
+	// column. SQLite has no IF NOT EXISTS for a column, and re-adding one is a
+	// duplicate-column error rather than a broken database, so the second run is
+	// the no-op.
+	if _, err := st.db.Exec(`ALTER TABLE channel_route ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	return nil
 }
 
 func (st *store) Close() error { return st.db.Close() }
@@ -285,21 +304,35 @@ func (st *store) finishSend(ctx context.Context, org, channel, idem, messageID s
 // ── routes (inbound-learned reply targets) ───────────────────────────────────
 
 // upsertRoute records an allowed inbound room as a send target. Called only on
-// the allow and pair branches — a blocked sender mints no route.
-func (st *store) upsertRoute(ctx context.Context, org, channel, roomID, replyRoot string, now int64) error {
-	_, err := st.db.ExecContext(ctx, `INSERT INTO channel_route (org, channel, room_id, reply_root, updated_at)
-  VALUES (?,?,?,?,?)
-  ON CONFLICT (org, channel, room_id) DO UPDATE SET reply_root = excluded.reply_root, updated_at = excluded.updated_at`,
-		org, channel, roomID, replyRoot, now)
+// the allow and pair branches — a blocked sender mints no route. expires is when
+// the capability lapses, or 0 for one that does not.
+//
+// The two ways a row can already be there decide the merge: a lasting route is
+// never shortened to a pairing's hour, and a pairing route the org then approved
+// becomes lasting on the next allowed message. So 0 wins, and otherwise the
+// later expiry does.
+func (st *store) upsertRoute(ctx context.Context, org, channel, roomID, replyRoot string, now, expires int64) error {
+	_, err := st.db.ExecContext(ctx, `INSERT INTO channel_route (org, channel, room_id, reply_root, updated_at, expires_at)
+  VALUES (?,?,?,?,?,?)
+  ON CONFLICT (org, channel, room_id) DO UPDATE SET
+    reply_root = excluded.reply_root,
+    updated_at = excluded.updated_at,
+    expires_at = CASE WHEN excluded.expires_at = 0 OR channel_route.expires_at = 0 THEN 0
+                      ELSE MAX(channel_route.expires_at, excluded.expires_at) END`,
+		org, channel, roomID, replyRoot, now, expires)
 	return err
 }
 
 // routeFor returns the stored reply root for a room; ok=false when the org has
-// never received allowed inbound from it.
-func (st *store) routeFor(ctx context.Context, org, channel, roomID string) (string, bool, error) {
+// never received allowed inbound from it, or when the capability that minted the
+// row has lapsed. The expiry is read here and not left to gc: gc rides inbound
+// traffic, so a room nobody writes to again would keep an expired route for as
+// long as the org stayed quiet.
+func (st *store) routeFor(ctx context.Context, org, channel, roomID string, now int64) (string, bool, error) {
 	var root string
 	err := st.db.QueryRowContext(ctx, `SELECT reply_root FROM channel_route
-  WHERE org = ? AND channel = ? AND room_id = ?`, org, channel, roomID).Scan(&root)
+  WHERE org = ? AND channel = ? AND room_id = ? AND (expires_at = 0 OR expires_at > ?)`,
+		org, channel, roomID, now).Scan(&root)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
@@ -311,12 +344,16 @@ func (st *store) routeFor(ctx context.Context, org, channel, roomID string) (str
 
 // ── retention ────────────────────────────────────────────────────────────────
 
-// gc drops inbox rows past retention and send keys past the idempotency replay
-// window. Ridden opportunistically from ingest (bounded to once per 10 min).
+// gc drops inbox rows past retention, send keys past the idempotency replay
+// window, and routes whose capability has lapsed. Ridden opportunistically from
+// ingest (bounded to once per 10 min).
 func (st *store) gc(ctx context.Context, now int64) error {
 	if _, err := st.db.ExecContext(ctx, `DELETE FROM channel_inbox WHERE created_at < ?`, now-inboxKeepSec); err != nil {
 		return err
 	}
-	_, err := st.db.ExecContext(ctx, `DELETE FROM channel_send WHERE ts < ?`, now-sendKeepSec)
+	if _, err := st.db.ExecContext(ctx, `DELETE FROM channel_send WHERE ts < ?`, now-sendKeepSec); err != nil {
+		return err
+	}
+	_, err := st.db.ExecContext(ctx, `DELETE FROM channel_route WHERE expires_at != 0 AND expires_at <= ?`, now)
 	return err
 }

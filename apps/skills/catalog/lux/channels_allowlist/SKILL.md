@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `channel` | query | no | string | Channel is the transport to read: discord, slack, teams or telegram. Required; an unknown value is a 404. |
+| `channel` | query | no | string | Channel is the transport to read: discord, slack, teams, telegram or whatsapp. Required; an unknown value is a 404. |
 
 ## Response
 

@@ -3,6 +3,7 @@ package channels
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
@@ -29,7 +30,7 @@ import (
 // being guessed at here.
 var whatsappTransport = transport{
 	id:        "whatsapp",
-	caps:      capabilities{DM: true, Media: true},
+	caps:      capabilities{DM: true},
 	normalize: whatsappNormalize,
 	send:      whatsappEgress,
 }
@@ -38,6 +39,10 @@ var whatsappTransport = transport{
 // the business phone-number id that received the message — the account, since
 // one org can hold several numbers — and Channel is the sender's number, which
 // is also the only address a reply can go to.
+//
+// The wamid does two jobs and is filed under both: it dedupes the delivery, and
+// it is the message a reply quotes (Meta renders `context.message_id` as a
+// quoted reply). Telegram files its triggering message id the same way.
 func whatsappNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 	in := ev
 	if strings.TrimSpace(in.Channel) == "" {
@@ -50,13 +55,14 @@ func whatsappNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 		// Kind is DM unconditionally: the Cloud API has no other room to be.
 		Room:        Room{ID: in.Channel, Kind: RoomDM},
 		Text:        in.Text,
+		ReplyTo:     in.DedupeKey,
 		Idempotency: in.DedupeKey,
 	}, true
 }
 
 // whatsappDoor is the send path; tests spy it, prod never repoints.
-var whatsappDoor = func(ctx context.Context, to, replyTo, text string) (string, error) {
-	return post(ctx, plane.ChatSendIn{Provider: "whatsapp", Room: to, ReplyTo: replyTo, Text: text})
+var whatsappDoor = func(ctx context.Context, org, to, replyTo, text string) (string, error) {
+	return post(ctx, org, plane.ChatSendIn{Provider: "whatsapp", Room: to, ReplyTo: replyTo, Text: text})
 }
 
 // whatsappEgress sends after the tenancy gate. A channel_route row exists only
@@ -64,16 +70,17 @@ var whatsappDoor = func(ctx context.Context, to, replyTo, text string) (string, 
 // org's verified capability to reply to it — the same rule discord uses, and
 // the one the 24-hour window makes load-bearing rather than merely tidy.
 func whatsappEgress(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error) {
-	_, ok, err := s.State.store.routeFor(ctx, org, "whatsapp", m.Room.ID)
+	now := time.Now().Unix()
+	_, ok, err := s.State.store.routeFor(ctx, org, "whatsapp", m.Room.ID, now)
 	if err != nil {
 		return Delivery{}, err
 	}
 	if !ok {
 		return Delivery{}, errNoRoute
 	}
-	id, err := whatsappDoor(ctx, m.Room.ID, m.ReplyTo, m.Text)
+	id, err := whatsappDoor(ctx, org, m.Room.ID, m.ReplyTo, renderText(m))
 	if err != nil {
 		return Delivery{}, err
 	}
-	return Delivery{MessageID: id}, nil
+	return Delivery{MessageID: id, Timestamp: now}, nil
 }

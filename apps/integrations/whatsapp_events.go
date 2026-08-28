@@ -135,9 +135,10 @@ func parseWhatsAppEvent(raw []byte) (whatsappInbound, bool) {
 //
 // It answers 200 for anything it cannot act on. Meta retries a non-2xx with
 // backoff and eventually disables the subscription, so a status callback or an
-// unbound number must not read as a delivery failure — the only refusals are an
-// unconfigured endpoint and a bad signature, which are ours to fix and not
-// Meta's to retry.
+// unbound number must not read as a delivery failure. It refuses an unconfigured
+// endpoint and a bad signature, which are ours to fix rather than Meta's to
+// retry, and a message it could not take, which is exactly what a redelivery
+// repairs.
 func whatsappWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	channelReady()
 	if whatsappAppSecret() == "" {
@@ -157,28 +158,11 @@ func whatsappWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		s.Log.Warn("whatsapp: message to an unbound number", "account", m.Account)
 		return c.NoContent(http.StatusOK)
 	}
-	if !channelLim.acquire(org) {
-		s.Log.Warn("whatsapp: at capacity, shedding for retry", "org", org)
-		return zip.Errorf(http.StatusTooManyRequests, "whatsapp agent pool at capacity")
-	}
-
 	// Meta redelivers on any non-2xx, so the same message id arrives more than
-	// once as a matter of course. MarkEvent is what makes a redelivery free.
-	fresh, err := s.State.store.MarkEvent(c.Context(), "whatsapp", m.MessageID)
-	if err != nil {
-		channelLim.release(org)
-		s.Log.Warn("whatsapp: dedupe error, skipping", "err", err)
-		return c.NoContent(http.StatusOK)
-	}
-	if !fresh {
-		channelLim.release(org)
-		return c.NoContent(http.StatusOK)
-	}
-	if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
-		s.Log.Warn("whatsapp: dedupe gc", "err", gerr)
-	}
-
-	emitIngress(org, Inbound{
+	// once as a matter of course, and the dedupe inside emitIngress is what makes
+	// a redelivery free. An event it could not take answers a retriable non-2xx
+	// for the same reason: nothing was recorded, so the redelivery is the recovery.
+	if !emitIngress(c.Context(), s, org, Inbound{
 		Provider:   "whatsapp",
 		ExternalID: m.Account,
 		User:       m.From,
@@ -187,6 +171,8 @@ func whatsappWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		Channel:   m.From,
 		Text:      m.Text,
 		DedupeKey: m.MessageID,
-	}, "")
+	}, "") {
+		return zip.Errorf(http.StatusTooManyRequests, "whatsapp message not taken; please redeliver")
+	}
 	return c.NoContent(http.StatusOK)
 }

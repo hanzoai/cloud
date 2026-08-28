@@ -27,32 +27,73 @@ import (
 // real traffic, silently, for as long as the client existed. This is the same
 // mistake plane.AgentsRunOnBehalf was written to undo, one client over.
 
-// emitIngress hands one event to the channels inbox over the plane, on a
-// detached goroutine with its own bounded context, so the billed webhook path is
-// never delayed. No request-scoped context crosses the hop — everything the
-// consumer needs rides the event.
-func emitIngress(org string, in Inbound, replyRoot string) {
+// emitIngress takes one authenticated event and delivers it to the channels
+// inbox: a slot, the durable dedupe, then a detached dispatch over the plane.
+// It answers whether it took the event — false means NOTHING was recorded and
+// nothing was sent, so the caller answers the platform something that invites a
+// redelivery. A duplicate is taken (the original already ran), so the caller has
+// nothing left to do either way it answers true.
+//
+// The three live together because the ORDER is the contract. The slot is taken
+// before the dedupe write, so a shed cannot burn an event id and the redelivery
+// arrives clean; the dedupe is written before the dispatch, so a redelivery of an
+// event that already ran does not run twice.
+//
+// Each adapter used to spell that order out for itself and then hand its slot to
+// the goroutine below, which released it on no path at all. So every dispatched
+// event leaked one, the pool is global with a small per-org share, and a few
+// tenants of ordinary traffic wedged every tenant on every transport until the
+// process restarted. The slot is acquired and released in this one function now,
+// which is what makes that unwritable rather than remembered.
+//
+// The bound is what this process still spends per event: a goroutine and a plane
+// call. The agent turn it was originally sized for runs in channels, behind
+// channels' own pool; slack's in-process turns are the other holder here, and
+// they take their slot beside channelSpawn, which releases it.
+func emitIngress(ctx context.Context, s *cloud.Service[state], org string, in Inbound, replyRoot string) bool {
+	channelReady()
+	if !channelLim.acquire(org) {
+		s.Log.Warn("integrations: at capacity, event not taken", "provider", in.Provider, "org", org)
+		return false
+	}
+	// Fail CLOSED on an unreadable ledger, and say so on the wire: nothing was
+	// recorded, so a redelivery costs nothing and may well succeed, where a 200
+	// would drop the message with no second chance.
+	fresh, err := s.State.store.MarkEvent(ctx, in.Provider, in.DedupeKey)
+	if err != nil {
+		channelLim.release(org)
+		s.Log.Warn("integrations: dedupe unreadable, event not taken", "provider", in.Provider, "err", err)
+		return false
+	}
+	if !fresh {
+		channelLim.release(org)
+		return true
+	}
+	if _, gerr := s.State.store.GCEvents(ctx, staleEventCutoff()); gerr != nil {
+		s.Log.Warn("integrations: dedupe gc", "provider", in.Provider, "err", gerr)
+	}
+	// Detached, with its own bounded context, so the billed webhook path is never
+	// delayed. No request-scoped context crosses the hop — everything the consumer
+	// needs rides the event.
 	go func() {
+		defer channelLim.release(org)
 		defer func() { _ = recover() }()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		out, err := plane.Ask[plane.ChannelsIngestIn, plane.ChannelsIngestOut](ctx, "channels", plane.ChannelsIngest,
 			ingestIn(org, in, replyRoot))
-		// SAID, not swallowed. The whole point of this change is that a dropped
+		// SAID, not swallowed. The whole point of this client is that a dropped
 		// event used to be invisible; an unreachable inbox must not become the
 		// same silence one layer down.
 		if err != nil {
-			if m := mounted; m != nil {
-				m.Log.Warn("integrations: channels ingest", "provider", in.Provider, "org", org, "err", err)
-			}
+			s.Log.Warn("integrations: channels ingest", "provider", in.Provider, "org", org, "err", err)
 			return
 		}
 		if out != nil && !out.Taken {
-			if m := mounted; m != nil {
-				m.Log.Debug("integrations: channels declined event", "provider", in.Provider, "org", org)
-			}
+			s.Log.Debug("integrations: channels declined event", "provider", in.Provider, "org", org)
 		}
 	}()
+	return true
 }
 
 // LinkedSubject returns the Hanzo account subject bound to (org, provider,
@@ -235,12 +276,22 @@ func serveSend() {
 // by the adapter from a signed id. It is safe because the send can only spend
 // THAT org's own token — TokenFor fails closed for an org that never connected —
 // and reads nothing across tenants.
+//
+// So the org is REQUIRED here, at the boundary, rather than left to each
+// transport to notice. Custody is what the org buys: TokenFor's validOrg refuses
+// an empty one and telegram's chat bind can never match it, so a caller that
+// omitted it reached a per-transport error message on two transports and spent a
+// shared app credential unchecked on two others. One refusal, named once, and a
+// dropped org is loud where it was silent.
 func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOut, error) {
 	if mounted == nil {
 		return nil, fmt.Errorf("integrations: not mounted")
 	}
 	if in == nil || strings.TrimSpace(in.Text) == "" {
 		return nil, fmt.Errorf("integrations: chat send needs text")
+	}
+	if strings.TrimSpace(in.Org) == "" {
+		return nil, fmt.Errorf("integrations: chat send needs the org it sends as")
 	}
 	switch in.Provider {
 	case "slack":
