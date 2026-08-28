@@ -139,17 +139,19 @@ func TestEntitlements_UnknownPlanErrors(t *testing.T) {
 }
 
 // TestPlans_Ladder pins the commercial model on the surface GET
-// /v1/plan/subscriptions serves: the personal ladder dev $19 / max $99, and team $24
-// per-seat with a 2-seat minimum. Stripe lookup keys are part of the contract — each
-// carries its price, so a reprice mints a new key rather than moving an immutable
-// one, which is why team's key is hanzo_team_24 and not the repriced hanzo_team_25.
+// /v1/plan/subscriptions serves: free, dev $19 ($199/yr), max $99 ($999/yr) and
+// team $25 a seat ($250/seat/yr, minimum two), with enterprise quoted. Stripe
+// lookup keys are part of the contract — each carries its price, so a reprice
+// mints a new key rather than moving an immutable one, which is why team's key is
+// hanzo_team_25 again rather than the hanzo_team_24 of the interim $24 price.
 //
 // This is a CANARY on a money surface: it is meant to fail loudly when the catalog
 // reprices, so the change is deliberate and reviewed. It last fired for real when
 // plans v1.6.0 retired go $9 and pro $49 to leave a shorter ladder, and repriced
-// team 25 -> 24; before that when v1.4.10 replaced the pro $20 / plus $100 / max
-// $200 ladder — the same change that retired plus/team-max/custom (see
-// paid_test.go).
+// team 25 -> 24; then again at v1.8.0, which put team back to $25 and gave every
+// paid rung a chosen annual TOTAL; before that when v1.4.10 replaced the pro $20 /
+// plus $100 / max $200 ladder — the same change that retired plus/team-max/custom
+// (see paid_test.go).
 func TestPlans_Ladder(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
@@ -166,8 +168,9 @@ func TestPlans_Ladder(t *testing.T) {
 			} `json:"limits"`
 			PriceRef struct {
 				Recurring struct {
-					PerSeat         bool   `json:"per_seat"`
-					StripeLookupKey string `json:"stripe_lookup_key"`
+					PerSeat         bool    `json:"per_seat"`
+					StripeLookupKey string  `json:"stripe_lookup_key"`
+					AnnualTotalUSD  float64 `json:"annual_total_usd"`
 				} `json:"recurring"`
 			} `json:"price_ref"`
 		} `json:"plans"`
@@ -175,8 +178,14 @@ func TestPlans_Ladder(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	price := map[string]float64{"free": 0, "dev": 19, "max": 99, "team": 24}
-	lookup := map[string]string{"free": "", "dev": "hanzo_dev_19", "max": "hanzo_max_99", "team": "hanzo_team_24"}
+	price := map[string]float64{"free": 0, "dev": 19, "max": 99, "team": 25}
+	lookup := map[string]string{"free": "", "dev": "hanzo_dev_19", "max": "hanzo_max_99", "team": "hanzo_team_25"}
+	// The annual TOTAL, which is the figure actually charged. Read here rather than
+	// derived from the monthly, because it is chosen: $199 and $999 are 12.72% and
+	// 15.91% off twelve months, so no percentage produces both. The per-month
+	// display is that total over twelve and cannot always be exact — $199/12 is
+	// 16.5833… — which is why nothing may bill from it.
+	annual := map[string]float64{"dev": 199, "max": 999, "team": 250}
 	seen := map[string]bool{}
 	for _, p := range body.Plans {
 		want, ok := price[p.ID]
@@ -190,6 +199,18 @@ func TestPlans_Ladder(t *testing.T) {
 		if p.PriceRef.Recurring.StripeLookupKey != lookup[p.ID] {
 			t.Errorf("%s stripe lookup = %q, want %q", p.ID, p.PriceRef.Recurring.StripeLookupKey, lookup[p.ID])
 		}
+		if wantYear, priced := annual[p.ID]; priced {
+			if p.PriceRef.Recurring.AnnualTotalUSD != wantYear {
+				t.Errorf("%s annual_total_usd = %v, want %v", p.ID, p.PriceRef.Recurring.AnnualTotalUSD, wantYear)
+			}
+			if wantYear >= want*12 {
+				t.Errorf("%s annual $%v is not cheaper than twelve months ($%v)", p.ID, wantYear, want*12)
+			}
+		}
+		// Team is the ONE rung that multiplies by seats, and it carries a floor of
+		// two — a "team" of one is an individual plan under another name. Every
+		// other rung must not price per seat, so a personal tier that silently
+		// gained a seat multiplier fails here.
 		if p.ID == "team" {
 			if !p.PriceRef.Recurring.PerSeat {
 				t.Error("team must price per seat")
@@ -197,11 +218,22 @@ func TestPlans_Ladder(t *testing.T) {
 			if p.Limits.MinSeats != 2 {
 				t.Errorf("team limits.minSeats = %v, want 2", p.Limits.MinSeats)
 			}
+		} else if p.PriceRef.Recurring.PerSeat {
+			t.Errorf("%s prices per seat; only team does", p.ID)
 		}
 	}
 	for id := range price {
 		if !seen[id] {
 			t.Errorf("plan %q missing from subscriptions", id)
+		}
+	}
+	// The withdrawn rungs must stay withdrawn: the catalog is what a fresh
+	// deployment seeds and sells from, so a slug that reappears here reappears on
+	// the pricing page.
+	for _, p := range body.Plans {
+		switch p.ID {
+		case "go", "pro":
+			t.Errorf("%s was withdrawn and is being sold again", p.ID)
 		}
 	}
 }
@@ -210,6 +242,10 @@ func TestPlans_Ladder(t *testing.T) {
 // hanzo.team: a signed license for dev, max AND team must carry
 // licensing.product:team, and free (the entry tier, since go and pro were retired)
 // must NOT — the gate fails closed for a tier that never bought team access.
+//
+// It reads the ENTITLEMENT rather than the plan id, which is why it survived team
+// being withdrawn and restored: the product called team is granted by three rungs,
+// and the per-seat rung is only one of the ways to buy it.
 func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	prev := host
 	host = newHost(t)
@@ -227,6 +263,8 @@ func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 		if !slices.Contains(feats, "licensing.product:team") {
 			t.Errorf("%s license_features = %v, want licensing.product:team", id, feats)
 		}
+		// team.guests is what a NON-team rung gets: guest seats on somebody else's
+		// team. The team rung buys seats outright, so it carries no guest count.
 		if id != "team" && ents["team.guests"] != float64(3) {
 			t.Errorf("%s team.guests = %v, want 3", id, ents["team.guests"])
 		}
@@ -236,8 +274,9 @@ func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	} else if !slices.Contains(feats, "licensing.product:engine") {
 		t.Errorf("max license_features = %v, want licensing.product:engine", feats)
 	}
-	// free is the entry tier now that go and pro are retired, and the gate has to
-	// fail closed for it the same way: a tier that bought nothing carries nothing.
+	// The negative half, and it has to keep existing or the gate only ever proves
+	// that SOMETHING grants team. free is the entry tier now that go and pro are
+	// retired: it resolves, and a tier that bought nothing must carry nothing.
 	if _, feats, found, err := LicenseEntitlement(ctx, "free"); err != nil || !found {
 		t.Fatalf("LicenseEntitlement(free): found=%v err=%v", found, err)
 	} else if slices.Contains(feats, "licensing.product:team") {

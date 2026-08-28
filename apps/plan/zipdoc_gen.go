@@ -33,7 +33,7 @@ func init() {
 			"planEntitlements.entitlements":     "Entitlements is the canonical namespaced entitlement block derived from the\nplan's limits and addons, where -1 means unlimited.",
 			"planEntitlements.id":               "ID is the plan id or slug that was resolved, as it was requested.",
 			"planEntitlements.license_features": "LicenseFeatures is the flat, sorted feature list a signed license carries,\nderived from the entitlements.",
-			"planRef.id":                        "ID is the plan's catalog id or slug — \"pro\", \"team\", \"world-enterprise\",\n\"rpc-growth\". Both are matched, so a slug resolves the plan it names.",
+			"planRef.id":                        "ID is the plan's catalog id or slug — \"dev\", \"max\", \"team\", \"rpc-growth\".\nBoth are matched, so a slug resolves the plan it names. A withdrawn id still\nresolves for a renewal, which is why this takes an id rather than a ladder\nposition.",
 		},
 		Example: json.RawMessage(`{"id":"team"}`),
 	})
@@ -63,14 +63,14 @@ func init() {
 	zip.Describe("GET /v1/plan/resolve/:id", zip.Doc{
 		Description: "Resolves one plan to everything a consumer of the catalog needs at\nonce: its canonical entitlement block, the flat license-feature list a signed\nlicense carries, its billing reference, and the catalog it came from. The id\nmay be the plan's id or its slug, and it is resolved against the caller's\ncatalog, so a reseller's override wins over the canonical record. An id no\ncatalog holds answers 404.",
 		Fields: map[string]string{
-			"planRef.id":                      "ID is the plan's catalog id or slug — \"pro\", \"team\", \"world-enterprise\",\n\"rpc-growth\". Both are matched, so a slug resolves the plan it names.",
+			"planRef.id":                      "ID is the plan's catalog id or slug — \"dev\", \"max\", \"team\", \"rpc-growth\".\nBoth are matched, so a slug resolves the plan it names. A withdrawn id still\nresolves for a renewal, which is why this takes an id rather than a ladder\nposition.",
 			"planResolution.entitlements":     "Entitlements is the canonical namespaced entitlement block derived from the\nplan's limits and addons — keys like \"ai.tokens_per_min\" and\n\"world.api_rate_limit\", where -1 means unlimited.",
 			"planResolution.id":               "ID is the plan's catalog id.",
 			"planResolution.license_features": "LicenseFeatures is the flat, sorted feature list a signed license carries,\nderived from the entitlements — \"ai.premium\", \"licensing.product:team\".",
 			"planResolution.price_ref":        "PriceRef is the plan's billing reference — currency, the recurring monthly\nand annual amounts, whether it prices per seat, its Stripe lookup key and\nits metered components.",
 			"planResolution.tenant_id":        "TenantID is the catalog the record came from: \"hanzo\" for the canonical\ncatalog, a reseller org for that reseller's override.",
 		},
-		Example: json.RawMessage(`{"id":"pro"}`),
+		Example: json.RawMessage(`{"id":"dev"}`),
 	})
 	zip.Describe("GET /v1/plan/schema", zip.Doc{
 		Description: "Returns the two JSON Schema documents this surface speaks:\nentitlements.schema.json, which declares every entitlement key with its type,\nunit and enum, and plan.schema.json, which a catalog plan record conforms to.",
