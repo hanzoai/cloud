@@ -105,6 +105,13 @@ func init() {
 // A silent operation is skipped rather than given an empty sentence: Describe refuses
 // an empty declaration, and correctly — a sentence nobody wrote is not a sentence.
 func describeAI(doc map[string]any) {
+	// The shapes ai's responses name. They have to cross with them or every $ref
+	// that comes across resolves to nothing.
+	if c, ok := doc["components"].(map[string]any); ok {
+		if s, ok := c["schemas"].(map[string]any); ok {
+			openapi.Schemas(s)
+		}
+	}
 	paths, _ := doc["paths"].(map[string]any)
 	for path, raw := range paths {
 		item, _ := raw.(map[string]any)
