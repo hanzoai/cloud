@@ -30,35 +30,8 @@ func init() {
 	}
 }
 
-// pkceChallenge is the PKCE code_challenge/verifier for providers that require
-// PKCE on a confidential client (X is the notable one). It is `plain`, so the
-// challenge and verifier are the same string and no per-request state has to be
-// carried between the authorize and the callback — which matters here because
-// the callback is state-authed and stateless by design.
-//
-// `plain` is weaker than S256 and the reason it is acceptable is specific: PKCE
-// defends a PUBLIC client whose secret is on the user's device. This is a
-// confidential server-side client that also sends its client_secret, so the
-// exchange is already bound to something an attacker does not have.
-const pkceChallenge = "hanzo-connectors-pkce-v1-plain-challenge"
-
 var catalog = []spec{
 	// ── Social ────────────────────────────────────────────────────────────────
-	{
-		id: "x", name: "X", desc: "Post to X and read your account's timeline.",
-		category:  "Social",
-		authURL:   "https://twitter.com/i/oauth2/authorize",
-		tokenURL:  "https://api.x.com/2/oauth2/token",
-		revokeURL: "https://api.x.com/2/oauth2/revoke",
-		scopes:    []string{"tweet.read", "tweet.write", "users.read", "offline.access"},
-		// X requires PKCE even for a confidential client, and rejects the
-		// exchange without a matching verifier.
-		authExtra:       map[string]string{"code_challenge": pkceChallenge, "code_challenge_method": "plain"},
-		basicAuth:       true,
-		clientIDEnv:     "X_CLIENT_ID",
-		clientSecretEnv: "X_CLIENT_SECRET",
-		identify:        identifyX,
-	},
 	{
 		id: "linkedin", name: "LinkedIn", desc: "Share posts to your LinkedIn profile or page.",
 		category:        "Social",
@@ -200,19 +173,6 @@ func identifyOIDC(endpoint string) func(context.Context, string) (identity, erro
 		}
 		return identity{ExternalID: u.Sub, Label: firstNonEmpty(u.Email, u.Name)}, nil
 	}
-}
-
-func identifyX(ctx context.Context, token string) (identity, error) {
-	var r struct {
-		Data struct {
-			ID       string `json:"id"`
-			Username string `json:"username"`
-		} `json:"data"`
-	}
-	if err := getJSON(ctx, "https://api.x.com/2/users/me", token, &r); err != nil {
-		return identity{}, err
-	}
-	return identity{ExternalID: r.Data.ID, Label: "@" + r.Data.Username}, nil
 }
 
 func identifyGitHub(ctx context.Context, token string) (identity, error) {

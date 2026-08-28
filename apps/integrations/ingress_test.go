@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/plane"
 )
 
 // ingress_test.go proves the two client pieces channels rides: the SendDiscord
@@ -201,10 +203,16 @@ func TestIngestEventCarriesTheVerifiedFields(t *testing.T) {
 }
 
 func TestEmitIngressNeverDelaysTheWebhook(t *testing.T) {
-	// No plane peer here, so the call fails — which is the point: the webhook
+	newApp(t, newKMS(t))
+	// No plane peer here, so the dispatch fails — which is the point: the webhook
 	// path must return regardless of whether the inbox is reachable.
 	done := make(chan struct{})
-	go func() { defer close(done); emitIngress("org1", Inbound{Provider: "slack"}, "") }()
+	go func() {
+		defer close(done)
+		if !emitIngress(context.Background(), mounted, "org1", Inbound{Provider: "slack", DedupeKey: "e-nodelay"}, "") {
+			t.Error("an unreachable inbox must not stop the event being taken")
+		}
+	}()
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
@@ -213,4 +221,77 @@ func TestEmitIngressNeverDelaysTheWebhook(t *testing.T) {
 	// Give the detached goroutine a beat to fail and unwind; the process staying
 	// alive IS the assertion.
 	time.Sleep(50 * time.Millisecond)
+}
+
+// A taken event RETURNS its pool slot, and it is the dispatching path that used
+// to keep it: the slot was acquired in the handler and released by the goroutine
+// the turn ran in, and the turn moved to channels, so nothing released it. The
+// pool is global with a small per-org share, so a few tenants of ordinary
+// traffic wedged every tenant on every transport until the process restarted.
+//
+// A cap-1 pool makes that deterministic: the second event can only be taken if
+// the first gave its slot back.
+func TestEmitIngressReleasesTheSlotItTook(t *testing.T) {
+	newApp(t, newKMS(t))
+	channelReady()
+	saved := channelLim
+	channelLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { channelLim = saved })
+
+	const org = "leakorg"
+	for i, key := range []string{"e-1", "e-2", "e-3"} {
+		if !emitIngress(context.Background(), mounted, org, Inbound{Provider: "slack", DedupeKey: key}, "") {
+			t.Fatalf("event %d was not taken; the pool is holding slots nothing released", i+1)
+		}
+		waitForSlot(t, org)
+	}
+	// Nothing is in flight, so the pool is empty for every tenant.
+	if !channelLim.acquire(org) {
+		t.Fatal("the pool never came back; a dispatched event leaked its slot")
+	}
+	channelLim.release(org)
+}
+
+// waitForSlot blocks until the org's in-flight dispatch has unwound, so the next
+// acquire measures the release rather than racing it.
+func waitForSlot(t *testing.T, org string) {
+	t.Helper()
+	for range 400 {
+		if channelLim.acquire(org) {
+			channelLim.release(org)
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("the dispatch never released its slot")
+}
+
+// A send names the org it sends AS, and the boundary refuses one that does not.
+// The org is what buys the credential — TokenFor's validOrg refuses an empty one
+// and telegram's chat bind can never match it — so a caller that dropped it
+// reached a per-transport error on two transports and spent a shared app
+// credential unchecked on the other two.
+func TestChatSendNeedsTheOrgItSendsAs(t *testing.T) {
+	newApp(t, newKMS(t))
+	t.Setenv(discordBotTokenEnv, "test-token")
+	rec := newDiscordMsgServer(t, http.StatusOK, `{"id":"m1"}`)
+
+	if _, err := planeChatSend(context.Background(),
+		&plane.ChatSendIn{Provider: "discord", Room: "123", Text: "hi"}); err == nil ||
+		!strings.Contains(err.Error(), "org") {
+		t.Fatalf("err = %v, want a refusal naming the org", err)
+	}
+	if rec.count() != 0 {
+		t.Fatal("an org-less send must be refused before any transport is spent")
+	}
+
+	// The same call, named, goes through — so the refusal is the missing org and
+	// nothing else.
+	if _, err := planeChatSend(context.Background(),
+		&plane.ChatSendIn{Org: "acme", Provider: "discord", Room: "123", Text: "hi"}); err != nil {
+		t.Fatalf("named send: %v", err)
+	}
+	if rec.count() != 1 {
+		t.Fatalf("transport calls = %d, want the named send to reach it", rec.count())
+	}
 }

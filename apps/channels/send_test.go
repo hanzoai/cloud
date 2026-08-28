@@ -59,7 +59,7 @@ func TestSendDiscordRouteCapability(t *testing.T) {
 		t.Fatal("binding gate must precede the transport")
 	}
 
-	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix()); err != nil {
+	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
 	res := req(t, e, http.MethodPost, "/v1/channels/discord/send", "acme", body)
@@ -97,7 +97,7 @@ func TestSendTeamsRouteCapability(t *testing.T) {
 		t.Fatal("binding gate must precede the transport")
 	}
 
-	if err := st.upsertRoute(ctx, "acme", "teams", conv, root, time.Now().Unix()); err != nil {
+	if err := st.upsertRoute(ctx, "acme", "teams", conv, root, time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
 	if r := req(t, e, http.MethodPost, "/v1/channels/teams/send", "acme", body); r.Code != http.StatusOK {
@@ -232,7 +232,7 @@ func TestSendIdempotency(t *testing.T) {
 	dc := spyDiscord(t)
 	ctx := context.Background()
 	st := e.store(t)
-	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix()); err != nil {
+	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
 	body := map[string]any{"room": map[string]any{"id": "999"}, "text": "x", "idempotency": "idem-1"}
@@ -276,7 +276,7 @@ func TestSendRetryAfterFailure(t *testing.T) {
 	dc := spyDiscord(t)
 	ctx := context.Background()
 	st := e.store(t)
-	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix()); err != nil {
+	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
 	body := map[string]any{"room": map[string]any{"id": "999"}, "text": "x", "idempotency": "k-r"}
@@ -323,7 +323,7 @@ func TestSendNoSecretsAtRest(t *testing.T) {
 	sl := spySlack(t)
 	ctx := context.Background()
 	st := e.store(t)
-	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix()); err != nil {
+	if err := st.upsertRoute(ctx, "acme", "discord", "999", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
 
@@ -392,7 +392,7 @@ func TestSendWhatsAppRouteCapability(t *testing.T) {
 		t.Fatal("binding gate must precede the transport")
 	}
 
-	if err := st.upsertRoute(ctx, "acme", "whatsapp", "15551234567", "", time.Now().Unix()); err != nil {
+	if err := st.upsertRoute(ctx, "acme", "whatsapp", "15551234567", "", time.Now().Unix(), 0); err != nil {
 		t.Fatalf("seed route: %v", err)
 	}
 	res := req(t, e, http.MethodPost, "/v1/channels/whatsapp/send", "acme", body)

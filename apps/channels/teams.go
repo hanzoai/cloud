@@ -14,8 +14,8 @@ import (
 // (integrations.SendTeams).
 
 // teamsDoor is the send path; tests spy it, prod never repoints.
-var teamsDoor = func(ctx context.Context, serviceURL, conversationID, text string) error {
-	_, err := post(ctx, plane.ChatSendIn{Provider: "teams", Root: serviceURL, Room: conversationID, Text: text})
+var teamsDoor = func(ctx context.Context, org, serviceURL, conversationID, text string) error {
+	_, err := post(ctx, org, plane.ChatSendIn{Provider: "teams", Root: serviceURL, Room: conversationID, Text: text})
 	return err
 }
 
@@ -53,17 +53,18 @@ func teamsNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 // (no attacker-chosen serviceURL) and the tenancy gate (an org can drive only
 // conversations it was messaged from).
 func teamsEgress(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error) {
-	root, ok, err := s.State.store.routeFor(ctx, org, "teams", m.Room.ID)
+	now := time.Now().Unix()
+	root, ok, err := s.State.store.routeFor(ctx, org, "teams", m.Room.ID, now)
 	if err != nil {
 		return Delivery{}, err
 	}
 	if !ok || root == "" {
 		return Delivery{}, errNoRoute
 	}
-	if err := teamsDoor(ctx, root, m.Room.ID, renderText(m)); err != nil {
+	if err := teamsDoor(ctx, org, root, m.Room.ID, renderText(m)); err != nil {
 		return Delivery{}, err
 	}
 	// The Bot Connector activity id is not surfaced by the existing helper —
 	// accepted tradeoff; the receipt carries the send time only.
-	return Delivery{MessageID: "", Timestamp: time.Now().Unix()}, nil
+	return Delivery{MessageID: "", Timestamp: now}, nil
 }

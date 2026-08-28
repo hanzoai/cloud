@@ -13,12 +13,12 @@ import (
 	"github.com/hanzoai/iam/pkg/pkce"
 )
 
-// TestTwitterPKCEAuthorizeURL proves the authorize URL carries an S256 code_challenge
+// TestXPKCEAuthorizeURL proves the authorize URL carries an S256 code_challenge
 // that is the HASH of the verifier — the verifier itself never appears — and the scope
 // is least-privilege read (no write).
-func TestTwitterPKCEAuthorizeURL(t *testing.T) {
+func TestXPKCEAuthorizeURL(t *testing.T) {
 	creds := OAuthConfig{ClientID: "cid", ClientSecret: "csecret"}
-	raw, err := twitterAuthorize(creds, "https://api.hanzo.ai/v1/integrations/twitter/callback", "st8")
+	raw, err := xAuthorize(creds, "https://api.hanzo.ai/v1/integrations/x/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestTwitterPKCEAuthorizeURL(t *testing.T) {
 	if q.Get("code_challenge_method") != "S256" {
 		t.Fatalf("must be S256, got %q", q.Get("code_challenge_method"))
 	}
-	verifier := twitterVerifier(creds)
+	verifier := xVerifier(creds)
 	challenge := q.Get("code_challenge")
 	if challenge == "" {
 		t.Fatal("no code_challenge")
@@ -51,18 +51,18 @@ func TestTwitterPKCEAuthorizeURL(t *testing.T) {
 	}
 }
 
-// TestTwitterVerifierDeterministic proves the verifier is a stable, valid RFC-7636
+// TestXVerifierDeterministic proves the verifier is a stable, valid RFC-7636
 // verifier bound to the app credential, and that it differs when the secret differs.
-func TestTwitterVerifierDeterministic(t *testing.T) {
+func TestXVerifierDeterministic(t *testing.T) {
 	c1 := OAuthConfig{ClientID: "cid", ClientSecret: "s1"}
-	v1a, v1b := twitterVerifier(c1), twitterVerifier(c1)
+	v1a, v1b := xVerifier(c1), xVerifier(c1)
 	if v1a != v1b {
 		t.Fatal("verifier must be deterministic for the same credential")
 	}
 	if len(v1a) != 43 { // base64url(sha256) unpadded = 43 chars, in-range for PKCE
 		t.Fatalf("verifier length = %d, want 43", len(v1a))
 	}
-	if v1a == twitterVerifier(OAuthConfig{ClientID: "cid", ClientSecret: "s2"}) {
+	if v1a == xVerifier(OAuthConfig{ClientID: "cid", ClientSecret: "s2"}) {
 		t.Fatal("verifier must change when the client secret rotates")
 	}
 	if pkce.Challenge(v1a) == v1a {
@@ -70,15 +70,15 @@ func TestTwitterVerifierDeterministic(t *testing.T) {
 	}
 }
 
-// newTwitterMock stands in for X's token + /2/users/me endpoints. It records the
+// newXMock stands in for X's token + /2/users/me endpoints. It records the
 // Authorization header and posted form so a test can prove Basic client auth + the
 // matching code_verifier.
-type twitterMock struct {
+type xMock struct {
 	auth     string
 	verifier string
 }
 
-func newTwitterMock(t *testing.T, m *twitterMock) {
+func newXMock(t *testing.T, m *xMock) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -95,16 +95,16 @@ func newTwitterMock(t *testing.T, m *twitterMock) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	oldT, oldMe := twitterTokenURL, twitterMeURL
-	twitterTokenURL, twitterMeURL = srv.URL+"/2/oauth2/token", srv.URL+"/2/users/me"
-	t.Cleanup(func() { twitterTokenURL, twitterMeURL = oldT, oldMe })
+	oldT, oldMe := xTokenURL, xMeURL
+	xTokenURL, xMeURL = srv.URL+"/2/oauth2/token", srv.URL+"/2/users/me"
+	t.Cleanup(func() { xTokenURL, xMeURL = oldT, oldMe })
 }
 
-func TestTwitterExchangeBasicAuthAndVerifier(t *testing.T) {
-	m := &twitterMock{}
-	newTwitterMock(t, m)
+func TestXExchangeBasicAuthAndVerifier(t *testing.T) {
+	m := &xMock{}
+	newXMock(t, m)
 	creds := OAuthConfig{ClientID: "cid", ClientSecret: "csecret"}
-	res, err := twitterExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integrations/twitter/callback", "authcode")
+	res, err := xExchange(context.Background(), creds, "https://api.hanzo.ai/v1/integrations/x/callback", "authcode")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestTwitterExchangeBasicAuthAndVerifier(t *testing.T) {
 		t.Fatalf("exchange must authenticate the client with Basic, got %q", m.auth)
 	}
 	// The code_verifier sent MUST be the one the challenge in Authorize was derived from.
-	if m.verifier != twitterVerifier(creds) {
+	if m.verifier != xVerifier(creds) {
 		t.Fatalf("exchange code_verifier %q != derived verifier", m.verifier)
 	}
 	if res.Tokens[accessSecret] != "X-ACCESS-SECRET" || res.Tokens[refreshSecret] != "X-REFRESH-SECRET" {
@@ -128,23 +128,23 @@ func TestTwitterExchangeBasicAuthAndVerifier(t *testing.T) {
 	}
 }
 
-func TestTwitterExchangeRequiresSecret(t *testing.T) {
-	_, err := twitterExchange(context.Background(), OAuthConfig{ClientID: "cid"}, "redir", "code")
-	if err == nil || !strings.Contains(err.Error(), "TWITTER_CLIENT_SECRET") {
+func TestXExchangeRequiresSecret(t *testing.T) {
+	_, err := xExchange(context.Background(), OAuthConfig{ClientID: "cid"}, "redir", "code")
+	if err == nil || !strings.Contains(err.Error(), "X_CLIENT_SECRET") {
 		t.Fatalf("want a specific not-configured error, got %v", err)
 	}
 }
 
-func TestTwitterExchangeTokenFree(t *testing.T) {
+func TestXExchangeTokenFree(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error":"invalid_request"}`))
 	}))
 	t.Cleanup(srv.Close)
-	old := twitterTokenURL
-	twitterTokenURL = srv.URL + "/2/oauth2/token"
-	t.Cleanup(func() { twitterTokenURL = old })
-	_, err := twitterExchange(context.Background(), OAuthConfig{ClientID: "cid", ClientSecret: "top-secret-value"}, "redir", "code")
+	old := xTokenURL
+	xTokenURL = srv.URL + "/2/oauth2/token"
+	t.Cleanup(func() { xTokenURL = old })
+	_, err := xExchange(context.Background(), OAuthConfig{ClientID: "cid", ClientSecret: "top-secret-value"}, "redir", "code")
 	if err == nil || strings.Contains(err.Error(), "top-secret-value") {
 		t.Fatalf("exchange error must be present and secret-free: %v", err)
 	}

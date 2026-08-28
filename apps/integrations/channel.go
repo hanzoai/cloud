@@ -17,11 +17,11 @@ import (
 )
 
 // channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo entry point
-// shared by EVERY chat platform (Slack, Teams, Discord, Telegram). It owns
-// everything provider-blind — the normalized inbound message, the bounded per-org
-// agent-turn pool, the ONE agent brain (on-behalf-of RunOnBehalf), and the
-// per-user account-link binding — so a new platform is a thin ADAPTER (three edges:
-// inbound-auth, parse, reply), never a copy of the whole bridge.
+// shared by EVERY chat platform. It owns everything provider-blind — the
+// normalized inbound message, the bounded per-org pool, the ONE agent brain
+// (on-behalf-of RunOnBehalf), and the per-user account-link binding — so a new
+// platform is a thin ADAPTER (three edges: inbound-auth, parse, reply), never a
+// copy of the whole bridge.
 //
 // Each adapter's webhook does, in order: (1) authenticate at the platform's OWN
 // trust boundary (Slack HMAC / Teams Bot Framework JWT / Discord Ed25519 /
@@ -42,7 +42,7 @@ import (
 // adapter produces it AFTER it has authenticated the request and parsed the
 // payload. The core never sees a raw platform payload.
 type Inbound struct {
-	Provider   string // registry slug: "slack","teams","discord","telegram"
+	Provider   string // registry slug: "slack","teams","discord","telegram","whatsapp"
 	ExternalID string // workspace/tenant/guild/chat id → OrgForExternalID (isolation root)
 	User       string // platform-verified user id (billing/attribution subject via the link)
 	Channel    string // reply target (channel/conversation/chat id)
@@ -51,7 +51,7 @@ type Inbound struct {
 	DedupeKey  string // event/update/interaction id ("" ⇒ non-dedupable)
 }
 
-// ── bounded per-org agent-turn pool (shared across ALL platforms) ───────────
+// ── the bounded per-org pool (shared across ALL platforms) ──────────────────
 
 const (
 	// channelAgentTimeout bounds one async agent turn end-to-end (org resolve + run
@@ -70,7 +70,7 @@ const (
 
 var (
 	channelOnce sync.Once
-	channelLim  *orgLimiter // the ONE bounded agent-turn pool: global cap + per-org sub-limit
+	channelLim  *orgLimiter // the ONE bounded per-org pool for the work an event costs this process
 	channelSeen *seenSet    // single-use link-state nonces (process-lifetime)
 )
 
@@ -84,18 +84,22 @@ func channelReady() {
 	})
 }
 
-// channelSpawn runs an ALREADY-SLOTTED agent turn in a recovered goroutine. Every
-// adapter handler acquires the pool slot SYNCHRONOUSLY (channelLim.acquire) BEFORE
-// recording the dedupe key, so a capacity SHED returns a retriable non-2xx without
-// burning the event id (Red M-1); the slotted turn is then handed here. Two
-// guarantees: (1) the slot is released on every exit, and (2) a panic anywhere in
-// the turn (channelReply → agents.RunOnBehalf → the reply closure — a large surface
-// over UNTRUSTED platform input) is CONTAINED. On the SHARED multi-tenant cloud
-// binary this is non-negotiable: middleware.Recover() wraps only the sync request
-// goroutine, so an unrecovered panic here would crash EVERY tenant and subsystem
-// (Red M-2). The recover defer is registered LAST so it runs FIRST (LIFO); release
-// still runs after it — a panicking turn frees its slot. ONE spawn+recover for
-// every platform (Slack included).
+// channelSpawn runs an ALREADY-SLOTTED agent turn in a recovered goroutine. The
+// caller acquires the slot SYNCHRONOUSLY (channelLim.acquire) and hands the
+// slotted turn here, which is the ONE pairing left in this file: every other
+// holder of this pool is emitIngress, which acquires and releases inside itself.
+// Two guarantees: (1) the slot is released on every exit, and (2) a panic
+// anywhere in the turn (channelReply → agents.RunOnBehalf → the reply closure —
+// a large surface over UNTRUSTED platform input) is CONTAINED. On the SHARED
+// multi-tenant cloud binary this is non-negotiable: middleware.Recover() wraps
+// only the sync request goroutine, so an unrecovered panic here would crash
+// EVERY tenant and subsystem. The recover defer is registered LAST so it runs
+// FIRST (LIFO); release still runs after it — a panicking turn frees its slot.
+//
+// Slack is the caller: its slash command runs its turn in THIS process, and its
+// events path spends a slot on the thinking indicator it posts while channels
+// answers. The other four adapters run no turn here — they take an event and
+// emit it — so they hold no slot of their own.
 func channelSpawn(s *cloud.Service[state], org string, run func()) {
 	go func() {
 		defer channelLim.release(org)
@@ -113,14 +117,15 @@ func channelRecover(s *cloud.Service[state], org string) {
 	}
 }
 
-// ── the bounded per-org agent-turn pool (the ONE limiter every adapter binds on) ─
+// ── the bounded per-org pool (the ONE limiter this process binds on) ────────
 
-// orgLimiter bounds concurrent agent turns two ways: a GLOBAL cap (total in-flight
-// across all orgs) AND a PER-ORG cap (max in-flight for any single org). Data /
-// token / billing isolation already holds via the resolved org; this adds the
-// AVAILABILITY isolation that stops one tenant exhausting the shared worker pool. It
-// lives here (provider-agnostic): channelLim (the shared chat pool) above, the Slack
-// coding pool (codingLim), and every adapter bound against the SAME type.
+// orgLimiter bounds concurrent per-org work two ways: a GLOBAL cap (total
+// in-flight across all orgs) AND a PER-ORG cap (max in-flight for any single
+// org). Data / token / billing isolation already holds via the resolved org;
+// this adds the AVAILABILITY isolation that stops one tenant exhausting the
+// shared worker pool. It lives here (provider-agnostic): channelLim (the shared
+// chat pool) above, the Slack coding pool (codingLim), and every caller bound
+// against the SAME type.
 type orgLimiter struct {
 	mu       sync.Mutex
 	inflight map[string]int

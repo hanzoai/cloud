@@ -70,7 +70,13 @@ type spec struct {
 	clientSecretEnv string
 
 	// authExtra adds provider-specific query parameters to the consent URL —
-	// Google's `access_type=offline`, X's PKCE challenge, and so on.
+	// Google's `access_type=offline`, Reddit's `duration=permanent`, and so on.
+	//
+	// PKCE is not among them. A declaration carries no per-request state, so the
+	// verifier it could send is a compile-time constant every deployment shares
+	// and publishes in each authorize URL, which is the property PKCE exists to
+	// deny. A provider that requires PKCE writes its own flow, where a verifier
+	// can be derived per app (x.go) or per flow.
 	authExtra map[string]string
 
 	// basicAuth sends the client credentials as an HTTP Basic header instead of
@@ -159,12 +165,6 @@ func oauthProvider(sp spec) *Provider {
 			if !sp.basicAuth {
 				form.Set("client_id", c.ClientID)
 				form.Set("client_secret", c.ClientSecret)
-			}
-			// PKCE: a provider that asked for a challenge must be sent the
-			// verifier. The challenge is `plain` (see pkceVerifier), so the two
-			// are the same string — which is why this needs no per-request state.
-			if v := sp.authExtra["code_challenge"]; v != "" {
-				form.Set("code_verifier", v)
 			}
 
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, sp.tokenURL,
