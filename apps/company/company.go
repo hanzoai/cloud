@@ -118,11 +118,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("company.Mount: empty DataDir")
 	}
-	// Every operation here that changes a formation asks account.CSRF, which verifies
-	// a MAC the account process minted; without the shared key it refuses all of them.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("company.Mount: %w", err)
-	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on the
 	// App. A router that cannot reach it would serve every route with no schema,
 	// no prose, no MCP tool and no SDK method — so the mount FAILS rather than

@@ -44,7 +44,6 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/manifest"
@@ -70,11 +69,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	z := cloud.ZipApp(app)
 	if z == nil {
 		return fmt.Errorf("plugin.Mount: router carries no typed-op registry")
-	}
-	// core.Change verifies a token the account process minted, so this process must
-	// hold the same key; without it every operator action here is refused.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("plugin.Mount: %w", err)
 	}
 	o := &ops{
 		z:       z,

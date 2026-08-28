@@ -95,12 +95,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	exposeIndex()
 
-	// This surface verifies MACs another process mints, so a key it invented itself
-	// would refuse every ambient-cookie call for as long as the pod ran. Asked at
-	// boot rather than discovered on the wire.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("code.Mount: %w", err)
-	}
 	if err := routes(app, s); err != nil {
 		return err
 	}

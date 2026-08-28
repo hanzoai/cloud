@@ -125,14 +125,11 @@ type state struct {
 
 // Mount registers the customer-facing /v1/billing/* read surface on app.
 //
-// Every write below asks account.CSRF, which verifies a MAC the ACCOUNT process
-// minted, so this process must hold that same key. account.Shared answers whether it
-// does, and a no here is the mount's answer too: without the key every console write
-// on this surface would be refused, one request at a time, for the life of the pod.
+// Every write below asks account.CSRF, which verifies a MAC the account process
+// minted. Whether this process holds that key is not asked here: the catalog read
+// at /v1/billing/plans is public and answers no token at all, so a key question
+// gets between an anonymous caller and a price list it does not need.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("billing.Mount: %w", err)
-	}
 	return cloud.Mount(app, deps, "billing", build, routes)
 }
 

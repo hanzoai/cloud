@@ -164,12 +164,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("todo.Mount: empty DataDir")
 	}
-	// The board's writes and the repository routes ask account's control, which
-	// verifies a MAC the account process minted; without the shared key it refuses
-	// every one of them.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("todo.Mount: %w", err)
-	}
 	b := cloud.NewBase(deps, "todo")
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores: cloud.NewOrgStore(b, store, openStore),

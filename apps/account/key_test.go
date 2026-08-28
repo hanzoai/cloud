@@ -10,34 +10,13 @@ import (
 // A valid shared key, as an operator would provision it: 32 bytes, hex.
 const testKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-// TestAVerifierWithoutTheSharedKeyRefusesToBoot pins the whole point of Shared: an
-// app that VERIFIES a token this process did not mint must not come up holding a key
-// it invented, because that key matches no token it will ever be sent.
-//
-// The suite cannot see this from inside one process — a test that mounts the issuer
-// and the verifier together shares the memoized key and passes either way — so the
-// question is asked of the ENVIRONMENT, which is the thing that actually differs
-// between a laptop and a pod.
-func TestAVerifierWithoutTheSharedKeyRefusesToBoot(t *testing.T) {
-	t.Setenv(KeyEnv, "")
-	err := Shared()
-	if err == nil {
-		t.Fatal("a verifier came up with no shared key; every token it is sent was minted under another")
-	}
-	if !strings.Contains(err.Error(), KeyEnv) {
-		t.Errorf("the refusal does not name the value to set: %v", err)
-	}
-
-	t.Setenv(KeyEnv, "not-a-key")
-	if err := Shared(); err == nil {
-		t.Fatal("a value that is not 32 bytes was accepted as the shared key")
-	}
-
-	t.Setenv(KeyEnv, testKey)
-	if err := Shared(); err != nil {
-		t.Fatalf("a provisioned key was refused: %v", err)
-	}
-}
+// The verifier's boot check is GONE, and with it the test that pinned it. It
+// refused a whole app — every route, every caller — for a key that gates one
+// branch of one control, and it was asked by eleven apps that are all lazy, so
+// the "loud at boot" it promised never happened once: the child exited on its
+// first request instead. cloud.Intended is fail-closed without it (see
+// TestAKeylessProcessRefusesTheChangeAndServesTheRead), and cloud.keyed is the
+// composition-time rule, scoped to what a process actually SERVES.
 
 // TestTheMinterKeepsItsOwnKeyOnALaptopAndRefusesItOnADeployment: the issuer accepts
 // only the tokens it wrote, so one key over one lifetime is self-consistent and a

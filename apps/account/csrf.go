@@ -60,26 +60,6 @@ func serving() bool {
 	return !projecting
 }
 
-// Shared is the CHECKER's verdict, taken at BOOT. An app whose operations ask [CSRF]
-// calls it once from its Mount.
-//
-// It is the whole difference between a control that works and one that refuses
-// everything: this process checks MACs written by the process that serves
-// GET /v1/account/csrf, and a key it invented itself matches none of them. Returning
-// the error fails the mount, which in a plugin child is exit 1 and in the host is the
-// app absent behind a 503 — a missing key is then loud at boot, in one line, instead
-// of a 403 on every console write for as long as the pod runs.
-//
-// The minter does not call this: its own key verifies its own tokens, so a laptop with
-// no KMS still issues and accepts them. See [own].
-func Shared() error {
-	if lone := attest.Shared(); lone != nil && serving() {
-		return fmt.Errorf("anti-forgery: %w; it checks the token GET /v1/account/csrf mints in another process, "+
-			"so both must hold the same 32-byte key — set %s from KMS", lone, KeyEnv)
-	}
-	return nil
-}
-
 // own is the MINTER's verdict on a key of its own, which is a different question with
 // a different answer: this app issues the tokens it accepts, so one process over one
 // lifetime is self-consistent and a laptop with no KMS works unchanged. A DEPLOYMENT

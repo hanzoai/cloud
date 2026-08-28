@@ -47,7 +47,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/admin/audit"
 	"github.com/hanzoai/cloud/apps/admin/commerce"
 	"github.com/hanzoai/cloud/apps/admin/core"
@@ -76,11 +75,6 @@ import (
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("admin.Mount: nil app")
-	}
-	// The change gate verifies a token the account process minted, so this process
-	// must hold the same key; without it every operator write here is refused.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("admin.Mount: %w", err)
 	}
 	// Every route here is a typed op, and the op registry lives on the App. A Router
 	// that is not one cannot carry this surface, so the mount fails rather than
