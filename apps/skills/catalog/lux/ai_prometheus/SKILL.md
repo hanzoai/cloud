@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/ai/prometheus` → JSON object.
+- `/v1/ai/prometheus` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
 
 ## Example
 

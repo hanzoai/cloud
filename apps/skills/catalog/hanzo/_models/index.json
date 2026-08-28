@@ -18,7 +18,7 @@
       "name": "models_models",
       "path": "models_models/SKILL.md",
       "service": "models",
-      "sha256": "8df234ce3e1d40d9685dd513df8bc6e1dc4304c3033c393a4bb3d502690ff7e5"
+      "sha256": "7663fa8b509b584f75ee10d000f41ae7211fd4cba363a61cb82f643e0b79a12f"
     },
     {
       "description": "Read models providers: Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected..",

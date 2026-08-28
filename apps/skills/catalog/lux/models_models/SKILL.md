@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/models` → JSON object.
+- `/v1/models` → `ai.ModelList` object with fields: `data`, `models`, `object`.
 
 ## Example
 

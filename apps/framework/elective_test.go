@@ -10,7 +10,10 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/internal/planetest"
+
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/doctype"
+	engine "github.com/hanzoai/framework"
 	"github.com/zap-proto/zip"
 )
 
@@ -145,5 +148,53 @@ func TestDoctypeInReadsTheSegment(t *testing.T) {
 		if !ok || got != c.want {
 			t.Errorf("doctypeIn(%q) = %q,%v want %q", c.path, got, ok, c.want)
 		}
+	}
+}
+
+// Two orgs are two DATABASES, not two values in an `org` column. cloud.OrgStore
+// keys one file per namespace, so distinct engines are distinct files.
+func TestEachOrgGetsItsOwnBase(t *testing.T) {
+	planetest.Entitled(t, func(_, p string) bool { return p == "lane" })
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+
+	acme, err := engineOf("acme")
+	if err != nil {
+		t.Fatalf("engine acme: %v", err)
+	}
+	initech, err := engineOf("initech")
+	if err != nil {
+		t.Fatalf("engine initech: %v", err)
+	}
+	if acme == initech {
+		t.Fatal("both orgs resolved the SAME engine — one file holds every tenant, and isolation is an `org` column again")
+	}
+	// And the same org is the SAME engine, or every request opens a new file.
+	again, err := engineOf("acme")
+	if err != nil || again != acme {
+		t.Errorf("acme resolved a different engine on the second call (%v)", err)
+	}
+}
+
+// An unvalidated caller is refused BEFORE a database is named: naming one is the
+// first thing an op does now, and namespace answers a 500 for an empty org where
+// the engine answers a 403.
+func TestNoOrgIsRefusedNotCrashed(t *testing.T) {
+	planetest.Entitled(t, func(string, string) bool { return true })
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+
+	_, err := engineOf("")
+	if err == nil {
+		t.Fatal("an empty org named a database")
+	}
+	if got := engine.Classify(err); got != engine.CodeForbidden {
+		t.Errorf("empty org classified %v, want %v — the caller reads a 500 instead of a 403", got, engine.CodeForbidden)
 	}
 }

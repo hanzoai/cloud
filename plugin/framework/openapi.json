@@ -915,19 +915,7 @@
         },
         "type": "object"
       },
-      "moduleList": {
-        "properties": {
-          "data": {
-            "description": "Data is every module compiled into this binary, with the DocTypes it installs\nand whether the caller's org has turned it on.",
-            "items": {
-              "$ref": "#/components/schemas/moduleRow"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "moduleRow": {
+      "module": {
         "properties": {
           "doctypes": {
             "items": {
@@ -941,6 +929,18 @@
           },
           "module": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "moduleList": {
+        "properties": {
+          "data": {
+            "description": "Data is every module compiled into this binary, with the DocTypes it installs\nand whether the caller's org has turned it on.",
+            "items": {
+              "$ref": "#/components/schemas/module"
+            },
+            "type": "array"
           }
         },
         "type": "object"

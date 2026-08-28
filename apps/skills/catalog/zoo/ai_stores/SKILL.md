@@ -31,8 +31,8 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 - `/v1/ai/stores` → JSON object.
 - `/v1/ai/stores/global` → JSON object.
-- `/v1/ai/stores/names` → JSON object.
-- `/v1/ai/stores/providers` → JSON object.
+- `/v1/ai/stores/names` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/stores/providers` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
 - `/v1/ai/stores/{owner}/{name}` → JSON object.
 
 ## Example

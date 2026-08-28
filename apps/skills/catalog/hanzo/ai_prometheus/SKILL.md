@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/ai/prometheus` → JSON object.
+- `/v1/ai/prometheus` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
 
 ## Example
 

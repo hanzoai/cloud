@@ -28,7 +28,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/ai/signin-sessions` → JSON object.
-- `/v1/ai/signin-sessions/duplicated` → JSON object.
+- `/v1/ai/signin-sessions/duplicated` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
 - `/v1/ai/signin-sessions/{owner}/{name}` → JSON object.
 
 ## Example
