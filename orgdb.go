@@ -582,10 +582,27 @@ func (c *OrgStore[T]) promote(ns namespace.Namespace, path string, old T, oldDur
 // Sync ships the org's local file to its durable object, fenced at the lease round
 // (the ship-before-ack step a durable subsystem calls after a write commits). It
 // returns acked=false when this replica is not the owner or was deposed mid-request
-// (the caller retries on the new owner). On a local-only store (no Durability) it is
-// a successful no-op — the write is already as durable as configured.
+// (the caller retries on the new owner).
+//
+// WITHOUT A DURABILITY THERE ARE TWO ANSWERS AND THEY ARE NOT THE SAME. A lone
+// writer's committed write is already as durable as the deployment is configured to
+// be, so the ship is a successful no-op and always was. But a deployment with
+// SEVERAL writers and no fence can prove nothing: no round orders the two copies,
+// so an acknowledgement here is a claim the deployment cannot support. It used to
+// ack anyway, which is how the end-of-lease path went on billing customers in the
+// one regime whose whole point is that nobody may — the gate refused the sweep and
+// the ship waved the debit through behind it.
+//
+// So it REFUSES, and the refusal is what defers the debit rather than doubling it:
+// no watermark becomes durable, so the whole gap bills once, on whichever replica
+// is provably the owner when the object store comes back.
 func (c *OrgStore[T]) Sync(ns namespace.Namespace) (acked bool, err error) {
 	if c.dur == nil {
+		if c.peers {
+			return false, fmt.Errorf("cloud: %s/%s cannot be made durable — this deployment has more "+
+				"than one writer and no object store to fence them, so no write here may be acknowledged",
+				ns, c.subsystem)
+		}
 		return true, nil
 	}
 	c.mu.Lock()
@@ -617,18 +634,23 @@ func (c *OrgStore[T]) Sync(ns namespace.Namespace) (acked bool, err error) {
 // — but a pod that has lost an org stops sweeping it within one refresh, where
 // today every pod sweeps every org for ever.
 //
-// THE LOCAL-ONLY PATH IS NOT A NO-OP HERE, AND THAT IS THE DIFFERENCE FROM Sync.
-// Sync acks trivially without a Durability because a write is then already as
-// durable as the deployment is configured to be. Ownership has no such trivial
-// answer: with no fence, one writer owns everything and several writers can prove
-// nothing about which of them owns what. So this reads Peers — and a multi-writer
-// deployment whose store could not be proven at boot owns NOTHING, which stops
-// the sweep rather than letting two pods bill one span. That is a deferred debit,
-// not a lost one: no watermark moves, so the plane bills the whole gap once
-// durability returns.
+// WITHOUT A FENCE, THIS ANSWERS YES, and the first version answered no. That was
+// the wrong half of the deployment to stop. With no Durability a replica's orgs are
+// the ones on its own volume — no peer holds that file — so acting on them is not
+// only safe, it is the only way they are acted on at all. Answering no stopped the
+// REAPER: on a deployment that merely lost its object store at boot, every expired
+// lease kept its pod for ever, unbilled and uncounted, while the request path went
+// on selling new ones. A resource leak with free compute at the end of it, entered
+// by an S3 outage.
+//
+// What must stop in that regime is the MONEY, and that is Sync's answer rather than
+// this one — a write nobody can prove durable is not acknowledged, so nothing is
+// billed and every span defers. Two questions, two answers: this one gates the ACT,
+// Sync gates the CLAIM. Folding them into one predicate is what made an outage stop
+// the reaper and not the meter, which is exactly backwards.
 func (c *OrgStore[T]) Owned(ns namespace.Namespace) bool {
 	if c.dur == nil {
-		return !c.peers
+		return true
 	}
 	c.mu.Lock()
 	d := c.durables[ns]
@@ -661,7 +683,7 @@ func SayDurability(log luxlog.Logger, b Base, what string) {
 	case !b.Peers:
 		log.Info(what + ": local-only, single writer — this process bills every org it holds, and a debit is as durable as its volume")
 	default:
-		log.Error(what + ": local-only on a MULTI-WRITER deployment — no fence can say which replica owns an org, so NOTHING is billed and every span defers until the durable plane is provable. Configure S3_ADMIN_* to enable it.")
+		log.Error(what + ": local-only on a MULTI-WRITER deployment — no fence can say which replica owns an org, so NOTHING is billed and every span defers until the durable plane is provable. Lifetimes are still enforced: leases end and pods are reclaimed, they are simply not charged. Configure S3_ADMIN_* to enable it.")
 	}
 }
 

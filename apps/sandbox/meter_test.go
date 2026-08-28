@@ -183,8 +183,8 @@ func TestALeaseTheMeterHasNeverSeenStartsItsClock(t *testing.T) {
 // sandbox runs, "metering a lease that failed to start would bill for a pod nobody
 // got"; runtime obeys the same rule through the same predicate.
 //
-// MUTATION: delete the `holding` check in bill and an errored lease bills forever,
-// because nothing reaps a row in that status.
+// MUTATION: delete the `holding` check in retire and an errored lease claims a
+// span it never ran.
 func TestALeaseThatNeverCameUpIsNotBilled(t *testing.T) {
 	st, l, ctx := memStore(t), &ledger{}, context.Background()
 	const start, now = 1_800_000_000, 1_800_003_600
@@ -194,7 +194,12 @@ func TestALeaseThatNeverCameUpIsNotBilled(t *testing.T) {
 	if err := st.Put(ctx, m); err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	bill(&Service{Base: cloud.Base{Log: luxlog.NewNoOpLogger()}}, ctx, st, m)
+	// `holding` is the predicate retire claims a tail on, and the ONE predicate
+	// occupancy reads too — asserted here rather than by driving retire, because
+	// retire also stops a pod and drops a row and this test is about neither.
+	if holding(m) {
+		t.Fatal("a lease that never came up counts as held, so it would be billed for a pod nobody got")
+	}
 	if l.len() != 0 {
 		t.Fatalf("a lease that never came up was billed %d times", l.len())
 	}

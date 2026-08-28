@@ -348,6 +348,22 @@ func (s *Store) Rows(ctx context.Context, org string) ([]Sandbox, error) {
 	return s.rows(ctx, ` WHERE org=?`, org)
 }
 
+// Org is the org this file belongs to, as its own rows spell it — the RAW string a
+// caller was validated as, not a fold of it.
+//
+// It exists because a Kubernetes object outlives the process that made it, and the
+// sweeps identify one by a label built from this value. The file is per-org, so
+// every row agrees and one is enough; an empty file has no answer and says so with
+// the empty string rather than a guess.
+func (s *Store) Org(ctx context.Context) (string, error) {
+	var org string
+	err := s.db.QueryRowContext(ctx, `SELECT org FROM sandbox LIMIT 1`).Scan(&org)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return org, err
+}
+
 // rows is the scan every unbounded set above shares, so a column added to the table
 // is added to one scan rather than to three that must be kept in step.
 func (s *Store) rows(ctx context.Context, where string, args ...any) ([]Sandbox, error) {

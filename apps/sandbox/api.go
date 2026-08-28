@@ -536,20 +536,11 @@ func End(s *Service, ctx context.Context, org, id string, purge bool) error {
 	if err != nil {
 		return err
 	}
-	if serr := s.State.rt.stop(ctx, m); serr != nil {
-		s.Log.Warn("stop sandbox", "id", m.ID, "err", serr)
-	}
-	if purge && m.Volume != "" {
-		if perr := s.State.rt.purge(ctx, m); perr != nil {
-			s.Log.Warn("purge volume", "volume", m.Volume, "err", perr)
-		}
-	}
-	// The tail, BEFORE the delete. The row carries the watermark, so once it is
-	// gone there is nothing left to say how much of this lease was never billed.
-	bill(s, ctx, store, m)
-	if err := store.Delete(ctx, m.Org, m.ID); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-	}
+	// The tail, the stop, the delete and the ship are ONE settlement (meter.go), in
+	// that order: the snapshot that carries the advanced watermark has to carry the
+	// deletion too, or a successor hydrates a lease this caller ended and bills them
+	// for it until it notices.
+	retire(s, ctx, store, m, purge)
 	return nil
 }
 

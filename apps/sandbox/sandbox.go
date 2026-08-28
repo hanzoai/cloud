@@ -244,6 +244,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// over one domain, and an app that mounted only one of them would be an app
 	// whose answer depends on who asked.
 	mounted.Store(s)
+	// The drain. Without it the org stores never close on a rolling restart, so
+	// whatever a pod wrote since its last ship — every lease it ended, every
+	// watermark it advanced — is gone with the volume, and the successor hydrates a
+	// snapshot in which those leases are still running. See [retire]: the ship after
+	// a delete is what makes one ending durable, and this is what makes the last of
+	// them durable when the process is asked to stop rather than told to.
+	shutdownStores = s.State.stores.CloseAll
 	expose()
 	// Start the reaper HERE, not from a route and not from a caller. Nothing
 	// else ends a lease: every field it needs was already written on every

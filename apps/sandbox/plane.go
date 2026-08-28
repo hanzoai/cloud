@@ -53,6 +53,22 @@ import (
 // service is a package value — the same shape apps/git and apps/agents use.
 var mounted atomic.Pointer[Service]
 
+// Shutdown drains this subsystem's per-org stores: each one's final state ships
+// fenced at its lease round and its ownership is released, so the replica that
+// picks the org up next hydrates everything this one acknowledged.
+//
+// It is the ORDERLY half of durability and the reaper is the other. A lease ended
+// a second before SIGTERM is durable because of this; a lease ended a second
+// before a kill -9 is re-ended by the successor because of the reaper. Neither
+// covers the other, and shipping without this one meant every graceful restart
+// resurrected whatever had not happened to be swept.
+func Shutdown() error { return shutdownStores() }
+
+// shutdownStores is bound at Mount. Unmounted, closing is a no-op rather than a
+// nil call — a host that shuts a subsystem it never started is asking a reasonable
+// question and the answer is "nothing to drain".
+var shutdownStores = func() error { return nil }
+
 // expose publishes the sandbox verbs on the internal plane. Called from Mount.
 func expose() {
 	p := cloud.Plane()
