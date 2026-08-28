@@ -855,20 +855,6 @@
         },
         "type": "object"
       },
-      "ModuleInfo": {
-        "properties": {
-          "doctypes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "module": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "ModuleState": {
         "properties": {
           "doctypes": {
@@ -932,11 +918,29 @@
       "moduleList": {
         "properties": {
           "data": {
-            "description": "Data is every module compiled into this binary, with the DocTypes it installs.",
+            "description": "Data is every module compiled into this binary, with the DocTypes it installs\nand whether the caller's org has turned it on.",
             "items": {
-              "$ref": "#/components/schemas/ModuleInfo"
+              "$ref": "#/components/schemas/moduleRow"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "moduleRow": {
+        "properties": {
+          "doctypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "description": "Enabled is whether this org has turned the module on. A module that is off\nanswers 404 on every DocType it owns (elective.go).",
+            "type": "boolean"
+          },
+          "module": {
+            "type": "string"
           }
         },
         "type": "object"

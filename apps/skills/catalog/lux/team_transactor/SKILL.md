@@ -1,7 +1,7 @@
 ---
 name: team_transactor
 version: "8.0.0"
-description: "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Statistics returns the transactor's live sessions for the workspace"
+description: "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Open the workspace data-plane socket."
 ---
 
 # Lux · TEAM · transactor
@@ -14,7 +14,6 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/team/transactor/api/v1/statistics` — Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base.
 - `GET https://api.lux.network/v1/team/transactor/statistics` — Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base.
 - `GET https://api.lux.network/v1/team/transactor/{token}` — Open the workspace data-plane socket
 
@@ -27,14 +26,13 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/team/transactor/api/v1/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
 - `/v1/team/transactor/statistics` → `statsOut` object with fields: `admin`, `metrics`, `statistics`.
 - `/v1/team/transactor/{token}` → JSON object.
 
 ## Example
 
 ```bash
-curl -sS "https://api.lux.network/v1/team/transactor/api/v1/statistics" \
+curl -sS "https://api.lux.network/v1/team/transactor/statistics" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

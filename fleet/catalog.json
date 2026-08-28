@@ -1345,93 +1345,6 @@
    "doc": "Reads one URL and answers with the page as markdown.\n\nIt fetches a single URL from inside the cluster and answers with the address it\nactually landed on, the document's title, its content rendered to MARKDOWN, and\nwhatever the page said about itself. One URL per call: batching would make the\nanswer a partial-failure envelope every caller then has to unpack.\n\nA PAGE THAT COULD NOT BE FETCHED IS A NORMAL ANSWER, not a fault. An\nunreachable host, a refused address and a content type that is not a document\nall answer 200 with `success:false` and the reason in `error`, because the\ncaller sent a well-formed ask and gets a well-formed answer. Non-2xx is reserved\nfor a caller problem — 400 with the same body when there is no url, 401 for a\nbad key, 503 when the surface is unconfigured — so error handling can trust the\nstatus. Check `success` before reading `data`.\n\nAdmission is either a validated principal or the shared service key, presented\nas X-API-Key or a Bearer; neither is refused, and an unset key fails closed\nrather than opening the fetcher to the private network. Pages are archived under\nthe scope of the VERIFIED principal and NEVER a scope named in the body, so a\nURL already read under that scope is answered from the archive without touching\nthe network; a service caller has no org and its pages land in the shared\ncorpus.\n\nThe URL is caller-supplied and dialled from INSIDE the cluster, which makes this\na request-forgery primitive by construction. Only http and https are accepted,\nand every address actually dialled must be public unicast — loopback,\nlink-local, private and multicast are refused. The check lives in the DIALER\nrather than on the hostname, because resolving a name to validate it and then\nletting the transport resolve it again is a gap DNS rebinding walks straight\nthrough; redirects re-enter the same dialer."
   }
  ],
- "crm": [
-  {
-   "id": "delete_crm_companies_by_id",
-   "doc": "Removes one of the caller org's companies and answers 204. Any\ncontact or opportunity in the org that referenced it keeps existing with the\nreference cleared, so nothing is left pointing at a company that is gone."
-  },
-  {
-   "id": "delete_crm_contacts_by_id",
-   "doc": "Removes one of the caller org's contacts and answers 204. Any\nopportunity in the org that named it point of contact keeps existing with\nthat reference cleared."
-  },
-  {
-   "id": "delete_crm_opportunities_by_id",
-   "doc": "Removes one of the caller org's deals and answers 204."
-  },
-  {
-   "id": "get_crm_applications",
-   "doc": "Returns the org's Startup Program applications, newest first.\nEach carries its AI screen and its stage history; a stage narrows the page to\none pipeline stage.",
-   "read": true
-  },
-  {
-   "id": "get_crm_applications_by_id",
-   "doc": "Returns one Startup Program application with its AI screen and stage history.\nAn id belonging to another org reads as not found.",
-   "read": true
-  },
-  {
-   "id": "get_crm_companies",
-   "doc": "Returns the caller org's companies, most recently updated first.",
-   "read": true
-  },
-  {
-   "id": "get_crm_companies_by_id",
-   "doc": "Returns one of the caller org's companies. An id belonging to\nanother org reads as not found.",
-   "read": true
-  },
-  {
-   "id": "get_crm_contacts",
-   "doc": "Returns the caller org's contacts, most recently updated first.\nA companyId narrows the page to the people at that company.",
-   "read": true
-  },
-  {
-   "id": "get_crm_contacts_by_id",
-   "doc": "Returns one of the caller org's contacts. An id belonging to\nanother org reads as not found.",
-   "read": true
-  },
-  {
-   "id": "get_crm_opportunities",
-   "doc": "Returns the caller org's deals, most recently updated first.\nA stage narrows the page to one pipeline stage.",
-   "read": true
-  },
-  {
-   "id": "get_crm_opportunities_by_id",
-   "doc": "Returns one of the caller org's deals. An id belonging to\nanother org reads as not found.",
-   "read": true
-  },
-  {
-   "id": "get_crm_summary",
-   "doc": "Summary counts the caller org's CRM records: companies, contacts, opportunities.",
-   "read": true
-  },
-  {
-   "id": "patch_crm_applications_by_id",
-   "doc": "Moves one Startup Program application through the pipeline. The\nmove is recorded on the application's timeline, attributed to the calling\nstaff user: it may advance exactly one stage, go back to any earlier stage,\nreject from any non-rejected stage, or reopen a rejected application to\n`applied`; anything else is refused. Rejecting requires a reason. A note with\nno stage change is still recorded."
-  },
-  {
-   "id": "post_crm_companies",
-   "doc": "Adds a company to the caller's org and answers 201 with the stored record.\nA name is required; an empty currency defaults to USD."
-  },
-  {
-   "id": "post_crm_contacts",
-   "doc": "Adds a person to the caller's org and answers 201 with the stored record.\nOne of firstName, lastName or email is required, and a companyId must name a\ncompany in the same org."
-  },
-  {
-   "id": "post_crm_opportunities",
-   "doc": "Adds a deal to the caller's org and answers 201 with the stored record.\nA name is required; the stage defaults to NEW; companyId and pointOfContactId\nmust name records in the same org."
-  },
-  {
-   "id": "put_crm_companies_by_id",
-   "doc": "Replaces one of the caller org's companies. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required."
-  },
-  {
-   "id": "put_crm_contacts_by_id",
-   "doc": "Replaces one of the caller org's contacts. Every writable field\nis taken from the request, so a field the request omits is CLEARED — send the\nwhole record. One of firstName, lastName or email is required."
-  },
-  {
-   "id": "put_crm_opportunities_by_id",
-   "doc": "Replaces one of the caller org's deals. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required and the stage must be a pipeline\nstage."
-  }
- ],
  "dataroom": [
   {
    "id": "get_dataroom_analytics_dataroom_by_dataroomid",
@@ -6522,11 +6435,6 @@
   {
    "id": "get_team_rooms",
    "doc": "Returns every room of the caller's org, across the workspaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
-   "read": true
-  },
-  {
-   "id": "get_team_transactor_api_v1_statistics",
-   "doc": "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
    "read": true
   },
   {

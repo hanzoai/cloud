@@ -11,22 +11,11 @@
 // registers them with the engine at init — the ONE source of truth for the ERP
 // model, per-org on Base/SQLite.
 //
-// It does not ship today. No binary imports it — not plugin/framework, not the
-// host — so its init never runs, the "erp" module is never registered, and
-// POST /v1/framework/modules/erp/install answers for a module the engine has
-// never heard of. Linking it into plugin/framework is the whole activation.
-//
-// This is the second app lane on the framework (CMS was the first), proving the
-// thesis: one engine + one renderer renders every business app. It reuses the
-// generic install path (POST /v1/framework/modules/erp/install) and the generic
-// renderer verbatim; the only ERP-specific code is data (fixtures) and behavior
-// (hooks) — zero UI, zero forked engine.
-//
 // # Naming (all names are slug-clean so the generic renderer can reach them)
 //
 //   - DocType names are slug-style with an "erp-" prefix, so they never collide
-//     with the CMS lane's names (Author/Media/Page/…) or the CRM's, and never carry
-//     a space that the console's `/cloud` path filter would reject.
+//     with the cms or crm lanes' names, and never carry a space that the console's
+//     `/cloud` path filter would reject.
 //   - Transactional documents use a SERIES autoname ("erp-so-.#####" → "erp-so-00001"),
 //     always slug-clean and monotonic per org.
 //   - Masters use a field autoname ("field:item_code" …); the console slugifies the

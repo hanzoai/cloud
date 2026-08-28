@@ -1,7 +1,7 @@
 // Package help is a support desk: customers file tickets, your team answers them.
 //
 // The Hanzo Support product: the Frappe-Helpdesk model rebuilt as DocType
-// fixtures on the native framework engine (clients/framework), plus a thin
+// fixtures on the native framework engine (apps/framework), plus a thin
 // /v1/help subsystem (subsystem.go) for the one plane the generic,
 // secure-by-default framework surface deliberately cannot serve — the PUBLIC
 // help center.

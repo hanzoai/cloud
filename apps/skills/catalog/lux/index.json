@@ -146,11 +146,6 @@
       "skill_count": 3
     },
     {
-      "name": "crm",
-      "path": "_crm/index.json",
-      "skill_count": 5
-    },
-    {
       "name": "dataroom",
       "path": "_dataroom/index.json",
       "skill_count": 7
@@ -586,7 +581,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 675,
+  "skill_count": 670,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -2141,41 +2136,6 @@
       "path": "content_lifecycle/SKILL.md",
       "service": "content",
       "sha256": "31c901b0b5ef82833447525daf062d205fcf85a5ffa592138e54f7f1b52b621d"
-    },
-    {
-      "description": "Read crm applications: Returns the org's Startup Program applications, newest first., Returns one Startup Program application with its AI screen and stage history..",
-      "name": "crm_applications",
-      "path": "crm_applications/SKILL.md",
-      "service": "crm",
-      "sha256": "e3d5ffb272cf1f742c77eb00434ce2316d73412a39a83fa8e22a04835982d4cc"
-    },
-    {
-      "description": "Read crm companies: Returns the caller org's companies, most recently updated first., Returns one of the caller org's companies..",
-      "name": "crm_companies",
-      "path": "crm_companies/SKILL.md",
-      "service": "crm",
-      "sha256": "25abd58e667d34e68ae46941f623914d5eae5941a2f07500c6f3ee5a54a718f8"
-    },
-    {
-      "description": "Read crm contacts: Returns the caller org's contacts, most recently updated first., Returns one of the caller org's contacts..",
-      "name": "crm_contacts",
-      "path": "crm_contacts/SKILL.md",
-      "service": "crm",
-      "sha256": "2adf3619c2c9ea6cedc934ee24d4cb876ba38a4862e5fc2d1c471c3ee8c39499"
-    },
-    {
-      "description": "Read crm opportunities: Returns the caller org's deals, most recently updated first., Returns one of the caller org's deals..",
-      "name": "crm_opportunities",
-      "path": "crm_opportunities/SKILL.md",
-      "service": "crm",
-      "sha256": "ced1dad985094f1710fc8a88fc27057af265d39b9f4e5879dae0b65fff2f8f8f"
-    },
-    {
-      "description": "Read crm summary: Summary counts the caller org's CRM records: companies, contacts, opportunities..",
-      "name": "crm_summary",
-      "path": "crm_summary/SKILL.md",
-      "service": "crm",
-      "sha256": "64626e50941ee3a25be7f39799544a38c214368f5743adf696cff1caf82bf375"
     },
     {
       "description": "Read dataroom analytics: Rolls up every share link pointing at one data room: session and page-view totals for the room, plus the per-page breakdown for each link beneath it., Reports how one share link was actually read: total viewing sessions, total page views, and per page the",
@@ -4908,11 +4868,11 @@
       "sha256": "e0a2db9f4c4a42ca550d7f644e767c34674a8ac59453b4536f4ded56b5387fd5"
     },
     {
-      "description": "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Statistics returns the transactor's live sessions for the workspace",
+      "description": "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Open the workspace data-plane socket.",
       "name": "team_transactor",
       "path": "team_transactor/SKILL.md",
       "service": "team",
-      "sha256": "dfaa80a246e75dcd7483fd6b2e8de665e98ff35d65dc3acc827aafb6ccafa235"
+      "sha256": "7b2acc45ca67bef6758e387d9507462738c92b636998bcf31df4c24fb5273a5f"
     },
     {
       "description": "Read tel calls: Lists the calls this org has placed or received, newest first..",

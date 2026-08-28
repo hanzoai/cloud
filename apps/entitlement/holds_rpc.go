@@ -13,17 +13,8 @@ import (
 
 // Whether an org has turned on one product, published on the internal plane.
 //
-// The caller is the refusal an ELECTIVE capability installs on its own prefixes
-// (manifest.App.Elective, cloud.Elective): every request that reaches /v1/crm
-// asks whether this org asked for crm, and a 404 is the answer when it has not.
-// That caller runs in the binary serving the capability while the enablements
-// live in this app's store, so the question crosses a process boundary — which
-// is what the plane is.
-//
-// It is the twin of flags' hold and deliberately not the same op. A flag says
-// whether a capability is finished enough to show a customer; this says whether
-// the customer asked for it. Both can be false about the same product for
-// unrelated reasons, and one op could not report which.
+// The caller is apps/framework's refusal, which runs in the binary serving a
+// module while the enablements live in this app's store.
 
 // exposeHolds publishes the enablement read. Mount calls it.
 func exposeHolds() {
@@ -33,18 +24,11 @@ func exposeHolds() {
 		zip.WithSummary("Whether the caller's org has one product turned on"))
 }
 
-// holds reads one product FOR THE CALLER'S OWN ORG.
+// holds reads one product for the caller's own org. The caller names only the
+// product, so "check another org's entitlement" is unrepresentable.
 //
-// The subject is the org, not a person: enablement says whether a customer has
-// bought into a product, which is a fact about the tenant. So the caller names
-// only the product, and has no way to name a subject at all — the shape that
-// makes "check another org's entitlement" unrepresentable rather than merely
-// refused.
-//
-// An unmounted store is an ERROR, never a false. The caller fails closed on it,
-// and answering "not held" would make a subsystem that failed to start
-// indistinguishable from a customer who has not subscribed — the two states that
-// must never be confused, because one is our bug and the other is their choice.
+// An unmounted store is an error, never a false: a subsystem that failed to start
+// must not read as a customer who has not subscribed.
 func holds(ctx context.Context, in *plane.ProductIn) (*plane.Held, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {

@@ -1,6 +1,6 @@
 {
-  "paths": 1735,
-  "operations": 2402,
+  "paths": 1726,
+  "operations": 2382,
   "products": {
     "account": 10,
     "ad": 7,
@@ -32,7 +32,6 @@
     "compliance": 17,
     "content": 6,
     "crawl": 1,
-    "crm": 20,
     "dataroom": 27,
     "dataset": 7,
     "deploy": 21,

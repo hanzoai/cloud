@@ -571,21 +571,12 @@ const (
 	// name it.
 	FlagsHold = "flags_hold"
 
-	// EntitlementHolds answers whether the caller's org has TURNED ON one product
-	// — the question an elective capability asks about every request that reaches
-	// its prefix (manifest.App.Elective).
+	// EntitlementHolds answers whether the caller's org has turned on one product.
+	// A framework module asks it on every document op (apps/framework/elective.go).
 	//
-	// It is a different question from [FlagsHold] and that is why it is a different
-	// op. A flag says whether a capability is finished enough to show this customer;
-	// this says whether the customer asked for it. The two are independent — a ga
-	// product can be un-asked-for, an alpha one can be both — and folding them into
-	// one op would mean one store answering for two facts that move for unrelated
-	// reasons.
-	//
-	// The subject is the org, and the org rides the caller, for the same reason it
-	// does on FlagsHold: enablement is a fact about a TENANT. A project is a
-	// subdivision inside one, and reading a project scope here would let two
-	// projects of one customer disagree about which products exist.
+	// Distinct from [FlagsHold]: a flag says whether a capability is finished
+	// enough to show a customer, this says whether the customer asked for it. The
+	// subject is the org, which rides the caller.
 	EntitlementHolds = "entitlement_holds"
 )
 
@@ -1047,17 +1038,14 @@ type Flag struct {
 
 // ---- entitlement.holds -----------------------------------------------------
 
-// ProductIn names the product to test, and nothing else. The subject is the
-// caller's org — see [EntitlementHolds].
+// ProductIn names the product to test. The subject is the caller's org.
 type ProductIn struct {
-	Product string `json:"product"` // the product id; for a capability it is the capability's name
+	Product string `json:"product"` // the product id; for a module it is the module name
 }
 
-// Held is the verdict: whether the caller's org has this product turned on.
-//
-// It is a distinct type from [Flag] despite the identical shape, because the two
-// are answers to different questions from different stores. Sharing one would
-// make a caller that asked the wrong subsystem type-check.
+// Held is whether the caller's org has this product turned on. Distinct from
+// [Flag] despite the shape: sharing one type would let a caller ask the wrong
+// subsystem and still type-check.
 type Held struct {
 	On bool `json:"on"`
 }

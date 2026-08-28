@@ -12,6 +12,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/internal/planetest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -106,6 +107,8 @@ func mountWith(t *testing.T, deps cloud.Deps) *zip.App {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
+	// The lane is enabled for every org here; the gate is tested in apps/framework.
+	planetest.Entitled(t, func(_, product string) bool { return product == Module })
 	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("framework.Mount: %v", err)
 	}

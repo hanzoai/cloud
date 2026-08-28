@@ -260,10 +260,6 @@ var allowedRequestUses = map[string]string{
 		"founder KYC decision. Hanzo forms the entity and carries the KYC/AML obligation, so the decision is " +
 		"a SuperAdmin one and is ATTRIBUTED: it needs X-User-IsAdmin and X-User-Id, neither of which " +
 		"principal.OrgFrom carries. Fails closed off the HTTP path: no request, no attested reviewer.",
-	"apps/crm/applications.go": "actor — a Startup Program stage event is attributed to the STAFF USER " +
-		"who moved it, and the validated user id lives in X-User-Id, which principal.OrgFrom does not " +
-		"carry (the org is the pipeline's owner, not the mover). Fails closed off the HTTP path: no " +
-		"request, no attested caller, so the event is attributed to \"staff\" rather than to an invented one.",
 	"apps/visor/visor.go": "A tenant-scoped PROXY: client.go forwards the caller's own identity headers " +
 		"(and their bearer where no service credential is configured) upstream, so an op without the request " +
 		"drops the caller's identity on the far side of the hop.",

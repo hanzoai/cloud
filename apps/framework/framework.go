@@ -44,6 +44,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/plane/entitlement"
 	"github.com/hanzoai/cloud/sqlpool"
 	engine "github.com/hanzoai/framework"
 	"github.com/zap-proto/zip"
@@ -92,7 +94,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "framework"), State: state{eng: eng}}
 	mounted = s
 
-	g := app.Group("/v1/framework")
+	g := app.Group(prefix)
+	g.Use(zip.H(elective))
 
 	// No identity middleware here. Every operation reads the caller from the
 	// request itself (caller / callerOf below), which is what each of the six
@@ -531,8 +534,19 @@ type moduleRef struct {
 
 // moduleList is a page of the app lanes this deployment carries.
 type moduleList struct {
-	// Data is every module compiled into this binary, with the DocTypes it installs.
-	Data []engine.ModuleInfo `json:"data"`
+	// Data is every module compiled into this binary, with the DocTypes it installs
+	// and whether the caller's org has turned it on.
+	Data []moduleRow `json:"data"`
+}
+
+// moduleRow is one lane with the customer's answer attached. Catalog and state
+// come back together: read from two endpoints they can be read at two instants,
+// and the console draws a switch for a module that is gone.
+type moduleRow struct {
+	engine.ModuleInfo
+	// Enabled is whether this org has turned the module on. A module that is off
+	// answers 404 on every DocType it owns (elective.go).
+	Enabled bool `json:"enabled"`
 }
 
 // listModules returns every app lane compiled into this deployment and the
@@ -543,7 +557,15 @@ func (o ops) listModules(ctx context.Context, _ *noInput) (*moduleList, error) {
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	return &moduleList{Data: mods}, nil
+	rows := make([]moduleRow, 0, len(mods))
+	for _, m := range mods {
+		// One question per module, through the op the refusal asks — a batch read
+		// would be a second answer to disagree with. Unanswerable reports NOT
+		// enabled, matching what the refusal will do.
+		on, err := entitlement.EntitlementHolds(ctx, &plane.ProductIn{Product: m.Module})
+		rows = append(rows, moduleRow{ModuleInfo: m, Enabled: err == nil && on.On})
+	}
+	return &moduleList{Data: rows}, nil
 }
 
 // getModule returns one app lane's install state for the caller's org: the
