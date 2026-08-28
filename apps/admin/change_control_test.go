@@ -177,7 +177,6 @@ func seamApp(t *testing.T) *zip.App {
 		Commerce:  commerce.New("", "test-token"),
 		Health:    health.New(""),
 		DO:        digitalocean.New(""),
-		AdminOrg:  "admin",
 		WLTenants: map[string]bool{"maxpower": true},
 	}})
 	if err := account.MountAccount(app, cloud.Deps{Brand: "hanzo"}); err != nil {

@@ -359,7 +359,7 @@ func TestSessionMaxAge(t *testing.T) {
 func TestSignInFailsClosedWithoutPublicOrigin(t *testing.T) {
 	svc := fakeService()
 	svc.State.oauth = oauth{
-		issuer: "https://iam.test", clientID: defaultClientID, adminOrg: "admin",
+		issuer: "https://iam.test", clientID: defaultClientID,
 		http:   &http.Client{Timeout: time.Second},
 		verify: func(string) (cloud.VerifiedIdentity, error) { return cloud.VerifiedIdentity{}, nil },
 	} // publicURL deliberately empty
@@ -603,7 +603,7 @@ func signinApp(t *testing.T, issuer string) (*zip.App, *fakeIAM) {
 	}
 	svc := fakeService()
 	svc.State.oauth = oauth{
-		issuer: issuer, clientID: defaultClientID, adminOrg: "admin",
+		issuer: issuer, clientID: defaultClientID,
 		publicURL: "https://cd.hanzo.ai", http: &http.Client{Timeout: 5 * time.Second},
 		verify: func(raw string) (cloud.VerifiedIdentity, error) {
 			if iam.verifyErr != nil {

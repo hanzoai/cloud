@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/iam"
 	"github.com/hanzoai/cloud/plane"
@@ -25,7 +26,7 @@ const MaxCustomerConcurrency = 8
 // overview/orgs/usage/customer/revenue/finance aggregators fold over.
 func ListOrgs(s *cloud.Service[State], ctx context.Context, cr iam.Creds) ([]iam.Org, error) {
 	q := url.Values{}
-	q.Set("owner", s.State.AdminOrg)
+	q.Set("owner", authz.AdminOrg)
 	res, err := s.State.IAM.Orgs(ctx, cr, q)
 	if err != nil {
 		return nil, err

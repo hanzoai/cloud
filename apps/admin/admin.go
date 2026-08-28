@@ -46,6 +46,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/audit"
 	"github.com/hanzoai/cloud/apps/admin/commerce"
@@ -90,7 +91,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			Commerce:   commerce.New(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 			Health:     health.New(o11yHealthURL()),
 			DO:         digitalocean.New(doTokenFromEnv()),
-			AdminOrg:   adminOrgOf(deps),
 			AuditStore: deps.Audit,
 			WLTenants:  wlTenantsFromEnv(),
 		},
@@ -103,7 +103,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		"iam", s.State.IAM.Ready(),
 		"commerce", s.State.Commerce.Ready(),
 		"digitalocean", s.State.DO.Ready(),
-		"adminOrg", s.State.AdminOrg,
+		"adminOrg", authz.AdminOrg,
 	)
 	return nil
 }
@@ -210,7 +210,7 @@ func (o ops) me(ctx context.Context, _ *core.None) (*meOut, error) {
 	sc := core.ResolveScope(o.s, c)
 	owner, _ := principal.Org(c)
 	if owner == "" && sc.Super {
-		owner = o.s.State.AdminOrg
+		owner = authz.AdminOrg
 	}
 	name := strings.TrimSpace(c.User())
 	return &meOut{Status: core.OK, Data: &adminMe{
@@ -368,7 +368,7 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 			Email:        u.Email,
 			DisplayName:  u.DisplayName,
 			IsAdmin:      u.IsAdmin,
-			IsSuperAdmin: u.Owner == o.s.State.AdminOrg,
+			IsSuperAdmin: u.Owner == authz.AdminOrg,
 			Tag:          u.Tag,
 			Created:      u.CreatedTime,
 			LastSignin:   u.LastSigninTime,
@@ -416,7 +416,7 @@ func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path, rows strin
 	q := url.Values{}
 	owner := strings.TrimSpace(in.Owner)
 	if owner == "" {
-		owner = o.s.State.AdminOrg
+		owner = authz.AdminOrg
 	}
 	q.Set("owner", owner)
 	res, err := o.s.State.IAM.List(ctx, core.CallerCreds(c), path, rows, q)
@@ -795,15 +795,6 @@ func o11yHealthURL() string {
 		return v
 	}
 	return "http://o11y.hanzo.svc.cluster.local:80/v1/o11y/health"
-}
-
-// adminOrgOf resolves the admin org slug (IAM's IsSuperAdmin owner). IAM_ADMIN_ORG mirrors
-// config.go's default; "admin" is the fleet-wide default.
-func adminOrgOf(_ cloud.Deps) string {
-	if v := strings.TrimSpace(os.Getenv("IAM_ADMIN_ORG")); v != "" {
-		return v
-	}
-	return "admin"
 }
 
 // wlTenantsFromEnv resolves the enabled white-label tenant allowlist from

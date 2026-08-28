@@ -70,14 +70,6 @@ type Config struct {
 	// the path to prefer.
 	IAMIssuer string
 
-	// AdminOrg is the IAM org slug whose members are SuperAdmins (IAM's
-	// IsSuperAdmin: owner == AdminOrg). The in-binary identity sanitizer grants
-	// admin authority — the c.IsAdmin() that gates /v1/admin/* writes, the
-	// /v1/pricing/sync trigger, and the literal "admin" org bucket — ONLY to a
-	// validated principal from this org, never to a raw header. Env IAM_ADMIN_ORG
-	// (default "admin"), matching the gateway's admin-guard.
-	AdminOrg string
-
 	// JWKSURL is the JSON Web Key Set endpoint the identity sanitizer fetches IAM
 	// signing keys from. Defaults to {IAMIssuer}/v1/iam/.well-known/jwks
 	// (HIP-0111); override with CLOUD_JWKS_URL.
@@ -352,7 +344,6 @@ func LoadConfig() *Config {
 		Domain: environ.Or("CLOUD_DOMAIN", ""),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
 		IAMIssuer:         environ.Or("CLOUD_IAM_ISSUER", ""),
-		AdminOrg:          environ.Or("IAM_ADMIN_ORG", "admin"),
 		JWKSURL:           environ.Or("CLOUD_JWKS_URL", ""),
 		KMSMasterKeyRef:   rootKeyRef(),
 		KMSMPCAddr:        environ.Or("CLOUD_KMS_MPC_ADDR", ""),

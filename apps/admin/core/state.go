@@ -29,7 +29,6 @@ type State struct {
 	Commerce   *commerce.Client
 	Health     *health.Client
 	DO         *digitalocean.Client
-	AdminOrg   string
 	AuditStore *audit.Recorder
 
 	// WLTenants is the fail-closed allowlist of enabled WHITE-LABEL TENANT orgs — the

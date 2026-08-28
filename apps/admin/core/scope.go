@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/iam"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -85,8 +86,8 @@ func ScopedOrgs(s *cloud.Service[State], ctx context.Context, c *zip.Ctx, cr iam
 	}
 	rows := make([]iam.Org, 0, len(sc.Orgs))
 	for _, name := range sc.Orgs {
-		row := iam.Org{Owner: s.State.AdminOrg, Name: name, DisplayName: name}
-		if full, err := s.State.IAM.Org(ctx, cr, s.State.AdminOrg, name); err == nil && full.Name != "" {
+		row := iam.Org{Owner: authz.AdminOrg, Name: name, DisplayName: name}
+		if full, err := s.State.IAM.Org(ctx, cr, authz.AdminOrg, name); err == nil && full.Name != "" {
 			row = full
 		}
 		rows = append(rows, row)

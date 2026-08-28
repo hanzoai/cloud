@@ -3,7 +3,10 @@ package cloud
 import (
 	"context"
 	"io"
+	"io/fs"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -227,5 +230,51 @@ func TestAKeylessProcessRefusesTheChangeAndServesTheRead(t *testing.T) {
 		t.Errorf("POST with no ambient credential and no shared key = %d %q, want 200 — "+
 			"a key question got between a machine caller and a surface it does not gate",
 			resp.StatusCode, string(body))
+	}
+}
+
+// TestTheReservedAdminOrgIsNotConfigurable closes the knob SanitizeIdentity says is
+// gone. It was gone from that one file; three readers kept it alive, and one of them
+// computed the IsSuperAdmin bit from it.
+//
+// The reserved org is the SuperAdmin predicate — IAM decides `owner == "admin"` and
+// authz publishes the constant. A consumer-side value can only ever make cloud
+// DISAGREE with the token it is reading, and disagreement in this direction is
+// privilege escalation: set it to "hanzo" and every member of the hanzo org holds
+// platform sudo here while IAM considers none of them a SuperAdmin.
+//
+// The fields are DELETED, so the compiler now refuses the escalation and no runtime
+// assertion can reach one. What is left to test is that nobody puts the knob back —
+// which is a fact about the SOURCE, so that is what this reads. A default that is
+// merely correct is one assignment away from wrong; an absent field is not.
+func TestTheReservedAdminOrgIsNotConfigurable(t *testing.T) {
+	var found []string
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/testdata/") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			t := strings.TrimSpace(line)
+			if strings.HasPrefix(t, "//") || !strings.Contains(t, "IAM_ADMIN_ORG") {
+				continue
+			}
+			found = append(found, path+": "+t)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	for _, f := range found {
+		t.Errorf("the reserved admin org is readable from the environment again:\n  %s\n"+
+			"it is authz.AdminOrg, the issuer's constant — a consumer-side value only lets "+
+			"cloud disagree with the token it reads, and that disagreement is platform sudo", f)
 	}
 }

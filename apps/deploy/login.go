@@ -60,6 +60,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/iam/pkg/pkce"
 	fiber "github.com/zap-proto/fiber/v3"
@@ -112,7 +113,6 @@ type oauth struct {
 	issuer       string // IAM origin, e.g. https://hanzo.id
 	clientID     string // IAM application client_id (organization == adminOrg)
 	clientSecret string // optional; empty ⟹ public client on PKCE alone
-	adminOrg     string // the reserved org whose members are SuperAdmins
 	publicURL    string // REQUIRED public origin of this console; "" disables sign-in
 	http         *http.Client
 
@@ -132,7 +132,6 @@ func newOAuth(deps cloud.Deps) oauth {
 		issuer:       issuer,
 		clientID:     cmp.Or(os.Getenv("DEPLOY_IAM_CLIENT_ID"), defaultClientID),
 		clientSecret: os.Getenv("DEPLOY_IAM_CLIENT_SECRET"),
-		adminOrg:     cmp.Or(os.Getenv("IAM_ADMIN_ORG"), "admin"),
 		publicURL:    strings.TrimRight(cmp.Or(os.Getenv("DEPLOY_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
 		http:         &http.Client{Timeout: 15 * time.Second},
 		verify:       cloud.NewTokenValidator(issuer).Validate,
@@ -270,10 +269,10 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	// SuperAdmin ⟺ the VERIFIED owner claim IS the reserved admin org. Not the
 	// `isAdmin` bit, which only says "admin of my own org" — conflating the two
 	// would be a privilege escalation.
-	if id.Owner != s.State.oauth.adminOrg {
+	if id.Owner != authz.AdminOrg {
 		s.Log.Warn("deploy sign-in refused: not a SuperAdmin", "user", id.User, "org", id.Owner)
 		return zip.ErrForbidden("SuperAdmin required: this console is limited to members of the " +
-			s.State.oauth.adminOrg + " organization")
+			authz.AdminOrg + " organization")
 	}
 
 	maxAge := sessionMaxAge(id.Expiry)
