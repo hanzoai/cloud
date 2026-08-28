@@ -28,7 +28,7 @@ var frozen = []string{
 	"dns", "domain", "prompt", "agents", "link", "wallet",
 	"x402", "deploy", "functions", "todo", "template", "blueprint",
 	"framework", "knowledge", "graph", "help", "content", "webhook",
-	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "crm", "marketing", "ad",
+	"ml", "label", "reference", "risk", "dataset", "usage", "leaderboard", "marketing", "ad",
 	"campaign", "validator", "social", "standing", "event", "git", "sync",
 	"visor", "captable", "code", "lsp", "network", "share",
 	"dataroom", "explorer", "security", "integrations", "destination", "cloudflare",

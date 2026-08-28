@@ -1,5 +1,5 @@
 // Package cms declares the Hanzo CMS content model as DocType fixtures on the
-// framework engine (clients/framework). CMS is NOT a bespoke subsystem and mounts
+// framework engine (apps/framework). CMS is NOT a bespoke subsystem and mounts
 // NO HTTP surface of its own: a "collection" IS a framework DocType in module
 // "cms", a content entry IS a framework document, media IS an Attach-backed
 // document, and publishing IS a status field. All CRUD, permissions, tenant
@@ -8,11 +8,7 @@
 // with the engine at init — the ONE source of truth for the CMS content model,
 // per-org on Base/SQLite.
 //
-// This is the first app lane on the framework and the template for the rest:
-// ERPNext DocTypes and Helpdesk register their fixtures the same way
-// (framework.RegisterModule) and are installed + rendered by the SAME generic
-// install path and the SAME generic @hanzo/ui DocType renderer. One engine, one
-// renderer, every business app.
+// erp and crm declare their models the same way, on the same engine.
 package cms
 
 import "github.com/hanzoai/cloud/apps/framework"

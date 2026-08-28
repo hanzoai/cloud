@@ -1,12 +1,7 @@
 package entitlement
 
-// The read the REFUSAL makes, against the real store.
-//
-// elective_test.go in package cloud drives the refusal against a peer that
-// implements the contract; this drives the other end — the handler that peer
-// stands in for — so the chain store → holds → plane has no untested link. The
-// two failures it catches are the ones a fake cannot: a query that reads the
-// wrong row, and a store that is absent answering "not held" instead of erroring.
+// The read the refusal makes, against the real store — the end a fake peer stands
+// in for, so the chain store → holds → plane has no untested link.
 
 import (
 	"context"
@@ -15,9 +10,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// An org holds only what it enabled, and nothing else holds it. This is the whole
-// opt-in semantic: no row is off, and the row is keyed by BOTH columns, so one
-// org's purchase cannot answer for another's.
+// Keyed by both columns, so one org's purchase cannot answer for another's.
 func TestHoldsIsPerOrgAndPerProduct(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -44,7 +37,7 @@ func TestHoldsIsPerOrgAndPerProduct(t *testing.T) {
 	}
 }
 
-// Disabling turns it back off — so the switch is a switch, not a one-way grant.
+// Disabling turns it back off: the switch is a switch, not a one-way grant.
 func TestHoldsFollowsDisable(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -59,14 +52,12 @@ func TestHoldsFollowsDisable(t *testing.T) {
 		t.Fatalf("Holds: %v", err)
 	}
 	if got {
-		t.Error("Holds = true after Disable — a product turned off still admits, so nobody can stop being billed for it")
+		t.Error("Holds = true after Disable")
 	}
 }
 
-// An unmounted store ERRORS. It must never answer false: the caller fails closed
-// on an error, so both paths refuse — but only the error tells an operator that
-// the subsystem did not start, where a false is indistinguishable from every
-// customer having declined the product.
+// An unmounted store errors rather than answering false: both refuse, but only
+// the error tells an operator the subsystem did not start.
 func TestHoldsWithoutAStoreIsAnError(t *testing.T) {
 	prev := mounted
 	mounted = nil
@@ -79,8 +70,7 @@ func TestHoldsWithoutAStoreIsAnError(t *testing.T) {
 	}
 }
 
-// A call carrying no org is refused rather than answered for some default. The
-// subject is not an input, so there is nothing to fall back to.
+// No org is refused rather than defaulted; the subject is not an input.
 func TestHoldsNeedsACaller(t *testing.T) {
 	prev := mounted
 	mounted = &service{store: openTestStore(t)}
@@ -92,8 +82,7 @@ func TestHoldsNeedsACaller(t *testing.T) {
 	if _, err := holds(plane.For(context.Background(), "acme"), &plane.ProductIn{Product: "  "}); err == nil {
 		t.Error("holds answered a call naming no product")
 	}
-	// And the happy path through the handler, so the three refusals above are not
-	// the only thing this function is known to do.
+	// The happy path through the handler.
 	if err := mounted.store.Enable(context.Background(), "acme", "crm", "", 1); err != nil {
 		t.Fatalf("enable: %v", err)
 	}

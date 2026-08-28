@@ -100,17 +100,11 @@ func (s *Store) List(ctx context.Context, org string) ([]string, error) {
 	return out, nil
 }
 
-// Holds reports whether org has product turned on.
+// Holds reports whether org has product turned on. A primary-key lookup, not a
+// membership test over [List], because this is the read on the refusal path.
 //
-// It is a primary-key lookup rather than a membership test over [List] because
-// this is the read on the REFUSAL path: every request reaching an elective
-// capability's prefix asks it, where List asks the console once per page.
-//
-// The absence of a row is `false` and never an error. That is the whole opt-in
-// semantic — a product nobody asked for is held by nobody — and it is why the
-// zero state needs no seeding. A store that cannot ANSWER is an error, which the
-// caller fails closed on; reporting "not held" for an outage would make a broken
-// database indistinguishable from a customer decision.
+// No row is false and never an error — that is the opt-in semantic, and why the
+// zero state needs no seeding.
 func (s *Store) Holds(ctx context.Context, org, product string) (bool, error) {
 	var one int
 	err := s.db.QueryRowContext(ctx,

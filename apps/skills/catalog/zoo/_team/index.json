@@ -49,11 +49,11 @@
       "sha256": "ed4f57109be753af1c19a2c5ef24c6891ac25dbd3743928cc2d03c893f4f87eb"
     },
     {
-      "description": "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Statistics returns the transactor's live sessions for the workspace",
+      "description": "Read team transactor: Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base., Open the workspace data-plane socket.",
       "name": "team_transactor",
       "path": "team_transactor/SKILL.md",
       "service": "team",
-      "sha256": "0c732e495126d49eed7ccd798fad6bbdd42c1294c80f383a775f677714d3c49a"
+      "sha256": "5cbf2f17cd75f2789697abfe2c2abc62a788fdd6158ded5e6fe8ffed07f89f6e"
     }
   ],
   "spec_version": "8.0.0"

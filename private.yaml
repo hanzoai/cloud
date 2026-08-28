@@ -2840,50 +2840,6 @@ components:
           description: Source is the warehouse table the lens read.
           type: string
       type: object
-    Company:
-      properties:
-        arr:
-          description: ARR is annual recurring revenue in minor units (cents) of Currency.
-          type: integer
-        city:
-          description: City is the head-office city.
-          type: string
-        country:
-          description: Country is the head-office country.
-          type: string
-        createdAt:
-          description: CreatedAt is the unix second the company was created. Server-owned.
-          type: integer
-        currency:
-          description: |-
-            Currency is the ISO code ARR is denominated in; a write that names none
-            stores USD.
-          type: string
-        domainName:
-          description: DomainName is the company's primary domain, e.g. "acme.com".
-          type: string
-        employees:
-          description: Employees is the headcount.
-          type: integer
-        id:
-          description: ID is the server-minted company id ("comp_" + 128 random bits).
-          type: string
-        idealCustomerProfile:
-          description: ICP marks the company as an ideal-customer-profile fit.
-          type: boolean
-        linkedinLink:
-          description: Linkedin is the company's LinkedIn URL.
-          type: string
-        name:
-          description: Name is the company name.
-          type: string
-        updatedAt:
-          description: UpdatedAt is the unix second of the last write. Server-owned.
-          type: integer
-        xLink:
-          description: XLink is the company's X (Twitter) URL.
-          type: string
-      type: object
     Completion:
       properties:
         detail:
@@ -3036,48 +2992,6 @@ components:
           type: integer
         stream_name:
           description: Stream is the stream this consumer reads.
-          type: string
-      type: object
-    Contact:
-      properties:
-        city:
-          description: City is where the person is based.
-          type: string
-        companyId:
-          description: |-
-            CompanyID links the contact to one of the org's companies; empty when the
-            contact stands alone, and cleared when its company is deleted. A write
-            naming a company the org does not own is refused with 422.
-          type: string
-        createdAt:
-          description: CreatedAt is the unix second the contact was created. Server-owned.
-          type: integer
-        email:
-          description: Email is the person's email address.
-          type: string
-        firstName:
-          description: FirstName is the person's given name.
-          type: string
-        id:
-          description: ID is the server-minted contact id ("cont_" + 128 random bits).
-          type: string
-        jobTitle:
-          description: JobTitle is the person's role at their company.
-          type: string
-        lastName:
-          description: LastName is the person's family name.
-          type: string
-        linkedinLink:
-          description: Linkedin is the person's LinkedIn URL.
-          type: string
-        phone:
-          description: Phone is the person's phone number.
-          type: string
-        updatedAt:
-          description: UpdatedAt is the unix second of the last write. Server-owned.
-          type: integer
-        xLink:
-          description: XLink is the person's X (Twitter) URL.
           type: string
       type: object
     Contacts:
@@ -7489,15 +7403,6 @@ components:
           description: prompt plus completion
           type: integer
       type: object
-    ModuleInfo:
-      properties:
-        doctypes:
-          items:
-            type: string
-          type: array
-        module:
-          type: string
-      type: object
     ModuleState:
       properties:
         doctypes:
@@ -7759,50 +7664,6 @@ components:
           type: string
         summary:
           type: string
-      type: object
-    Opportunity:
-      properties:
-        amount:
-          description: Amount is the deal value in minor units (cents) of Currency.
-          type: integer
-        closeDate:
-          description: CloseDate is the expected close as a unix second (0 = unset).
-          type: integer
-        companyId:
-          description: |-
-            CompanyID links the deal to one of the org's companies; empty when
-            unlinked, and cleared when that company is deleted. A write naming a
-            company the org does not own is refused with 422.
-          type: string
-        createdAt:
-          description: CreatedAt is the unix second the opportunity was created. Server-owned.
-          type: integer
-        currency:
-          description: |-
-            Currency is the ISO code Amount is denominated in; a write that names none
-            stores USD.
-          type: string
-        id:
-          description: ID is the server-minted opportunity id ("oppo_" + 128 random
-            bits).
-          type: string
-        name:
-          description: Name is the deal name.
-          type: string
-        pointOfContactId:
-          description: |-
-            PointOfContact links the deal to one of the org's contacts; empty when
-            unlinked, and cleared when that contact is deleted. A write naming a
-            contact the org does not own is refused with 422.
-          type: string
-        stage:
-          description: |-
-            Stage is the pipeline stage, always one of NEW, SCREENING, MEETING,
-            PROPOSAL or CUSTOMER — stored upper-case whatever case the write used.
-          type: string
-        updatedAt:
-          description: UpdatedAt is the unix second of the last write. Server-owned.
-          type: integer
       type: object
     Outcome:
       properties:
@@ -8462,81 +8323,6 @@ components:
         units:
           description: Units is the summed quantity sold.
           type: integer
-      type: object
-    ProgramApplication:
-      properties:
-        company:
-          description: Company is the applicant's company name.
-          type: string
-        companyId:
-          description: |-
-            CompanyID is the CRM Company minted for this lead at intake, so the startup
-            also appears in the org's standard CRM tabs. Empty when that best-effort
-            projection did not run.
-          type: string
-        contactId:
-          description: |-
-            ContactID is the CRM Contact minted for this lead at intake. Empty when that
-            best-effort projection did not run.
-          type: string
-        contactName:
-          description: ContactName is the person who applied.
-          type: string
-        createdAt:
-          description: CreatedAt is the unix second the application arrived. Server-owned.
-          type: integer
-        email:
-          description: |-
-            Email is the applicant's email — half of the (email, company) key a
-            resubmission refreshes instead of duplicating.
-          type: string
-        events:
-          description: Events is the append-only stage-transition log, oldest first.
-          items:
-            $ref: '#/components/schemas/StageEvent'
-          type: array
-        id:
-          description: ID is the server-minted application id ("appl_" + 128 random
-            bits).
-          type: string
-        metadata:
-          additionalProperties:
-            type: object
-          description: |-
-            Metadata is the FULL submitted form, every field, including the arrays the
-            promoted columns above do not carry (tier1Investors, useCases) and the
-            deterministic tier1Matched list.
-          type: object
-        reason:
-          description: |-
-            Reason is why the application was rejected, required to reject. Empty
-            otherwise.
-          type: string
-        role:
-          description: Role is the applicant's role at their company.
-          type: string
-        screen:
-          $ref: '#/components/schemas/ScreenResult'
-          description: |-
-            Screen is the AI screen. It runs after intake, so a freshly created
-            application carries a "pending" screen.
-        stage:
-          description: |-
-            Stage is the pipeline stage: applied, screened, qualified, credits-offered,
-            onboarded or rejected. Server-owned — it starts at "applied" and moves only
-            through the transition machine.
-          type: string
-        tier1:
-          description: |-
-            Tier1 is whether the applicant is tier-1 backed, derived deterministically
-            at intake from the submitted fund list — independent of the AI screen.
-          type: boolean
-        updatedAt:
-          description: UpdatedAt is the unix second of the last write. Server-owned.
-          type: integer
-        website:
-          description: Website is the applicant's website as submitted.
-          type: string
       type: object
     ProjectSummary:
       properties:
@@ -11077,44 +10863,6 @@ components:
             resolved server-side.
           type: string
       type: object
-    ScreenResult:
-      properties:
-        draftReply:
-          description: DraftReply is a suggested email reply for staff to edit and
-            send.
-          type: string
-        error:
-          description: |-
-            Error says why a failed screen failed — no AI gateway configured, a gateway
-            error, or a reply that carried no parseable JSON. Absent on success.
-          type: string
-        model:
-          description: Model is the LLM the screen ran on.
-          type: string
-        score:
-          description: Score is the model's 0..100 fit score, clamped to that range.
-          type: integer
-        screenedAt:
-          description: ScreenedAt is the unix second the screen finished (0 while
-            pending).
-          type: integer
-        status:
-          description: 'Status is the screen''s state: pending | done | failed.'
-          type: string
-        suggestedCredits:
-          description: |-
-            SuggestedCredits is the recommended credit grant in USD, snapped to the
-            nearest allowed rung: 0 | 5000 | 25000 | 50000 | 150000.
-          type: integer
-        summary:
-          description: Summary is the model's short assessment of the application.
-          type: string
-        tier1Backed:
-          description: |-
-            Tier1Backed is the model's read on tier-1 backing, normalized to
-            "yes", "no" or "unclear" (anything it cannot resolve reads "unclear").
-          type: string
-      type: object
     SecretMeta:
       properties:
         env:
@@ -11737,28 +11485,6 @@ components:
           description: |-
             T is the bucket's start instant, RFC3339 UTC. Buckets are gap-filled, so a
             window with no spend still has its points.
-          type: string
-      type: object
-    StageEvent:
-      properties:
-        at:
-          description: At is the unix second of the move.
-          type: integer
-        by:
-          description: |-
-            By is who moved it: "system" for intake and the AI auto-advance, else the
-            validated staff user id.
-          type: string
-        from:
-          description: From is the stage moved out of; empty on the intake event that
-            opens the log.
-          type: string
-        note:
-          description: Note is the free-text comment recorded with the move. Absent
-            when none.
-          type: string
-        to:
-          description: To is the stage moved into.
           type: string
       type: object
     StarterKit:
@@ -16352,14 +16078,6 @@ components:
             existing row's status, which may already be "approved" or "suspended".
           type: string
       type: object
-    applicationList:
-      properties:
-        data:
-          description: Data is the page of applications, newest first.
-          items:
-            $ref: '#/components/schemas/ProgramApplication'
-          type: array
-      type: object
     appliedResource:
       properties:
         message:
@@ -20823,53 +20541,6 @@ components:
             $ref: '#/components/schemas/commitJSON'
           type: array
       type: object
-    companyList:
-      properties:
-        data:
-          description: Data is the page of companies, most recently updated first.
-          items:
-            $ref: '#/components/schemas/Company'
-          type: array
-      type: object
-    companyReq:
-      properties:
-        arr:
-          description: ARR is annual recurring revenue in minor units (cents) of Currency.
-          type: integer
-        city:
-          description: City is the head-office city.
-          type: string
-        country:
-          description: Country is the head-office country.
-          type: string
-        currency:
-          description: Currency is the ISO code ARR is denominated in; empty defaults
-            to USD.
-          type: string
-        domainName:
-          description: DomainName is the company's primary domain, e.g. "acme.com".
-          type: string
-        employees:
-          description: Employees is the headcount.
-          type: integer
-        id:
-          description: |-
-            ID names the company to update and comes from the path. A create ignores
-            it: the server mints the id.
-          type: string
-        idealCustomerProfile:
-          description: ICP marks the company as an ideal-customer-profile fit.
-          type: boolean
-        linkedinLink:
-          description: Linkedin is the company's LinkedIn URL.
-          type: string
-        name:
-          description: Name is the company name. Required.
-          type: string
-        xLink:
-          description: XLink is the company's X (Twitter) URL.
-          type: string
-      type: object
     computeLeaf:
       properties:
         active:
@@ -21266,49 +20937,6 @@ components:
             UserLoginsDisabled is true: the SPA must not render its own username/password
             form. Signing in goes through IAM, at GET /v1/deploy/login.
           type: boolean
-      type: object
-    contactList:
-      properties:
-        data:
-          description: Data is the page of contacts, most recently updated first.
-          items:
-            $ref: '#/components/schemas/Contact'
-          type: array
-      type: object
-    contactReq:
-      properties:
-        city:
-          description: City is where the person is based.
-          type: string
-        companyId:
-          description: CompanyID links the contact to one of the org's companies.
-          type: string
-        email:
-          description: Email is the person's email address.
-          type: string
-        firstName:
-          description: FirstName is the person's given name.
-          type: string
-        id:
-          description: |-
-            ID names the contact to update and comes from the path. A create ignores
-            it: the server mints the id.
-          type: string
-        jobTitle:
-          description: JobTitle is the person's role at their company.
-          type: string
-        lastName:
-          description: LastName is the person's family name.
-          type: string
-        linkedinLink:
-          description: Linkedin is the person's LinkedIn URL.
-          type: string
-        phone:
-          description: Phone is the person's phone number.
-          type: string
-        xLink:
-          description: XLink is the person's X (Twitter) URL.
-          type: string
       type: object
     contextIn:
       properties:
@@ -21971,18 +21599,6 @@ components:
         connector:
           $ref: '#/components/schemas/connView'
           description: Connection is the connector as it now stands.
-      type: object
-    crmSummary:
-      properties:
-        companies:
-          description: Companies is how many companies the org has.
-          type: integer
-        contacts:
-          description: Contacts is how many contacts the org has.
-          type: integer
-        opportunities:
-          description: Opportunities is how many opportunities the org has.
-          type: integer
       type: object
     cryptoAsset:
       properties:
@@ -31923,11 +31539,26 @@ components:
     moduleList:
       properties:
         data:
-          description: Data is every module compiled into this binary, with the DocTypes
-            it installs.
+          description: |-
+            Data is every module compiled into this binary, with the DocTypes it installs
+            and whether the caller's org has turned it on.
           items:
-            $ref: '#/components/schemas/ModuleInfo'
+            $ref: '#/components/schemas/moduleRow'
           type: array
+      type: object
+    moduleRow:
+      properties:
+        doctypes:
+          items:
+            type: string
+          type: array
+        enabled:
+          description: |-
+            Enabled is whether this org has turned the module on. A module that is off
+            answers 404 on every DocType it owns (elective.go).
+          type: boolean
+        module:
+          type: string
       type: object
     moneyBoard:
       properties:
@@ -44880,46 +44511,6 @@ components:
             tenant uses it.
           type: string
       type: object
-    oppList:
-      properties:
-        data:
-          description: Data is the page of opportunities, most recently updated first.
-          items:
-            $ref: '#/components/schemas/Opportunity'
-          type: array
-      type: object
-    oppReq:
-      properties:
-        amount:
-          description: Amount is the deal value in minor units (cents) of Currency.
-          type: integer
-        closeDate:
-          description: CloseDate is the expected close, as a unix second (0 = unset).
-          type: integer
-        companyId:
-          description: CompanyID links the deal to one of the org's companies.
-          type: string
-        currency:
-          description: Currency is the ISO code Amount is denominated in; empty defaults
-            to USD.
-          type: string
-        id:
-          description: |-
-            ID names the opportunity to update and comes from the path. A create
-            ignores it: the server mints the id.
-          type: string
-        name:
-          description: Name is the deal name. Required.
-          type: string
-        pointOfContactId:
-          description: PointOfContact links the deal to one of the org's contacts.
-          type: string
-        stage:
-          description: |-
-            Stage is the pipeline stage: NEW, SCREENING, MEETING, PROPOSAL or CUSTOMER
-            (case-insensitive). Empty defaults to NEW.
-          type: string
-      type: object
     optinView:
       properties:
         org:
@@ -45337,25 +44928,6 @@ components:
             Sender is the transport-native user id waiting for access — the same
             identity inbox messages carry. Approving mints a DM allow entry for exactly
             this value and nothing wider: pairing never grants group access.
-          type: string
-      type: object
-    patchApplicationIn:
-      properties:
-        id:
-          description: ID is the application to move, from the path.
-          type: string
-        note:
-          description: |-
-            Note is a free-text comment recorded on the timeline, with or without a
-            stage change.
-          type: string
-        reason:
-          description: Reason records WHY, and is required to reject.
-          type: string
-        stage:
-          description: |-
-            Stage is the stage to move to: applied, screened, qualified,
-            credits-offered, onboarded or rejected. Omit to leave the stage alone.
           type: string
       type: object
     patchFlowIn:
@@ -80932,585 +80504,6 @@ paths:
       tags:
       - crawl
       x-app: crawl
-      x-public: true
-      x-tool: true
-  /v1/crm/applications:
-    get:
-      description: |-
-        Returns the org's Startup Program applications, newest first.
-        Each carries its AI screen and its stage history; a stage narrows the page to
-        one pipeline stage.
-      operationId: get_crm_applications
-      parameters:
-      - description: |-
-          Stage returns only the applications at that pipeline stage when set:
-          applied, screened, qualified, credits-offered, onboarded or rejected.
-        in: query
-        name: stage
-        required: false
-        schema:
-          type: string
-      - description: 'Limit caps the rows returned: 200 by default, 1000 at most.'
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/applicationList'
-          description: ok
-      summary: Returns the org's Startup Program applications, newest first.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Files an application to the Startup Program and answers the id and pipeline stage it landed at.
-
-        This is the ONE unauthenticated route in crm. It takes no principal and never reads a caller org: the application is filed against the DEPLOYMENT's own program org — the brand, hanzo unless white-labelled — so there is no tenant to name and none to leak. Reading the application back is staff-only and lives elsewhere.
-
-        company, contactName and a parseable email are required; everything else is optional context. Re-submitting the same (email, company) REFRESHES the existing application instead of filing a second one, so an impatient applicant cannot duplicate their own lead — that is a 200 where a first submission is a 201. A filled `hp` honeypot field is answered exactly like a success and stored nowhere, so a bot cannot tell a drop from an accept.
-
-        Filing is not screening: the application lands at stage `applied` with its AI screen still pending, and the screen runs afterwards on its own clock. A company and contact are also projected into the program org's ordinary CRM lists, best-effort — that projection failing does not fail the application. Bodies over 64 KiB are refused, and submissions are rate-limited.
-      operationId: post_crm_applications
-      summary: Apply to the Startup Program from the public form
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-  /v1/crm/applications/{id}:
-    get:
-      description: |-
-        Returns one Startup Program application with its AI screen and stage history.
-        An id belonging to another org reads as not found.
-      operationId: get_crm_applications_by_id
-      parameters:
-      - description: ID is the record to act on, from the path.
-        example: appl_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProgramApplication'
-          description: ok
-      summary: Returns one Startup Program application with its AI screen and stage
-        history.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    patch:
-      description: |-
-        Moves one Startup Program application through the pipeline. The
-        move is recorded on the application's timeline, attributed to the calling
-        staff user: it may advance exactly one stage, go back to any earlier stage,
-        reject from any non-rejected stage, or reopen a rejected application to
-        `applied`; anything else is refused. Rejecting requires a reason. A note with
-        no stage change is still recorded.
-      operationId: patch_crm_applications_by_id
-      parameters:
-      - description: ID is the application to move, from the path.
-        example: appl_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: appl_1
-              reason: not a fit this round
-              stage: rejected
-            schema:
-              $ref: '#/components/schemas/patchApplicationIn'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProgramApplication'
-          description: ok
-      summary: Moves one Startup Program application through the pipeline.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-  /v1/crm/companies:
-    get:
-      description: Returns the caller org's companies, most recently updated first.
-      operationId: get_crm_companies
-      parameters:
-      - description: 'Limit caps the rows returned: 200 by default, 1000 at most.'
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/companyList'
-          description: ok
-      summary: Returns the caller org's companies, most recently updated first.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Adds a company to the caller's org and answers 201 with the stored record.
-        A name is required; an empty currency defaults to USD.
-      operationId: post_crm_companies
-      requestBody:
-        content:
-          application/json:
-            example:
-              domainName: maxpower.ai
-              employees: 42
-              name: MaxPower Inc
-            schema:
-              $ref: '#/components/schemas/companyReq'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Company'
-          description: created
-      summary: Adds a company to the caller's org and answers 201 with the stored
-        record.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-  /v1/crm/companies/{id}:
-    delete:
-      description: |-
-        Removes one of the caller org's companies and answers 204. Any
-        contact or opportunity in the org that referenced it keeps existing with the
-        reference cleared, so nothing is left pointing at a company that is gone.
-      operationId: delete_crm_companies_by_id
-      parameters:
-      - description: ID is the record to act on, from the path.
-        example: comp_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one of the caller org's companies and answers 204.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's companies. An id belonging to
-        another org reads as not found.
-      operationId: get_crm_companies_by_id
-      parameters:
-      - description: ID is the record to act on, from the path.
-        example: comp_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Company'
-          description: ok
-      summary: Returns one of the caller org's companies.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Replaces one of the caller org's companies. Every writable
-        field is taken from the request, so a field the request omits is CLEARED —
-        send the whole record. A name is required.
-      operationId: put_crm_companies_by_id
-      parameters:
-      - description: |-
-          ID names the company to update and comes from the path. A create ignores
-          it: the server mints the id.
-        example: comp_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              employees: 64
-              id: comp_1
-              name: MaxPower Inc
-            schema:
-              $ref: '#/components/schemas/companyReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Company'
-          description: ok
-      summary: Replaces one of the caller org's companies.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-  /v1/crm/contacts:
-    get:
-      description: |-
-        Returns the caller org's contacts, most recently updated first.
-        A companyId narrows the page to the people at that company.
-      operationId: get_crm_contacts
-      parameters:
-      - description: CompanyID returns only the contacts at that company when set.
-        in: query
-        name: companyId
-        required: false
-        schema:
-          type: string
-      - description: 'Limit caps the rows returned: 200 by default, 1000 at most.'
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/contactList'
-          description: ok
-      summary: Returns the caller org's contacts, most recently updated first.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Adds a person to the caller's org and answers 201 with the stored record.
-        One of firstName, lastName or email is required, and a companyId must name a
-        company in the same org.
-      operationId: post_crm_contacts
-      requestBody:
-        content:
-          application/json:
-            example:
-              email: dave@maxpower.ai
-              firstName: Dave
-              lastName: Lorenzini
-            schema:
-              $ref: '#/components/schemas/contactReq'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Contact'
-          description: created
-      summary: Adds a person to the caller's org and answers 201 with the stored record.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-  /v1/crm/contacts/{id}:
-    delete:
-      description: |-
-        Removes one of the caller org's contacts and answers 204. Any
-        opportunity in the org that named it point of contact keeps existing with
-        that reference cleared.
-      operationId: delete_crm_contacts_by_id
-      parameters:
-      - description: ID is the record to act on, from the path.
-        example: cont_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one of the caller org's contacts and answers 204.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's contacts. An id belonging to
-        another org reads as not found.
-      operationId: get_crm_contacts_by_id
-      parameters:
-      - description: ID is the record to act on, from the path.
-        example: cont_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Contact'
-          description: ok
-      summary: Returns one of the caller org's contacts.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Replaces one of the caller org's contacts. Every writable field
-        is taken from the request, so a field the request omits is CLEARED — send the
-        whole record. One of firstName, lastName or email is required.
-      operationId: put_crm_contacts_by_id
-      parameters:
-      - description: |-
-          ID names the contact to update and comes from the path. A create ignores
-          it: the server mints the id.
-        example: cont_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              firstName: Dave
-              id: cont_1
-              jobTitle: CTO
-            schema:
-              $ref: '#/components/schemas/contactReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Contact'
-          description: ok
-      summary: Replaces one of the caller org's contacts.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-  /v1/crm/opportunities:
-    get:
-      description: |-
-        Returns the caller org's deals, most recently updated first.
-        A stage narrows the page to one pipeline stage.
-      operationId: get_crm_opportunities
-      parameters:
-      - description: |-
-          Stage returns only the opportunities at that pipeline stage when set
-          (NEW, SCREENING, MEETING, PROPOSAL or CUSTOMER; case-insensitive).
-        in: query
-        name: stage
-        required: false
-        schema:
-          type: string
-      - description: 'Limit caps the rows returned: 200 by default, 1000 at most.'
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/oppList'
-          description: ok
-      summary: Returns the caller org's deals, most recently updated first.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Adds a deal to the caller's org and answers 201 with the stored record.
-        A name is required; the stage defaults to NEW; companyId and pointOfContactId
-        must name records in the same org.
-      operationId: post_crm_opportunities
-      requestBody:
-        content:
-          application/json:
-            example:
-              amount: 5000000
-              name: Enterprise Deal
-              stage: PROPOSAL
-            schema:
-              $ref: '#/components/schemas/oppReq'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Opportunity'
-          description: created
-      summary: Adds a deal to the caller's org and answers 201 with the stored record.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-  /v1/crm/opportunities/{id}:
-    delete:
-      description: Removes one of the caller org's deals and answers 204.
-      operationId: delete_crm_opportunities_by_id
-      parameters:
-      - description: ID is the record to act on, from the path.
-        example: oppo_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one of the caller org's deals and answers 204.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    get:
-      description: |-
-        Returns one of the caller org's deals. An id belonging to
-        another org reads as not found.
-      operationId: get_crm_opportunities_by_id
-      parameters:
-      - description: ID is the record to act on, from the path.
-        example: oppo_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Opportunity'
-          description: ok
-      summary: Returns one of the caller org's deals.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-    put:
-      description: |-
-        Replaces one of the caller org's deals. Every writable
-        field is taken from the request, so a field the request omits is CLEARED —
-        send the whole record. A name is required and the stage must be a pipeline
-        stage.
-      operationId: put_crm_opportunities_by_id
-      parameters:
-      - description: |-
-          ID names the opportunity to update and comes from the path. A create
-          ignores it: the server mints the id.
-        example: oppo_1
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: oppo_1
-              name: Enterprise Deal
-              stage: CUSTOMER
-            schema:
-              $ref: '#/components/schemas/oppReq'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Opportunity'
-          description: ok
-      summary: Replaces one of the caller org's deals.
-      tags:
-      - crm
-      x-app: crm
-      x-public: true
-      x-tool: true
-  /v1/crm/summary:
-    get:
-      description: 'Summary counts the caller org''s CRM records: companies, contacts,
-        opportunities.'
-      operationId: get_crm_summary
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/crmSummary'
-          description: ok
-      summary: 'Summary counts the caller org''s CRM records: companies, contacts,
-        opportunities.'
-      tags:
-      - crm
-      x-app: crm
       x-public: true
       x-tool: true
   /v1/dataroom/analytics/dataroom/{dataroomId}:
@@ -128564,9 +127557,6 @@ tags:
 - description: Package crawl is any web page turned into clean markdown a model can
     read.
   name: crawl
-- description: 'Package crm is your sales pipeline: the companies, the people, the
-    deals in play.'
-  name: crm
 - description: Package dataroom is a secure document room you share by link and watch
     page by page.
   name: dataroom

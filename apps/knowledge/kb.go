@@ -7,7 +7,7 @@
 // vault.
 //
 // The model is declared here as DocType fixtures on the framework engine
-// (clients/framework), and index.go wires the ONE per-org vector path that turns
+// (apps/framework), and index.go wires the ONE per-org vector path that turns
 // every knowledge document into retrievable org memory. It is the FOURTH app lane
 // after cms/erp/help and the one that makes "a Notion-like wiki + agent memory"
 // just another module on Base — no new Base, no new database.

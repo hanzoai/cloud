@@ -22,6 +22,7 @@ import (
 	// has never heard of. That is what both packages did until now, and erp's own
 	// doc named this line as the fix.
 	_ "github.com/hanzoai/cloud/apps/cms"
+	_ "github.com/hanzoai/cloud/apps/crm"
 	_ "github.com/hanzoai/cloud/apps/erp"
 )
 

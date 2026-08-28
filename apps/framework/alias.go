@@ -12,12 +12,10 @@ import (
 // crosses between them with no conversion and there is still exactly one
 // definition of each.
 //
-// They exist because the app lanes (cms, erp, help, knowledge, content, guide)
-// already build against `clients/framework` and should not have to care that
-// the engine now lives in its own module. A lane declaring a content model
-// keeps writing framework.DocType / framework.FieldData, and a lane that wants
-// the engine directly can import github.com/hanzoai/framework instead — the
-// types are interchangeable either way.
+// They exist so an app lane (cms, crm, erp, help, knowledge, content, guide) can
+// declare a content model as framework.DocType / framework.FieldData without
+// caring that the engine lives in its own module. A lane that wants the engine
+// directly imports github.com/hanzoai/framework; the types are interchangeable.
 
 // The schema and document types.
 type (

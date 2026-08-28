@@ -14,10 +14,7 @@
 
 package manifest
 
-import (
-	"sort"
-	"strings"
-)
+import "strings"
 
 // PrefixesFor returns the paths app answers, as declared in Apps.
 //
@@ -85,32 +82,6 @@ func Coresident(name string) bool {
 // An unknown name is ga, which is the same answer the zero value gives. A name
 // that is not in Apps was never routed here, so there is no prefix for a refusal
 // to sit on and nothing for a stage to decide.
-// Electives is every capability an org must ask for, sorted. It is the catalog a
-// console renders as the list of products with a switch beside each, and it is
-// derived from the rows rather than kept as a second list, so a row marked
-// elective is offered the same day it starts refusing.
-func Electives() []string {
-	out := []string{}
-	for _, a := range Apps {
-		if a.Elective {
-			out = append(out, a.Name)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// IsElective reports whether an org holds this capability only by asking for it.
-// See [App.Elective]; an unknown name is universal, exactly as it is un-staged.
-func IsElective(name string) bool {
-	for _, a := range Apps {
-		if a.Name == name {
-			return a.Elective
-		}
-	}
-	return false
-}
-
 func StageOf(name string) string {
 	for _, a := range Apps {
 		if a.Name == name {

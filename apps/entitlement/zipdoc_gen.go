@@ -22,6 +22,12 @@ func init() {
 			"entitlementsView.enabled": "Enabled is the org's turned-on product ids, sorted. Always an array, never null.",
 		},
 	})
+	zip.Describe("POST /entitlement/holds", zip.Doc{
+		Description: "Reads one product for the caller's own org. The caller names only the\nproduct, so \"check another org's entitlement\" is unrepresentable.\n\nAn unmounted store is an error, never a false: a subsystem that failed to start\nmust not read as a customer who has not subscribed.",
+		Fields: map[string]string{
+			"ProductIn.product": "the product id; for a module it is the module name",
+		},
+	})
 	zip.Describe("POST /v1/entitlement/orgs/:org", zip.Doc{
 		Description: "Post turns products on or off for an org and returns the enabled set afterwards.\n\nA product may only be ENABLED if the org's plan already ENTITLES it, so enabling\nnever spends new money — a product the plan does not grant answers 402 and the\nconsole routes that to an upgrade prompt. DISABLING is never gated. A platform\nsuper admin bypasses the plan check (operator comp/grant) and may target any org;\neveryone else may only change their own. Commerce unreachable is a 503, never an\nimplicit yes.",
 		Fields: map[string]string{
