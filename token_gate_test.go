@@ -100,6 +100,10 @@ var allowedTokenPrimitives = map[string]string{
 		"and a ref, and no Hanzo surface accepts anything this file produces.",
 	"apps/integrations/slack_verify.go": "Slack request verification — the v0 signing scheme over " +
 		"timestamp+body, Slack's contract.",
+	"apps/integrations/whatsapp_events.go": "WhatsApp webhook verification — Meta's " +
+		"X-Hub-Signature-256, an HMAC over the raw body under the app secret, their contract. It " +
+		"verifies THEIR signature and mints nothing: what the delivery buys is a reply route, and no " +
+		"Hanzo surface accepts anything this file produces.",
 	"apps/integrations/state.go": "OAuth state MAC — tamper-proofs the (org, nonce) binding across " +
 		"the round trip so a callback cannot be bound to a foreign org. A CSRF seal, not a bearer.",
 	"apps/integrations/channel_state.go": "the shared signed-state primitive the channel and Slack " +
