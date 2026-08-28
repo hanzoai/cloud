@@ -209,8 +209,17 @@ func init() {
 	docs := openapi.OneOf{[]json.RawMessage{}, json.RawMessage{}}
 	openapi.Register("/v1/index/indexes/:uid/documents", http.MethodPost, docs, indexEnqueued{})
 	openapi.Register("/v1/index/indexes/:uid/documents", http.MethodPut, docs, indexEnqueued{})
+	// delete-batch is ONE array, not a choice between two. It read as
+	// OneOf{[]string, []float64} — "a list of strings or a list of numbers" —
+	// which is wrong twice. It forbids the MIXED list the engine accepts, since an
+	// id is a string or a number per document and not per request. And a union of
+	// two unnamed arrays is not a name any generator can write: typescript-fetch
+	// emitted `Array<string> | Array<number>ToJSON(...)` as the body expression,
+	// which is a syntax error, so hanzo-js/sdk-fetch had not compiled since
+	// v8.5.102. An id is whatever JSON an id is, which is the same argument
+	// json.RawMessage already carries for a document one line up.
 	openapi.Register("/v1/index/indexes/:uid/documents/delete-batch", http.MethodPost,
-		openapi.OneOf{[]string{}, []float64{}}, indexEnqueued{})
+		[]json.RawMessage{}, indexEnqueued{})
 }
 
 // routes registers the Meilisearch dialect under /v1/index.

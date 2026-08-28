@@ -257,9 +257,17 @@ func TestTheUntypedWritesStillDeclareTheirBodies(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal request body: %v", err)
 		}
-		if !strings.Contains(string(raw), "oneOf") {
-			t.Errorf("%s declares a single body shape (%s) — the wire really is two, and naming one "+
-				"publishes an API that cannot send the other", key, raw)
+		// The ARRAY is what every one of these declares, because the array body is
+		// the reason all three are here (reasonArrayBody). It used to read
+		// `contains "oneOf"`, which is a different claim: true of the two upserts,
+		// which take a single document as well as a list, and false of
+		// delete-batch, which is always a list. Asserting the union made
+		// delete-batch declare one — `[]string` or `[]float64` — and that is a
+		// body no generator can name, so hanzo-js/sdk-fetch emitted a syntax error
+		// for it and had not compiled since v8.5.102.
+		if !strings.Contains(string(raw), `"type":"array"`) {
+			t.Errorf("%s declares no array body (%s) — an SDK generated from this cannot send the "+
+				"list the wire takes", key, raw)
 		}
 		if op.Responses == nil {
 			t.Errorf("%s declares no response — the receipt it answers with is invisible", key)
