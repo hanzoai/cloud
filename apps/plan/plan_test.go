@@ -139,15 +139,17 @@ func TestEntitlements_UnknownPlanErrors(t *testing.T) {
 }
 
 // TestPlans_Ladder pins the commercial model on the surface GET
-// /v1/plan/subscriptions serves: the personal ladder go $9 / dev $19 / pro $49 /
-// max $99, and team $25 per-seat with a 2-seat minimum. Stripe lookup keys are part
-// of the contract — each carries its price, so a reprice mints a new key rather than
-// moving an immutable one.
+// /v1/plan/subscriptions serves: the personal ladder dev $19 / max $99, and team $24
+// per-seat with a 2-seat minimum. Stripe lookup keys are part of the contract — each
+// carries its price, so a reprice mints a new key rather than moving an immutable
+// one, which is why team's key is hanzo_team_24 and not the repriced hanzo_team_25.
 //
 // This is a CANARY on a money surface: it is meant to fail loudly when the catalog
 // reprices, so the change is deliberate and reviewed. It last fired for real when
-// plans v1.4.10 replaced the pro $20 / plus $100 / max $200 ladder — the same change
-// that retired plus/team-max/custom (see paid_test.go).
+// plans v1.6.0 retired go $9 and pro $49 to leave a shorter ladder, and repriced
+// team 25 -> 24; before that when v1.4.10 replaced the pro $20 / plus $100 / max
+// $200 ladder — the same change that retired plus/team-max/custom (see
+// paid_test.go).
 func TestPlans_Ladder(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
@@ -173,8 +175,8 @@ func TestPlans_Ladder(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	price := map[string]float64{"free": 0, "go": 9, "dev": 19, "pro": 49, "max": 99, "team": 25}
-	lookup := map[string]string{"free": "", "go": "hanzo_go_9", "dev": "hanzo_dev_19", "pro": "hanzo_pro_49", "max": "hanzo_max_99", "team": "hanzo_team_25"}
+	price := map[string]float64{"free": 0, "dev": 19, "max": 99, "team": 24}
+	lookup := map[string]string{"free": "", "dev": "hanzo_dev_19", "max": "hanzo_max_99", "team": "hanzo_team_24"}
 	seen := map[string]bool{}
 	for _, p := range body.Plans {
 		want, ok := price[p.ID]
@@ -205,16 +207,16 @@ func TestPlans_Ladder(t *testing.T) {
 }
 
 // TestLicenseEntitlement_TeamProduct is the entitlement gate contract for
-// hanzo.team: a signed license for pro, max AND team must carry
-// licensing.product:team, and go (the entry tier) must NOT — the gate fails
-// closed for a tier that never bought team access.
+// hanzo.team: a signed license for dev, max AND team must carry
+// licensing.product:team, and free (the entry tier, since go and pro were retired)
+// must NOT — the gate fails closed for a tier that never bought team access.
 func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	prev := host
 	host = newHost(t)
 	defer func() { host.Close(); host = prev }()
 	ctx := context.Background()
 
-	for _, id := range []string{"pro", "max", "team"} {
+	for _, id := range []string{"dev", "max", "team"} {
 		ents, feats, found, err := LicenseEntitlement(ctx, id)
 		if err != nil {
 			t.Fatalf("LicenseEntitlement(%s): %v", id, err)
@@ -234,10 +236,22 @@ func TestLicenseEntitlement_TeamProduct(t *testing.T) {
 	} else if !slices.Contains(feats, "licensing.product:engine") {
 		t.Errorf("max license_features = %v, want licensing.product:engine", feats)
 	}
-	if _, feats, found, err := LicenseEntitlement(ctx, "go"); err != nil || !found {
-		t.Fatalf("LicenseEntitlement(go): found=%v err=%v", found, err)
+	// free is the entry tier now that go and pro are retired, and the gate has to
+	// fail closed for it the same way: a tier that bought nothing carries nothing.
+	if _, feats, found, err := LicenseEntitlement(ctx, "free"); err != nil || !found {
+		t.Fatalf("LicenseEntitlement(free): found=%v err=%v", found, err)
 	} else if slices.Contains(feats, "licensing.product:team") {
-		t.Error("go must not carry licensing.product:team")
+		t.Error("free must not carry licensing.product:team")
+	}
+	// A retired id is GONE from the subscription catalog, not merely unsold. `go`
+	// resolves to nothing; `pro` still answers because plans.json — the separate
+	// infra ladder — has a `pro` of its own, and that one carries no licensing
+	// features. Neither can hand a caller team access.
+	if _, _, found, _ := LicenseEntitlement(ctx, "go"); found {
+		t.Error("go is retired and must not resolve as a subscription")
+	}
+	if _, feats, _, _ := LicenseEntitlement(ctx, "pro"); slices.Contains(feats, "licensing.product:team") {
+		t.Errorf("retired pro carries %v — it must grant nothing", feats)
 	}
 }
 
