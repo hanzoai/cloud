@@ -129,9 +129,32 @@ const (
 	// which read as "the service ships no logs" and was never that.
 	planeLogResourceTable = "event.log_resource"
 
-	// resourceBucket is the width event.log_resource is partitioned and read on:
-	// the reader bounds its CTE by seen_at_ts_bucket_start, so a resource must be
-	// re-stated in every bucket it is still logging in, not once when first seen.
+	// event.span_resource is the same fact for the span lane, and the read plane
+	// narrows through it exactly as it narrows logs through event.log_resource:
+	// a resource CTE selects fingerprints whose labels match the filter, and the
+	// span query keeps `resource_fingerprint GLOBAL IN (…)` and nothing else
+	// (hanzoai/o11y pins that shape in telemetrytraces' golden). So a span row
+	// whose fingerprint names no identity row is unreachable by any filter a
+	// console panel can express — and a span row with an EMPTY fingerprint is
+	// unreachable by all of them.
+	//
+	// Measured before this: 10,307 spans on the plane, 10,307 with
+	// resource_fingerprint = '' and 0 rows in event.span_resource. The Service
+	// Map and the per-service Traces view were empty for every service.
+	planeSpanResourceTable = "event.span_resource"
+
+	// event.operation is the (service, name) inventory the trace read plane
+	// resolves a root-operation filter against — `(name, service) GLOBAL IN
+	// (SELECT DISTINCT name, serviceName FROM event.operation WHERE time >= …)`.
+	// Empty, that predicate matches nothing, so every query that names an
+	// operation answers empty over a complete span table. Nothing but the span
+	// writer knows a span's (service, name), so the span writer owes the row.
+	planeOperationTable = "event.operation"
+
+	// resourceBucket is the width event.log_resource and event.span_resource are
+	// partitioned and read on: the reader bounds its CTE by
+	// seen_at_ts_bucket_start, so a resource must be re-stated in every bucket it
+	// is still producing in, not once when first seen.
 	resourceBucket = 1800
 
 	// The ZAP wire addresses, unchanged from the embedded collector: 4317 is
@@ -186,8 +209,13 @@ const (
 // merge collapses it. The version has to be a clock, and the server's clock is
 // the only one every writer shares.
 var (
+	// resource_fingerprint is LAST and is the join key, not a description: it
+	// points a span row at the identity row in event.span_resource that the read
+	// plane's CTE selects. It is bound here, on the fact, because the reader
+	// follows it from the row and never recomputes it.
 	planeSpanColumns = []string{"org", "time", "id", "name", "kind", "service",
-		"trace_id", "span_id", "parent", "duration", "status", "attributes"}
+		"trace_id", "span_id", "parent", "duration", "status", "attributes",
+		"resource_fingerprint"}
 	planeLogColumns = []string{"org", "time", "id", "name", "kind", "service",
 		"severity_text", "severity_number", "body", "trace_id", "span_id", "attributes",
 		"resource_fingerprint"}
@@ -197,6 +225,17 @@ var (
 	// it is which 30-minute window this resource was observed logging in, and the
 	// reader matches on it.
 	planeLogResourceColumns = []string{"org", "fingerprint", "labels", "seen_at_ts_bucket_start"}
+
+	// The same identity for the span lane. The two tables carry the same four
+	// values in a DIFFERENT ORDER, which is the applied schema's own choice and
+	// not ours to reconcile: each list states the table it names.
+	planeSpanResourceColumns = []string{"org", "seen_at_ts_bucket_start", "fingerprint", "labels"}
+
+	// event.operation's full column list. serviceName is camel-cased in the
+	// applied schema, and `time` is the LATEST span start observed for the pair,
+	// which is also the table's ReplacingMergeTree version — so re-stating a pair
+	// in a later bucket refreshes it rather than duplicating it.
+	planeOperationColumns = []string{"org", "serviceName", "name", "time"}
 
 	// event.trace's full column list — the table has FIVE columns and no
 	// ingested_at, so the rule above has nothing to omit here. Its retention and
@@ -214,16 +253,27 @@ var (
 // asserts exactly that, so a reordered column list goes red instead of silently
 // summarizing a trace by its duration column.
 const (
-	planeSpanColOrg      = 0
-	planeSpanColTime     = 1
-	planeSpanColTraceID  = 6
-	planeSpanColDuration = 9
+	planeSpanColOrg         = 0
+	planeSpanColTime        = 1
+	planeSpanColName        = 3
+	planeSpanColService     = 5
+	planeSpanColTraceID     = 6
+	planeSpanColDuration    = 9
+	planeSpanColFingerprint = 12
 )
 
 // planeSink pins the ingest resources for the process life so shutdown can
 // stop the listeners and flush the connection, mirroring metricsIngest.
 type planeSink struct {
-	sink    *datastoreSink
+	sink *datastoreSink
+
+	// insert is the statement this sink writes through — ps.sink.Insert in a
+	// running process. It is a field for the reason rowBuffer takes its writer as
+	// an argument: what this file OWES the plane (which tables, in which order,
+	// keyed how) is decidable without a datastore, and a rule about ordering that
+	// only a live store can check is a rule nothing checks.
+	insert func(ctx context.Context, table string, columns []string, rows [][]any) error
+
 	spanRcv *zapreceiver.Receiver
 	logRcv  *zaplogreceiver.Receiver
 
@@ -248,14 +298,20 @@ type planeSink struct {
 	seen map[string]struct{}
 }
 
-// rememberResource states a batch's resource identity at most once per bucket.
+// state writes the DIMENSION rows a batch implies, at most once per identity.
 //
-// Fail-soft and SAID, like every other branch of this sink: a resource that does
+// The three dimensions this sink owes — a log's resource, a span's resource, a
+// span's (service, name) operation — repeat batch after batch and are read by
+// their identity alone, so writing one per batch would be the write amplification
+// that has taken this store down before ("Too many parts"). key says what an
+// identity IS for a table, which is the only thing that differs between them.
+//
+// Fail-soft and SAID, like every other branch of this sink: a dimension that does
 // not land makes its rows unreadable, which is exactly the failure this whole
-// change exists to end, so it must never pass silently. The key is only marked
-// once the write succeeded — a failed attempt is retried by the next batch rather
-// than remembered as done.
-func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, rows [][]any) {
+// change exists to end, so it must never pass silently. A key is marked only once
+// the write succeeded — a failed attempt is retried by the next batch rather than
+// remembered as done.
+func (ps *planeSink) state(ctx context.Context, log luxlog.Logger, table string, columns []string, rows [][]any, key func([]any) string) {
 	pending := make([][]any, 0, len(rows))
 	keys := make([]string, 0, len(rows))
 	ps.mu.Lock()
@@ -263,24 +319,24 @@ func (ps *planeSink) rememberResource(ctx context.Context, log luxlog.Logger, ro
 		ps.seen = map[string]struct{}{}
 	}
 	for _, row := range rows {
-		if len(row) != len(planeLogResourceColumns) {
+		if len(row) != len(columns) {
 			continue
 		}
-		key := fmt.Sprint(row[0], "\x00", row[1], "\x00", row[3])
-		if _, done := ps.seen[key]; done {
+		k := table + "\x00" + key(row)
+		if _, done := ps.seen[k]; done {
 			continue
 		}
 		pending = append(pending, row)
-		keys = append(keys, key)
+		keys = append(keys, k)
 	}
 	ps.mu.Unlock()
 	if len(pending) == 0 {
 		return
 	}
 
-	if err := ps.sink.Insert(ctx, planeLogResourceTable, planeLogResourceColumns, pending); err != nil {
-		log.Warn("plane log resource identity not stated — rows in this batch are unreachable by a resource filter until it is",
-			"table", planeLogResourceTable, "err", err)
+	if err := ps.insert(ctx, table, columns, pending); err != nil {
+		log.Warn("plane identity not stated — rows in this batch are unreachable by a filter that narrows through it until it is",
+			"table", table, "err", err)
 		return
 	}
 
@@ -342,13 +398,14 @@ func mountPlaneIngest(deps cloud.Deps) error {
 		return nil // fail-soft
 	}
 	ps := &planeSink{sink: sink}
+	ps.insert = sink.Insert
 
 	// One second bounds staleness and the crash window; the row caps bound
 	// memory. 10k log rows is ~10 MB against this pod's 11 Gi ceiling, and it is
 	// reached only by a burst — the steady state is one flush of whatever the
 	// fleet produced in the last second.
 	ps.logs = newRowBuffer("event.log", func(ctx context.Context, rows [][]any) error {
-		return ps.sink.Insert(ctx, planeLogTable, planeLogColumns, rows)
+		return ps.insert(ctx, planeLogTable, planeLogColumns, rows)
 	}, time.Second, 10000, log)
 	ps.spans = newRowBuffer("event.span", func(ctx context.Context, rows [][]any) error {
 		return ps.writeSpans(ctx, log, rows)
@@ -358,7 +415,8 @@ func mountPlaneIngest(deps cloud.Deps) error {
 		Listen: planeSpanListen,
 		NodeID: "cloud-o11y-plane",
 		OnBatch: func(ctx context.Context, b *zapreceiver.SpanBatch) error {
-			return ps.insertSpans(ctx, log, spanRowsOf(b))
+			rows, labels := spanRowsOf(b)
+			return ps.insertSpans(ctx, log, rows, labels)
 		},
 	})
 	if err != nil {
@@ -379,7 +437,7 @@ func mountPlaneIngest(deps cloud.Deps) error {
 			// row is unreadable by any filter; a resource row nothing points at
 			// yet is merely early. Ordering the pair this way means a crash
 			// between the two never loses something a reader could have seen.
-			ps.rememberResource(ctx, log, logResourceRowsOf(b, time.Now().UTC()))
+			ps.state(ctx, log, planeLogResourceTable, planeLogResourceColumns, logResourceRowsOf(b, time.Now().UTC()), logResourceIdentity)
 			return ps.logs.add(ctx, rows)
 		},
 	})
@@ -400,7 +458,8 @@ func mountPlaneIngest(deps cloud.Deps) error {
 			Listen: spanSock,
 			NodeID: "cloud-o11y-plane-uds",
 			OnBatch: func(ctx context.Context, b *zapreceiver.SpanBatch) error {
-				return ps.insertSpans(ctx, log, spanRowsOf(b))
+				rows, labels := spanRowsOf(b)
+				return ps.insertSpans(ctx, log, rows, labels)
 			},
 		}); err != nil {
 			log.Warn("plane span ingest (socket) failed to start", "listen", spanSock, "err", err)
@@ -418,7 +477,7 @@ func mountPlaneIngest(deps cloud.Deps) error {
 				if len(rows) == 0 {
 					return nil
 				}
-				ps.rememberResource(ctx, log, logResourceRowsOf(b, time.Now().UTC()))
+				ps.state(ctx, log, planeLogResourceTable, planeLogResourceColumns, logResourceRowsOf(b, time.Now().UTC()), logResourceIdentity)
 				return ps.logs.add(ctx, rows)
 			},
 		}); err != nil {
@@ -434,7 +493,8 @@ func mountPlaneIngest(deps cloud.Deps) error {
 	// flag, same fall-through-to-the-wire contract tracesink.go carried.
 	if cloud.TraceInprocEnabled() {
 		cloud.RegisterTraceSink(func(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
-			return ps.insertSpans(ctx, log, sdkSpanRowsOf(spans))
+			rows, labels := sdkSpanRowsOf(spans)
+			return ps.insertSpans(ctx, log, rows, labels)
 		})
 		log.Info("in-process trace sink live: cloud's own spans -> event.span (Cost-0, no socket)")
 	}
@@ -495,11 +555,130 @@ func shutdownPlaneIngest(context.Context) error {
 // it, adding its span count to num_spans a second time (start/end are min/max
 // and absorb the repeat; the count is a sum and does not). Failing soft costs a
 // stale summary; failing hard corrupts it.
-func (ps *planeSink) insertSpans(ctx context.Context, log luxlog.Logger, rows [][]any) error {
+func (ps *planeSink) insertSpans(ctx context.Context, log luxlog.Logger, rows [][]any, labels map[string]string) error {
 	if len(rows) == 0 {
 		return nil
 	}
+	// THE DIMENSIONS FIRST, for the reason the log path states: a span row whose
+	// fingerprint names no identity row is unreachable by any filter a console
+	// panel can express, while an identity row nothing points at yet is merely
+	// early. Ordering the pair this way means a crash between the two never loses
+	// something a reader could have seen.
+	//
+	// Both are derived from the ROWS, not from the wire batch or the SDK spans,
+	// and for the same reason traceRowsOf is: the producers disagree about
+	// everything upstream of the row and agree exactly at planeSpanColumns, so a
+	// span and the dimensions describing it cannot drift apart.
+	ps.state(ctx, log, planeSpanResourceTable, planeSpanResourceColumns, spanResourceRowsOf(rows, labels), resourceIdentity)
+	ps.state(ctx, log, planeOperationTable, planeOperationColumns, operationRowsOf(rows), operationIdentity)
 	return ps.spans.add(ctx, rows)
+}
+
+// resourceIdentity and operationIdentity say what a repeat IS for each dimension
+// — the columns the reader matches on, and nothing else. A dimension keyed on
+// its whole row would be re-written every batch by whichever column is a clock.
+func resourceIdentity(row []any) string {
+	return fmt.Sprint(row[0], "\x00", row[1], "\x00", row[2])
+}
+
+// The operation row's `time` is the latest span start in the batch, so it moves
+// every batch and cannot be part of the identity; the bucket it falls in is,
+// which keeps the pair fresh to one window without a write per batch.
+func operationIdentity(row []any) string {
+	at, _ := row[3].(time.Time)
+	return fmt.Sprint(row[0], "\x00", row[1], "\x00", row[2], "\x00", bucketOf(at))
+}
+
+// logResourceIdentity is the same statement for the log lane, whose column order
+// puts the bucket last. Two orders because two applied tables.
+func logResourceIdentity(row []any) string {
+	return fmt.Sprint(row[0], "\x00", row[1], "\x00", row[3])
+}
+
+// bucketOf floors a time onto the 30-minute grid the resource tables are read on.
+func bucketOf(at time.Time) int64 {
+	return at.Unix() / resourceBucket * resourceBucket
+}
+
+// spanResourceRowsOf renders the identities a batch of BUILT span rows points at:
+// one row per (org, bucket, fingerprint) the rows fall in.
+//
+// One row per distinct ORG, not one per batch, because org is a per-ROW fact here
+// — planeOrg reads each span's own hanzo.org — and one process serves many
+// tenants. The identity table is keyed (org, bucket, fingerprint), so an identity
+// written under one tenant does not resolve for another.
+//
+// The bucket comes from the SPAN'S OWN time rather than from the clock, so a span
+// that arrives late is stated in the window it belongs to. A resource stated in
+// the wrong window is a resource the reader's CTE does not select.
+func spanResourceRowsOf(rows [][]any, labels map[string]string) [][]any {
+	out := make([][]any, 0, 1)
+	seen := make(map[string]struct{}, 1)
+	for _, row := range rows {
+		if len(row) <= planeSpanColFingerprint {
+			continue
+		}
+		fingerprint, _ := row[planeSpanColFingerprint].(string)
+		label := labels[fingerprint]
+		if fingerprint == "" || label == "" {
+			continue // an identity with no labels names nothing a filter can match
+		}
+		org, _ := row[planeSpanColOrg].(string)
+		at, ok := row[planeSpanColTime].(time.Time)
+		if !ok {
+			continue
+		}
+		bucket := bucketOf(at)
+		key := fmt.Sprint(org, "\x00", bucket, "\x00", fingerprint)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, []any{org, bucket, fingerprint, label})
+	}
+	return out
+}
+
+// operationRowsOf folds BUILT span rows into the (service, name) inventory the
+// trace read plane resolves an operation filter against — one row per
+// (org, service, name), carrying the latest start it saw for that pair.
+//
+// Latest rather than earliest because the column is also the table's version and
+// the reader bounds it by time: the pair is "still in use as of", which is the
+// question a picker asks.
+func operationRowsOf(rows [][]any) [][]any {
+	type seen struct {
+		at    time.Time
+		index int
+	}
+	acc := make(map[[3]string]*seen, len(rows))
+	out := make([][]any, 0, len(rows))
+	for _, row := range rows {
+		if len(row) <= planeSpanColService {
+			continue
+		}
+		name, _ := row[planeSpanColName].(string)
+		if name == "" {
+			continue // an operation with no name autocompletes nothing
+		}
+		org, _ := row[planeSpanColOrg].(string)
+		service, _ := row[planeSpanColService].(string)
+		at, ok := row[planeSpanColTime].(time.Time)
+		if !ok {
+			continue
+		}
+		k := [3]string{org, service, name}
+		if s := acc[k]; s != nil {
+			if at.After(s.at) {
+				s.at = at
+				out[s.index][3] = at
+			}
+			continue
+		}
+		acc[k] = &seen{at: at, index: len(out)}
+		out = append(out, []any{org, service, name, at})
+	}
+	return out
 }
 
 // writeSpans is the statement half of insertSpans: the buffer hands it whatever
@@ -512,14 +691,14 @@ func (ps *planeSink) writeSpans(ctx context.Context, log luxlog.Logger, rows [][
 	if len(rows) == 0 {
 		return nil
 	}
-	if err := ps.sink.Insert(ctx, planeSpanTable, planeSpanColumns, rows); err != nil {
+	if err := ps.insert(ctx, planeSpanTable, planeSpanColumns, rows); err != nil {
 		return err
 	}
 	partials := traceRowsOf(rows)
 	if len(partials) == 0 {
 		return nil
 	}
-	if err := ps.sink.Insert(ctx, planeTraceTable, planeTraceColumns, partials); err != nil {
+	if err := ps.insert(ctx, planeTraceTable, planeTraceColumns, partials); err != nil {
 		log.Warn("plane trace summary write failed; spans landed, trace list stays stale",
 			"err", err, "spans", len(rows), "traces", len(partials))
 	}
@@ -532,11 +711,12 @@ func (ps *planeSink) writeSpans(ctx context.Context, log luxlog.Logger, rows [][
 // service; resource attributes fold into each row's attribute map (the plane
 // carries no separate resource object — deployment.environment et al. ride
 // beside the span's own attributes, as the existing rows already do).
-func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
+func spanRowsOf(b *zapreceiver.SpanBatch) ([][]any, map[string]string) {
 	if b == nil || len(b.Spans) == 0 {
-		return nil
+		return nil, nil
 	}
 	service := planeService(b.Resource, b.AppName)
+	fingerprint, labels := planeResource(b.Resource, service)
 	rows := make([][]any, 0, len(b.Spans))
 	for _, s := range b.Spans {
 		attrs := make(map[string]string, len(b.Resource)+len(s.Attributes)+2)
@@ -572,9 +752,10 @@ func spanRowsOf(b *zapreceiver.SpanBatch) [][]any {
 			dur,
 			planeStatus(s.StatusCode),
 			attrs,
+			fingerprint,
 		})
 	}
-	return rows
+	return rows, map[string]string{fingerprint: labels}
 }
 
 // planeResource is a batch's resource as the read plane needs it: the LABELS it
@@ -699,22 +880,32 @@ func logRowsOf(b *zaplogreceiver.LogBatch) [][]any {
 
 // sdkSpanRowsOf renders the host's live SDK batch as event.span rows — the
 // in-process twin of spanRowsOf, one converter per input shape, one row shape.
-func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
+func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) ([][]any, map[string]string) {
 	rows := make([][]any, 0, len(spans))
+	labels := map[string]string{}
 	for _, s := range spans {
 		if s == nil {
 			continue
 		}
-		attrs := map[string]string{}
+		// The RESOURCE alone, kept apart from the span's own attributes below:
+		// the fingerprint identifies the producer, so folding a span's attributes
+		// into it would give every span its own resource and the identity table
+		// would name one row each.
+		resource := map[string]string{}
 		if res := s.Resource(); res != nil {
 			for _, kv := range res.Attributes() {
-				attrs[string(kv.Key)] = kv.Value.Emit()
+				resource[string(kv.Key)] = kv.Value.Emit()
 			}
 		}
 		// The SAME resolver the wire path uses — an SDK resource that names no
 		// service still carries its workload, and one function decides what a
 		// service IS for every row on the plane.
-		service := planeService(attrs, "")
+		service := planeService(resource, "")
+		fingerprint, resourceLabels := planeResource(resource, service)
+		labels[fingerprint] = resourceLabels
+
+		attrs := make(map[string]string, len(resource)+len(s.Attributes())+2)
+		maps.Copy(attrs, resource)
 		for _, kv := range s.Attributes() {
 			attrs[string(kv.Key)] = kv.Value.Emit()
 		}
@@ -750,9 +941,10 @@ func sdkSpanRowsOf(spans []sdktrace.ReadOnlySpan) [][]any {
 			dur,
 			status,
 			attrs,
+			fingerprint,
 		})
 	}
-	return rows
+	return rows, labels
 }
 
 // traceRowsOf folds event.span rows into event.trace PARTIALS — this batch's

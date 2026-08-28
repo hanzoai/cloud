@@ -16,6 +16,7 @@ package cloud
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/zap-proto/zip"
@@ -34,7 +35,10 @@ import (
 func newRecordingTracer(t *testing.T) *tracetest.SpanRecorder {
 	t.Helper()
 	sr := tracetest.NewSpanRecorder()
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	// The SAME id source the composition root installs (telemetry.go). A test
+	// provider without it would mint a request boundary's ids where production
+	// adopts them, so the one property these tests exist to hold could not be seen.
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr), sdktrace.WithIDGenerator(hopIDs{}))
 	prev := httpTracer
 	httpTracer = tp.Tracer(TracerName)
 	t.Cleanup(func() { httpTracer = prev; _ = tp.Shutdown(t.Context()) })
@@ -227,7 +231,13 @@ func TestTracingMiddleware_JoinsTheCallersTrace(t *testing.T) {
 
 	app := zip.New(zip.Config{})
 	app.Use(TracingMiddleware())
-	app.Get("/v1/models", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "yes"}) })
+	// The handler reads the header the framework settled — trace id kept, span id
+	// this hop's — which is the pair every log line of this request prints.
+	var settled string
+	app.Get("/v1/models", func(c *zip.Ctx) error {
+		settled = c.Header("traceparent")
+		return c.JSON(200, map[string]string{"ok": "yes"})
+	})
 
 	// A caller's trace, sampled, in the exact shape the framework forwards.
 	const caller = "4bf92f3577b34da6a3ce929d0e0e4736"
@@ -246,22 +256,36 @@ func TestTracingMiddleware_JoinsTheCallersTrace(t *testing.T) {
 		t.Fatalf("server span is in trace %q, want the caller's %q — the request "+
 			"started a trace of its own, so its spans cannot be joined to the caller's", got, caller)
 	}
-	// The PARENT is the framework's own hop, not the caller's span id, and that is
-	// correct rather than a near miss. The framework rewrites traceparent on the
-	// way in — keeping the caller's trace id, substituting its own hop's span id —
-	// before any of cloud's middleware runs, so the id extracted here names the hop
-	// that actually handed us the request. It emits no OTel span of its own, which
-	// leaves this span's parent dangling inside a valid trace; a waterfall renders
-	// such a span as a root of what it can see, which is the honest picture. What
-	// must NOT happen is a fresh trace, and that is what the assertion above pins.
-	if !span.Parent().IsRemote() {
-		t.Fatal("the extracted parent must be marked remote — it came off the wire")
+	// THE SPAN IS THE HOP, NOT A CHILD OF IT. What the header names by the time
+	// this middleware runs is the framework's own hop id, and the framework emits
+	// no OTel span of its own — so read as a parent it names a row nothing writes.
+	// Measured live before this: 10,307 spans on the plane, ZERO with parent='',
+	// and not one log line joining a span on span_id while 3,169 joined one on
+	// `parent`. The read plane selects a trace's root with `parent = ''`, so the
+	// service list and every waterfall answered empty over a complete span table.
+	if hop := hopFrom(settled); span.SpanContext().SpanID().String() != hop {
+		t.Errorf("span id = %s, want the hop %s the framework settled — the log lines "+
+			"of this request name that one, so the line and the span cannot be joined",
+			span.SpanContext().SpanID(), hop)
+	}
+	if span.Parent().HasSpanID() {
+		t.Errorf("server span reports parent %s — that span is written nowhere, so this "+
+			"row is a child of nothing and its trace has no root", span.Parent().SpanID())
 	}
 	// Sampling has to survive the join too. A parent that arrives sampled and a
 	// child that is not recorded is the same silent drop in a different place.
 	if !span.SpanContext().IsSampled() {
 		t.Fatal("a span joined to a sampled caller must itself be sampled")
 	}
+}
+
+// hopFrom reads the span id out of a W3C traceparent: 00-<32 trace>-<16 span>-<flags>.
+func hopFrom(header string) string {
+	parts := strings.Split(header, "-")
+	if len(parts) != 4 {
+		return ""
+	}
+	return parts[2]
 }
 
 // TestTracingMiddleware_RefusesAnUnusableCallerContext: a request that arrives
@@ -312,5 +336,47 @@ func TestTracingMiddleware_RefusesAnUnusableCallerContext(t *testing.T) {
 				t.Fatal("a minted trace must be sampled, or the request records nothing")
 			}
 		})
+	}
+}
+
+// THE HOP BELONGS TO ONE SPAN. The request boundary adopts an identity that was
+// settled before it, and everything nested under it mints its own — otherwise a
+// child would land on the same row as its parent and the waterfall would be one
+// span deep forever.
+func TestNestedWorkKeepsItsOwnIdentity(t *testing.T) {
+	sr := newRecordingTracer(t)
+
+	app := zip.New(zip.Config{})
+	app.Use(TracingMiddleware())
+	app.Get("/v1/models", func(c *zip.Ctx) error {
+		// A nested span the way a handler makes one, and a second that asks for a
+		// root of its own — the case where a leaked identity would surface.
+		_, child := httpTracer.Start(c.Fiber().Context(), "agent.run")
+		child.End()
+		_, detached := httpTracer.Start(c.Fiber().Context(), "job", trace.WithNewRoot())
+		detached.End()
+		return c.JSON(200, map[string]string{"ok": "yes"})
+	})
+
+	if _, err := app.Test(httptest.NewRequest("GET", "/v1/models", nil)); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+
+	seen := map[string]string{}
+	for _, s := range sr.Ended() {
+		id := s.SpanContext().SpanID().String()
+		if other, dup := seen[id]; dup {
+			t.Fatalf("%q and %q share span id %s — two spans, one row", other, s.Name(), id)
+		}
+		seen[id] = s.Name()
+	}
+	server := findSpan(sr.Ended(), "GET /v1/models")
+	child := findSpan(sr.Ended(), "agent.run")
+	if server == nil || child == nil {
+		t.Fatalf("recorded %v, want the server span and its child", seen)
+	}
+	if child.Parent().SpanID() != server.SpanContext().SpanID() {
+		t.Errorf("agent.run parents to %s, want the request boundary %s — nested work "+
+			"must still hang off the span the request is", child.Parent().SpanID(), server.SpanContext().SpanID())
 	}
 }

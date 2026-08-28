@@ -55,7 +55,7 @@ func TestAgentRunSpansAreFiledUnderTheirTenant(t *testing.T) {
 	step.End()
 	run.End()
 
-	rows := sdkSpanRowsOf(sr.Ended())
+	rows, _ := sdkSpanRowsOf(sr.Ended())
 	if len(rows) != 3 {
 		t.Fatalf("got %d rows, want 3 (run, step, tool)", len(rows))
 	}
@@ -94,7 +94,7 @@ func TestAnAgentSpanMissingItsTenantIsThePlatforms(t *testing.T) {
 	span.SetAttributes(attribute.String("hanzo.agent.org", "acme"))
 	span.End()
 
-	rows := sdkSpanRowsOf(sr.Ended())
+	rows, _ := sdkSpanRowsOf(sr.Ended())
 	if got := spanCol(t, rows[0], "org"); got != platformOrg {
 		t.Fatalf("org = %v; a span naming its tenant under an unread key must fall "+
 			"back to %q — if this now resolves the tenant, planeOrg reads more than one key",

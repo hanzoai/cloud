@@ -55,18 +55,26 @@ func logCol(t *testing.T, row []any, name string) any { return row[colIndex(t, p
 // The row a builder appends MUST be exactly as wide as the column list it is inserted
 // with — a positional Insert silently misaligns otherwise.
 func TestPlaneColumns_CountsAreFixed(t *testing.T) {
-	if len(planeSpanColumns) != 12 {
-		t.Errorf("planeSpanColumns = %d cols, want 12: %v", len(planeSpanColumns), planeSpanColumns)
+	// 13, and the thirteenth is resource_fingerprint: it joins a row to its
+	// identity in event.span_resource, which is the ONLY thing a resource-context
+	// filter (service.name, host.name, every k8s.*) can select on — the reader
+	// narrows a span query through that CTE and keeps nothing else.
+	if len(planeSpanColumns) != 13 {
+		t.Errorf("planeSpanColumns = %d cols, want 13: %v", len(planeSpanColumns), planeSpanColumns)
 	}
-	// 13, not 12: resource_fingerprint joins a row to its identity in
-	// event.log_resource, which is the ONLY thing a resource-context filter
-	// (service.name, host.name, every k8s.*) can select on — the reader never
-	// touches `service` on this table.
+	// 13 for the same reason, over event.log_resource; the reader never touches
+	// `service` on that table either.
 	if len(planeLogColumns) != 13 {
 		t.Errorf("planeLogColumns = %d cols, want 13: %v", len(planeLogColumns), planeLogColumns)
 	}
 	if len(planeLogResourceColumns) != 4 {
 		t.Errorf("planeLogResourceColumns = %d cols, want 4: %v", len(planeLogResourceColumns), planeLogResourceColumns)
+	}
+	if len(planeSpanResourceColumns) != 4 {
+		t.Errorf("planeSpanResourceColumns = %d cols, want 4: %v", len(planeSpanResourceColumns), planeSpanResourceColumns)
+	}
+	if len(planeOperationColumns) != 4 {
+		t.Errorf("planeOperationColumns = %d cols, want 4: %v", len(planeOperationColumns), planeOperationColumns)
 	}
 }
 
@@ -88,7 +96,7 @@ func TestSpanRowsOf_FullSpan(t *testing.T) {
 			StatusCode: "error", StatusMsg: "upstream 502",
 		}},
 	}
-	rows := spanRowsOf(b)
+	rows, _ := spanRowsOf(b)
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
 	}
@@ -153,7 +161,7 @@ func TestSpanRowsOf_FullSpan(t *testing.T) {
 // A span that names no tenant belongs to the platform, its kind defaults to
 // internal, and a completed span with no failure declared is ok.
 func TestSpanRowsOf_PlatformDefaults(t *testing.T) {
-	rows := spanRowsOf(&zapreceiver.SpanBatch{
+	rows, _ := spanRowsOf(&zapreceiver.SpanBatch{
 		AppName: "cloud",
 		Spans:   []zapreceiver.Span{{SpanID: "s", Name: "job", StartUnixNs: 5, EndUnixNs: 4 /* end<=start */}},
 	})
@@ -179,10 +187,10 @@ func TestSpanRowsOf_PlatformDefaults(t *testing.T) {
 }
 
 func TestSpanRowsOf_EmptyAndNil(t *testing.T) {
-	if rows := spanRowsOf(nil); rows != nil {
+	if rows, _ := spanRowsOf(nil); rows != nil {
 		t.Errorf("nil batch -> %v, want nil", rows)
 	}
-	if rows := spanRowsOf(&zapreceiver.SpanBatch{}); rows != nil {
+	if rows, _ := spanRowsOf(&zapreceiver.SpanBatch{}); rows != nil {
 		t.Errorf("no-span batch -> %v, want nil", rows)
 	}
 }
@@ -412,7 +420,7 @@ func TestSdkSpanRowsOf_DerivesWorkloadService(t *testing.T) {
 	_, span := tp.Tracer("planesink-test").Start(context.Background(), "job")
 	span.End()
 
-	rows := sdkSpanRowsOf(sr.Ended())
+	rows, _ := sdkSpanRowsOf(sr.Ended())
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
 	}
@@ -444,7 +452,7 @@ func TestSdkSpanRowsOf_RecordedSpan(t *testing.T) {
 	span.SetStatus(codes.Error, "boom")
 	span.End()
 
-	rows := sdkSpanRowsOf(sr.Ended())
+	rows, _ := sdkSpanRowsOf(sr.Ended())
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
 	}

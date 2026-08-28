@@ -148,10 +148,14 @@ func consumeSpans(log luxlog.Logger, org string, spans []event.SpanEvent) {
 	// Only the LLM-shaped spans become rows, so a batch of ordinary spans costs one
 	// pass and no write at all.
 	rows := make([][]any, 0, len(spans))
+	labels := make(map[string]string, 1)
 	for _, s := range spans {
-		if row, ok := spanRow(org, s); ok {
-			rows = append(rows, row)
+		row, label, ok := spanRow(org, s)
+		if !ok {
+			continue
 		}
+		rows = append(rows, row)
+		labels[row[planeSpanColFingerprint].(string)] = label
 	}
 	if len(rows) == 0 {
 		return
@@ -168,7 +172,7 @@ func consumeSpans(log luxlog.Logger, org string, spans []event.SpanEvent) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), spanSinkTimeout)
 	defer cancel()
-	if err := ps.insertSpans(ctx, log, rows); err != nil {
+	if err := ps.insertSpans(ctx, log, rows, labels); err != nil {
 		log.Warn("llm span-sink insert failed", "org", org, "spans", len(rows), "err", err)
 	}
 }
@@ -176,10 +180,10 @@ func consumeSpans(log luxlog.Logger, org string, spans []event.SpanEvent) {
 // spanRow renders one event.SpanEvent as an event.span row in planeSpanColumns
 // order, or (nil,false) when the span is not an LLM call. Pure — no I/O — so the
 // mapping is unit-tested, exactly as buildSentryEvent is.
-func spanRow(org string, s event.SpanEvent) ([]any, bool) {
+func spanRow(org string, s event.SpanEvent) ([]any, string, bool) {
 	attrs, ok := genAIAttributes(org, s)
 	if !ok {
-		return nil, false
+		return nil, "", false
 	}
 	// event.span's identity is (org, trace_id, time, id) and id IS the span id, so a
 	// span that named none takes the message id — which the fan-out already minted when
@@ -191,23 +195,30 @@ func spanRow(org string, s event.SpanEvent) ([]any, bool) {
 	// anonymous "" trace: the traces view groups by trace_id, so sharing the empty
 	// string would fold every orphan LLM call in the org into one bogus trace.
 	traceID := cmp.Or(s.TraceID, spanID)
+	// The emitting workload, then the surface — the SAME precedence the error lens
+	// resolves service_name with, so one span and one error from one caller name
+	// their origin identically.
+	service := cmp.Or(s.Service, s.Product)
+	// A span that arrived over the product wire carries no resource of its own, so
+	// its identity is what this row knows about where it came from. Through the
+	// SAME function the two telemetry paths use, so a service named here and a
+	// service named there fingerprint alike and the reader's CTE selects both.
+	fingerprint, labels := planeResource(nil, service)
 	return []any{
 		org,
 		s.Time.UTC(),
 		spanID,
 		s.Name,
 		planeSpanKind(s.Kind),
-		// The emitting workload, then the surface — the SAME precedence the error lens
-		// resolves service_name with, so one span and one error from one caller name
-		// their origin identically.
-		cmp.Or(s.Service, s.Product),
+		service,
 		traceID,
 		spanID,
 		s.Parent,
 		s.Duration,
 		planeStatus(s.Status),
 		attrs,
-	}, true
+		fingerprint,
+	}, labels, true
 }
 
 // genAIAttributes renders the span's attribute map and decides whether the span is an

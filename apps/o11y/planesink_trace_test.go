@@ -90,14 +90,17 @@ func TestPlaneSpanColumnIndexesArePinned(t *testing.T) {
 	}{
 		{planeSpanColOrg, "org"},
 		{planeSpanColTime, "time"},
+		{planeSpanColName, "name"},
+		{planeSpanColService, "service"},
 		{planeSpanColTraceID, "trace_id"},
 		{planeSpanColDuration, "duration"},
+		{planeSpanColFingerprint, "resource_fingerprint"},
 	} {
 		if c.idx >= len(planeSpanColumns) {
 			t.Fatalf("index %d is past planeSpanColumns (%d cols)", c.idx, len(planeSpanColumns))
 		}
 		if got := planeSpanColumns[c.idx]; got != c.name {
-			t.Errorf("planeSpanColumns[%d] = %q, want %q — traceRowsOf reads this position", c.idx, got, c.name)
+			t.Errorf("planeSpanColumns[%d] = %q, want %q — the folds read this position", c.idx, got, c.name)
 		}
 	}
 }
@@ -295,7 +298,7 @@ func TestTraceRowsOf_FoldsRealSpanRows(t *testing.T) {
 				Attributes: map[string]any{"hanzo.org": "acme"}},
 		},
 	}
-	spans := spanRowsOf(b)
+	spans, _ := spanRowsOf(b)
 	if len(spans) != 3 {
 		t.Fatalf("spanRowsOf -> %d rows, want 3", len(spans))
 	}

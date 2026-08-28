@@ -15,6 +15,8 @@
 package cloud
 
 import (
+	"context"
+	"crypto/rand"
 	"strings"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -71,6 +74,77 @@ func (i inbound) Keys() []string {
 	var keys []string
 	i.c.Fiber().Request().Header.VisitAll(func(k, _ []byte) { keys = append(keys, string(k)) })
 	return keys
+}
+
+// hop is a request's place in a trace, as the framework settled it before any
+// middleware ran: the trace it belongs to, and the span this hop IS.
+//
+// zip parses the caller's traceparent (or starts a trace when there is none),
+// mints THIS hop's span id, rewrites the inbound header to name it, and prints
+// the pair on every log line the request produces. So by the time this
+// middleware runs, the hop already has an identity and every line of the request
+// already carries it.
+//
+// What the header names after that rewrite is not the caller's span — it is
+// ours. Read as a parent it made every span on the plane a child of a row
+// nothing writes: measured on a live store, 10,307 spans, ZERO with parent=”,
+// and not one log line joining a span on span_id while 3,169 of them joined one
+// on `parent`. The read plane selects a trace's root with `parent = ”`, so the
+// service list, the waterfall and the flamegraph answered empty over a complete
+// span table.
+//
+// So the server span takes the hop instead of parenting itself to it: same
+// trace, same span id, and no parent. One hop, one span, one id — the log line
+// and the span row now name the same thing.
+//
+// The caller's own span id is the one fact still missing, and it is missing
+// upstream: zip resolves it and then overwrites the header field that carried
+// it, so no middleware can read it. Until the framework carries it past its own
+// restamp, the first hop this plane records is the root of what it records.
+type hop struct {
+	trace trace.TraceID
+	span  trace.SpanID
+}
+
+// hopKey is the private context key the settled identity travels under, from
+// the middleware to the SDK's id source and no further.
+type hopKey struct{}
+
+// hopIDs is where a span's identity comes from in this process.
+//
+// The SDK asks NewIDs only for a span with no parent, which is exactly the
+// server span below (it is started WithNewRoot). Every other span in the process
+// has a parent, so it asks NewSpanID and gets a fresh random id — nested work
+// keeps its real tree, and only the request boundary adopts an identity that was
+// settled before it.
+type hopIDs struct{}
+
+var _ sdktrace.IDGenerator = hopIDs{}
+
+func (hopIDs) NewIDs(ctx context.Context) (trace.TraceID, trace.SpanID) {
+	if h, ok := ctx.Value(hopKey{}).(hop); ok && h.trace.IsValid() && h.span.IsValid() {
+		return h.trace, h.span
+	}
+	var t trace.TraceID
+	var s trace.SpanID
+	_, _ = rand.Read(t[:])
+	_, _ = rand.Read(s[:])
+	return t, s
+}
+
+func (hopIDs) NewSpanID(context.Context, trace.TraceID) trace.SpanID {
+	var s trace.SpanID
+	_, _ = rand.Read(s[:])
+	return s
+}
+
+// hopOf reads the settled identity off the request, through the ONE parser this
+// process has for it — the W3C propagator. A request carrying nothing parsable
+// yields a zero hop and the SDK mints a fresh pair, which is the right answer for
+// a span that genuinely begins here.
+func hopOf(c *zip.Ctx) hop {
+	sc := trace.SpanContextFromContext(propagator.Extract(context.Background(), inbound{c}))
+	return hop{trace: sc.TraceID(), span: sc.SpanID()}
 }
 
 // traceSkip reports paths that must NOT open a span: the liveness/readiness/
@@ -134,21 +208,29 @@ func TracingMiddleware() zip.Handler {
 		// enriched context back so the rest of the chain (and every downstream
 		// client that pulls c.Context()) nests under it.
 		//
-		// The framework stamps a W3C traceparent on every inbound request before
-		// this middleware runs — parsing the caller's when there is one, minting a
-		// sampled one at the edge when there is not — and forwards that same header
-		// on every call it makes to another process. So the id that makes one
-		// request's spans ONE trace is already on the wire at every hop. Nothing
-		// here had ever read it, which is why a span tree stopped dead at each
-		// process boundary: the Slack webhook and the agent run it caused were two
-		// unrelated traces, and no query could join them.
+		// The framework settles the request's trace before this runs — parsing the
+		// caller's traceparent when there is one, starting a trace when there is
+		// not — and forwards that same header on every call it makes to another
+		// process. So the id that makes one request's spans ONE trace is already on
+		// the wire at every hop. Nothing here had ever read it, which is why a span
+		// tree stopped dead at each process boundary: the Slack webhook and the
+		// agent run it caused were two unrelated traces, and no query could join
+		// them.
 		//
-		// Extracting collapses the two id spaces into one. A span's trace id now
-		// equals the `trace` field the logger already prints for the same request,
-		// so a log line and a span are reachable from each other.
+		// It is read for BOTH ids and taken as an identity rather than a parent —
+		// see [hop] for what the second half fixes.
+		//
+		// WithNewRoot says the rule at the call rather than trusting the context to
+		// hold it: a span in c.Context() (a middleware added later, a context a
+		// handler chain carried in) would silently make the request boundary a
+		// child again and the plane would have no roots a second time. It is also
+		// what sends this span to hopIDs for the pair below, since the SDK asks for
+		// new ids exactly when there is no parent.
+		h := hopOf(c)
 		ctx, span := httpTracer.Start(
-			propagator.Extract(c.Context(), inbound{c}),
+			context.WithValue(c.Context(), hopKey{}, h),
 			method+" "+path,
+			trace.WithNewRoot(),
 			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(
 				attribute.String("http.request.method", method),
@@ -157,7 +239,10 @@ func TracingMiddleware() zip.Handler {
 				attribute.String("server.address", strings.Clone(c.Header("Host"))),
 			),
 		)
-		c.Fiber().SetContext(ctx)
+		// The identity does not travel past the span it belongs to: a nested span
+		// that asked for a root of its own would otherwise be handed this request's
+		// id and two spans would share one row.
+		c.Fiber().SetContext(context.WithValue(ctx, hopKey{}, hop{}))
 		defer span.End()
 
 		if rid := strings.Clone(c.RequestID()); rid != "" {

@@ -29,7 +29,7 @@ import (
 // arrive through spansink, which has always stamped the attribute, so the views
 // were populated — merely incomplete — and nothing anywhere reported an error.
 func TestWireSpanStampsTheTenantItResolved(t *testing.T) {
-	rows := spanRowsOf(&zapreceiver.SpanBatch{
+	rows, _ := spanRowsOf(&zapreceiver.SpanBatch{
 		AppName:  "agents",
 		Resource: map[string]string{"service.name": "cloud"},
 		Spans: []zapreceiver.Span{{
@@ -105,7 +105,7 @@ func TestTheTenantIsWhateverHanzoOrgSays(t *testing.T) {
 	const claimed = "acme"
 
 	// The wire builder, end to end: one span batch in, one row out.
-	rows := spanRowsOf(&zapreceiver.SpanBatch{
+	rows, _ := spanRowsOf(&zapreceiver.SpanBatch{
 		AppName:  "agents",
 		Resource: map[string]string{"service.name": "cloud"},
 		Spans: []zapreceiver.Span{{

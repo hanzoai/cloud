@@ -56,7 +56,7 @@ func llmSpan() event.SpanEvent {
 // LLM views read it from. A positional Insert misaligns silently, so the width is
 // asserted with the values.
 func TestSpanRowMapsOntoPlaneColumns(t *testing.T) {
-	row, ok := spanRow("acme", llmSpan())
+	row, _, ok := spanRow("acme", llmSpan())
 	if !ok {
 		t.Fatal("a gen_ai span must project")
 	}
@@ -123,20 +123,20 @@ func TestSpanRowMapsOntoPlaneColumns(t *testing.T) {
 func TestSpanRowSkipsNonLLMSpan(t *testing.T) {
 	plain := llmSpan()
 	plain.Properties = map[string]any{"http.request.method": "GET"}
-	if row, ok := spanRow("acme", plain); ok {
+	if row, _, ok := spanRow("acme", plain); ok {
 		t.Errorf("a span without the gen_ai marker must not project: %+v", row)
 	}
 	// A marker present but empty is the same "no provider named" and must not admit the
 	// span — the empty value is indistinguishable from an absent key on the read side.
 	blank := llmSpan()
 	blank.Properties = map[string]any{llmobstypes.GenAISystem: ""}
-	if _, ok := spanRow("acme", blank); ok {
+	if _, _, ok := spanRow("acme", blank); ok {
 		t.Error("an empty gen_ai.system must not project")
 	}
 	// No properties at all — the common non-LLM span.
 	bare := llmSpan()
 	bare.Properties = nil
-	if _, ok := spanRow("acme", bare); ok {
+	if _, _, ok := spanRow("acme", bare); ok {
 		t.Error("a span with no attributes must not project")
 	}
 }
@@ -149,7 +149,7 @@ func TestSpanRowSkipsNonLLMSpan(t *testing.T) {
 func TestSpanRowIdentityFallbacks(t *testing.T) {
 	s := llmSpan()
 	s.SpanID, s.TraceID = "", ""
-	row, ok := spanRow("acme", s)
+	row, _, ok := spanRow("acme", s)
 	if !ok {
 		t.Fatal("must still project")
 	}
@@ -166,7 +166,7 @@ func TestSpanRowIdentityFallbacks(t *testing.T) {
 	// Two id-less spans in one org must stay two rows.
 	other := llmSpan()
 	other.SpanID, other.TraceID, other.MessageID = "", "", "m-2"
-	row2, _ := spanRow("acme", other)
+	row2, _, _ := spanRow("acme", other)
 	if spanCol(t, row, "id") == spanCol(t, row2, "id") {
 		t.Error("distinct spans must not share an identity")
 	}
@@ -226,7 +226,7 @@ func TestGenAIAttributesFillOnlyWhatSpanOmits(t *testing.T) {
 func TestSpanRowServiceFallsBackToTheSurface(t *testing.T) {
 	s := llmSpan()
 	s.Service = ""
-	row, _ := spanRow("acme", s)
+	row, _, _ := spanRow("acme", s)
 	if got := spanCol(t, row, "service"); got != "chat" {
 		t.Errorf("service = %v, want the emitting surface", got)
 	}
@@ -332,7 +332,7 @@ func TestSpanSinkNamesTheOneWritePath(t *testing.T) {
 	}
 	rows := [][]any{}
 	for _, s := range []event.SpanEvent{llmSpan()} {
-		row, ok := spanRow("acme", s)
+		row, _, ok := spanRow("acme", s)
 		if !ok {
 			t.Fatal("must project")
 		}
@@ -356,7 +356,7 @@ func TestSpanRowStatusNarrowsToThePlanesVocabulary(t *testing.T) {
 	for status, want := range map[string]string{"error": "error", "ok": "ok", "unset": "ok", "": "ok"} {
 		s := llmSpan()
 		s.Status = status
-		row, _ := spanRow("acme", s)
+		row, _, _ := spanRow("acme", s)
 		if got := spanCol(t, row, "status"); got != want {
 			t.Errorf("status %q projected as %v, want %q", status, got, want)
 		}
@@ -364,7 +364,7 @@ func TestSpanRowStatusNarrowsToThePlanesVocabulary(t *testing.T) {
 	// The same narrowing for kind: OTel's own default for a span that states none.
 	s := llmSpan()
 	s.Kind = "nonsense"
-	row, _ := spanRow("acme", s)
+	row, _, _ := spanRow("acme", s)
 	if got := spanCol(t, row, "kind"); got != "internal" {
 		t.Errorf("kind = %v, want internal", got)
 	}

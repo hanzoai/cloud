@@ -421,6 +421,11 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName, insta
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(&routerTraceExporter{router: traceRouter, dest: traceDest, wire: wire}),
 		sdktrace.WithResource(res),
+		// Where a span's identity comes from. A request boundary adopts the hop
+		// the framework already settled — same trace, same span id as every log
+		// line of that request — instead of minting a second id and filing itself
+		// under the first as a parent. See middleware_tracing.go's hop.
+		sdktrace.WithIDGenerator(hopIDs{}),
 	)
 	otel.SetTracerProvider(tp)
 	// The propagator, without which every Inject and Extract in the process is a
