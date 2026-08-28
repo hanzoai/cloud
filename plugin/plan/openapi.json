@@ -106,7 +106,7 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the plan's catalog id or slug — \"pro\", \"team\", \"world-enterprise\",\n\"rpc-growth\". Both are matched, so a slug resolves the plan it names.",
+            "description": "ID is the plan's catalog id or slug — \"dev\", \"max\", \"team\", \"rpc-growth\".\nBoth are matched, so a slug resolves the plan it names. A withdrawn id still\nresolves for a renewal, which is why this takes an id rather than a ladder\nposition.",
             "schema": {
               "type": "string"
             },
@@ -243,11 +243,11 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "description": "ID is the plan's catalog id or slug — \"pro\", \"team\", \"world-enterprise\",\n\"rpc-growth\". Both are matched, so a slug resolves the plan it names.",
+            "description": "ID is the plan's catalog id or slug — \"dev\", \"max\", \"team\", \"rpc-growth\".\nBoth are matched, so a slug resolves the plan it names. A withdrawn id still\nresolves for a renewal, which is why this takes an id rather than a ladder\nposition.",
             "schema": {
               "type": "string"
             },
-            "example": "pro"
+            "example": "dev"
           }
         ],
         "responses": {

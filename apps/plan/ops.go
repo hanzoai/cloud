@@ -80,8 +80,10 @@ type planNoInput struct{}
 
 // planRef addresses one plan in the catalog.
 type planRef struct {
-	// ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
-	// "rpc-growth". Both are matched, so a slug resolves the plan it names.
+	// ID is the plan's catalog id or slug — "dev", "max", "team", "rpc-growth".
+	// Both are matched, so a slug resolves the plan it names. A withdrawn id still
+	// resolves for a renewal, which is why this takes an id rather than a ladder
+	// position.
 	ID string `json:"id"`
 }
 
@@ -353,7 +355,7 @@ func (o ops) getVocab(ctx context.Context, _ *planNoInput) (*planVocab, error) {
 // catalog, so a reseller's override wins over the canonical record. An id no
 // catalog holds answers 404.
 //
-// Example: {"id": "pro"}
+// Example: {"id": "dev"}
 func (o ops) resolve(ctx context.Context, in *planRef) (*planResolution, error) {
 	return routeOf[planResolution](ctx, o, "resolve", map[string]string{"id": in.ID})
 }

@@ -4170,7 +4170,7 @@
       "name": "plan_entitlements",
       "path": "plan_entitlements/SKILL.md",
       "service": "plan",
-      "sha256": "cfacaece1815dbc1ca7a0ee042d0e2dd01df7791b531d82c3ac457deaac32a1c"
+      "sha256": "b78e715b72efd01145caffbc037f5ab1542031c9c904599681fca33785fca691"
     },
     {
       "description": "Read plan gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPUs, host memory and hourly price..",
@@ -4212,7 +4212,7 @@
       "name": "plan_resolve",
       "path": "plan_resolve/SKILL.md",
       "service": "plan",
-      "sha256": "c18c73ff565cb19e8d0f63a24de66ab1074896ade3b63818dab04b8876dfdc50"
+      "sha256": "38addf6542ad87e3b5aee0459523b2b6412ce41f43c24b3d8fc09b6b33e6724d"
     },
     {
       "description": "Read plan schema: Returns the two JSON Schema documents this surface speaks: entitlements.schema.json, which declares every entitlement key with its type, unit and enum, and plan.schema.json, which a catalog plan record conforms to..",

@@ -114667,8 +114667,10 @@ paths:
       operationId: get_plan_entitlements_by_id
       parameters:
       - description: |-
-          ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
-          "rpc-growth". Both are matched, so a slug resolves the plan it names.
+          ID is the plan's catalog id or slug — "dev", "max", "team", "rpc-growth".
+          Both are matched, so a slug resolves the plan it names. A withdrawn id still
+          resolves for a renewal, which is why this takes an id rather than a ladder
+          position.
         example: team
         in: path
         name: id
@@ -114788,9 +114790,11 @@ paths:
       operationId: get_plan_resolve_by_id
       parameters:
       - description: |-
-          ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
-          "rpc-growth". Both are matched, so a slug resolves the plan it names.
-        example: pro
+          ID is the plan's catalog id or slug — "dev", "max", "team", "rpc-growth".
+          Both are matched, so a slug resolves the plan it names. A withdrawn id still
+          resolves for a renewal, which is why this takes an id rather than a ladder
+          position.
+        example: dev
         in: path
         name: id
         required: true
