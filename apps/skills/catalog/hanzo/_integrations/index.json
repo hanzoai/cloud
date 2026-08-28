@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 9,
+  "skill_count": 10,
   "skills": [
     {
       "description": "Read integrations callback: OAuth return for any connector.",
@@ -68,6 +68,13 @@
       "path": "integrations_telegram/SKILL.md",
       "service": "integrations",
       "sha256": "6943a4705dd9fa8a4adf9b3f1612ac84e92941016a399e8d24424d2c4cc66016"
+    },
+    {
+      "description": "Read integrations whatsapp: WhatsApp Cloud API subscription challenge.",
+      "name": "integrations_whatsapp",
+      "path": "integrations_whatsapp/SKILL.md",
+      "service": "integrations",
+      "sha256": "82963e9d4e655f2acf723c43d1293b4fb669f9495308ff4583e656a42fd90467"
     }
   ],
   "spec_version": "8.0.0"
