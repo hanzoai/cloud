@@ -34,9 +34,9 @@ func askCall(t *testing.T, app *zip.App, workspace, room, bearer string) (int, s
 	return resp.StatusCode, string(b)
 }
 
-func decodeCall(t *testing.T, body string) call {
+func decodeCall(t *testing.T, body string) venue {
 	t.Helper()
-	var out call
+	var out venue
 	if err := json.Unmarshal([]byte(body), &out); err != nil {
 		t.Fatalf("decode %q: %v", body, err)
 	}

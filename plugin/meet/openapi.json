@@ -54,7 +54,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/call"
+                  "$ref": "#/components/schemas/venue"
                 }
               }
             },
@@ -224,23 +224,6 @@
   },
   "components": {
     "schemas": {
-      "call": {
-        "properties": {
-          "name": {
-            "description": "Name is the media room to join: the value POST /v1/meet/getToken takes as\nroomName, and the value the media server keys participants on.",
-            "type": "string"
-          },
-          "ready": {
-            "description": "Ready reports that this deployment can mint a join token for this room. It\nis false on a deployment holding no media-server key, where Name is still\ncorrect — the name is a property of the room and the key is a property of\nthe deployment, so a caller learns the room's identity either way and\nlearns not to offer a join button.",
-            "type": "boolean"
-          },
-          "ws": {
-            "description": "WS is where the media plane is — the address a client opens its own\nbrowser-to-server connection to. Empty when this deployment has not been\ntold where its media server lives, which is reported rather than refused:\na surface can say a call is unavailable without a second request.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "meetHealth": {
         "properties": {
           "ready": {
@@ -298,6 +281,23 @@
           },
           "status": {
             "description": "Status is the media server's own state name: EGRESS_STARTING, EGRESS_ACTIVE,\nEGRESS_ENDING, EGRESS_COMPLETE, EGRESS_FAILED, EGRESS_ABORTED or\nEGRESS_LIMIT_REACHED. It is passed through rather than folded into a\nvocabulary of ours, so the answer cannot mean something the media server did\nnot say.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "venue": {
+        "properties": {
+          "name": {
+            "description": "Name is the media room to join: the value POST /v1/meet/getToken takes as\nroomName, and the value the media server keys participants on.",
+            "type": "string"
+          },
+          "ready": {
+            "description": "Ready reports that this deployment can mint a join token for this room. It\nis false on a deployment holding no media-server key, where Name is still\ncorrect — the name is a property of the room and the key is a property of\nthe deployment, so a caller learns the room's identity either way and\nlearns not to offer a join button.",
+            "type": "boolean"
+          },
+          "ws": {
+            "description": "WS is where the media plane is — the address a client opens its own\nbrowser-to-server connection to. Empty when this deployment has not been\ntold where its media server lives, which is reported rather than refused:\na surface can say a call is unavailable without a second request.",
             "type": "string"
           }
         },

@@ -11,7 +11,7 @@
       "name": "meet_call",
       "path": "meet_call/SKILL.md",
       "service": "meet",
-      "sha256": "b23bdcb7f42ddd6675968eeef8fa809cf6d186399cb050384ea3b321dc94fc3d"
+      "sha256": "c2ddccde888d60727425c6ffd989837b39f756e34632172a6402fe6615cf3e8f"
     },
     {
       "description": "Read meet health: Health reports whether the office can mint join tokens..",

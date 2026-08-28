@@ -70,7 +70,7 @@ type callIn struct {
 // needs to RENDER a call — which media room, and whether this deployment can seat
 // anyone in it — and the caller spends them on the existing mint. Resolving is a
 // read and is free; the seat is what costs.
-type call struct {
+type venue struct {
 	// Name is the media room to join: the value POST /v1/meet/getToken takes as
 	// roomName, and the value the media server keys participants on.
 	Name string `json:"name"`
@@ -106,7 +106,7 @@ type call struct {
 // which is a different decision with a different failure mode — and reporting
 // "nobody is in this call" when the question could not be asked would be exactly the
 // unknown-rendered-as-zero this surface refuses elsewhere.
-func (o ops) resolve(ctx context.Context, in *callIn) (*call, error) {
+func (o ops) resolve(ctx context.Context, in *callIn) (*venue, error) {
 	refuse := zip.Errorf(http.StatusUnauthorized, "not admitted to this room")
 	c, ok := cloud.Request(ctx)
 	if !ok {
@@ -128,5 +128,5 @@ func (o ops) resolve(ctx context.Context, in *callIn) (*call, error) {
 		return nil, refuse
 	}
 	st := o.s.State
-	return &call{Name: name, WS: st.ws, Ready: st.ready()}, nil
+	return &venue{Name: name, WS: st.ws, Ready: st.ready()}, nil
 }
