@@ -26,8 +26,39 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/o11y"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
+
+// specs is what this program serves, in the one shape every composition root
+// states it in — the same fields a generated main hands cloud.Listen.
+//
+// It exists because a subsystem is not a Mount function: it is a name, the route
+// subtrees it owns, what a request to them costs, and what it tears down. This
+// program used to call o11y.Mount directly and hold none of that, so nothing in
+// the process knew which subsystem owned /v1/o11y — SubsystemOf answered "" for
+// every path it served, and every metric it recorded named its app "-".
+//
+// Global because this process serves nothing else: o11y composes its surface as
+// a whole app onto the router (apps/o11y.Mount ends in Use), and in a binary
+// whose only subsystem is o11y that IS the whole binary. A scope would bound the
+// middleware of one subsystem against its neighbours, and there are none.
+func specs() []cloud.Plugin {
+	return []cloud.Plugin{{
+		Name: "o11y",
+		// Declared: the surface is four subtrees (/v1/o11y and the three
+		// signal addresses), not the /v1/o11y the convention would assume.
+		Prefixes: manifest.PrefixesFor("o11y"),
+		Price:    cloud.Free,
+		Global:   true,
+		// The runtime answers GET /v1/o11y/health itself, so nothing generic may
+		// declare that address as well — one address declared twice is a program
+		// zip refuses to compose.
+		OwnsHealth: true,
+		Mount:      o11y.Mount,
+		Shutdown:   o11y.ShutdownO11y,
+	}}
+}
 
 // listenEnv names the address to serve on when this binary is run DIRECTLY
 // rather than by a host. Under a host, zip.Addr ignores it and uses the private
@@ -66,18 +97,31 @@ func run() error {
 		defer done()
 		cfg = spec
 	}
+	// This process serves o11y and nothing else, so it says so — the same
+	// override cloud.Listen applies for every generated main, where the forced
+	// set is what makes `hanzo kms` unambiguous. Left to the environment, a
+	// CLOUD_ENABLE naming other subsystems would switch this one off in the
+	// binary whose whole purpose is to run it.
+	cfg.Enable = []string{"o11y"}
+
 	deps := cloud.BuildDeps(cfg)
+	plugins := specs()
 
 	// A plugin is a host for its own requests, so it owns its own providers —
 	// the SAME bootstrap cloud.Listen runs, not a second one. Before the mount, so
 	// the trace sink this process registers below is already the destination its
 	// own spans route to. Without this the child served /v1/o11y/* with the global
 	// no-op provider and emitted nothing.
-	defer cloud.InstallTelemetry(context.Background(), luxlog.Default(), "hanzo-o11y")(context.Background())
+	defer cloud.InstallTelemetry(context.Background(), luxlog.Default(), "hanzo-o11y", "o11y")(context.Background())
 
-	app := newApp(cfg, deps)
+	app := newApp(cfg, deps, plugins)
 
-	if err := o11y.Mount(app, deps); err != nil {
+	// Through the fleet's ONE mount, not past it. Mounting the subsystem by hand
+	// skipped everything MountAll does around the call — the prefix index every
+	// traced request resolves against, the teardown hook, and the request series
+	// that exists from the moment an app composes rather than from its first
+	// caller — and each absence read as ordinary emptiness.
+	if err := cloud.MountAll(app, plugins, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
 
@@ -88,11 +132,12 @@ func run() error {
 		return cloud.Describe(specDir, app)
 	}
 
-	// Teardown belongs to the process that owns the resources. The OTLP
-	// collector, the trace sink and the event-ingest Datastore all live HERE
-	// now, so their flush-and-close runs here on our own shutdown rather than
-	// in the host's MountAll teardown.
-	app.OnShutdown(o11y.ShutdownO11y)
+	// Teardown belongs to the process that owns the resources — the OTLP
+	// collector, the trace sink and the event-ingest Datastore all live HERE —
+	// and it is registered where every other subsystem's is: at the mount above,
+	// from the spec's own Shutdown. zip drains those hooks after the listeners
+	// stop and in-flight requests finish, so nothing is torn down under a
+	// request still using it.
 
 	// Bind the CANONICAL plane socket before serving the edge.
 	//
@@ -170,16 +215,16 @@ func run() error {
 //
 // Shadow per org by default, exactly as in the fused binary, so this is a sensor
 // here until an operator arms the org — not a second policy.
-func newApp(cfg *cloud.Config, deps cloud.Deps) *zip.App {
+func newApp(cfg *cloud.Config, deps cloud.Deps, plugins []cloud.Plugin) *zip.App {
 	// cloud.App, not zip.New. Every other app binary already ran this exact chain,
 	// because every other one reaches it through cloud.Listen; this program was the
 	// single exception, and the six members it silently lacked are what the long
 	// note above is about. Assembling one by hand is no longer possible, so the
 	// exception cannot come back.
 	//
-	// nil tools: the MCP surface is projected from a subsystem list, and this
-	// program mounts o11y directly rather than holding one.
-	app := cloud.App("o11y", cfg, deps, nil)
+	// nil tools: the per-caller MCP source belongs to the one subsystem whose
+	// tools are rows (Plugin.Door), and o11y is not it.
+	app := cloud.App(cfg, deps, plugins, nil)
 
 	// AbuseGate is NOT part of the constructor: in cloud.Listen it sits after the
 	// audit trail and the per-org ceiling, so that a refused request is still

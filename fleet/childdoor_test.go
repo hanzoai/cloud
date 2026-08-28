@@ -57,8 +57,9 @@ func darkChild(t *testing.T, name string, mount cloud.MountFunc) *child {
 	cfg := &cloud.Config{Brand: "hanzo", Domain: "api.hanzo.ai", DataDir: t.TempDir(), Enable: []string{name}}
 	deps := cloud.BuildDeps(cfg)
 
-	app := cloud.App(name, cfg, deps, nil)
-	if err := cloud.MountAll(app, []cloud.Plugin{{Name: name, Price: cloud.Free, Mount: mount}}, cfg, deps); err != nil {
+	specs := []cloud.Plugin{{Name: name, Price: cloud.Free, Mount: mount}}
+	app := cloud.App(cfg, deps, specs, nil)
+	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
 		t.Fatalf("mount %s: %v", name, err)
 	}
 	// LAST, and with no console bundle — a child cannot bootstrap one (serve.go),

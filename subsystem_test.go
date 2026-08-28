@@ -107,3 +107,59 @@ func TestSubsystemOfWithoutIndex(t *testing.T) {
 		t.Fatalf("Subsystems on an unbuilt index = %v, want empty", got)
 	}
 }
+
+// TestTheConstructorDeclaresWhatTheProgramServes is the pin on the empty index.
+//
+// The index used to be built one call further on, in MountAll, and a program
+// that composed its subsystem by hand never reached it: SubsystemOf answered ""
+// for every path that program owned, its request spans carried no
+// hanzo.subsystem, and every metric it recorded named its app "-". Nothing said
+// so, because an absent label reads exactly like a subsystem that is switched
+// off.
+//
+// So this obtains an app the ONE way a program can, hands it the inventory, and
+// calls neither Declare nor MountAll. Resolution has to work anyway — otherwise
+// the declaration is still something a composition root can forget.
+func TestTheConstructorDeclaresWhatTheProgramServes(t *testing.T) {
+	prev := subsystems.Load()
+	t.Cleanup(func() { subsystems.Store(prev) })
+	subsystems.Store(nil) // the state a fresh process starts in
+
+	specs := []Plugin{{
+		Name:     "kite",
+		Prefixes: []string{"/v1/kite", "/v1/string"},
+		Price:    Free,
+	}}
+	_ = App(&Config{Brand: "hanzo", Enable: []string{"kite"}}, Deps{}, specs, nil)
+
+	for _, path := range []string{"/v1/kite/fly", "/v1/string"} {
+		if got := SubsystemOf(path); got != "kite" {
+			t.Errorf("SubsystemOf(%q) = %q, want kite — the program is serving a surface it never declared", path, got)
+		}
+	}
+	if got := PriceOf("/v1/kite/fly"); got != Free {
+		t.Errorf("PriceOf(/v1/kite/fly) = %v, want Free — the price rides the same index", got)
+	}
+}
+
+// TestADisabledSubsystemStillOwnsNothing keeps the constructor honest about the
+// half of Declare that is easy to lose in a move: a subsystem this deployment
+// switched off claims no prefix, so its paths resolve to nobody rather than to
+// it.
+func TestADisabledSubsystemStillOwnsNothing(t *testing.T) {
+	prev := subsystems.Load()
+	t.Cleanup(func() { subsystems.Store(prev) })
+	subsystems.Store(nil)
+
+	_ = App(&Config{Brand: "hanzo", Enable: []string{"kite"}}, Deps{}, []Plugin{
+		{Name: "kite", Price: Free},
+		{Name: "anchor", Price: Free},
+	}, nil)
+
+	if got := SubsystemOf("/v1/kite"); got != "kite" {
+		t.Errorf("SubsystemOf(/v1/kite) = %q, want kite", got)
+	}
+	if got := SubsystemOf("/v1/anchor"); got != "" {
+		t.Errorf("SubsystemOf(/v1/anchor) = %q, want \"\" — a disabled subsystem serves nothing", got)
+	}
+}

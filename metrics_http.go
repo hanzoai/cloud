@@ -19,7 +19,7 @@ import (
 // READER queried was VictoriaMetrics, and signals travel to where they are kept.
 // VictoriaMetrics is gone and the datastore is the only store left, so the
 // instruments below are collected into a registry and written to it directly
-// (telemetry.go installs the reader, apps/o11y/metricspush.go drains it). The
+// (telemetry.go installs the reader, metrics_push.go drains it). The
 // instruments themselves have never changed.
 //
 // This is the emit side of the per-org observability story: cloud tags every /v1

@@ -164,7 +164,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// to a co-resident sink when apps/o11y is linked in, the ZAP wire when it is a
 	// plugin. No-op (non-nil shutdown) when no sink/endpoint is configured. See
 	// telemetry.go.
-	telemetryShutdown := InstallTelemetry(context.Background(), luxlog.Default(), "hanzo-cloud")
+	telemetryShutdown := InstallTelemetry(context.Background(), luxlog.Default(), "hanzo-cloud", procName(plugins))
 
 	// Data-plane encryption posture. The KEY was installed by BootMaster at the top
 	// of this function (BuildDeps logs where it resolved from); this only READS
@@ -204,9 +204,10 @@ func Listen(plugins []Plugin, enable []string) error {
 	// The app, and everything a Hanzo program carries, from the ONE constructor —
 	// see app.go. This body used to build it inline, which is why the o11y binary
 	// could assemble a different one by hand and be missing six of these without
-	// anything saying so. procName is what this process calls itself: its single
-	// subsystem's name, or "cloud" when it carries several.
-	app := App(procName(plugins), cfg, deps, source)
+	// anything saying so. The inventory goes in because the constructor reads two
+	// things out of it: what this process calls itself, and which subsystem owns
+	// each path it serves.
+	app := App(cfg, deps, plugins, source)
 
 	// Console identity = the ONE validated principal, not the embedded account surface
 	// model. When a principal is present, /v1/get-account reflects it so the operator

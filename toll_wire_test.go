@@ -188,8 +188,8 @@ func TestTheProgramArmsItsRule(t *testing.T) {
 	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
 	led := planetest.Money(t, 0) // an empty ledger: a priced operation cannot be afforded
 
-	app := cloud.App("probe", &cloud.Config{Brand: "hanzo"},
-		cloud.Deps{Metering: led.Client(t)}, nil)
+	app := cloud.App(&cloud.Config{Brand: "hanzo"},
+		cloud.Deps{Metering: led.Client(t)}, []cloud.Plugin{{Name: "probe", Price: 500}}, nil)
 	free := func(ctx context.Context, _ *none) (*ok, error) { return &ok{OK: true}, nil }
 	if err := mountAll(t, app, []cloud.Plugin{
 		{Name: "probe", Price: 500, Mount: func(r cloud.Router, _ cloud.Deps) error {

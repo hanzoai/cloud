@@ -34,7 +34,7 @@
 // `up` was the SCRAPE's own metric: one series per target, born from the act of
 // visiting it. Nothing visits anything now. What we have instead is
 // hanzo_service_up, which the fleet prober (probes.go) writes every 30s by
-// knocking on each service's own health URL, and which metricspush.go carries
+// knocking on each service's own health URL, and which the metric leg carries
 // into the store in-process.
 //
 // The two are not the same measurement and this endpoint does not pretend they

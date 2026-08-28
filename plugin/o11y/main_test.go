@@ -16,6 +16,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
 
@@ -36,7 +37,7 @@ func probeApp(t *testing.T, origins []string) *zip.App {
 	// every client-supplied authority header, and validates nothing — the shape a
 	// deployment has before it is pointed at an issuer, and the one that must not
 	// leave the chain trusting the wire.
-	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol}, specs())
 	app.Get("/v1/o11y/summary", func(c *zip.Ctx) error {
 		return c.JSON(200, map[string]string{"page_title": "Hanzo status"})
 	})
@@ -141,7 +142,7 @@ func TestSummaryEmitsNothingWhenAllowlistEmpty(t *testing.T) {
 // gates verbatim. The chain must strip them whether or not a token validates.
 func TestChainStripsClientSuppliedAuthority(t *testing.T) {
 	pol, _ := edge.New("", "admin", edge.Policy{})
-	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol})
+	app := newApp(&cloud.Config{}, cloud.Deps{GatewayPolicy: pol}, specs())
 
 	var seen struct{ org, user, admin string }
 	app.Get("/v1/o11y/summary", func(c *zip.Ctx) error {
@@ -160,5 +161,42 @@ func TestChainStripsClientSuppliedAuthority(t *testing.T) {
 	}
 	if seen.admin != "" {
 		t.Fatalf("a client-supplied X-User-IsAdmin survived the chain: %q", seen.admin)
+	}
+}
+
+// THIS PROGRAM DECLARES THE SURFACE IT SERVES.
+//
+// It used to call the subsystem's Mount directly, past everything the fleet's
+// mount does around that call. The prefix index was the expensive absence: with
+// nothing declared, SubsystemOf answered "" for every one of the four subtrees
+// this binary owns, so its request spans carried no hanzo.subsystem and every
+// metric it recorded named its app "-" — an answer indistinguishable from a
+// subsystem that is switched off.
+//
+// The assertion is on the resolution, not on the call: it asks what the process
+// knows after building its app, which is the question the request path asks.
+func TestThisProgramDeclaresTheSurfaceItServes(t *testing.T) {
+	cfg := &cloud.Config{Brand: "hanzo", Enable: []string{"o11y"}}
+	_ = newApp(cfg, cloud.Deps{}, specs())
+
+	for _, path := range []string{"/v1/o11y/summary", "/v1/o11y/services", "/v1/metrics", "/v1/logs/health"} {
+		if got := cloud.SubsystemOf(path); got != "o11y" {
+			t.Errorf("SubsystemOf(%q) = %q, want o11y — this process serves that path and cannot name itself", path, got)
+		}
+	}
+}
+
+// The four subtrees are the manifest's, not a second list. A surface added there
+// and not here would be served by a subsystem the index attributes to nobody.
+func TestTheDeclaredPrefixesAreTheManifestsOwn(t *testing.T) {
+	got := specs()[0].Prefixes
+	want := manifest.PrefixesFor("o11y")
+	if len(got) != len(want) {
+		t.Fatalf("prefixes = %v, want the manifest's %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("prefixes = %v, want the manifest's %v", got, want)
+		}
 	}
 }

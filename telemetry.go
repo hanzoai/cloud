@@ -218,7 +218,7 @@ func PlaneDSN() string {
 var metricRegistry = prometheus.NewRegistry()
 
 // MetricGatherer exposes the registry for the in-process push to the telemetry
-// store (apps/o11y/metricspush.go), which is the ONLY way measurements leave
+// store (metrics_push.go), which is the ONLY way measurements leave
 // this process now that Prometheus is retired.
 //
 // The registry is no longer a PUBLISHED SURFACE — there is no exposition and no
@@ -237,7 +237,7 @@ func MetricGatherer() prometheus.Gatherer { return metricRegistry }
 // cloud's request counters (metrics_http.go) did before this existed.
 //
 // ONE reader, and NOBODY PULLS IT: the provider collects into this process's
-// registry (metricRegistry), and apps/o11y's metricspush.go gathers that
+// registry (metricRegistry), and this process's metric leg gathers that
 // registry on a timer and writes it straight to the telemetry store in-process.
 // The registry is a buffer, not a published surface — no port is bound for it
 // and there is no exposition to scrape.
@@ -296,8 +296,15 @@ func installMeter(log luxlog.Logger, res *resource.Resource) (*sdkmetric.MeterPr
 // needs the same providers, and one bootstrap that every root calls is the only
 // way that stays true. No root writes its own.
 //
+// serviceName is the SUBJECT — what this is, and what every process of it
+// shares. instance is WHICH PROCESS of it: the app this one serves. They are two
+// questions and were one string until the metric leg needed the second: a
+// measurement's series is identified by its resource, so a hundred sibling
+// processes filing under one resource write one contested series rather than a
+// hundred honest ones (metrics_push.go).
+//
 // An operator may override serviceName at runtime with OTEL_SERVICE_NAME.
-func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string) func(context.Context) {
+func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName, instance string) func(context.Context) {
 	// Telemetry is never allowed to take the process down, and that starts with
 	// its own arguments: a root that has no logger yet still gets a provider.
 	if log == nil {
@@ -334,7 +341,16 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// name and resource a batch is filed under are resolved — the writer went in
 	// at BuildDeps, and what it held since then flushes now. See logsink.go.
 	stopLogs := installLogSink(log, res, serviceName, planeLogEndpoint)
+
+	// METRICS OUT, on their own decision too, and beside the log leg because the
+	// argument is identical: the meter above is only a place to put numbers, and
+	// until this existed exactly one process in the fleet carried its own — the
+	// one holding the store's connection. Everything else measured and published
+	// nothing. See metrics_push.go.
+	stopMetricPush := installMetricPush(log, res, serviceName, instance, planeMetricEndpoint)
+
 	stopSignals := func(ctx context.Context) {
+		stopMetricPush(ctx)
 		stopLogs(ctx)
 		stopMeter(ctx)
 	}

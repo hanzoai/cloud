@@ -1180,11 +1180,12 @@ func door(plugins []Plugin) (zip.Source, error) {
 // teardown needs no separate enablement gate.
 func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 	logger := luxlog.Default()
-	// Declare the composition root BEFORE anything mounts: TracingMiddleware resolves
-	// hanzo.subsystem off this, DefaultPrice resolves each surface's declared price off
-	// it, and the inventory (including what is switched OFF) is what
-	// /v1/admin/subsystems reports. Built once, read lock-free per request.
-	Declare(specs, cfg)
+	// The boot snapshot these specs imply is NOT built here. It is built by App,
+	// the constructor that already takes this same inventory — one call earlier,
+	// and the one a program cannot get an app without. Building it here as well
+	// would be a second answer to "which subsystem owns this path", and building
+	// it ONLY here is what let a program that mounted by hand serve with no
+	// answer at all. See App.
 	for _, spec := range specs {
 		if !cfg.Enabled(spec.Name) {
 			logger.Debug("subsystem disabled", "name", spec.Name)

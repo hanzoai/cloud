@@ -58,7 +58,7 @@ func TestSignalsNameTheStoresTheSinkWritesTo(t *testing.T) {
 	written := map[string]bool{planeLogTable: true, planeSpanTable: true}
 	for _, s := range telemetry.Signals {
 		if s.Name == "metric" {
-			continue // pushed by metricspush.go, not by the ZAP sink
+			continue // carried by the metric leg, not by the ZAP span/log sink
 		}
 		if !written[s.Store] {
 			t.Errorf("signal %q names %q, which this app's plane sink does not write (it writes %s and %s)",

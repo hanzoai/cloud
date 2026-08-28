@@ -90,7 +90,7 @@ type observed struct {
 func ask(t *testing.T, jwksURL string, mutate func(*http.Request)) observed {
 	t.Helper()
 	cfg := &cloud.Config{Brand: "hanzo", IAMIssuer: testIssuer, JWKSURL: jwksURL}
-	app := newApp(cfg, cloud.Deps{})
+	app := newApp(cfg, cloud.Deps{}, specs())
 
 	var got observed
 	app.Get("/v1/o11y/probe", func(c *zip.Ctx) error {

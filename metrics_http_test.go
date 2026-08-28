@@ -305,3 +305,50 @@ func TestTelemetryNamesTheOrgTheIdentityWasValidatedFor(t *testing.T) {
 		}
 	})
 }
+
+// A PROGRAM BUILT THE ONE WAY NAMES ITS APP, WITH NOTHING TOLD TWICE.
+//
+// The sibling above drives the middleware after an explicit Declare, which is
+// how the label resolved in tests and only in tests: production reached Declare
+// through MountAll, and the o11y binary composed its subsystem by hand and never
+// reached it. Every series it wrote carried app="-" while its own test suite
+// stayed green.
+//
+// So this builds the app through the ONE constructor, mounts through the ONE
+// mount, and calls Declare nowhere. The series has to name the app anyway.
+func TestAProgramBuiltTheOneWayNamesItsApp(t *testing.T) {
+	prev := subsystems.Load()
+	t.Cleanup(func() { subsystems.Store(prev) })
+	subsystems.Store(nil)
+
+	cfg := &Config{Brand: "hanzo", Enable: []string{"kite"}}
+	specs := []Plugin{{
+		Name:     "kite",
+		Prefixes: []string{"/v1/kite"},
+		Price:    Free,
+		Mount: func(r Router, _ Deps) error {
+			r.Get("/v1/kite/fly", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "yes"}) })
+			return nil
+		},
+	}}
+
+	app := App(cfg, Deps{}, specs, nil)
+	if err := MountAll(app, specs, cfg, Deps{}); err != nil {
+		t.Fatalf("MountAll: %v", err)
+	}
+	if _, err := app.Test(httptest.NewRequest("GET", "/v1/kite/fly", nil)); err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+
+	got := gathered(t, "hanzo_http_requests_total")
+	const want = "app=kite,org=-,product=kite,status=2xx"
+	if got[want] < 1 {
+		t.Errorf("series %q = %v, want at least 1 — a request served by a mounted app must name it\ngot: %v",
+			want, got[want], got)
+	}
+	for series := range got {
+		if strings.HasPrefix(series, "app=-,") && strings.Contains(series, "product=kite") {
+			t.Errorf("series %q — the app that served /v1/kite is nameless, which is the empty index", series)
+		}
+	}
+}

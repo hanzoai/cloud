@@ -62,7 +62,7 @@ func TestInstallTelemetry_SpanReachesCoResidentSink(t *testing.T) {
 	RegisterTraceSink(sink.sink)
 	t.Cleanup(func() { RegisterTraceSink(nil) })
 
-	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud")
+	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud", "probe")
 	if shutdown == nil {
 		t.Fatal("InstallTelemetry returned a nil shutdown func")
 	}
@@ -151,7 +151,7 @@ func TestInstallTelemetry_RetiresOTLPExporterEnv(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector.hanzo.svc:4318")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://otel-collector.hanzo.svc:4318")
 
-	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud")
+	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud", "probe")
 	t.Cleanup(func() { shutdown(context.Background()) })
 
 	if v := environ.Or("OTEL_EXPORTER_OTLP_ENDPOINT", ""); v != "" {
@@ -175,7 +175,7 @@ func TestInstallTelemetry_DisabledIsNoop(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
 	t.Setenv("O11Y_TRACES_ZAP_INPROCESS", "")
 
-	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud")
+	shutdown := InstallTelemetry(context.Background(), testLogger(), "hanzo-cloud", "probe")
 	if shutdown == nil {
 		t.Fatal("InstallTelemetry returned a nil shutdown func")
 	}

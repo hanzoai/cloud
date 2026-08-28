@@ -139,8 +139,12 @@ const (
 	// This sink binds ONLY these two sockets — cloud owns its own HTTP and
 	// health listeners, so the :9090-class collision the old collector had to
 	// be configured around cannot exist here.
-	planeSpanListen = "0.0.0.0:4317"
-	planeLogListen  = "0.0.0.0:4318"
+	// 4319 is the metric wire (metrics.go binds it, cloud/metrics_push.go
+	// sends to it), stated here with its two siblings so the three addresses
+	// this process answers on are read in one place.
+	planeSpanListen   = "0.0.0.0:4317"
+	planeLogListen    = "0.0.0.0:4318"
+	planeMetricListen = "0.0.0.0:4319"
 
 	// The SAME wires, over a unix socket, for the senders that share this pod.
 	//
@@ -484,7 +488,7 @@ func shutdownPlaneIngest(context.Context) error {
 // a span the trace list cannot find, and that is exactly the state this file was
 // in while event.span held 172,789 distinct trace ids and event.trace held one.
 //
-// The partial write is NON-FATAL, matching pushOnce's discipline in metricspush.go:
+// The partial write is NON-FATAL, matching the metric leg's discipline:
 // the spans are the facts and they are already durable, the summary is derived
 // from them, and returning an error here would tell the receiver its batch failed
 // after it had in fact landed — which on the wire path means the sender re-sends

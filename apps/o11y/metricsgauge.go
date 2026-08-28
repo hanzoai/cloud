@@ -14,7 +14,7 @@
 
 // Reading a gauge back out of the native store.
 //
-// This is the other half of metricspush.go, and it is the piece that lets
+// This is the other half of the metric leg, and it is the piece that lets
 // VictoriaMetrics go. The measurements were never the problem — the fleet
 // prober has recorded hanzo_service_up for as long as it has existed. The
 // problem was that the only way to READ them was a PromQL instant query against

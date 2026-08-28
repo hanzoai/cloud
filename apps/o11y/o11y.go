@@ -406,15 +406,13 @@ func mountRuntime(deps cloud.Deps) error {
 		// so every declared address reaches the same handler: module.Whole, which is
 		// what SetHandler meant before a runtime could resolve per address.
 		module.SetRuntime(module.Whole(gh))
-		// Runtime (and its ONE datastore connection) is live; start native
-		// metrics ingest — opt-in, fail-soft (metrics.go).
+		// Runtime (and its ONE datastore connection) is live; open the metric
+		// ear — fail-soft (metrics.go). This process RECEIVES the fleet's
+		// measurements, including its own: every process ships them on the same
+		// wire from cloud.InstallTelemetry (cloud/metrics_push.go), so there is
+		// one sender and one receiver rather than a private path for whichever
+		// process happens to hold the connection.
 		startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
-		// …and start carrying THIS process's own measurements to the same
-		// store. The line above receives other processes' metrics; this one
-		// sends ours. Without it cloud is the only service in the fleet whose
-		// metrics exist nowhere, because its single exit was a Prometheus
-		// scrape and Prometheus is gone (metricspush.go).
-		startNativeMetricsPush(embeddedRuntime.TelemetryStore, log)
 		// Project /v1/event errors onto the Sentry plane — fail-soft
 		// (errorsink.go). Requires the in-process runtime's Modules.Sentry, so
 		// it is installed only on this embed-up branch.
@@ -549,7 +547,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return err
 	}
 	// The gauge leaves this process by being PUSHED to the telemetry store
-	// (metricspush.go, started with the runtime above), not by being collected.
+	// (cloud/metrics_push.go, in every process), not by being collected.
 	// There was a Prometheus exposition on :9464 here until Prometheus was
 	// retired; a listener whose only caller was a scraper that no longer exists
 	// is not a way out, it is an open port.
@@ -630,7 +628,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // Idempotent and nil-safe.
 func ShutdownO11y(ctx context.Context) error {
 	stopProbes()
-	stopNativeMetricsPush()
 	// Detach both analytics fan-outs first so no in-flight ingest dispatches into a
 	// tearing-down runtime or a closing datastore connection. Idempotent and nil-safe.
 	clearErrorSink()

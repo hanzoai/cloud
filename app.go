@@ -35,12 +35,37 @@ import (
 // the kernel answers which process is calling, and the boundary's findings travel
 // with the request.
 //
-// name is what the program calls itself in a diagnostic. tools is the per-caller
-// half of this program's agent MCP server — the tools that exist because of WHO
-// is asking, which only a program holding a subsystem list can declare; everyone
-// else passes nil and offers none. The server itself is not optional either way:
-// see [callerTools].
-func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
+// specs is what this program serves — the composition root's own inventory, and
+// the reason it is a PARAMETER rather than something the program remembers to
+// state later. Two things fall out of it here and nowhere else:
+//
+//   - the name the program calls itself in a diagnostic (procName: its single
+//     subsystem, or "cloud" when it carries several), and
+//   - the boot snapshot every traced request resolves against (Declare) —
+//     which subsystem owns a path, and what that surface costs.
+//
+// THAT SECOND ONE IS WHY IT IS HERE. It used to live in MountAll, which is one
+// call further on and therefore skippable: the o11y binary composed its
+// subsystem by hand, never reached MountAll, and served with an empty index —
+// so SubsystemOf answered "" for every path it owned, its request spans carried
+// no hanzo.subsystem, and every one of its metrics named its app "-". Nothing
+// said so, because an absent label reads the same as a subsystem that is off.
+// Declaring at the constructor makes the index a property of the app a program
+// is holding, so a program serving a surface it never declared is not a thing
+// that can be built.
+//
+// tools is the per-caller half of this program's agent MCP server — the tools
+// that exist because of WHO is asking; a program with none passes nil. The
+// server itself is not optional either way: see [callerTools].
+func App(cfg *Config, deps Deps, specs []Plugin, tools zip.Source) *zip.App {
+	// BEFORE anything is built, so nothing in the constructor below can observe a
+	// half-declared process: TracingMiddleware resolves hanzo.subsystem off this,
+	// DefaultPrice resolves each surface's declared price off it, and the
+	// inventory (including what is switched OFF) is what /v1/admin/subsystems
+	// reports. Built once, read lock-free per request.
+	Declare(specs, cfg)
+	name := procName(specs)
+
 	app := zip.New(zip.Config{
 		AppName:        name,
 		Logger:         luxlog.Default(),
