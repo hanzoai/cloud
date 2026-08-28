@@ -801,7 +801,7 @@ components:
         hits:
           description: |-
             Hits is how many results this leg returned, counted BEFORE fusion, so it is
-            not the number that survived into Response.Hits — fusion merges what both
+            not the number that survived into Fusion.Hits — fusion merges what both
             legs found and the caller's limit and offset then page it. 0 for a leg that
             did not run.
           type: integer
@@ -4215,6 +4215,35 @@ components:
             reader knows whether 40 signups is a month or a day.
           type: integer
       type: object
+    Fusion:
+      properties:
+        backends:
+          description: Backends is the per-leg report. Always populated.
+          items:
+            $ref: '#/components/schemas/BackendStatus'
+          type: array
+        hits:
+          description: Hits is the fused, ranked result set.
+          items:
+            $ref: '#/components/schemas/Hit'
+          type: array
+        mode:
+          description: Mode is the mode actually used after `auto` resolution.
+          type: string
+        status:
+          description: |-
+            Status is the query's overall honesty signal:
+              ok          every consulted leg answered.
+              partial     at least one leg failed; Hits holds the survivors' results.
+              unavailable every consulted leg failed; Hits is empty AND that is stated.
+          type: string
+        took_ms:
+          description: |-
+            TookMS is the whole query's wall time in milliseconds — every leg it
+            consulted, plus fusion and paging. Each leg's own share is in
+            Backends[].TookMS; the legs run in sequence, so this is at least their sum.
+          type: integer
+      type: object
     GLRow:
       properties:
         account:
@@ -4563,7 +4592,7 @@ components:
             exactly why the hit outranks one a single leg found. Never empty on a
             returned hit.
           items:
-            $ref: '#/components/schemas/Match'
+            $ref: '#/components/schemas/Provenance'
           type: array
         project:
           description: |-
@@ -5535,31 +5564,6 @@ components:
             URL is the server's JSON-RPC endpoint. Always a public http(s) host: the
             registration boundary and the dialer both refuse anything else.
           type: string
-      type: object
-    Match:
-      properties:
-        backend:
-          description: |-
-            Backend is the leg that contributed this match: "index" (lexical), "vector"
-            (semantic) or "code" (the org's repositories). It is the same name that leg
-            reports itself under in Response.Backends, so a hit can be traced to a
-            status.
-          type: string
-        rank:
-          description: |-
-            Rank is this document's 1-based position in THAT leg's own result list,
-            before fusion — 1 is the leg's best hit. It is the only input to the fused
-            score: RRF adds 1/(60+rank) per leg, which is why a document two legs ranked
-            second beats one a single leg ranked first.
-          type: integer
-        score:
-          description: |-
-            Score is the leg's NATIVE score, on that leg's own scale, reported for
-            explanation and never used in ranking — the scales are incomparable (a cosine
-            similarity against a term-match count), which is why fusion works on ranks.
-            The vector leg reports Qdrant's cosine similarity; the lexical leg exposes no
-            per-row score and reports 0, meaning "unscored", not "scored zero".
-          type: number
       type: object
     MemoryEntry:
       properties:
@@ -6814,6 +6818,31 @@ components:
           description: string|number|boolean|object|array
           type: string
       type: object
+    Provenance:
+      properties:
+        backend:
+          description: |-
+            Backend is the leg that contributed this match: "index" (lexical), "vector"
+            (semantic) or "code" (the org's repositories). It is the same name that leg
+            reports itself under in Fusion.Backends, so a hit can be traced to a
+            status.
+          type: string
+        rank:
+          description: |-
+            Rank is this document's 1-based position in THAT leg's own result list,
+            before fusion — 1 is the leg's best hit. It is the only input to the fused
+            score: RRF adds 1/(60+rank) per leg, which is why a document two legs ranked
+            second beats one a single leg ranked first.
+          type: integer
+        score:
+          description: |-
+            Score is the leg's NATIVE score, on that leg's own scale, reported for
+            explanation and never used in ranking — the scales are incomparable (a cosine
+            similarity against a term-match count), which is why fusion works on ranks.
+            The vector leg reports Qdrant's cosine similarity; the lexical leg exposes no
+            per-row score and reports 0, meaning "unscored", not "scored zero".
+          type: number
+      type: object
     ProviderBreakdown:
       properties:
         available:
@@ -7882,35 +7911,6 @@ components:
           items:
             type: string
           type: array
-      type: object
-    Response:
-      properties:
-        backends:
-          description: Backends is the per-leg report. Always populated.
-          items:
-            $ref: '#/components/schemas/BackendStatus'
-          type: array
-        hits:
-          description: Hits is the fused, ranked result set.
-          items:
-            $ref: '#/components/schemas/Hit'
-          type: array
-        mode:
-          description: Mode is the mode actually used after `auto` resolution.
-          type: string
-        status:
-          description: |-
-            Status is the query's overall honesty signal:
-              ok          every consulted leg answered.
-              partial     at least one leg failed; Hits holds the survivors' results.
-              unavailable every consulted leg failed; Hits is empty AND that is stated.
-          type: string
-        took_ms:
-          description: |-
-            TookMS is the whole query's wall time in milliseconds — every leg it
-            consulted, plus fusion and paging. Each leg's own share is in
-            Backends[].TookMS; the legs run in sequence, so this is at least their sum.
-          type: integer
       type: object
     Responsible:
       properties:
@@ -109703,7 +109703,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Response'
+                $ref: '#/components/schemas/Fusion'
           description: ok
       summary: Hybrid search over the org's own corpora
       tags:

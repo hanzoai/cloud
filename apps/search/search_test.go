@@ -32,7 +32,7 @@ func mount(t *testing.T) *zip.App {
 
 // post issues a search with a validated principal (X-User-Id is the signal the
 // identity middleware sets only from a verified credential).
-func post(t *testing.T, app *zip.App, org string, body any, principal bool) (int, Response) {
+func post(t *testing.T, app *zip.App, org string, body any, principal bool) (int, Fusion) {
 	t.Helper()
 	b, _ := json.Marshal(body)
 	hr := httptest.NewRequest(http.MethodPost, "/v1/search", strings.NewReader(string(b)))
@@ -49,7 +49,7 @@ func post(t *testing.T, app *zip.App, org string, body any, principal bool) (int
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
-	var out Response
+	var out Fusion
 	_ = json.Unmarshal(raw, &out)
 	return resp.StatusCode, out
 }
