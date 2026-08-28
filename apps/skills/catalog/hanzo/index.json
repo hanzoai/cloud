@@ -1762,7 +1762,7 @@
       "name": "channels_allowlist",
       "path": "channels_allowlist/SKILL.md",
       "service": "channels",
-      "sha256": "81f3de2c95c4d15fafd8c25c8666e69a7b03fecd2c39dceaf13a488d669deb35"
+      "sha256": "77f865f6c27ff0f8c3d1f33d8e8c99bf1ae871bf0bfe2b8106b2fda584b1438a"
     },
     {
       "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",

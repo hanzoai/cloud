@@ -19,9 +19,22 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// post carries one outbound message to the transport that owns the provider.
-func post(ctx context.Context, in plane.ChatSendIn) (string, error) {
-	out, err := plane.Ask[plane.ChatSendIn, plane.ChatSendOut](ctx, "integrations", plane.ChatSend, &in)
+// ask is the plane call the send rides; a test swaps it to read what actually
+// reached the wire, which is where the org went missing.
+var ask = plane.Ask[plane.ChatSendIn, plane.ChatSendOut]
+
+// post carries one outbound message to the transport that owns the provider, AS
+// an org.
+//
+// The tenant is a parameter rather than a field the caller fills, because it is
+// what resolves the credential the send spends: integrations refuses a send that
+// names no org, and four of the five doors named none — so telegram and whatsapp
+// could not deliver at all, and discord and teams spent a shared app credential
+// with nothing to check it against. A door cannot forget an argument it has to
+// pass.
+func post(ctx context.Context, org string, in plane.ChatSendIn) (string, error) {
+	in.Org = org
+	out, err := ask(ctx, "integrations", plane.ChatSend, &in)
 	if err != nil {
 		return "", err
 	}

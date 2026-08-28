@@ -20,8 +20,8 @@ import (
 var errNoRoute = errors.New("channels: no reply route for this room")
 
 // discordDoor is the send path; tests spy it, prod never repoints.
-var discordDoor = func(ctx context.Context, channelID, replyTo, text string) (string, error) {
-	return post(ctx, plane.ChatSendIn{Provider: "discord", Room: channelID, ReplyTo: replyTo, Text: text})
+var discordDoor = func(ctx context.Context, org, channelID, replyTo, text string) (string, error) {
+	return post(ctx, org, plane.ChatSendIn{Provider: "discord", Room: channelID, ReplyTo: replyTo, Text: text})
 }
 
 // DM:false is honest: the interactions ingress is guild-scoped only.
@@ -52,16 +52,17 @@ func discordNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 // channel, so route presence IS the org's verified send capability
 // (reply_root is "" for discord; presence is the datum).
 func discordEgress(ctx context.Context, s *cloud.Service[state], org string, m Message) (Delivery, error) {
-	_, ok, err := s.State.store.routeFor(ctx, org, "discord", m.Room.ID)
+	now := time.Now().Unix()
+	_, ok, err := s.State.store.routeFor(ctx, org, "discord", m.Room.ID, now)
 	if err != nil {
 		return Delivery{}, err
 	}
 	if !ok {
 		return Delivery{}, errNoRoute
 	}
-	id, err := discordDoor(ctx, m.Room.ID, m.ReplyTo, renderText(m))
+	id, err := discordDoor(ctx, org, m.Room.ID, m.ReplyTo, renderText(m))
 	if err != nil {
 		return Delivery{}, err
 	}
-	return Delivery{MessageID: id, Timestamp: time.Now().Unix()}, nil
+	return Delivery{MessageID: id, Timestamp: now}, nil
 }

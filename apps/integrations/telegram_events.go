@@ -124,35 +124,16 @@ func telegramWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		s.Log.Warn("telegram: message in unbound chat", "chat", chatID)
 		return c.NoContent(http.StatusOK)
 	}
-	// SHED BEFORE the dedupe write (Red M-1): acquire a pool slot first; if the pool
-	// is full, record NOTHING and return a retriable NON-2xx so Telegram re-delivers
-	// when a slot frees (no lost message, no double-run).
-	if !channelLim.acquire(org) {
-		s.Log.Warn("telegram: at capacity, shedding for retry", "org", org)
-		return zip.Errorf(http.StatusTooManyRequests, "telegram agent pool at capacity")
-	}
-	// Slot held. DURABLE dedupe (billed path) on update_id: release on every path
-	// that does NOT dispatch. Fail CLOSED on a dedupe error.
-	fresh, err := s.State.store.MarkEvent(c.Context(), "telegram", strconv.FormatInt(m.UpdateID, 10))
-	if err != nil {
-		channelLim.release(org)
-		s.Log.Warn("telegram: dedupe error, skipping", "err", err)
-		return c.NoContent(http.StatusOK)
-	}
-	if !fresh {
-		channelLim.release(org)
-		return c.NoContent(http.StatusOK)
-	}
-	if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
-		s.Log.Warn("telegram: dedupe gc", "err", gerr)
-	}
 	in := Inbound{
 		Provider: "telegram", ExternalID: chatID, User: strconv.FormatInt(m.UserID, 10),
 		Channel: chatID, ThreadID: strconv.FormatInt(m.MessageID, 10), Text: prompt,
 		DedupeKey: strconv.FormatInt(m.UpdateID, 10),
 	}
-	emitIngress(org, in, "")
-	// The turn runs in channels now — emitIngress above is the whole dispatch.
+	// An event we did not take is a retriable NON-2xx, so Telegram re-delivers it:
+	// nothing was recorded, so there is no lost message and no double-run.
+	if !emitIngress(c.Context(), s, org, in, "") {
+		return zip.Errorf(http.StatusTooManyRequests, "telegram update not taken; please redeliver")
+	}
 	return c.NoContent(http.StatusOK)
 }
 

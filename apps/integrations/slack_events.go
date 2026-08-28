@@ -148,39 +148,17 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		if conn, ok := ConnectionFor(org, "slack", ""); ok && conn.BotUserID != "" && d.User == conn.BotUserID {
 			return c.NoContent(http.StatusOK)
 		}
-		// SHED BEFORE the dedupe write (Red M-1). Try to acquire a pool slot first; if
-		// the pool is full, record NOTHING and return a retriable NON-2xx — the turn
-		// never ran, so no event_id is burned and Slack re-delivers when a slot frees
-		// (no lost @mention, no double-run).
-		if !channelLim.acquire(org) {
-			s.Log.Warn("slack: at capacity, shedding for retry", "org", org)
-			return zip.Errorf(http.StatusTooManyRequests, "slack agent pool at capacity")
-		}
-		// Slot held. DURABLE dedupe (BILLED path): a Slack retry of an event that
-		// already ran must never double-run. Release the slot on every path that does
-		// NOT dispatch. Fail CLOSED on a dedupe error (skip) rather than risk a double
-		// charge.
-		key := slackEventKey(raw)
-		fresh, err := s.State.store.MarkEvent(c.Context(), "slack", key)
-		if err != nil {
-			channelLim.release(org)
-			s.Log.Warn("slack: event dedupe error, skipping", "err", err)
-			return c.NoContent(http.StatusOK)
-		}
-		if !fresh {
-			channelLim.release(org)
-			return c.NoContent(http.StatusOK)
-		}
-		// Opportunistic GC so the dedupe table cannot grow without bound.
-		if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
-			s.Log.Warn("slack: dedupe gc", "err", gerr)
-		}
 		route := d
 		in := Inbound{
 			Provider: "slack", ExternalID: route.TeamID, User: route.User,
-			Channel: route.Channel, ThreadID: route.ThreadTS, Text: route.Text, DedupeKey: key,
+			Channel: route.Channel, ThreadID: route.ThreadTS, Text: route.Text, DedupeKey: slackEventKey(raw),
 		}
-		emitIngress(org, in, "")
+		// An event we did not take is a retriable NON-2xx: nothing was recorded, so
+		// no event_id is burned and Slack re-delivers it (no lost @mention, no
+		// double-run).
+		if !emitIngress(c.Context(), s, org, in, "") {
+			return zip.Errorf(http.StatusTooManyRequests, "slack event not taken; please redeliver")
+		}
 		// SAY SOMETHING IMMEDIATELY. A turn is a real model completion and measured
 		// 9,955 / 35,893 / 52,985 ms in production — the plumbing is ~25ms of it.
 		// Until this, the person saw an empty thread for the whole of that, which is
@@ -194,8 +172,11 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		// It stays in the ADAPTER while the turn moved to channels, because it is
 		// Slack's own gesture and nothing portable answers to it. Best-effort by
 		// construction: a failed status must never cost the answer, so the error is
-		// dropped. Slack clears it when the reply lands.
-		channelSpawn(s, org, func() { slackThinking(s, org, route.Channel, route.ThreadTS) })
+		// dropped and a full pool skips the gesture rather than the reply. Slack
+		// clears it when the reply lands.
+		if channelLim.acquire(org) {
+			channelSpawn(s, org, func() { slackThinking(s, org, route.Channel, route.ThreadTS) })
+		}
 		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)

@@ -22,13 +22,13 @@ import (
 var errRoomNotBound = errors.New("channels: room not bound to org")
 
 // telegramDoor is the sender; tests spy it, prod never repoints.
-var telegramDoor = func(ctx context.Context, chatID, replyTo int64, text string) error {
+var telegramDoor = func(ctx context.Context, org string, chatID, replyTo int64, text string) error {
 	room := strconv.FormatInt(chatID, 10)
 	reply := ""
 	if replyTo != 0 {
 		reply = strconv.FormatInt(replyTo, 10)
 	}
-	_, err := post(ctx, plane.ChatSendIn{Provider: "telegram", Room: room, ReplyTo: reply, Text: text})
+	_, err := post(ctx, org, plane.ChatSendIn{Provider: "telegram", Room: room, ReplyTo: reply, Text: text})
 	return err
 }
 
@@ -91,7 +91,8 @@ func telegramEgress(ctx context.Context, s *cloud.Service[state], org string, m 
 	// lives. Both, deliberately: one process holding the token and another deciding
 	// who may spend it is exactly where a single check becomes a single point of
 	// failure.
-	if _, ok, err := s.State.store.routeFor(ctx, org, "telegram", m.Room.ID); err != nil {
+	now := time.Now().Unix()
+	if _, ok, err := s.State.store.routeFor(ctx, org, "telegram", m.Room.ID, now); err != nil {
 		return Delivery{}, err
 	} else if !ok {
 		return Delivery{}, errRoomNotBound
@@ -103,10 +104,10 @@ func telegramEgress(ctx context.Context, s *cloud.Service[state], org string, m 
 	// Best-effort reply threading: an unparseable ReplyTo degrades to a
 	// top-level send rather than failing the message.
 	replyTo, _ := strconv.ParseInt(m.ReplyTo, 10, 64)
-	if err := telegramDoor(ctx, chatID, replyTo, renderText(m)); err != nil {
+	if err := telegramDoor(ctx, org, chatID, replyTo, renderText(m)); err != nil {
 		return Delivery{}, err
 	}
 	// sendMessage's message id is not surfaced by the existing helper —
 	// accepted tradeoff; the receipt carries the send time only.
-	return Delivery{MessageID: "", Timestamp: time.Now().Unix()}, nil
+	return Delivery{MessageID: "", Timestamp: now}, nil
 }

@@ -7,7 +7,7 @@ package channels
 // message drove two mechanisms and only the second one ever replied. The turn
 // belongs on this side because everything it needs is already here — the policy
 // gate that decides whether a sender may speak, the route that says where a
-// reply goes, and the four egress transports.
+// reply goes, and the egress transports themselves.
 //
 // What is NOT here is custody. Which Hanzo account a chat user has linked is
 // integrations' to answer (plane.ChatIdentity) because the link lives in KMS
@@ -171,8 +171,8 @@ func turn(s *cloud.Service[state], tr transport, org string, m Message) {
 	// be delivered at all and the person is left unlinked with no way to know why,
 	// so that is an error and not a shrug.
 	if ephemeral {
-		if _, err := post(ctx, plane.ChatSendIn{
-			Org: org, Provider: m.Channel, Room: m.Room.ID,
+		if _, err := post(ctx, org, plane.ChatSendIn{
+			Provider: m.Channel, Room: m.Room.ID,
 			User: m.Sender.ExternalID, Private: true, Text: text,
 		}); err != nil {
 			s.Log.Error("channels: sign-in prompt undeliverable, user left unlinked",

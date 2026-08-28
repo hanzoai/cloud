@@ -228,11 +228,12 @@ type Delivery struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
-// renderText is the ONE deterministic downgrade renderer: all four transports
-// advertise media:false / actions:false this pass, so attachments and actions
-// flatten to one line each after the text. Native rendering is a named
-// follow-up. Called only on validated messages (an approval action carries a
-// non-nil Approval).
+// renderText is the ONE deterministic downgrade renderer: every transport
+// advertises media:false / actions:false, so attachments and actions flatten to
+// one line each after the text. Native rendering is a named follow-up. Every
+// egress goes through it — a transport that sent m.Text raw would drop what it
+// advertised it would flatten. Called only on validated messages (an approval
+// action carries a non-nil Approval).
 func renderText(m Message) string {
 	var b strings.Builder
 	b.WriteString(m.Text)

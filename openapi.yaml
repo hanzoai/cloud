@@ -11642,7 +11642,7 @@ components:
           type: object
         channel:
           description: |-
-            Channel is the transport to edit: discord, slack, teams or telegram.
+            Channel is the transport to edit: discord, slack, teams, telegram or whatsapp.
             Required; an unknown value is a 404.
           type: string
         dm:
@@ -11685,8 +11685,8 @@ components:
             AccessGroups is the org's named sender sets, as group name -> channel ->
             member entries, held once for the whole org. A DM or Group entry written
             `accessGroup:<name>` admits any sender listed under that name for THIS
-            channel, or under the channel `*`, which is how one set covers all four
-            transports. Replaced wholesale by the PUT.
+            channel, or under the channel `*`, which is how one set covers every
+            transport at once. Replaced wholesale by the PUT.
           type: object
         dm:
           description: |-
@@ -12046,8 +12046,9 @@ components:
     approvePairingIn:
       properties:
         channel:
-          description: 'Channel is the transport the request came in on: discord,
-            slack, teams or telegram.'
+          description: |-
+            Channel is the transport the request came in on: discord, slack, teams,
+            telegram or whatsapp.
           type: string
         code:
           description: |-
@@ -14185,34 +14186,38 @@ components:
             \  — a menu (`options`, each a label and the value choosing it\n\t           returns),
             rendered as a picker.\n\tapproval — a reference to an approval request
             (`approval.id`), rendered as\n\t           approve/deny controls bound
-            to that id.\n\nFalse on all four transports this pass, and nothing refuses
-            a send for it:\nactions are accepted, validated per kind, and flattened
-            by renderText to one\nline each after the text — `[label] command`, `[label]
-            url`,\n`[label] opt | opt`, `[label] approval requested: <id>`. So a caller
-            that\nneeds a real control must read this flag and degrade itself; a caller
-            that\nonly needs the choice communicated can send actions and take the
-            text form."
+            to that id.\n\nFalse on every transport, and nothing refuses a send for
+            it:\nactions are accepted, validated per kind, and flattened by renderText
+            to one\nline each after the text — `[label] command`, `[label] url`,\n`[label]
+            opt | opt`, `[label] approval requested: <id>`. So a caller that\nneeds
+            a real control must read this flag and degrade itself; a caller that\nonly
+            needs the choice communicated can send actions and take the text form."
           type: boolean
         dm:
           description: |-
             DM is whether the transport carries a DIRECT message at all. True for slack,
-            teams and telegram. False for discord, honestly: that ingress is guild-scoped
-            slash commands — an interaction without a guild id is refused at the endpoint —
-            so nothing ever arrives classified as a DM, no reply route is ever learned
-            for one, and a send addressed at a Discord DM is refused 409.
+            teams, telegram and whatsapp — whatsapp is nothing else, since the Cloud API
+            addresses a person's number and there is no room a third party joins. False
+            for discord, honestly: that ingress is guild-scoped slash commands — an
+            interaction without a guild id is refused at the endpoint — so nothing ever
+            arrives classified as a DM, no reply route is ever learned for one, and a
+            send addressed at a Discord DM is refused 409.
           type: boolean
         group:
           description: |-
             Group is whether the transport carries multi-person rooms — a Discord guild
             channel, a Slack channel, a Teams channel or group chat, a Telegram group or
-            supergroup. True on all four.
+            supergroup. False on whatsapp alone, which has no such room to carry.
           type: boolean
         media:
           description: |-
-            Media is whether the transport renders an ATTACHMENT natively. False on all
-            four this pass, and a send is not refused for it: renderText flattens each
+            Media is whether the transport renders an ATTACHMENT natively. False
+            everywhere, and a send is not refused for it: renderText flattens each
             attachment to one `kind: url (mime)` line after the text rather than dropping
-            it.
+            it. A transport whose egress hands its door the raw text would drop the
+            attachment instead, and an attachment-only send would reach the platform
+            with nothing to say — which is why the flag and the flattening are pinned
+            together.
           type: boolean
         thread:
           description: |-
@@ -14220,8 +14225,8 @@ components:
             slack alone: it is the only transport whose ingress reports a thread
             (thread_ts, published as the envelope's replyTo) and whose send posts back
             into it. Discord's replyTo makes an inline reply rather than a thread,
-            Telegram's answers one message id, and Teams carries no reply target at all —
-            a replyTo sent to it is ignored.
+            Telegram's and WhatsApp's each quote one message, and Teams carries no reply
+            target at all — a replyTo sent to it is ignored.
           type: boolean
       type: object
     captableClassHolding:
@@ -15676,8 +15681,8 @@ components:
           type: string
         id:
           description: |-
-            ID is the fixed transport identifier — discord, slack, teams or telegram —
-            and the value every route on this surface names a channel by, including the
+            ID is the fixed transport identifier — discord, slack, teams, telegram or
+            whatsapp — and the value every route on this surface names a channel by, including the
             `:channel` segment of the send path. The listing is always in that order.
           type: string
         pendingPairing:
@@ -62186,13 +62191,13 @@ paths:
   /v1/channels/{channel}/send:
     post:
       description: |-
-        Delivers text, attachments and actions to one room on a connected chat transport — discord, slack, teams or telegram — and answers that transport's own receipt, the `messageId` it assigned and the Unix second it landed. An unknown channel is a 404.
+        Delivers text, attachments and actions to one room on a connected chat transport — discord, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the `messageId` it assigned and the Unix second it landed. An unknown channel is a 404.
 
         The body is the envelope's NARROW outbound projection: `room`, `text`, `attachments`, `actions`, `replyTo` and `idempotency`, and nothing else. Identity is not a field — the channel is the path segment and the sender is the caller's validated org — so a body carrying `sender`, `account` or `channel` is refused with 400 rather than having it silently dropped. `room.id` is required, and so is something to say: text, or at least one attachment.
 
-        Requires a validated principal; 403 without one. The room must already belong to the caller's org — each transport verifies the binding itself, so a room this org has not bound is 403 and a room whose route the bot has never learned is 409, meaning someone has to message the bot there first. A transport that fails answers 502 carrying status and shape only, never a token.
+        Requires a validated principal; 403 without one. The room must already belong to the caller's org — each transport verifies the binding itself, so a room this org has not bound is 403 and a room whose route the bot has never learned is 409, meaning someone has to message the bot there first. A route learned only so a pairing reply could be delivered lasts exactly as long as that pairing request does, so a room whose sender was never approved goes back to 409 within the hour. A transport that fails answers 502 carrying status and shape only, never a token.
 
-        Sending is at-most-once only if you ask for it: pass an `idempotency` string and a replay answers 200 with the PRIOR receipt instead of sending twice, while a send that fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. All four transports currently render text only, so attachments and actions are flattened deterministically to one line each after the text rather than dropped.
+        Sending is at-most-once only if you ask for it: pass an `idempotency` string and a replay answers 200 with the PRIOR receipt instead of sending twice, while a send that fails releases the key so the caller can re-attempt. Bodies over 1 MiB are refused. Every transport currently renders text only, so attachments and actions are flattened deterministically to one line each after the text rather than dropped.
       operationId: post_channels_by_channel_send
       parameters:
       - in: path
@@ -62216,7 +62221,7 @@ paths:
       operationId: get_channels_allowlist
       parameters:
       - description: |-
-          Channel is the transport to read: discord, slack, teams or telegram.
+          Channel is the transport to read: discord, slack, teams, telegram or whatsapp.
           Required; an unknown value is a 404.
         example: slack
         in: query

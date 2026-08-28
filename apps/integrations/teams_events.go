@@ -69,28 +69,6 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		s.Log.Warn("teams: activity for unconnected tenant", "tenant", tenant)
 		return c.NoContent(http.StatusOK)
 	}
-	// SHED BEFORE the dedupe write (Red M-1): acquire a pool slot first; if the pool
-	// is full, record NOTHING and return a retriable NON-2xx so the Bot Connection
-	// re-delivers when a slot frees (no lost message, no double-run).
-	if !channelLim.acquire(org) {
-		s.Log.Warn("teams: at capacity, shedding for retry", "org", org)
-		return zip.Errorf(http.StatusTooManyRequests, "teams agent pool at capacity")
-	}
-	// Slot held. DURABLE dedupe (billed path): release on every path that does NOT
-	// dispatch. Fail CLOSED on a dedupe error.
-	fresh, err := s.State.store.MarkEvent(c.Context(), "teams", act.ID)
-	if err != nil {
-		channelLim.release(org)
-		s.Log.Warn("teams: dedupe error, skipping", "err", err)
-		return c.NoContent(http.StatusOK)
-	}
-	if !fresh {
-		channelLim.release(org)
-		return c.NoContent(http.StatusOK)
-	}
-	if _, gerr := s.State.store.GCEvents(c.Context(), staleEventCutoff()); gerr != nil {
-		s.Log.Warn("teams: dedupe gc", "err", gerr)
-	}
 	user := act.UserAADObjectID
 	if user == "" {
 		user = act.UserID
@@ -99,8 +77,12 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		Provider: "teams", ExternalID: tenant, User: user,
 		Channel: act.ConversationID, Text: stripTeamsMentions(act.Text), DedupeKey: act.ID,
 	}
-	emitIngress(org, in, act.ServiceURL)
-	// The turn runs in channels now — emitIngress above is the whole dispatch.
+	// An event we did not take is a retriable NON-2xx, so the Bot Connection
+	// re-delivers it: nothing was recorded, so there is no lost message and no
+	// double-run.
+	if !emitIngress(c.Context(), s, org, in, act.ServiceURL) {
+		return zip.Errorf(http.StatusTooManyRequests, "teams event not taken; please redeliver")
+	}
 	return c.NoContent(http.StatusOK)
 }
 

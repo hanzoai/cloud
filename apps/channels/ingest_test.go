@@ -230,8 +230,8 @@ func (r *doorRec) call(t *testing.T, i int) doorCall {
 	return r.calls[i]
 }
 
-// The four spy installers swap the package transport vars for recorders and
-// restore them on cleanup. ALL FOUR transports are spies in this package —
+// The spy installers swap the package transport vars for recorders and
+// restore them on cleanup. EVERY transport is a spy in this package —
 // Discord's real HTTP path is proven in apps/integrations/ingress_test.go
 // (C2-4), symmetric with the other transports' existing send-path tests.
 
@@ -239,8 +239,8 @@ func spyTelegram(t *testing.T) *doorRec {
 	t.Helper()
 	rec := &doorRec{}
 	saved := telegramDoor
-	telegramDoor = func(_ context.Context, chatID, replyTo int64, text string) error {
-		_, err := rec.hit(doorCall{room: strconv.FormatInt(chatID, 10), replyTo: strconv.FormatInt(replyTo, 10), text: text})
+	telegramDoor = func(_ context.Context, org string, chatID, replyTo int64, text string) error {
+		_, err := rec.hit(doorCall{org: org, room: strconv.FormatInt(chatID, 10), replyTo: strconv.FormatInt(replyTo, 10), text: text})
 		return err
 	}
 	t.Cleanup(func() { telegramDoor = saved })
@@ -263,8 +263,8 @@ func spyTeams(t *testing.T) *doorRec {
 	t.Helper()
 	rec := &doorRec{}
 	saved := teamsDoor
-	teamsDoor = func(_ context.Context, serviceURL, conversationID, text string) error {
-		_, err := rec.hit(doorCall{root: serviceURL, room: conversationID, text: text})
+	teamsDoor = func(_ context.Context, org, serviceURL, conversationID, text string) error {
+		_, err := rec.hit(doorCall{org: org, root: serviceURL, room: conversationID, text: text})
 		return err
 	}
 	t.Cleanup(func() { teamsDoor = saved })
@@ -275,8 +275,8 @@ func spyDiscord(t *testing.T) *doorRec {
 	t.Helper()
 	rec := &doorRec{id: "m-1"}
 	saved := discordDoor
-	discordDoor = func(_ context.Context, channelID, replyTo, text string) (string, error) {
-		return rec.hit(doorCall{room: channelID, replyTo: replyTo, text: text})
+	discordDoor = func(_ context.Context, org, channelID, replyTo, text string) (string, error) {
+		return rec.hit(doorCall{org: org, room: channelID, replyTo: replyTo, text: text})
 	}
 	t.Cleanup(func() { discordDoor = saved })
 	return rec
@@ -286,8 +286,8 @@ func spyWhatsApp(t *testing.T) *doorRec {
 	t.Helper()
 	rec := &doorRec{id: "wamid.1"}
 	saved := whatsappDoor
-	whatsappDoor = func(_ context.Context, to, replyTo, text string) (string, error) {
-		return rec.hit(doorCall{room: to, replyTo: replyTo, text: text})
+	whatsappDoor = func(_ context.Context, org, to, replyTo, text string) (string, error) {
+		return rec.hit(doorCall{org: org, room: to, replyTo: replyTo, text: text})
 	}
 	t.Cleanup(func() { whatsappDoor = saved })
 	return rec
@@ -606,7 +606,7 @@ func TestIngestRouteAfterGate(t *testing.T) {
 	// capability.
 	putAllowlist(t, e, org, map[string]any{"channel": "teams", "groupPolicy": "disabled"})
 	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u1", conv, "", "hi", "t1", root))
-	if _, ok, _ := st.routeFor(ctx, org, "teams", conv); ok {
+	if _, ok, _ := st.routeFor(ctx, org, "teams", conv, time.Now().Unix()); ok {
 		t.Fatal("blocked inbound must not mint a route")
 	}
 	if tm.count() != 0 {
@@ -616,7 +616,7 @@ func TestIngestRouteAfterGate(t *testing.T) {
 	// Allowed inbound stores the JWT-verified reply root; egress rides it.
 	putAllowlist(t, e, org, map[string]any{"channel": "teams", "groupPolicy": "open"})
 	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u1", conv, "", "hi again", "t2", root))
-	got, ok, err := st.routeFor(ctx, org, "teams", conv)
+	got, ok, err := st.routeFor(ctx, org, "teams", conv, time.Now().Unix())
 	if err != nil || !ok || got != root {
 		t.Fatalf("route = %q ok=%v err=%v, want the stored reply root", got, ok, err)
 	}
@@ -635,7 +635,7 @@ func TestIngestRouteAfterGate(t *testing.T) {
 	const dmConv = "a:1a2b"
 	const root2 = "https://smba.example/emea/"
 	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u7", dmConv, "", "hello", "t3", root2))
-	got2, ok2, _ := st.routeFor(ctx, org, "teams", dmConv)
+	got2, ok2, _ := st.routeFor(ctx, org, "teams", dmConv, time.Now().Unix())
 	if !ok2 || got2 != root2 {
 		t.Fatalf("pair-branch route = %q ok=%v, want %q", got2, ok2, root2)
 	}
@@ -716,7 +716,7 @@ func TestIngestDiscordRoute(t *testing.T) {
 	if len(rows) != 1 || rows[0].RoomKind != RoomGroup || rows[0].Account != "guild9" {
 		t.Fatalf("rows = %+v", rows)
 	}
-	root, ok, err := st.routeFor(ctx, org, "discord", "c-99")
+	root, ok, err := st.routeFor(ctx, org, "discord", "c-99", time.Now().Unix())
 	if err != nil || !ok || root != "" {
 		t.Fatalf("route = %q ok=%v err=%v, want present with empty root", root, ok, err)
 	}
@@ -732,5 +732,90 @@ func TestIngestDiscordRoute(t *testing.T) {
 	}
 	if got := dc.find(t, "pong"); got.room != "c-99" {
 		t.Fatalf("transport call = %+v, want room c-99", got)
+	}
+}
+
+// A route minted so a PAIRING REPLY could be delivered lasts exactly as long as
+// the pairing request does. The sender is one the org has explicitly not
+// approved, and nothing else here ever deletes a route — so before this, one
+// message from a stranger left a permanent reply target that outlived the
+// pairing's hour, an admin's refusal to approve, and retention GC, addressable
+// by any principal in that org.
+func TestPairRouteLapsesWithThePairing(t *testing.T) {
+	e := newApp(t)
+	tm := spyTeams(t)
+	ctx := context.Background()
+	const org = "acme-lapse"
+	st := e.store(t)
+	const stranger = "a:stranger"
+	const approved = "19:known@thread.tacv2"
+	const root = "https://smba.example/amer/"
+	now := time.Now().Unix()
+	lapsed := now + int64(pairTTL/time.Second) + 1
+
+	// A stranger's DM pairs (the default policy), and the reply rides the route
+	// the pair branch minted.
+	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-stranger", stranger, "", "hello", "p1", root))
+	tm.find(t, "Pairing code: ")
+	if _, ok, _ := st.routeFor(ctx, org, "teams", stranger, now); !ok {
+		t.Fatal("the pairing reply needs a route to ride")
+	}
+
+	// The pairing lapses, and the capability lapses with it — read-side, because
+	// gc rides inbound traffic and a room nobody writes to again would keep an
+	// expired route for as long as the org stayed quiet.
+	if _, ok, _ := st.routeFor(ctx, org, "teams", stranger, lapsed); ok {
+		t.Fatal("an unapproved sender's route outlived their pairing request")
+	}
+	if err := st.gc(ctx, lapsed); err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+	var rows int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM channel_route
+  WHERE org = ? AND channel = 'teams' AND room_id = ?`, org, stranger).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("lapsed route rows = %d err=%v, want collected", rows, err)
+	}
+	if r := req(t, e, http.MethodPost, "/v1/channels/teams/send", org,
+		map[string]any{"room": map[string]any{"id": stranger}, "text": "still here?"}); r.Code != http.StatusConflict {
+		t.Fatalf("send to a lapsed route: %d, want 409", r.Code)
+	}
+
+	// An ALLOWED sender's route is the other grant and it lasts: the group policy
+	// defaults open, so this one is admitted rather than paired.
+	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-known", approved, "", "hi", "p2", root))
+	if err := st.gc(ctx, lapsed); err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+	if got, ok, _ := st.routeFor(ctx, org, "teams", approved, lapsed); !ok || got != root {
+		t.Fatalf("allowed route = %q ok=%v, want it to last", got, ok)
+	}
+}
+
+// Approving a pairing makes the sender's next message an ALLOWED one, and that
+// message is what makes their route lasting — so the grant and the capability
+// have one lifetime, not two.
+func TestApprovalMakesThePairRouteLast(t *testing.T) {
+	e := newApp(t)
+	_ = spyTeams(t)
+	ctx := context.Background()
+	const org = "acme-promote"
+	st := e.store(t)
+	const dm = "a:promote"
+	const root = "https://smba.example/amer/"
+	now := time.Now().Unix()
+	lapsed := now + int64(pairTTL/time.Second) + 1
+
+	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-p", dm, "", "let me in", "q1", root))
+	pend, _ := listPairing(ctx, st, org, now)
+	if len(pend) != 1 {
+		t.Fatalf("pending = %+v, want one request", pend)
+	}
+	if r := reqAdmin(t, e, http.MethodPost, "/v1/channels/pairing/approve", org,
+		map[string]any{"channel": "teams", "code": pend[0].Code}); r.Code != http.StatusOK {
+		t.Fatalf("approve: %d (%s)", r.Code, r.Body)
+	}
+	ingest(ctx, ingressEv(org, "teams", "tenant-1", "u-p", dm, "", "thanks", "q2", root))
+	if got, ok, _ := st.routeFor(ctx, org, "teams", dm, lapsed); !ok || got != root {
+		t.Fatalf("approved sender's route = %q ok=%v, want it to last", got, ok)
 	}
 }
