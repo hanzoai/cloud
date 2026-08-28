@@ -128,7 +128,7 @@ func TestADeadSubsystemDoesNotTakeTheHostDown(t *testing.T) {
 	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, absent); err != nil {
 		t.Fatalf("mounting a healthy subsystem after a dead one failed: %v", err)
 	}
-	health(app, absent)
+	health(app, absent, nil)
 
 	// 1. EVERY OTHER SUBSYSTEM SERVES. This is the whole point.
 	code, ctype, body := do(t, app, "/v1/flags")
@@ -187,7 +187,7 @@ func TestAnAbsentPrefixBeatsTheConsoleCatchAll(t *testing.T) {
 			if err := mount(app, dead(t, tc.app, tc.prefix), true, absent); err != nil {
 				t.Fatal(err)
 			}
-			health(app, absent)
+			health(app, absent, nil)
 			if err := webui.Mount(app, consoleBundle()); err != nil {
 				t.Fatalf("mount console: %v", err)
 			}
@@ -220,7 +220,7 @@ func TestAbsenceIsObservable(t *testing.T) {
 	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, absent); err != nil {
 		t.Fatal(err)
 	}
-	health(app, absent)
+	health(app, absent, nil)
 
 	code, ctype, body := do(t, app, "/healthz")
 
@@ -274,7 +274,7 @@ func TestAHealthyHostReportsNoAbsence(t *testing.T) {
 	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
-	health(app, absent)
+	health(app, absent, nil)
 
 	_, _, body := do(t, app, "/healthz")
 	if strings.Contains(body, "absent") {
