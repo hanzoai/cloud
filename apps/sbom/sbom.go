@@ -393,7 +393,7 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 		return
 	}
 	if log == nil {
-		log = luxlog.Noop()
+		log = luxlog.Default()
 	}
 	log = log.New("subsystem", "sbom")
 	// Prefetch runs OUTSIDE Mount (no Deps), and pullAndStore only reads s.Log — so

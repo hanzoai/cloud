@@ -281,8 +281,10 @@ func TestTheParserReadsWhatTheLoggerWrites(t *testing.T) {
 //
 // A logger built with luxlog.New writes to bare stderr: it never passed through
 // BuildDeps, so it carries no plane leg, and every line it writes is invisible to
-// the fleet while looking perfectly logged. Six packages built their own, which
-// is how a rule that reads "127 packages inherit it" quietly means 121.
+// the fleet while looking perfectly logged. A logger built with Noop writes
+// nowhere at all, which is the same failure with the volume down. Six packages
+// built their own, which is how a rule that reads "127 packages inherit it"
+// quietly means 121.
 //
 // Three sites are allowed and each states why: the install point itself, the
 // sink's own voice (breaking the amplification loop), and a test helper that has
@@ -293,9 +295,17 @@ func TestTheParserReadsWhatTheLoggerWrites(t *testing.T) {
 // is a convention: the same construction under a different import alias, or
 // under no alias at all, is the same logger and a different string. Parsing asks
 // the question the compiler asks — which import does this identifier bind, and
-// what is being called on it — so the answer does not depend on how anyone typed
+// what is being named on it — so the answer does not depend on how anyone typed
 // it. Redirecting a logger (Default().Output) is not construction and is not
 // caught: it inherits the install point and then says where its own lines go.
+//
+// IT MATCHES THE CONSTRUCTOR AS A VALUE, not as a call, because in Go those are
+// the same thing said twice: `var mk = luxlog.New` and `make(luxlog.New)` build
+// exactly what `luxlog.New(...)` builds, one frame later, and a check that
+// insisted on the call shape would report the third and pass the first two.
+// Naming the constructor at all is the finding. It follows that
+// `NewFactory().Make(…)` is caught where it is named — the factory IS the
+// construction, one remove out.
 //
 // A file that will not parse is REPORTED, never skipped. That is the same rule
 // the whole-file read was here for — one NUL byte makes a search skip a source
@@ -345,25 +355,98 @@ func TestOnlyOnePlaceBuildsALogger(t *testing.T) {
 	}
 }
 
-// logPath is the package the invariant is about, and builders are the calls in
-// it that return a logger with a destination of its own. Default() is not one:
-// it returns the logger the install point already built.
+// logPath is the package the invariant is about.
 const logPath = "github.com/luxfi/log"
 
-var builders = map[string]bool{"New": true, "NewWriter": true}
+// inherited names the exported functions of logPath that HAND BACK the logger
+// the install point already built, rather than making one with a destination of
+// its own. Everything else there that answers with a logger is a construction.
+//
+// Stated this way round deliberately. A list of BUILDERS is a list somebody has
+// to remember to extend, so a constructor added upstream is missed in silence —
+// which is the exact shape of failure this guard exists to end. A list of
+// ACCESSORS is closed by what the package MEANS rather than by what it happens
+// to export today, so the same upstream addition is caught by default and the
+// worst a stale entry can do is report a line a human then reads.
+var inherited = map[string]bool{"Default": true, "Root": true, "SlogRoot": true, "Ctx": true}
 
-// logName is the identifier an UNALIASED import of logPath binds — the package's
-// own name, asked of the toolchain rather than guessed from the path, because a
+// logTypes are the results that ARE a logger. Factory is one at a remove —
+// NewFactory().Make(name) answers a logger writing to the factory's own file —
+// so naming the factory is naming the construction.
+var logTypes = map[string]bool{"Logger": true, "SlogLogger": true, "Factory": true}
+
+// logAPI is what the toolchain says about logPath: the identifier an UNALIASED
+// import binds, and the constructors the package declares. Both are ASKED rather
+// than guessed, for the reason the import is parsed rather than searched — a
 // guess is the convention this check exists to stop relying on.
-var logName = sync.OnceValues(func() (string, error) {
-	out, err := exec.Command("go", "list", "-f", "{{.Name}}", logPath).Output()
-	return strings.TrimSpace(string(out)), err
+type logAPI struct {
+	name     string
+	builders map[string]bool
+}
+
+var askLog = sync.OnceValues(func() (logAPI, error) {
+	out, err := exec.Command("go", "list", "-f", "{{.Name}}\n{{.Dir}}", logPath).Output()
+	if err != nil {
+		return logAPI{}, err
+	}
+	said := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(said) != 2 {
+		return logAPI{}, fmt.Errorf("go list %s said %q, want a name and a directory", logPath, out)
+	}
+	api := logAPI{name: said[0], builders: map[string]bool{}}
+	entries, err := os.ReadDir(said[1])
+	if err != nil {
+		return logAPI{}, err
+	}
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(said[1], n), nil, 0)
+		if err != nil {
+			return logAPI{}, err
+		}
+		for _, d := range f.Decls {
+			fn, ok := d.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil || !fn.Name.IsExported() || inherited[fn.Name.Name] {
+				continue
+			}
+			if answersALogger(fn.Type.Results) {
+				api.builders[fn.Name.Name] = true
+			}
+		}
+	}
+	// An instrument that found nothing to look for must not read as a pass —
+	// the same rule the unparseable file follows below.
+	if len(api.builders) == 0 {
+		return logAPI{}, fmt.Errorf("%s declares no constructor, so nothing would ever be found", logPath)
+	}
+	return api, nil
 })
 
-// loggerBuilds reports every construction of a logger in one source file, by
-// the name the file itself binds the log package to.
+// answersALogger reports whether any result of a signature is a logger.
+func answersALogger(results *ast.FieldList) bool {
+	if results == nil {
+		return false
+	}
+	for _, r := range results.List {
+		t := r.Type
+		if star, ok := t.(*ast.StarExpr); ok {
+			t = star.X
+		}
+		if id, ok := t.(*ast.Ident); ok && logTypes[id.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+// loggerBuilds reports every construction of a logger in one source file, by the
+// names the file itself binds the log package to.
 func loggerBuilds(path string, src []byte) ([]string, error) {
-	name, err := logName()
+	api, err := askLog()
 	if err != nil {
 		return nil, err
 	}
@@ -373,14 +456,17 @@ func loggerBuilds(path string, src []byte) ([]string, error) {
 		return nil, err
 	}
 
-	local := ""
+	// EVERY binding, because one file may import one path twice under two names
+	// and both reach the same constructors. Keeping only the last one is how a
+	// second spec hides the first.
+	local := map[string]bool{}
 	for _, spec := range f.Imports {
 		if p, err := strconv.Unquote(spec.Path.Value); err != nil || p != logPath {
 			continue
 		}
 		switch {
 		case spec.Name == nil:
-			local = name
+			local[api.name] = true
 		case spec.Name.Name == "_":
 			// Imported for a side effect; it binds no identifier and can
 			// construct nothing.
@@ -391,26 +477,22 @@ func loggerBuilds(path string, src []byte) ([]string, error) {
 			return []string{fmt.Sprintf("%s:%d: dot-imports %s, which puts its constructors in scope unqualified",
 				path, fset.Position(spec.Pos()).Line, logPath)}, nil
 		default:
-			local = spec.Name.Name
+			local[spec.Name.Name] = true
 		}
 	}
-	if local == "" {
+	if len(local) == 0 {
 		return nil, nil
 	}
 
 	var found []string
 	ast.Inspect(f, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok || !api.builders[sel.Sel.Name] {
 			return true
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !builders[sel.Sel.Name] {
-			return true
-		}
-		if id, ok := sel.X.(*ast.Ident); ok && id.Name == local {
-			found = append(found, fmt.Sprintf("%s:%d: %s.%s(...)",
-				path, fset.Position(call.Pos()).Line, local, sel.Sel.Name))
+		if id, ok := sel.X.(*ast.Ident); ok && local[id.Name] {
+			found = append(found, fmt.Sprintf("%s:%d: %s.%s",
+				path, fset.Position(sel.Pos()).Line, id.Name, sel.Sel.Name))
 		}
 		return true
 	})
@@ -455,6 +537,34 @@ func f() {}`, 0},
 import "log"
 import "os"
 func f() { _ = log.New(os.Stderr, "", 0) }`, 0},
+
+		// SIX THAT COMPILE AND USED TO PASS. Each is the same construction under
+		// a shape the previous matcher did not have a case for, and every one of
+		// them is a real logger with a destination of its own.
+		{"the constructor bound to a variable", `package p
+import luxlog "github.com/luxfi/log"
+var mk = luxlog.New
+func f() { _ = mk("x") }`, 1},
+		{"the constructor handed to somebody else", `package p
+import luxlog "github.com/luxfi/log"
+func g(func(...interface{}) interface{}) {}
+func f() { g(luxlog.New) }`, 1},
+		{"a factory, which makes them by the file", `package p
+import luxlog "github.com/luxfi/log"
+func f() { l, _ := luxlog.NewFactory().Make("x"); _ = l }`, 1},
+		{"one that writes nowhere at all", `package p
+import luxlog "github.com/luxfi/log"
+func f() { _ = luxlog.NewNoOpLogger(); _ = luxlog.Noop() }`, 2},
+		{"the slog half of the same package", `package p
+import luxlog "github.com/luxfi/log"
+import "log/slog"
+func f(h slog.Handler) { _ = luxlog.NewLogger(h) }`, 1},
+		{"one path imported twice, so the second hid the first", `package p
+import (
+	luxlog "github.com/luxfi/log"
+	zz "github.com/luxfi/log"
+)
+func f() { _ = zz.New("x"); _ = luxlog.New("y") }`, 2},
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			got, err := loggerBuilds("fixture.go", []byte(c.src))
