@@ -1,4 +1,4 @@
-package membership
+package live
 
 // membership_k8s_test.go proves the parts of the live membership source that run without
 // a cluster: the ready-gating predicate (the safety-critical filter that keeps a
