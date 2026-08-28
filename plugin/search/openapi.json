@@ -115,7 +115,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Response"
+                  "$ref": "#/components/schemas/Fusion"
                 }
               }
             },
@@ -136,7 +136,7 @@
             "type": "string"
           },
           "hits": {
-            "description": "Hits is how many results this leg returned, counted BEFORE fusion, so it is\nnot the number that survived into Response.Hits — fusion merges what both\nlegs found and the caller's limit and offset then page it. 0 for a leg that\ndid not run.",
+            "description": "Hits is how many results this leg returned, counted BEFORE fusion, so it is\nnot the number that survived into Fusion.Hits — fusion merges what both\nlegs found and the caller's limit and offset then page it. 0 for a leg that\ndid not run.",
             "type": "integer"
           },
           "name": {
@@ -149,6 +149,37 @@
           },
           "took_ms": {
             "description": "TookMS is how long this leg took, in milliseconds, timed around its own call\nand excluding fusion. 0 for a leg that was skipped or is disabled, since\nnothing was called.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Fusion": {
+        "properties": {
+          "backends": {
+            "description": "Backends is the per-leg report. Always populated.",
+            "items": {
+              "$ref": "#/components/schemas/BackendStatus"
+            },
+            "type": "array"
+          },
+          "hits": {
+            "description": "Hits is the fused, ranked result set.",
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "description": "Mode is the mode actually used after `auto` resolution.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the query's overall honesty signal:\n  ok          every consulted leg answered.\n  partial     at least one leg failed; Hits holds the survivors' results.\n  unavailable every consulted leg failed; Hits is empty AND that is stated.",
+            "type": "string"
+          },
+          "took_ms": {
+            "description": "TookMS is the whole query's wall time in milliseconds — every leg it\nconsulted, plus fusion and paging. Each leg's own share is in\nBackends[].TookMS; the legs run in sequence, so this is at least their sum.",
             "type": "integer"
           }
         },
@@ -171,7 +202,7 @@
           "matched": {
             "description": "Matched is one entry per leg that returned this document, with that leg's\nrank and native score. More than one entry means the legs AGREED, which is\nexactly why the hit outranks one a single leg found. Never empty on a\nreturned hit.",
             "items": {
-              "$ref": "#/components/schemas/Match"
+              "$ref": "#/components/schemas/Provenance"
             },
             "type": "array"
           },
@@ -194,10 +225,10 @@
         },
         "type": "object"
       },
-      "Match": {
+      "Provenance": {
         "properties": {
           "backend": {
-            "description": "Backend is the leg that contributed this match: \"index\" (lexical), \"vector\"\n(semantic) or \"code\" (the org's repositories). It is the same name that leg\nreports itself under in Response.Backends, so a hit can be traced to a\nstatus.",
+            "description": "Backend is the leg that contributed this match: \"index\" (lexical), \"vector\"\n(semantic) or \"code\" (the org's repositories). It is the same name that leg\nreports itself under in Fusion.Backends, so a hit can be traced to a\nstatus.",
             "type": "string"
           },
           "rank": {
@@ -243,37 +274,6 @@
           "query": {
             "description": "Query is the natural-language or keyword query. Required.",
             "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "Response": {
-        "properties": {
-          "backends": {
-            "description": "Backends is the per-leg report. Always populated.",
-            "items": {
-              "$ref": "#/components/schemas/BackendStatus"
-            },
-            "type": "array"
-          },
-          "hits": {
-            "description": "Hits is the fused, ranked result set.",
-            "items": {
-              "$ref": "#/components/schemas/Hit"
-            },
-            "type": "array"
-          },
-          "mode": {
-            "description": "Mode is the mode actually used after `auto` resolution.",
-            "type": "string"
-          },
-          "status": {
-            "description": "Status is the query's overall honesty signal:\n  ok          every consulted leg answered.\n  partial     at least one leg failed; Hits holds the survivors' results.\n  unavailable every consulted leg failed; Hits is empty AND that is stated.",
-            "type": "string"
-          },
-          "took_ms": {
-            "description": "TookMS is the whole query's wall time in milliseconds — every leg it\nconsulted, plus fusion and paging. Each leg's own share is in\nBackends[].TookMS; the legs run in sequence, so this is at least their sum.",
-            "type": "integer"
           }
         },
         "type": "object"

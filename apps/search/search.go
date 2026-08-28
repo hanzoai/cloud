@@ -125,10 +125,10 @@ type Request struct {
 // without this is undebuggable — you cannot distinguish a hit both legs agreed on
 // from a hit only one leg saw, nor tell a healthy leg from one quietly returning
 // nothing.
-type Match struct {
+type Provenance struct {
 	// Backend is the leg that contributed this match: "index" (lexical), "vector"
 	// (semantic) or "code" (the org's repositories). It is the same name that leg
-	// reports itself under in Response.Backends, so a hit can be traced to a
+	// reports itself under in Fusion.Backends, so a hit can be traced to a
 	// status.
 	Backend string `json:"backend"`
 	// Rank is this document's 1-based position in THAT leg's own result list,
@@ -185,7 +185,7 @@ type Hit struct {
 	// rank and native score. More than one entry means the legs AGREED, which is
 	// exactly why the hit outranks one a single leg found. Never empty on a
 	// returned hit.
-	Matched []Match `json:"matched"`
+	Matched []Provenance `json:"matched"`
 }
 
 // BackendStatus reports one leg's outcome. It is present for EVERY leg on EVERY
@@ -202,7 +202,7 @@ type BackendStatus struct {
 	// provisioned it; or the request's mode excluded it.
 	Status string `json:"status"`
 	// Hits is how many results this leg returned, counted BEFORE fusion, so it is
-	// not the number that survived into Response.Hits — fusion merges what both
+	// not the number that survived into Fusion.Hits — fusion merges what both
 	// legs found and the caller's limit and offset then page it. 0 for a leg that
 	// did not run.
 	Hits int `json:"hits"`
@@ -215,8 +215,12 @@ type BackendStatus struct {
 	Error string `json:"error,omitempty"`
 }
 
-// Response is the ONE result shape.
-type Response struct {
+// Fusion is the ONE result shape: the fused, ranked set plus the per-leg
+// report that says which legs produced it. It was `Response`, which is a word
+// every HTTP client already owns -- the Dart client put this model in the same
+// library as package:http and shadowed http.Response, so 7,452 references to
+// statusCode and body stopped resolving and the client had never compiled.
+type Fusion struct {
 	// Status is the query's overall honesty signal:
 	//   ok          every consulted leg answered.
 	//   partial     at least one leg failed; Hits holds the survivors' results.
@@ -265,7 +269,7 @@ var log luxlog.Logger
 // Query is the typed op behind POST /v1/search. It does exactly two things the
 // in-process entry point must not do: resolve the tenant from the validated
 // principal, and refuse when there is none. Everything else is ForOrg.
-func Query(ctx context.Context, in *Request) (*Response, error) {
+func Query(ctx context.Context, in *Request) (*Fusion, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
 		return nil, zip.ErrForbidden("valid principal required")
@@ -286,7 +290,7 @@ func Query(ctx context.Context, in *Request) (*Response, error) {
 // org MUST be a tenant the caller has authenticated. This function does not and
 // cannot check that; it is the caller's boundary, exactly as it is for every other
 // in-process store API in the codebase.
-func ForOrg(ctx context.Context, org string, in *Request) (*Response, error) {
+func ForOrg(ctx context.Context, org string, in *Request) (*Fusion, error) {
 	if strings.TrimSpace(org) == "" {
 		return nil, zip.ErrForbidden("valid principal required")
 	}
@@ -400,12 +404,12 @@ func ForOrg(ctx context.Context, org string, in *Request) (*Response, error) {
 		r := payload[f.Key]
 		r.Score = f.Score
 		for _, o := range f.Origins {
-			r.Matched = append(r.Matched, Match{Backend: o.Source, Rank: o.Rank, Score: o.Score})
+			r.Matched = append(r.Matched, Provenance{Backend: o.Source, Rank: o.Rank, Score: o.Score})
 		}
 		hits = append(hits, r)
 	}
 
-	return &Response{
+	return &Fusion{
 		Status:   overall(backends),
 		Mode:     mode,
 		Hits:     hits,
