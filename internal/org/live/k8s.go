@@ -1,29 +1,38 @@
-// Package membership is the live writer-membership source: the K8s pod poll
-// that feeds internal/org.Source so a horizontally-scaled cloud tracks its
-// CHANGING pod set instead of a static peer list.
+// Package live is the LIVE writer-set source: the Kubernetes pod poll that feeds
+// org.Source, so a horizontally-scaled cloud tracks its CHANGING pod set instead
+// of a static peer list.
 //
-// It is a LIBRARY, not a subsystem — it registers no route and has no manifest
-// row. It is also UNWIRED: the composition root that installed it
-// (apps/apps.go Wire, deleted at 22f4fc64) and the client it installed through
-// (cloud.SetLiveSource) are both gone, and nothing in the tree calls K8s. Until
-// a caller returns, every deployment runs on its static peer set and the
-// outage below is NOT fixed.
+// IT IS NOT ORG MEMBERSHIP, and it used to be called that. It sat at
+// `apps/membership`, which said two wrong things at once: `apps/` means
+// subsystem and this registers no route and has no manifest row, and
+// "membership" is the word IAM uses for which people are in an organisation.
+// Both readings cost real time — the package was read as an IAM duplicate and
+// nearly deleted. The membership here is which PODS are in the writer set.
 //
-// It lives OUT of package cloud on purpose: every subsystem imports cloud for
-// Deps, so cloud's import graph is the floor under all of them, and the k8s
-// client pulls 263 packages that only this one file needs.
+// It lives beside the fence rather than inside it, and the reason is the import
+// graph. Package cloud imports internal/org, so org's dependencies are the floor
+// under every subsystem and the light host; the k8s client this file needs pulls
+// ~360 packages more than org carries today, and folding it in would push the
+// host past the `host-is-light` gate for a file exactly one caller needs. The
+// arrow points this way — live imports org, org never imports live — which is
+// what keeps that true.
 //
-// It is the fix for the rolling-upgrade outage: with a static peer set, ha.Owner
-// keeps electing a pod that is draining or already gone, and the shard router
-// forwards an org's requests to a dead pod; a live, READY-gated set drops that pod
-// the moment it starts terminating, so ha.Owner re-elects a live successor and the
-// org stays served.
+// IT IS STILL UNWIRED. The composition root that installed it (apps/apps.go
+// Wire, deleted at 22f4fc64) and the seam it installed through
+// (cloud.SetLiveSource) are both gone, and nothing calls K8s. Until a caller
+// returns, every deployment runs on its static peer set and the outage below is
+// NOT fixed — moving the file does not fix it and is not claimed to.
+//
+// The outage: with a static peer set, ha.Owner keeps electing a pod that is
+// draining or already gone, and the shard router forwards an org's requests to a
+// dead pod. A live, READY-gated set drops that pod the moment it starts
+// terminating, so ha.Owner re-elects a live successor and the org stays served.
 //
 // It is a bounded LIST poll driven by internal/org.Membership's existing refresh
 // loop (which retains the last-good set on a transient error and serves the
 // hot-path AmOwner check lock-free from an atomic snapshot). Each poll re-lists,
 // so a dropped connection self-heals on the next tick — no watch state to wedge.
-package membership
+package live
 
 import (
 	"context"
