@@ -1650,7 +1650,7 @@
                       "properties": {
                         "data": {
                           "items": {
-                            "$ref": "#/components/schemas/Application"
+                            "$ref": "#/components/schemas/App"
                           },
                           "type": "array"
                         }
@@ -1691,7 +1691,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Application"
+                          "$ref": "#/components/schemas/App"
                         }
                       },
                       "type": "object"
@@ -1750,7 +1750,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Application"
+                          "$ref": "#/components/schemas/App"
                         }
                       },
                       "type": "object"
@@ -1807,7 +1807,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Application"
+                          "$ref": "#/components/schemas/App"
                         }
                       },
                       "type": "object"
@@ -1864,7 +1864,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Application"
+                          "$ref": "#/components/schemas/App"
                         }
                       },
                       "type": "object"
@@ -1921,7 +1921,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Application"
+                          "$ref": "#/components/schemas/App"
                         }
                       },
                       "type": "object"
@@ -2960,7 +2960,7 @@
                       "properties": {
                         "data": {
                           "items": {
-                            "$ref": "#/components/schemas/Form"
+                            "$ref": "#/components/schemas/Layout"
                           },
                           "type": "array"
                         }
@@ -3001,7 +3001,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Form"
+                          "$ref": "#/components/schemas/Layout"
                         }
                       },
                       "type": "object"
@@ -3071,7 +3071,7 @@
                       "properties": {
                         "data": {
                           "items": {
-                            "$ref": "#/components/schemas/Form"
+                            "$ref": "#/components/schemas/Layout"
                           },
                           "type": "array"
                         }
@@ -3132,7 +3132,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Form"
+                          "$ref": "#/components/schemas/Layout"
                         }
                       },
                       "type": "object"
@@ -3189,7 +3189,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Form"
+                          "$ref": "#/components/schemas/Layout"
                         }
                       },
                       "type": "object"
@@ -3246,7 +3246,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Form"
+                          "$ref": "#/components/schemas/Layout"
                         }
                       },
                       "type": "object"
@@ -3303,7 +3303,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Form"
+                          "$ref": "#/components/schemas/Layout"
                         }
                       },
                       "type": "object"
@@ -8277,7 +8277,7 @@
                       "properties": {
                         "data": {
                           "items": {
-                            "$ref": "#/components/schemas/Scan"
+                            "$ref": "#/components/schemas/Sweep"
                           },
                           "type": "array"
                         }
@@ -8318,7 +8318,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Scan"
+                          "$ref": "#/components/schemas/Sweep"
                         }
                       },
                       "type": "object"
@@ -8377,7 +8377,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Scan"
+                          "$ref": "#/components/schemas/Sweep"
                         }
                       },
                       "type": "object"
@@ -8434,7 +8434,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Scan"
+                          "$ref": "#/components/schemas/Sweep"
                         }
                       },
                       "type": "object"
@@ -8491,7 +8491,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Scan"
+                          "$ref": "#/components/schemas/Sweep"
                         }
                       },
                       "type": "object"
@@ -8548,7 +8548,7 @@
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/Scan"
+                          "$ref": "#/components/schemas/Sweep"
                         }
                       },
                       "type": "object"
@@ -10571,7 +10571,7 @@
                       "properties": {
                         "data": {
                           "items": {
-                            "$ref": "#/components/schemas/Tally"
+                            "$ref": "#/components/schemas/Count"
                           },
                           "type": "array"
                         }
@@ -12503,7 +12503,7 @@
         },
         "type": "object"
       },
-      "Application": {
+      "App": {
         "properties": {
           "basicConfigOptions": {
             "items": {
@@ -12843,6 +12843,17 @@
         },
         "type": "object"
       },
+      "Candidate": {
+        "properties": {
+          "isHit": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Chat": {
         "properties": {
           "category": {
@@ -13013,6 +13024,32 @@
           },
           "resources": {
             "$ref": "#/components/schemas/ResourceRequests"
+          }
+        },
+        "type": "object"
+      },
+      "Count": {
+        "properties": {
+          "chatCount": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "messageCount": {
+            "type": "integer"
+          },
+          "price": {
+            "type": "number"
+          },
+          "tokenCount": {
+            "type": "integer"
+          },
+          "userCount": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -13274,44 +13311,6 @@
         },
         "type": "object"
       },
-      "Form": {
-        "properties": {
-          "category": {
-            "type": "string"
-          },
-          "createdTime": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "formItems": {
-            "items": {
-              "$ref": "#/components/schemas/FormItem"
-            },
-            "type": "array"
-          },
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          },
-          "position": {
-            "type": "string"
-          },
-          "tag": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "FormItem": {
         "properties": {
           "label": {
@@ -13556,6 +13555,44 @@
         },
         "type": "object"
       },
+      "Layout": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "createdTime": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "formItems": {
+            "items": {
+              "$ref": "#/components/schemas/FormItem"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "position": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Memory": {
         "properties": {
           "content": {
@@ -13691,7 +13728,7 @@
           },
           "suggestions": {
             "items": {
-              "$ref": "#/components/schemas/Suggestion"
+              "$ref": "#/components/schemas/Candidate"
             },
             "type": "array"
           },
@@ -14214,59 +14251,6 @@
         },
         "type": "object"
       },
-      "Scan": {
-        "properties": {
-          "asset": {
-            "type": "string"
-          },
-          "command": {
-            "type": "string"
-          },
-          "createdTime": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "errorText": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          },
-          "provider": {
-            "type": "string"
-          },
-          "rawResult": {
-            "type": "string"
-          },
-          "result": {
-            "type": "string"
-          },
-          "resultSummary": {
-            "type": "string"
-          },
-          "runner": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          },
-          "target": {
-            "type": "string"
-          },
-          "targetMode": {
-            "type": "string"
-          },
-          "updatedTime": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "Service": {
         "properties": {
           "expectedStatus": {
@@ -14544,39 +14528,55 @@
         },
         "type": "object"
       },
-      "Suggestion": {
+      "Sweep": {
         "properties": {
-          "isHit": {
-            "type": "boolean"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "Tally": {
-        "properties": {
-          "chatCount": {
-            "type": "integer"
-          },
-          "currency": {
+          "asset": {
             "type": "string"
           },
-          "date": {
+          "command": {
             "type": "string"
           },
-          "messageCount": {
-            "type": "integer"
+          "createdTime": {
+            "type": "string"
           },
-          "price": {
-            "type": "number"
+          "displayName": {
+            "type": "string"
           },
-          "tokenCount": {
-            "type": "integer"
+          "errorText": {
+            "type": "string"
           },
-          "userCount": {
-            "type": "integer"
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "rawResult": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "resultSummary": {
+            "type": "string"
+          },
+          "runner": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "targetMode": {
+            "type": "string"
+          },
+          "updatedTime": {
+            "type": "string"
           }
         },
         "type": "object"
