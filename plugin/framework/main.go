@@ -6,6 +6,23 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+
+	// THE APP LANES, linked for their init() and nothing else.
+	//
+	// Neither is a subsystem and neither may become one: a collection IS a
+	// framework DocType, an ERP master IS a framework DocType, and all CRUD,
+	// permissions, tenancy, install and rendering are the framework's generic
+	// surface already. Giving either its own plugin would be a second engine for
+	// a model the one engine already serves.
+	//
+	// So the whole activation is the import. `framework.RegisterModule` runs at
+	// init, which is exactly why this is blank: nothing here calls into them, and
+	// without the import their init never runs — the module is never registered
+	// and POST /v1/framework/modules/<m>/install answers for a module the engine
+	// has never heard of. That is what both packages did until now, and erp's own
+	// doc named this line as the fix.
+	_ "github.com/hanzoai/cloud/apps/cms"
+	_ "github.com/hanzoai/cloud/apps/erp"
 )
 
 // Standalone entry for the framework app.
