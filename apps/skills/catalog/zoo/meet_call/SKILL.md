@@ -25,7 +25,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/meet/call` → `call` object with fields: `name`, `ready`, `ws`.
+- `/v1/meet/call` → `venue` object with fields: `name`, `ready`, `ws`.
 
 ## Example
 

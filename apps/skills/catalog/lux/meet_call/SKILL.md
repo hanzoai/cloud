@@ -25,7 +25,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/meet/call` → `call` object with fields: `name`, `ready`, `ws`.
+- `/v1/meet/call` → `venue` object with fields: `name`, `ready`, `ws`.
 
 ## Example
 
