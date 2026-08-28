@@ -62,7 +62,7 @@ import (
 // platform-sudo predicate (principal.IsSuperAdmin / c.IsAdmin), strictly tighter
 // than any purchasable tier — so the projection resolves it separately and it is
 // never handed to CheckEntitlement.
-var appProducts = []string{"team"}
+var appProducts = []string{"crm", "team"}
 
 // shellApps is what the projection must ALWAYS answer with: @hanzogui/shell maps
 // over exactly these names, so a key it does not find is a contract break in the

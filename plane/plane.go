@@ -570,6 +570,23 @@ const (
 	// the product — so there is nothing finer to name and no argument that could
 	// name it.
 	FlagsHold = "flags_hold"
+
+	// EntitlementHolds answers whether the caller's org has TURNED ON one product
+	// — the question an elective capability asks about every request that reaches
+	// its prefix (manifest.App.Elective).
+	//
+	// It is a different question from [FlagsHold] and that is why it is a different
+	// op. A flag says whether a capability is finished enough to show this customer;
+	// this says whether the customer asked for it. The two are independent — a ga
+	// product can be un-asked-for, an alpha one can be both — and folding them into
+	// one op would mean one store answering for two facts that move for unrelated
+	// reasons.
+	//
+	// The subject is the org, and the org rides the caller, for the same reason it
+	// does on FlagsHold: enablement is a fact about a TENANT. A project is a
+	// subdivision inside one, and reading a project scope here would let two
+	// projects of one customer disagree about which products exist.
+	EntitlementHolds = "entitlement_holds"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -1025,6 +1042,23 @@ type FlagIn struct {
 // are a richer answer that /v1/flags already gives to a caller that wants one, and
 // a refusal that read a variant would have to decide which variants mean yes.
 type Flag struct {
+	On bool `json:"on"`
+}
+
+// ---- entitlement.holds -----------------------------------------------------
+
+// ProductIn names the product to test, and nothing else. The subject is the
+// caller's org — see [EntitlementHolds].
+type ProductIn struct {
+	Product string `json:"product"` // the product id; for a capability it is the capability's name
+}
+
+// Held is the verdict: whether the caller's org has this product turned on.
+//
+// It is a distinct type from [Flag] despite the identical shape, because the two
+// are answers to different questions from different stores. Sharing one would
+// make a caller that asked the wrong subsystem type-check.
+type Held struct {
 	On bool `json:"on"`
 }
 

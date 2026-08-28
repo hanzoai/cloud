@@ -141,6 +141,36 @@ type App struct {
 	// visible the day it lands, rather than hidden and reachable by nobody, which
 	// is not visible at all.
 	Stage string
+
+	// Elective means an org holds this capability only by ASKING for it: its
+	// prefixes answer 404 until that org turns the product on
+	// (apps/entitlement's per-org store, read on the plane as
+	// plane.EntitlementHolds, refused by cloud.Elective).
+	//
+	// It is a separate field from Stage because they are separate facts that move
+	// for unrelated reasons. Stage is about the SOFTWARE — is this finished enough
+	// to show anyone — and it also decides visibility: the compose drops anything
+	// not ga from the public document, the generated clients and the tool list.
+	// Elective is about the CUSTOMER, and must NOT hide anything: a product you
+	// have to choose is a product you first have to read about, so an elective
+	// capability stays in the public document and in every client. Spelling one
+	// with the other would have made the docs for a purchasable product invisible
+	// to everyone who had not already bought it.
+	//
+	// They compose without interacting. An elective alpha holds both refusals and
+	// a caller must satisfy both; each answers in its own vocabulary, so an
+	// operator reading a 404 can still tell "not released to you" from "you have
+	// not subscribed" by asking the two ops directly.
+	//
+	// The zero value is universal, which is the safe direction here and the
+	// opposite of Stage's reasoning. A row nobody thought about SERVES, exactly as
+	// it did before this field existed; the failure mode of the other default is a
+	// capability that silently 404s for every customer including the ones paying
+	// for it, which is indistinguishable from an outage. Marking a row is
+	// therefore a deliberate act with a cutover attached — every org already using
+	// that product needs a row in the enablement store, or it loses access the
+	// moment this ships.
+	Elective bool
 }
 
 // The stages a row may declare. There is no `ga` constant because ga is the
