@@ -210,12 +210,26 @@ type mintedSlot struct{}
 // would mutate into unrelated bytes on the next request through that worker.
 // (A string used as a map key copies the header, never the backing array; Org
 // clones for exactly this reason.)
+//
+// EVERY field INCLUDES THE LIMIT, and that word is why this is written out
+// rather than assigned: a minted principal carries the grant its credential was
+// issued with, so the one reader of it (cloud.GrantOf) answers about the key the
+// request actually arrived on. A copy that carried the org and left the limit
+// behind would report a scoped key as reaching everything — the listing beside
+// it says "restricted" and nothing would be. The entries clone one at a time for
+// the reason above and the slice clones because the credential's own is shared
+// with the resolver that read it; an unlimited credential carries none, which is
+// the estate's common case and allocates nothing.
 func Mint(c *zip.Ctx, p Principal) {
-	c.Fiber().Locals(mintedSlot{}, Principal{
+	m := Principal{
 		Org:     strings.Clone(p.Org),
 		User:    strings.Clone(p.User),
 		Subject: strings.Clone(p.Subject),
-	})
+	}
+	for _, e := range p.Limit {
+		m.Limit = append(m.Limit, strings.Clone(e))
+	}
+	c.Fiber().Locals(mintedSlot{}, m)
 }
 
 // Minted returns the principal the boundary attested, and false when no boundary
