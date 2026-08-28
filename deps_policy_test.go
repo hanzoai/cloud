@@ -39,7 +39,7 @@ var depsFieldRationale = map[string]string{
 	"Env":       "which of the 3 envs this process runs in (mainnet|testnet|devnet), an attribution label stamped on metered usage; never a gate — every env bills against its own ledger",
 	"Domain":    "the deployment's OWN public API host, needed to build absolute URLs back to itself; it is the HOST and never the apex — anything needing the apex calls brand.Apex",
 	"IAMIssuer": "the trust root: which IAM's signing keys validate a JWT. A boot fact, and one a subsystem must be handed because verifying identity precedes every store it could read it from",
-	"DataDir":   "the on-disk root every per-org store opens beneath; resolved before config so credz can place its socket there",
+	"DataDir":   "the on-disk root every per-org store opens beneath; resolved before config because the stores it roots open before config is read",
 
 	// --- roots that must exist before any store opens ---
 	"MasterKey": "the 32-byte at-rest KEK, decoded once so subsystems that seal their own stores do not each provision a key",
