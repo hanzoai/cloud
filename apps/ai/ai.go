@@ -115,7 +115,15 @@ func describeAI(doc map[string]any) {
 			if summary == "" && description == "" {
 				continue
 			}
-			openapi.Describe(routeSpelling(path), strings.ToUpper(verb), summary, description)
+			route := routeSpelling(path)
+			openapi.Describe(route, strings.ToUpper(verb), summary, description)
+			// ai's own responses, verbatim. Carrying only the prose published 293
+			// of its 294 operations with no `responses` at all, so every generated
+			// client handed the caller an untyped result -- GET /v1/models, the
+			// most-called address on the surface, returned `undefined` in
+			// typescript-fetch and a bare *http.Response in Go. ai declares the
+			// envelope; there is no reason for it to stop at this boundary.
+			openapi.Answers(route, strings.ToUpper(verb), op["responses"])
 		}
 	}
 }
