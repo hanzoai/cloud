@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -145,7 +146,7 @@ func BuildDeps(cfg *Config) Deps {
 	// working *Store (static-only if the SQLite file can't open), so the edge
 	// middleware is never left without a policy source — a store-open error is
 	// logged, not fatal.
-	gp, err := edge.New(cfg.DataDir, cfg.AdminOrg, staticEdgePolicy(cfg))
+	gp, err := edge.New(cfg.DataDir, authz.AdminOrg, staticEdgePolicy(cfg))
 	if err != nil {
 		logger.Warn("gateway policy store degraded to static-only", "err", err)
 	}

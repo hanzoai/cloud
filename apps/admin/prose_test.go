@@ -70,7 +70,7 @@ var proseless = map[string]bool{
 func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	routes(app, &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}})
+	routes(app, &cloud.Service[core.State]{State: core.State{}})
 
 	doc, err := openapi.Spec(app, openapi.Info{Title: "admin", Version: "v1"})
 	if err != nil {
