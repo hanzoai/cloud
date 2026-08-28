@@ -46,7 +46,6 @@ import (
 	"github.com/hanzoai/cloud/brand"
 	"github.com/hanzoai/cloud/clientip"
 	"github.com/hanzoai/cloud/fleet"
-	"github.com/hanzoai/cloud/internal/attest"
 	"github.com/hanzoai/cloud/internal/datadir"
 	"github.com/hanzoai/cloud/internal/edge"
 	"github.com/hanzoai/cloud/internal/environ"
@@ -335,16 +334,7 @@ func run(addr, zapAddr string) error {
 	// the mount loops so it closes over the finished absence set — nothing is
 	// listening until app.Listen either way, so registration order costs no
 	// availability, only route specificity, and /healthz collides with no prefix.
-	// A lazy child inherits THIS process's environment and boots on its first
-	// request, so a shared anti-forgery key this host cannot attest is a key
-	// none of them can either. The ten subsystems apps/account csrf.go names
-	// exit on their first request and answer 503 from then on, while the
-	// boot-time absence set stays empty because the MOUNT succeeded — the
-	// failure is in the child's own boot, one request later, where nothing
-	// records it. Reading the environment here reads what those children
-	// will inherit, so the one fact that predicts all ten is reported before
-	// any request arrives instead of after the tenth surface is already down.
-	health(app, absent, attest.Shared())
+	health(app, absent)
 
 	// Where the API's clients sign in — the authorization server is this
 	// deployment's issuer, the value every child validates a token against
@@ -720,13 +710,9 @@ var draining atomic.Bool
 // stream, no bytes, no redirect, no foreign signature — so they carry their
 // shape in the registry like any other op, and the same answer is reachable
 // over native ZAP typed Call on :9653 as over the kubelet's GET.
-func health(app *zip.App, absent map[string]string, keyFault error) {
-	fault := ""
-	if keyFault != nil {
-		fault = keyFault.Error()
-	}
+func health(app *zip.App, absent map[string]string) {
 	alive := func(context.Context, *probeIn) (*probeOut, error) {
-		return &probeOut{Status: "ok", Absent: stillAbsent(app, absent), Fault: fault}, nil
+		return &probeOut{Status: "ok", Absent: stillAbsent(app, absent)}, nil
 	}
 	zip.Get(app, "/healthz", alive, zip.WithStatus(200),
 		zip.WithSummary("Report whether this host process is alive"))
@@ -753,9 +739,9 @@ func health(app *zip.App, absent map[string]string, keyFault error) {
 		}
 		a := stillAbsent(app, absent)
 		if u := unfit(a); len(u) > 0 {
-			return &probeOut{Status: "unfit", Absent: u, Fault: fault}, nil
+			return &probeOut{Status: "unfit", Absent: u}, nil
 		}
-		return &probeOut{Status: "ok", Absent: a, Fault: fault}, nil
+		return &probeOut{Status: "ok", Absent: a}, nil
 	}, zip.WithStatus(200, 503),
 		zip.WithSummary("Report whether this host should be sent requests"))
 }
@@ -774,13 +760,6 @@ type probeOut struct {
 	// Status is "ok", "draining" (this pod is shutting down) or "unfit" (a
 	// vital subsystem is absent).
 	Status string `json:"status"`
-	// Fault is a configuration this host holds that its children will
-	// inherit and refuse to boot on. It is NOT an absence: every mount
-	// stands and the host serves, so it neither fails liveness nor takes
-	// the pod out of rotation — a partial failure made loud is not worth
-	// turning into a total one. Last field and omitempty, so a healthy
-	// host answers the exact bytes every probe script already parses.
-	Fault string `json:"fault,omitempty"`
 }
 
 // StatusCode makes the answer carry its own status: draining and unfit are
