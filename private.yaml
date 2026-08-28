@@ -123469,40 +123469,6 @@ paths:
       - team
       x-app: team
       x-public: true
-  /v1/team/transactor/api/v1/statistics:
-    get:
-      description: |-
-        Statistics returns the transactor's live sessions for the workspace the caller's
-        credential names — the endpoint the front's workspace switcher and server panel
-        poll on the transactor base. `token` carries the same two lanes the socket's path
-        segment does: a workspace UUID names the workspace and is authorized against the
-        membership rows, an HS256 workspace token names it in its signed claims.
-        activeSessions carries ONLY that one workspace, never another tenant's sessions.
-        An unverifiable credential, or one the caller is no member under, is 401.
-      operationId: get_team_transactor_api_v1_statistics
-      parameters:
-      - description: Token is the workspace token minted by selectWorkspace.
-        example: eyJhbGciOiJIUzI1NiJ9…
-        in: query
-        name: token
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/statsOut'
-          description: ok
-      summary: Statistics returns the transactor's live sessions for the workspace
-        the caller's credential names — the endpoint the front's workspace switcher
-        and server panel poll on the transactor base.
-      tags:
-      - team
-      x-app: team
-      x-public: true
-      x-tool: true
   /v1/team/transactor/statistics:
     get:
       description: |-

@@ -81,7 +81,7 @@ func TestTypedStatisticsServesBothPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"/v1/team/transactor/statistics", "/v1/team/transactor/api/v1/statistics"} {
+	for _, p := range []string{"/v1/team/transactor/statistics"} {
 		code, body := call(t, app, http.MethodGet, p+"?token="+tok, nil, nil)
 		if code != http.StatusOK {
 			t.Fatalf("GET %s = %d, want 200 (%s)", p, code, body)
