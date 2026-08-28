@@ -93,7 +93,7 @@ func activityLog() luxlog.Logger {
 	wireMu.RLock()
 	defer wireMu.RUnlock()
 	if pkgLog == nil {
-		return luxlog.NewNoOpLogger()
+		return luxlog.Default()
 	}
 	return pkgLog
 }

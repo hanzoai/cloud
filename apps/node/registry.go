@@ -263,7 +263,7 @@ func NewRegistry(opts ...Option) *Registry {
 		byKey:   make(map[NodeKey]*Session),
 		byConn:  make(map[string]NodeKey),
 		pending: make(map[string]chan InvokeResult),
-		log:     luxlog.NewNoOpLogger(),
+		log:     luxlog.Default(),
 	}
 	for _, o := range opts {
 		if o != nil {
