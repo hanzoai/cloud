@@ -1,6 +1,12 @@
 package cloud
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/zap-proto/zip"
+)
 
 // The property that makes a grant safe is that it only ever NARROWS, and the
 // property that makes it shippable is that an unrestricted key keeps working.
@@ -138,5 +144,96 @@ func TestEveryEnforceableKindIsAskedSomewhere(t *testing.T) {
 		if g.Covers(kind, "something-else") {
 			t.Fatalf("%q is declared enforceable but does not narrow", kind)
 		}
+	}
+}
+
+// ── the limit crossing the boundary ─────────────────────────────────────────
+//
+// Everything above asks Covers about a grant it holds in its hand. A request
+// does not: the boundary resolves the credential and the handler asks about it
+// several middlewares later, through GrantOf, which reads ONE field of the
+// boundary's attestation and consults nothing else. So the rule is only as true
+// as that field, and a mint that copied the org and left the limit behind
+// answers the empty grant for every key in the estate — which restricts nothing,
+// the right answer for a key issued without a scope and the wrong one for a key
+// issued with one. It reads as working from either side alone: the boundary
+// hands the credential's scope in, Covers narrows correctly when handed a grant,
+// and in between the value is gone while the operator's own listing still calls
+// the key restricted.
+//
+// So it is asserted over the COMPOSITION — minted on one middleware, asked on
+// the handler, the way a request actually runs.
+
+// probeGrant runs one request whose boundary minted `scope`, and reports what
+// the handler's GrantOf says about the model the key names and one it does not.
+func probeGrant(t *testing.T, scope string) (named, another bool) {
+	t.Helper()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Use(zip.H(func(c *zip.Ctx) error {
+		principal.Mint(c, principal.Principal{Org: "acme", User: "u-1", Limit: ParseGrant(scope)})
+		return c.Continue()
+	}))
+	app.Get("/probe", func(c *zip.Ctx) error {
+		g := GrantOf(c)
+		named, another = g.Covers("model", "zen5"), g.Covers("model", "zen6")
+		return c.JSON(200, map[string]bool{"named": named, "another": another})
+	})
+	if _, err := app.Test(httptest.NewRequest("GET", "/probe", nil)); err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	return named, another
+}
+
+func TestAMintedPrincipalCarriesTheGrantItsCredentialWasIssuedWith(t *testing.T) {
+	for _, tc := range []struct {
+		what           string
+		scope          string
+		named, another bool
+	}{
+		// THE REFUSAL. A key issued for one model must not reach another, and
+		// this is the only place in the rule where that can be lost.
+		{"issued for one model", "model:zen5", true, false},
+		// ...and the three shapes that must keep working, because a limit that
+		// over-narrows is an outage rather than a leak.
+		{"issued with no limit at all", "", true, true},
+		{"issued for the whole kind", "model:*", true, true},
+		{"issued for a different kind", "project:acme", true, true},
+	} {
+		t.Run(tc.what, func(t *testing.T) {
+			named, another := probeGrant(t, tc.scope)
+			if named != tc.named {
+				t.Errorf("reaches the model it was issued for = %v, want %v", named, tc.named)
+			}
+			if another != tc.another {
+				t.Errorf("reaches a model it was not issued for = %v, want %v — "+
+					"the credential's limit did not survive the mint, so the key the listing "+
+					"calls restricted reaches everything", another, tc.another)
+			}
+		})
+	}
+}
+
+// The minted limit is the boundary's OWN copy, entry by entry. The credential's
+// grant is shared with the resolver that read it and cached it, so an aliased
+// mint would let anything holding the attestation rewrite what the NEXT request
+// on that key is told it may reach.
+func TestTheMintedLimitIsTheBoundarysOwnCopy(t *testing.T) {
+	scope := ParseGrant("model:zen5")
+	var got Grant
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Use(zip.H(func(c *zip.Ctx) error {
+		principal.Mint(c, principal.Principal{Org: "acme", User: "u-1", Limit: scope})
+		return c.Continue()
+	}))
+	app.Get("/probe", func(c *zip.Ctx) error {
+		got = GrantOf(c)
+		return c.JSON(200, map[string]bool{"ok": true})
+	})
+	if _, err := app.Test(httptest.NewRequest("GET", "/probe", nil)); err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	scope[0] = "model:*"
+	if got.Covers("model", "zen6") {
+		t.Error("rewriting the credential's own grant widened one already minted")
 	}
 }
