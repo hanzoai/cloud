@@ -187,16 +187,10 @@ func sweep(ctx context.Context, s *cloud.Service[state]) {
 // end retires a sandbox whose lease is over: the pod goes, the row goes, the
 // volume stays.
 func end(ctx context.Context, s *cloud.Service[state], st *Store, m Sandbox, why string) {
-	// The tail, BEFORE the delete — the same reason End states: the watermark
-	// lives on the row, so a span not charged here is a span nothing can recover.
-	bill(s, ctx, st, m)
-	if serr := s.State.rt.stop(ctx, m); serr != nil {
-		s.Log.Warn("reap: stop", "id", m.ID, "err", serr)
-	}
-	if derr := st.Delete(ctx, m.Org, m.ID); derr != nil {
-		s.Log.Warn("reap: delete", "id", m.ID, "err", derr)
-		return
-	}
+	// One settlement, in one order (meter.go retire): claim the tail, stop the pod,
+	// drop the row, ship the file that now says both, and bill only if that ship was
+	// acknowledged. The volume survives a reap, so nothing is purged here.
+	retire(s, ctx, st, m, false)
 	s.Log.Info("reaped sandbox", "id", m.ID, "org", m.Org, "why", why)
 }
 
@@ -426,11 +420,32 @@ func known(ctx context.Context, s *cloud.Service[state]) (claimed, owned map[str
 		for id := range ids {
 			out[id] = true
 		}
-		if s.State.stores.Owned(ns) {
-			// ns.ID() is the store's name AND the value labOrg carries (orgKey), so
-			// this is a comparison of one fold against itself — see orgKey for what
-			// comparing two different folds would have cost.
-			mine[ns.ID()] = true
+		if !s.State.stores.Owned(ns) {
+			return
+		}
+		// EVERY RENDERING THE LABEL HAS EVER CARRIED, and that is a permanent rule
+		// rather than a migration. A pod outlives the image that created it, so a
+		// sweep that recognises only what the RUNNING image would write is a sweep
+		// that cannot see half the cluster. The label was `slug(org)` and is now
+		// `orgKey(org)`; the two agree on a clean lowercase name and disagree on
+		// every other one (namespace.Sanitize appends a digest, slug does not), so
+		// matching only the current fold left an orphan of `acme.co` unreachable —
+		// not until the next deploy, but for ever, because an orphan is by
+		// definition never recreated.
+		//
+		// The raw org comes from the rows, which is the only place it survives: a
+		// namespace cannot be unfolded back into the name it was built from.
+		mine[ns.ID()] = true
+		raw, oerr := st.Org(ctx)
+		if oerr != nil {
+			// The claimed set is already suspect if a read failed, and `failed`
+			// above governs that. Here it only means one org's older label is
+			// unmatched, which can leak a pod but can never delete one.
+			s.Log.Warn("reap: read org for the orphan sweep", "namespace", ns, "err", oerr)
+			return
+		}
+		if raw != "" {
+			mine[slug(raw)] = true
 		}
 	})
 	if failed {

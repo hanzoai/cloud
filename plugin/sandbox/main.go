@@ -15,8 +15,7 @@ import (
 // and not the whole fleet. The light host loads it as a plugin; run directly it
 // serves standalone. Its OpenAPI subset comes from `sandboxes openapi`.
 //
-// Scaffolded by plugin/gen-app-cmds from the manifest.Apps row; now hand-owned —
-// add a Shutdown/OwnsHealth here if the app grows to need one.
+// Scaffolded by plugin/gen-app-cmds from the manifest.Apps row; now hand-owned.
 //
 // Metered, not Free, and that is a statement about WHERE the charge lives rather
 // than about its size. A lease is gated and debited by apps/sandbox itself
@@ -30,6 +29,10 @@ func main() {
 		Name:  "sandbox",
 		Price: cloud.Metered,
 		Mount: sandbox.Mount,
+		// The org stores drain on the way out: a lease ended just before SIGTERM
+		// has to reach the object store, or the successor hydrates it as still
+		// running and bills the customer for a sandbox that is gone.
+		Shutdown: cloud.CtxShutdown(sandbox.Shutdown),
 	}}, []string{"sandbox"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

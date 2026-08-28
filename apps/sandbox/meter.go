@@ -26,11 +26,13 @@ package sandbox
 // every other duration meter in the tree. `provisioning` can say "a dropped
 // instance is never charged — that is how delete stops the meter" because its rows
 // persist until the drop; here the row is gone a line later, so the final partial
-// span has to be charged BEFORE the delete or it is lost. Both delete sites call
-// [bill]: End (a caller ended it) and reap's end (the reaper did).
+// span has to be CLAIMED before the delete or it is lost — and, because the delete
+// is a durable fact too, SHIPPED after it. Both delete sites go through [retire]:
+// End (a caller ended it) and reap's end (the reaper did).
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -73,45 +75,98 @@ func rate(ctx context.Context, class string) int64 {
 	return cloud.RateMicros(ctx, cloud.RuntimeProduct, cloud.RuntimeMeter+"-"+class, floor)
 }
 
-// bill charges one lease for the time since it was last billed, and is the ONE
-// place this package moves runtime money. Both the sweep and the two end-of-lease
-// paths go through it, so there is one arithmetic, one act name and one debit
-// shape whatever ended the lease.
+// retire is the WHOLE of ending a lease, and it is one function because the order
+// of its five steps is the thing that has to be right. Both end-of-lease paths —
+// a caller's End and the reaper's end — go through it.
 //
-// SHIP BEFORE EMIT, at the end of a lease as much as during one. It is tempting to
-// read the end paths as exempt — the row is deleted a line later, so what does its
-// watermark matter? It matters because the DELETE is not durable either: a pod that
-// emits the tail and dies before the ship leaves a successor hydrating a snapshot
-// where the lease is still running with its old watermark, and that successor bills
-// the same tail again. The customer pays twice for the last hour of a sandbox they
-// already stopped.
+//	claim   the tail, on the row's own watermark
+//	stop    the pod (and the volume too, if the caller asked to purge)
+//	delete  the row
+//	ship    the file, which now carries BOTH the advance and the deletion
+//	bill    only if that ship was acknowledged
 //
-// A failure is logged and dropped rather than returned: the lease has already been
-// taken or already ended, and a debit that could not be recorded must never turn a
-// working sandbox into a refusal. It is the same posture MeterUsage takes.
-// The rate rides the ROW (running), so the three call sites cannot disagree about
-// which class they are pricing.
-func bill(s *Service, ctx context.Context, st *Store, m Sandbox) {
-	if !holding(m) {
-		return
-	}
+// SHIPPING BEFORE THE DELETE WAS THE BUG, and it was worse than not shipping at
+// all. The old order billed the tail, shipped, then deleted — so the last
+// acknowledged snapshot held the lease as `running` with a watermark at the moment
+// it ended, and nothing ever shipped the deletion. A successor hydrating that
+// snapshot found a live lease for a sandbox that had not existed since, and its
+// first sweep charged the customer from the end of the lease to whenever the
+// successor happened to wake up. Not a double charge of one span: a charge for a
+// span in which nothing ran, growing with the length of the outage.
+//
+// One ship, taken after both writes, makes the two facts arrive together or not at
+// all. If it is refused nothing is billed and nothing is durable, so the successor
+// re-reaps the lease and bills the tail once — which is the same answer, reached by
+// the replica that can prove it.
+//
+// A failure at any step is logged and dropped rather than returned: the lease is
+// already over, and a debit that could not be recorded must never turn ending a
+// sandbox into a refusal. It is the same posture MeterUsage takes.
+func retire(s *Service, ctx context.Context, st *Store, m Sandbox, purge bool) {
 	ns, err := cloud.OrgNamespace(m.Org, "")
 	if err != nil {
-		s.Log.Warn("runtime meter: the lease names no namespace (lease held, not billed)",
+		s.Log.Warn("the lease names no namespace, so it can be neither billed nor retired",
 			"sandbox", m.ID, "org", m.Org, "err", err)
 		return
 	}
-	_, err = cloud.RuntimeSweep(ctx, []cloud.Running{running(ctx, m)}, time.Now().Unix(),
+	// The claim, the two destructions and the ship are ONE settlement, so the
+	// destructions ride inside it: RuntimeSweep's contract is claim → make durable →
+	// emit, and at the end of a lease what has to be made durable is the retirement.
+	rows := []cloud.Running{}
+	if holding(m) {
+		// A lease that never came up is billed for nothing — the rule the lease fee
+		// already follows — so it is retired without a claim.
+		rows = append(rows, running(ctx, m))
+	}
+	_, err = cloud.RuntimeSweep(ctx, rows, time.Now().Unix(),
 		func(ctx context.Context, id string, was, now int64) (bool, error) {
 			return st.Advance(ctx, m.Org, id, was, now)
 		},
-		func() (bool, error) { return s.State.stores.Sync(ns) },
+		func() (bool, error) { return settle(s, ctx, st, ns, m, purge) },
 		s.State.debit,
 	)
 	if err != nil {
-		s.Log.Warn("runtime meter: the span was claimed and not billed (the watermark is not durable, so the next owner bills it)",
+		s.Log.Warn("the lease was retired and its tail not billed (nothing is durable, so the next owner bills it)",
 			"sandbox", m.ID, "org", m.Org, "err", err)
 	}
+	// A row that owed nothing still has to be retired, and RuntimeSweep does not
+	// ship a pass that claimed nothing — rightly, since an idle org owes no round
+	// trip. So the settlement is taken directly for that case.
+	if len(rows) == 0 {
+		if _, serr := settle(s, ctx, st, ns, m, purge); serr != nil {
+			s.Log.Warn("the lease could not be retired", "sandbox", m.ID, "org", m.Org, "err", serr)
+		}
+	}
+}
+
+// settle stops the sandbox, drops its row, and ships the file that now says so.
+//
+// The pod goes FIRST and the ship goes LAST, which is the only order in which a
+// failure is recoverable. A pod stopped and a row that outlives it is the state the
+// orphan sweep and the reaper are both built to converge; a row deleted while its
+// pod runs is a pod nothing will ever ask about again.
+func settle(s *Service, ctx context.Context, st *Store, ns namespace.Namespace, m Sandbox, purge bool) (bool, error) {
+	// ASKED AGAIN, HERE, because this is the line that cannot be undone. The sweep
+	// asked before it began and then walked a whole org's rows; a lease can be
+	// re-elected away inside that walk, and the answer that mattered was the one at
+	// the top. It is a lock and an HRW over the live member set — no I/O, so it is
+	// free to ask per row and it still answers during an object-store outage, which
+	// is exactly when a replica must go on ending its own expired leases.
+	if !s.State.stores.Owned(ns) {
+		return false, fmt.Errorf("sandbox: %s is no longer this replica's to end", ns)
+	}
+	if serr := s.State.rt.stop(ctx, m); serr != nil {
+		s.Log.Warn("stop sandbox", "id", m.ID, "err", serr)
+	}
+	if purge && m.Volume != "" {
+		if perr := s.State.rt.purge(ctx, m); perr != nil {
+			s.Log.Warn("purge volume", "volume", m.Volume, "err", perr)
+		}
+	}
+	if derr := st.Delete(ctx, m.Org, m.ID); derr != nil {
+		return false, derr
+	}
+	return s.State.stores.Sync(ns)
 }
 
 // meterRuntime bills every lease every org is holding, for the span since the last

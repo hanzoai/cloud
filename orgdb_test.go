@@ -326,37 +326,46 @@ func TestSanitizeInjectiveAndSafe(t *testing.T) {
 	}
 }
 
-// TestOwnedOnTheLocalOnlyPath — who owns an org when there is no fence to ask.
+// TestTheTwoGatesWithoutAFence — Owned gates the ACT, Sync gates the CLAIM, and
+// with no fence they answer differently. Folding them into one predicate is what
+// made an object-store outage stop the reaper and not the meter.
 //
-// It is the one question Sync cannot answer. Sync acks trivially without a
-// Durability, because a write is then already as durable as the deployment is
-// configured to be. Ownership has no such trivial answer: one writer owns
-// everything and several writers can prove nothing about which of them owns what.
+// Owned says YES in both regimes: a replica's orgs are the ones on its own volume,
+// so it is the only thing that will ever end their expired leases, and refusing
+// there leaves every sandbox pod running for ever, unbilled and uncounted.
 //
-// MUTATION: return true unconditionally when dur is nil and the multi-writer row
-// goes green — which is two pods each billing every org, the whole C-1 defect,
-// reintroduced under the configuration where the object store is down.
-func TestOwnedOnTheLocalOnlyPath(t *testing.T) {
+// Sync is where the several-writers case is refused. No round orders two copies,
+// so nothing written here may be acknowledged — which defers every debit rather
+// than letting two pods bill one span.
+//
+// MUTATION: make Owned answer !peers and the reaper row goes red; make Sync ack
+// unconditionally and the claim row goes red. Each names the half it broke.
+func TestTheTwoGatesWithoutAFence(t *testing.T) {
 	ns := MustOrgNamespace("acme", "")
 	for _, c := range []struct {
-		name  string
-		peers bool
-		want  bool
+		name     string
+		peers    bool
+		mayClaim bool
 	}{
-		{"a lone writer owns everything it holds", false, true},
-		{"several writers with no fence own nothing", true, false},
+		{"a lone writer acts and may claim", false, true},
+		{"several writers act and may claim nothing", true, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			st := NewOrgStore(Base{DataDir: t.TempDir(), Peers: c.peers}, "probe",
 				func(db *sql.DB) (*sql.DB, error) { return db, nil })
 			t.Cleanup(func() { _ = st.CloseAll() })
-			if got := st.Owned(ns); got != c.want {
-				t.Fatalf("Owned = %v, want %v", got, c.want)
+			if !st.Owned(ns) {
+				t.Fatal("a replica may not act on the orgs on its own volume — lifetimes stop")
 			}
-			// Sync is unchanged either way: it is not the gate being asked here, and a
-			// test that let the two blur would not notice one standing in for the other.
-			if acked, err := st.Sync(ns); !acked || err != nil {
-				t.Fatalf("Sync on a local-only store = (%v, %v), want (true, nil)", acked, err)
+			acked, err := st.Sync(ns)
+			if acked != c.mayClaim {
+				t.Fatalf("Sync acked=%v, want %v", acked, c.mayClaim)
+			}
+			if c.mayClaim && err != nil {
+				t.Fatalf("a lone writer's ship errored: %v", err)
+			}
+			if !c.mayClaim && err == nil {
+				t.Fatal("a ship that cannot be ordered by any round reported success")
 			}
 		})
 	}

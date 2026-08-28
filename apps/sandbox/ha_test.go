@@ -377,3 +377,52 @@ func TestTheOldestLeasesAreSweptToo(t *testing.T) {
 			held, n, held)
 	}
 }
+
+// TestADepositionInsideOnePassStopsTheStop — the second fence check, and why one
+// is not enough.
+//
+// The sweep asks who owns the org and then walks every one of its rows. A lease
+// can be re-elected away inside that walk, and the answer that mattered was taken
+// at the top. So `settle` asks again on the line before the pod is stopped — it is
+// a lock and an HRW over the live member set, no I/O, so asking per row is free.
+//
+// MUTATION: delete the Owned check at the top of settle and this passes, because
+// nothing between the sweep's gate and rt.stop re-reads the election.
+func TestADepositionInsideOnePassStopsTheStop(t *testing.T) {
+	ctx := context.Background()
+	f := twopod.New(t, "pod-a")
+	const org = "acme"
+
+	a := replica(t, f.Owner(org))
+	past := time.Now().Unix() - 2*3600
+	m := occupy(t, a, org, "m_mid", past)
+	m.ExpiresAt = past + 3600
+	st, err := storeFor(a, org)
+	if err != nil {
+		t.Fatalf("storeFor: %v", err)
+	}
+	if err := st.Put(ctx, m); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	ship(t, a, org)
+
+	// The election moves while this replica holds the row in hand: a second pod
+	// arrives and takes the org. This is the sweep's own walk, one row in.
+	f.Start("pod-b")
+	if f.Owner(org).ID != "pod-b" {
+		t.Skip("the election kept the org here; nothing was deposed")
+	}
+	b := replica(t, f.Pod("pod-b"))
+	if _, err := storeFor(b, org); err != nil {
+		t.Fatalf("the new owner could not open the org: %v", err)
+	}
+
+	// The deposed replica now reaches settle for a row it read while it still owned
+	// the org. It must not stop the pod, and it must not drop the row.
+	if acked, serr := settle(a, ctx, st, mustNS(t, org), m, false); acked || serr == nil {
+		t.Fatalf("a deposed replica settled a lease: acked=%v err=%v", acked, serr)
+	}
+	if _, err := st.Get(ctx, org, m.ID); err != nil {
+		t.Fatal("a deposed replica dropped a row the new owner is responsible for")
+	}
+}

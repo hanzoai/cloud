@@ -204,12 +204,33 @@ func (d *Durable) Bind(db *sql.DB) {
 	d.mu.Unlock()
 }
 
-// Owned reports whether this replica currently holds the writer lease. A store may
-// gate a write on it, but the authoritative gate is Sync's fenced ship.
+// Owned reports whether this replica holds the writer lease AND is still the org's
+// elected owner. A store may gate a write on it, but the authoritative gate is
+// Sync's fenced ship.
+//
+// BOTH HALVES, because the lease alone is a memory. `owned` is written once, at
+// Hydrate, and cleared in exactly one place: a ship refused as a stale round. So a
+// replica the fleet has re-elected away goes on answering true until it happens to
+// attempt a ship — and the acts that most need this gate are the ones that never
+// ship. Ending a lease stops a KUBERNETES POD before any ship is attempted, and
+// ending a row that is not `holding` charges nothing and so ships nothing at all;
+// neither would ever have learned the belief was stale. A deposed pod went on
+// deleting the new owner's pods with no mechanism anywhere to stop it.
+//
+// The election half is the same cheap question PendingPromotion already asks in the
+// other direction — one lock and an HRW over the live member snapshot, no I/O — so
+// this closes within one membership refresh rather than never.
+//
+// It is deliberately not a claim about the OBJECT STORE. A store that cannot be
+// reached does not move ownership: this replica still holds the lease and is still
+// elected, so it must go on ending expired leases through an outage. What it must
+// not do is call the resulting debit durable, and that is Sync's answer, not this
+// one.
 func (d *Durable) Owned() bool {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.owned
+	owned := d.owned
+	d.mu.Unlock()
+	return owned && d.dy.fencer.ElectsSelf(d.ns.ID())
 }
 
 // PendingPromotion reports whether this store opened degraded (does not hold the lease)
