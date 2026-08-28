@@ -586,6 +586,27 @@ KMS. Callers hold no key because `hanzoai/ai` resolves every credential through
 one precedence rule — KMS store first, configuration second — so sealing a key
 removes it from the caller's environment with no code change there.
 
+**ONE SEAM, NOT TWO.** `egress.Secrets` is `GetSecret`/`PutSecret` — the same
+pair `hanzoai/ai` declares as `object.SecretStore`, method for method — so one
+value satisfies both interfaces. What differs is only what sits behind it: in ai
+the store is in-process, in egress it is KMS across the network, reached over
+`luxfi/kms/pkg/zapclient` (ZAP, like everything else between our processes). A
+reference is flat — path segments then the name:
+
+    orgs/acme/users/u-7/connectors/openai/default
+
+**AN ABSENT CREDENTIAL ENDS THE CALL.** `ErrNoCredential` is a refusal and never
+a fallback, and the reason is the whole design: reading a key out of the calling
+process's environment is the exposure egress exists to remove, so falling back to
+one would restore it silently. This is the same shape as the master-key refusal
+above — the fail-closed half is what makes the mechanism worth having.
+
+**A CALL REPORTS WHO PAID**, because that is the difference between a customer's
+vendor bill and ours. Custody has two scopes: `user` is the customer's own key,
+enrolled by them and spent only for them; `org` is the platform key the tenant
+shares. Attribution is a property of the call rather than something reconstructed
+later from a log.
+
 Stated honestly rather than oversold: this is bounded and observable, not
 unstealable. No credential that lives in a cluster is unstealable from someone
 who owns that cluster; what changes is what the theft is worth. A running host
