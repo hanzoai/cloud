@@ -13,16 +13,21 @@ import (
 // whatsapp_send.go is the WhatsApp Cloud API egress. Token custody stays here,
 // with slack's and telegram's, so channels never holds a credential.
 
-// whatsappAPIBase is Meta's Graph host. A var so tests point it at a stub.
-var whatsappAPIBase = "https://graph.facebook.com/v21.0"
+// The same origin the connect-time verify uses, from the same env override, so a
+// test or a staging tenant cannot end up verifying against one host and sending
+// to another.
+func whatsappOrigin() string {
+	if v := strings.TrimSpace(os.Getenv("WHATSAPP_API_BASE")); v != "" {
+		return v
+	}
+	return "https://graph.facebook.com"
+}
 
-// The org's OWN custodied credentials. TokenFor fails closed for an org that
-// never connected WhatsApp, which is what keeps one tenant from sending as
-// another — the same rule slack's bot token follows.
-const (
-	whatsappTokenSecret  = "access_token"
-	whatsappNumberSecret = "phone_number_id"
-)
+// The credential and the number both come from the connection whatsapp.go
+// already establishes: the System User token sealed under apiKeySecret, and the
+// phone number id recorded as the connection's ExternalID when /connect verified
+// it live against the Graph API. Reading them from anywhere else would be a
+// second source for one fact.
 
 // SendWhatsApp sends one text message to a person, as the org's own business
 // number.
@@ -44,14 +49,17 @@ func SendWhatsApp(ctx context.Context, org, to, replyTo, text string) (string, e
 	if strings.TrimSpace(to) == "" {
 		return "", fmt.Errorf("whatsapp: a message needs someone to send it to")
 	}
-	tok, err := TokenFor(ctx, org, "whatsapp", whatsappTokenSecret)
+	tok, err := TokenFor(ctx, org, "whatsapp", apiKeySecret)
 	if err != nil {
 		return "", err
 	}
-	number, err := TokenFor(ctx, org, "whatsapp", whatsappNumberSecret)
-	if err != nil {
-		return "", err
+	// The ORG owns this connection (whatsapp.go registers it AdminOnly), so the
+	// owner is "" — a member-owned row would be a different number.
+	conn, ok := ConnectionFor(org, "whatsapp", "")
+	if !ok || conn.ExternalID == "" {
+		return "", fmt.Errorf("whatsapp: this org has no connected number")
 	}
+	number := conn.ExternalID
 
 	body := map[string]any{
 		"messaging_product": "whatsapp",
@@ -70,7 +78,7 @@ func SendWhatsApp(ctx context.Context, org, to, replyTo, text string) (string, e
 		return "", err
 	}
 
-	endpoint := whatsappAPIBase + "/" + string(number) + "/messages"
+	endpoint := whatsappOrigin() + "/v21.0/" + number + "/messages"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(payload)))
 	if err != nil {
 		return "", err
