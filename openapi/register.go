@@ -240,6 +240,28 @@ func Answers(path, method string, responses any) {
 	registry[key] = reg
 }
 
+// Schemas carries the named schemas a relayed document's responses refer to.
+//
+// [Answers] is per-operation; a component set is per-DOCUMENT, which is why this
+// is a second call and not a third argument. Without it the responses that cross
+// name shapes this document does not carry, and every $ref in them resolves to
+// nothing -- a dangling reference is worse than the silence it replaced, because
+// a generator follows it and emits a client with a missing type.
+func Schemas(named map[string]any) {
+	if len(named) == 0 {
+		return
+	}
+	regMu.Lock()
+	defer regMu.Unlock()
+	for name, schema := range named {
+		relayed[name] = schema
+	}
+}
+
+// relayed holds the schemas [Schemas] has been given, keyed by the name the
+// source document publishes them under.
+var relayed = map[string]any{}
+
 // identify states an operation's id instead of letting it be derived.
 //
 // Every other id comes from [zip.ID] on method+path, and that single rule is what

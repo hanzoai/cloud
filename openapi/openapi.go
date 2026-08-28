@@ -592,6 +592,17 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 		}
 		doc.Paths[path][strings.ToLower(r.Method)] = op
 	}
+	// A relayed document's own schemas, beside the ones reflected from Go types
+	// here. Only where this app has not already claimed the name: a Go type in
+	// this binary is the more specific claim, exactly as it is for a response.
+	// A collision ACROSS apps is the fleet's business and the noun gate's.
+	regMu.Lock()
+	for name, schema := range relayed {
+		if _, claimed := comp.schemas[name]; !claimed {
+			comp.schemas[name] = schema
+		}
+	}
+	regMu.Unlock()
 	if len(comp.schemas) > 0 {
 		doc.Components = &Components{Schemas: comp.schemas}
 	}
