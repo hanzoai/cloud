@@ -360,12 +360,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// engines are asked from metaSearch, which every caller reaches and none of
 	// them can hand a meter to. See meter.go.
 	bindMeter(cloud.NewResourceMeter(deps, "websearch"))
-	// This surface verifies MACs another process mints, so a key it invented itself
-	// would refuse every ambient-cookie call for as long as the pod ran. Asked at
-	// boot rather than discovered on the wire.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("websearch.Mount: %w", err)
-	}
 
 	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
 	// the zip layer so the same request either reaches native meta-search or is

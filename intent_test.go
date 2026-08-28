@@ -159,3 +159,73 @@ func TestTheRuleCoversTheGraph(t *testing.T) {
 		t.Errorf("the handler ran %d times for a change that was asked for; want 1", ran)
 	}
 }
+
+// TestAKeylessProcessRefusesTheChangeAndServesTheRead is why the eleven mount-time
+// account.Shared checks are gone, and it is the property they were mistaken for.
+//
+// Those checks read the same environment this one does and refused the whole app —
+// every route, every caller — when the key was absent. That is not what the control
+// protects. Intended consults the key in exactly one of its four branches, and that
+// branch already returns 403; the other three answer before the key is ever read.
+// A process with no key holds a random one (attest.Process), so it REFUSES every
+// token minted elsewhere and can be handed no forgery. Refusing to serve on top of
+// that bought nothing and cost the public reads — /v1/billing/plans, /v1/s3/health,
+// /v1/code/tree — which answer no token at all.
+//
+// So: keyless is not keyless-and-open. It is keyless-and-refusing, on the one path
+// that asks.
+func TestAKeylessProcessRefusesTheChangeAndServesTheRead(t *testing.T) {
+	t.Setenv(attest.KeyEnv, "")
+
+	// The RAW-ROUTE shape of the control, which is what apps/account RequireCSRF
+	// installs and one line over Intended — the same decision the typed-op
+	// authorizer reaches, asked where an HTTP request can actually meet it.
+	app := zip.New(zip.Config{})
+	app.Post("/v1/crm/companies", func(c *zip.Ctx) error {
+		if err := Intended(c); err != nil {
+			return err
+		}
+		return c.String(200, "served")
+	})
+
+	// COMPOSES. A process serving a governed change answers to `keyed`, and to
+	// nothing else — that is the whole of this change.
+	if err := keyed(app, false); err != nil {
+		t.Fatalf("a machine with no secret store was refused: %v", err)
+	}
+
+	// AND THE AMBIENT CHANGE IS STILL REFUSED. This is the security property the
+	// mount checks were credited with and never held: it lives here, per request.
+	req := httptest.NewRequest("POST", "/v1/crm/companies", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cookie", "session=whatever")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("test request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 403 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("POST with an ambient cookie and no shared key = %d %q, want 403 — "+
+			"a keyless process must refuse the change, not serve it", resp.StatusCode, string(body))
+	}
+
+	// AND IT STILL SERVES THE CALLERS THE KEY NEVER GATED. No Cookie means no
+	// ambient credential and nothing a page could have sent — the in-cluster hop
+	// and the machine caller. The mount checks 503'd these too, which is the cost
+	// that bought nothing: websearch's API-key arm, s3's ungated probe, code's
+	// free reads and billing's public catalog all live on this branch.
+	req = httptest.NewRequest("POST", "/v1/crm/companies", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(req)
+	if err != nil {
+		t.Fatalf("test request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Errorf("POST with no ambient credential and no shared key = %d %q, want 200 — "+
+			"a key question got between a machine caller and a surface it does not gate",
+			resp.StatusCode, string(body))
+	}
+}

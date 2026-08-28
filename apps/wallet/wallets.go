@@ -71,12 +71,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("wallet.Mount: empty DataDir")
 	}
-	// Every operation here that mints a wallet, rotates a key or signs asks
-	// account.CSRF, which verifies a MAC the account process minted; without the
-	// shared key it refuses all of them.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("wallet.Mount: %w", err)
-	}
 	st, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("wallet.Mount: open store: %w", err)

@@ -129,13 +129,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("s3.Mount: nil app")
 	}
-	// The anti-forgery token admit asks for is minted by another process, so this
-	// one verifies MACs it did not write: a key it invented itself matches none of
-	// them and every ambient-cookie call would 403 for as long as the pod ran.
-	// Asked at boot, in one line, rather than discovered on the wire.
-	if err := account.Shared(); err != nil {
-		return fmt.Errorf("s3.Mount: %w", err)
-	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "s3"), State: state{admin: s3admin.New()}}
 
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
