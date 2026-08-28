@@ -42,6 +42,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/manifest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -105,6 +106,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &service{store: store, commerce: deps.Commerce, log: log}
 	mounted = s
 	routes(app, s)
+	exposeHolds()
 
 	log.Info("entitlements surface mounted", "prefix", orgs, "brand", deps.Brand, "commerce", deps.Commerce != nil)
 	return nil
@@ -210,6 +212,21 @@ func (s *service) resolveOrg(ctx context.Context, param string) (org string, sup
 type entitlementsView struct {
 	// Enabled is the org's turned-on product ids, sorted. Always an array, never null.
 	Enabled []string `json:"enabled"`
+
+	// Elective is every product an org must ask for, sorted — the catalog a console
+	// renders as a list with a switch beside each, with Enabled saying which are on.
+	//
+	// It is answered HERE rather than from a second endpoint because a list of
+	// options and the subset that is on are one question asked once: read apart,
+	// the two can be read at different instants and the console renders a switch
+	// for a product that no longer exists, or omits one the org is paying for.
+	//
+	// It is derived from the manifest rows, never kept as a list of its own, so a
+	// capability becomes offerable and becomes refusable in the same edit. Enabled
+	// is NOT a subset of it: a product can be turned on and later stop being
+	// elective, and hiding that row would make a live entitlement invisible to the
+	// only surface that can turn it off.
+	Elective []string `json:"elective"`
 }
 
 // orgRef addresses one org's enablement row. The org is URL-borne only: `json:"-"`
@@ -235,7 +252,7 @@ func (o ops) get(ctx context.Context, in *orgRef) (*entitlementsView, error) {
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list entitlements: %v", err)
 	}
-	return &entitlementsView{Enabled: enabled}, nil
+	return &entitlementsView{Enabled: enabled, Elective: manifest.Electives()}, nil
 }
 
 // ── POST ───────────────────────────────────────────────────────────────────────
@@ -312,7 +329,7 @@ func (o ops) post(ctx context.Context, in *mutateReq) (*entitlementsView, error)
 		return nil, zip.Errorf(http.StatusInternalServerError, "apply entitlements: %v", err)
 	}
 	s.log.Info("entitlements mutated", "org", org, "add", add, "remove", remove, "superAdmin", superAdmin, "by", actor)
-	return &entitlementsView{Enabled: enabled}, nil
+	return &entitlementsView{Enabled: enabled, Elective: manifest.Electives()}, nil
 }
 
 // cleanProducts trims, drops empties, validates the slug shape, de-duplicates

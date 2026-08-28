@@ -242,8 +242,15 @@ func Listen(plugins []Plugin, enable []string) error {
 	// rate budget or touch its balance. It is the first thing asked about the
 	// ADDRESS once identity is settled, which is the right order: whether a thing
 	// exists for you comes before what it would cost you.
+	//
+	// Both refusals, in one pass, because they are the same question about the
+	// address asked of two authorities: Stage asks whether the product is released
+	// to this org, Elective whether the org asked for it. Each composes nothing for
+	// an app it does not govern, so the common row costs two nil checks at boot and
+	// nothing per request.
 	for _, p := range plugins {
 		app.Use(Stage(p.Name))
+		app.Use(Elective(p.Name))
 	}
 
 	// Per-scope rate limit (issue #70). Runs AFTER identity (needs the validated

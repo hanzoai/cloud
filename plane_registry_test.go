@@ -22,11 +22,13 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/allowance"
 	"github.com/hanzoai/cloud/apps/commerce"
+	"github.com/hanzoai/cloud/apps/entitlement"
 	"github.com/hanzoai/cloud/apps/event"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/apps/risk"
 	allowancepeer "github.com/hanzoai/cloud/plane/allowance"
 	commercepeer "github.com/hanzoai/cloud/plane/commerce"
+	entitlementpeer "github.com/hanzoai/cloud/plane/entitlement"
 	eventpeer "github.com/hanzoai/cloud/plane/event"
 	flagspeer "github.com/hanzoai/cloud/plane/flags"
 	riskpeer "github.com/hanzoai/cloud/plane/risk"
@@ -137,6 +139,25 @@ func TestGeneratedFlagsSurfaceIsTheLiveSurface(t *testing.T) {
 	sameSurface(t, "flags", flagspeer.Ops, live,
 		"flags registered no plane ops at all — every capability that is not ga refuses "+
 			"every org, including the ones holding its flag, and nothing says so. Mount must call exposeHold.")
+}
+
+// TestGeneratedEntitlementSurfaceIsTheLiveSurface holds the ENABLEMENT READ to
+// the same gate, and it fails the same silent way its flags twin does.
+//
+// It is what every ELECTIVE capability asks about every request reaching its
+// prefix, from whichever binary serves that capability. The refusal fails CLOSED,
+// so an op that stopped being registered — a Mount that no longer calls
+// exposeHolds, a rename on one side — errors nowhere: it turns every elective
+// product off for every customer who PAID for it, and each one reads as a 404
+// indistinguishable from the product not existing. So the registration itself is
+// asserted, from the running registry.
+func TestGeneratedEntitlementSurfaceIsTheLiveSurface(t *testing.T) {
+	live := liveOps(t, entitlementpeer.App, entitlement.Mount, false)
+	t.Cleanup(func() { _ = entitlement.Shutdown(t.Context()) })
+	sameSurface(t, "entitlement", entitlementpeer.Ops, live,
+		"entitlement registered no plane ops at all — every elective capability refuses "+
+			"every org, including the ones that enabled and are billed for it, and nothing "+
+			"says so. Mount must call exposeHolds.")
 }
 
 // sameSurface holds a generated peer client to the surface its app actually

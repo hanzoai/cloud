@@ -70,7 +70,7 @@ var unextracted = []string{
 	// product with a daemon of its own.
 	"kv",
 	"label",
-	"leaderboard", "legal", "link", "lsp", "marketplace", "meet", "membership",
+	"leaderboard", "legal", "link", "lsp", "marketplace", "meet",
 	"metering", "mq",
 	// nodes is the machine control plane, split out of bots (HIP-0139 §7.2). It
 	// carries the pin bots carried for it: no hanzoai/nodes exists, and what lives

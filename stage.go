@@ -35,6 +35,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/plane/entitlement"
 	"github.com/hanzoai/cloud/plane/flags"
 	"github.com/zap-proto/zip"
 )
@@ -68,25 +69,72 @@ func Stage(name string) zip.Handler {
 	if stage == "" {
 		return nil
 	}
+	return refuse(name, "stage", func(ctx context.Context) (bool, error) {
+		held, err := flags.FlagsHold(ctx, &plane.FlagIn{Key: name})
+		if err != nil {
+			return false, err
+		}
+		return held.On, nil
+	})
+}
+
+// Elective refuses requests to a capability the caller's org has not turned on,
+// or composes NOTHING when the capability is universal.
+//
+//	app.Use(Elective(p.Name))
+//
+// It is the twin of [Stage] and asks a different subsystem a different question:
+// Stage asks flags whether this customer has been LET INTO a product that is not
+// finished, Elective asks entitlement whether this customer has ASKED FOR one
+// that is. Both refuse with the same 404 because a refusal that distinguished
+// them would tell a stranger which products exist and which they could buy.
+//
+// An org holds nothing until it says so — the enablement store has no row for a
+// product nobody enabled, and no row is `false`. That is the opt-in semantic, and
+// it means marking a row Elective is a CUTOVER for anyone already using it: see
+// manifest.App.Elective.
+func Elective(name string) zip.Handler {
+	if !manifest.IsElective(name) {
+		return nil
+	}
+	return refuse(name, "elective", func(ctx context.Context) (bool, error) {
+		on, err := entitlement.EntitlementHolds(ctx, &plane.ProductIn{Product: name})
+		if err != nil {
+			return false, err
+		}
+		return on.On, nil
+	})
+}
+
+// refuse is the rule both capability refusals share: whose path this is, who is
+// asking, and what an unanswerable question means. Only the question differs, so
+// only the question is a parameter.
+//
+// It is one function because the parts that are easy to get wrong are the parts
+// that are NOT the question — the ownership test, the unvalidated caller, the
+// fail-closed — and two copies would be two places for those to drift. `why`
+// names the asking subsystem in the log and nowhere else; it never reaches the
+// wire.
+func refuse(name, why string, ask func(context.Context) (bool, error)) zip.Handler {
 	prefixes := manifest.PrefixesFor(name)
 	return func(c *zip.Ctx) error {
 		// WHOSE PATH IS THIS. Prefixes nest — /v1/risk is risk's and
 		// /v1/risk/labels is label's — and the router resolves that by
-		// SPECIFICITY, so a beta capability holding the shallower prefix must not
+		// SPECIFICITY, so a capability holding the shallower prefix must not
 		// answer for the deeper one. [manifest.OwnerOf] is that rule already, and
 		// asking it rather than comparing strings is what keeps the refusal on
 		// exactly the surface the host routes here.
 		//
 		// The prefix test in front of it is not a second rule, it is the fast
 		// reject: OwnerOf walks every prefix in the fleet and costs ~33µs, which is
-		// nothing on a request that is about to ask flags over a socket and far too
-		// much on the ga request that merely shares this process. A path under none
+		// nothing on a request that is about to ask a peer over a socket and far too
+		// much on the request that merely shares this process. A path under none
 		// of this app's prefixes cannot be owned by it, so skipping the scan there
 		// cannot change the answer.
 		if !covers(prefixes, c.Path()) || manifest.OwnerOf(c.Path()) != name {
 			return c.Next()
 		}
-		// An unvalidated caller is 404, not 401. A staged capability owes a
+		// An unvalidated caller is 404, not 401. A refused capability owes a
 		// stranger nothing, and answering 401 would confirm the address is real to
 		// exactly the caller with no standing to know it. A request that would have
 		// been refused for its credentials anyway loses nothing by being refused
@@ -97,19 +145,19 @@ func Stage(name string) zip.Handler {
 		}
 		ctx, cancel := context.WithTimeout(For(c.Context(), org), wait)
 		defer cancel()
-		held, err := flags.FlagsHold(ctx, &plane.FlagIn{Key: name})
+		on, err := ask(ctx)
 		if err != nil {
-			// FAIL CLOSED, and say why HERE rather than on the wire. A flags outage
-			// must not open every unfinished product to every customer — that is the
-			// one failure this refusal exists to prevent, and it is the failure an
-			// "if we cannot ask, let them through" would cause fleet-wide and at
-			// once. The operator reads the reason in the log; the caller reads the
-			// same 404 they would have read anyway, so an outage is not a signal
-			// either.
-			c.Log().Warn("stage: refusing, flags did not answer", "app", name, "stage", stage, "err", err)
+			// FAIL CLOSED, and say why HERE rather than on the wire. An outage in
+			// the subsystem being asked must not open every gated product to every
+			// customer — that is the one failure this refusal exists to prevent, and
+			// it is the failure an "if we cannot ask, let them through" would cause
+			// fleet-wide and at once. The operator reads the reason in the log; the
+			// caller reads the same 404 they would have read anyway, so an outage is
+			// not a signal either.
+			c.Log().Warn("refusing: the authority did not answer", "app", name, "why", why, "err", err)
 			return missing()
 		}
-		if !held.On {
+		if !on {
 			return missing()
 		}
 		return c.Next()

@@ -284,7 +284,13 @@ var Apps = []App{
 	// so it took its own name rather than folding into that one. The backfill is
 	// the SuperAdmin view of this capability and lives where those live.
 	{Name: "leaderboard", Prefixes: []string{"/v1/admin/leaderboard", "/v1/leaderboard"}},
-	{Name: "crm", Prefixes: []string{"/v1/crm"}},
+	// ELECTIVE: an org reaches /v1/crm only after turning `crm` on
+	// (POST /v1/entitlement/orgs/:org). It is the first row to carry the bit, and
+	// it carries it because it was the one standalone business product a customer
+	// could reach without ever asking for it: erp, cms, knowledge and content are
+	// framework MODULES, which an org already installs per-org and which do not
+	// exist for it until it does.
+	{Name: "crm", Prefixes: []string{"/v1/crm"}, Elective: true},
 	{Name: "marketing", Prefixes: []string{"/v1/marketing"}},
 	{Name: "ad", Prefixes: []string{"/v1/ad"}},
 	{Name: "campaign", Prefixes: []string{"/v1/campaign"}},
