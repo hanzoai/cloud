@@ -589,3 +589,40 @@ func TestAlphaAndAdminReachOnlyThePrivateDocument(t *testing.T) {
 func under(path, prefix string) bool {
 	return path == prefix || strings.HasPrefix(path, prefix+"/")
 }
+
+// Two names that differ only in CASE are one name to every generator that
+// PascalCases a schema, so the gate owes them the same refusal it owes one name
+// with two shapes. It is the same defect one level down, and it is not
+// hypothetical: `call` (meet's media room) and `Call` (tel's telephony call)
+// were both claimed, and the Kotlin client imported ai.hanzo.cloud.model.Call
+// beside okhttp3.Call and stopped compiling on an ambiguous import.
+func TestComposeRefusesTwoNamesThatDifferOnlyInCase(t *testing.T) {
+	part := func(app, schema string) openapi.Part {
+		return openapi.Part{App: app, Doc: &openapi.Document{
+			Paths: map[string]openapi.PathItem{"/v1/" + app: {"get": {OperationID: "get_" + app}}},
+			Components: &openapi.Components{Schemas: map[string]any{
+				schema: map[string]any{"type": "object"},
+			}},
+		}}
+	}
+	_, err := openapi.Compose([]openapi.Part{part("meet", "call"), part("tel", "Call")})
+	var c *openapi.Conflict
+	if !errors.As(err, &c) {
+		t.Fatalf("Compose = %v, want a *Conflict — `call` and `Call` are one class to Kotlin", err)
+	}
+	if c.Kind != "case" {
+		t.Errorf("Conflict.Kind = %q, want \"case\" (got %+v)", c.Kind, c)
+	}
+	for _, want := range []string{"call", "Call", "meet", "tel"} {
+		if !strings.Contains(c.Error(), want) {
+			t.Errorf("Conflict.Error() = %q, does not name %q — a refusal nobody can act on", c.Error(), want)
+		}
+	}
+
+	// The SAME name twice is not a case collision — it is the shape gate's
+	// business, and identical shapes merge.
+	if _, err := openapi.Compose([]openapi.Part{part("meet", "call"), part("tel", "call")}); err != nil {
+		t.Errorf("one name claimed twice with one shape: %v — that is composition, not collision", err)
+	}
+
+}
