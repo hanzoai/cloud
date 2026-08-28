@@ -60,6 +60,16 @@ type registration struct {
 	description string
 	described   bool // the prose half is present (Describe ran)
 
+	// answers is a RELAYED operation's responses, already in document form.
+	//
+	// The body half above is Go types, which is the right carrier for an
+	// operation this binary serves. A relayed one is served by another
+	// repository: its shapes are that repository's, they arrive as JSON, and
+	// re-declaring them here would be a second implementation of somebody
+	// else's wire format -- wrong the moment it disagreed. So the source's own
+	// responses cross verbatim.
+	answers any
+
 	// id overrides the operation id derived from method+path. Empty for almost
 	// every route, because a derived id is the right one: it is the address, and
 	// two routes cannot share an address. The exception is an address the
@@ -202,6 +212,31 @@ func Describe(path, method, summary, description string) {
 		panic(fmt.Sprintf("openapi: duplicate Describe for %s %s", key.method, key.path))
 	}
 	reg.summary, reg.description, reg.described = summary, description, true
+	registry[key] = reg
+}
+
+// Answers carries a RELAYED operation's responses across from the document that
+// declares them.
+//
+// [Describe] carries the sentence; this carries the shape. They are separate
+// because they have separate owners: the prose is lifted from the handler's doc
+// comment, and the responses are the source document's own. Prose without shape
+// is what the relay used to carry, and it published 293 of hanzoai/ai's 294
+// operations with no `responses` at all -- so every generated client handed the
+// caller an untyped result for a third of the API, GET /v1/models included.
+//
+// It is additive metadata on a route that exists, exactly as Describe is: a
+// registry entry cannot conjure an operation, and responses for an address the
+// router does not serve never render.
+func Answers(path, method string, responses any) {
+	if responses == nil {
+		return
+	}
+	key := opKey{method: strings.ToUpper(method), path: path}
+	regMu.Lock()
+	defer regMu.Unlock()
+	reg := registry[key]
+	reg.answers = responses
 	registry[key] = reg
 }
 
@@ -356,6 +391,13 @@ func (r *registration) apply(op *Operation, c *components) error {
 		op.Responses = map[string]*Response{
 			"2XX": {Description: "Success", Content: map[string]Media{"application/json": {Schema: s}}},
 		}
+		return nil
+	}
+	// A relayed operation's own responses, when nothing above declared any. The
+	// typed half wins where both exist: a Go type in this binary describes what
+	// this binary answers, which is the more specific claim.
+	if r.answers != nil {
+		op.Responses = r.answers
 	}
 	return nil
 }
