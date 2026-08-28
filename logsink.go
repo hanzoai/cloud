@@ -95,6 +95,17 @@ const planeLogEndpoint = "127.0.0.1:4318"
 // Whichever is reached first stops the hold. Past either, the NEWEST are dropped
 // and counted, because in a boot window the first lines are the ones that say why
 // the rest happened.
+//
+// holdBytes IS IN LINE BYTES — the length of the JSON a line arrived as, which is
+// `size` below and the only figure that is free to take at the one moment it is
+// in hand. It is not what the hold costs the process: a held line is a parsed
+// record with its attributes and the context its ids live in, so it retains a
+// multiple of the line it came from. The multiple runs the opposite way from this
+// ceiling — largest for short lines, where holdMax stops the hold long before
+// these bytes do, and about one for a long line, which is nearly all message. The
+// peak is where the two ceilings meet, an attribute-heavy line near 4 KiB filling
+// both at once, and it is about 30 MB of process for the 8 MiB named here.
+// TestWhatTheHoldCostsIsBoundedInTheUnitsItIsSpent measures that and bounds it.
 const (
 	holdMax   = 2048
 	holdBytes = 8 << 20

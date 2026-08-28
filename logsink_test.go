@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,6 +193,58 @@ func TestWhatIsHeldIsBoundedInBytes(t *testing.T) {
 	}
 	if lost != 10 {
 		t.Errorf("lost = %d, want the 10 that did not fit counted", lost)
+	}
+}
+
+// ...AND WHAT THAT CEILING IS IN, which is a different number from what the hold
+// costs the process.
+//
+// holdBytes counts LINE bytes; a held line is a parsed record and retains a
+// multiple of the JSON it came from. The multiple runs the opposite way from the
+// ceiling, so neither constant's own figure is the worst case: short lines have
+// the largest multiple and holdMax stops them first, long lines fill the byte
+// ceiling and are nearly all message. The peak is the crossover — an
+// attribute-heavy line near 4 KiB, which fills both ceilings at once.
+//
+// Measured rather than asserted, and bounded well clear of the measurement so it
+// answers to a change of shape rather than to GC noise.
+func TestWhatTheHoldCostsIsBoundedInTheUnitsItIsSpent(t *testing.T) {
+	var fields strings.Builder
+	for i := 0; i < 300; i++ {
+		fmt.Fprintf(&fields, `,"k%03d":"v%03d"`, i, i)
+	}
+	line := []byte(`{"level":"info","message":"x"` + fields.String() + `}`)
+
+	s := &logSink{}
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for holding(s) < holdMax {
+		n := holding(s)
+		_, _ = s.Write(line)
+		if holding(s) == n {
+			break // the byte ceiling stopped it
+		}
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	s.mu.Lock()
+	lines := s.bytes
+	s.mu.Unlock()
+	heap := int64(after.HeapAlloc) - int64(before.HeapAlloc)
+	runtime.KeepAlive(s)
+
+	if lines <= holdBytes/2 {
+		t.Fatalf("held %d line bytes against a %d ceiling — this shape does not reach the crossover, "+
+			"so it measures nothing about the peak", lines, holdBytes)
+	}
+	if heap <= holdBytes {
+		t.Errorf("the hold retains %d bytes for %d bytes of lines — if that is real, the ceiling IS "+
+			"the footprint and the comment above holdBytes is wrong", heap, lines)
+	}
+	if heap > 64<<20 {
+		t.Errorf("the hold retains %d bytes for a %d-byte ceiling; the boot window is bounded in "+
+			"name only past this", heap, holdBytes)
 	}
 }
 

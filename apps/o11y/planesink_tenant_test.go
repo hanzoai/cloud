@@ -72,20 +72,60 @@ func TestSDKSpanStampsTheTenantItResolved(t *testing.T) {
 	}
 }
 
-// The tenant is the read boundary of every llmobs query, so it is the server's
-// answer and never the caller's. A sender that states the attribute itself must
-// not be able to place its spans in another org's view — which is why the stamp
-// is unconditional and last, exactly as spansink.go states it.
-func TestAWireValueCannotChooseTheTenant(t *testing.T) {
+// THE TWO SPELLINGS CANNOT DISAGREE, which is what the unconditional last stamp
+// buys and the only thing it buys. A record naming one tenant in the column and
+// another in the attribute would be scoped one way by the plane's own queries
+// and another by every llmobs view — a row no reader can explain and no reader
+// reports.
+func TestTheTwoSpellingsOfTheTenantCannotDisagree(t *testing.T) {
 	attrs := map[string]string{
 		"hanzo.org":                 "acme",
-		llmobstypes.GenAIHanzoOrgID: "victim", // forged on the wire
+		llmobstypes.GenAIHanzoOrgID: "victim",
 	}
 	if got := planeTenant(attrs); got != "acme" {
 		t.Fatalf("planeTenant = %q, want acme", got)
 	}
 	if got := attrs[llmobstypes.GenAIHanzoOrgID]; got != "acme" {
-		t.Errorf("a forged wire value survived as %q — one org could write rows another org reads", got)
+		t.Errorf("the attribute reads %q while the column reads acme — one row, two tenants", got)
+	}
+}
+
+// AND `hanzo.org` IS WHERE BOTH COME FROM, on every builder, which is the fact a
+// reader of a row's org actually needs. This function decides the spelling; it
+// does not decide the source, and the source differs by caller: the SDK builder
+// reads a span made in this binary, where the identity boundary's attestation
+// stamped it, and the wire builders read what the sender wrote.
+//
+// Stated here so the two are one rule rather than one rule and one belief. It is
+// the belief that goes stale: a gate on the wire path — an ear that weighs a
+// credential, or a receiver that names the tenant itself — changes what a row's
+// org means, and this is where that has to be said out loud rather than left for
+// the next reader to infer from a comment.
+func TestTheTenantIsWhateverHanzoOrgSays(t *testing.T) {
+	const claimed = "acme"
+
+	// The wire builder, end to end: one span batch in, one row out.
+	rows := spanRowsOf(&zapreceiver.SpanBatch{
+		AppName:  "agents",
+		Resource: map[string]string{"service.name": "cloud"},
+		Spans: []zapreceiver.Span{{
+			TraceID: "t-1", SpanID: "s-1", Name: "chat", Kind: "client",
+			StartUnixNs: 1_700_000_000_000_000_000, EndUnixNs: 1_700_000_000_010_000_000,
+			Attributes: map[string]any{"hanzo.org": claimed},
+		}},
+	})
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	if got := spanCol(t, rows[0], "org"); got != claimed {
+		t.Errorf("a wire span's org column = %v, want %q — planeOrg is the one reader of hanzo.org "+
+			"and its comment says this is what the ear delivers", got, claimed)
+	}
+
+	// ...and the same reader, asked directly, for the callers that hand it a map
+	// they built themselves.
+	if got := planeOrg(map[string]string{"hanzo.org": claimed}); got != claimed {
+		t.Errorf("planeOrg = %q, want %q", got, claimed)
 	}
 }
 

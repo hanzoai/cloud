@@ -827,8 +827,22 @@ func traceRowsOf(spanRows [][]any) [][]any {
 	return rows
 }
 
-// planeOrg is the row's tenant: the hanzo.org the TracingMiddleware stamped
-// when the telemetry belongs to a tenant, else the platform's own.
+// planeOrg is the row's tenant: the `hanzo.org` the telemetry carries when it
+// belongs to a tenant, else the platform's own.
+//
+// WHOSE STATEMENT hanzo.org IS belongs to the caller, and the two kinds of
+// caller differ — which is the whole of what a reader of a row's org needs to
+// know, so it is said here, at the one place the field is read:
+//
+//   - the in-process SDK sink (traceRowsOf) — the span was made in THIS binary,
+//     where TracingMiddleware stamped hanzo.org from the identity boundary's own
+//     attestation. No caller could name its own tenant.
+//   - the ZAP span and log wires (spanRowsOf, logRowsOf, logResourceRowsOf) —
+//     the record arrived over an ear, so hanzo.org is what the SENDER wrote.
+//     zapreceiver.Config declares no credential, so a row's tenant is trusted as
+//     far as the ear it came in on: the unix ears admit whoever the filesystem
+//     admits, the TCP ears whoever reaches the port (both are named at the top
+//     of this file, with what each is for).
 func planeOrg(attrs map[string]string) string {
 	if org := attrs["hanzo.org"]; org != "" {
 		return org
@@ -848,9 +862,16 @@ func planeOrg(attrs map[string]string) string {
 // arrive through spansink, which stamps the attribute (spansink.go), so the
 // views stay populated and are merely incomplete.
 //
-// Stamped unconditionally and last, for the reason spansink states in full: the
-// key is the tenant boundary of every llmobs read, so it is never taken from the
-// wire. A client-supplied value would let one org write rows another org reads.
+// Stamped unconditionally and last, so the two spellings can never disagree:
+// whatever gen_ai.hanzo.org_id held on arrival, the row's own org replaces it. A
+// span that named itself one tenant in the column and another in the attribute
+// would be scoped one way by the plane's queries and another by every llmobs
+// view, which is a row nobody can explain.
+//
+// THAT IS THE WHOLE OF WHAT THIS DECIDES. Where the tenant comes from is
+// planeOrg's, and it differs by caller — see it. spansink states the same stamp
+// over an org resolved by the SERVER and passed in as an argument; this function
+// takes no such argument, so that sentence describes spansink and not this.
 //
 // Safe for non-LLM telemetry: every llmobs view is gated on gen_ai.system, so an
 // infrastructure span carrying this attribute is still not an llmobs row.
