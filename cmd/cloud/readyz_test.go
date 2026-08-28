@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -45,7 +46,7 @@ func TestVitalAbsenceIsNotReadyButStaysAlive(t *testing.T) {
 	if err := mount(app, good(t, "flags", "/v1/flags", `{"flag":"on"}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
-	health(app, absent)
+	health(app, absent, nil)
 
 	// 1. LIVENESS STAYS 200. Restarting cannot help: the cause is in the image or
 	// the config, so the replacement fails identically — and the restart would
@@ -95,7 +96,7 @@ func TestNonVitalAbsenceStaysReady(t *testing.T) {
 	if err := mount(app, dead(t, "pubsub", "/v1/pubsub"), true, absent); err != nil {
 		t.Fatal(err)
 	}
-	health(app, absent)
+	health(app, absent, nil)
 
 	code, _, body := do(t, app, "/readyz")
 	if code != 200 {
@@ -117,7 +118,7 @@ func TestAHealthyHostIsReadyAndSaysNothingElse(t *testing.T) {
 	if err := mount(app, good(t, "flags", "/v1/flags", `{}`), false, absent); err != nil {
 		t.Fatal(err)
 	}
-	health(app, absent)
+	health(app, absent, nil)
 
 	code, _, body := do(t, app, "/readyz")
 	if code != 200 {
@@ -137,7 +138,7 @@ func TestAHealthyHostIsReadyAndSaysNothingElse(t *testing.T) {
 // a signal nobody read.
 func TestDrainingIsNotReady(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
-	health(app, map[string]string{})
+	health(app, map[string]string{}, nil)
 
 	draining.Store(true)
 	t.Cleanup(func() { draining.Store(false) })
@@ -247,7 +248,7 @@ func TestProbeAnswersAreByteStable(t *testing.T) {
 			if absent == nil {
 				absent = map[string]string{}
 			}
-			health(app, absent)
+			health(app, absent, nil)
 			if tc.drain {
 				draining.Store(true)
 				t.Cleanup(func() { draining.Store(false) })
@@ -272,7 +273,7 @@ func TestProbeAnswersAreByteStable(t *testing.T) {
 // subset and the MCP tool list are built from.
 func TestProbesAreTypedOps(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
-	health(app, map[string]string{})
+	health(app, map[string]string{}, nil)
 
 	got := map[string]bool{}
 	for _, c := range app.Commands() {
@@ -283,5 +284,60 @@ func TestProbesAreTypedOps(t *testing.T) {
 			t.Errorf("%s is not a registered op — it slipped back to a raw handler and is invisible "+
 				"to OpenAPI, MCP, the CLI and typed Call", want)
 		}
+	}
+}
+
+// TestAKeyTheChildrenInheritIsReportedBeforeTheyFail is the lazy half of
+// TestADeadSubsystemDoesNotTakeTheHostDown, and it is the half that was silent.
+//
+// An EAGER child that cannot boot is caught by the mount loop and named in
+// `absent`. A LAZY one is not: its mount succeeds with no process behind it,
+// which is the whole point of Lazy, so boot records nothing. The child boots on
+// its FIRST REQUEST, and a shared key it refuses to boot without is one it
+// inherited from this host — so by the time anything fails, the ten subsystems
+// apps/account csrf.go names are answering 503 and /healthz still says "ok".
+//
+// That is the exact shape of the outage this file already describes one layer
+// up: a total failure reading as healthy. The host holds the same environment
+// its children will, so it can answer before the first request instead of after
+// the tenth surface is down.
+func TestAKeyTheChildrenInheritIsReportedBeforeTheyFail(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	health(app, map[string]string{}, errors.New("CONSOLE_CSRF_KEY is unset"))
+
+	code, _, body := do(t, app, "/healthz")
+
+	// REPORTED. Without this the operator has a 503 per surface and no cause.
+	if !strings.Contains(body, "CONSOLE_CSRF_KEY is unset") {
+		t.Errorf("GET /healthz = %q, want the inherited key fault named — "+
+			"a config the children cannot boot on is invisible until they are asked", body)
+	}
+
+	// AND STILL ALIVE. Liveness must not flap: a restart replaces the pod with
+	// one holding the same environment, so it would fail identically forever.
+	if code != 200 {
+		t.Errorf("GET /healthz = %d, want 200 — reporting a config fault must not "+
+			"restart a host that is serving every other subsystem", code)
+	}
+
+	// AND STILL IN ROTATION. Every mount stands and 54 subsystems serve; taking
+	// the pod out would turn a partial failure into a total one.
+	code, _, body = do(t, app, "/readyz")
+	if code != 200 {
+		t.Errorf("GET /readyz = %d %q, want 200 — a reported fault is not an absence", code, body)
+	}
+}
+
+// TestAHealthyHostAnswersTheSameBytes pins the compatibility the Fault field was
+// added under: probe scripts parse this body, so a host with nothing wrong must
+// not grow a key.
+func TestAHealthyHostAnswersTheSameBytes(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+	health(app, map[string]string{}, nil)
+
+	_, _, body := do(t, app, "/healthz")
+	if strings.Contains(body, "fault") {
+		t.Errorf("GET /healthz = %q on a healthy host, want no fault key — "+
+			"omitempty is what keeps every existing probe parsing the same bytes", body)
 	}
 }

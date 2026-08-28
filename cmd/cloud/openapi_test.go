@@ -82,7 +82,7 @@ func host(t *testing.T) *zip.App {
 			t.Fatalf("mount %s: %v", a.Name, err)
 		}
 	}
-	health(app, absent)
+	health(app, absent, nil)
 	spec(app, manifest.Names()) // no --enable: the whole fleet, as production runs it
 	graphql(app, manifest.Names())
 	if err := webui.Mount(app, consoleBundle()); err != nil {
