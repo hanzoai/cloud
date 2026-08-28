@@ -46,13 +46,18 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/plane/entitlement"
-	"github.com/hanzoai/cloud/sqlpool"
 	engine "github.com/hanzoai/framework"
 	"github.com/zap-proto/zip"
 )
 
 // state is this subsystem's data: the engine it mounted.
-type state struct{ eng *engine.Engine }
+// engines is one DocType database per org, opened on first use and keyed by the
+// org's namespace — the same cloud.OrgStore every other per-tenant subsystem uses.
+// The engine holds one file; cloud decides there is one PER ORG, which is what
+// makes tenancy physical instead of an `org` column on every query.
+type state struct {
+	engines *cloud.OrgStore[*engine.Engine]
+}
 
 // mounted is the active service. It exists so Shutdown can close the engine and
 // so the in-process API below (which the app lanes call with no request in
@@ -70,28 +75,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	log := luxlog.Default().New("subsystem", "framework")
 
-	// Encryption at rest is CLOUD's storage policy, under a KMS-held master key. The
-	// engine takes an opener rather than importing it, so the same engine runs
-	// unencrypted in a test or a standalone app.
-	//
-	// The engine has ONE database and offers its path; cloud names it instead. These
-	// are the DEPLOYMENT's own DocType stores rather than a tenant's, so the system
-	// namespace owns them — and a name is what keys a file here, which a path handed
-	// down from a library cannot be. A per-org DocType store would come through
-	// OrgDB, which names its owner.
-	eng, err := engine.Open(engine.Config{
-		Dir: deps.DataDir,
-		// sqlpool.Open, not a bare cek.Open: this handle needs the single-connection
-		// cap like every other store in the binary, and opening it by hand is how it
-		// went without one. The opener applies it now, so there is nothing to forget.
-		OpenDB: func(string) (*sql.DB, error) { return sqlpool.Open("framework", deps.DataDir) },
-		Logger: log,
+	// One database PER ORG, at {DataDir}/orgs/{org}/framework.db. Encryption at
+	// rest, the single-connection cap and the durability discipline all come from
+	// cloud.OrgStore; the engine takes an opener rather than importing any of it,
+	// so the same engine runs unencrypted in a test or a standalone app.
+	base := cloud.NewBase(deps, "framework")
+	engines := cloud.NewOrgStore(base, "framework", func(db *sql.DB) (*engine.Engine, error) {
+		return engine.Open(engine.Config{
+			Dir:    deps.DataDir,
+			OpenDB: func(string) (*sql.DB, error) { return db, nil },
+			Logger: log,
+		})
 	})
-	if err != nil {
-		return fmt.Errorf("framework.Mount: %w", err)
-	}
 
-	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "framework"), State: state{eng: eng}}
+	s := &cloud.Service[state]{Base: base, State: state{engines: engines}}
 	mounted = s
 
 	g := app.Group(prefix)
@@ -234,7 +231,7 @@ func Shutdown() error {
 	if mounted == nil {
 		return nil
 	}
-	err := mounted.State.eng.Close()
+	err := mounted.State.engines.CloseAll()
 	mounted = nil
 	return err
 }
@@ -389,7 +386,11 @@ type docTypeList struct {
 //
 // Example: {"name": "Task", "autoname": "TASK-.#####", "fields": [{"fieldname": "subject", "fieldtype": "Data", "reqd": true}]}
 func (o ops) createDocType(ctx context.Context, in *DocType) (*DocType, error) {
-	saved, err := o.s.State.eng.DefineDocType(ctx, callerOf(ctx), *in)
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	saved, err := eng.DefineDocType(ctx, callerOf(ctx), *in)
 	if err != nil {
 		return nil, fail(err, "")
 	}
@@ -399,7 +400,11 @@ func (o ops) createDocType(ctx context.Context, in *DocType) (*DocType, error) {
 // listDocTypes returns every DocType defined in the caller's org. Another
 // tenant's definitions are never included: the org is part of the store key.
 func (o ops) listDocTypes(ctx context.Context, _ *noInput) (*docTypeList, error) {
-	rows, err := o.s.State.eng.ListDocTypes(ctx, callerOf(ctx))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	rows, err := eng.ListDocTypes(ctx, callerOf(ctx))
 	if err != nil {
 		return nil, fail(err, "")
 	}
@@ -412,7 +417,11 @@ func (o ops) listDocTypes(ctx context.Context, _ *noInput) (*docTypeList, error)
 //
 // Example: {"name": "Task"}
 func (o ops) getDocType(ctx context.Context, in *docTypeRef) (*DocType, error) {
-	dt, err := o.s.State.eng.DocTypeOf(ctx, callerOf(ctx), decodeSeg(in.Name))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	dt, err := eng.DocTypeOf(ctx, callerOf(ctx), decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -426,7 +435,11 @@ func (o ops) getDocType(ctx context.Context, in *docTypeRef) (*DocType, error) {
 //
 // Example: {"name": "Task", "fields": [{"fieldname": "subject", "fieldtype": "Data"}]}
 func (o ops) replaceDocType(ctx context.Context, in *DocType) (*DocType, error) {
-	saved, err := o.s.State.eng.ReplaceDocType(ctx, callerOf(ctx), decodeSeg(in.Name), *in)
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	saved, err := eng.ReplaceDocType(ctx, callerOf(ctx), decodeSeg(in.Name), *in)
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -439,7 +452,11 @@ func (o ops) replaceDocType(ctx context.Context, in *DocType) (*DocType, error) 
 //
 // Example: {"name": "Task"}
 func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, error) {
-	if err := o.s.State.eng.DeleteDocType(ctx, callerOf(ctx), decodeSeg(in.Name)); err != nil {
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	if err := eng.DeleteDocType(ctx, callerOf(ctx), decodeSeg(in.Name)); err != nil {
 		return nil, fail(err, "doctype not found")
 	}
 	return nil, nil
@@ -488,7 +505,11 @@ type roleList struct {
 // what DocType permissions are written against, so this is the grant table the
 // permission calculus resolves a member's rights from.
 func (o ops) listRoles(ctx context.Context, _ *noInput) (*roleList, error) {
-	rows, err := o.s.State.eng.ListRoles(ctx, callerOf(ctx))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	rows, err := eng.ListRoles(ctx, callerOf(ctx))
 	if err != nil {
 		return nil, fail(err, "")
 	}
@@ -505,7 +526,11 @@ func (o ops) listRoles(ctx context.Context, _ *noInput) (*roleList, error) {
 //
 // Example: {"user": "u_alice", "role": "System Manager"}
 func (o ops) assignRole(ctx context.Context, in *RoleAssignment) (*RoleAssignment, error) {
-	saved, err := o.s.State.eng.AssignRole(ctx, callerOf(ctx), in.User, in.Role)
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	saved, err := eng.AssignRole(ctx, callerOf(ctx), in.User, in.Role)
 	if err != nil {
 		return nil, fail(err, "")
 	}
@@ -517,7 +542,11 @@ func (o ops) assignRole(ctx context.Context, in *RoleAssignment) (*RoleAssignmen
 //
 // Example: {"user": "u_alice", "role": "System Manager"}
 func (o ops) revokeRole(ctx context.Context, in *roleRef) (*noContent, error) {
-	err := o.s.State.eng.RevokeRole(ctx, callerOf(ctx), decodeSeg(in.User), decodeSeg(in.Role))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	err = eng.RevokeRole(ctx, callerOf(ctx), decodeSeg(in.User), decodeSeg(in.Role))
 	if err != nil {
 		return nil, fail(err, "role assignment not found")
 	}
@@ -536,13 +565,13 @@ type moduleRef struct {
 type moduleList struct {
 	// Data is every module compiled into this binary, with the DocTypes it installs
 	// and whether the caller's org has turned it on.
-	Data []moduleRow `json:"data"`
+	Data []module `json:"data"`
 }
 
-// moduleRow is one lane with the customer's answer attached. Catalog and state
-// come back together: read from two endpoints they can be read at two instants,
-// and the console draws a switch for a module that is gone.
-type moduleRow struct {
+// module is one lane as this org sees it. Catalog and state come back together:
+// read from two endpoints they can be read at two instants, and the console draws
+// a switch for a module that is gone.
+type module struct {
 	engine.ModuleInfo
 	// Enabled is whether this org has turned the module on. A module that is off
 	// answers 404 on every DocType it owns (elective.go).
@@ -553,19 +582,23 @@ type moduleRow struct {
 // DocTypes each one installs. It describes the BINARY, not the org: what a given
 // org has actually installed is the per-module state below.
 func (o ops) listModules(ctx context.Context, _ *noInput) (*moduleList, error) {
-	mods, err := o.s.State.eng.Modules(ctx, callerOf(ctx))
+	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	rows := make([]moduleRow, 0, len(mods))
+	mods, err := eng.Modules(ctx, callerOf(ctx))
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	out := make([]module, 0, len(mods))
 	for _, m := range mods {
 		// One question per module, through the op the refusal asks — a batch read
 		// would be a second answer to disagree with. Unanswerable reports NOT
 		// enabled, matching what the refusal will do.
 		on, err := entitlement.EntitlementHolds(ctx, &plane.ProductIn{Product: m.Module})
-		rows = append(rows, moduleRow{ModuleInfo: m, Enabled: err == nil && on.On})
+		out = append(out, module{ModuleInfo: m, Enabled: err == nil && on.On})
 	}
-	return &moduleList{Data: rows}, nil
+	return &moduleList{Data: out}, nil
 }
 
 // getModule returns one app lane's install state for the caller's org: the
@@ -574,7 +607,11 @@ func (o ops) listModules(ctx context.Context, _ *noInput) (*moduleList, error) {
 //
 // Example: {"module": "cms"}
 func (o ops) getModule(ctx context.Context, in *moduleRef) (*engine.ModuleState, error) {
-	st, err := o.s.State.eng.ModuleOf(ctx, callerOf(ctx), in.Module)
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	st, err := eng.ModuleOf(ctx, callerOf(ctx), in.Module)
 	if err != nil {
 		return nil, fail(err, "unknown module: "+in.Module)
 	}
@@ -588,7 +625,11 @@ func (o ops) getModule(ctx context.Context, in *moduleRef) (*engine.ModuleState,
 //
 // Example: {"module": "cms"}
 func (o ops) installModule(ctx context.Context, in *moduleRef) (*engine.Install, error) {
-	res, err := o.s.State.eng.InstallModule(ctx, callerOf(ctx), in.Module)
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	res, err := eng.InstallModule(ctx, callerOf(ctx), in.Module)
 	if err != nil {
 		return nil, fail(err, "unknown module: "+in.Module)
 	}
@@ -649,7 +690,11 @@ type listDocumentsIn struct {
 func (o ops) listDocuments(ctx context.Context, in *listDocumentsIn) (*documentList, error) {
 	cl := callerOf(ctx)
 	dtName := decodeSeg(in.DocType)
-	dt, err := o.s.State.eng.DocTypeOf(ctx, cl, dtName)
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	dt, err := eng.DocTypeOf(ctx, cl, dtName)
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -662,7 +707,7 @@ func (o ops) listDocuments(ctx context.Context, in *listDocumentsIn) (*documentL
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	docs, err := o.s.State.eng.ListDocuments(ctx, cl, dtName, opts)
+	docs, err := eng.ListDocuments(ctx, cl, dtName, opts)
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -677,7 +722,11 @@ func (o ops) listDocuments(ctx context.Context, in *listDocumentsIn) (*documentL
 //
 // Example: {"doctype": "Task", "name": "TASK-00001"}
 func (o ops) getDocument(ctx context.Context, in *docRef) (*docView, error) {
-	doc, err := o.s.State.eng.GetDocument(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	doc, err := eng.GetDocument(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -690,7 +739,11 @@ func (o ops) getDocument(ctx context.Context, in *docRef) (*docView, error) {
 //
 // Example: {"doctype": "Task", "name": "TASK-00001"}
 func (o ops) deleteDocument(ctx context.Context, in *docRef) (*noContent, error) {
-	err := o.s.State.eng.DeleteDocument(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	err = eng.DeleteDocument(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -704,7 +757,11 @@ func (o ops) deleteDocument(ctx context.Context, in *docRef) (*noContent, error)
 //
 // Example: {"doctype": "Task", "name": "TASK-00001"}
 func (o ops) submitDocument(ctx context.Context, in *docRef) (*docView, error) {
-	doc, err := o.s.State.eng.Submit(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	doc, err := eng.Submit(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -718,7 +775,11 @@ func (o ops) submitDocument(ctx context.Context, in *docRef) (*docView, error) {
 //
 // Example: {"doctype": "Task", "name": "TASK-00001"}
 func (o ops) cancelDocument(ctx context.Context, in *docRef) (*docView, error) {
-	doc, err := o.s.State.eng.Cancel(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	doc, err := eng.Cancel(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -740,7 +801,11 @@ type summaryView struct {
 // summary reports how much of the DocType surface the caller's org uses: how
 // many DocTypes it has defined, and how many documents exist across them.
 func (o ops) summary(ctx context.Context, _ *noInput) (*summaryView, error) {
-	sum, err := o.s.State.eng.Summary(ctx, callerOf(ctx))
+	eng, err := engineFor(o.s, ctx)
+	if err != nil {
+		return nil, fail(err, "")
+	}
+	sum, err := eng.Summary(ctx, callerOf(ctx))
 	if err != nil {
 		return nil, fail(err, "")
 	}
@@ -757,7 +822,11 @@ func createDocument(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	doc, err := s.State.eng.CreateDocument(c.Context(), caller(c), pathParam(c, "doctype"), in)
+	eng, err := engineOfService(s, caller(c).Org)
+	if err != nil {
+		return fail(err, "")
+	}
+	doc, err := eng.CreateDocument(c.Context(), caller(c), pathParam(c, "doctype"), in)
 	if err != nil {
 		return fail(err, "doctype not found")
 	}
@@ -769,7 +838,11 @@ func updateDocument(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	doc, err := s.State.eng.UpdateDocument(c.Context(), caller(c), pathParam(c, "doctype"), pathParam(c, "name"), in)
+	eng, err := engineOfService(s, caller(c).Org)
+	if err != nil {
+		return fail(err, "")
+	}
+	doc, err := eng.UpdateDocument(c.Context(), caller(c), pathParam(c, "doctype"), pathParam(c, "name"), in)
 	if err != nil {
 		return fail(err, "document not found")
 	}
@@ -788,17 +861,39 @@ func updateDocument(s *cloud.Service[state], c *zip.Ctx) error {
 // and no second import. The pipeline is the engine's, so an off-request create
 // runs the SAME validation and lifecycle hooks an HTTP create does.
 
-func engineOf() (*engine.Engine, error) {
-	if mounted == nil || mounted.State.eng == nil {
+func engineOf(org string) (*engine.Engine, error) {
+	if mounted == nil || mounted.State.engines == nil {
 		return nil, fmt.Errorf("framework: not mounted")
 	}
-	return mounted.State.eng, nil
+	return engineOfService(mounted, org)
+}
+
+// engineFor is the ONE way an op reaches a database: it names it through the
+// caller's validated org, so "which file does this request touch" has one answer
+// from one input.
+func engineFor(s *cloud.Service[state], ctx context.Context) (*engine.Engine, error) {
+	return engineOfService(s, callerOf(ctx).Org)
+}
+
+func engineOfService(s *cloud.Service[state], org string) (*engine.Engine, error) {
+	// The caller check comes FIRST, because naming a database is now the first
+	// thing an op does and an unvalidated caller has no database to name. The
+	// engine asks this same question with this same sentence; asking it here keeps
+	// the answer a 403 rather than the namespace package's 500.
+	if org == "" {
+		return nil, fmt.Errorf("%w: valid principal required", engine.ErrForbidden)
+	}
+	ns, err := cloud.OrgNamespace(org, "")
+	if err != nil {
+		return nil, err
+	}
+	return s.State.engines.For(ns)
 }
 
 // Ingest creates a document from already-trusted field data, running the full
 // validate + lifecycle-hook pipeline.
 func Ingest(ctx context.Context, org, doctype string, data map[string]any, requestedName string) (Ingested, error) {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return Ingested{}, err
 	}
@@ -808,7 +903,7 @@ func Ingest(ctx context.Context, org, doctype string, data map[string]any, reque
 // UpdateData replaces an existing draft document's data, running before_save +
 // after_save — the in-process twin of the HTTP PUT.
 func UpdateData(ctx context.Context, org, doctype, name string, data map[string]any) error {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return err
 	}
@@ -817,7 +912,7 @@ func UpdateData(ctx context.Context, org, doctype, name string, data map[string]
 
 // Delete removes a document after running the on_trash gate hooks.
 func Delete(ctx context.Context, org, doctype, name string) error {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return err
 	}
@@ -826,7 +921,7 @@ func Delete(ctx context.Context, org, doctype, name string) error {
 
 // Get returns one document by name in (org, doctype).
 func Get(ctx context.Context, org, doctype, name string) (Document, error) {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return Document{}, err
 	}
@@ -835,7 +930,7 @@ func Get(ctx context.Context, org, doctype, name string) (Document, error) {
 
 // Search is the in-process, org-scoped document list.
 func Search(ctx context.Context, org, doctype string, filters map[string]string, limit int) ([]Document, error) {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return nil, err
 	}
@@ -845,7 +940,7 @@ func Search(ctx context.Context, org, doctype string, filters map[string]string,
 // FindByField returns the name of the first document whose `field` equals
 // `value`, or "" if none.
 func FindByField(ctx context.Context, org, doctype, field, value string) (string, error) {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return "", err
 	}
@@ -854,7 +949,7 @@ func FindByField(ctx context.Context, org, doctype, field, value string) (string
 
 // Installed reports whether `doctype` exists in `org`.
 func Installed(ctx context.Context, org, doctype string) bool {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return false
 	}
@@ -863,7 +958,7 @@ func Installed(ctx context.Context, org, doctype string) bool {
 
 // ModuleInstalled reports whether a module's content model resolves for `org`.
 func ModuleInstalled(ctx context.Context, org, module string) bool {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return false
 	}
@@ -874,7 +969,7 @@ func ModuleInstalled(ctx context.Context, org, module string) bool {
 // cross-process interlock a non-idempotent side effect (the content lane's
 // channel fan-out) serializes on.
 func AcquireLease(ctx context.Context, org, key string, ttl, wait time.Duration) (*Lease, bool, error) {
-	e, err := engineOf()
+	e, err := engineOf(org)
 	if err != nil {
 		return nil, false, err
 	}

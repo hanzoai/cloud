@@ -29,7 +29,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 - `/v1/ai/nodes` → JSON object.
 - `/v1/ai/nodes/{owner}/{name}` → JSON object.
-- `/v1/ai/nodes/{owner}/{name}/tunnel` → JSON object.
+- `/v1/ai/nodes/{owner}/{name}/tunnel` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
 
 ## Example
 

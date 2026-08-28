@@ -18,7 +18,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/ai/rag/context` → JSON object.
+- `/v1/ai/rag/context` → JSON array of `DocSearchResult`.
 
 ## Example
 

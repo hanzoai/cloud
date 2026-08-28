@@ -18,7 +18,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Response
 
-- `/v1/ai/rag/context` → JSON object.
+- `/v1/ai/rag/context` → JSON array of `DocSearchResult`.
 
 ## Example
 

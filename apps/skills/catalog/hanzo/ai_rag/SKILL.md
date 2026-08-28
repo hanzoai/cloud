@@ -18,7 +18,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Response
 
-- `/v1/ai/rag/context` → JSON object.
+- `/v1/ai/rag/context` → JSON array of `DocSearchResult`.
 
 ## Example
 

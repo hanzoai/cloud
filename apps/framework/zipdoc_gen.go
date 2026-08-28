@@ -68,8 +68,8 @@ func init() {
 	zip.Describe("GET /v1/framework/modules", zip.Doc{
 		Description: "Returns every app lane compiled into this deployment and the\nDocTypes each one installs. It describes the BINARY, not the org: what a given\norg has actually installed is the per-module state below.",
 		Fields: map[string]string{
-			"moduleList.data":   "Data is every module compiled into this binary, with the DocTypes it installs\nand whether the caller's org has turned it on.",
-			"moduleRow.enabled": "Enabled is whether this org has turned the module on. A module that is off\nanswers 404 on every DocType it owns (elective.go).",
+			"module.enabled":  "Enabled is whether this org has turned the module on. A module that is off\nanswers 404 on every DocType it owns (elective.go).",
+			"moduleList.data": "Data is every module compiled into this binary, with the DocTypes it installs\nand whether the caller's org has turned it on.",
 		},
 	})
 	zip.Describe("GET /v1/framework/modules/:module", zip.Doc{

@@ -29,8 +29,8 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/ai/records` → JSON object.
-- `/v1/ai/records/query` → JSON object.
-- `/v1/ai/records/query-second` → JSON object.
+- `/v1/ai/records/query` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
+- `/v1/ai/records/query-second` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
 - `/v1/ai/records/{owner}/{name}` → JSON object.
 
 ## Example
