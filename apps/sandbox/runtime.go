@@ -999,6 +999,42 @@ func (r *runtime) podSpec(m Sandbox, cr cred) *unstructured.Unstructured {
 		// caller a fresh empty sandbox wearing the same id.
 		"restartPolicy": "Never",
 		"containers":    []any{c},
+		// SPREAD, so sandboxes do not pile onto one machine. A fleet's sandbox
+		// nodes are a handful of big boxes, and the scheduler's own bias is toward
+		// whichever is emptiest at admission — which on a burst is ONE of them,
+		// because every pod in the burst is admitted against the same snapshot.
+		// The result is a node carrying the whole burst while its neighbour is
+		// idle, and a sandbox is a real 250m/512Mi reservation.
+		//
+		// ScheduleAnyway, NEVER DoNotSchedule. This is a preference and has to stay
+		// one: DoNotSchedule turns an uneven cluster into a sandbox that cannot
+		// start, which trades a working lease for a tidy distribution. A caller
+		// waiting on an answer would get Pending and no reason.
+		//
+		// IT SAYS NOTHING ABOUT ARCH OR GPU, and that is a gap rather than a
+		// decision. A fleet is not uniform — one node is arm64 with an nvidia
+		// card, another amd64 with an amd one, a third small and archival — so a
+		// sandbox that needs a particular machine has to ASK for one, and nothing
+		// in the lease can ask: Sandbox carries no arch and no accelerator, and a
+		// selector this file invented would be a policy nobody stated. Closing it
+		// means a field on the lease, carried through the typed op and the store,
+		// and THEN a nodeSelector here — not a guess at this line.
+		"topologySpreadConstraints": []any{map[string]any{
+			"maxSkew":           int64(1),
+			"topologyKey":       "kubernetes.io/hostname",
+			"whenUnsatisfiable": "ScheduleAnyway",
+			// EXISTS, not the id. `labSandbox` carries this sandbox's OWN id, so
+			// matching it would select exactly one pod — itself — and a constraint
+			// that spreads a pod against nothing is a silent no-op that reads as
+			// configured. The set to balance is every sandbox, which is what
+			// carrying the label at all means.
+			"labelSelector": map[string]any{
+				"matchExpressions": []any{map[string]any{
+					"key":      labSandbox,
+					"operator": "Exists",
+				}},
+			},
+		}},
 	}
 	// THE ISOLATION BOUNDARY, and the one field that picks it. OMITTED when empty
 	// rather than sent as "", because those are different requests: an absent

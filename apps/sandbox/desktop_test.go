@@ -145,3 +145,46 @@ func TestEveryClassStillDropsEverythingAndRunsAsNobody(t *testing.T) {
 		}
 	}
 }
+
+// A sandbox is spread across the fleet's machines, and the constraint has to
+// select EVERY sandbox to do it.
+//
+// The selector is the half worth a test. `labSandbox` carries each sandbox's own
+// id, so a constraint matching it selects exactly one pod — itself — and spreads
+// that pod against nothing. That is a silent no-op: the field is present, the
+// pod is valid, the spec reads as configured, and the burst still lands on one
+// machine. Matching on the label's EXISTENCE is what makes the set the whole
+// population.
+//
+// It stays a PREFERENCE. `DoNotSchedule` on an uneven cluster is a lease that
+// cannot start, which trades a caller's answer for a tidy distribution.
+func TestSandboxesSpreadAcrossMachines(t *testing.T) {
+	spec, _ := podWith(t, "exec", cred{})
+
+	cs, ok := spec["topologySpreadConstraints"].([]any)
+	if !ok || len(cs) != 1 {
+		t.Fatalf("want one spread constraint, got %v", spec["topologySpreadConstraints"])
+	}
+	c, _ := cs[0].(map[string]any)
+
+	if got := c["topologyKey"]; got != "kubernetes.io/hostname" {
+		t.Fatalf("topologyKey = %v, want the node", got)
+	}
+	if got := c["whenUnsatisfiable"]; got != "ScheduleAnyway" {
+		t.Fatalf("whenUnsatisfiable = %v — a sandbox must never go Pending to balance a cluster", got)
+	}
+
+	// The selector must reach every sandbox, not this one.
+	sel, _ := c["labelSelector"].(map[string]any)
+	if _, byValue := sel["matchLabels"]; byValue {
+		t.Fatal("matchLabels selects this sandbox's own id — the constraint would spread it against nothing")
+	}
+	exprs, ok := sel["matchExpressions"].([]any)
+	if !ok || len(exprs) != 1 {
+		t.Fatalf("want one match expression, got %v", sel["matchExpressions"])
+	}
+	e, _ := exprs[0].(map[string]any)
+	if e["key"] != labSandbox || e["operator"] != "Exists" {
+		t.Fatalf("selector = %v, want %s Exists", e, labSandbox)
+	}
+}
