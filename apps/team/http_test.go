@@ -587,7 +587,7 @@ func TestTransactorStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	code, body := call(t, app, http.MethodGet, "/v1/team/transactor/api/v1/statistics?token="+wsTok, nil, nil)
+	code, body := call(t, app, http.MethodGet, "/v1/team/transactor/statistics?token="+wsTok, nil, nil)
 	if code != http.StatusOK {
 		t.Fatalf("statistics = %d, want 200 (%s)", code, body)
 	}
@@ -607,7 +607,7 @@ func TestTransactorStatistics(t *testing.T) {
 	if _, ok := out.Statistics.ActiveSessions[wsUUID]; !ok {
 		t.Fatalf("activeSessions missing the token's workspace: %s", body)
 	}
-	if code, _ := call(t, app, http.MethodGet, "/v1/team/transactor/api/v1/statistics?token=not.a.token", nil, nil); code != http.StatusUnauthorized {
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/transactor/statistics?token=not.a.token", nil, nil); code != http.StatusUnauthorized {
 		t.Fatalf("bad token statistics = %d, want 401", code)
 	}
 }

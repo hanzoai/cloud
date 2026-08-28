@@ -562,42 +562,6 @@
         "x-tool": true
       }
     },
-    "/v1/team/transactor/api/v1/statistics": {
-      "get": {
-        "operationId": "get_team_transactor_api_v1_statistics",
-        "summary": "Statistics returns the transactor's live sessions for the workspace the caller's credential names — the endpoint the front's workspace switcher and server panel poll on the transactor base.",
-        "description": "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
-        "tags": [
-          "team"
-        ],
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "description": "Token is the workspace token minted by selectWorkspace.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "eyJhbGciOiJIUzI1NiJ9…"
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/statsOut"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/team/transactor/statistics": {
       "get": {
         "operationId": "get_team_transactor_statistics",

@@ -167,17 +167,25 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	tg := app.Group(teamPrefix)
 	acct.register(app, guard)
 
-	// The front's workspace switcher polls this statistics endpoint on the
-	// transactor base (LoginEndpoint ws→http + /api/v1/statistics). Static route —
-	// never captured by the :token segment below.
+	// The front's workspace switcher polls this on the transactor base
+	// (LoginEndpoint, ws→http). Static route — never captured by the :token
+	// segment below.
 	//
-	// Canon is the api.* host + /v1/ with no nested /api/vN. The clean path is the
-	// canonical one new callers use; the /api/v1/ path stays as a forward-compatible
-	// alias for the current transactor front until it repoints (no outage, no rename
-	// in place). Both resolve to the SAME handler — and both are TYPED ops, so each
-	// is its own registry entry and its own operation in the document.
+	// ONE ADDRESS. It carried a second registration at `/transactor/api/v1/
+	// statistics` for the same handler, waiting on the front to repoint. The front
+	// repointed (SelectWorkspaceMenu.svelte), so the alias is gone with it.
+	//
+	// It was never merely untidy: both were TYPED, so each was its own registry
+	// entry and its own operation in the published document — two operations, two
+	// generated SDK methods, two MCP tools and two CLI commands for one endpoint.
+	// A duplicate that costs nothing in the router still doubles the surface every
+	// projection is cut from.
+	//
+	// The `/api/v1/` spelling is the stats POD's own protocol (Huly's internal
+	// service wire, still served on its own hosts and correctly untouched); asking
+	// the TRANSACTOR for it was the confusion. Canon here is the api.* host and
+	// /v1/, with no nested /api/vN.
 	zip.Get(tg, "/transactor/statistics", trans.statistics)
-	zip.Get(tg, "/transactor/api/v1/statistics", trans.statistics)
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
 	// path segment — no slashes), decoded + VERIFIED before the upgrade. UNTYPED,

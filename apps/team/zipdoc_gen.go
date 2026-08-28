@@ -90,18 +90,6 @@ func init() {
 	zip.Describe("GET /v1/team/transactor/:token", zip.Doc{
 		Description: "AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a\nrefusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs\nthe frame loop. The org is the VERIFIED tenant — the key for every store path —\nnever a client header.\n\nThe path segment carries whichever lane the caller is on, and a UUID is not a\nJWT so the two can never be read as each other:\n\nTHE PATH SEGMENT IS THE CREDENTIAL — the workspace token selectWorkspace minted,\nwhose signed claims name both the account and the workspace. Nothing ambient\nauthorizes this socket; see admitWS for why it must stay that way and what the\nIAM lane here will look like.",
 	})
-	zip.Describe("GET /v1/team/transactor/api/v1/statistics", zip.Doc{
-		Description: "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
-		Fields: map[string]string{
-			"statsIn.token":                "Token is the workspace token minted by selectWorkspace.",
-			"statsOut.admin":               "Admin is the upstream service's server-panel flag, always false here.",
-			"statsOut.metrics":             "Metrics is the upstream transactor's metrics block. This server does not\npopulate it, so it is always the empty object — the front reads the key,\nnot its contents.",
-			"statsOut.statistics":          "Statistics carries the live sessions.",
-			"statsSessions.activeSessions": "ActiveSessions maps a workspace uuid to its connected sessions. It carries\nonly the token's OWN workspace, and is empty for a token that names none.",
-			"statsUser.userId":             "UserID is the account the session is authenticated as.",
-		},
-		Example: json.RawMessage(`{"token":"eyJhbGciOiJIUzI1NiJ9…"}`),
-	})
 	zip.Describe("GET /v1/team/transactor/statistics", zip.Doc{
 		Description: "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
 		Fields: map[string]string{
