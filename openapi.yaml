@@ -83580,13 +83580,8 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-              - items:
-                  type: string
-                type: array
-              - items:
-                  type: number
-                type: array
+              items: {}
+              type: array
       responses:
         2XX:
           content:
