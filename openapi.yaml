@@ -85713,6 +85713,32 @@ paths:
       - integrations
       x-app: integrations
       x-public: true
+  /v1/integrations/whatsapp/webhook:
+    get:
+      description: Meta calls this once when the webhook is subscribed, carrying the
+        verify token this deployment was configured with and a challenge to echo.
+        The token is compared in constant time before the echo — answering the challenge
+        without checking it would let anyone point their own app at this address and
+        have it confirm the subscription.
+      operationId: get_integrations_whatsapp_webhook
+      summary: WhatsApp Cloud API subscription challenge
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
+    post:
+      description: |-
+        One delivery from Meta. Authenticity is the X-Hub-Signature-256 HMAC over the raw body, and it is the whole of it: a message accepted here creates the reply route that authorises this org to answer, so an unsigned delivery would let anyone hand an org a conversation to answer under its own number.
+
+        Meta batches (entry × changes × messages) and sends status callbacks — sent/delivered/read — through this same address with no message at all. Those are acknowledged and dropped rather than refused, because a non-2xx is retried with backoff and eventually disables the subscription: the only refusals here are an unconfigured endpoint and a bad signature, which are ours to fix and not Meta's to retry.
+
+        The answer is acknowledged immediately and the work happens afterwards, because every one of these platforms times out a slow webhook. Duplicate deliveries are absorbed durably, so a platform retry of an event that already ran never runs it a second time or bills for it twice. When the agent pool is full nothing at all is recorded and the delivery is refused as retriable, so the message is re-delivered later rather than being lost or half-processed.
+      operationId: post_integrations_whatsapp_webhook
+      summary: WhatsApp Cloud API webhook
+      tags:
+      - integrations
+      x-app: integrations
+      x-public: true
   /v1/kms/auth/login:
     post:
       description: |-

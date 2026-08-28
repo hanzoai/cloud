@@ -283,7 +283,7 @@
     {
       "name": "integrations",
       "path": "_integrations/index.json",
-      "skill_count": 9
+      "skill_count": 10
     },
     {
       "name": "kms",
@@ -586,7 +586,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 674,
+  "skill_count": 675,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -3212,6 +3212,13 @@
       "path": "integrations_telegram/SKILL.md",
       "service": "integrations",
       "sha256": "6943a4705dd9fa8a4adf9b3f1612ac84e92941016a399e8d24424d2c4cc66016"
+    },
+    {
+      "description": "Read integrations whatsapp: WhatsApp Cloud API subscription challenge.",
+      "name": "integrations_whatsapp",
+      "path": "integrations_whatsapp/SKILL.md",
+      "service": "integrations",
+      "sha256": "82963e9d4e655f2acf723c43d1293b4fb669f9495308ff4583e656a42fd90467"
     },
     {
       "description": "Read kms config: Returns the runtime configuration for the KMS console..",
