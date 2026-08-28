@@ -20,7 +20,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `id` | path | yes | string | ID is the plan's catalog id or slug — "pro", "team", "world-enterprise", "rpc-growth". Both are matched, so a slug resolves the plan it names. |
+| `id` | path | yes | string | ID is the plan's catalog id or slug — "dev", "max", "team", "rpc-growth". Both are matched, so a slug resolves the plan it names. A withdrawn id still resolves for a renewal, which is why this takes an id rather than a ladder position. |
 
 ## Response
 

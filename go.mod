@@ -27,7 +27,7 @@ require (
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
 	github.com/hanzoai/notify v1.7.2
-	github.com/hanzoai/plans v1.6.0
+	github.com/hanzoai/plans v1.8.0
 	github.com/hanzoai/pricing v1.4.10
 	github.com/hanzoai/pubsub v1.4.6
 	github.com/hanzoai/sign v1.0.0
