@@ -1,7 +1,7 @@
 package integrations
 
 // new_connectors_test.go proves the connectors this change adds — the CRM/support,
-// analytics, commerce, and content key-connectors, and the salesforce/adroll/twitter/
+// analytics, commerce, and content key-connectors, and the salesforce/adroll/x/
 // google-data OAuth connectors — are registered coherently for Mount and wired to the
 // right verify transport with the right placement, path, and seal. Per-provider OAuth
 // exchange + custom-verify behavior lives in the sibling *_test.go files; this file is
@@ -30,7 +30,7 @@ var newOAuthConnectors = []struct {
 }{
 	{"salesforce", "CRM", true, []string{accessSecret, refreshSecret, salesforceInstanceURL}},
 	{"adroll", "Advertising", true, []string{accessSecret, refreshSecret}},
-	{"twitter", "Social", true, []string{accessSecret, refreshSecret}},
+	{"x", "Social", true, []string{accessSecret, refreshSecret}},
 	{"google_bigquery", "Data", true, []string{accessSecret, refreshSecret}},
 	{"google_cloud", "Data", true, []string{accessSecret, refreshSecret}},
 }

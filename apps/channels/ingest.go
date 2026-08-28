@@ -61,11 +61,16 @@ func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 	}
 	if v.Allow || v.Pair {
 		// Route capture on allow AND pair — the pairing reply below must be able
-		// to ride the teams transport. Upserted for all four transports; only discord
-		// (row presence = egress capability, ReplyRoot "") and teams (the
-		// JWT-verified serviceURL) read it — slack/telegram bind egress via
-		// per-org token / OrgForExternalID instead.
-		if rerr := st.upsertRoute(ctx, ev.Org, m.Channel, m.Room.ID, ev.ReplyRoot, now); rerr != nil {
+		// to ride the teams transport — but the two grants are not the same grant,
+		// so they do not last the same time. An ALLOWED sender's route lasts; a
+		// PAIRING sender is one the org has explicitly not approved yet, so their
+		// route lapses exactly when their pairing request does. Approve them and
+		// their next message arrives on the allow branch, which makes it lasting.
+		expires := int64(0)
+		if !v.Allow {
+			expires = now + int64(pairTTL/time.Second)
+		}
+		if rerr := st.upsertRoute(ctx, ev.Org, m.Channel, m.Room.ID, ev.ReplyRoot, now, expires); rerr != nil {
 			s.Log.Warn("channels: route upsert", "channel", m.Channel, "err", rerr)
 		}
 	}

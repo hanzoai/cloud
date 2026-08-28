@@ -2270,6 +2270,10 @@ type Ownership struct {
 // ANSWERING side, where the org's token for it lives; nothing here names a
 // credential.
 type ChatSendIn struct {
+	// Org is the tenant this message is sent AS, and it is REQUIRED: it resolves
+	// the credential the send spends, so a send that omits it names no custody to
+	// check. The answering side refuses an empty one rather than letting each
+	// transport discover it separately.
 	Org      string `json:"org"`
 	Provider string `json:"provider"`
 	Room     string `json:"room"`     // channel / conversation / chat id
