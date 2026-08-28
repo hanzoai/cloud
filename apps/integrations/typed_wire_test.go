@@ -59,6 +59,11 @@ var untypedByDesign = map[string]string{
 	"POST /v1/integrations/teams/events": "header-authed, and answers an EMPTY 200 to a body it cannot parse; zip " +
 		"unmarshals before the handler, so a typed In turns that 200 into a 400 and retry-storms the platform.",
 	"POST /v1/integrations/telegram/webhook": "header-authed, same empty-200-on-unparseable contract as Teams.",
+	"GET /v1/integrations/whatsapp/webhook": "Meta's subscription challenge: the token is compared, then its " +
+		"`hub.challenge` is echoed as bare text — a typed Out would wrap it in JSON and the subscription would never verify.",
+	"POST /v1/integrations/whatsapp/webhook": "Meta's HMAC covers the RAW received bytes, and it answers 200 to " +
+		"anything it cannot act on — a status callback carries no message, and a non-2xx is retried with backoff " +
+		"until the subscription is disabled.",
 	"POST /v1/integrations/openrouter/webhook": "the credential is read from the destination's own Headers map BEFORE the " +
 		"body is touched, so a caller with no key never buys a decode — an order zip's pre-handler unmarshal inverts.",
 

@@ -89,6 +89,8 @@ var rawRoutes = map[string]string{
 	"POST /v1/integrations/slack/events":          "HMAC over the raw body",
 	"POST /v1/integrations/teams/events":          "Bot Framework JWT",
 	"POST /v1/integrations/telegram/webhook":      "secret token header",
+	"GET /v1/integrations/whatsapp/webhook":       "verify token, echoed challenge",
+	"POST /v1/integrations/whatsapp/webhook":      "X-Hub-Signature-256 over the raw body",
 }
 
 // TestSurfaceIsRegistered checks that every op above is a route on the live router

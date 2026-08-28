@@ -704,6 +704,25 @@ func init() {
 			"service URL. The service-URL binding is the part that matters: without it a "+
 			"token valid for one activity could point the outbound reply somewhere else."+
 			vendorCall+asyncTurn)
+	openapi.Describe("/v1/integrations/whatsapp/webhook", http.MethodGet,
+		"WhatsApp Cloud API subscription challenge",
+		"Meta calls this once when the webhook is subscribed, carrying the verify token "+
+			"this deployment was configured with and a challenge to echo. The token is "+
+			"compared in constant time before the echo — answering the challenge without "+
+			"checking it would let anyone point their own app at this address and have it "+
+			"confirm the subscription.")
+	openapi.Describe("/v1/integrations/whatsapp/webhook", http.MethodPost,
+		"WhatsApp Cloud API webhook",
+		"One delivery from Meta. Authenticity is the X-Hub-Signature-256 HMAC over the "+
+			"raw body, and it is the whole of it: a message accepted here creates the reply "+
+			"route that authorises this org to answer, so an unsigned delivery would let "+
+			"anyone hand an org a conversation to answer under its own number.\n\n"+
+			"Meta batches (entry × changes × messages) and sends status callbacks — "+
+			"sent/delivered/read — through this same address with no message at all. Those "+
+			"are acknowledged and dropped rather than refused, because a non-2xx is retried "+
+			"with backoff and eventually disables the subscription: the only refusals here "+
+			"are an unconfigured endpoint and a bad signature, which are ours to fix and not "+
+			"Meta's to retry."+asyncTurn)
 	openapi.Describe("/v1/integrations/telegram/webhook", http.MethodPost,
 		"Telegram Bot API webhook",
 		"The update webhook for the Telegram bot. It does two jobs: `/start <code>` or "+
@@ -974,6 +993,10 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/teams/link/callback", cloud.Handle(s, teamsLinkCallback))
 	zip.Post(zapp, "/v1/integrations/telegram/connect", o.telegramConnect)
 	app.Post("/v1/integrations/telegram/webhook", cloud.Terminal(cloud.Handle(s, telegramWebhook)))
+	// GET answers Meta's subscription challenge; POST takes the deliveries. Both
+	// live at one address because that is the address Meta is configured with.
+	app.Get("/v1/integrations/whatsapp/webhook", cloud.Handle(s, whatsappVerify))
+	app.Post("/v1/integrations/whatsapp/webhook", cloud.Terminal(cloud.Handle(s, whatsappWebhook)))
 	app.Get("/v1/integrations/telegram/link", cloud.Handle(s, telegramLink))
 	app.Get("/v1/integrations/telegram/link/auth", cloud.Handle(s, telegramLinkAuth))
 	app.Get("/v1/integrations/telegram/link/callback", cloud.Handle(s, telegramLinkCallback))
