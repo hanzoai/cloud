@@ -191,6 +191,12 @@ type runtime struct {
 	// cluster's fact and a setting that claimed it would be the one thing here
 	// worth lying about. See confine.
 	bare         string
+	// fast is the boundary a sandbox takes when nobody chose one and it CAN take
+	// it — a microVM, which is the strongest isolation we run. It is empty until
+	// the cluster is seen to install it, for the same reason `bare` is: a class
+	// the apiserver has never heard of is a pod that waits Pending with no
+	// explanation, and the floor below is always installed.
+	fast         string
 	startTimeout time.Duration
 	execTimeout  time.Duration
 	dyn          dynamic.Interface
@@ -246,6 +252,13 @@ func newRuntime() *runtime {
 	// speed and never an outage.
 	if n := bare(); r.confine(context.Background(), n) {
 		r.bare = n
+	}
+	// Same shape, weaker question. `bare` needs a pool of its own because it
+	// SHARES the node's kernel; this one has a kernel of its own, so all it needs
+	// is to exist — and asking is what keeps a deployment that does not install
+	// it on the floor instead of on Pending.
+	if r.installed(context.Background(), preferred) {
+		r.fast = preferred
 	}
 	return r
 }
@@ -390,6 +403,18 @@ var runtimes = map[string]struct{ kernel, shares bool }{
 // behaviour rather than adding one.
 const shared = "gvisor"
 
+// preferred is the boundary to reach for when nothing else decided — a microVM,
+// which is the strongest isolation this cloud runs and the one a sandbox should
+// get by default.
+//
+// IT CANNOT BE THE FLOOR, and that is a property of the boundary rather than a
+// preference: Firecracker has no virtio-fs, so `runtimes` records shares:false
+// and a sandbox carrying a project volume does not fit on it. Writes would land
+// in a tmpfs and be lost when the sandbox ends. So this is the default for a
+// sandbox that KEEPS NOTHING, and anything with a disk falls to `shared` — which
+// is the existing behaviour, unchanged, reached by the same `fits`.
+const preferred = "kata-fc"
+
 // fits reports whether this deployment may put a sandbox on a boundary — the
 // ONE predicate, asked by all three paths into runtimeFor.
 //
@@ -522,6 +547,13 @@ func (r *runtime) runtimeFor(m Sandbox, want, fleet string) (string, error) {
 	if fleet = strings.TrimSpace(fleet); fleet != "" && r.fits(fleet, kernel, shares) {
 		return fleet, nil
 	}
+	// Nobody chose, so take the strongest boundary this sandbox can hold. `fast`
+	// is empty unless the cluster installs it, and `fits` refuses it for anything
+	// carrying a volume, so the two facts that would make this wrong both answer
+	// before it is reached.
+	if r.fits(r.fast, kernel, shares) {
+		return r.fast, nil
+	}
 	return shared, nil
 }
 
@@ -565,6 +597,37 @@ func Boundaries() []string { return sorted() }
 // Every no-answer is a NO — no such class, no client, no permission — so the
 // boundary is simply not offered and our code takes the same one as everybody
 // else's. That is the failure this can afford to have.
+// installed reports whether the cluster serves this RuntimeClass at all.
+//
+// A WEAKER QUESTION THAN confine, deliberately. confine asks whether a boundary
+// is kept to nodes of its own, which is what a kernel-SHARING boundary needs
+// before our code may take it. A boundary with a kernel of its own needs no pool
+// — it is a boundary wherever it runs — so all that is left to ask is whether
+// the class exists.
+//
+// Asked once, at startup, and only ever able to REMOVE a boundary from what this
+// deployment offers: every no-answer — no class, no client, no permission —
+// leaves the name unset, and an unset name fits nothing, so the answer falls to
+// the floor. A cluster that cannot answer costs a little isolation and never an
+// outage, which is the same trade confine takes.
+func (r *runtime) installed(ctx context.Context, name string) bool {
+	if r.dyn == nil || name == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	all, err := r.dyn.Resource(k8s.RuntimeClasses).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false
+	}
+	for _, rc := range all.Items {
+		if rc.GetName() == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *runtime) confine(ctx context.Context, name string) bool {
 	if r.dyn == nil || name == "" {
 		return false

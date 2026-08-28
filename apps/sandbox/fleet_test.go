@@ -151,3 +151,59 @@ func TestNoFleetValuePutsATenantOnTheNodesKernel(t *testing.T) {
 		}
 	}
 }
+
+// The DEFAULT is the strongest boundary the sandbox can hold, and the two facts
+// that would make that wrong are both asked before it is reached.
+//
+// `fast` is empty until the cluster is seen to install the class, so a
+// deployment without it keeps the floor rather than getting a pod that waits
+// Pending; and a sandbox carrying a volume does not fit on a boundary with no
+// shared filesystem, so it keeps the floor too — its writes would land in a
+// tmpfs and be lost when the sandbox ends.
+//
+// Set as a FIELD rather than through the constructor because that is the fact
+// the constructor resolves against a live cluster, and the derivation is pure
+// over it — which is the whole reason it can be stated here at all.
+func TestTheDefaultIsTheStrongestBoundaryTheSandboxCanHold(t *testing.T) {
+	for _, c := range []struct {
+		name, fast, volume, want string
+	}{
+		{"installed, keeps nothing", preferred, "", preferred},
+		{"installed, carries a disk", preferred, "m-acme-p-abc", shared},
+		{"not installed, keeps nothing", "", "", shared},
+		{"not installed, carries a disk", "", "m-acme-p-abc", shared},
+		// A cluster that answered with a name we do not run fits nothing, so the
+		// floor takes it — the same answer a typo gets everywhere else here.
+		{"unknown class", "runsc", "", shared},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := &runtime{fast: c.fast}
+			got, err := r.runtimeFor(Sandbox{ID: "m_1", Org: "acme", Volume: c.volume}, "", "")
+			if err != nil {
+				t.Fatalf("default must not fail a lease: %v", err)
+			}
+			if got != c.want {
+				t.Fatalf("fast=%q volume=%q gave %q, want %q", c.fast, c.volume, got, c.want)
+			}
+		})
+	}
+}
+
+// The floor holds over the new default too: whatever the cluster installs, a
+// tenant's sandbox never lands on the node's own kernel. Same property as
+// TestNoFleetValuePutsATenantOnTheNodesKernel, asked of the other input — a
+// boundary added to `runtimes` later cannot open a hole through `fast`.
+func TestNoInstalledBoundaryPutsATenantOnTheNodesKernel(t *testing.T) {
+	for _, fast := range append([]string{"", " ", "runsc", "default"}, sorted()...) {
+		for _, vol := range []string{"", "m-acme-p-abc"} {
+			r := &runtime{fast: fast}
+			got, err := r.runtimeFor(Sandbox{ID: "m_1", Org: "acme", Volume: vol}, "", "")
+			if err != nil {
+				continue // a refusal is the other acceptable answer
+			}
+			if b, ok := runtimes[got]; !ok || !b.kernel {
+				t.Fatalf("fast=%q volume=%q gave %q, which is not a kernel of its own", fast, vol, got)
+			}
+		}
+	}
+}
