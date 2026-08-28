@@ -344,9 +344,11 @@ it, and the host resolves each plugin as a sibling file (`manifest.App.Plugin`).
 The host is the FRONT DOOR, so it owns what no plugin can: it serves the
 white-labelled console at `/` (the light `webui` leaf, mounted last so every app
 prefix wins), threads the deployment's `--brand/--domain/--data-dir/--iam-issuer`
-flags to the children as `CLOUD_*` env, and SCOPES CREDENTIALS — it scrubs the
-KMS root key from its own environment and hands it to the `kms` broker child
-alone (see the credz section).
+flags to the children as `CLOUD_*` env. It does NOT scope credentials: it used
+to scrub the KMS root key from its own environment and hand it to the `kms`
+broker child alone, and that broker is dead. The data-plane master is inherited
+by every child on purpose — that is how they open the same encrypted files, and
+`MasterEnv` says so at its declaration. See the credentials section.
 
 The host knows three facts per app and no more — name, prefixes, eager-or-lazy —
 and they live in `manifest/apps.go`, the hand-authored source of truth. `make
@@ -515,91 +517,80 @@ of a sibling file.
   API" and a client may cache it and stop retrying; 503 says "this API exists and
   is down right now", which is retryable.
 
-## Credentials: one key for the deployment, one scope per app (`credz`)
+## Credentials: two different keys, and neither is handed to a process any more
 
-A plugin is a child process, and `zip` spawns it with `os.Environ()`. So whatever
-the launcher holds, all 108 children hold — every secret in every
-`/proc/<pid>/environ`, inherited by anything any of them execs. `credz` replaces
-that: **one process holds the root key; every other asks it, over a unix socket,
-for the credentials of the app it is.**
+`credz` IS DEAD. It was a 1,237-line broker that served per-app credential
+bundles over a unix socket, and `master.go` — the file that replaced it — records
+why in its own header: the boundary it drew was against ACCIDENT rather than
+against a peer that reads its neighbours, because the launch stamp sat in the
+child's environment where the same uid could read it at `/proc/<pid>/environ`.
+The pod was the data-plane boundary before and after, so the socket bought a
+scope and not a boundary.
 
-- **The ONE credential a deployment provisions is `CLOUD_KMS_MASTER_KEY_REF`.**
-  It unseals the KMS secret store and keys the cek data plane. Every other secret
-  lives *inside* that store. `credz.Boot` takes it out of the environment at
-  process start and holds it in memory, so no spawned child inherits it.
-- **Who brokers**: the process that read the root key from its own environment
-  AND owns the sealed store (`deps.KMS` is the embedded client). That is the KMS
-  subsystem — exactly one process. `cmd/cloud` links no store and brokers nothing —
-  and no longer passes the key down: it scrubs it (see host mode below).
-- **Who asks**: every other `cloud` process, at the top of `Serve`, before
-  `LoadConfig` and before any store opens.
-- **Identity comes from the launcher** (`credz/launch`, stdlib-only leaf). The
-  launcher stamps `CREDZ_TOKEN=<app>:<hex hmac-sha256(secret, app)>` into that
-  ONE child's `zip.Plugin.Env` at spawn; the child presents it; the broker opens
-  it with the secret it holds and gates the result on `manifest.Apps`. Claim and
-  proof are one variable, so neither half can be recombined with another's. ONE
-  spawn site, per-plugin and never `os.Environ()`: `cmd/cloud`, which mints the
-  secret in-process, stamps every child, and hands `CREDZ_LAUNCH_SECRET` AND the
-  root key to the `kms` child alone. It used to be two, the second being
-  `cloud.PluginSpec` — where the launcher was itself the broker — and that went
-  with `apps.Wire()`: one host loads every child now, so there is one minter.
-  `credz.Boot` reads the token once and unsets it.
+Nothing calls it. `grep -rn 'credz\.' --include='*.go'` over this tree is empty;
+what survives is prose, including several paragraphs that stood here describing
+it as live. If you find another, it is stale — delete it rather than restoring
+the mechanism.
 
-  This replaces reading the peer's argv out of `/proc` (#51). `SO_PEERCRED` is
-  kernel-authenticated for pid/uid but **argv is not** — a process picks its own
-  `argv[0]` at `execve`, so any same-uid process could present itself as any app
-  and be handed that app's bundle *including the root key*. `SO_PEERCRED` stays
-  for the two things it can do: the uid check, and the pid in the audit line.
-- **The limit, stated honestly**: the token is in the child's environment, which
-  the same uid can read at `/proc/<pid>/environ`. So the cost of impersonating an
-  app went from *nothing* to *first steal a live peer's token*, and a stolen token
-  buys only the app it was stolen from — a boundary against accident and casual
-  forgery, **not** against a peer that reads its neighbours. A real same-uid
-  boundary means the socket becomes the credential (launcher pre-connects, passes
-  the fd as an `ExtraFile`), which is a change to `zip`'s spawn contract.
-- **Host mode scopes credentials** (`cmd/cloud`, the deployed entrypoint): the
-  host does NOT call `credz.Boot` — importing `credz` would drag `cek` →
-  modernc/sqlite + sqlcipher into the ~400-package host whose whole point is being
-  small — so it does the scrub itself with the stdlib `credz/launch` leaf.
-  `stampAndScrub` reads `CLOUD_KMS_MASTER_KEY_REF` and `os.Unsetenv`s it from the
-  host's OWN environment (zip builds every child's env from `os.Environ()`, so a
-  key left here reaches every child), stamps each child its scoped `CREDZ_TOKEN`,
-  and re-injects the root key onto the `kms` broker child's `Plugin.Env` ALONE.
-  Every generic child comes up with a token and NO root key and must ask the
-  broker — the boundary, now the default entrypoint (`cmd/cloud/main_test.go`
-  pins it: a dns child's env has `CREDZ_TOKEN` and not `CLOUD_KMS_MASTER_KEY_REF`).
-- **Scope is derived, not configured** — the manifest names every app, the store
-  holds every secret, and the path is built from the app the launcher stamped:
+**The two keys are different and must not be conflated.** They protect different
+things, live in different places, and only one of them was ever credz's.
 
-      /orgs/{adminOrg}/svc/_shared/{NAME}   every app
-      /orgs/{adminOrg}/svc/{app}/{NAME}     that app only
+### The data-plane master — `master.go`
 
-  `{NAME}` is the environment variable the app already reads, and `credz` reads
-  env `default` — the store requires `env` on every write, so provisioning is:
+What opens the encrypted per-org SQLite stores. The deployment supplies it in the
+environment from KMS (`CLOUD_KMS_MASTER_KEY_REF`), and **every child inherits
+it**, which is precisely how they all open the same files. `MasterEnv` is
+deliberately NOT scrubbed: inheritance is the mechanism.
 
-      POST /v1/kms/orgs/{adminOrg}/secrets
-      {"path":"/svc/ai","name":"CLOUD_AI_API_KEY","env":"default","value":"sk-…"}
+That file is also honest about what it is worth, and the sentence is worth
+keeping in front of anyone who reaches for it: a key in the environment is a key
+in a Secret, so whatever reads Secrets — a cloud API token, a shell in the pod, a
+snapshot of the volume — holds the one value that opens every store. Sealing
+under a root that sits beside the ciphertext protects nothing from a reader who
+has both. The ring (`mpcrek`) is the answer to that half: it holds SHARES, so no
+single holder can produce the root and the sealed form travels as ordinary
+configuration.
 
-  No second registry and no code change to add a credential. The `billing`
-  process is never handed `/svc/ai`: the path is built from the app the launcher
-  stamped, so a peer cannot spell a path — only present the token for the one it
-  was started as.
-- **The environment stays the interface**: the bundle is installed with
-  `os.Setenv`, so all 108 apps keep reading `os.Getenv` unchanged — and a value
-  set after `execve` never appears in `/proc/<pid>/environ`.
-- **Three postures, logged at boot** (`credentials: ROOT|LEAF|DEV`, plus the
-  fail-closed case). `make host` with nothing provisioned resolves DEV: a
-  deterministic key through the same encrypted path as production, zero config.
-- **Boundary, stated honestly**: the data-plane key is shared by every process in
-  the pod, because they open the same encrypted files. `credz` scopes the
-  *service* credentials. The pod is the data-plane boundary; the app is the
-  credential boundary.
+With nothing supplied, a process over an EMPTY data directory mints a random
+master that dies with it, so a laptop needs no configuration. **The refusal is
+the load-bearing half**: minting over a directory that already holds databases
+would SUCCEED, and every file would then read as "file is not a database" while
+the data sits intact and unreadable — so that case is a fault and the stores fail
+closed.
 
-Ordering is load-bearing: a store opened before the master is installed fails, so
-`credz.Boot` runs before the first store opens (top of `Serve`, and again at the
-top of `BuildDeps` for callers that skip `Serve` — it is `sync.Once`). Installing
-a key any later loses to the cached "no key" while the log claims success, which
-is exactly the bug this replaced.
+### The upstream credential — `hanzoai/egress`
+
+A provider key — OpenRouter, OpenAI, Anthropic, Fireworks, DO — is MONEY, and it
+is the one credz never protected. Egress is the outbound trust boundary:
+`ingress` decides who may come in, egress decides who may spend.
+
+**A caller asks for a CALL, not for a key.** That is the whole difference from
+credz, which handed a process a scoped key and trusted it to hold it. Egress
+holds the key and returns the response, so a stolen caller credential buys
+metered calls through our own meter — rate limited, attributed, audited,
+revocable in one place — instead of a vendor bearer that spends without limit,
+off our network, invisibly, and takes a five-vendor rotation to undo.
+
+**It runs OFF the managed cluster, and that is the whole point rather than a
+deployment detail.** A DO API token reaches every pod, every secret and every
+volume in DOKS, so egress running there would hold a decrypted key inside the
+blast radius it exists to escape. Renting the escape hatch from the provider it
+escapes puts it back inside. Mounting it into cloud destroys the only thing it
+does — that is the one change to never make here.
+
+It is a COMPOSITION and adds custody only: the provider surface is `hanzoai/ai`
+(imported, never re-implemented — a second copy drifts on a changed streaming
+shape and we learn from a customer), rate limits and breakers are `gateway`'s
+edge policy (two limiters disagree about who is over budget), custody at rest is
+KMS. Callers hold no key because `hanzoai/ai` resolves every credential through
+one precedence rule — KMS store first, configuration second — so sealing a key
+removes it from the caller's environment with no code change there.
+
+Stated honestly rather than oversold: this is bounded and observable, not
+unstealable. No credential that lives in a cluster is unstealable from someone
+who owns that cluster; what changes is what the theft is worth. A running host
+holds the key in memory, which only SEV-SNP or TDX closes, and with no TPM
+nothing measures the code.
 
 ## One build contract: `mk/plugin.mk`, and an app's Makefile is its name
 
@@ -6132,7 +6123,7 @@ scales them by price level. See commerce/LLM.md "One way to price a UNIT".
 
 `github.com/hanzoai/cek` is the whole of it, and cloud owns none of it:
 
-    cek.SetMaster(k)                        // once, at boot, from KMS (credz does this)
+    cek.SetMaster(k)                        // once, at boot, from KMS (master.go does this)
     cek.Open(ns, subsystem, dir)            // everywhere else
 
 The key is DERIVED — `HKDF(master, "hanzo/cek/v1/" + ns + "/" + subsystem)` — so it
@@ -6361,31 +6352,33 @@ The ledger speaks the latter, so the wire carries `AttoString()` ↔ `ParseInt()
 by construction. Flatten to cents only at a boundary that is already cents-shaped.
 Alignment is NOT finished: ~46 `money.Amount` against ~308 `int64` cents.
 
-**One deployment, one key.** The credz broker IS kms (`launch.Broker`), so the host
-starts it first and eagerly; a child launched with a token WAITS for it and, failing
-that, holds no key rather than inventing a second one. A fallback here is how a fleet
-ends up running on two keys with nothing saying so.
+**One deployment, one key.** The data-plane master arrives in the environment and
+every child inherits it (master.go), so the fleet cannot end up running on two
+keys with nothing saying so. There is no broker to start first and no token to
+wait for — that was credz, and it is dead (see the credentials section).
 
-**credz is NOT the plane with extra steps, and must not be collapsed into it.** Both
-speak over a 0600 unix socket, but they prove different things and only one of them
-proves identity:
+**THE PLANE PROVES NOTHING ABOUT WHO IS CALLING, and that is the fact to carry.**
+The caller is nine HEADERS — `zip.CallerOf` reads X-Org-Id, X-User-Id,
+X-User-IsAdmin and the rest (zip caller.go). Nothing signs them and nothing
+verifies them: the callee believes the sender, so any co-located app can state
+`For("another-tenant")` and be believed.
 
-    plane    the caller is nine HEADERS (zip.CallerOf reads X-Org-Id, X-User-Id,
-             X-User-IsAdmin, …; zip caller.go). Nothing signs them and nothing
-             verifies them: the callee believes the sender, so any co-located app
-             can state For("another-tenant") and be believed.
-    credz    peerPID (SO_PEERCRED, same uid) AND a launch token that opens only
-             under the secret the launcher minted — so the app name is the one
-             the LAUNCHER stamped, never one the caller chose.
+The socket is the boundary for "one of our own processes" — 0600, and
+`SO_PEERCRED` is kernel-authenticated for uid — and it is NOT a boundary between
+our own processes. That is fine for a bug-free fleet and is worth knowing before
+treating a forwarded identity as an authorization decision.
 
-That difference is load-bearing: it is how each child gets ITS scoped bundle and not
-a sibling's. So the socket is the boundary for "one of our own processes", and it is
-NOT a boundary between our own processes — which is fine for a bug-free fleet and is
-worth knowing before treating a forwarded identity as an authorization decision.
-Tenancy is enforced where a request principal is resolved, at the edge, from a
-validated token; a method that re-checks the stated org against a ref (as kms does)
-catches an app asking for one tenant while acting for another, which is a BUG worth
-failing on rather than an attack being repelled.
+Tenancy is enforced where a request principal is RESOLVED: at the edge, from a
+validated token. A method that re-checks the stated org against a ref (as kms
+does) catches an app asking for one tenant while acting for another — a BUG worth
+failing on, rather than an attack being repelled.
+
+This box used to compare the plane against credz's launch token, on the reasoning
+that the token proved the app NAME because the launcher stamped it. That
+comparison is gone with the broker; what it protected — each child getting its
+own scoped bundle — is not a thing that happens any more, because no process is
+handed a bundle. An upstream credential is not handed over at all now: the caller
+asks egress for a CALL. See the credentials section.
 
 **This box used to describe `parseIdent(call.Cap)` — a capability the plane parsed
 and nothing verified — and BOTH SYMBOLS ARE GONE** (`grep -rn 'parseIdent|call\.Cap'

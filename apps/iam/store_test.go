@@ -18,8 +18,8 @@ import (
 	"github.com/hanzoai/orm"
 
 	// The store is keyed now, so this test binary needs a master before it opens
-	// one. devmaster mints a per-process key; production resolves the real one
-	// through credz.Boot from KMS.
+	// one. devmaster mints a per-process key; production inherits the real one
+	// from the environment (master.go), sealed in KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 

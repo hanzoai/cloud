@@ -351,9 +351,10 @@ func TestTheAppSetIsNotNamedTwice(t *testing.T) {
 //
 // Adding a name here must be a deliberate diff with a reason, never a side effect
 // of a manifest edit. A candidate would have to show that serving WITHOUT it is
-// unsafe rather than merely degraded — note that the credz broker does NOT
-// qualify: children that cannot reach it fail closed, so its absence is useless,
-// not unsafe.
+// unsafe rather than merely degraded. The credz broker was the worked example
+// of a name that does NOT qualify — children that could not reach it failed
+// closed, so its absence was useless rather than unsafe. It is dead now, and the
+// test it argued about is unchanged.
 func TestNothingIsRequiredByDefault(t *testing.T) {
 	for _, a := range manifest.Apps {
 		if a.Required {
