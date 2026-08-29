@@ -600,9 +600,9 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// it named. See scope.go for the three decisions.
 	// The module's own table LAST, and its ERROR returned rather than its call.
 	// Folding the two functions into one made this the difference between a mounted
-	// surface and a 404: a bare `return module.Mount(a)` short-circuits the compose
+	// surface and a 404: a bare `return module.Use(a)` short-circuits the compose
 	// below, which the outer function used to perform after this one returned.
-	if err := module.Mount(a); err != nil {
+	if err := module.Use(a); err != nil {
 		return err
 	}
 	// Use is the ONE composition verb, and an *App IS a Component. Two claimants on

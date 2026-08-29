@@ -1143,7 +1143,7 @@ func UseMetrics(app Router, deps Deps) error {
 	if a == nil {
 		return fmt.Errorf("metrics: router is not a zip app")
 	}
-	if err := metrics.Mount(a, metrics.Deps{
+	if err := metrics.Use(a, metrics.Deps{
 		Logger: luxlog.Default(), DataDir: deps.DataDir, Brand: deps.Brand,
 		Org: principal.Org,
 	}); err != nil {
