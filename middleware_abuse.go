@@ -51,6 +51,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
@@ -310,7 +311,11 @@ func (g *abuseGate) bill(org, project, request, ip string, v RiskVerdict) bool {
 	if !v.Scored() {
 		return false
 	}
-	g.meter.Meter(org, project, "screen", g.cents, request, ip)
+	// The sensor keys on the org, so that is the address a screen is charged to —
+	// account.PayerOf is the one parse from a key to an address, and a bare slug
+	// through it IS that org's own account. Stated rather than assumed, because the
+	// meter now takes an address and will not guess which half a string meant.
+	g.meter.Meter(account.PayerOf("", org), project, "screen", g.cents, request, ip)
 	return true
 }
 

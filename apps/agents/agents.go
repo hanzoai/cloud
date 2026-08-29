@@ -49,6 +49,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -244,8 +245,13 @@ type agentView struct {
 	// drawn as its initial, the same way a person with no photo is. Both are
 	// iam/pkg/schema's Mark, so a face means the same thing on an agent as it
 	// does on a person or an org.
+	// Avatar is the agent's picture: an image URL, or the image itself inline as a
+	// data URL up to 96 KiB. Empty when the agent has no image.
 	Avatar string `json:"avatar,omitempty"`
-	Emoji  string `json:"emoji,omitempty"`
+	// Emoji is the single glyph a caller picked when they had no image. At most one
+	// of avatar and emoji is ever set; neither means the agent is drawn as its
+	// initial, the same way a person with no photo is.
+	Emoji string `json:"emoji,omitempty"`
 	// Runs is how many executions the org has recorded against this agent, counted
 	// at read time. The list and update reads count the WHOLE history; the detail
 	// read reports the size of the RecentRuns page it carries, which stops at 20 —
@@ -708,7 +714,10 @@ type createAgentIn struct {
 	// avatar passes, so the 96 KiB bound and the accepted URL forms are stated
 	// once for every subject that has a face.
 	Avatar string `json:"avatar"`
-	Emoji  string `json:"emoji"`
+	// Emoji is the single glyph shown when there is no image. An image WINS when
+	// both are given — it is the thing somebody made — and both empty leaves the
+	// agent drawn as its initial.
+	Emoji string `json:"emoji"`
 }
 
 // CreateAgent defines an agent in the caller's org: a model, a system prompt
@@ -798,7 +807,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 		// clock at all — it costs its per-run fee when it is invoked and nothing
 		// while it sits in the roster — so its watermark stays zero and the sweep
 		// never sees it.
-		Payer: payerOf(ctx, org),
+		Payer: payerOf(ctx, org).Subject(),
 	}
 	if mode == ModeLongRunning {
 		a.MeteredAt = now
@@ -907,7 +916,10 @@ type updateAgentIn struct {
 	// setting an image clears a glyph and "" for both goes back to the initial —
 	// there is no state where a row holds two answers.
 	Avatar *string `json:"avatar"`
-	Emoji  *string `json:"emoji"`
+	// Emoji re-draws the agent as a glyph. Sending either of the pair replaces
+	// BOTH, so setting a glyph clears an image and "" for both goes back to the
+	// initial — there is no state where a row holds two answers.
+	Emoji *string `json:"emoji"`
 }
 
 // UpdateAgent changes an agent in place. Every field is optional; a field the
@@ -1031,7 +1043,7 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 	// change reaches them. Same shape as the cap check above, and gated on the
 	// same `!wasLongRunning`.
 	if a.ExecutionMode == ModeLongRunning && !wasLongRunning {
-		if serr := sto.Stamp(ctx, org, a.Name, payerOf(ctx, org), a.UpdatedAt); serr != nil {
+		if serr := sto.Stamp(ctx, org, a.Name, payerOf(ctx, org).Subject(), a.UpdatedAt); serr != nil {
 			s.Log.Warn("runtime meter: a bot went resident unstamped", "org", org, "agent", a.Name, "err", serr)
 		}
 	}
@@ -1237,7 +1249,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// Gate the AGENT's own org — never a caller default, never another tenant.
 	// fee<=0 or unconfigured billing makes this a no-op (allows). Background run
 	// path: no request principal, so the project axis is empty + unvalidated (soft).
-	if err := s.State.bill.Gate(ctx, a.Org, "", false, meterKind, fee); err != nil {
+	if err := s.State.bill.Gate(ctx, account.PayerOf("", a.Org), "", false, meterKind, fee); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "balance gate denied")
 		return Run{}, err
@@ -1287,7 +1299,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// the throttled one it started on), and the actor for the audit trail.
 	// Fire-and-forget on a background context.
 	if r.Status == "ok" {
-		s.State.bill.MeterUsage(a.Org, meterKind, metering.Usage{
+		s.State.bill.MeterUsage(account.PayerOf("", a.Org), meterKind, metering.Usage{
 			AmountCents: fee,
 			Model:       r.Model,
 			Actor:       actor,

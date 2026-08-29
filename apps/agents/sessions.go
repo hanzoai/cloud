@@ -662,7 +662,7 @@ func (o sessionOps) register(ctx context.Context, in *registerReq) (*sessionView
 		StartedAt: now, CreatedAt: now, UpdatedAt: now,
 		// The runtime meter's two facts, settled at the act that opened the
 		// session: whose wallet pays, and the instant its clock starts.
-		Payer: payerOf(ctx, org), MeteredAt: now,
+		Payer: payerOf(ctx, org).Subject(), MeteredAt: now,
 	}
 	if isTerminalStatus(status) {
 		x.EndedAt = now
@@ -1202,7 +1202,7 @@ func openRunSession(s *cloud.Service[state], ctx context.Context, a Agent, r Run
 		// moment it is written, which is right: what a run costs is the per-run
 		// fee runAgent already charged, and billing an instant twice would be
 		// billing one act under two names.
-		Payer: payerOf(ctx, a.Org), MeteredAt: ts,
+		Payer: payerOf(ctx, a.Org).Subject(), MeteredAt: ts,
 	}
 	if err := sto.CreateSession(ctx, x); err != nil {
 		s.Log.Warn("run session: create", "org", a.Org, "agent", a.Name, "err", err)

@@ -75,6 +75,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tenant"
@@ -124,9 +125,13 @@ type plane struct {
 // caller is shown when that happens is a property this package must be able to
 // test. Reaching that state with a real meter needs a commerce peer to be down,
 // which is not a state a unit test can stand up.
+//
+// The first parameter is the money's ADDRESS and not an org slug, because that is
+// what the real meter takes: an account carries both the books and the account
+// within them, so a gate and a debit cannot name different ones by accident.
 type meter interface {
-	Gate(ctx context.Context, org, project string, projectValidated bool, kind string, costCents int64) error
-	Meter(org, project, kind string, amountCents int64, requestID, clientIP string)
+	Gate(ctx context.Context, payer account.Account, project string, projectValidated bool, kind string, costCents int64) error
+	Meter(payer account.Account, project, kind string, amountCents int64, requestID, clientIP string)
 	Enabled() bool
 }
 
@@ -385,7 +390,11 @@ func (p *plane) admit(ctx context.Context, c caller, name string, version int, c
 // It is one function because it is called from two ops, and "remember to wrap the
 // gate" is not a property; being unable to call the gate any other way is.
 func (p *plane) charge(ctx context.Context, c caller, cost int64) error {
-	err := p.bill.Gate(ctx, c.ledger, c.project, c.validated, "dataset", cost)
+	// c.ledger is a field on the resolved caller — a string the op is carrying, not a
+	// request it can ask again — so the address is parsed back out of it. PayerOf
+	// answers a bare slug with that org's own account, which is what [plane.who]
+	// recorded and what this gate has always keyed on.
+	err := p.bill.Gate(ctx, account.PayerOf("", c.ledger), c.project, c.validated, "dataset", cost)
 	if err == nil {
 		return nil
 	}

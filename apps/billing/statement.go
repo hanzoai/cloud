@@ -31,6 +31,7 @@ func mountStatement(app cloud.Router, o ops) {
 	zip.Get(zapp, "/v1/billing/accounts/:id/members", o.accountMembers)
 	zip.Get(zapp, "/v1/billing/payouts", o.payouts)
 	zip.Get(zapp, "/v1/billing/transactions", o.transactions)
+	zip.Get(zapp, "/v1/billing/transactions/:id", o.transaction)
 }
 
 // accountsView is the caller's billing accounts — one, because an org IS its
@@ -207,4 +208,37 @@ func callerIn(ctx context.Context) *plane.CallerIn {
 		role = "admin"
 	}
 	return &plane.CallerIn{Subject: c.User(), Email: c.UserEmail(), Role: role}
+}
+
+// transactionRef names one ledger entry. The id is the URL's, and there is no
+// subject field: the books are the caller's own, resolved server-side, so a
+// guessed id can only miss.
+type transactionRef struct {
+	ID string `json:"id"`
+}
+
+// Reads one ledger entry by its id.
+//
+// It is the MEMBER of the collection beside it rather than a second way to ask —
+// the same rows GET /v1/billing/transactions lists, addressed one at a time. A
+// top-up receipt is read here, because a receipt IS a ledger entry: the id this
+// takes is the `transactionId` a top-up hands back.
+//
+// The read is narrower than the list: commerce's core loads the row and refuses
+// anything that is not a deposit, so a row that exists but is not a top-up
+// answers 404. That asymmetry is stated rather than closed, because widening a
+// money read to make two shapes match is not a change worth making for symmetry.
+//
+// The books are the caller's own and cannot be named, so a guessed id misses
+// rather than reaching another tenant's ledger.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (o ops) transaction(ctx context.Context, in *transactionRef) (*plane.Transaction, error) {
+	org, _, err := payer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ask(ctx, org, "transaction", func(ctx context.Context) (*plane.Transaction, error) {
+		return commercepeer.BillingTransaction(ctx, &plane.TransactionRef{ID: in.ID})
+	})
 }

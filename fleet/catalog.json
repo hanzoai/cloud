@@ -525,6 +525,11 @@
    "read": true
   },
   {
+   "id": "get_billing_recharge",
+   "doc": "Reads the caller's auto-reload rule: top the balance up by `amountCents`\nwhenever it falls below `thresholdCents`, charging the card on file\noff-session. It is the same setting every prepaid AI account calls auto-reload.\n\nAn org that has never set one reads as disabled with zeroes rather than as an\nerror — \"no rule\" answers the question — and `stored` is how a caller tells\nnever-configured from deliberately-off.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
    "id": "get_billing_settings",
    "doc": "Answers the PUBLIC half of this org's processor configuration — the ids a\nbrowser needs to tokenize a card, and the environment it must tokenize\nagainst.\n\nIt carries no secret: an application id is published to every checkout page by\ndesign. What matters is that it names the SAME processor account the charge\nwill be made on, because a card vaulted against one account and charged\nagainst another is a card that saves and then cannot be used.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
@@ -542,6 +547,11 @@
   {
    "id": "get_billing_transactions",
    "doc": "Answers one page of the caller's own ledger, newest first: what moved, how\nmuch, when, and what it was tagged with.\n\n`count` is the size of the WHOLE history rather than of the page, which is how\na reader knows there is more to ask for, and `user` echoes the wallet the page\nwas read for — the same subject the spend gate debits, so a customer can see\nwhich account answered rather than guessing from their own token.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+   "read": true
+  },
+  {
+   "id": "get_billing_transactions_by_id",
+   "doc": "Reads one ledger entry by its id.\n\nIt is the MEMBER of the collection beside it rather than a second way to ask —\nthe same rows GET /v1/billing/transactions lists, addressed one at a time. A\ntop-up receipt is read here, because a receipt IS a ledger entry: the id this\ntakes is the `transactionId` a top-up hands back.\n\nThe read is narrower than the list: commerce's core loads the row and refuses\nanything that is not a deposit, so a row that exists but is not a top-up\nanswers 404. That asymmetry is stated rather than closed, because widening a\nmoney read to make two shapes match is not a change worth making for symmetry.\n\nThe books are the caller's own and cannot be named, so a guessed id misses\nrather than reaching another tenant's ledger.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
   },
   {
@@ -590,6 +600,10 @@
   {
    "id": "post_billing_topup_token",
    "doc": "Charges a single-use card token and credits the caller's\nbalance.\n\nThe token comes from the payment form and is vaulted as part of the charge, so\nno card number reaches this service and none is stored here. The receipt names\nthe ledger entry, the new balance, and the PROCESSOR's own reference — which is\nthe only field that proves money moved at the gateway rather than only in our\nledger.\n\nRetry-safe on X-Idempotency-Key: the same key settles one charge and returns\nthe first receipt."
+  },
+  {
+   "id": "put_billing_recharge",
+   "doc": "Sets the caller's auto-reload rule, and answers with the rule as stored.\n\nENABLING REQUIRES A CARD ON FILE (400), because the sweep charges off-session:\na rule naming no chargeable method is a promise the schedule cannot keep. A\nnon-positive amount and a negative threshold are refused the same way, each\nnaming the field that was wrong.\n\nThe rule is the caller's OWN. The org comes from the validated principal and\nthe body names none, so there is no field a write could be steered through onto\nanother tenant's schedule.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
   },
   {
    "id": "raiseInvoice",
@@ -1114,11 +1128,6 @@
    "read": true
   },
   {
-   "id": "getPayment",
-   "doc": "Reads one settled payment out of the caller's org ledger.\n\nThe org scopes the read by construction — the ledger is namespaced to it — so\nan id belonging to another tenant is simply not found rather than found and\nthen filtered. A ledger row that is not a payment is likewise not found, so\nthis cannot be used to walk the org's usage debits.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
-   "read": true
-  },
-  {
    "id": "get_commerce_health",
    "doc": "Answers ok whenever the commerce subsystem is mounted. It is registered\nbefore the module embed boots, so it keeps answering even when the embed\nfailed and every business route serves the fail-closed 503 — which is the\npoint: it reports that the process is reachable, never that the money plane\nis healthy. Unauthenticated: a probe that needs a credential is a probe that\nreports the credential.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
    "read": true
@@ -1130,10 +1139,6 @@
   {
    "id": "setCartItem",
    "doc": "Sets how many of one item a cart holds, and answers the whole updated cart.\n\nThis is the ONE way a cart's contents change. The quantity is the RESULT, not a\ndelta: sending 3 leaves 3 however many were there before, so a retry is safe and\na double-submit cannot double an order. ZERO REMOVES the line — there is\ndeliberately no separate delete, because removal is the same act at the boundary\nvalue and a second spelling would be a second set of edge cases.\n\nName the item with EITHER product OR variant, never both. Prefer variant for\nanything sold in sizes, colours or tiers: the price and the stock belong to the\nvariant, so a product-level line on a varianted product prices the wrong thing.\nEither may be given as an id or as the human key — a product's URL slug, a\nvariant's SKU — which is what lets a storefront add to cart straight from a\nproduct page URL without a lookup first.\n\nThe item's price and name are CACHED onto the line as it is added, so the cart\nkeeps the price the shopper was shown even if the catalog moves underneath it.\n\nAn item that resolves to nothing in the catalog is refused 400 and the cart is\nleft exactly as it was; nothing is partially applied.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry."
-  },
-  {
-   "id": "takePayment",
-   "doc": "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nA payment is RISK-SCREENED before the card is charged, so this can be refused\nwithout any money moving: 403 means the screen did not authorise it, and 503 means\nthe screen could not reach a decision — that one is worth retrying, and no charge\nwas attempted either way.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named builder, not a closure, so zipdoc can lift this prose into the registry.\n\nIt BUILDS the handler rather than being it, because the screen has to sit inside\nthe value every projection of this op dispatches to — see exposePayments. `charge`\nis the money move, `take` is the screened entry point onto it, and the only\nregistrable one is the second."
   }
  ],
  "company": [

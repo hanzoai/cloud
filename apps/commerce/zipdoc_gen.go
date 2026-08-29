@@ -43,20 +43,6 @@ func init() {
 			"liveness.status":  "Status is always ok: mounted is the only state that can answer.",
 		},
 	})
-	zip.Describe("GET /v1/commerce/payments/:id", zip.Doc{
-		Description: "Reads one settled payment out of the caller's org ledger.\n\nThe org scopes the read by construction — the ledger is namespaced to it — so\nan id belonging to another tenant is simply not found rather than found and\nthen filtered. A ledger row that is not a payment is likewise not found, so\nthis cannot be used to walk the org's usage debits.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
-		Fields: map[string]string{
-			"PaymentRecord.amountCents": "AmountCents is the credited amount in whole cents.",
-			"PaymentRecord.createdAt":   "CreatedAt is when the credit was written, RFC3339.",
-			"PaymentRecord.currency":    "Currency is the ISO 4217 code.",
-			"PaymentRecord.id":          "ID is the ledger transaction id.",
-			"PaymentRecord.notes":       "Notes is the ledger memo, carrying the processor and its reference.",
-			"PaymentRecord.status":      "Status is the payment's state. This ledger writes a deposit only AFTER the\nprocessor settled, so a payment that can be read is one that succeeded.",
-			"PaymentRecord.subject":     "Subject is the billing key this payment credited.",
-			"PaymentRecord.test":        "Test reports whether this was a sandbox charge (test balance) or live money.",
-			"PaymentRef.id":             "ID is the ledger transaction id a payment returned.",
-		},
-	})
 	zip.Describe("POST /billing/account/members", zip.Doc{
 		Description: "Lists one billing account's roster.\n\ncommerce stores no roster, so the only member it can name is the caller — and\nthat is what it names. What it DOES enforce is that the account asked about is\nthe caller's own: a foreign id is refused rather than answered empty, because\nan empty roster and somebody else's account are different facts and only one\nof them is a refusal.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
@@ -77,6 +63,12 @@ func init() {
 	})
 	zip.Describe("POST /billing/alerts", zip.Doc{
 		Description: "Lists this org's spend caps, each with the period spend derived for its scope.\n\nThe derived figures are POINTERS on the wire and absent rather than zero when\nthe aggregation could not be read, because \"nothing spent\" and \"spend unknown\"\nare different answers and a zero cannot tell them apart. The policy row is\nstill reported either way — a cap whose spend cannot be read is still a cap.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
+	zip.Describe("POST /billing/auto-recharge", zip.Doc{
+		Description: "Reads this org's auto-reload rule — the threshold the sweep measures against and\nthe amount it charges when the balance falls below it.\n\nAn org that never set one reads as DISABLED with zeroes rather than as an error:\n\"no rule\" is a true answer to \"what is your rule\", and `stored` carries the\ndifference between never having set one and having turned one off.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
+	zip.Describe("POST /billing/auto-recharge/set", zip.Doc{
+		Description: "Sets this org's auto-reload rule.\n\nENABLING REQUIRES A CARD ON FILE, because the sweep charges off-session and a\nrule that names no chargeable method is a promise the schedule cannot keep. The\nthree refusals a caller can provoke — a non-positive amount, a negative\nthreshold, no default payment method — are the module's own sentinels, mapped\nhere to 400 so a caller learns which of its own values was wrong rather than\nreading a 500 and guessing.\n\nThe rule is the caller's own: the org comes from the validated principal and the\ninput names none, so a write cannot be steered onto another tenant's schedule.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("POST /billing/cap/authorize", zip.Doc{
 		Description: "Answers whether one proposed spend fits inside this org's caps.\n\nIt evaluates EVERY covering row, most-restrictive-wins, and denies when a\nhard-enforceable row is exceeded, reporting the tightest one. Soft rows — and\na project-scoped enforce row whose project axis the caller could not establish\n— never block; they only raise the reported utilization.\n\nProjectValidated travels because only the endpoint knows it. A project a caller\nmerely claimed is not a project the cap may bind on, and a callee that assumed\nvalidation would turn an unproven claim into a refusal.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
@@ -335,6 +327,9 @@ func init() {
 			"Charged.transactionId": "TransactionID is the ledger entry this charge created. It is the handle a\nlater read or a refund names, and it is minted by the ledger rather than by\nthe caller.",
 		},
 	})
+	zip.Describe("POST /billing/transaction", zip.Doc{
+		Description: "Reads one ledger entry by its id, for the caller's own books.\n\nIt is [commercebilling.ReadPayment] — the module's own published read of the\nrow — so the receipt a top-up hands back and the row a statement lists are the\nsame record read the same way. That core loads a transaction by id and refuses\nanything that is not a DEPOSIT, which is why this answers 404 for a row that\nexists but is not a top-up: the read is narrower than the collection beside it,\nand saying so is better than widening a money read to close a asymmetry nobody\nasked about.\n\nThe org is the caller's and cannot be named, so a guessed id misses rather than\nreaching another tenant's ledger.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
 	zip.Describe("POST /billing/transactions", zip.Doc{
 		Description: "Reads one page of a subject's ledger, newest first.\n\nThe SUBJECT travels and the org does not, which is the tenancy rule this plane\nkeeps everywhere: a subject is a wallet inside the caller's own org, so naming\none can reach another account of that org and nothing beyond it. The edge\nresolves it from the validated principal, so a query cannot widen the read.\n\nCount is the size of the whole history rather than of the page, because that\ndifference is how a reader knows there is more to ask for.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
@@ -348,7 +343,7 @@ func init() {
 		Description: "Reads one subject's spendable prepaid balance out of the ledger this process\nowns, so a process that must never open the file can still report a balance.\n\nThe ORG is the caller's — the gateway's assertion, or what a background job\nstated once and explicitly — and can never be named in the input, so a caller\ncannot read another tenant's books. The SUBJECT is the caller's to choose, but\nonly within that org: it is a wallet inside the ledger the caller's identity\nalready pinned. An empty subject reads the org's own account and an empty\ncurrency reads usd. A missing ledger is an ERROR, never a zero — answering zero\nfrom the process that owns the file would report every account as broke.\n\nThe amount crosses the plane EXACTLY. Flattening it to cents here was the\nconsole's understatement: every sub-cent tail of the true balance vanished\nbetween the one writer and every reader.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("POST /finance/costs", zip.Doc{
-		Description: "Is what we paid every vendor in a period, and the total.\n\nIt is a PLATFORM god-view, not a tenant read: the figures are the fleet's own\nCOGS. It still resolves through payingOrg, because the books it walks are\nnamespaced and the reserved admin org is where the platform's own live —\nasking without a validated caller would read an empty namespace and report\nthat we pay our vendors nothing, which is the worst shape a cost report can\ntake.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+		Description: "Is what we paid every vendor in a period, and the total.\n\nIt is a PLATFORM god-view, not a tenant read: the figures are the fleet's own\nCOGS. It still resolves through orgOf, because the books it walks are\nnamespaced and the reserved admin org is where the platform's own live —\nasking without a validated caller would read an empty namespace and report\nthat we pay our vendors nothing, which is the worst shape a cost report can\ntake.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("POST /finance/credit", zip.Doc{
 		Description: "Puts money INTO one subject's prepaid ledger — the seller's half of a\nsettlement, and the only op on this plane that creates a balance rather than\nmoving, reading or gating one.\n\nREF IS REQUIRED and is the idempotency key. Without it this op is a money\nprinter: a settlement retries by construction, and a retry would credit twice.\nIt is required rather than defaulted, because a default nobody chose is a key\nthat collides. The amount must PARSE and must be positive — a credit is not a\ndebit spelled with a sign.\n\nThe ORG comes from the CALLER, never the argument: a caller able to name the\ncredited org could pay itself out of someone else's books. An empty subject\ncredits the org's own account. The amount is deposited as the EXACT decimal\nrather than its minor unit, because a settlement is routinely a fraction of a\ncent and rounding to the minor unit would round it to nothing.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
@@ -481,20 +476,6 @@ func init() {
 			"CartItemSet.product":  "Product names the catalog product to set, by its id or its URL slug. Give\nthis or Variant, never both; a request naming neither is refused.",
 			"CartItemSet.quantity": "Quantity is how many of that item the cart should hold AFTER this call — it\nis the resulting count, not a delta, so sending 3 twice leaves 3 and not 6.\nZERO REMOVES the line, which is the only way to take an item out.",
 			"CartItemSet.variant":  "Variant names the specific sellable variant to set, by its id or its SKU.\nPrefer it over Product for anything sold in sizes, colours or tiers — the\nprice and the stock are the variant's, not the product's.",
-		},
-	})
-	zip.Describe("POST /v1/commerce/payments", zip.Doc{
-		Description: "Takes a payment: charges a single-use card token and credits the caller's org\nbalance, exactly once.\n\nThis is the operation behind \"collect money from a customer\". It runs the SAME\ncore the console's card top-up runs (commerce billing.TakePayment), so the\nserver-side amount bounds, the idempotency guard and the ledger credit are\nshared rather than reimplemented — a second charge path would eventually\ndouble-charge somebody.\n\nThe ORG is the caller's, taken from the validated principal and never from the\ninput, so a payment can only ever credit the account of whoever made the call.\n\nA payment is RISK-SCREENED before the card is charged, so this can be refused\nwithout any money moving: 403 means the screen did not authorise it, and 503 means\nthe screen could not reach a decision — that one is worth retrying, and no charge\nwas attempted either way.\n\nSend an idempotencyKey. An agent retries by construction, and the key is what\nturns a retry into a replay of the first receipt instead of a second charge.\n\nThe answer states whether it settled in SANDBOX or live mode (`test`), and\ncarries the processor's own reference (`processorRef`) so the charge can be\nreconciled against the processor rather than taken on trust.\n\nA named builder, not a closure, so zipdoc can lift this prose into the registry.\n\nIt BUILDS the handler rather than being it, because the screen has to sit inside\nthe value every projection of this op dispatches to — see exposePayments. `charge`\nis the money move, `take` is the screened entry point onto it, and the only\nregistrable one is the second.",
-		Fields: map[string]string{
-			"PaymentIn.amountCents":    "AmountCents is the amount to charge, in whole cents (5000 is $50.00).\nServer-side bounds apply and are authoritative — the default floor is $1\nand the ceiling $5,000, so a fat-fingered or hostile amount is refused\nbefore any money moves.",
-			"PaymentIn.currency":       "Currency is the ISO 4217 code, lower-cased. Empty means usd.",
-			"PaymentIn.idempotencyKey": "IdempotencyKey makes a retry safe: the same key never charges twice, it\nreplays the first result. Sending one is strongly recommended for an agent,\nwhich retries by construction. Empty falls back to a windowed key derived\nfrom the amount and currency, so a double-submit inside 15 minutes still\ncollapses onto one charge.",
-			"PaymentIn.sourceId":       "SourceID is the single-use payment token that stands in for the card: a\nSquare Web Payments SDK nonce minted in the browser, or a Square sandbox\ntest nonce when the org's credentials are sandbox ones. The card number\nitself never reaches this process, which is what keeps it out of PCI scope.",
-			"PaymentOut.balanceCents":  "BalanceCents is the org's balance AFTER this payment, read back from the\nsame key just credited so it matches what the balance endpoint reports.",
-			"PaymentOut.id":            "ID is the ledger transaction id for the credit. It is what getPayment\nreads back, and the customer-visible receipt for the money.",
-			"PaymentOut.processorRef":  "ProcessorRef is the payment processor's own reference for the charge\n(Square's payment id). It is the field that proves money actually moved at\nthe gateway rather than only in our ledger — the thing to quote when\nreconciling against a processor dashboard.",
-			"PaymentOut.status":        "Status is \"ok\" on a settled charge. A charge that did not settle is an\nerror with the processor's reason, never a status field to inspect.",
-			"PaymentOut.test":          "Test reports which bucket this credited: true is a SANDBOX charge crediting\nthe test balance, false is live money. It is always stated so a receipt can\nnever be mistaken for the other kind.",
 		},
 	})
 }

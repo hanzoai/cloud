@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/types"
 	"regexp"
@@ -571,7 +572,7 @@ func baseParams(m mode) Params {
 		maxSources: m.maxSources, maxQueries: m.maxQueries, readTop: m.readTop,
 		rounds: min(m.rounds, maxRounds), hostCap: m.hostCap,
 		deadline: m.deadline, tokenCeiling: m.tokenCeiling,
-		followUps: true, system: m.system, payer: "acme", dataOrg: "acme",
+		followUps: true, system: m.system, payer: account.PayerOf("", "acme"), dataOrg: "acme",
 	}
 }
 

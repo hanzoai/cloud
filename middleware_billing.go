@@ -293,8 +293,8 @@ func canonicalService(path string) string {
 // the gate — but metering v0.1.0's AuthInput/Usage carry no Actor field, so it
 // is omitted here until the metering module ships the User/Actor split.
 func identity(c *zip.Ctx, path string) metering.AuthInput {
-	w, ok := principal.WalletOf(c)
-	if !ok {
+	w := principal.Payer(c)
+	if w.Zero() {
 		return metering.AuthInput{}
 	}
 	// Scope axes for the per-scope spend cap (issue #70). Service is SERVER-DERIVED
@@ -304,8 +304,8 @@ func identity(c *zip.Ctx, path string) metering.AuthInput {
 	// so a forgeable project can neither hard-stop nor be evaded.
 	project, projectValidated := principal.ValidatedProject(c)
 	return metering.AuthInput{
-		User:             w.Account,
-		Org:              w.Ledger, // balance check + debit → the HOME org's ledger (who pays)
+		User:             w.Subject(),
+		Org:              w.Org(), // balance check + debit → the HOME org's ledger (who pays)
 		Project:          project,
 		ProjectValidated: projectValidated,
 		Service:          canonicalService(path),

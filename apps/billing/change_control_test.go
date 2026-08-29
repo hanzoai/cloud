@@ -48,6 +48,7 @@ var changesSomething = map[string]string{
 	"POST /v1/billing/methods":                       "vaults an instrument at the processor and records it",
 	"POST /v1/billing/portal/methods":                "the same act at the hosted-checkout address",
 	"POST /v1/billing/subscribe/card":                "vaults a card, charges the first period and opens a subscription",
+	"PUT /v1/billing/recharge":                       "arms the sweep that charges a saved card off-session, and sets what it charges",
 }
 
 // TestEveryChangeIsClassified makes forgetting structurally impossible: the two

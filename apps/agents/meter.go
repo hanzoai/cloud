@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/namespace"
@@ -44,11 +45,11 @@ import (
 // stated caller alike. Where it answers nothing — a scheduler tick, a migration —
 // the org's own pool pays, which is the honest answer for an act with no person
 // behind it and is what account.Payer resolves a bare org slug to anyway.
-func payerOf(ctx context.Context, org string) string {
-	if w := cloud.PayerOf(ctx).Wallet; w != "" {
+func payerOf(ctx context.Context, org string) account.Account {
+	if w := cloud.PayerOf(ctx).Wallet; !w.Zero() {
 		return w
 	}
-	return org
+	return account.PayerOf("", org)
 }
 
 // sessionRunning describes one session to the runtime meter.
@@ -129,7 +130,9 @@ func closeResidency(ctx context.Context, s *cloud.Service[state], sto *Store, or
 			return sto.Advance(ctx, org, a.Name, was, at)
 		},
 		func() (bool, error) { return s.State.stores.Sync(ns) },
-		func(payer string, u metering.Usage) { s.Bill.MeterUsage(payer, meterKind, u) })
+		// The sweep carries the session's STORED payer key, so it is parsed into an
+		// address here by the one rule rather than the store learning a new type.
+		func(payer string, u metering.Usage) { s.Bill.MeterUsage(account.PayerOf("", payer), meterKind, u) })
 	if err != nil {
 		s.Log.Warn("runtime meter: a bot left residency unbilled", "org", org, "agent", a.Name, "err", err)
 	}

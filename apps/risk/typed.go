@@ -1358,7 +1358,7 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	if !onHTTP {
 		return func(int) {}, nil
 	}
-	ledger := principal.Ledger(c)
+	ledger := principal.Payer(c)
 	// NO LEDGER IS AN IDENTITY REFUSAL, and [cloud.ResourceMeter.Gate] is where it
 	// is answered — above both of its branches, for every caller of the meter,
 	// as [cloud.ErrNoLedger]. [cloud.denial] renders that as 403 "no validated

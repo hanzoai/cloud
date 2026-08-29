@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -154,9 +155,14 @@ func nsEnv(key string, def []string) []string {
 type meterBiller struct{ rm *cloud.ResourceMeter }
 
 func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) error {
+	// org crosses the Biller interface as a bare string — the purchase path hands it
+	// down, there is no principal here to read — so the address is parsed back out of
+	// it. PayerOf is upstream's own parse and answers a bare slug with that org's
+	// own account, which is what this gate has always keyed on.
+	//
 	// ("", false): no project sub-scope on a domain purchase — org- and
 	// service-scoped caps apply; a domain buy is not project-attributed.
-	err := m.rm.Gate(ctx, org, "", false, "domain.register", cents)
+	err := m.rm.Gate(ctx, account.PayerOf("", org), "", false, "domain.register", cents)
 	if errors.Is(err, metering.ErrInsufficientBalance) {
 		return ErrInsufficientFunds
 	}
@@ -177,7 +183,9 @@ func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) er
 // confirmed — the two paths that must not charge (a refused Authorize, a registrar error)
 // both return before reaching it.
 func (m *meterBiller) Capture(org string, cents int64) {
-	m.rm.MeterUsage(org, "domain.register", metering.Usage{
+	// Same string boundary as Authorize above: org is the Biller parameter, parsed
+	// here so the debit lands where the gate looked.
+	m.rm.MeterUsage(account.PayerOf("", org), "domain.register", metering.Usage{
 		Model:       "domain.register",
 		AmountCents: cents,
 	})

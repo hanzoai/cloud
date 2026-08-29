@@ -36,7 +36,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// exposeStatement publishes the four statement reads. Mount calls it.
+// exposeStatement publishes the five statement reads. Mount calls it.
 func exposeStatement() {
 	zip.Post[plane.CallerIn, plane.Accounts](cloud.Plane(), "/billing/accounts", planeAccounts,
 		zip.WithOperationID(plane.BillingAccounts),
@@ -50,6 +50,9 @@ func exposeStatement() {
 	zip.Post[plane.TransactionsIn, plane.Transactions](cloud.Plane(), "/billing/transactions", planeTransactions,
 		zip.WithOperationID(plane.BillingTransactions),
 		zip.WithSummary("One page of a subject's ledger"))
+	zip.Post[plane.TransactionRef, plane.Transaction](cloud.Plane(), "/billing/transaction", planeTransaction,
+		zip.WithOperationID(plane.BillingTransaction),
+		zip.WithSummary("One ledger entry by its id"))
 }
 
 // Lists the caller's billing accounts — one, because in commerce an org IS its
@@ -63,7 +66,7 @@ func exposeStatement() {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeAccounts(ctx context.Context, in *plane.CallerIn) (*plane.Accounts, error) {
-	org, err := payingOrg(ctx, "accounts")
+	org, err := orgOf(ctx, "accounts")
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +94,7 @@ func planeAccounts(ctx context.Context, in *plane.CallerIn) (*plane.Accounts, er
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, error) {
-	org, err := payingOrg(ctx, "account members")
+	org, err := orgOf(ctx, "account members")
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +123,7 @@ func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, err
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planePayouts(ctx context.Context, _ *struct{}) (*plane.Payouts, error) {
-	org, err := payingOrg(ctx, "payouts")
+	org, err := orgOf(ctx, "payouts")
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +161,7 @@ func planePayouts(ctx context.Context, _ *struct{}) (*plane.Payouts, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeTransactions(ctx context.Context, in *plane.TransactionsIn) (*plane.Transactions, error) {
-	org, err := payingOrg(ctx, "transactions")
+	org, err := orgOf(ctx, "transactions")
 	if err != nil {
 		return nil, err
 	}
@@ -183,3 +186,36 @@ func planeTransactions(ctx context.Context, in *plane.TransactionsIn) (*plane.Tr
 // carried a date must keep carrying one, and "0001-01-01T00:00:00Z" is the date
 // it carried.
 func stamp(t time.Time) string { return t.Format(time.RFC3339Nano) }
+
+// Reads one ledger entry by its id, for the caller's own books.
+//
+// It is [commercebilling.ReadPayment] — the module's own published read of the
+// row — so the receipt a top-up hands back and the row a statement lists are the
+// same record read the same way. That core loads a transaction by id and refuses
+// anything that is not a DEPOSIT, which is why this answers 404 for a row that
+// exists but is not a top-up: the read is narrower than the collection beside it,
+// and saying so is better than widening a money read to close a asymmetry nobody
+// asked about.
+//
+// The org is the caller's and cannot be named, so a guessed id misses rather than
+// reaching another tenant's ledger.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeTransaction(ctx context.Context, in *plane.TransactionRef) (*plane.Transaction, error) {
+	org, err := orgOf(ctx, "read transaction")
+	if err != nil {
+		return nil, err
+	}
+	rec, f := commercebilling.ReadPayment(ctx, org, in.ID)
+	if f != nil {
+		return nil, zip.Errorf(f.Status, "%s", f.Message)
+	}
+	return &plane.Transaction{
+		ID:        rec.ID,
+		Type:      "deposit",
+		Amount:    rec.AmountCents,
+		Currency:  rec.Currency,
+		Notes:     rec.Notes,
+		CreatedAt: rec.CreatedAt,
+	}, nil
+}

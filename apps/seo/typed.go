@@ -129,7 +129,7 @@ func run[T any](ctx context.Context, o ops, t task, want int, body any) ([]T, mo
 	if err != nil {
 		return nil, money.Zero(), err
 	}
-	ledger := principal.Ledger(c)
+	ledger := principal.Payer(c)
 	project, validated := principal.ValidatedProject(c)
 
 	// CentsUp, never Cents: the vendor's cheapest call is $0.00012, and rounded to

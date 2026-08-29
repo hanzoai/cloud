@@ -207,10 +207,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	//
 	// A typed op receives a context and no request, so the validated org has to be
 	// parked on that context before the op runs — which is what cloud.Bridge does,
-	// and what payingOrg (payments.go) reads back. Serve installs one app-wide, so
+	// and what orgOf (payments.go) reads back. Serve installs one app-wide, so
 	// nothing here was live-broken; what was missing is that NO PACKAGE TEST RUNS
 	// Serve. Three tests in this package installed it by hand
-	// (risk_payments_test.go, payingorg_s2s_test.go, ledger_peer_test.go), which
+	// (risk_payments_test.go, orgof_s2s_test.go, ledger_peer_test.go), which
 	// is three copies of one fact and covers only the ops those three drive: a
 	// typed op added here without remembering would resolve no org and 403 a valid
 	// request, in this package's tests only, with the production path fine.
@@ -235,52 +235,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// scorer is installed as a plane client — cloud.SetRiskScorer's first producer
 	// (risk.go).
 	installRiskScorer(lg)
-	// THE CREDIT SCREEN, resolved ONCE and composed onto the HANDLER of every
-	// endpoint that mints.
+	// THE CREDIT SCREEN, resolved ONCE and handed to every endpoint that mints.
 	//
-	// There are two, and they are registered a hundred lines apart: the browser's
-	// POST /v1/billing/topup/token below, and the agent's typed POST /v1/commerce/payments in
-	// exposePayments. Both end in commerce's ONE card money move (billing.TakePayment),
-	// so both mint spendable balance from a settled charge — which is why the screen is
-	// named here, at the composition root, and handed to each registration rather than
-	// being reached for at either. A gate fetched independently at each endpoint is a gate
-	// that can be fetched at one of them.
+	// There is ONE endpoint onto the mint: the browser's POST /v1/billing/topup/token,
+	// whose typed plane ops carry the screen (sale_rpc.go). A SECOND address onto the
+	// same money move used to sit at POST /v1/commerce/payments — one act with two
+	// public names, two operation ids and two MCP tools — and it was retired rather
+	// than screened twice. It had been opened because the billing route was raw and so
+	// reached no agent; that route is a typed op now, which is what made the second
+	// address redundant instead of necessary.
 	//
 	// IT GOES ON THE HANDLER, NOT ON THE ROUTER, and that is what makes it a control on
 	// the MINT rather than on a URL. A typed op is recorded once and projected four ways
 	// — REST, MCP tool, by-name call, CLI — and all four dispatch to the op's handler,
 	// while router middleware wraps only the fiber handler REST is served through. The
-	// screen was mounted on a router; `takePayment` is in tools/list; so an agent's
-	// tools/call reached the same authorized deposit unscreened and taught the model
-	// nothing when it settled. Both endpoints now WRAP THEIR HANDLER with it (risk.go
-	// screen.route, screen.op), which is the one composition point every projection has
-	// to run through.
+	// screen was once mounted on a router while `takePayment` sat in tools/list, so an
+	// agent's tools/call reached the same authorized deposit unscreened.
 	//
-	// It is one VALUE, not one call per endpoint, so there is no arrangement of these two
-	// registrations in which they hold different screens.
+	// It is one VALUE, not one call per endpoint, so there is no arrangement of these
+	// registrations in which two of them hold different screens.
 	screen := riskGate(lg)
-	// The typed payment surface. Registered EARLY, beside the health probe and
-	// ahead of the embed, for the reason the probe is: these are the fleet's only
-	// agent-callable money ops, and a failure to boot the legacy embed must not be
-	// what decides whether an agent can take a payment. They share commerce's ONE
-	// charge core with the browser's card top-up (payments.go), so registering
-	// them here adds an endpoint, never a second money path.
-	//
-	// AND AN ENDPOINT ONTO THE MINT IS SCREENED, which is why the screen is passed in. The
-	// shared core is the whole argument: POST /v1/commerce/payments reaches the same authorized
-	// deposit the top-up does, and it is published as an MCP tool besides — so the
-	// screen is composed onto its HANDLER, where every projection of the op runs it,
-	// rather than onto the router only REST is served through. exposePayments puts the
-	// screen on the WRITE only; the receipt read mints nothing.
-	exposePayments(zapp, screen)
-	// The three CARD endpoints the money surface relays to, screened through the same
-	// VALUE for the same reason: one screen, handed to every endpoint, so there is no
-	// arrangement of these registrations in which two of them hold different ones.
 	exposeSale(screen)
 	// The typed cart surface (cart.go). It reads and writes the embedded module's
 	// own cart store, so unlike the payment ops it is only useful when the embed
 	// below succeeds — and it is registered HERE anyway, ahead of it, so a cart
-	// call against a failed embed answers the 503 payingOrg raises ("commerce is
+	// call against a failed embed answers the 503 orgOf raises ("commerce is
 	// not co-resident in this process") instead of the bare 404 an unregistered
 	// route gives. A missing basket and a missing feature are different answers.
 	exposeCart(zapp)

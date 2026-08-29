@@ -54,9 +54,9 @@ func wallets(t *testing.T, org, user, claim string) (direct, detached Payer) {
 func TestDetachKeepsTheClaimedWallet(t *testing.T) {
 	direct, detached := wallets(t, "acme", "bob", "person:acme/bob")
 
-	if direct.Wallet != "acme/bob" {
+	if direct.Wallet.Subject() != "acme/bob" {
 		t.Fatalf("the direct path resolved %q, want %q — this test proves nothing if the "+
-			"claim is not being honoured on the path that always did", direct.Wallet, "acme/bob")
+			"claim is not being honoured on the path that always did", direct.Wallet.Subject(), "acme/bob")
 	}
 	if detached.Wallet != direct.Wallet {
 		t.Fatalf("detached wallet = %q, direct = %q — one request, two wallets. The gate "+
@@ -74,7 +74,7 @@ func TestDetachKeepsTheClaimedWallet(t *testing.T) {
 // so the fix cannot be an accident of the claim being present.
 func TestDetachAgreesWithoutAClaim(t *testing.T) {
 	direct, detached := wallets(t, "acme", "bob", "")
-	if direct.Wallet == "" {
+	if direct.Wallet.Zero() {
 		t.Fatal("no wallet resolved on the direct path")
 	}
 	if detached.Wallet != direct.Wallet {
@@ -86,7 +86,7 @@ func TestDetachAgreesWithoutAClaim(t *testing.T) {
 // cannot name a wallet outside the org the boundary proved they belong to.
 func TestDetachIgnoresACrossOrgClaim(t *testing.T) {
 	direct, detached := wallets(t, "acme", "bob", "person:evil/mallory")
-	if direct.Wallet == "evil/mallory" {
+	if direct.Wallet.Subject() == "evil/mallory" {
 		t.Fatal("a cross-org billing claim was honoured on the direct path")
 	}
 	if detached.Wallet != direct.Wallet {

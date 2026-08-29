@@ -52,6 +52,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -106,11 +107,11 @@ type Params struct {
 	tokenCeiling int
 	followUps    bool
 	system       string
-	dataOrg      string // effective org — data scope (RAG/BYO keys) on the ChatRequest
-	payer        string // home org — the ledger that PAYS (the meter debits this)
-	project      string // ChatRequest attribution
-	projectScope string // meter Usage scope
-	fee          int64  // cents debited for this answer (the single revenue charge)
+	dataOrg      string          // effective org — data scope (RAG/BYO keys) on the ChatRequest
+	payer        account.Account // the ADDRESS that PAYS: Org() the books, Subject() the account in them
+	project      string          // ChatRequest attribution
+	projectScope string          // meter Usage scope
+	fee          int64           // cents debited for this answer (the single revenue charge)
 	requestID    string
 	clientIP     string
 }
@@ -122,9 +123,9 @@ type Params struct {
 // BEFORE any work, so an out-of-funds caller gets a clean 402, never a half stream.
 func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 	dataOrg, _ := principal.Org(c) // gated non-empty by the endpoint
-	payer := principal.Ledger(c)
-	if payer == "" {
-		payer = dataOrg
+	payer := principal.Payer(c)
+	if payer.Zero() {
+		payer = account.PayerOf("", dataOrg)
 	}
 	capProject, capValidated := principal.ValidatedProject(c)
 
@@ -249,6 +250,14 @@ type Report struct {
 func (e Engine) Answer(ctx context.Context, in Request, q string) (*Report, error) {
 	org, _ := principal.OrgFrom(ctx)
 	project := principal.ProjectFrom(ctx)
+	// PayerFrom is the context-side twin of the request-side Payer, so a call that
+	// arrives as a typed op resolves the SAME address a call over HTTP does. Falling
+	// back to the caller's own org keeps the transport-free path billable when the
+	// boundary minted no ledger.
+	payer := principal.PayerFrom(ctx)
+	if payer.Zero() {
+		payer = account.PayerOf("", org)
+	}
 
 	m := resolveMode(in.Mode)
 	fee := feeCents(m.name, m.feeCents)
@@ -256,7 +265,7 @@ func (e Engine) Answer(ctx context.Context, in Request, q string) (*Report, erro
 	// MONEY GATE — the same refusal Serve makes, before any work, so an
 	// out-of-funds caller is told so rather than handed a half answer.
 	capValidated := principal.ValidatedFrom(ctx) && !principal.IsDefaultProject(project)
-	if err := e.Bill.Gate(ctx, org, project, capValidated, "web", fee); err != nil {
+	if err := e.Bill.Gate(ctx, payer, project, capValidated, "web", fee); err != nil {
 		return nil, err
 	}
 
@@ -278,7 +287,7 @@ func (e Engine) Answer(ctx context.Context, in Request, q string) (*Report, erro
 		followUps:    in.FollowUps == nil || *in.FollowUps,
 		system:       pickSystem(in.System, m.system),
 		dataOrg:      org,
-		payer:        org,
+		payer:        payer,
 		project:      project,
 		projectScope: project,
 		fee:          fee,
@@ -599,7 +608,7 @@ func (e Engine) chat(ctx context.Context, p Params, model, prompt string, emit f
 		Model:      model,
 		Prompt:     prompt,
 		Org:        p.dataOrg,
-		BillingOrg: p.payer,
+		BillingOrg: p.payer.Subject(),
 		Project:    p.project,
 	}
 	if emit != nil {

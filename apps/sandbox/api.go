@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 
@@ -245,9 +246,14 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// core takes identity as arguments and reads none, so it cannot state whether a
 	// project claim was validated — and claiming it was would hard-enforce a cap on
 	// a value it cannot vouch for.
+	//
+	// ledger arrives as an argument — this core reads no identity of its own, so there
+	// is no principal here to ask — and the address is parsed back out of it. PayerOf
+	// answers a bare slug with that org's own account, which is what principal.Ledger
+	// resolved and what this gate has always keyed on.
 	fee := ResourceFee(class)
 	if fee > 0 {
-		if err := s.Bill.Gate(ctx, ledger, "", false, "sandbox", fee); err != nil {
+		if err := s.Bill.Gate(ctx, account.PayerOf("", ledger), "", false, "sandbox", fee); err != nil {
 			return Sandbox{}, err
 		}
 	}
@@ -373,7 +379,9 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// could not cover it, and metering a lease that failed to start would bill for
 	// a pod nobody got. Class is the unit — an exec is not a desktop — so the meter
 	// says which was leased rather than that one more thing happened.
-	s.Bill.MeterUsage(ledger, "sandbox", metering.Usage{
+	// Same string boundary as the gate above: ledger is the argument, parsed here so
+	// the debit lands where the gate looked.
+	s.Bill.MeterUsage(account.PayerOf("", ledger), "sandbox", metering.Usage{
 		Model:       class + "/" + m.Runtime,
 		AmountCents: fee,
 	})
