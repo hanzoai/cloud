@@ -163,7 +163,7 @@ func seed(home, brand string) func(context.Context, string, *sql.DB) error {
 			name = home
 		}
 		profile := map[string]any{
-			"name":      strings.ToUpper(name[:1]) + name[1:],
+			"name":      cloud.BrandDisplay(name),
 			"tagline":   "How we run, in public.",
 			"summary":   "Every control here names the repository and file where its mechanism lives, and every coverage number is computed from that inventory against each framework's whole published clause list.",
 			"published": true,
