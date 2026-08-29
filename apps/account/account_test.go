@@ -323,8 +323,8 @@ func mount(t *testing.T, brand string) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	deps := cloud.Deps{Brand: brand}
-	if err := MountAccount(app, deps); err != nil {
-		t.Fatalf("MountAccount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use: %v", err)
 	}
 	return app
 }
@@ -808,8 +808,8 @@ func TestAccountClaimsNothingUnderIAM(t *testing.T) {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := MountAccount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
-		t.Fatalf("MountAccount: %v", err)
+	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("Use: %v", err)
 	}
 	for _, r := range app.Fiber().GetRoutes(true) {
 		if strings.HasPrefix(r.Path, "/v1/iam") || strings.HasPrefix(r.Path, "/login/oauth") {

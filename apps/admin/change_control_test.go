@@ -179,7 +179,7 @@ func seamApp(t *testing.T) *zip.App {
 		DO:        digitalocean.New(""),
 		WLTenants: map[string]bool{"maxpower": true},
 	}})
-	if err := account.MountAccount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+	if err := account.Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
 		t.Fatalf("account: %v", err)
 	}
 	return app

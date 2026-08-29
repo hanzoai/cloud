@@ -316,8 +316,8 @@ func TestACookieAloneCannotSpend(t *testing.T) {
 func TestTheTokenTheControlAsksForIsAccepted(t *testing.T) {
 	bs := &billServer{available: 100000}
 	app, _ := seamApp(t, bs.start(t))
-	if err := account.MountAccount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
-		t.Fatalf("MountAccount: %v", err)
+	if err := account.Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("Use: %v", err)
 	}
 
 	st, body := asVisitor(t, app, httptest.NewRequest(http.MethodGet, "/v1/account/csrf", nil), nil)

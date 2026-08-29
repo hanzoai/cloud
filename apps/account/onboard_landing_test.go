@@ -6,7 +6,7 @@ import (
 )
 
 // The day-one path: a brand-new user signs up through OAuth and asks for their
-// own workspace.
+// own space.
 //
 // Federated sign-up files the new user under the sign-up APPLICATION's own
 // organization (iam internal/oidc/federation.go: `org := app.Organization`), so
@@ -21,7 +21,7 @@ import (
 
 // TestOnboard_OAuthSignup_GetsItsOwnOrg drives a real OAuth-shaped signup end to
 // end through the mounted route: a validated principal whose org is the sign-up
-// application's, asking for a personal workspace. It must end OWNING its own org.
+// application's, asking for a personal space. It must end OWNING its own org.
 func TestOnboard_OAuthSignup_GetsItsOwnOrg(t *testing.T) {
 	f := newFakeIAM()
 	// The row federated sign-up wrote: owner is the sign-up application's org, and
@@ -33,7 +33,7 @@ func TestOnboard_OAuthSignup_GetsItsOwnOrg(t *testing.T) {
 
 	code, body := call(t, app, http.MethodPost, "/v1/account/orgs", "dave", "hanzo", `{"personal":true}`)
 	if code != http.StatusOK {
-		t.Fatalf("OAuth signup asking for its own workspace: want 200, got %d (%s)", code, body)
+		t.Fatalf("OAuth signup asking for its own space: want 200, got %d (%s)", code, body)
 	}
 	var resp onboardResp
 	mustJSON(t, body, &resp)
@@ -99,7 +99,7 @@ func TestOnboard_SuperAdminKeepsTheirOrg(t *testing.T) {
 	}
 
 	// And the 409 stays correct where it was always correct: asking for a personal
-	// workspace when you already hold one is still a conflict.
+	// space when you already hold one is still a conflict.
 	code, _ = call(t, app, http.MethodPost, "/v1/account/orgs", "root", "admin", `{"personal":true}`)
 	if code != http.StatusConflict {
 		t.Fatalf("personal-while-orged: want 409, got %d", code)

@@ -134,11 +134,11 @@ func newService(deps cloud.Deps) (*cloud.Service[state], error) {
 	return &cloud.Service[state]{Base: b, State: st}, nil
 }
 
-// MountAccount wires account's self-service routes (order 48) — the ones that must
+// Use wires account's self-service routes (order 48) — the ones that must
 // win over the IAM /v1/iam/* wildcard (50) and the commerce embed (100).
-func MountAccount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("account.MountAccount: nil app")
+		return fmt.Errorf("account.Use: nil app")
 	}
 	s, err := newService(deps)
 	if err != nil {
@@ -171,7 +171,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// projection knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("account.MountAccount: router exposes no zip.App, so no typed op could be registered")
+		return fmt.Errorf("account.Use: router exposes no zip.App, so no typed op could be registered")
 	}
 	o := ops{s: s}
 
@@ -707,7 +707,7 @@ type onboardReq struct {
 	// Name is the organization's display name. Ignored when personal is true, which
 	// derives the name from the caller's own username instead.
 	Name string `json:"name"`
-	// Personal asks for the caller's own workspace: the name is derived from their
+	// Personal asks for the caller's own space: the name is derived from their
 	// username and the slug auto-suffixes to stay unique. Meaningless — and refused
 	// — for a caller who already has an organization.
 	Personal bool `json:"personal"`
@@ -735,7 +735,7 @@ type onboardResp struct {
 // that separates a FIRST-RUN onboarding from an ADDITIONAL one.
 //
 // Carrying an X-Org-Id is NOT that fact, and reading it as one is what left a
-// fresh sign-up unable to get a workspace. Federated sign-up files a brand-new
+// fresh sign-up unable to get a space. Federated sign-up files a brand-new
 // user under the sign-up APPLICATION's own organization (iam
 // internal/oidc/federation.go: `org := app.Organization`, which for hanzo-console
 // is the brand org — the same value hanzoai/account publishes as SignupOrg), so
@@ -894,7 +894,7 @@ func resolveOnboardName(s *cloud.Service[state], body onboardReq, cr caller) (ba
 	if body.Personal {
 		baseSlug = personalOrgSlug(cr.name)
 		if len(baseSlug) < minOrgSlug || isReservedOrg(baseSlug) {
-			baseSlug = "org-" + cmp.Or(slugifyOrg(cr.name), "workspace")
+			baseSlug = "org-" + cmp.Or(slugifyOrg(cr.name), "space")
 		}
 		return baseSlug, humanize(cr.name), nil
 	}
