@@ -192,7 +192,7 @@
             "type": "string"
           },
           "doctype": {
-            "description": "DocType is the knowledge doctype: kb-page, kb-memory or kb-source from the\nsemantic leg, and a lexical row's own doctype/type field otherwise. Absent\nwhen the row carried neither.",
+            "description": "DocType is the knowledge doctype: kb.page, kb.memory or kb.source from the\nsemantic leg, and a lexical row's own doctype/type field otherwise. Absent\nwhen the row carried neither.",
             "type": "string"
           },
           "id": {
