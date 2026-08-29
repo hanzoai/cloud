@@ -93,14 +93,15 @@ var canons = []canon{{
 		"string — a pinned \"https://hanzo.id/\" and a derived \"https://hanzo.id\" are two " +
 		"issuers, so a token stamped by one fails validation against the other",
 }, {
-	fact:  "whether this process may serve, given the console anti-forgery key",
-	home:  "cloud.keyed at compose time (intent.go), cloud.Intended per request, account own for the minter",
-	local: regexp.MustCompile(`account\.Shared\(\)|accountapp\.Shared\(\)`),
-	owns:  nil,
-	cost: "eleven apps asked it in Mount and refused their WHOLE surface — including " +
-		"public reads that answer no token at all — for a key one branch of one control " +
-		"reads, and being lazy they refused in the child on first request, where no probe " +
-		"could see it",
+	fact:  "whether a change was asked for by the caller",
+	home:  "cloud.Intended (intent.go) — Sec-Fetch-Site, which the browser states and script cannot write",
+	local: regexp.MustCompile(`account\.Shared\(\)|accountapp\.Shared\(\)|attest\.Process\(\)\.Valid\(`),
+	owns:  []string{"internal/attest/attest.go"},
+	cost: "it was a 32-byte key every process had to hold the same copy of, and eleven " +
+		"apps asked for it in Mount and refused their WHOLE surface without it. The key " +
+		"proved a caller had first read GET /v1/account/csrf from this origin, which is " +
+		"the fact Sec-Fetch-Site states directly — so the agreement bought nothing and " +
+		"cost nine surfaces answering 503 to every caller",
 }}
 
 func TestOneFactHasOneHome(t *testing.T) {

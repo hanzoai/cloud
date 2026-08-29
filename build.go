@@ -1457,7 +1457,7 @@ func UseAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 		}
 		logger.Info("composed subsystem", "name", spec.Name)
 	}
-	return keyed(app, Deployed())
+	return nil
 }
 
 // logMaster states how this process resolved its data-plane key. Nothing

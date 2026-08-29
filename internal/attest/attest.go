@@ -51,9 +51,19 @@ const (
 	Header = "X-CSRF-Token"
 )
 
-// KeyEnv names the shared MAC key. KMS holds the value; the pod carries it; a
-// plugin child inherits it. It is the ONE name, so an operator provisioning it and
-// an error telling them to say the same word.
+// KeyEnv names the MAC key, and NOTHING REQUIRES IT ANY MORE.
+//
+// It was the value every process in the fleet had to hold the same copy of, so that
+// a token minted at one address verified at another. cloud.Intended stopped reading
+// tokens — it reads Sec-Fetch-Site, which the browser states on the request — so
+// there is no cross-process agreement left to make. A process without it mints a key
+// of its own and checks only its own tokens, which is now every process's situation
+// and harms none of them.
+//
+// It stays because the mint route still answers, and a client that reads and echoes
+// a token is not broken by being unchecked. Setting it does nothing; leaving it
+// unset does nothing. That is the point: it was an agreement problem, and the fix
+// was to stop needing agreement rather than to distribute the value more carefully.
 const KeyEnv = "CONSOLE_CSRF_KEY"
 
 // Shared is nil when this process holds the key every other process holds, and

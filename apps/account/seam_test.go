@@ -52,7 +52,7 @@ func tabHeaders(token string) map[string]string {
 		"Cookie": "iam_access_token=opaque-sid",
 	}
 	if token != "" {
-		h["X-CSRF-Token"] = token
+		h["Sec-Fetch-Site"] = "same-origin"
 	}
 	return h
 }

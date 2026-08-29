@@ -39,11 +39,10 @@ package cloud
 
 import (
 	"context"
-	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/hanzoai/cloud/apps/metering"
-	"github.com/hanzoai/cloud/internal/attest"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,12 +102,40 @@ func Intended(c *zip.Ctx) error {
 	if len(c.Fiber().Request().Header.Peek("Cookie")) == 0 {
 		return nil // gateway header-injection, an in-cluster hop — no ambient credential
 	}
-	tok := strings.TrimSpace(c.Header(attest.Header))
-	if tok == "" {
-		return zip.ErrForbidden(Unasked + ": GET /v1/account/csrf and echo it in " + attest.Header)
-	}
-	if !attest.Process().Valid(tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
-		return zip.ErrForbidden(Unasked + ", and that token does not say so")
+	// THE BROWSER ALREADY ANSWERS THIS, and its answer cannot be forged from a page.
+	//
+	// Sec-Fetch-Site is set by the browser and is a forbidden header, so script
+	// cannot write it. It distinguishes exactly the case that matters here and that
+	// SameSite cannot: a sibling subdomain sends `same-site`, not `same-origin`, so
+	// a page on any other *.hanzo.ai host is refused while the console's own request
+	// passes. `none` is a user-initiated navigation — typed, bookmarked — which is by
+	// definition asked for.
+	//
+	// This replaces a 32-byte key that every process had to hold the same copy of.
+	// That key bought nothing this does not: it proved the caller had first read
+	// GET /v1/account/csrf from THIS origin, which is the same fact Sec-Fetch-Site
+	// states directly. What it cost was an agreement problem — one value, shared by
+	// every child of the fleet, absent or blank in any of them. Nine surfaces
+	// answered 503 to every caller for exactly that reason, and no probe could see
+	// it, because a key is a deployment fact and a header is a request fact.
+	switch c.Header("Sec-Fetch-Site") {
+	case "same-origin", "none":
+		return nil
+	case "":
+		// Pre-2023 Safari and other exotic clients. Origin is still sent on every
+		// POST by every browser that has ever implemented fetch, so an exact-host
+		// match stands in. Absent BOTH, refuse: a cookie-bearing state change that
+		// will not say where it came from is the shape being defended against.
+		if o := strings.TrimSpace(c.Header("Origin")); o != "" {
+			if u, err := url.Parse(o); err == nil && strings.EqualFold(u.Host, c.Fiber().Hostname()) {
+				return nil
+			}
+			return zip.ErrForbidden(Unasked + " (CSRF): this change came from " + o)
+		}
+		return zip.ErrForbidden(Unasked + " (CSRF): a cookie-authenticated change that states no origin")
+	default:
+		// same-site (a sibling subdomain) and cross-site.
+		return zip.ErrForbidden(Unasked + " (CSRF): the browser says this came from another site")
 	}
 	return nil
 }
@@ -146,46 +173,11 @@ func governs(path string) bool {
 	return false
 }
 
-// keyed refuses to compose a DEPLOYED program that serves a governed change
-// without the key every process shares. UseAll asks it once, after the ops exist
-// and before anything listens.
+// NO COMPOSE-TIME KEY CHECK. keyed() stood here and refused to compose a deployed
+// program that served a governed change without the shared anti-forgery key.
 //
-// A CONTROL WITHOUT THE KEY IS A CONTROL THAT REFUSES EVERYTHING. The token is a
-// MAC, so a process checks it against the key that WROTE it, and the writer is the
-// process serving GET /v1/account/csrf — another process entirely. A process that
-// mints a key of its own therefore refuses every change a browser makes, for as
-// long as the pod runs, with nothing in any log saying why. That failure is
-// invisible from inside one process, so it cannot be found by a test; it can only
-// be refused at boot, which is what this does.
-//
-// DEPLOYED ONLY. A laptop runs the whole fleet in ONE process, so the key it
-// invents is the key it checks against and everything works — asking an engineer
-// for a KMS value to run a CRM would be a control that costs more than it defends.
-// A deployment is not one process: it was handed a master key, so a secret store
-// stands behind it, and a key it invented would be one value per replica and a new
-// one per restart.
-//
-// It takes the fact rather than reading it, so the refusal can be measured: a test
-// binary is not a deployment, and a rule that asked Deployed itself would be
-// untestable in the one direction that matters.
-func keyed(app *zip.App, deployed bool) error {
-	if !deployed {
-		return nil
-	}
-	if _, projecting := DescribeRequested(); projecting {
-		return nil // no session, no token, nothing to check
-	}
-	lone := attest.Shared()
-	if lone == nil {
-		return nil
-	}
-	for _, op := range app.Registry() {
-		if governs(op.Path) && Consumes(op.Method, op.Path) {
-			return fmt.Errorf("anti-forgery: %w; this process serves %s %s, whose changes answer to the "+
-				"control, and it checks a token another process mints — set %s from KMS (32 bytes, hex or "+
-				"base64) on every process, or take that surface out of the governed list",
-				lone, op.Method, op.Path, attest.KeyEnv)
-		}
-	}
-	return nil
-}
+// It went when the key did. [Intended] reads Sec-Fetch-Site now — a fact the
+// browser states on the request — so there is no value every process must hold the
+// same copy of, and therefore nothing to verify at composition. What that check
+// really enforced was an agreement between processes, and the way to stop needing
+// agreement is to stop having a shared secret, not to check for one earlier.

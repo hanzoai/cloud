@@ -18,29 +18,20 @@ package account
 // GET /v1/account/csrf) and MUST echo in a CUSTOM header (a simple cross-site
 // request cannot set X-CSRF-Token without a preflight the server never grants).
 //
-// THE KEY IS SHARED, AND THAT IS A DEPLOYMENT FACT. One address MINTS a token — the
-// route below — and the processes that CHECK one are other processes entirely
-// (plugin/<name>/main.go links one subsystem; the host runs each as a child). A MAC
-// verifies against the key that wrote it, so those processes hold ONE key or no
-// token ever verifies. That key is attest.KeyEnv, from KMS, on the pod — a child
-// inherits the host's environment whole, so one value reaches every process.
+// THE KEY IS NO LONGER SHARED, AND NOTHING VERIFIES ACROSS PROCESSES.
 //
-// Absent it, a process mints a key of its own. That is right for the MINTER alone,
-// which only ever checks tokens it wrote itself, and wrong for everyone else, whose
-// every check then fails — a permanent 403 across the console that no test can see
-// from inside one process. So the two sides ask different questions of the same key
-// at BOOT, and both are answered here:
+// This route still mints a token, and a client that echoes one is not broken. But
+// cloud.Intended does not read it: it reads Sec-Fetch-Site, a fact the browser
+// states on the request and script cannot write. So a process that mints a key of
+// its own checks only tokens it wrote itself, which is fine, because nothing else
+// checks them at all.
 //
-//	[Shared] — the checkers. A key of their own verifies nothing they will be sent,
-//	           so they refuse, and the mount fails.
-//	[Use] — the minter. A key of its own works for one process over one
-//	           lifetime, so it is allowed on a laptop and refused on a deployment
-//	           ([cloud.Deployed] — this process was handed a master key, so it has a
-//	           secret store and no excuse for a missing one).
+// What that removed was an agreement problem. One value had to reach every child of
+// the fleet, and when it did not — blank, unset, or wrong — the surfaces that asked
+// for it refused every caller with a 503 that no probe could explain.
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/internal/attest"
@@ -60,20 +51,15 @@ func serving() bool {
 	return !projecting
 }
 
-// own is the MINTER's verdict on a key of its own, which is a different question with
-// a different answer: this app issues the tokens it accepts, so one process over one
-// lifetime is self-consistent and a laptop with no KMS works unchanged. A DEPLOYMENT
-// is not one process over one lifetime — it was handed a master key, so a secret store
-// stands behind it, and a key it invented would be one value per replica and a new one
-// per restart, refusing every console session that crossed either.
-func own(deployed bool) error {
-	lone := attest.Shared()
-	if lone == nil || !deployed || !serving() {
-		return nil
-	}
-	return fmt.Errorf("anti-forgery: %w; this process holds a master key, so it has a secret store — set %s "+
-		"from KMS (32 bytes, hex or base64) on every process that mints or checks a console token", lone, KeyEnv)
-}
+// NO MINTER KEY CHECK EITHER. own() refused to mount a DEPLOYED account process
+// holding a key of its own, because a per-replica key meant a token minted by one
+// replica failed on the next.
+//
+// Nothing mints a token that another process verifies any more, so there is no key
+// to disagree about. This check was also the last thing keeping /v1/account/* at
+// 503 for every caller after the fleet-wide ones came out: account is the surface
+// that serves the avatar, the appearance and the API keys, and it was refusing all
+// of them over a value none of them read.
 
 // CSRF is the control as a PREDICATE, in the shape a typed op holds: a context. It
 // is how an operation on a surface cloud.Intent does not yet govern asks the same
