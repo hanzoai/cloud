@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "hanzo.team usage & wallet page — a small @hanzo/ui@8 React static export, go:embed'd by apps/team and served at /v1/team/billing/ui/.",
+  "description": "hanzo.team usage & wallet page \u2014 a small @hanzo/ui@8 React static export, go:embed'd by apps/team and served at /v1/team/billing/ui/.",
   "scripts": {
     "dev": "vite",
     "build": "vite build"
@@ -19,7 +19,7 @@
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^6.0.2",
     "vite": "^8.2.2"
   },
   "license": "BSD-3-Clause"

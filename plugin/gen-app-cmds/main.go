@@ -240,7 +240,7 @@ const stub = "package main\n\n" +
 	"\tif err := cloud.Listen([]cloud.Plugin{{\n" +
 	"\t\tName:  %q,\n" +
 	"\t\tPrice: cloud.Free,\n" +
-	"\t\tMount: %s.Use,\n" +
+	"\t\tUse: %s.Use,\n" +
 	"\t}}, []string{%q}); err != nil {\n" +
 	"\t\tfmt.Fprintln(os.Stderr, err)\n" +
 	"\t\tos.Exit(1)\n" +
