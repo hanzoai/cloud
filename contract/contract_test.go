@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -64,8 +66,50 @@ func TestMany(t *testing.T) {
 		}
 	}
 	// A data spelling beside a generator is the same ambiguity.
-	if _, err := Load(tree{"hanzo.yml": []byte("a: 1\n"), "hanzo.ts": []byte("x")}.read); !errors.Is(err, ErrMany) {
-		t.Errorf("yml + ts: want ErrMany, got %v", err)
+	if _, err := Load(tree{"hanzo.yml": []byte("a: 1\n"), "hanzo.config.ts": []byte("x")}.read); !errors.Is(err, ErrMany) {
+		t.Errorf("yml + config.ts: want ErrMany, got %v", err)
+	}
+}
+
+// THE REGRESSION THAT MOVED THE GENERATOR NAMES. hanzo-js publishes a browser
+// bundle called hanzo.js at its repo root, and hanzo.js was once a generator
+// spelling — so resolving that repository meant `node hanzo.js`, the resolver
+// running a repository's own published artifact because of what it is called. A
+// root hanzo.go was worse: Go would have compiled it into the project as well.
+//
+// None of those three is a contract now. A repository carrying all of them, and
+// nothing else, declares NOTHING — not a document, not a refusal to run one.
+func TestOrdinarySourceIsNotAContract(t *testing.T) {
+	bundles := tree{
+		"hanzo.js": []byte("(function(){/* 300kB of published bundle */})();"),
+		"hanzo.ts": []byte("export const version = '1.0.0'\n"),
+		"hanzo.go": []byte("package hanzo\n\nfunc Version() string { return \"1.0.0\" }\n"),
+	}
+	if _, err := Load(bundles.read); !errors.Is(err, ErrNone) {
+		t.Fatalf("a repo of ordinary source: want ErrNone, got %v", err)
+	}
+	// And it does not become ambiguous beside a real contract: the repository
+	// declares the one document it wrote, and the bundle stays a bundle.
+	with := tree{"hanzo.yml": []byte("bucket: plugins\n")}
+	for name, body := range bundles {
+		with[name] = body
+	}
+	doc, err := Load(with.read)
+	if err != nil {
+		t.Fatalf("contract beside a bundle: %v", err)
+	}
+	if doc.Name != "hanzo.yml" {
+		t.Errorf("resolved %q", doc.Name)
+	}
+	// The names that ARE generators cannot be ordinary source: nothing is bundled
+	// to hanzo.config.js, and .hanzo/contract.go is out of the repo's own package.
+	for _, name := range Names {
+		if toolchain(name) == nil {
+			continue
+		}
+		if _, taken := bundles[name]; taken {
+			t.Errorf("%s is a generator spelling AND a name ordinary source has", name)
+		}
 	}
 }
 
@@ -74,7 +118,7 @@ func TestMany(t *testing.T) {
 // broken — so no reader's answer can depend on where its scan started.
 func TestReorderIsNotATieBreak(t *testing.T) {
 	one := tree{"hanzo.json": []byte(`{"bucket": "plugins"}`)}
-	two := tree{"hanzo.yml": []byte("a: 1\n"), "hanzo.go": []byte("package main")}
+	two := tree{"hanzo.yml": []byte("a: 1\n"), ".hanzo/contract.go": []byte("package main")}
 
 	was := Names
 	t.Cleanup(func() { Names = was })
@@ -83,7 +127,10 @@ func TestReorderIsNotATieBreak(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	Names = []string{"hanzo.go", "hanzo.ts", "hanzo.js", "hanzo.json", "hanzo.yaml", "hanzo.yml"}
+	// Reversed from Names ITSELF, not from a second list written out here: a copy
+	// would drift, and then this would be reversing something Names no longer says.
+	Names = append([]string{}, was...)
+	slices.Reverse(Names)
 	again, err := Load(one.read)
 	if err != nil {
 		t.Fatalf("reversed scan: %v", err)
@@ -298,9 +345,9 @@ func TestShape(t *testing.T) {
 
 // LOAD READS AND DOES NOT RUN. Every downstream reader — CI, platform, the
 // operator — holds this door and no other, so a repository cannot get code
-// executed by naming its declaration hanzo.ts.
+// executed by naming its declaration hanzo.config.ts.
 func TestLoadRefusesCode(t *testing.T) {
-	for _, name := range []string{"hanzo.js", "hanzo.ts", "hanzo.go"} {
+	for _, name := range []string{"hanzo.config.js", "hanzo.config.ts", ".hanzo/contract.go"} {
 		_, err := Load(tree{name: []byte("print('nope')")}.read)
 		if err == nil {
 			t.Errorf("%s: Load accepted a generator", name)
@@ -317,19 +364,31 @@ func TestLoadRefusesCode(t *testing.T) {
 // same declaration.
 func TestEvalGenerator(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "hanzo.go", `//go:build ignore
-
-package main
+	write(t, dir, ".hanzo/contract.go", `package main
 
 import "fmt"
 
 func main() { fmt.Println(`+"`"+`{"bucket": "plugins", "retries": 3}`+"`"+`) }
 `)
+	// It is out of the project's own package, which is the whole reason it lives
+	// under .hanzo/, and that claim is asked of the toolchain rather than believed:
+	// `go build ./...` here compiles the project and never the generator, because
+	// the go tool skips a dot-directory when it walks packages.
+	// The go directive stays BELOW the toolchain running this test, so the build is
+	// local and nothing is fetched.
+	write(t, dir, "go.mod", "module contract.test\n\ngo 1.24\n")
+	write(t, dir, "lib.go", "package lib\n")
+	build := exec.Command("go", "build", "./...")
+	build.Dir = dir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("a generator under .hanzo/ was compiled into the project: %v: %s", err, out)
+	}
+
 	doc, err := Eval(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}
-	if doc.Name != "hanzo.go" {
+	if doc.Name != ".hanzo/contract.go" {
 		t.Errorf("name %q", doc.Name)
 	}
 	same, err := Load(tree{"hanzo.yml": []byte("bucket: plugins\nretries: 3\n")}.read)
@@ -345,9 +404,7 @@ func main() { fmt.Println(`+"`"+`{"bucket": "plugins", "retries": 3}`+"`"+`) }
 // declaration is not reported as a parse error a hundred lines away.
 func TestEvalRefuses(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "hanzo.go", `//go:build ignore
-
-package main
+	write(t, dir, ".hanzo/contract.go", `package main
 
 import (
 	"fmt"
@@ -363,7 +420,7 @@ func main() {
 	if err == nil {
 		t.Fatal("a generator that exited 1 was accepted")
 	}
-	for _, want := range []string{"hanzo.go", "the registry is not configured"} {
+	for _, want := range []string{".hanzo/contract.go", "the registry is not configured"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error does not carry %q: %v", want, err)
 		}
@@ -371,15 +428,13 @@ func main() {
 
 	// Output that is not a document is refused the same way, naming the file.
 	other := t.TempDir()
-	write(t, other, "hanzo.go", `//go:build ignore
-
-package main
+	write(t, other, ".hanzo/contract.go", `package main
 
 import "fmt"
 
 func main() { fmt.Println("built ok") }
 `)
-	if _, err := Eval(context.Background(), other); err == nil || !strings.Contains(err.Error(), "hanzo.go") {
+	if _, err := Eval(context.Background(), other); err == nil || !strings.Contains(err.Error(), ".hanzo/contract.go") {
 		t.Errorf("non-document output: %v", err)
 	}
 }
@@ -399,21 +454,29 @@ func TestEvalReadsData(t *testing.T) {
 		t.Errorf("empty dir: %v", err)
 	}
 
-	// A DIRECTORY carrying one of the names is absent, not unreadable. Nothing is
-	// lost by passing it over — a directory cannot be a document and no author ever
-	// meant one as one — and reading a tree at a revision already answers this way,
-	// so the two readers agree.
-	both := t.TempDir()
-	if err := os.Mkdir(filepath.Join(both, "hanzo.go"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	write(t, both, "hanzo.yml", "bucket: plugins\n")
-	doc, err = Eval(context.Background(), both)
-	if err != nil {
-		t.Fatalf("a directory named hanzo.go stopped resolution: %v", err)
-	}
-	if doc.Name != "hanzo.yml" {
-		t.Errorf("resolved %q", doc.Name)
+	// A PATH THAT CANNOT BE HOLDING A DOCUMENT IS ABSENT, not unreadable, and
+	// reading a tree at a revision already answers that way — so the checkout reader
+	// and the git reader cannot disagree about the same repository. Two shapes reach
+	// it: a directory carrying one of the names, and a plain file where .hanzo/ has
+	// to be a directory for the name under it to exist at all.
+	for _, odd := range []func(t *testing.T, dir string){
+		func(t *testing.T, dir string) {
+			if err := os.MkdirAll(filepath.Join(dir, ".hanzo", "contract.go"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		},
+		func(t *testing.T, dir string) { write(t, dir, ".hanzo", "not a directory\n") },
+	} {
+		both := t.TempDir()
+		odd(t, both)
+		write(t, both, "hanzo.yml", "bucket: plugins\n")
+		doc, err = Eval(context.Background(), both)
+		if err != nil {
+			t.Fatalf("resolution stopped on a path that cannot be a document: %v", err)
+		}
+		if doc.Name != "hanzo.yml" {
+			t.Errorf("resolved %q", doc.Name)
+		}
 	}
 }
 
@@ -451,7 +514,11 @@ func TestOwnContract(t *testing.T) {
 
 func write(t *testing.T, dir, name, body string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+	at := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(at), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(at, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

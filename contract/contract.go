@@ -4,8 +4,8 @@
 // A repository writes that document in one of several spellings. hanzo.yml,
 // hanzo.yaml and hanzo.json are three ways to write the SAME document — YAML 1.2
 // is a superset of JSON, so one parser reads all three, against one schema.
-// hanzo.js, hanzo.ts and hanzo.go are generators: they are run once, at the edge,
-// and what they print is the document (eval.go says why).
+// hanzo.config.js, hanzo.config.ts and .hanzo/contract.go are generators: they are
+// run once, at the edge, and what they print is the document (eval.go says why).
 //
 // So reading a contract is always: resolve → evaluate if the spelling is code →
 // canonical document → digest. Load is the reading half and is what every
@@ -29,13 +29,32 @@ import (
 // Names are the spellings of the contract, in scan order: the data forms first,
 // then the generators.
 //
+// A DATA spelling is inert, so it can sit at the root under the plain name. A
+// GENERATOR is code, so its name has to be one ordinary source cannot already have,
+// or resolving a repository means running a file that repository wrote for some
+// other purpose. Each language already has such a name and it is not `hanzo.<ext>`
+// — and the two are not the same shape, because what a root file MEANS is not the
+// same in the two languages:
+//
+//   - hanzo.js is what a JS project calls its published browser bundle — hanzo-js
+//     ships one at its root — so `hanzo.js` would run a repository's own artifact.
+//     hanzo.config.js and hanzo.config.ts are the name every JS project already
+//     reserves for configuration (vite.config, next.config, tailwind.config), and
+//     nothing is ever bundled to one.
+//   - hanzo.go is worse, because a root .go file is part of the repository's OWN
+//     package: it would be compiled into the project and read as the project's
+//     contract at the same time. .hanzo/contract.go is neither. The go tool skips a
+//     dot-directory when it walks packages, so `go build ./...` never compiles it,
+//     while `go run .hanzo/contract.go` still runs it — and .hanzo/ is already where
+//     this estate keeps a repository's workflows.
+//
 // The order is NOT a tie-break. Two contract files in one repository is refused
 // (ErrMany), because two files each claiming to be the contract is genuinely
 // ambiguous, and a reader that silently picks one ends up disagreeing with the
 // reader that picks the other about what the repository declares. What the order
 // fixes is which name a scan looks at first, and so the order an error lists them
 // in; Names[0] is the spelling to write when creating one.
-var Names = []string{"hanzo.yml", "hanzo.yaml", "hanzo.json", "hanzo.js", "hanzo.ts", "hanzo.go"}
+var Names = []string{"hanzo.yml", "hanzo.yaml", "hanzo.json", "hanzo.config.js", "hanzo.config.ts", ".hanzo/contract.go"}
 
 // Max bounds a contract: the most that is read from a file, and the most a
 // generator may print. A declaration is small, and the tree it arrives in is
@@ -52,10 +71,11 @@ var (
 	ErrMany = errors.New("contract: more than one")
 )
 
-// Read answers one repository-root file's bytes. A file that is not there answers
-// an error satisfying errors.Is(err, fs.ErrNotExist); anything else is a real
-// failure and resolution stops on it, so an unreadable contract is never mistaken
-// for an absent one.
+// Read answers one file's bytes, named relative to the repository root — a plain
+// name for a data spelling, a path under .hanzo/ for the Go generator. A file that
+// is not there answers an error satisfying errors.Is(err, fs.ErrNotExist); anything
+// else is a real failure and resolution stops on it, so an unreadable contract is
+// never mistaken for an absent one.
 type Read func(name string) ([]byte, error)
 
 // Doc is a repository's contract in canonical form.

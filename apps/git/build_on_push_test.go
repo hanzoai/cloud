@@ -1,15 +1,19 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/contract"
+	luxlog "github.com/luxfi/log"
 )
 
 // build_on_push_test.go proves the PURE core of the native CI/CD orchestrator: the
@@ -135,9 +139,16 @@ func TestReadPipelineSpellings(t *testing.T) {
 	}
 
 	// A generator is not run here. The reactor reads what a repo declares.
-	_, _, err = readPipeline(context.Background(), tree{"hanzo.ts": "export default {}"}, "abc")
-	if err == nil || !strings.Contains(err.Error(), "hanzo.ts") {
+	_, _, err = readPipeline(context.Background(), tree{"hanzo.config.ts": "export default {}"}, "abc")
+	if err == nil || !strings.Contains(err.Error(), "hanzo.config.ts") {
 		t.Errorf("generator: %v", err)
+	}
+
+	// A repo's PUBLISHED BUNDLE is not its contract. hanzo-js ships hanzo.js at its
+	// root; a resolver naming that would have run it. It declares nothing here.
+	pl, from, err = readPipeline(context.Background(), tree{"hanzo.js": "(function(){})();"}, "abc")
+	if pl != nil || from != "" || err != nil {
+		t.Errorf("a bundle named hanzo.js: %+v %q %v", pl, from, err)
 	}
 
 	// A contract too big to read is a refusal, not an absence. hanzoai/openapi
@@ -150,6 +161,28 @@ func TestReadPipelineSpellings(t *testing.T) {
 	}, "abc")
 	if err == nil || !strings.Contains(err.Error(), "hanzo.yaml") {
 		t.Errorf("oversized file: %v", err)
+	}
+}
+
+// TWO CONTRACTS IS LOUDER THAN A BAD MOMENT. The reactor is best-effort, so this
+// line is the whole account of a repository that has stopped building — and a
+// misconfiguration nobody will notice on its own must not read like a connection
+// that dropped once and will be fine next push.
+func TestTwoContractsIsLouder(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("%w: hanzo.yml hanzo.json", contract.ErrMany), `"level":"error"`},
+		{errors.New("dial tcp: connection refused"), `"level":"warn"`},
+		{contract.ErrNone, `"level":"warn"`},
+	} {
+		var buf bytes.Buffer
+		s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test").Output(&buf)}}
+		level(s, c.err)("native ci/cd: read pipeline", "err", c.err)
+		if got := buf.String(); !strings.Contains(got, c.want) {
+			t.Errorf("%v: want %s, logged %s", c.err, c.want, strings.TrimSpace(got))
+		}
 	}
 }
 

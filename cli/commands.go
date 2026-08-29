@@ -337,7 +337,7 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 //
 // The CLI is one of the two edges that may EVALUATE a contract written as code,
 // which is why this resolves through contract.Eval: a project whose declaration is
-// a hanzo.ts builds from what that prints, and everything downstream still receives
+// a hanzo.config.ts builds from what that prints, and everything downstream receives
 // the document.
 func (br *BuildReq) loadRecipe(ctx context.Context, dir string) error {
 	doc, err := contract.Eval(ctx, dir)
