@@ -130,12 +130,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("company.Mount: open store: %w", err)
 	}
-	// Resolve the founder-KYC provider from config (fail-closed: a named-but-
-	// misconfigured provider fails the mount, never silently downgrades to manual).
-	kyc, err := resolveKYC(deps)
-	if err != nil {
-		return fmt.Errorf("company.Mount: kyc provider: %w", err)
-	}
+	// A misconfigured provider refuses the two ops that read it (brokenKYC) rather
+	// than the whole surface — see resolveKYC.
+	kyc := resolveKYC(deps)
 	b := cloud.NewBase(deps, "company")
 	s := &cloud.Service[state]{Base: b, State: state{
 		store: store,

@@ -2,7 +2,6 @@ package company
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/hanzoai/cloud"
@@ -17,31 +16,49 @@ import (
 // drives founder verification through the SAME client Hanzo Compliance uses for org-side
 // onboarding — one provider, no duplication.
 
-// resolveKYC returns the founder-KYC provider for a mount. It is FAIL-CLOSED: a
-// named-but-misconfigured provider is an error (the mount fails) rather than a silent
-// downgrade to manual, which would weaken the KYC gate unnoticed. An unset provider
-// is the honest manualKYC default.
-func resolveKYC(deps cloud.Deps) (KYCProvider, error) {
-	p, err := idv.FromConfig(kmsGetter(deps), os.Getenv)
+// resolveKYC returns the founder-KYC provider for a mount. A named-but-misconfigured
+// provider must never downgrade to manual — that would weaken the KYC gate unnoticed —
+// so it resolves to brokenKYC, which refuses.
+//
+// It does not fail the MOUNT. Two of this app's ~24 routes read the provider
+// (POST /v1/company/kyc and /kyc/refresh); the rest — the formation record, /tariff
+// and /ein, the founders and documents, the fundraise reads — never touch it, and a
+// KYC secret is no reason for them to answer 503. That mattered most for
+// /kyc/decision, the human-in-the-loop path this package calls the only route to a
+// pass when no real provider is wired: a mount refusal took down the one manual
+// remedy for the provider's own misconfiguration.
+//
+// An unset provider is still the honest manualKYC default.
+func resolveKYC(deps cloud.Deps) KYCProvider {
+	p, err := idv.FromConfig(deps.Secret(), os.Getenv)
 	if err != nil {
-		return nil, err
+		return brokenKYC{err: err}
 	}
 	if _, isManual := p.(idv.Manual); isManual {
-		return manualKYC{}, nil // the formation's own honest, callback-driven default
+		return manualKYC{} // the formation's own honest, callback-driven default
 	}
-	return idvKYC{p: p}, nil
+	return idvKYC{p: p}
 }
 
-// kmsGetter adapts deps.KMS into the idv secret resolver. A nil KMS yields a resolver
-// that errors, so a real provider needing a sealed key fails closed at mount.
-func kmsGetter(deps cloud.Deps) idv.SecretFn {
-	if deps.KMS == nil {
-		return func(context.Context, string) ([]byte, error) {
-			return nil, fmt.Errorf("KMS not available")
-		}
-	}
-	return deps.KMS.GetSecret
+// brokenKYC is what a misconfigured deployment gets. Every call carries the
+// configuration error out, so the two ops that verify identity name it and the
+// rest of the surface keeps serving.
+//
+// It is FAIL-CLOSED by construction, and the payment gate is what proves it: a
+// founder only reaches StagePayment through guardKYCVerified, which demands a
+// DecidedBy on every founder, and brokenKYC mints no reference and reports no
+// status, so DecidedBy is never set. Refusing louder than manualKYC also matters —
+// manual is a legitimate configuration, and answering "manual" here would report a
+// misconfiguration as a working default.
+type brokenKYC struct{ err error }
+
+func (brokenKYC) Name() string { return "unavailable" }
+
+func (b brokenKYC) Start(context.Context, string, Founder) (ref, verifyURL, status string, err error) {
+	return "", "", "", b.err
 }
+
+func (b brokenKYC) Check(context.Context, string) (string, error) { return "", b.err }
 
 // idvKYC adapts the shared idv.Provider to the company KYCProvider client: it maps a
 // Founder to an idv.Subject and the provider's honest status vocabulary onto the
