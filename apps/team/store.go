@@ -3,6 +3,8 @@ package team
 import (
 	"database/sql"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sync"
 
@@ -36,6 +38,31 @@ type docStore struct {
 
 func newStore(dir string) *docStore {
 	return &docStore{dir: dir, dbs: map[namespace.Namespace]*sql.DB{}}
+}
+
+// converge carries a document tree written before this directory was called
+// `spaces`. The account store's own converge is the same act one layer up.
+//
+// It is ONE rename, and that is the whole reason it is safe: the tree holds a
+// database per (org, space) and cek keeps each one's wrapped key in a `.dek`
+// beside it, so moving the files and leaving the keys — or the reverse — would
+// leave every space encrypted with a key nothing can find. Moving the directory
+// moves both, together, or neither.
+//
+// Guarded on both ends. A fresh deployment has no old tree; a converged one has
+// the new one and the old name is gone, so a second boot does nothing. The
+// failure it must never have is a SILENT one: without this the tree is simply
+// not found, every space opens empty, and a deployment reports itself healthy
+// while its documents sit unread on the same disk.
+func converge(root string) error {
+	was, is := filepath.Join(root, "workspaces"), filepath.Join(root, "spaces")
+	if _, err := os.Stat(is); err == nil {
+		return nil
+	}
+	if _, err := os.Stat(was); err != nil {
+		return nil
+	}
+	return os.Rename(was, is)
 }
 
 var pathSanitize = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
