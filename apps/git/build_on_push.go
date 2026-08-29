@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"gopkg.in/yaml.v2"
+	"github.com/hanzoai/cloud/contract"
 )
 
 // build_on_push.go is the NATIVE CI/CD orchestrator: a git-lifecycle reactor that
@@ -82,31 +84,34 @@ const (
 	defaultEnqueueURL = "http://cloud.hanzo.svc.cluster.local:8000/v1/platform/runner"
 )
 
-// pipeline is the slice of the `hanzo.yml` / `.hanzo/workflows/*.yml` schema the
+// pipeline is the slice of the contract / `.hanzo/workflows/*.yml` schema the
 // orchestrator acts on: the images to build. Deploy is intentionally NOT read here
-// — platform's build-completion gates the rollout per the same `hanzo.yml` deploy
+// — platform's build-completion gates the rollout per the same contract's deploy
 // block (one deploy policy, evaluated once, on the executor), so the orchestrator
 // only needs to know WHAT to build; WHERE it rolls stays platform's decision.
+//
+// The fields carry json names because a resolved contract's canonical form is
+// JSON, whatever spelling the repository wrote it in (contract.Doc.Into).
 type pipeline struct {
-	Images []pipelineImage `yaml:"images"`
+	Images []pipelineImage `json:"images"`
 }
 
-// pipelineImage mirrors one `images:` entry (the multi-image hanzo.yml form). The
+// pipelineImage mirrors one `images:` entry (the multi-image contract form). The
 // field names are the canonical schema the platform TS validator and the ci
 // reusable already read — one schema, three readers.
 type pipelineImage struct {
-	Name       string `yaml:"name"`
-	Repo       string `yaml:"repo"`       // bare registry repo, e.g. ghcr.io/hanzoai/foo
-	Context    string `yaml:"context"`    // build context dir (default ".")
-	Dockerfile string `yaml:"dockerfile"` // default "<context>/Dockerfile"
-	TagSuffix  string `yaml:"tag-suffix"` // default = name
+	Name       string `json:"name"`
+	Repo       string `json:"repo"`       // bare registry repo, e.g. ghcr.io/hanzoai/foo
+	Context    string `json:"context"`    // build context dir (default ".")
+	Dockerfile string `json:"dockerfile"` // default "<context>/Dockerfile"
+	TagSuffix  string `json:"tag-suffix"` // default = name
 	// Args are `--build-arg` values for THIS image. They are what makes several
 	// entries off ONE Dockerfile mean different things: hanzoai/bot declares
 	// three sandbox classes as three entries that differ only by
 	// `args: {STAGE: exec|dev|desktop}`. Dropped on the floor, the three tags are
 	// three copies of whatever stage the Dockerfile defaults to — an `exec` tag
 	// carrying a whole desktop, published under a name that says otherwise.
-	Args map[string]string `yaml:"args"`
+	Args map[string]string `json:"args"`
 }
 
 // enqueueReq is platform's /v1/runner body (EnqueueBody). Field-for-field the
@@ -168,9 +173,10 @@ func buildOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycl
 
 // readPipeline resolves the repo's native pipeline at the pushed commit: it merges
 // the images of every `.hanzo/workflows/*.yml|*.yaml` file (the native-first
-// location), and falls back to the root `hanzo.yml` when that directory is absent or
-// declares no image. Returns the parsed pipeline + the config path it came from
-// (for the log), or (nil,"",nil) when the repo carries no native pipeline at all.
+// location), and falls back to the repo's own contract — in whichever spelling it
+// is written — when that directory is absent or declares no image. Returns the
+// parsed pipeline + the file it came from (for the log), or (nil,"",nil) when the
+// repo carries no native pipeline at all.
 func readPipeline(ctx context.Context, repo Repository, after string) (*pipeline, string, error) {
 	rev, _, err := repo.Resolve(ctx, after)
 	if err != nil {
@@ -185,12 +191,16 @@ func readPipeline(ctx context.Context, repo Repository, after string) (*pipeline
 			if e.Dir || (!strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml")) {
 				continue
 			}
-			var p pipeline
-			b, berr := repo.Blob(ctx, rev, e.Path, 0)
-			if berr != nil || b.Binary {
+			b, berr := repo.Blob(ctx, rev, e.Path, contract.Max)
+			if berr != nil || b.Binary || b.Truncated {
 				continue
 			}
-			if yaml.Unmarshal(b.Content, &p) == nil && len(p.Images) > 0 {
+			doc, derr := contract.Parse(e.Path, b.Content)
+			if derr != nil {
+				continue
+			}
+			var p pipeline
+			if doc.Into(&p) == nil && len(p.Images) > 0 {
 				merged.Images = append(merged.Images, p.Images...)
 				from = append(from, e.Name)
 			}
@@ -199,25 +209,46 @@ func readPipeline(ctx context.Context, repo Repository, after string) (*pipeline
 			return merged, ".hanzo/workflows/{" + strings.Join(from, ",") + "}", nil
 		}
 	}
-	// Fallback: the root hanzo.yml (GitHub-Actions-compatible location).
-	if pl := pipelineFromBlob(ctx, repo, rev, "hanzo.yml"); pl != nil {
-		return pl, "hanzo.yml", nil
-	}
-	return nil, "", nil
-}
-
-// pipelineFromBlob parses one file at a revision as a pipeline, returning nil when
-// the file is absent, unreadable, binary, or declares no image.
-func pipelineFromBlob(ctx context.Context, repo Repository, rev Revision, path string) *pipeline {
-	b, err := repo.Blob(ctx, rev, path, 0)
-	if err != nil || b.Binary {
-		return nil
+	// Fallback: the repo's own contract at its root — hanzo.yml, .yaml or .json.
+	// A generator spelling is refused by contract.Load and reported: this reactor
+	// reads what a repository declares, it does not run it.
+	doc, err := contract.Load(blobs(ctx, repo, rev))
+	switch {
+	case errors.Is(err, contract.ErrNone):
+		return nil, "", nil
+	case err != nil:
+		return nil, "", err
 	}
 	var p pipeline
-	if yaml.Unmarshal(b.Content, &p) != nil || len(p.Images) == 0 {
-		return nil
+	if err := doc.Into(&p); err != nil {
+		return nil, "", fmt.Errorf("%s: %w", doc.Name, err)
 	}
-	return &p
+	if len(p.Images) == 0 {
+		return nil, "", nil
+	}
+	return &p, doc.Name, nil
+}
+
+// blobs reads repo-root files at a revision in the shape contract.Load resolves
+// through: a path that is not in the tree answers fs.ErrNotExist, and anything else
+// is a real failure resolution must stop on rather than read past. A file too big
+// or too binary to read is one of those — skipping it would let a repository lose
+// its declaration without a word.
+func blobs(ctx context.Context, repo Repository, rev Revision) contract.Read {
+	return func(name string) ([]byte, error) {
+		b, err := repo.Blob(ctx, rev, name, contract.Max)
+		switch {
+		case errors.Is(err, ErrNoPath):
+			return nil, fs.ErrNotExist
+		case err != nil:
+			return nil, err
+		case b.Truncated:
+			return nil, fmt.Errorf("%d bytes; a declaration is smaller than %d", b.Size, contract.Max)
+		case b.Binary:
+			return nil, errors.New("not text")
+		}
+		return b.Content, nil
+	}
 }
 
 // enqueuePipeline POSTs one direct-build request per image and returns
