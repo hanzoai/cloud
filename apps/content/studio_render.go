@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 )
 
@@ -148,8 +149,12 @@ func (g *aiStudioGenerator) draftAsset(ctx context.Context, org string, in Gener
 	// Gate the render to the brand's org BEFORE the compute (fail-closed 402 out of funds).
 	// project rides the request body (in.Project), not a server-minted identity claim,
 	// so it is unvalidated → a project-scoped cap stays soft (anti project-spoof).
+	//
+	// org is the Generator parameter — a bare string handed down from Draft, with no
+	// request in reach — so the address is parsed back out of it. PayerOf answers a
+	// bare slug with that org's own account, which is what this gate has always keyed on.
 	fee := cloud.ResourceFeeCents("CONTENT_STUDIO_FEE_CENTS", kind)
-	if err := g.bill.Gate(ctx, org, project, false, "asset", fee); err != nil {
+	if err := g.bill.Gate(ctx, account.PayerOf("", org), project, false, "asset", fee); err != nil {
 		return nil, err
 	}
 
@@ -174,7 +179,10 @@ func (g *aiStudioGenerator) draftAsset(ctx context.Context, org string, in Gener
 	// to the blob plane BEFORE Generate's framework.Ingest, so even if that later CMS
 	// write fails, the paid artifact survives on the blob plane (only the bookkeeping row
 	// is missing) — the org is never charged for a lost render.
-	g.bill.Meter(org, project, kind, fee, "", "")
+	//
+	// Same string boundary as the gate above: org is the parameter, parsed here so the
+	// debit lands where the gate looked.
+	g.bill.Meter(account.PayerOf("", org), project, kind, fee, "", "")
 
 	file := g.persistOrLink(ctx, org, in.Design, img)
 	data := map[string]any{

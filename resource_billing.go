@@ -94,10 +94,20 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 //	                                    (render 503). Fail-open returns nil.
 //
 // costCents<=0 means the kind is free → no gate (mirrors BillingGate's price==0
-// short-circuit). org MUST be the caller's resolved slug; it is sent as the
-// commerce user AND X-Org-Id so the CALLER's ledger is checked, overriding
-// the client default org — the anti-cross-org property. The balance check
-// honors ctx (a client disconnect/timeout cancels it).
+// short-circuit). The balance check honors ctx (a client disconnect/timeout
+// cancels it).
+//
+// payer IS THE ADDRESS, both halves of it. A debit needs two things — which
+// ledger file holds the money, and which account inside it — and this meter used
+// to be handed ONE string and parse the second out of the first. That parse
+// asserted "the wallet IS the org", which is true of a pooled tenant and false in
+// the shared signup org, where every self-serve stranger lives and account.Payer
+// resolves a person to <org>/<username>. So whether a surface billed the person
+// or the platform's own pool came down to which helper its author happened to
+// reach for, and the two were indistinguishable at the call site because both are
+// strings. An [account.Account] answers both questions itself, so the question
+// cannot be answered two ways: Org() names the books, Subject() names the wallet.
+// A surface that genuinely means the org pool says so — account.Org(slug).
 //
 // costCents is forwarded as AuthInput.AmountCents so the gate enforces
 // available >= costCents, not merely available > 0 — otherwise a 1-cent balance
@@ -112,13 +122,13 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 // service-scoped caps stay hard), so a forgeable X-Project-Id can neither
 // hard-stop nor be evaded. service is intrinsically this meter's provider. Pass
 // ("", false) on a background/no-principal path (org- and service-scoped caps only).
-func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectValidated bool, kind string, costCents int64) error {
+func (rm *ResourceMeter) Gate(ctx context.Context, payer account.Account, project string, projectValidated bool, kind string, costCents int64) error {
 	if costCents <= 0 {
 		return nil
 	}
-	// An empty org is an IDENTITY refusal, and it is answered here rather than by
-	// the money plane, because every way of asking the money plane to price a spend
-	// for a nameless subject answers in the vocabulary of money: the co-resident
+	// An UNATTRIBUTABLE payer is an IDENTITY refusal, and it is answered here rather
+	// than by the money plane, because every way of asking the money plane to price a
+	// spend for a nameless subject answers in the vocabulary of money: the co-resident
 	// meter refuses an empty org fail-closed and renders 503 "Billing temporarily
 	// unavailable", and gatePeer ships AuthorizeIn{Subject:""} whose far end refuses
 	// with 400 `field "subject" is required` — a field that appears in no published
@@ -127,7 +137,7 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 	// It sits ABOVE both branches so a fail-OPEN money policy cannot make an
 	// unidentified caller free: fail-open decides what to do when the ledger is
 	// unreachable, never who the caller is. See [ErrNoLedger] and [denial].
-	if org == "" {
+	if payer.Zero() {
 		return ErrNoLedger
 	}
 	// NEVER CONSTRUCTED is not the same as NO LOCAL LEDGER, and only the second
@@ -142,7 +152,6 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 	if rm == nil || rm.m == nil {
 		return nil
 	}
-	books := booksOf(org)
 	if !rm.Enabled() {
 		// No meter in THIS process, which is the normal case once apps are their own
 		// binaries: the ledger has one writer and it lives with commerce. Ask it.
@@ -151,10 +160,10 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 		// every priced act free the moment an app is split out, and does it silently.
 		// The distinction that matters is "nobody bills in this deployment" versus
 		// "the biller is one socket away", and only the second is answerable.
-		return rm.gatePeer(ctx, org, project, projectValidated, costCents)
+		return rm.gatePeer(ctx, payer, project, projectValidated, costCents)
 	}
 	return rm.m.Authorize(ctx, metering.AuthInput{
-		User: org, Org: books, AmountCents: costCents,
+		User: payer.Subject(), Org: payer.Org(), AmountCents: costCents,
 		// Service (=provider) is server-set → always validated. Project hardens iff
 		// it is claim-bound (projectValidated) — the anti project-spoof gate.
 		Project: project, ProjectValidated: projectValidated, Service: rm.provider,
@@ -178,8 +187,8 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectV
 // call it ever made. The ledger's key is [metering.Usage.Ref], which the meter mints;
 // a caller holding a server-assigned act id (a registration ref, a settlement id) sets
 // it through MeterUsage instead.
-func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, requestID, clientIP string) {
-	rm.MeterUsage(org, kind, metering.Usage{
+func (rm *ResourceMeter) Meter(payer account.Account, project, kind string, amountCents int64, requestID, clientIP string) {
+	rm.MeterUsage(payer, kind, metering.Usage{
 		Model:       kind, // the billed unit within the product (e.g. "sql", "invoke", "op") — per-item ledger attribution.
 		AmountCents: amountCents,
 		Project:     project, // scope attribution → the per-scope cap sums over it.
@@ -192,9 +201,9 @@ func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, req
 // usage event after forcing the per-org billing invariants that make the debit
 // land on the CALLER's ledger and never another org's:
 //
-//   - u.User and u.Org are OVERWRITTEN to the caller's org slug (the per-org
-//     prepaid billing key + the X-Org-Id namespace) — a caller can never bill
-//     someone else, and a surface can't accidentally leave them unset (which
+//   - u.User and u.Org are OVERWRITTEN from payer — Subject() is the wallet the
+//     debit lands in, Org() the books that hold it — so a caller can never bill
+//     someone else, and a surface cannot accidentally leave them unset (which
 //     would debit the client-default org).
 //   - Provider defaults to the meter's provider; Status defaults to "success";
 //     Currency defaults to "usd".
@@ -209,8 +218,8 @@ func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, req
 // [metering.Usage.Ref] and the debit is exactly-once on it. Left unset, the meter mints
 // a fresh name and the debit stands alone — which is what every per-request meter
 // wants, since two calls are two acts.
-func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
-	rm.meterUsage(org, kind, u, nil)
+func (rm *ResourceMeter) MeterUsage(payer account.Account, kind string, u metering.Usage) {
+	rm.meterUsage(payer, kind, u, nil)
 }
 
 // meterUsage is MeterUsage with the one thing a RESERVATION needs and a
@@ -223,7 +232,7 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 // moment that is true is inside the recording goroutine, so that is where the
 // release is handed. posted runs on EVERY exit, including the ones that record
 // nothing: a hold released late is a customer locked out of their own balance.
-func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted func()) {
+func (rm *ResourceMeter) meterUsage(payer account.Account, kind string, u metering.Usage, posted func()) {
 	if posted == nil {
 		posted = func() {}
 	}
@@ -263,11 +272,11 @@ func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted f
 	// unchanged by having been sealed one step earlier.
 	u = u.Seal()
 	if !rm.Enabled() {
-		rm.meterPeer(org, kind, u, posted)
+		rm.meterPeer(payer, kind, u, posted)
 		return
 	}
-	u.User = org         // the WALLET the debit lands in.
-	u.Org = booksOf(org) // WHICH BOOKS hold it (X-Org-Id; overrides the client default).
+	u.User = payer.Subject() // the WALLET the debit lands in.
+	u.Org = payer.Org()      // WHICH BOOKS hold it (X-Org-Id; overrides the client default).
 	if u.Provider == "" {
 		u.Provider = rm.provider
 	}
@@ -281,12 +290,12 @@ func (rm *ResourceMeter) meterUsage(org, kind string, u metering.Usage, posted f
 		u.Currency = "usd"
 	}
 	m, log, env := rm.m, rm.log, rm.env
-	settle(posted, log, org, kind, func() {
+	settle(posted, log, payer.Subject(), kind, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), ledgerCallTimeout)
 		defer cancel()
 		if _, err := m.Record(ctx, u); err != nil && log != nil {
 			log.Error("resource debit failed (resource created, not billed)",
-				"org", org, "kind", kind, "provider", u.Provider,
+				"payer", payer.Subject(), "books", payer.Org(), "kind", kind, "provider", u.Provider,
 				"cents", u.AmountCents, "env", env, "err", err)
 		}
 	})
@@ -334,28 +343,6 @@ func settle(posted func(), log luxlog.Logger, org, kind string, record func()) {
 // answers with, and the code+message it carries. Both renderings below read it,
 // so an untyped handler and a typed op can never describe the same refusal two
 // different ways.
-// booksOf names WHICH ORG'S BOOKS hold a wallet, given the wallet's key.
-//
-// THE TWO HALVES OF AN ADDRESS. A debit needs both — the org selects the ledger
-// FILE (finance is per-org SQLite), the wallet key selects the account inside it —
-// and this meter is handed ONE string. It used to use that string for both, which
-// silently asserted "the wallet IS the org": true of a pooled tenant org, false in
-// the shared signup org, where account.Payer resolves a person to <org>/<username>.
-// So a caller that correctly passes principal.Payer would, without this, have
-// written the person's key into the ORG field and opened a ledger file named
-// "hanzo/stranger".
-//
-// It is a PARSE, not a second rule about who pays: account.PayerOf funnels into
-// account.Payer, the one rule, and a key with no "/" is already an org — so a caller
-// still passing a bare org slug gets exactly the value it got before, byte for byte.
-// That is what makes adopting principal.Payer a per-surface decision rather than a
-// flag day.
-func booksOf(payer string) string {
-	if acct := account.PayerOf("", payer); !acct.Zero() {
-		return acct.Org()
-	}
-	return payer
-}
 
 // ErrNoLedger is a priced act with no ledger to charge: there is nobody to bill
 // because there is nobody. It is the ONE value [ResourceMeter.Gate] answers with

@@ -217,11 +217,11 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// resolves to that org's pool, because that is the account their requests will
 	// be gated on. A refusal here means the name could not be turned into an address
 	// (a "/" in it would silently address something else), never a fallback.
-	w, addressed := principal.WalletFor(org, req.User)
-	if !addressed {
+	w := principal.PayerFor(org, req.User)
+	if w.Zero() {
 		return &GrantOut{Status: Err, Msg: "user must be a bare IAM username (no '/')"}, nil
 	}
-	subject := w.Account
+	subject := w.Subject()
 
 	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
@@ -231,10 +231,10 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// with the commerce HTTP deposit as the split-deploy fallback. Both return the
 	// pre-balance (recorded even on failure), the entry/transaction id, and the post-balance,
 	// so the audit + response below are one shape regardless of which path moved the money.
-	// w.Ledger, not the raw path/body org: both halves of the address come from ONE
+	// w.Org(), not the raw path/body org: both halves of the address come from ONE
 	// resolved Account, so the ledger a deposit opens can never disagree in case with
 	// the subject written into it.
-	before, txID, after, afterExact, derr := grantDeposit(c, w.Ledger, subject, currency, notes, tag, source, req.AmountCents)
+	before, txID, after, afterExact, derr := grantDeposit(c, w.Org(), subject, currency, notes, tag, source, req.AmountCents)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.

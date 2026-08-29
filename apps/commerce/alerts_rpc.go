@@ -57,7 +57,7 @@ func exposeAlerts() {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error) {
-	org, err := payingOrg(ctx, "alerts")
+	org, err := orgOf(ctx, "alerts")
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func planeAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeAlertRaise(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, error) {
-	org, err := payingOrg(ctx, "raise cap")
+	org, err := orgOf(ctx, "raise cap")
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func planeAlertRaise(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, er
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeAlertAmend(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, error) {
-	org, err := payingOrg(ctx, "amend cap")
+	org, err := orgOf(ctx, "amend cap")
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func planeAlertAmend(ctx context.Context, in *plane.AlertPatch) (*plane.Alert, e
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeAlertDrop(ctx context.Context, in *plane.AlertRef) (*plane.Dropped, error) {
-	org, err := payingOrg(ctx, "drop cap")
+	org, err := orgOf(ctx, "drop cap")
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func planeAlertDrop(ctx context.Context, in *plane.AlertRef) (*plane.Dropped, er
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCapAuthorize(ctx context.Context, in *plane.CapIn) (*plane.CapVerdict, error) {
-	org, err := payingOrg(ctx, "cap authorize")
+	org, err := orgOf(ctx, "cap authorize")
 	if err != nil {
 		return nil, err
 	}

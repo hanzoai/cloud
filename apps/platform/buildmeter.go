@@ -9,6 +9,7 @@ package platform
 // via the shared cloud.ResourceMeter, exactly once per completed build.
 
 import (
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 )
@@ -45,7 +46,10 @@ func meterBuild(s *cloud.Service[state], b Build, endUnix int64) {
 	if cents <= 0 {
 		return
 	}
-	s.Bill.MeterUsage(b.Org, "build", metering.Usage{
+	// b.Org is a column on the stored build record, written when the build was
+	// launched; the reconciler calls this with no request in reach, so the address is
+	// parsed back out of the stored string.
+	s.Bill.MeterUsage(account.PayerOf("", b.Org), "build", metering.Usage{
 		Model:       "build", // the billed unit: wall-clock build minutes.
 		AmountCents: cents,
 	})

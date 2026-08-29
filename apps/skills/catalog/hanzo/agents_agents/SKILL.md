@@ -26,7 +26,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/agents` → `agentList` object with fields: `agents`.
-- `/v1/agents/{ref}` → `agentDetail` object with fields: `computeRef`, `createdAt`, `description`, `executionMode`, `id`, `instructions`, `model`, `name`, `recentRuns`, `runs`, `schedule`, `serviceAccountId`.
+- `/v1/agents/{ref}` → `agentDetail` object with fields: `avatar`, `computeRef`, `createdAt`, `description`, `emoji`, `executionMode`, `id`, `instructions`, `model`, `name`, `recentRuns`, `runs`.
 
 ## Example
 

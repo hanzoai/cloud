@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -32,15 +33,16 @@ import (
 // Payer is the party a charge is billed to, with everything the ledger row
 // carries about them.
 //
-// An empty Wallet means there is nobody to bill, which is NOT a refusal: an
+// A ZERO Wallet means there is nobody to bill, which is NOT a refusal: an
 // in-process composer and a shared-service-key caller both arrive that way by
 // design, and neither is gated nor debited. It is total rather than partial for
 // the reason principal.Payer is — a caller hands the empty value straight to the
 // gate and gets the gate's own fail-closed refusal (ErrNoLedger), rather than
 // writing a second branch of its own that could disagree with it.
 type Payer struct {
-	// Wallet is the key money is spent from — principal.Payer, never the bare org.
-	Wallet string
+	// Wallet is the money's ADDRESS — both halves, never one string standing in for
+	// both. Org() names the books, Subject() the account within them.
+	Wallet account.Account
 	// Project is the caller's org sub-scope, and Validated says it is bound to a
 	// verified claim. Together they are what lets a project-scoped spend cap
 	// enforce hard rather than degrade — see ResourceMeter.Gate.
@@ -54,7 +56,7 @@ type Payer struct {
 
 // Billable reports that there is somebody to charge. A surface asks this before
 // gating so a caller with no wallet is neither refused nor billed.
-func (p Payer) Billable() bool { return p.Wallet != "" }
+func (p Payer) Billable() bool { return !p.Wallet.Zero() }
 
 // payerKey names the slot a RESOLVED payer crosses a detach in. Unexported
 // zero-size type, so only this package can mint or read one.
@@ -139,7 +141,7 @@ func (rm *ResourceMeter) Allow(ctx context.Context, p Payer, kind string, costCe
 	if rm == nil || !p.Billable() || costCents <= 0 {
 		return &Charge{}, nil
 	}
-	h := &hold{to: &rm.inflight, org: p.Wallet, cost: costCents}
+	h := &hold{to: &rm.inflight, org: p.Wallet.Subject(), cost: costCents}
 	// GIVE IT BACK ON EVERY EXIT THIS FUNCTION HAS, including the one it does not
 	// write down. Releasing only on the error return leaks the commitment when Gate
 	// panics — and a leaked commitment is not a lost cent, it is a wallet that can
@@ -154,7 +156,7 @@ func (rm *ResourceMeter) Allow(ctx context.Context, p Payer, kind string, costCe
 	}()
 	// Commit FIRST, then weigh — see above. committed is this call's cost plus
 	// everything else outstanding for the same wallet.
-	committed := rm.inflight.commit(p.Wallet, costCents)
+	committed := rm.inflight.commit(p.Wallet.Subject(), costCents)
 	if err := rm.Gate(ctx, p.Wallet, p.Project, p.Validated, kind, committed); err != nil {
 		return &Charge{}, err
 	}

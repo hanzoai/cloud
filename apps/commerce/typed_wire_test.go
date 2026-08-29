@@ -469,8 +469,15 @@ func TestTheLedgersSumToTheServedSurface(t *testing.T) {
 	// The seed, measured on the router this file reads. Lowering the owed floor is
 	// automatic on a conversion; RAISING it is a hand edit in the same commit,
 	// where a reviewer sees the number go up next to its reason.
+	//
+	// typedFloor went 7 → 5 for a DELETION, which is the one reason it may fall.
+	// takePayment and getPayment were a second public address onto the card money
+	// move the browser top-up already reached — one act, two operation ids, two MCP
+	// tools — and they were retired rather than kept in step. The receipt read they
+	// carried is now the member of the collection that already existed,
+	// GET /v1/billing/transactions/{id}, so no capability went with them.
 	const (
-		typedFloor = 7
+		typedFloor = 5
 		owedCeil   = 173
 	)
 	if len(typed) < typedFloor {

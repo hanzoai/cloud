@@ -59,7 +59,7 @@ func exposePosture() {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeSettings(ctx context.Context, _ *struct{}) (*plane.PaymentConfig, error) {
-	org, err := payingOrg(ctx, "settings")
+	org, err := orgOf(ctx, "settings")
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func planeSettings(ctx context.Context, _ *struct{}) (*plane.PaymentConfig, erro
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
-	org, err := payingOrg(ctx, "mode")
+	org, err := orgOf(ctx, "mode")
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func planeMode(ctx context.Context, in *plane.ModeIn) (*plane.Mode, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, error) {
-	org, err := payingOrg(ctx, "methods")
+	org, err := orgOf(ctx, "methods")
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func planeMethods(ctx context.Context, in *plane.MethodsIn) (*plane.Rendered, er
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeMethodSave(ctx context.Context, in *plane.MethodSaveIn) (*plane.Rendered, error) {
-	org, err := payingOrg(ctx, "save method")
+	org, err := orgOf(ctx, "save method")
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func planeMethodSave(ctx context.Context, in *plane.MethodSaveIn) (*plane.Render
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeMethodDetach(ctx context.Context, in *plane.MethodRef) (*plane.Detachment, error) {
-	org, err := payingOrg(ctx, "detach method")
+	org, err := orgOf(ctx, "detach method")
 	if err != nil {
 		return nil, err
 	}

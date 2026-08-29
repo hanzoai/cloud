@@ -26,6 +26,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -59,11 +60,13 @@ const (
 // payer is a caller billing somebody else. Empty off the HTTP path, which is the
 // unbilled default — and the endpoint has already refused anything without a
 // validated principal before this runs.
-func payer(c *zip.Ctx, org string) string {
-	if subject := principal.Ledger(c); subject != "" {
-		return subject
+func payer(c *zip.Ctx, org string) account.Account {
+	if a := principal.Payer(c); !a.Zero() {
+		return a
 	}
-	return org
+	// Off the HTTP path there is no request to resolve; the caller's own org is the
+	// address, parsed by the one rule rather than assumed to be a bare slug.
+	return account.PayerOf("", org)
 }
 
 // gate refuses the request unless the payer can cover a prepare.
@@ -75,7 +78,7 @@ func payer(c *zip.Ctx, org string) string {
 // refused.
 func (s *state) gate(ctx context.Context, c *zip.Ctx, org string) error {
 	subject := payer(c, org)
-	if subject == "" {
+	if subject.Zero() {
 		return nil // off the HTTP path: unbilled, and already principal-gated
 	}
 	// The project here is the VALIDATED cap scope — the per-project spend limit
@@ -93,7 +96,7 @@ func (s *state) gate(ctx context.Context, c *zip.Ctx, org string) error {
 // attribution sees the traffic.
 func (s *state) charge(c *zip.Ctx, org string, prepared bool) {
 	subject := payer(c, org)
-	if subject == "" {
+	if subject.Zero() {
 		return
 	}
 	model, cents := modelQuery, int64(0)

@@ -41,7 +41,7 @@ const (
 func gateHosting(s *cloud.Service[state], c *zip.Ctx) (fee int64, err error) {
 	fee = cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind)
 	project, projectValidated := principal.ValidatedProject(c)
-	return fee, s.State.bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, deployKind, fee)
+	return fee, s.State.bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, deployKind, fee)
 }
 
 // meterDeploy debits the caller's org ledger ONCE for a successful deploy. It is
@@ -50,5 +50,5 @@ func gateHosting(s *cloud.Service[state], c *zip.Ctx) (fee int64, err error) {
 // flipped the site live — never on a failed deploy. It attributes spend to the
 // caller's validated project sub-scope so a per-project cap sums correctly.
 func meterDeploy(s *cloud.Service[state], c *zip.Ctx, fee int64) {
-	s.State.bill.Meter(principal.Ledger(c), principal.Project(c), deployKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.State.bill.Meter(principal.Payer(c), principal.Project(c), deployKind, fee, c.RequestID(), cloud.ClientIP(c))
 }

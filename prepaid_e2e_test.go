@@ -44,6 +44,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/money"
@@ -180,8 +181,8 @@ func e2eApp(t *testing.T, jwksURL string, served *atomic.Int64, seen *atomic.Val
 	app.Use(BillingGate(m, DefaultPrice))
 
 	record := func(c *zip.Ctx) error {
-		if w, ok := principal.WalletOf(c); ok {
-			seen.Store(w.Ledger + "|" + w.Account)
+		if w := principal.Payer(c); !w.Zero() {
+			seen.Store(w.Org() + "|" + w.Subject())
 		}
 		served.Add(1)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "served"})
@@ -437,23 +438,23 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 	// The canonical metered handler, verbatim in shape from apps/functions/invoke.go.
 	app.Post(e2ePricedPath, func(c *zip.Ctx) error {
 		project, validated := principal.ValidatedProject(c)
-		if err := bill.Gate(c.Context(), principal.Ledger(c), project, validated, kind, fee); err != nil {
+		if err := bill.Gate(c.Context(), principal.Payer(c), project, validated, kind, fee); err != nil {
 			return DenyResource(c, err)
 		}
 		served.Add(1)
-		bill.Meter(principal.Ledger(c), principal.Project(c), kind, fee, c.RequestID(), ClientIP(c))
+		bill.Meter(principal.Payer(c), principal.Project(c), kind, fee, c.RequestID(), ClientIP(c))
 		return c.JSON(http.StatusOK, map[string]string{"ok": "served"})
 	})
 	base := e2eServer(t, app)
 	tok := e2eToken(t, key, p.owner, p.user)
 
 	// ── the address ─────────────────────────────────────────────────────────────
-	// ResourceMeter addresses money by ORG — it overwrites Usage.User and Usage.Org
-	// with the caller's org slug, on purpose, so a handler cannot bill someone else.
-	// BillingGate addresses it by principal.WalletOf. Fund BOTH candidate wallets
-	// and let the binary say which one it moved: an assertion that only watched the
-	// one this test expects would be blind to exactly the disagreement that has
-	// shipped three times.
+	// ResourceMeter now addresses money by the resolved ACCOUNT — Usage.User is its
+	// Subject() and Usage.Org its Org() — so a handler still cannot bill someone else
+	// and the two halves can no longer disagree. Fund BOTH candidate wallets and let
+	// the binary say which one it moved: an assertion that only watched the one this
+	// test expects would be blind to exactly the disagreement that has shipped three
+	// times.
 	pool := payer{ledger: p.ledger, account: p.ledger}
 	for _, w := range []payer{pool, p} {
 		if _, err := led.fin.Deposit(context.Background(), types.DepositInput{
@@ -467,19 +468,21 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 	if code != http.StatusOK {
 		t.Fatalf("metered call: status = %d, want 200 (body=%s)", code, body)
 	}
-	e2eSettled(t, led, pool, e2eTopUp-e2ePrice)
+	e2eSettled(t, led, p, e2eTopUp-e2ePrice)
 
-	// The gate and the debit must name ONE wallet. When the two addressing rules
-	// coincide (a pooled tenant org) there is nothing to see; when they DIVERGE
-	// (the shared signup org, where WalletOf says <org>/<user> and ResourceMeter
-	// says <org>) this is the assertion that says so out loud.
+	// The gate and the debit must name ONE wallet, and it is the PAYER'S — the same
+	// address principal.Payer resolves for the edge gate and the paywall. Where the
+	// two coincide (a pooled tenant org) there is nothing to see; where they DIVERGE
+	// (the shared signup org, where the payer is <org>/<user> and the pool is the bare
+	// <org>) this says the platform's own books were NOT touched. It asserted the
+	// opposite until the meter took an address instead of one overloaded string: a
+	// self-serve customer's usage landed on Hanzo's pool while their own top-up sat
+	// unspendable beside it.
 	if p.account != pool.account {
-		if got := e2eBalance(t, led, p); got != e2eTopUp {
-			t.Fatalf("the person's wallet moved to %d¢ as well — two debits for one call", got)
+		if got := e2eBalance(t, led, pool); got != e2eTopUp {
+			t.Fatalf("the org pool moved to %d¢ — a self-serve caller's usage landed on the "+
+				"platform's own books instead of their wallet %q", got, p.account)
 		}
-		t.Logf("MEASURED: ResourceMeter debits the ORG POOL %q; principal.WalletOf (what "+
-			"BillingGate and the paywall read) resolves this same caller to %q. In the shared "+
-			"signup org those are DIFFERENT wallets.", pool.account, p.account)
 	}
 
 	// ── spend it down, then refuse ──────────────────────────────────────────────
@@ -487,7 +490,7 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 		if code, body := e2eCall(t, base, http.MethodPost, e2ePricedPath, tok); code != http.StatusOK {
 			t.Fatalf("call %d: status = %d, want 200 (body=%s)", i, code, body)
 		}
-		e2eSettled(t, led, pool, int64(e2eTopUp-i*e2ePrice))
+		e2eSettled(t, led, p, int64(e2eTopUp-i*e2ePrice))
 	}
 
 	ran := served.Load()
@@ -539,26 +542,36 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 
 // ── the address the meter uses, and the two claims made about it ────────────────
 
-// TestBooksOfIsInertForABareOrg pins the claim booksOf's own comment makes, rather
-// than leaving it as prose: a caller that has NOT adopted principal.Payer still
-// passes a bare org slug, and must get back exactly what it got before — byte for
-// byte, no parse, no fold. That is the whole reason adopting the new address is a
-// per-surface decision and not a flag day, so it is the thing to check, not assert.
+// TestTheAddressCarriesBothHalves pins what the meter's address must answer,
+// rather than leaving it as prose. There used to be a `booksOf` parse here that
+// recovered the ledger from a payer STRING, and it existed so that adopting the
+// person-scoped address could be a per-surface decision rather than a flag day.
+// The meter takes an [account.Account] now, so the two halves travel together and
+// the parse only happens at a genuine string boundary — a stored row, a wire field.
 //
-// It also pins the other half: a PERSON key resolves to the org whose books hold
-// it. Without that, a migrated caller would name a ledger file "hanzo/stranger".
-func TestBooksOfIsInertForABareOrg(t *testing.T) {
-	for _, tc := range []struct{ payer, books string }{
-		// Unmigrated callers: a bare slug, unchanged.
-		{"hanzo", "hanzo"},
-		{"acme", "acme"},
-		{"", ""},
-		// Migrated callers: the person's key names the org that holds their wallet.
-		{"hanzo/stranger", "hanzo"},
-		{"acme/bob", "acme"},
+// Both claims that parse made are still load-bearing and are checked here: a bare
+// org slug is that org's OWN account (an unmigrated caller is unchanged, byte for
+// byte), and a person key names the org whose books hold it — without which a
+// migrated caller would open a ledger file called "hanzo/stranger".
+func TestTheAddressCarriesBothHalves(t *testing.T) {
+	for _, tc := range []struct{ payer, books, subject string }{
+		// A bare slug: the org's own pooled account.
+		{"hanzo", "hanzo", "hanzo"},
+		{"acme", "acme", "acme"},
+		{"", "", ""},
+		// A person key: the org holds the books, the person names the wallet.
+		{"hanzo/stranger", "hanzo", "hanzo/stranger"},
+		// A person key in a POOLED org collapses to the pool, and that is the rule
+		// rather than a rounding: outside the signup org there is no member wallet to
+		// hold money, so an amount credited to one could never be spent.
+		{"acme/bob", "acme", "acme"},
 	} {
-		if got := booksOf(tc.payer); got != tc.books {
-			t.Errorf("booksOf(%q) = %q, want %q", tc.payer, got, tc.books)
+		got := account.PayerOf("", tc.payer)
+		if got.Org() != tc.books {
+			t.Errorf("PayerOf(%q).Org() = %q, want %q", tc.payer, got.Org(), tc.books)
+		}
+		if got.Subject() != tc.subject {
+			t.Errorf("PayerOf(%q).Subject() = %q, want %q", tc.payer, got.Subject(), tc.subject)
 		}
 	}
 }

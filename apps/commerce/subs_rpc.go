@@ -40,7 +40,7 @@ import (
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeSubs(ctx context.Context, in *plane.SubsIn) (*plane.Subs, error) {
-	org, err := payingOrg(ctx, "subs")
+	org, err := orgOf(ctx, "subs")
 	if err != nil {
 		return nil, err
 	}

@@ -56,7 +56,7 @@ func walletProbe(t *testing.T, claims idClaims, selected string) (billOrg, billU
 		in := identity(c, c.Path())
 		billOrg, billUser = in.Org, in.User
 		dataOrg, _ = principal.Org(c)
-		_, ok = principal.WalletOf(c)
+		ok = !principal.Payer(c).Zero()
 		close(done)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
 	})

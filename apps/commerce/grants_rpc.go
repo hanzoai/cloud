@@ -52,7 +52,7 @@ func exposeGrants() {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCredits(ctx context.Context, in *plane.SubjectIn) (*plane.CreditGrants, error) {
-	org, err := payingOrg(ctx, "credits")
+	org, err := orgOf(ctx, "credits")
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func planeCredits(ctx context.Context, in *plane.SubjectIn) (*plane.CreditGrants
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCreditBalance(ctx context.Context, in *plane.SubjectIn) (*plane.CreditBalance, error) {
-	org, err := payingOrg(ctx, "credit balance")
+	org, err := orgOf(ctx, "credit balance")
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func planeCreditBalance(ctx context.Context, in *plane.SubjectIn) (*plane.Credit
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCreditBreakdown(ctx context.Context, in *plane.SubjectIn) (*plane.CreditBreakdown, error) {
-	org, err := payingOrg(ctx, "credit breakdown")
+	org, err := orgOf(ctx, "credit breakdown")
 	if err != nil {
 		return nil, err
 	}

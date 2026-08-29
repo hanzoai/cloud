@@ -59,7 +59,7 @@ var allowedRequestUses = map[string]string{
 		"an In field — a caller that could name its own payer or jurisdiction would screen as someone " +
 		"else. It fails OPEN of nothing: a call with no request at all (the CLI's LocalInvoke) resolves " +
 		"no payer and is screened as that state rather than exempted from it, and the handler's own " +
-		"payingOrg gate refuses it after.",
+		"orgOf gate refuses it after.",
 	"apps/dataset/dataset.go": "who — the dataset plane's caller resolver, and the ONE place an op " +
 		"establishes who is asking. The TENANT is resolved through apps/tenant, which reads " +
 		"principal.OrgFrom and nothing else; the request is needed for the other half, which is a " +

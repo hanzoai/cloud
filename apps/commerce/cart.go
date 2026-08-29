@@ -219,7 +219,7 @@ func exposeCart(app *zip.App) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (cartOps) open(ctx context.Context, in *CartOpen) (*Cart, error) {
-	org, err := payingOrg(ctx, "open cart")
+	org, err := orgOf(ctx, "open cart")
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +348,7 @@ func (cartOps) discard(ctx context.Context, in *CartRef) (*Cart, error) {
 // place a cart id becomes a cart, so every op scopes its read the same way and no
 // handler can be the one that forgets the namespace.
 func loadCart(ctx context.Context, id, op string) (*cartmodel.Cart, error) {
-	org, err := payingOrg(ctx, op)
+	org, err := orgOf(ctx, op)
 	if err != nil {
 		return nil, err
 	}

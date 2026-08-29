@@ -42,7 +42,7 @@ import (
 // org is the VALIDATED principal org (the ledger); principal.Subject names the wallet
 // within it, preferring the minted X-User-Name over the UUID X-User-Id and honoring the
 // signed `billing_account` claim.
-func subjectFor(c *zip.Ctx, org string) string { return principal.Subject(c, org) }
+func subjectFor(c *zip.Ctx, org string) string { return principal.PayerIn(c, org).Subject() }
 
 // availableCents returns the caller's spendable prepaid balance from the co-resident
 // finance ledger. ok is false ONLY when this deployment runs no commerce at all (split

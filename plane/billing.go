@@ -246,8 +246,16 @@ const (
 	// BillingPayouts lists the org's outbound payouts.
 	BillingPayouts = "billing_payouts"
 
-	// BillingTransactions is one page of a subject's ledger.
+	// BillingTransactions is one page of a subject's ledger, and
+	// BillingTransaction is ONE entry of it by id — the member read of that same
+	// collection rather than a second way to ask.
+	//
+	// It replaced a `getPayment` op that lived under the merchant product and read
+	// exactly this row: commerce's ReadPayment loads a transaction by id and
+	// refuses anything that is not a deposit. A top-up receipt is a ledger entry,
+	// so it is read where ledger entries are read.
 	BillingTransactions = "billing_transactions"
+	BillingTransaction  = "billing_transaction"
 )
 
 // CallerIn carries the identity the endpoint already validated: who is asking,
@@ -371,6 +379,13 @@ type Transaction struct {
 	ExpiresAt string          `json:"expiresAt,omitempty"`
 }
 
+// TransactionRef names one ledger entry inside the caller's own books. It carries
+// no org and cannot: the books are the caller's, so a guessed id can only ever
+// miss rather than reach another tenant's row.
+type TransactionRef struct {
+	ID string `json:"id"`
+}
+
 // Transactions is one page of that ledger. Count is the size of the WHOLE
 // history rather than of the page — that difference is how a reader knows there
 // is more to ask for — and User echoes the subject the page was read for, so a
@@ -379,6 +394,46 @@ type Transactions struct {
 	Rows  []Transaction `json:"transactions"`
 	Count int           `json:"count"`
 	User  string        `json:"user"`
+}
+
+// ---- billing.recharge — the customer's own auto-reload rule ---------------
+
+const (
+	// BillingAutoRecharge reads the org's auto-reload rule; BillingAutoRechargeSet
+	// writes it. The SWEEP that acts on it is BillingRecharge, and the two are not
+	// the same question: one is what the customer chose, the other is the schedule
+	// spending it. Commerce ran the sweep for months with no reachable way to set a
+	// threshold, so it recharged nobody.
+	BillingAutoRecharge    = "billing_auto_recharge"
+	BillingAutoRechargeSet = "billing_auto_recharge_set"
+)
+
+// AutoRecharge is one org's auto-reload rule as its readers see it: top the
+// balance up by Amount whenever it falls below Threshold, charging the default
+// card off-session. It is the "auto-reload" every prepaid AI account has.
+//
+// Stored says whether a rule was ever written. An org that has never set one
+// reads as disabled with zeroes, which is the honest answer and is not the same
+// fact as a rule someone deliberately turned off — a caller that must tell those
+// apart reads this rather than inferring it from Enabled.
+type AutoRecharge struct {
+	Subject         string `json:"subject"`
+	Enabled         bool   `json:"enabled"`
+	ThresholdCents  int64  `json:"thresholdCents"`
+	AmountCents     int64  `json:"amountCents"`
+	Currency        string `json:"currency"`
+	LastRechargedAt string `json:"lastRechargedAt,omitempty"`
+	Stored          bool   `json:"stored"`
+}
+
+// AutoRechargeEdit is what a caller may change. It names no org and no subject:
+// the rule is the caller's own, resolved from the validated principal, so there
+// is no field a write could be steered through.
+type AutoRechargeEdit struct {
+	Enabled        bool   `json:"enabled"`
+	ThresholdCents int64  `json:"thresholdCents"`
+	AmountCents    int64  `json:"amountCents"`
+	Currency       string `json:"currency,omitempty"`
 }
 
 // ---- billing.credits — grants, balance, breakdown -------------------------

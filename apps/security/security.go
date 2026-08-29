@@ -372,7 +372,7 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 	// gate downstream of the work is a bill for compute already spent.
 	fee := cloud.ResourceFeeCents(feeEnvPrefix, "scan")
 	scopeProject, projectValidated := principal.ValidatedProject(c)
-	if err := s.State.bill.Gate(ctx, principal.Ledger(c), scopeProject, projectValidated, meterKind, fee); err != nil {
+	if err := s.State.bill.Gate(ctx, principal.Payer(c), scopeProject, projectValidated, meterKind, fee); err != nil {
 		return nil, cloud.Denied(err)
 	}
 
@@ -410,7 +410,7 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 	// One metered unit per scan (product=security), at the fee the Gate above
 	// authorized — the same number, read once, so the charge can never exceed what
 	// the balance was checked against. Nil/disabled meter → no-op.
-	s.State.bill.Meter(principal.Ledger(c), principal.Project(c), meterKind, fee, c.RequestID(), clientIP(c))
+	s.State.bill.Meter(principal.Payer(c), principal.Project(c), meterKind, fee, c.RequestID(), clientIP(c))
 
 	// Audit: the scan happened, by whom, with what tally. The redacted findings
 	// (never the secrets) are the evidence; the tally is the AU-3 outcome.

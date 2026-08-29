@@ -36,6 +36,8 @@ var Ops = []string{
 	plane.BillingAlertDrop,
 	plane.BillingAlertRaise,
 	plane.BillingAlerts,
+	plane.BillingAutoRecharge,
+	plane.BillingAutoRechargeSet,
 	plane.BillingCapAuthorize,
 	plane.BillingCreditBalance,
 	plane.BillingCreditBreakdown,
@@ -67,6 +69,7 @@ var Ops = []string{
 	plane.BillingTier,
 	plane.BillingTopup,
 	plane.BillingTopupCard,
+	plane.BillingTransaction,
 	plane.BillingTransactions,
 	plane.BillingWire,
 	plane.FinanceAuthorize,
@@ -123,6 +126,20 @@ func BillingAlertRaise(ctx context.Context, in *plane.AlertSpec) (*plane.Alert, 
 // Calls plane.BillingAlerts on commerce over the peer plane.
 func BillingAlerts(ctx context.Context, in *plane.SubjectIn) (*plane.Alerts, error) {
 	return plane.Ask[plane.SubjectIn, plane.Alerts](ctx, App, plane.BillingAlerts, in)
+}
+
+// BillingAutoRecharge this org's auto-reload rule.
+//
+// Calls plane.BillingAutoRecharge on commerce over the peer plane.
+func BillingAutoRecharge(ctx context.Context) (*plane.AutoRecharge, error) {
+	return plane.Ask[struct{}, plane.AutoRecharge](ctx, App, plane.BillingAutoRecharge, &struct{}{})
+}
+
+// BillingAutoRechargeSet set this org's auto-reload rule.
+//
+// Calls plane.BillingAutoRechargeSet on commerce over the peer plane.
+func BillingAutoRechargeSet(ctx context.Context, in *plane.AutoRechargeEdit) (*plane.AutoRecharge, error) {
+	return plane.Ask[plane.AutoRechargeEdit, plane.AutoRecharge](ctx, App, plane.BillingAutoRechargeSet, in)
 }
 
 // BillingCapAuthorize whether one proposed spend fits inside this org's caps.
@@ -340,6 +357,13 @@ func BillingTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, e
 // Calls plane.BillingTopupCard on commerce over the peer plane.
 func BillingTopupCard(ctx context.Context, in *plane.CardIn) (*plane.Charged, error) {
 	return plane.Ask[plane.CardIn, plane.Charged](ctx, App, plane.BillingTopupCard, in)
+}
+
+// BillingTransaction one ledger entry by its id.
+//
+// Calls plane.BillingTransaction on commerce over the peer plane.
+func BillingTransaction(ctx context.Context, in *plane.TransactionRef) (*plane.Transaction, error) {
+	return plane.Ask[plane.TransactionRef, plane.Transaction](ctx, App, plane.BillingTransaction, in)
 }
 
 // BillingTransactions one page of a subject's ledger.

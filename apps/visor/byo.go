@@ -76,14 +76,14 @@ func (o ops) attachCluster(ctx context.Context, in *clusterAttach) (*clusterView
 	// org, not the project sub-scope).
 	fee := cloud.ResourceFeeCents("CLOUD_COMPUTE_FEE_CENTS", byoClusterKind)
 	_, projectValidated := principal.ValidatedProject(c)
-	if err := o.State.bill.Gate(c.Context(), principal.Ledger(c), principal.Project(c), projectValidated, byoClusterKind, fee); err != nil {
+	if err := o.State.bill.Gate(c.Context(), principal.Payer(c), principal.Project(c), projectValidated, byoClusterKind, fee); err != nil {
 		return nil, cloud.DenyResource(c, err)
 	}
 	rec, err := o.State.fleet.Register(c.Context(), org, project(c), name, in.Kubeconfig, in.Provider, in.Default)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	o.State.bill.Meter(principal.Ledger(c), principal.Project(c), byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
+	o.State.bill.Meter(principal.Payer(c), principal.Project(c), byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
 	cloud.Created(ctx)
 	v := byoToClusterView(rec)
 	return &v, nil

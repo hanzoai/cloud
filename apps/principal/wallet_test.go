@@ -13,7 +13,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// wallet drives principal.WalletOf over the SAME zip.Ctx header accessors the
+// wallet drives principal.Payer over the SAME zip.Ctx header accessors the
 // identity boundary feeds in production, so a test sets X-User-Id / X-User-Name /
 // X-Org-Id exactly as SanitizeIdentity mints them: X-User-Id from the JWT `sub`
 // (a UUID), X-User-Name from the validated `name` claim (the IAM username).
@@ -21,8 +21,8 @@ func wallet(t *testing.T, headers map[string]string) (ledger, acct string, ok bo
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Get("/w", func(c *zip.Ctx) error {
-		w, k := principal.WalletOf(c)
-		return c.JSON(200, map[string]any{"ledger": w.Ledger, "account": w.Account, "ok": k})
+		w := principal.Payer(c)
+		return c.JSON(200, map[string]any{"ledger": w.Org(), "account": w.Subject(), "ok": !w.Zero()})
 	})
 	req := httptest.NewRequest("GET", "/w", nil)
 	for h, v := range headers {
@@ -59,7 +59,7 @@ var signupPerson = map[string]string{
 // addresses must be the wallet a deposit can NAME — and every funding path names
 // "<org>/<username>" or the bare org, never "<org>/<uuid>".
 //
-// The regression: WalletOf read X-User-Id for the name half. Both minters set that
+// The regression: the wallet read X-User-Id for the name half. Both minters set that
 // header from the JWT `sub`, and IAM's `sub` is a UUID, so the address resolved to
 // "hanzo/<uuid>" — a wallet no grant, no promo, no starter credit and no operator
 // deposit can ever reach. It read $0 forever while the ai gate, the usage debit and

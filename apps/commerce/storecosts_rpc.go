@@ -28,7 +28,7 @@ import (
 // planeCosts is what we paid every vendor in a period, and the total.
 //
 // It is a PLATFORM god-view, not a tenant read: the figures are the fleet's own
-// COGS. It still resolves through payingOrg, because the books it walks are
+// COGS. It still resolves through orgOf, because the books it walks are
 // namespaced and the reserved admin org is where the platform's own live —
 // asking without a validated caller would read an empty namespace and report
 // that we pay our vendors nothing, which is the worst shape a cost report can
@@ -36,7 +36,7 @@ import (
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCosts(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
-	org, err := payingOrg(ctx, "costs")
+	org, err := orgOf(ctx, "costs")
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func planeCosts(ctx context.Context, in *plane.CostsIn) (*plane.Costs, error) {
 // cross a tenant boundary — StoreIn carries no fields at all, which is the same
 // guarantee stated in the type.
 func planeStore(ctx context.Context, _ *plane.StoreIn) (*plane.Store, error) {
-	org, err := payingOrg(ctx, "store")
+	org, err := orgOf(ctx, "store")
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func planeStore(ctx context.Context, _ *plane.StoreIn) (*plane.Store, error) {
 // it, so a caller setting a header image preserves the curated name, price and
 // copy it says nothing about.
 func planeListing(ctx context.Context, in *plane.ListingIn) (*plane.Listed, error) {
-	org, err := payingOrg(ctx, "listing")
+	org, err := orgOf(ctx, "listing")
 	if err != nil {
 		return nil, err
 	}
