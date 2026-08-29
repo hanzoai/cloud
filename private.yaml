@@ -87394,7 +87394,7 @@ paths:
       operationId: post_content_by_doctype_by_name_transition
       parameters:
       - description: DocType is the content type to act on, from the path.
-        example: SocialPost
+        example: marketing.SocialPost
         in: path
         name: doctype
         required: true
@@ -87411,7 +87411,7 @@ paths:
         content:
           application/json:
             example:
-              doctype: SocialPost
+              doctype: marketing.SocialPost
               name: spring-teaser
               to: published
             schema:
@@ -87610,7 +87610,7 @@ paths:
         content:
           application/json:
             example:
-              doctype: SocialPost
+              doctype: marketing.SocialPost
               name: spring-teaser
             schema:
               $ref: '#/components/schemas/PublishInput'

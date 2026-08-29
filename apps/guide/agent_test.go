@@ -50,7 +50,7 @@ func TestAgentToolStepSucceeds(t *testing.T) {
 		return map[string]any{"name": "Positioning-1"}, nil
 	}
 	d := agentDeps{ai: ai, model: "zen", store: st, invoke: invoke, toolOK: func(string) bool { return true }}
-	step := JourneyStep{ID: "positioning", Title: "P", Tool: "content_generate", Draft: "write it", DraftInto: "brief", Args: map[string]any{"doctype": "Campaign"}}
+	step := JourneyStep{ID: "positioning", Title: "P", Tool: "content_generate", Draft: "write it", DraftInto: "brief", Args: map[string]any{"doctype": "marketing.Campaign"}}
 
 	emit, evs := collect()
 	final, err := runAgent(ctx, d, "acme", "acme", step, emit)
@@ -64,8 +64,8 @@ func TestAgentToolStepSucceeds(t *testing.T) {
 	if gotOrg != "acme" || gotTool != "content_generate" {
 		t.Fatalf("invoked as org=%q tool=%q, want acme/content_generate", gotOrg, gotTool)
 	}
-	if gotArgs["brief"] != "DRAFTED COPY" || gotArgs["doctype"] != "Campaign" {
-		t.Fatalf("args want {doctype:Campaign, brief:DRAFTED COPY}, got %v", gotArgs)
+	if gotArgs["brief"] != "DRAFTED COPY" || gotArgs["doctype"] != "marketing.Campaign" {
+		t.Fatalf("args want {doctype:marketing.Campaign, brief:DRAFTED COPY}, got %v", gotArgs)
 	}
 	if ai.gotOrg != "acme" || ai.gotPay != "acme" {
 		t.Fatalf("AI billed to org=%q payer=%q, want acme/acme", ai.gotOrg, ai.gotPay)

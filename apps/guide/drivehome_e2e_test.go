@@ -356,7 +356,7 @@ func TestDrive_Client6_ExecuteStepEffectLandsDetectReflects(t *testing.T) {
 		"id": "positioning", "title": "Nail positioning",
 		"tool": "content_generate", "signal": "acted", "draftInto": "brief",
 		"draft": "Write a one-line positioning statement plus three bullets.",
-		"args":  map[string]any{"doctype": "Campaign", "title": "Positioning"},
+		"args":  map[string]any{"doctype": "marketing.Campaign", "title": "Positioning"},
 	}}}
 	if r := reqJSON(t, app, http.MethodPut, "/v1/guide/curriculum", org, override); r.Code != http.StatusOK {
 		t.Fatalf("put override want 200, got %d (%s)", r.Code, r.Body)
@@ -478,7 +478,7 @@ func TestDrive_AutonomousLoop(t *testing.T) {
 			"id": id, "title": title, "deps": deps,
 			"tool": "content_generate", "draftInto": "brief",
 			"draft": "Draft the work product for: " + title,
-			"args":  map[string]any{"doctype": "Campaign", "title": title},
+			"args":  map[string]any{"doctype": "marketing.Campaign", "title": title},
 		}
 	}
 	chain := map[string]any{"version": "growth-1", "steps": []map[string]any{
