@@ -69,7 +69,6 @@ func mountService(t *testing.T, iamURL, commerceURL, healthURL string) (func(met
 		Commerce: commerce.New(commerceURL, "test-token"),
 		Health:   health.New(healthURL),
 		DO:       digitalocean.New(""), // no token → honest not-configured unless a test overrides s.State.DO
-		AdminOrg: "admin",
 		// The harness enables ONE white-label tenant — "maxpower" (the org orgAdminHdr
 		// belongs to) — so the scoped-panel tests exercise the ADMITTED WL tier. The
 		// gate now requires WL enablement for any non-super caller, so the deny tests use

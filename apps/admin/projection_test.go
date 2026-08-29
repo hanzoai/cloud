@@ -30,7 +30,7 @@ func spec(t *testing.T) (map[string]any, []string) {
 		OpenAPI: zip.OpenAPIConfig{Title: "cloud", Version: "v1.0.0"},
 	})
 	compose(app)
-	routes(app, &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}})
+	routes(app, &cloud.Service[core.State]{State: core.State{}})
 
 	var live []string
 	for _, r := range app.Fiber().GetRoutes(true) {

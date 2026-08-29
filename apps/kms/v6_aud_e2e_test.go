@@ -98,7 +98,6 @@ func e2eCfg(t *testing.T, jwksURL string) *cloud.Config {
 		Domain:          "api.hanzo.ai",
 		IAMIssuer:       e2eIssuer,
 		JWKSURL:         jwksURL,
-		AdminOrg:        "admin",
 		DataDir:         t.TempDir(),
 		Enable:          []string{"kms"},
 		KMSMasterKeyRef: masterKeyB64(t),
