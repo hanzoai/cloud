@@ -75,23 +75,6 @@
     "preview": "https://hanzo.app/templates/kinetic.webp"
   },
   {
-    "slug": "quantum",
-    "title": "Quantum",
-    "category": "SaaS",
-    "description": "SaaS landing page \u2014 hero, feature grid, pricing and FAQ.",
-    "framework": "Next.js 14.1",
-    "features": [
-      "Framer Motion",
-      "Landing",
-      "Modern",
-      "Responsive"
-    ],
-    "useCase": "SaaS landing pages",
-    "tier": 1,
-    "rating": 5,
-    "source": "https://github.com/hanzo-apps/template-quantum"
-  },
-  {
     "slug": "blocks",
     "title": "Blocks",
     "category": "Bento Cards",
@@ -820,23 +803,6 @@
     ]
   },
   {
-    "slug": "jobfinder",
-    "title": "Job Finder",
-    "category": "Mobile App",
-    "description": "Job-search app UI \u2014 listings, filters, company profiles and applications.",
-    "framework": "React Native",
-    "features": [
-      "Jobs",
-      "Search",
-      "Mobile",
-      "React Native"
-    ],
-    "useCase": "Job search mobile apps",
-    "tier": 2,
-    "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-jobfinder"
-  },
-  {
     "slug": "pixel",
     "title": "Pixel",
     "category": "Portfolio",
@@ -1122,42 +1088,6 @@
     "rating": 5,
     "source": "https://github.com/hanzo-templates/flutter-chat",
     "demo": "https://flutter-chat.hanzo.app"
-  },
-  {
-    "slug": "swiftui",
-    "title": "Hanzo SwiftUI",
-    "category": "Mobile",
-    "description": "Native iOS 17 starter \u2014 TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
-    "framework": "SwiftUI + Swift 6 (iOS 17)",
-    "features": [
-      "TabView",
-      "NavigationStack",
-      "swift-testing",
-      "XcodeGen",
-      "Native"
-    ],
-    "useCase": "Native iOS apps",
-    "tier": 1,
-    "rating": 5,
-    "source": "https://github.com/hanzo-templates/swiftui"
-  },
-  {
-    "slug": "swiftui-chat",
-    "title": "Hanzo Chat (SwiftUI)",
-    "category": "Mobile",
-    "description": "Native streaming AI chat \u2014 @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
-    "framework": "SwiftUI + Swift 6 (iOS 17)",
-    "features": [
-      "@Observable",
-      "AsyncThrowingStream",
-      "Hanzo /v1",
-      "swift-testing",
-      "Native"
-    ],
-    "useCase": "Native iOS apps",
-    "tier": 1,
-    "rating": 5,
-    "source": "https://github.com/hanzo-templates/swiftui-chat"
   },
   {
     "slug": "desktop-tauri",
