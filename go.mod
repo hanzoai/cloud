@@ -694,7 +694,7 @@ require (
 	github.com/hanzoai/authz v1.10.36
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16
-	github.com/hanzoai/o11y v1.5.67
+	github.com/hanzoai/o11y v1.5.69
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.11
