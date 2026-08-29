@@ -3,6 +3,7 @@ package team
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,7 +51,7 @@ func seedMember(t *testing.T, s *accountStore, org, account, slug, role string) 
 	}).WithContext(ctx).Execute(); err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
-	if err := s.AddMember(ctx, w.ID, account, role, slug); err != nil {
+	if err := s.AddMember(ctx, org, w.UUID, account, role); err != nil {
 		t.Fatalf("seed member: %v", err)
 	}
 	return w
@@ -149,7 +150,7 @@ func TestGetUserWorkspacesUnionsOrgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth := map[string]string{"Authorization": "Bearer " + sess}
+	auth := authAs(sess, "davelorenzini", acct)
 
 	code, body := call(t, app, http.MethodPost, "/v1/team/account", auth, rpcRequest{Method: "getUserWorkspaces"})
 	if code != http.StatusOK {
@@ -193,7 +194,7 @@ func TestGetUserWorkspacesLegacyToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess}, rpcRequest{Method: "getUserWorkspaces"})
+		authAs(sess, org, acct), rpcRequest{Method: "getUserWorkspaces"})
 	if code != http.StatusOK {
 		t.Fatalf("status %d: %s", code, body)
 	}
@@ -227,7 +228,7 @@ func TestSelectWorkspaceCrossOrg(t *testing.T) {
 		expUnix(sessionTokenTTL), testSecret)
 
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, "davelorenzini", acct),
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": teamWS.Slug}})
 	if code != http.StatusOK {
 		t.Fatalf("status %d: %s", code, body)
@@ -267,7 +268,7 @@ func TestSelectWorkspaceNoDefault(t *testing.T) {
 
 	// No workspaceUrl → BadRequest, and NO workspace token leaked.
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, org, acct),
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{}})
 	if code != http.StatusOK {
 		t.Fatalf("status %d: %s", code, body)
@@ -300,7 +301,7 @@ func TestSelectWorkspaceAmbiguous(t *testing.T) {
 		expUnix(sessionTokenTTL), testSecret)
 
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, "org-a", acct),
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": "shared"}})
 	if code != http.StatusOK {
 		t.Fatalf("status %d: %s", code, body)
@@ -331,7 +332,7 @@ func TestGuestSelectUnaffected(t *testing.T) {
 	sess, _ := token.Generate(acct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "member"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, org, acct),
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": ws.Slug}})
 	if code != http.StatusOK {
 		t.Fatalf("status %d: %s", code, body)
@@ -420,6 +421,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 	}))
 	defer iamSrv.Close()
 
+	planetest.ServeIdentity(t)
 	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -441,7 +443,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 	sess, _ := token.Generate(inviterAcct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, org, inviterAcct),
 		map[string]any{"method": "sendInvite", "params": map[string]any{"email": "Eve@Example.com", "workspaceUrl": ws.Slug}})
 	if code != http.StatusOK {
 		t.Fatalf("status %d: %s", code, body)
@@ -470,7 +472,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 	}
 	// The local member row exists for the invitee's derived account uuid.
 	inviteeAcct := accountID(inviteeSub)
-	role, ok := store.Membership(context.Background(), ws.ID, inviteeAcct)
+	role, ok := store.Membership(context.Background(), org, ws.UUID, inviteeAcct)
 	if !ok || role != "member" {
 		t.Fatalf("invitee member row = %q,%v, want member,true", role, ok)
 	}
@@ -490,6 +492,7 @@ func TestSendInviteRequiresAdmin(t *testing.T) {
 	}))
 	defer iamSrv.Close()
 
+	planetest.ServeIdentity(t)
 	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -497,7 +500,7 @@ func TestSendInviteRequiresAdmin(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
 	ws, _ := store.EnsureWorkspace(ctx, org, ownerAcct, "Max Power")
-	if err := store.AddMember(ctx, ws.ID, memberAcct, "member", "Mel"); err != nil {
+	if err := store.AddMember(ctx, org, ws.UUID, memberAcct, "member"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -513,7 +516,7 @@ func TestSendInviteRequiresAdmin(t *testing.T) {
 	sess, _ := token.Generate(memberAcct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "member"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, org, memberAcct),
 		map[string]any{"method": "sendInvite", "params": map[string]any{"email": "eve@example.com", "workspaceUrl": ws.Slug}})
 	var r struct {
 		Error *Status `json:"error"`
@@ -550,6 +553,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 	}))
 	defer iamSrv.Close()
 
+	planetest.ServeIdentity(t)
 	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -567,7 +571,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 	extra := orgsExtra(org, model.OrgRef{Org: org, Role: "admin"})
 	extra["user"] = "maxpower/dave"
 	sess, _ := token.Generate(acct, "", extra, expUnix(sessionTokenTTL), testSecret)
-	auth := map[string]string{"Authorization": "Bearer " + sess}
+	auth := authAs(sess, org, acct)
 
 	// Live refresh returns the fuller set from IAM.
 	code, body := call(t, app, http.MethodPost, "/v1/team/account", auth, rpcRequest{Method: "getMemberships"})

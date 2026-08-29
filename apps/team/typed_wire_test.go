@@ -2,6 +2,7 @@ package team
 
 import (
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -99,6 +100,7 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 // install reaches every group team builds and not merely the one it sits beside.
 func TestCollabRPCBridgedUnderBareMount(t *testing.T) {
 	t.Setenv("SERVER_SECRET", testSecret)
+	planetest.ServeIdentity(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount: %v", err)
@@ -202,12 +204,12 @@ var untypedByDesign = map[string]string{
 
 	"POST /v1/team/account": "RAW-BODY TOLERANCE, and two more: (1) ORDER — an unparseable body " +
 		"answers HTTP 200 carrying a Status, `g.fail(c, statusError(\"bad request\"))` " +
-		"(account.go:715), where op.invoke decodes into In BEFORE the handler is entered and " +
+		"(account.go:712), where op.invoke decodes into In BEFORE the handler is entered and " +
 		"answers ErrBadRequest (zip typed.go:485-491), so error precedence would move; (2) SHAPE — " +
 		"`result` is a different type per verb (LoginInfo, a workspace list, a bool, RegionInfo), " +
 		"so one Out could only say `any`; (3) A SECOND KEY — the entitlement arm answers 402 with " +
-		"`\"upgradeUrl\": upgradeURL` (account.go:828) beside its error.",
-	"PUT /v1/team/account/cookie": "RAW-BODY TOLERANCE: `_ = c.Bind(&body)` (account.go:660) " +
+		"`\"upgradeUrl\": upgradeURL` (account.go:825) beside its error.",
+	"PUT /v1/team/account/cookie": "RAW-BODY TOLERANCE: `_ = c.Bind(&body)` (account.go:657) " +
 		"DISCARDS the decode error and the token falls back to the Authorization bearer, so an " +
 		"unparseable body SUCCEEDS — where op.invoke answers ErrBadRequest before the handler runs " +
 		"(zip typed.go:485-491).",
@@ -227,7 +229,7 @@ var untypedByDesign = map[string]string{
 		"typed.go:557-558), so one key carries one value, and RFC 6265 §3 forbids folding two " +
 		"cookies into one header. This needs a header MULTIMAP, not a body capability. Its bounce " +
 		"also has a text/plain 500 arm, " +
-		"`c.String(http.StatusInternalServerError, \"bad front url\")` (account.go:1348).",
+		"`c.String(http.StatusInternalServerError, \"bad front url\")` (account.go:1345).",
 
 	"GET /v1/team/billing/ui": "BYTE REPLY: the embedded wallet page's bytes under a per-asset " +
 		"Content-Type, `c.Bytes(http.StatusOK, body)` (billing.go:204), while a typed op's only " +

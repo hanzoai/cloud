@@ -542,9 +542,6 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 			g.log.Info("account: seeded default crew", "org", oorg, "created", n)
 		}
 	}
-	// Fill the human display name so the roster reconcile renders a name, not the
-	// account uuid. Idempotent (only fills empty).
-	_ = g.accounts.EnsureMemberName(ctx, account, displayName)
 
 	// Carry the FULL membership set into the session token so getUserWorkspaces
 	// can union a user's workspaces across every org they belong to (the Slack
@@ -824,7 +821,7 @@ func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
 	org := ws.OwnerOrg
 	// The billing gate: the org's plan must license the team product. 402 carries
 	// the upgrade destination; infra errors NEVER block login (see entitle).
-	if st := g.entitle(c.Context(), org, role, ws.ID, account); st != nil {
+	if st := g.entitle(c.Context(), org, role, ws.UUID, account); st != nil {
 		return c.JSON(http.StatusPaymentRequired, map[string]any{"error": *st, "upgradeUrl": upgradeURL})
 	}
 	// Carry the tenant AND the caller's role into the workspace token so the
@@ -878,7 +875,7 @@ func (g *api) resolveWorkspace(ctx context.Context, orgs []model.OrgRef, account
 		if err != nil {
 			continue // absent in this org (or a real store error) — not a candidate
 		}
-		r, ok := g.accounts.Membership(ctx, ws.ID, account)
+		r, ok := g.accounts.Membership(ctx, o.Org, ws.UUID, account)
 		if !ok {
 			continue // resolvable but the caller is not a member — not a candidate
 		}
@@ -1276,7 +1273,7 @@ func (id *identity) admit(ctx context.Context, cl caller, wsUUID string) (worksp
 	if err != nil {
 		return workspace{}, errNoWorkspace
 	}
-	if _, ok := id.accounts.Membership(ctx, w.ID, cl.account); !ok {
+	if _, ok := id.accounts.Membership(ctx, cl.org, w.UUID, cl.account); !ok {
 		return workspace{}, errNoWorkspace
 	}
 	return w, nil

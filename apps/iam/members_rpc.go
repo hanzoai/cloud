@@ -32,6 +32,10 @@ func exposeMembers() {
 		grant,
 		zip.WithOperationID(plane.IAMGrant),
 		zip.WithSummary("Record that a user may act in a scope of the caller's org"))
+	zip.Post[struct{}, plane.Seats](cloud.Plane(), "/iam/seats",
+		seats,
+		zip.WithOperationID(plane.IAMSeats),
+		zip.WithSummary("The caller's org's billable people"))
 }
 
 // members lists the grants in one scope, each with the display name IAM holds for
@@ -47,7 +51,14 @@ func members(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
 	}
 	q := orm.TypedQuery[iamschema.Membership](db).Filter("Org=", org)
 	if in != nil {
-		q = q.Filter("Workspace=", in.Workspace).Filter("Project=", in.Project)
+		if in.User != "" {
+			q = q.Filter("User=", in.User)
+		}
+		// Any is what separates "the org's own grants" from "every scope": an empty
+		// Workspace is a real scope, so it cannot also mean unfiltered.
+		if !in.Any {
+			q = q.Filter("Workspace=", in.Workspace).Filter("Project=", in.Project)
+		}
 	}
 	rows, err := q.GetAll(ctx)
 	if err != nil {
@@ -58,7 +69,10 @@ func members(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
 		if m == nil || m.User == "" {
 			continue
 		}
-		out = append(out, plane.Membership{User: m.User, Role: m.Role, Name: displayName(db, m.User)})
+		out = append(out, plane.Membership{
+			User: m.User, Role: m.Role, Name: displayName(db, m.User),
+			Workspace: m.Workspace, Project: m.Project,
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].User < out[j].User })
 	return &plane.Memberships{Memberships: out}, nil
@@ -95,4 +109,24 @@ func grant(ctx context.Context, in *plane.GrantIn) (*struct{}, error) {
 		return nil, fmt.Errorf("grant: %w", err)
 	}
 	return &struct{}{}, nil
+}
+
+// seats counts the caller's org's billable people.
+//
+// The error is PROPAGATED: a wallet reading zero seats under-bills silently,
+// where a failure retries. This is the one read here that must not degrade.
+func seats(ctx context.Context, _ *struct{}) (*plane.Seats, error) {
+	org := cloud.Who(ctx).Org
+	if org == "" {
+		return nil, zip.ErrUnauthorized("seats: no org on the call")
+	}
+	db := DB()
+	if db == nil {
+		return nil, fmt.Errorf("seats: identity store not open in the process that owns it")
+	}
+	n, guests, err := iamstore.Seats(ctx, db, org)
+	if err != nil {
+		return nil, fmt.Errorf("seats: %w", err)
+	}
+	return &plane.Seats{Seats: n, Guests: guests}, nil
 }

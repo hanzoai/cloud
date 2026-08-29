@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -20,7 +21,6 @@ import (
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/apps/team/wallet"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/orm/query"
 )
 
 // billingApp registers the billing plane directly (no Mount) with a fake
@@ -28,6 +28,7 @@ import (
 // gateApp (entitle_test.go).
 func billingApp(t *testing.T, commerce types.CommerceClient, planEnt func(context.Context, string) (map[string]any, error)) (*zip.App, *accountStore) {
 	t.Helper()
+	planetest.ServeIdentity(t)
 	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openAccountStore: %v", err)
@@ -109,21 +110,22 @@ func TestBillingPlanOrgScoped(t *testing.T) {
 	// Org A: the owner + one member + one guest (3 seats, 1 guest) + a bot
 	// (never a seat). Org B: a different tenant with its own members.
 	uid := func(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-0000000000%02d", i) }
-	wsA, _ := store.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
-	seed := func(ws workspace, user, role string, bot int) {
+	wsA, err := store.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
+	if err != nil {
+		t.Fatalf("ensure wsA: %v", err)
+	}
+	// Grants go to IAM, which is where a seat is counted. A bot is not seeded at
+	// all: the peer counts people, and machine-ness is IAM's fact about the user.
+	seed := func(ws workspace, user, role string) {
 		t.Helper()
-		if _, err := store.db.Insert("members", query.Params{
-			"workspace_id": ws.ID, "user_id": user, "role": role,
-			"display_name": "m", "is_bot": bot, "active": 1, "joined_at": 1,
-		}).WithContext(ctx).Execute(); err != nil {
+		if err := store.AddMember(ctx, ws.OwnerOrg, ws.UUID, user, role); err != nil {
 			t.Fatal(err)
 		}
 	}
-	seed(wsA, uid(1), "member", 0)
-	seed(wsA, uid(2), roleGuest, 0)
-	seed(wsA, uid(3), "member", 1) // bot — not a seat
+	seed(wsA, uid(1), "member")
+	seed(wsA, uid(2), roleGuest)
 	wsB, _ := store.EnsureWorkspace(ctx, "other", uid(9), "Bob")
-	seed(wsB, uid(4), "member", 0)
+	seed(wsB, uid(4), "member")
 
 	code, body := call(t, app, http.MethodGet, "/v1/team/billing/plan", bearerFor(t, gateAcct, gateOrg), nil)
 	if code != http.StatusOK {
@@ -150,16 +152,19 @@ func TestBillingPlanOrgScoped(t *testing.T) {
 	}
 
 	// Commerce not co-resident → plan honestly empty, seats still real.
-	appNil, storeNil := billingApp(t, nil, nil)
-	wsN, _ := storeNil.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
-	_ = wsN
+	//
+	// The seat count does NOT reset with a second store: seats are the ORG's, held
+	// by IAM, so every instance serving that tenant reports the same three. It used
+	// to be one, back when each store counted its own table — which is the answer
+	// this change exists to remove.
+	appNil, _ := billingApp(t, nil, nil)
 	code, body = call(t, appNil, http.MethodGet, "/v1/team/billing/plan", bearerFor(t, gateAcct, gateOrg), nil)
 	if code != http.StatusOK {
 		t.Fatalf("plan(nil commerce) = %d (%s)", code, body)
 	}
 	out = planInfo{}
 	_ = json.Unmarshal(body, &out)
-	if out.Plan != "" || out.Active || out.Seats != 1 {
-		t.Fatalf("nil-commerce plan = %+v, want empty plan + 1 seat", out)
+	if out.Plan != "" || out.Active || out.Seats != 3 {
+		t.Fatalf("nil-commerce plan = %+v, want empty plan + the org's three seats", out)
 	}
 }

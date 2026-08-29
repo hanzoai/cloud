@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/cloud/plane/iam"
 	"strings"
 	"time"
 
@@ -120,33 +123,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_workspaces_uuid      ON workspaces(uuid);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_workspaces_org_slug  ON workspaces(owner_org, slug);
 CREATE INDEX        IF NOT EXISTS ix_workspaces_org       ON workspaces(owner_org);
 
-CREATE TABLE IF NOT EXISTS members (
-  workspace_id TEXT NOT NULL,
-  user_id      TEXT NOT NULL,
-  role         TEXT NOT NULL DEFAULT 'member',
-  display_name TEXT NOT NULL DEFAULT '',
-  is_bot       INTEGER NOT NULL DEFAULT 0,
-  active       INTEGER NOT NULL DEFAULT 1,
-  joined_at    INTEGER NOT NULL,
-  PRIMARY KEY (workspace_id, user_id)
-);
-CREATE INDEX IF NOT EXISTS ix_members_user ON members(user_id);
-
 -- Personal-workspace uniqueness. EnsureWorkspace is the SOLE creator of workspaces
 -- and always writes owner=account, so (owner_org, owner) identifies an account's ONE
 -- personal workspace. A pre-fix login race could mint duplicates (two concurrent
--- logins both saw "none"); converge any such duplicates to the EARLIEST row (drop the
--- extras' member rows, then the extras) before enforcing the invariant going forward.
+-- logins both saw "none"); converge any such duplicates to the EARLIEST row before
+-- enforcing the invariant going forward. The extras' grants need no sweep: the
+-- backfill joins members to workspaces, so a grant whose workspace is gone is
+-- never carried into IAM.
 -- The index is PARTIAL (owner <> '') so any owner-less row — none created here — stays
 -- unconstrained rather than colliding. Idempotent: no-op once converged.
-DELETE FROM members WHERE workspace_id IN (
-  SELECT w.id FROM workspaces w
-  WHERE w.owner <> '' AND EXISTS (
-    SELECT 1 FROM workspaces e
-    WHERE e.owner_org = w.owner_org AND e.owner = w.owner AND e.id <> w.id
-      AND (e.created_at < w.created_at OR (e.created_at = w.created_at AND e.id < w.id))
-  )
-);
 DELETE FROM workspaces WHERE owner <> '' AND id IN (
   SELECT w.id FROM workspaces w
   WHERE EXISTS (
@@ -242,35 +227,23 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 		}
 		return workspace{}, fmt.Errorf("team: ensure workspace: create conflicted but no personal workspace resolved")
 	}
-	if _, err := tx.Insert("members", query.Params{
-		"workspace_id": w.ID,
-		"user_id":      account,
-		"role":         "owner",
-		"display_name": name,
-		"is_bot":       0,
-		"active":       1,
-		"joined_at":    w.CreatedAt,
-	}).WithContext(ctx).Execute(); err != nil {
-		return workspace{}, fmt.Errorf("insert owner member: %w", err)
-	}
 	if err := tx.Commit(); err != nil {
 		return workspace{}, fmt.Errorf("commit: %w", err)
+	}
+	// The creator owns it, recorded where every other grant lives. AFTER the
+	// commit, because the workspace has to exist before a grant can name it: the
+	// grant is idempotent, so a failure here leaves a workspace its creator
+	// re-owns on the next call rather than a row pointing at nothing.
+	if err := s.AddMember(ctx, org, w.UUID, account, "owner"); err != nil {
+		return workspace{}, fmt.Errorf("grant owner: %w", err)
 	}
 	return w, nil
 }
 
-// adoptExisting returns the account's first workspace in the org (newest membership
-// first), having HEALED the caller's own member row to an active human seat. ok is
-// false when the account has no workspace yet. Used both on the fast path and after
-// losing the personal-workspace create race (adopt the concurrent winner).
+// adoptExisting returns the account's first workspace in the org, if any.
 //
-// Heal rationale: a user who just authenticated through IAM is, by definition, an
-// ACTIVE, non-bot member of their workspace — but a row migrated from team-go (or
-// otherwise) can carry is_bot=1 / active=0, which excludes the owner from the billed
-// seat count (Seats filters active=1 AND is_bot=0) even though WorkspacesOf still
-// lists the workspace (it does not filter those flags). Force the caller's OWN row —
-// never anyone else's — to an active human seat. Idempotent: a correct row is left
-// unchanged.
+// It heals nothing: the grant it used to repair is IAM's row now, and a workspace
+// this account can be found through is one IAM already says they may act in.
 func (s *accountStore) adoptExisting(ctx context.Context, org, account string) (workspace, bool, error) {
 	existing, err := s.WorkspacesOf(ctx, org, account)
 	if err != nil {
@@ -279,24 +252,31 @@ func (s *accountStore) adoptExisting(ctx context.Context, org, account string) (
 	if len(existing) == 0 {
 		return workspace{}, false, nil
 	}
-	if _, err := s.db.Update("members",
-		query.Params{"active": 1, "is_bot": 0},
-		query.HashExp{"workspace_id": existing[0].ID, "user_id": account},
-	).WithContext(ctx).Execute(); err != nil {
-		return workspace{}, false, fmt.Errorf("heal member: %w", err)
-	}
 	return existing[0], true, nil
 }
 
-// WorkspacesOf returns the org's workspaces the account is a member of, newest
-// first. The join is scoped by owner_org so an account never resolves a workspace
-// outside the caller's VERIFIED org.
+// WorkspacesOf returns the org's workspaces the account may act in, newest first.
+//
+// Where a person may act is IAM's answer; which workspace carries which name is
+// team's. So this asks IAM for the scopes and reads the rows for them, rather
+// than joining a roster it no longer keeps.
 func (s *accountStore) WorkspacesOf(ctx context.Context, org, account string) ([]workspace, error) {
-	t := s.workspacesIn("workspaces w", prefixed("w", wsCols)...)
-	t.Query().InnerJoin("members m", query.NewExp("m.workspace_id = w.id"))
-	out, err := t.
-		Where(query.HashExp{"w.owner_org": org, "m.user_id": account}).
-		OrderBy("m.joined_at DESC", "w.created_at DESC").
+	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{User: account, Any: true})
+	if err != nil {
+		return nil, fmt.Errorf("workspaces of: %w", err)
+	}
+	uuids := make([]any, 0, len(got.Memberships))
+	for _, m := range got.Memberships {
+		if m.Workspace != "" {
+			uuids = append(uuids, m.Workspace)
+		}
+	}
+	if len(uuids) == 0 {
+		return nil, nil
+	}
+	out, err := s.workspacesIn("workspaces w", prefixed("w", wsCols)...).
+		Where(query.HashExp{"w.owner_org": org, "w.uuid": uuids}).
+		OrderBy("w.created_at DESC").
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("workspaces of: %w", err)
@@ -335,180 +315,113 @@ func (s *accountStore) WorkspaceByUUID(ctx context.Context, org, id string) (wor
 	return w, nil
 }
 
-// Membership returns the account's role in a workspace, or ("", false) if the
-// account is not a member. The role is ALWAYS read from the members row, never a
-// self-asserted claim.
-func (s *accountStore) Membership(ctx context.Context, workspaceID, account string) (string, bool) {
-	var role string
-	err := s.db.Select("role").From("members").
-		Where(query.HashExp{"workspace_id": workspaceID, "user_id": account}).
-		WithContext(ctx).Row(&role)
-	if err != nil {
-		return "", false
+// Membership is the role a person holds in a workspace, from IAM.
+//
+// Team keeps no roster: identity, membership and roles are IAM's. The scope is
+// the workspace UUID — team's stable external name for it, which is what the
+// grant is filed against.
+func (s *accountStore) Membership(ctx context.Context, org, wsUUID, account string) (string, bool) {
+	for _, m := range s.roster(ctx, org, wsUUID) {
+		if m.User == account {
+			return m.Role, true
+		}
 	}
-	return role, true
+	return "", false
 }
 
-// MemberName returns the display name on a member row, empty when the row has
-// none or does not exist. It is deliberately NOT folded into Membership: a role
-// is what a member may DO and is read by every gate, while a display name is
-// decoration read by the few surfaces that render a person. Empty is a real
-// answer — EnsureMemberName only fills a name that a login supplied.
-func (s *accountStore) MemberName(ctx context.Context, workspaceID, account string) string {
-	var name string
-	err := s.db.Select("display_name").From("members").
-		Where(query.HashExp{"workspace_id": workspaceID, "user_id": account}).
-		WithContext(ctx).Row(&name)
-	if err != nil {
-		return ""
+// MemberName is the name IAM holds for a member of a workspace.
+func (s *accountStore) MemberName(ctx context.Context, org, wsUUID, account string) string {
+	for _, m := range s.roster(ctx, org, wsUUID) {
+		if m.User == account {
+			return m.Name
+		}
 	}
-	return name
+	return ""
 }
 
-// AccountForSubject is the ONE answer to "which team account is this IAM
-// identity?", and the store is deliberately the one that gives it.
+// AccountForSubject resolves an IAM subject to the account id team attributes work
+// by, and reports whether that account may act in the org.
 //
-// The subject is the `sub` claim VERBATIM and nothing else. It is NOT the
-// canonical user id: that one falls back sub → preferred_username → name, so a
-// token carrying no sub presents its USERNAME there — and accountID returns a
-// UUID-shaped input verbatim, so a username that is a colleague's account uuid
-// would have resolved to the colleague. Subject-only closes that, and an empty
-// subject is refused exactly as the OAuth callback's userinfo() refuses one.
-//
-// It then CONFIRMS the derived id against the rows instead of asserting it. The
-// derivation (accountID) is the same function establishSession stores the rows
-// under — one derivation, not two — but a login is what CREATES those rows, so an
-// id that matches none is an identity this deployment has never seen, and the
-// honest answer is "no account" rather than an account-shaped string every later
-// query would then scope by. That is what makes the caller's refusal true rather
-// than merely documented.
-//
-// The existence check is org-scoped: a member row is only this org's if its
-// workspace is. So a subject known in org A resolves to nothing in org B, and the
-// answer cannot be used to probe another tenant.
+// The account id is DERIVED from the subject — team owns that join — while whether
+// they may act is IAM's. So the derivation stays here and the membership question
+// goes to IAM, which is the split that removed the roster.
 func (s *accountStore) AccountForSubject(ctx context.Context, org, subject string) (string, bool) {
 	account := accountID(strings.TrimSpace(subject))
 	if account == "" || strings.TrimSpace(org) == "" {
 		return "", false
 	}
-	var found string
-	err := s.db.Select("m.user_id").From("members m").
-		InnerJoin("workspaces w", query.NewExp("w.id = m.workspace_id")).
-		Where(query.HashExp{"w.owner_org": org, "m.user_id": account}).
-		Limit(1).WithContext(ctx).Row(&found)
-	if err != nil || found == "" {
+	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{User: account, Any: true})
+	if err != nil || len(got.Memberships) == 0 {
 		return "", false
 	}
-	return found, true
+	return account, true
 }
 
-// MembersForWorkspaceUUID returns the member rows of a workspace, resolved by
-// (org, workspace uuid) so a foreign tenant's uuid returns nothing. This is the
-// human half of the roster reconcile.
+// MembersForWorkspaceUUID is the workspace's roster, from IAM.
 func (s *accountStore) MembersForWorkspaceUUID(ctx context.Context, org, wsUUID string) ([]member, error) {
-	t := orm.Select[member](s.db, "members m",
-		"m.workspace_id", "m.user_id", "m.role", "m.display_name", "m.is_bot", "m.active", "m.joined_at")
-	t.Query().InnerJoin("workspaces w", query.NewExp("w.id = m.workspace_id"))
-	out, err := t.Where(query.HashExp{"w.owner_org": org, "w.uuid": wsUUID}).All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("members for workspace: %w", err)
+	rows := s.roster(ctx, org, wsUUID)
+	out := make([]member, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, member{
+			WorkspaceID: wsUUID, UserID: m.User, Role: m.Role,
+			DisplayName: m.Name, Active: true,
+		})
 	}
 	return out, nil
 }
 
-// GuestRank returns the 1-based join-order rank of account among the
-// workspace's guest-role members, 0 when the account is not a guest there. The
-// entitle gate compares it to the plan's team.guests cap so the FIRST cap
-// guests keep access deterministically (joined_at, user_id tie-break) and later
-// invites are refused — never all-or-nothing.
-func (s *accountStore) GuestRank(ctx context.Context, workspaceID, account string) int {
-	var rank int
-	err := s.db.Select("COUNT(*)").From("members g", "members me").
-		Where(query.NewExp(
-			`me.workspace_id = {:ws} AND me.user_id = {:acct} AND me.role = {:role}
-			 AND g.workspace_id = me.workspace_id AND g.role = me.role
-			 AND (g.joined_at < me.joined_at OR (g.joined_at = me.joined_at AND g.user_id <= me.user_id))`,
-			query.Params{"ws": workspaceID, "acct": account, "role": roleGuest})).
-		WithContext(ctx).Row(&rank)
+// roster reads one workspace's memberships. It answers empty on a failure: every
+// caller is deciding whether ONE person may act, and an empty roster denies.
+func (s *accountStore) roster(ctx context.Context, org, wsUUID string) []plane.Membership {
+	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{Workspace: wsUUID})
 	if err != nil {
-		return 0
-	}
-	return rank
-}
-
-// Seats counts the org's distinct ACTIVE human members across all of its
-// workspaces (the billed seats), and how many of those are invited guests.
-// Bots never occupy a seat. Backs GET /v1/team/billing/plan.
-//
-// The read error is PROPAGATED, never swallowed: this is an aggregate COUNT
-// query that always returns exactly one row (zeros for an org with no members),
-// so an error is a real DB failure — surfacing it lets the wallet's seat
-// read fail honestly and retry, instead of a broken read masquerading as a
-// truthful "0 members" and under-reporting the billed seat count.
-func (s *accountStore) Seats(ctx context.Context, org string) (seats, guests int, err error) {
-	// The guest role sits in the PROJECTION, which no Where can carry, so it binds on
-	// the query itself. AndBind, never Bind: Bind REPLACES the parameter set.
-	q := s.db.Select(
-		"COUNT(DISTINCT m.user_id)",
-		"COUNT(DISTINCT CASE WHEN m.role = {:role} THEN m.user_id END)").
-		From("members m").
-		InnerJoin("workspaces w", query.NewExp("w.id = m.workspace_id")).
-		Where(query.NewExp("w.owner_org = {:org} AND m.active = 1 AND m.is_bot = 0",
-			query.Params{"org": org})).
-		AndBind(query.Params{"role": roleGuest})
-	if err := q.WithContext(ctx).Row(&seats, &guests); err != nil {
-		return 0, 0, fmt.Errorf("seats: %w", err)
-	}
-	return seats, guests, nil
-}
-
-// EnsureMemberName fills display_name on the account's member rows when empty, so
-// the projected Person shows a human name rather than the account uuid. Idempotent
-// (only fills empty). Scoped to the account's own rows.
-func (s *accountStore) EnsureMemberName(ctx context.Context, account, name string) error {
-	if strings.TrimSpace(name) == "" {
 		return nil
 	}
-	_, err := s.db.Update("members",
-		query.Params{"display_name": name},
-		query.HashExp{"user_id": account, "display_name": ""},
-	).WithContext(ctx).Execute()
-	return err
+	return got.Memberships
 }
 
-// AddMember records (or re-activates) a human membership row for an invited
-// account in a workspace. Idempotent: a re-invite updates the role and clears any
-// prior deactivation rather than duplicating (the PK is (workspace_id, user_id)).
-// The role is written verbatim (owner | admin | member | guest) — the invite path
-// validates it before calling. joined_at is preserved on an existing row so guest
-// join-order (GuestRank) stays deterministic across re-invites.
+// GuestRank is a guest's position among the workspace's guests, oldest first.
+// IAM returns the roster in a stable order, so the rank is the index.
+func (s *accountStore) GuestRank(ctx context.Context, org, wsUUID, account string) int {
+	rank := 0
+	for _, m := range s.roster(ctx, org, wsUUID) {
+		if m.Role != roleGuest {
+			continue
+		}
+		rank++
+		if m.User == account {
+			return rank
+		}
+	}
+	return 0
+}
+
+// Seats is what the org is billed for, counted by IAM.
 //
-// RAW, because PRESERVING a column is the thing dbx's Upsert cannot say: it fans
-// every inserted column into the DO UPDATE SET list, so joined_at and is_bot would be
-// overwritten on re-invite — and overwriting joined_at is exactly the guest join-order
-// GuestRank and the seat cap depend on.
-func (s *accountStore) AddMember(ctx context.Context, workspaceID, account, role, displayName string) error {
-	if workspaceID == "" || account == "" {
+// The error is PROPAGATED, never swallowed: a broken read masquerading as a
+// truthful "0 members" under-reports the billed seat count.
+func (s *accountStore) Seats(ctx context.Context, org string) (seats, guests int, err error) {
+	got, err := iam.IAMSeats(cloud.For(ctx, org))
+	if err != nil {
+		return 0, 0, fmt.Errorf("seats: %w", err)
+	}
+	return got.Seats, got.Guests, nil
+}
+
+// EnsureMemberName is gone: a person's name is IAM's, read with the roster.
+
+// AddMember records in IAM that account may act in the workspace.
+func (s *accountStore) AddMember(ctx context.Context, org, wsUUID, account, role string) error {
+	if wsUUID == "" || account == "" {
 		return fmt.Errorf("team: add member: empty workspace/account")
 	}
 	if role == "" {
 		role = "member"
 	}
-	_, err := s.db.NewQuery(
-		`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
-		 VALUES ({:ws},{:acct},{:role},{:name},0,1,{:joined})
-		 ON CONFLICT(workspace_id,user_id) DO UPDATE SET
-		   role=excluded.role,
-		   active=1,
-		   display_name=CASE WHEN members.display_name='' THEN excluded.display_name ELSE members.display_name END`).
-		Bind(query.Params{
-			"ws": workspaceID, "acct": account, "role": role,
-			"name": displayName, "joined": time.Now().UnixMilli(),
-		}).WithContext(ctx).Execute()
-	if err != nil {
-		return fmt.Errorf("add member: %w", err)
-	}
-	return nil
+	_, err := iam.IAMGrant(cloud.For(ctx, org), &plane.GrantIn{
+		User: account, Workspace: wsUUID, Role: role,
+	})
+	return err
 }
 
 // WorkspacesForOrg returns every workspace of an org — used by /v1/team/bots/sync

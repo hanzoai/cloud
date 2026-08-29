@@ -3,6 +3,7 @@ package team
 import (
 	"context"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"path/filepath"
 	"testing"
 )
@@ -13,6 +14,7 @@ import (
 // session bound to the seeded workspace, and the workspace uuid.
 func rosterServer(t *testing.T, org, human, humanName string, bots []Bot) (*transServer, *session, string) {
 	t.Helper()
+	id := planetest.ServeIdentity(t)
 	dir := t.TempDir()
 	accounts, err := openAccountStore(dir)
 	if err != nil {
@@ -20,6 +22,8 @@ func rosterServer(t *testing.T, org, human, humanName string, bots []Bot) (*tran
 	}
 	t.Cleanup(func() { _ = accounts.Close() })
 
+	// IAM holds the person's name, so the roster reads it from there.
+	id.Named(human, humanName)
 	ws, err := accounts.EnsureWorkspace(context.Background(), org, human, humanName)
 	if err != nil {
 		t.Fatalf("ensure workspace: %v", err)

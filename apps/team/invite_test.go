@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,7 +14,6 @@ import (
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/types"
 	model "github.com/hanzoai/iam/pkg/model"
-	"github.com/hanzoai/orm/query"
 )
 
 // TestOrgGrantRoleCaps proves a workspace invite can never confer an org-level
@@ -66,6 +66,7 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	const inviteeSub = "113d4dd4-2486-40de-be2b-88d6e3e0b718"
 	iamSrv := inviteIAM(t, org, inviteeSub)
 
+	planetest.ServeIdentity(t)
 	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -74,10 +75,7 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	ctx := context.Background()
 	ws, _ := store.EnsureWorkspace(ctx, org, inviterAcct, "Max Power")
 	// One guest already present (join order 1) — the plan's cap of 1 is now full.
-	if _, err := store.db.Insert("members", query.Params{
-		"workspace_id": ws.ID, "user_id": "00000000-0000-4000-8000-000000000001",
-		"role": roleGuest, "display_name": "g1", "is_bot": 0, "active": 1, "joined_at": 1,
-	}).WithContext(ctx).Execute(); err != nil {
+	if err := store.AddMember(ctx, org, ws.UUID, "00000000-0000-4000-8000-000000000001", roleGuest); err != nil {
 		t.Fatal(err)
 	}
 
@@ -100,7 +98,7 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	sess, _ := token.Generate(inviterAcct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, org, inviterAcct),
 		map[string]any{"method": "sendInvite", "params": map[string]any{
 			"email": "eve@example.com", "workspaceUrl": ws.Slug, "role": roleGuest}})
 
@@ -124,7 +122,7 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	}
 	// And this was a genuine over-cap add: the invitee's guest rank exceeds the cap of 1.
 	inviteeAcct := accountID(inviteeSub)
-	if rank := store.GuestRank(ctx, ws.ID, inviteeAcct); rank <= 1 {
+	if rank := store.GuestRank(ctx, org, ws.UUID, inviteeAcct); rank <= 1 {
 		t.Fatalf("invitee guest rank = %d, want > 1 (a genuine over-cap add)", rank)
 	}
 }
@@ -139,6 +137,7 @@ func TestSendInviteGuestInfraErrorAdmits(t *testing.T) {
 	const inviteeSub = "113d4dd4-2486-40de-be2b-88d6e3e0b718"
 	iamSrv := inviteIAM(t, org, inviteeSub)
 
+	planetest.ServeIdentity(t)
 	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +159,7 @@ func TestSendInviteGuestInfraErrorAdmits(t *testing.T) {
 	sess, _ := token.Generate(inviterAcct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, org, inviterAcct),
 		map[string]any{"method": "sendInvite", "params": map[string]any{
 			"email": "eve@example.com", "workspaceUrl": ws.Slug, "role": roleGuest}})
 
@@ -171,7 +170,7 @@ func TestSendInviteGuestInfraErrorAdmits(t *testing.T) {
 		t.Fatal("gate did not run at sendInvite (commerce never consulted)")
 	}
 	// The invite was recorded despite the licensing outage.
-	if _, ok := store.Membership(ctx, ws.ID, accountID(inviteeSub)); !ok {
+	if _, ok := store.Membership(ctx, org, ws.UUID, accountID(inviteeSub)); !ok {
 		t.Fatal("invite must be recorded even when the licensing read errors")
 	}
 }

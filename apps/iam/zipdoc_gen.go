@@ -32,6 +32,9 @@ func init() {
 	})
 	zip.Describe("POST /iam/members", zip.Doc{
 		Description: "Lists the grants in one scope, each with the display name IAM holds for\nthe person — so a caller never keeps a copy of somebody's name to show it.",
+		Fields: map[string]string{
+			"Scope.any": "Any drops the scope filters, for the caller asking where one person acts.",
+		},
 	})
 	zip.Describe("POST /iam/projects", zip.Doc{
 		Description: "Answers with the projects owned by the CALLER'S OWN org.\n\nThe org comes from the authenticated call and can never be an argument. Owner\nis the tenancy key of the whole project table, so a caller able to pass it\ncould list another tenant's work — which is exactly the hole the HTTP client\nthis replaces had to mint a per-org credential to close.\n\nThe projection is narrow on purpose: five fields are what it takes to key,\nname and date a project. Returning the record itself would put IAM's metadata\nand workspace columns on a wire whose layout is positional, so every field\nhere is one the contract can never reorder.\n\nIt fails closed on a store that is not open. This process owns the store, so a\nnil handle is a boot-order fault, and an empty list would read as \"this org has\nno projects\" — a lie that a caller would act on by offering to create one that\nalready exists.",
@@ -44,5 +47,8 @@ func init() {
 	})
 	zip.Describe("POST /iam/roles", zip.Doc{
 		Description: "Resolves the caller's effective roles: the org grant they hold, plus every\nrole naming them directly or through a team.\n\nAn org owner or admin is a System Manager, which is what makes an org\nadministrable the moment it exists — the grant IAM already records, rather than\na first-caller-wins seed in whichever subsystem was reached first.\n\nIt fails closed on a store that is not open: this process owns the store, so a\nnil handle is a boot-order fault, and an empty set would read as a member with\nno grants — a refusal the caller would blame on their own permissions.",
+	})
+	zip.Describe("POST /iam/seats", zip.Doc{
+		Description: "Counts the caller's org's billable people.\n\nThe error is PROPAGATED: a wallet reading zero seats under-bills silently,\nwhere a failure retries. This is the one read here that must not degrade.",
 	})
 }

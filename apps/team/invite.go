@@ -27,7 +27,6 @@ package team
 // the button lands — no second path.
 
 import (
-	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -223,9 +222,9 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 	if inviteeAccount == "" {
 		return g.fail(c, statusInvite("invitee has no IAM subject"))
 	}
-	displayName := cmp.Or(u.DisplayName, u.Name, localPart(email))
-	if err := g.accounts.AddMember(c.Context(), ws.ID, inviteeAccount, role, displayName); err != nil {
-		g.log.Error("team: invite — local member row write failed", "err", err)
+	// The name is IAM's and is read with the roster, so nothing is copied here.
+	if err := g.accounts.AddMember(c.Context(), org, ws.UUID, inviteeAccount, role); err != nil {
+		g.log.Error("team: invite — workspace grant failed", "err", err)
 		return g.fail(c, statusInvite("could not add workspace member: "+err.Error()))
 	}
 	// The entitlement gate AT THE ADD POINT — the SAME client selectWorkspace gates login
@@ -235,7 +234,7 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 	// enforcement returns (entitle starts returning the Status). Any commerce/plans error
 	// admits inside entitle, so a licensing outage never bricks an invite. The invitee is
 	// now a guest member, so entitle's team.guests rank check sees this add.
-	if st := g.entitle(c.Context(), org, role, ws.ID, inviteeAccount); st != nil {
+	if st := g.entitle(c.Context(), org, role, ws.UUID, inviteeAccount); st != nil {
 		return c.JSON(http.StatusPaymentRequired, map[string]any{"error": *st, "upgradeUrl": upgradeURL})
 	}
 	return g.ok(c, map[string]any{

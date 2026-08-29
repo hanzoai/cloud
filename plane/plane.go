@@ -595,6 +595,11 @@ const (
 	// IAMGrant records that a user may act in a scope of the caller's org, with a
 	// role. Idempotent.
 	IAMGrant = "iam_grant"
+
+	// IAMSeats counts the caller's org's billable people. IAM answers it because
+	// IAM holds what decides it — who is a machine, who is disabled, and who holds
+	// a grant — and a subsystem computing its own would bill from a second roster.
+	IAMSeats = "iam_seats"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -1076,23 +1081,40 @@ type Roles struct {
 
 // ---- iam.members / iam.grant ------------------------------------------------
 
-// Scope narrows a membership question inside the caller's org. Empty Workspace is
-// the org itself; Project narrows further and needs a Workspace.
+// Scope narrows a membership question inside the caller's org. Every field is a
+// filter and all are optional: give a Workspace for its roster, a User for
+// everywhere that person may act, both for one grant. The ORG is the caller's and
+// is not a field, so a question can never reach another tenant.
+//
+// A Workspace filter that is empty means the org level, not "any workspace" —
+// the org's own grants are a real answer, and conflating them with every
+// workspace's would make a roster read return the whole tenant.
 type Scope struct {
 	Workspace string `json:"workspace,omitempty"`
 	Project   string `json:"project,omitempty"`
+	User      string `json:"user,omitempty"`
+	// Any drops the scope filters, for the caller asking where one person acts.
+	Any bool `json:"any,omitempty"`
 }
 
-// Membership is one person's grant in a scope, as IAM holds it.
+// Membership is one grant: who, where, and as what.
 type Membership struct {
-	User string `json:"user"`
-	Role string `json:"role"`
-	Name string `json:"name"`
+	User      string `json:"user"`
+	Role      string `json:"role"`
+	Name      string `json:"name"`
+	Workspace string `json:"workspace,omitempty"`
+	Project   string `json:"project,omitempty"`
 }
 
 // Memberships is every grant in one scope.
 type Memberships struct {
 	Memberships []Membership `json:"memberships"`
+}
+
+// Seats is what an org is billed for: distinct people, and how many are guests.
+type Seats struct {
+	Seats  int `json:"seats"`
+	Guests int `json:"guests"`
 }
 
 // GrantIn records one membership. The org is the caller's and is never an
