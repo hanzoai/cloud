@@ -56,7 +56,7 @@ func (s *session) searchFulltext(id int64, params []json.RawMessage) []byte {
 }
 
 // parseFulltextParams reads the client's (query, options) pair. The client sends
-// either a bare string or Huly's {query: "..."} object, and options carry the
+// either a bare string or a {query: "..."} object, and options carry the
 // limit; anything absent or out of range falls back to a sane default rather than
 // failing the RPC.
 func parseFulltextParams(params []json.RawMessage) (string, int) {

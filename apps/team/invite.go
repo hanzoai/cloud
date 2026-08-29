@@ -19,8 +19,7 @@ package team
 // grant); the local row second (the projection). A caller must be an owner/admin
 // of the target workspace — enforced here before either write.
 //
-// Front wiring (honest state): the team SPA's plugins/login-resources speaks the
-// Huly accounts protocol whose invite verb is `sendInvite`; this implements that
+// The accounts protocol's invite verb is `sendInvite`; this implements that
 // backend RPC (account method "sendInvite") plus "getMemberships" for the
 // mid-session refresh. If the shipped SPA build has no invite button wired to
 // sendInvite yet, the RPC is still the one backend client the front binds to when

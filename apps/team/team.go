@@ -192,10 +192,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// A duplicate that costs nothing in the router still doubles the surface every
 	// projection is cut from.
 	//
-	// The `/api/v1/` spelling is the stats POD's own protocol (Huly's internal
-	// service wire, still served on its own hosts and correctly untouched); asking
-	// the TRANSACTOR for it was the confusion. Canon here is the api.* host and
-	// /v1/, with no nested /api/vN.
+	// The `/api/v1/` spelling belongs to the stats pod's own protocol, served on
+	// its own hosts. Canon here is the api.* host and /v1/, with no nested
+	// /api/vN.
 	zip.Get(tg, "/transactor/statistics", trans.statistics)
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
