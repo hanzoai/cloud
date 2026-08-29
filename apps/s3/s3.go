@@ -66,7 +66,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/fare"
+	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/zap-proto/zip"
