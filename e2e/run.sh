@@ -118,14 +118,26 @@ done
 say "building the host and $(make -s -n apps 2>/dev/null | grep -c 'go build' || echo '?') app binaries"
 make -j"$(nproc 2>/dev/null || echo 4)" ship >/dev/null
 
-# The console bundle is go:embed'd at COMPILE time. A fresh clone carries only the
-# fallback shell, and the UI spec says so rather than pretending.
-# A tree that has never built the console has NO FILE, not a small one, and the
-# redirection fails in the shell before wc runs — so the note below arrived after
-# two raw shell errors. Test for the file first.
+# The console is a PUBLISHED SITE RELEASE, not a compiled-in bundle (webui/console.go
+# carries no bytes; webui/release reads CLOUD_CONSOLE_ORG + CLOUD_CONSOLE_SITE). A
+# fresh data dir holds no release, so /login/oauth/authorize answers
+# 503 "console unavailable: the bundle has no index.html" and anything that has to
+# SIGN IN cannot run.
+#
+# The note used to name `make webui CONSOLE_DIR=../console`. There is no such
+# target — the Makefile says so in as many words, and deleting it is what moved the
+# console off this binary's build. Naming a target that cannot be run sent the
+# reader looking for it; these are the steps that work.
+#
+# Publishing needs a USER bearer, which comes from the sign-in this is trying to
+# make possible — so on a throwaway boot it is a chicken and egg, and the honest
+# thing is to say which specs that costs rather than to imply a one-liner.
 if [ ! -s webui/dist/index.html ] || [ "$(wc -c < webui/dist/index.html)" -lt 20000 ]; then
-  say "note: webui/dist holds the FALLBACK shell — UI specs will skip."
-  say "      build the real console first: make webui CONSOLE_DIR=../console"
+  say "note: no console release — every spec that SIGNS IN will skip."
+  say "      the login page is a site release, not a compiled-in bundle:"
+  say "        cd ../console && NEXT_PUBLIC_CLOUD_URL=$BASE NEXT_PUBLIC_IAM_URL=$BASE npm run build:embed"
+  say "        hanzo sites publish <slug> --source out/     # needs a user bearer"
+  say "        CLOUD_CONSOLE_SITE=<slug> ./e2e/run.sh"
 fi
 
 # ── boot ─────────────────────────────────────────────────────────────────────
