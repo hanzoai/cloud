@@ -642,6 +642,10 @@
     "schemas": {
       "issueEdit": {
         "properties": {
+          "assignee": {
+            "description": "Assignee hands the work to somebody — a person or an agent, by the name\nthey are known by on the forge. \"\" TAKES IT OFF whoever holds it, which is\nwhy this is a pointer: absent leaves the holder alone.\n\nIt is the other half of `claim`, which that handler already named: a claim\ntakes work for the CALLER and refuses to name anyone else, because giving\nwork away is a different act with different authority. This is that act,\nand until it existed a board could only be worked by whoever clicked\nfirst — an agent could never be given anything.",
+            "type": "string"
+          },
           "description": {
             "description": "Description rewrites the body.",
             "type": "string"
