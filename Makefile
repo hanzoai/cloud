@@ -54,15 +54,17 @@ STAMP            = -X github.com/hanzoai/cloud.Version=$(VERSION) -X github.com/
 #   CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5"
 # (CGO_ENABLED=0 there builds only the /smoke helper), so production links the live
 # libsqlcipher codec: databases are encrypted in place, per-commit, and shareable by
-# a second opener. The default below is pure Go for a DIFFERENT reason — it
-# registers the ONE "sqlite" driver exactly once:
-# cloud's stores use github.com/hanzoai/sqlite (its !cgo backend IS modernc), and
-# the embedded deps (ai/base/commerce/o11y/orm/tasks) that import modernc directly
-# then resolve to the SAME package → a single registration. A plain CGO_ENABLED=1
-# build instead links the fork's mattn backend ALONGSIDE those modernc importers
-# and panics at init ("sql: Register called twice for driver sqlite"); `make
-# test-cgo` proves the cgo path via the fork's `sqlite_purego` opt-out tag, which
-# forces the fork to modernc too so the whole binary registers "sqlite" once.
+# a second opener. The default below is pure Go so `dist` can
+# CROSS-COMPILE: it builds every app for every GOOS/GOARCH, and cgo needs a C
+# toolchain per target. That is the whole reason modernc is still linked anywhere.
+#
+# It used to say the reason was that ai/base/commerce/o11y/orm/tasks import modernc
+# DIRECTLY, so a cgo build would link mattn beside them and panic at init ("sql:
+# Register called twice for driver sqlite"). Not any more — measured on clean main,
+# `go list -deps ./cmd/... ./plugin/...` under CGO_ENABLED=1 links
+# github.com/hanzoai/csqlite and nothing else: every one of those deps goes through
+# the facade now. The only thing that reintroduces a second engine is a dep
+# importing one itself, which manifest/sqlite_test.go names.
 #
 # CONSEQUENCE, worth knowing before trusting a green run: neither target links
 # libsqlcipher, so NEITHER exercises the engine the image ships. Without the codec,
