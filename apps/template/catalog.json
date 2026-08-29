@@ -53,8 +53,7 @@
     "useCase": "Admin dashboards",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-apps/template-metrics",
-    "demo": "https://metrics-template.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-metrics"
   },
   {
     "slug": "kinetic",
@@ -108,8 +107,7 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-savor",
-    "preview": "https://hanzo.app/templates/savor.webp",
-    "demo": "https://savor.hanzo.app"
+    "preview": "https://hanzo.app/templates/savor.webp"
   },
   {
     "slug": "mint",
@@ -267,8 +265,7 @@
         "framework": "HTML/Gulp",
         "source": "https://github.com/hanzo-templates/soar"
       }
-    ],
-    "demo": "https://soar.hanzo.app"
+    ]
   },
   {
     "slug": "cipher",
@@ -287,7 +284,6 @@
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-cipher",
     "preview": "https://hanzo.app/templates/cipher-react.webp",
-    "demo": "https://cipher.hanzo.app",
     "variants": [
       {
         "id": "html",
@@ -370,8 +366,7 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-deploy",
-    "preview": "https://hanzo.app/templates/deploy.webp",
-    "demo": "https://deploy.hanzo.app"
+    "preview": "https://hanzo.app/templates/deploy.webp"
   },
   {
     "slug": "loop",
@@ -532,8 +527,7 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-oasis",
-    "preview": "https://hanzo.app/templates/oasis.webp",
-    "demo": "https://oasis.hanzo.app"
+    "preview": "https://hanzo.app/templates/oasis.webp"
   },
   {
     "slug": "solo",
@@ -588,8 +582,7 @@
     "useCase": "CRM dashboards",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-apps/template-beta",
-    "demo": "https://beta.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-beta"
   },
   {
     "slug": "hygge",
@@ -608,7 +601,6 @@
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-hygge",
     "preview": "https://hanzo.app/templates/hygge-html.webp",
-    "demo": "https://hygge.hanzo.app",
     "variants": [
       {
         "id": "html",
@@ -642,7 +634,6 @@
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-folio",
     "preview": "https://hanzo.app/templates/folio-full.webp",
-    "demo": "https://folio.hanzo.app",
     "variants": [
       {
         "id": "main",
@@ -855,8 +846,7 @@
     "useCase": "Editorial and magazine sites",
     "tier": 3,
     "rating": 3,
-    "source": "https://github.com/hanzo-apps/template-serif",
-    "demo": "https://serif.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-serif"
   },
   {
     "slug": "analytics-dashboard",
@@ -868,8 +858,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-analytics-dashboard",
-    "demo": "https://analytics-dashboard.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-analytics-dashboard"
   },
   {
     "slug": "blog-platform",
@@ -881,8 +870,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-blog-platform",
-    "demo": "https://blog-platform.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-blog-platform"
   },
   {
     "slug": "changelog",
@@ -894,8 +882,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-changelog",
-    "demo": "https://changelog.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-changelog"
   },
   {
     "slug": "crypto-portfolio",
@@ -907,8 +894,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-crypto-portfolio",
-    "demo": "https://crypto-portfolio.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-crypto-portfolio"
   },
   {
     "slug": "ecommerce-storefront",
@@ -920,8 +906,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-ecommerce-storefront",
-    "demo": "https://ecommerce-storefront.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-ecommerce-storefront"
   },
   {
     "slug": "kanban-board",
@@ -933,8 +918,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-kanban-board",
-    "demo": "https://kanban-board.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-kanban-board"
   },
   {
     "slug": "markdown-editor",
@@ -946,8 +930,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-markdown-editor",
-    "demo": "https://markdown-editor.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-markdown-editor"
   },
   {
     "slug": "portfolio",
@@ -959,8 +942,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-portfolio",
-    "demo": "https://portfolio.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-portfolio"
   },
   {
     "slug": "video-streaming",
@@ -972,8 +954,7 @@
     "useCase": "",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-video-streaming",
-    "demo": "https://video-streaming.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-video-streaming"
   },
   {
     "slug": "mobile",
@@ -991,8 +972,7 @@
     "useCase": "Cross-platform mobile apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-apps/template-mobile",
-    "demo": "https://mobile.hanzo.app"
+    "source": "https://github.com/hanzo-apps/template-mobile"
   },
   {
     "slug": "expo-chat",
@@ -1010,8 +990,7 @@
     "useCase": "AI assistants on mobile",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/expo-chat",
-    "demo": "https://expo-chat.hanzo.app"
+    "source": "https://github.com/hanzo-templates/expo-chat"
   },
   {
     "slug": "expo-shop",
@@ -1029,8 +1008,7 @@
     "useCase": "Mobile commerce",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/expo-shop",
-    "demo": "https://expo-shop.hanzo.app"
+    "source": "https://github.com/hanzo-templates/expo-shop"
   },
   {
     "slug": "expo-auth",
@@ -1048,8 +1026,7 @@
     "useCase": "Authenticated mobile apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/expo-auth",
-    "demo": "https://expo-auth.hanzo.app"
+    "source": "https://github.com/hanzo-templates/expo-auth"
   },
   {
     "slug": "flutter",
@@ -1067,8 +1044,7 @@
     "useCase": "Cross-platform mobile apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/flutter",
-    "demo": "https://flutter.hanzo.app"
+    "source": "https://github.com/hanzo-templates/flutter"
   },
   {
     "slug": "flutter-chat",
@@ -1086,8 +1062,7 @@
     "useCase": "AI assistants on mobile",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/flutter-chat",
-    "demo": "https://flutter-chat.hanzo.app"
+    "source": "https://github.com/hanzo-templates/flutter-chat"
   },
   {
     "slug": "desktop-tauri",
@@ -1105,8 +1080,7 @@
     "useCase": "Any cross-platform desktop app",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-tauri",
-    "demo": "https://desktop-tauri.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-tauri"
   },
   {
     "slug": "desktop-notes",
@@ -1124,8 +1098,7 @@
     "useCase": "Note-taking and journalling apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-notes",
-    "demo": "https://desktop-notes.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-notes"
   },
   {
     "slug": "desktop-chat",
@@ -1143,8 +1116,7 @@
     "useCase": "AI assistants and chat clients",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-chat",
-    "demo": "https://desktop-chat.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-chat"
   },
   {
     "slug": "desktop-monitor",
@@ -1162,8 +1134,7 @@
     "useCase": "System utilities and dashboards",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-monitor",
-    "demo": "https://desktop-monitor.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-monitor"
   },
   {
     "slug": "desktop-editor",
@@ -1181,8 +1152,7 @@
     "useCase": "Editors and developer tools",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-editor",
-    "demo": "https://desktop-editor.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-editor"
   },
   {
     "slug": "desktop-tray",
@@ -1200,8 +1170,7 @@
     "useCase": "Always-resident menubar utilities",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-tray",
-    "demo": "https://desktop-tray.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-tray"
   },
   {
     "slug": "desktop-electron",
@@ -1219,8 +1188,7 @@
     "useCase": "Apps that need Chromium itself",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-electron",
-    "demo": "https://desktop-electron.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-electron"
   },
   {
     "slug": "desktop-recorder",
@@ -1238,8 +1206,7 @@
     "useCase": "Screen capture and streaming tools",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/desktop-recorder",
-    "demo": "https://desktop-recorder.hanzo.app"
+    "source": "https://github.com/hanzo-templates/desktop-recorder"
   },
   {
     "slug": "godot-arcade",
@@ -1257,8 +1224,7 @@
     "useCase": "Browser games and 3D product demos",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/godot-arcade",
-    "demo": "https://godot-arcade.hanzo.app"
+    "source": "https://github.com/hanzo-templates/godot-arcade"
   },
   {
     "slug": "unity-webgl",
@@ -1276,8 +1242,7 @@
     "useCase": "Shipping an existing Unity project to the web",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/unity-webgl",
-    "demo": "https://unity-webgl.hanzo.app"
+    "source": "https://github.com/hanzo-templates/unity-webgl"
   },
   {
     "slug": "three-webgpu",
@@ -1295,8 +1260,7 @@
     "useCase": "3D landing pages and product configurators",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/three-webgpu",
-    "demo": "https://three-webgpu.hanzo.app"
+    "source": "https://github.com/hanzo-templates/three-webgpu"
   },
   {
     "slug": "rapier-physics",
@@ -1314,8 +1278,7 @@
     "useCase": "Simulation, training and physics-driven demos",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/rapier-physics",
-    "demo": "https://rapier-physics.hanzo.app"
+    "source": "https://github.com/hanzo-templates/rapier-physics"
   },
   {
     "slug": "voxel-craft",
@@ -1333,8 +1296,7 @@
     "useCase": "Sandbox games and world builders",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/voxel-craft",
-    "demo": "https://voxel-craft.hanzo.app"
+    "source": "https://github.com/hanzo-templates/voxel-craft"
   },
   {
     "slug": "kart-racer",
@@ -1352,7 +1314,6 @@
     "useCase": "Arcade games and interactive brand experiences",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/kart-racer",
-    "demo": "https://kart-racer.hanzo.app"
+    "source": "https://github.com/hanzo-templates/kart-racer"
   }
 ]
