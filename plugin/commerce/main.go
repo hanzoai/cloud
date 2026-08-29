@@ -19,7 +19,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "commerce",
 		Price: cloud.Free,
-		Mount: commerce.Mount,
+		Use:   commerce.Use,
 		// The embedded module installs its identity boundary at the ROOT of the
 		// shared app — EdgeAuth, the events local and the require gate are each
 		// an app.Router.Use (hanzoai/commerce server.go) — so the grant is real

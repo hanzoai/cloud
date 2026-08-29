@@ -247,15 +247,15 @@ type ops struct{ s *cloud.Service[state] }
 
 // Mount wires the lens and starts the corpus reconcile. No store, no DataDir:
 // the corpus is the index's, and the sync is a goroutine, not an endpoint.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// The typed-op registry lives on the App: it is what makes the browse a
 	// document operation, an MCP tool, a CLI command and an SDK method rather than
 	// only a route. A Router that cannot reach it must fail the mount rather than
 	// serve a route no projection knows about.
 	if app != nil && cloud.ZipApp(app) == nil {
-		return fmt.Errorf("catalog.Mount: router carries no typed-op registry")
+		return fmt.Errorf("catalog.Use:  router carries no typed-op registry")
 	}
-	return cloud.Mount(app, deps, "catalog", build, routes)
+	return cloud.Use(app, deps, "catalog", build, routes)
 }
 
 func build(b cloud.Base) (state, error) {

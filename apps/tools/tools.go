@@ -43,27 +43,27 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount registers the tool plane on app.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("tools.Mount: nil app")
+		return fmt.Errorf("tools.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("tools.Mount: empty DataDir")
+		return fmt.Errorf("tools.Use:  empty DataDir")
 	}
 	activation, err := OpenActivationStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("tools.Mount: open activation store: %w", err)
+		return fmt.Errorf("tools.Use:  open activation store: %w", err)
 	}
 	servers, err := OpenMCPServerStore(deps.DataDir)
 	if err != nil {
 		_ = activation.Close()
-		return fmt.Errorf("tools.Mount: open mcp-server store: %w", err)
+		return fmt.Errorf("tools.Use:  open mcp-server store: %w", err)
 	}
 	authored, err := OpenAuthoredStore(deps.DataDir)
 	if err != nil {
 		_ = activation.Close()
 		_ = servers.Close()
-		return fmt.Errorf("tools.Mount: open authored-plugin store: %w", err)
+		return fmt.Errorf("tools.Use:  open authored-plugin store: %w", err)
 	}
 
 	skills, err := OpenSkillStore(deps.DataDir)
@@ -71,7 +71,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		_ = activation.Close()
 		_ = servers.Close()
 		_ = authored.Close()
-		return fmt.Errorf("tools.Mount: open skill store: %w", err)
+		return fmt.Errorf("tools.Use:  open skill store: %w", err)
 	}
 
 	catalog, err := OpenCatalogStore(deps.DataDir)
@@ -80,7 +80,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		_ = servers.Close()
 		_ = authored.Close()
 		_ = skills.Close()
-		return fmt.Errorf("tools.Mount: open catalog store: %w", err)
+		return fmt.Errorf("tools.Use:  open catalog store: %w", err)
 	}
 
 	// Install the activation store on the process-wide registry and register the
@@ -120,7 +120,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //
 // cloud.Bridge is NOT installed here: Serve installs it once for the whole binary
 // (serve.go), after the identity boundary that makes the org trustworthy and
-// before MountAll registers any of these leaves. fiber runs middleware in
+// before UseAll registers any of these leaves. fiber runs middleware in
 // registration order, so one installed here — below the app-level Use — would be
 // redundant, and one installed after these leaves would never run.
 //

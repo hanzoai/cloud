@@ -63,8 +63,8 @@ func mount(t *testing.T) (*zip.App, *audit.Recorder) {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Audit: rec}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Audit: rec}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(); _ = rec.Close() })
 	return app, rec
@@ -186,8 +186,8 @@ func mountWithWebhook(t *testing.T, secret string) *zip.App {
 		DataDir: t.TempDir(), Audit: rec,
 		KMS: fakeKMS{ref: "kms://idv-webhook", secret: []byte(secret)},
 	}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(); _ = rec.Close() })
 	return app

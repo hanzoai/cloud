@@ -24,7 +24,7 @@ func main() {
 		// compose (see plugin/account/main.go).
 		Prefixes: manifest.PrefixesFor("admission"),
 		Price:    cloud.Free,
-		Mount:    admission.Mount,
+		Use:      admission.Use,
 		Shutdown: cloud.CtxShutdown(admission.Shutdown),
 	}}, []string{"admission"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

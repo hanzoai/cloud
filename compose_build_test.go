@@ -8,7 +8,7 @@ package cloud_test
 // routes (their ops are declared on the App with the whole path, so the routes
 // are siblings of that group, not children), and zen installed a Claim on "/v1"
 // it had no grant for. The first two turned every test in their own packages
-// into a panic out of app.Test; the third failed MountAll outright.
+// into a panic out of app.Test; the third failed UseAll outright.
 //
 // Build is the whole check. zip refuses a program whose middleware wraps nothing
 // (walk.go's inert-middleware rule), whose addresses collide, or whose MCP tools
@@ -16,7 +16,7 @@ package cloud_test
 // moves every one of those from a startup panic to a red test.
 //
 // BOTH ROUTERS, because a subsystem is mounted through two and they are not the
-// same. Production goes through MountAll, which hands each Mount a *scope* bound
+// same. Production goes through UseAll, which hands each Mount a *scope* bound
 // to its declared prefixes; a scope rewrites a middleware-carrying Group into an
 // app-wide, path-gated Use, so it can HIDE a client that a bare *zip.App refuses.
 // A package's own tests usually mount on the bare app. A subsystem is correct
@@ -53,13 +53,13 @@ import (
 // the binary does not deploy in.
 var composed = []struct {
 	name     string
-	mount    cloud.MountFunc
+	mount    cloud.UseFunc
 	prefixes []string
 	global   bool
 }{
-	{"audit", auditlog.Mount, nil, false},
-	{"catalog", catalog.Mount, nil, false},
-	{"zen", zen.Mount, []string{"/v1"}, false},
+	{"audit", auditlog.Use, nil, false},
+	{"catalog", catalog.Use, nil, false},
+	{"zen", zen.Use, []string{"/v1"}, false},
 	// commerce was NOT here, and that is the whole reason a duplicate route
 	// reached production. It declared GET /v1/commerce/org itself while the
 	// embedded commerce module declares /org under the same prefix, and zip
@@ -69,10 +69,10 @@ var composed = []struct {
 	// and a funded account rendered $0.00 with nothing anywhere saying why.
 	// A subsystem that is not in this list is a subsystem whose program only
 	// production checks.
-	{"commerce", commerce.Mount, commerce.Prefixes, true},
+	{"commerce", commerce.Use, commerce.Prefixes, true},
 }
 
-// TestSubsystemComposesThroughMountAll is the PRODUCTION path: MountAll hands
+// TestSubsystemComposesThroughMountAll is the PRODUCTION path: UseAll hands
 // the Mount a scope bound to its grant. A subsystem that installs middleware
 // outside that grant fails here, at the mount, exactly as the binary would —
 // which is what zen did, silently, for as long as its grant read the routing
@@ -81,12 +81,12 @@ func TestSubsystemComposesThroughMountAll(t *testing.T) {
 	for _, c := range composed {
 		t.Run(c.name, func(t *testing.T) {
 			app := newApp()
-			err := cloud.MountAll(app,
-				[]cloud.Plugin{{Name: c.name, Mount: c.mount, Prefixes: c.prefixes, Global: c.global}},
+			err := cloud.UseAll(app,
+				[]cloud.Plugin{{Name: c.name, Use: c.mount, Prefixes: c.prefixes, Global: c.global}},
 				&cloud.Config{Enable: []string{c.name}},
 				cloud.Deps{DataDir: t.TempDir()})
 			if err != nil {
-				t.Fatalf("MountAll(%s): %v", c.name, err)
+				t.Fatalf("UseAll(%s): %v", c.name, err)
 			}
 			if err := app.Build(); err != nil {
 				t.Fatalf("Build after mounting %s: %v", c.name, err)
@@ -105,7 +105,7 @@ func TestSubsystemComposesOnABareApp(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			app := newApp()
 			if err := c.mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-				t.Fatalf("Mount(%s): %v", c.name, err)
+				t.Fatalf("Use(%s): %v", c.name, err)
 			}
 			if err := app.Build(); err != nil {
 				t.Fatalf("Build after mounting %s on a bare app: %v", c.name, err)
@@ -182,11 +182,11 @@ func TestUseIsTheVerbThatComposesBothWays(t *testing.T) {
 // stand-in catch-all here is registered after zen mounts, exactly as ai's is.
 func TestZenClaimGatesTheCoresidentHost(t *testing.T) {
 	app := newApp()
-	if err := cloud.MountAll(app,
-		[]cloud.Plugin{{Name: "zen", Mount: zen.Mount, Prefixes: manifest.GrantFor("zen")}},
+	if err := cloud.UseAll(app,
+		[]cloud.Plugin{{Name: "zen", Use: zen.Use, Prefixes: manifest.GrantFor("zen")}},
 		&cloud.Config{Enable: []string{"zen"}},
 		cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("MountAll(zen): %v", err)
+		t.Fatalf("UseAll(zen): %v", err)
 	}
 	// ai's position: the greedy catch-all, registered after zen as in plugin/ai.
 	reachedHost := false

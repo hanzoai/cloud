@@ -461,13 +461,13 @@ func nonNil(xs []string) []string {
 }
 
 // Mount wires the agents surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("agents.Mount: nil app")
+		return fmt.Errorf("agents.Use:  nil app")
 	}
 	log := luxlog.Default()
 	if log == nil {
-		return fmt.Errorf("agents.Mount: nil luxlog.Default()")
+		return fmt.Errorf("agents.Use:  nil luxlog.Default()")
 	}
 	log = log.New("subsystem", "agents")
 
@@ -478,7 +478,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return err
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("agents.Mount: empty DataDir")
+		return fmt.Errorf("agents.Use:  empty DataDir")
 	}
 	// The typed-op registry lives on the App: it is what makes each op a document
 	// operation, an MCP tool, a CLI command and an SDK method rather than only a
@@ -486,7 +486,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// routes no projection knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("agents.Mount: router carries no typed-op registry")
+		return fmt.Errorf("agents.Use:  router carries no typed-op registry")
 	}
 	// deps.AI may be nil when no gateway is configured; run() degrades honestly.
 	// agents is a "complex" mount (package-global `mounted`, a background scheduler,
@@ -513,7 +513,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// registry served over live rows is the one outcome worse than not booting.
 	if err := fanOutLegacy(context.Background(), deps.DataDir, &s.State); err != nil {
 		_ = s.State.stores.CloseAll()
-		return fmt.Errorf("agents.Mount: %w", err)
+		return fmt.Errorf("agents.Use:  %w", err)
 	}
 	mounted = s
 	// The login-manager teardown, for the link process that has no session store

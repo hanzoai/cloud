@@ -30,8 +30,8 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	// publish and whose fields are another package's to write.
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Domain: "api.test"}); err != nil {
-		t.Fatalf("knowledge.Mount: %v", err)
+	if err := Use(app, cloud.Deps{Domain: "api.test"}); err != nil {
+		t.Fatalf("knowledge.Use:  %v", err)
 	}
 
 	doc, err := openapi.Spec(app, openapi.Info{Title: "knowledge", Version: "v1"})

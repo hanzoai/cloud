@@ -18,8 +18,8 @@ import (
 func mountAlone(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	return app

@@ -8,7 +8,7 @@
 //
 // THAT GUARANTEE IS PER APP, AND IT ENDS AT THE APP. [Spec] and [Mount] read a
 // router that is right there. The FLEET document — what api.hanzo.ai serves —
-// cannot: the light host mounts no subsystem, so [MountFleet] composes the
+// cannot: the light host mounts no subsystem, so [UseFleet] composes the
 // projections 116 app binaries wrote when they were BUILT (fleet.go). Between the
 // projection and the request sit two gaps no reading of any router closes: the
 // subset can be older than the code (mk/fleet.mk check regenerates it
@@ -864,8 +864,8 @@ func translate(pattern string) (string, []string) {
 // route — including this one, and any registered after Mount.
 //
 // The light HOST mounts no subsystem, so its live router is not the API — see
-// [MountFleet], the other document source at this same one address.
-func Mount(app *zip.App, info Info, servers ...Server) {
+// [UseFleet], the other document source at this same one address.
+func Use(app *zip.App, info Info, servers ...Server) {
 	serve(app, func() (*Document, error) { return Spec(app, info, servers...) })
 }
 
@@ -876,7 +876,7 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // encoding and the failure mode are stated once and cannot drift between them.
 //
 // LAZY is load-bearing in both: it is what lets Mount's document contain the
-// route this very call registers, and what keeps MountFleet's compose off the
+// route this very call registers, and what keeps UseFleet's compose off the
 // host's boot path.
 //
 // ONCE covers the bytes, not just the value, and that is not an optimization —
@@ -891,7 +891,7 @@ func Mount(app *zip.App, info Info, servers ...Server) {
 // openapi.yaml is rendered from (openapi/compose_test.go): the served document and
 // the committed artifact are then the same bytes, not two encodings that agree.
 // The document endpoint describes ITSELF, in an init rather than in serve, because
-// serve runs once per document source (Mount and MountFleet) and Describe refuses a
+// serve runs once per document source (Mount and UseFleet) and Describe refuses a
 // duplicate — a self-description that panicked the second time a process mounted
 // would be worse than none.
 //
@@ -1004,7 +1004,7 @@ func Door(path string) bool {
 // Both index endpoints sit inside a subtree a manifest row already claims — /v1
 // is ai's REMAINDER and /v1/{name} is each capability's own root — so a route at
 // either is two definitions claiming one address and zip refuses the composition
-// outright. [MountIndex] answers them from middleware composed before the mounts
+// outright. [UseIndex] answers them from middleware composed before the mounts
 // instead, which no Load can sit in front of.
 //
 // That distinction is the whole content of manifest.TestNoAppClaimsAHostDoor: a

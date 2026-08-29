@@ -175,12 +175,12 @@ var mounted *cloud.Service[state]
 // refuses, which is the correct answer for a plane that has not loaded — and the
 // one that matters after a restart, because this deployment runs one replica
 // with a recreate rollout, so every rollout starts from nothing.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("reference.Mount: nil app")
+		return fmt.Errorf("reference.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("reference.Mount: empty DataDir")
+		return fmt.Errorf("reference.Use:  empty DataDir")
 	}
 	base := cloud.NewBase(deps, subsystem)
 	// The base carries the deployment's durability, so each organisation's

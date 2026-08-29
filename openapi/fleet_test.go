@@ -5,7 +5,7 @@ package openapi_test
 // openapi/compose_test.go proves Fleet over the real 113 subsets equals the
 // committed golden, and cmd/cloud/openapi_test.go proves the host answers with
 // exactly that. What is left — and what those two cannot show, because both run
-// on a document that is already correct — is what Fleet and MountFleet do when
+// on a document that is already correct — is what Fleet and UseFleet do when
 // an input is WRONG. A composition that drops a bad input silently publishes an
 // API with one product missing and stays green: that is how plugin/ingress lost
 // eight paths from every generated SDK.
@@ -48,7 +48,7 @@ func ga(string) string { return "" }
 // spec no generated client could refresh itself from.
 func TestMountFleetServesTheCompositionIncludingItself(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	openapi.MountFleet(app, func() ([]openapi.Part, error) {
+	openapi.UseFleet(app, func() ([]openapi.Part, error) {
 		return openapi.Subsets([]string{"ad", "crm"}, func(a string) []byte { return subset(t, "/v1/"+a) }, ga)
 	})
 
@@ -140,7 +140,7 @@ func TestSubsetsRefusesAnAppWhoseOwnIDsCollide(t *testing.T) {
 // can see — not a smaller document that looks fine.
 func TestMountFleetReportsAFailedCompositionRatherThanAnEmptyDocument(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	openapi.MountFleet(app, func() ([]openapi.Part, error) {
+	openapi.UseFleet(app, func() ([]openapi.Part, error) {
 		return openapi.Subsets([]string{"ghost"}, func(string) []byte { return nil }, ga)
 	})
 

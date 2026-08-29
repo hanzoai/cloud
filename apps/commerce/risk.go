@@ -482,7 +482,6 @@ func (s screen) record(ctx context.Context, p payment, ref, id string) error {
 	return credit
 }
 
-
 // screened composes the screen onto ANY typed mint op's handler, and it is the
 // ONE composition point for all of them.
 //

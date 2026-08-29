@@ -35,7 +35,7 @@ const (
 )
 
 // ErrEngineNotReady is returned when cloud.EmbeddedTasks() is still nil (the engine
-// is wired after MountAll). Handlers render it as 503 "automation engine not ready".
+// is wired after UseAll). Handlers render it as 503 "automation engine not ready".
 var ErrEngineNotReady = errors.New("auto: engine not ready")
 
 // tokenSource is the ONE entry point to per-org credential custody. It defaults to

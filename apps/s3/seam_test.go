@@ -67,8 +67,8 @@ func seamApp(t *testing.T, commerceURL string) (*zip.App, *int32) {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("seam"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Metering: m, Env: "mainnet"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{Metering: m, Env: "mainnet"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app, &reached
 }

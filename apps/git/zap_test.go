@@ -72,8 +72,8 @@ func mountZapApp(t *testing.T) (base string, stop func()) {
 		return c.Continue()
 	}))
 
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	// The shared ZAP-over-WebSocket plane — the SAME one serve.go mounts. It
 	// bridges ZAP frames onto this app's /v1 routes, so git/zap/* are procedures.

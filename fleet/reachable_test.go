@@ -46,7 +46,7 @@ import (
 // reach is one capability the agent needs, and the operation that is its entry point.
 type reach struct {
 	app   string
-	mount cloud.MountFunc
+	mount cloud.UseFunc
 	op    string
 	// why is what the assistant cannot do while this operation is not projected.
 	why string
@@ -56,13 +56,13 @@ type reach struct {
 // is the composition a client meets: a single tools/list over the whole fleet.
 func TestTheAgentCanReachTheWeb(t *testing.T) {
 	want := []reach{
-		{"websearch", websearch.Mount, "search_web",
+		{"websearch", websearch.Use, "search_web",
 			"answer any question about what is happening now — the weather, an outage, a release"},
-		{"crawl", crawl.Mount, "read_page",
+		{"crawl", crawl.Use, "read_page",
 			"read a page it was given the URL of"},
-		{"exec", exec.Mount, "post_exec",
+		{"exec", exec.Use, "post_exec",
 			"run a snippet and report what it printed"},
-		{"ask", ask.Mount, "research_web",
+		{"ask", ask.Use, "research_web",
 			"research a question across many pages and answer it with sources cited"},
 	}
 

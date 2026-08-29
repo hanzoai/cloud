@@ -67,19 +67,19 @@ var mounted *cloud.Service[state]
 // Mount wires the /v1/esign/* surface onto app per HIP-0106. Constructs the value
 // directly (cloud.NewBase) — this subsystem keeps a package global for the Shutdown
 // hook and opens a per-tenant goja host + PKI signer from deps.DataDir.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("esign.Mount: nil app")
+		return fmt.Errorf("esign.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("esign.Mount: empty DataDir")
+		return fmt.Errorf("esign.Use:  empty DataDir")
 	}
 	// Carry the pre-rename data directory over before anything opens a store
 	// under the new name. Failing here aborts the boot on purpose: serving an
 	// empty document store while signed documents sit orphaned under the old
 	// name would look like data loss to every tenant.
 	if err := migrateDataDir(deps.DataDir, luxlog.Default()); err != nil {
-		return fmt.Errorf("esign.Mount: %w", err)
+		return fmt.Errorf("esign.Use:  %w", err)
 	}
 
 	// ONE registration, at the end, because a group is a sub-application and not a
@@ -122,11 +122,11 @@ func open(deps cloud.Deps) (*cloud.Service[state], error) {
 	}
 	sg, err := newSigner(deps.DataDir, deps.Env)
 	if err != nil {
-		return nil, fmt.Errorf("esign.Mount: signer: %w", err)
+		return nil, fmt.Errorf("esign.Use:  signer: %w", err)
 	}
 	bundle, err := signbundle.Bundle()
 	if err != nil {
-		return nil, fmt.Errorf("esign.Mount: load bundle: %w", err)
+		return nil, fmt.Errorf("esign.Use:  load bundle: %w", err)
 	}
 	host, err := goja.NewBase(goja.BaseConfig{
 		Name:    "esign",
@@ -137,7 +137,7 @@ func open(deps cloud.Deps) (*cloud.Service[state], error) {
 		HostFns: map[string]any{"__pdf": sg.pdfHostObject()},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("esign.Mount: goja NewBase host: %w", err)
+		return nil, fmt.Errorf("esign.Use:  goja NewBase host: %w", err)
 	}
 	index, err := openTokenIndex(deps.DataDir)
 	if err != nil {

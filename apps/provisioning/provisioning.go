@@ -219,13 +219,13 @@ type provisionResult struct {
 // Mount wires the provisioning surface onto app per HIP-0106. It is the complex
 // flavour of the generic subsystem: it keeps a package global (mounted) for
 // cross-package reach and starts a recurring footprint meter, so it constructs the
-// Service value directly rather than through cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// Service value directly rather than through cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("provisioning.Mount: nil app")
+		return fmt.Errorf("provisioning.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("provisioning.Mount: empty DataDir")
+		return fmt.Errorf("provisioning.Use:  empty DataDir")
 	}
 	// The typed half needs the op REGISTRY, not just a router: a typed op is a
 	// route plus the one entry the document, the MCP tool list, the CLI and every
@@ -233,11 +233,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// projection knows about.
 	z := cloud.ZipApp(app)
 	if z == nil {
-		return fmt.Errorf("provisioning.Mount: %T does not expose the typed-op registry", app)
+		return fmt.Errorf("provisioning.Use:  %T does not expose the typed-op registry", app)
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("provisioning.Mount: open store: %w", err)
+		return fmt.Errorf("provisioning.Use:  open store: %w", err)
 	}
 
 	b := cloud.NewBase(deps, "provisioning")

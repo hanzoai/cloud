@@ -484,9 +484,9 @@ type state struct {
 // client, and registers the /v1/flags surface. A store that cannot be opened
 // degrades every switch to env/default and the HTTP surface reports it — never an
 // error at boot.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
-		return fmt.Errorf("flags.Mount: empty deps.DataDir")
+		return fmt.Errorf("flags.Use:  empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "flags")
 	log := b.Log

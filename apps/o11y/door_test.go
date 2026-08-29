@@ -63,8 +63,8 @@ func doorApp(t *testing.T) *zip.App {
 	// — so a fixture that means to reproduce production has to supply it here or
 	// the chain it claims to exercise is missing a link.
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = shutdownAnnotationQueues() })
 	return app

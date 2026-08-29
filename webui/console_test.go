@@ -41,8 +41,8 @@ func newConsoleApp(t *testing.T) *zip.App {
 	})
 
 	// Console LAST — terminal catch-all, same as Serve.
-	if err := Mount(app, testBundle()); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, testBundle()); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }
@@ -382,8 +382,8 @@ func TestNoBundle_ARegisteredRouteStillAnswers(t *testing.T) {
 	app.Get("/v1/models", func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"object": "list"})
 	})
-	if err := Mount(app, nil); err != nil {
-		t.Fatalf("Mount(app, nil): %v — nil is the stated no-console case, not an error", err)
+	if err := Use(app, nil); err != nil {
+		t.Fatalf("Use(app, nil): %v — nil is the stated no-console case, not an error", err)
 	}
 	if code, _, _ := do(t, app, http.MethodGet, "/v1/models", nil); code != http.StatusOK {
 		t.Fatalf("GET /v1/models = %d, want 200 — a missing console must not cost the API", code)

@@ -116,8 +116,8 @@ const (
 type state struct{}
 
 // Mount wires the analytics surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "event", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "event", build, routes)
 }
 
 // build carries no per-subsystem state — analytics reads the shared warehouse. It

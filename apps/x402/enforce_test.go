@@ -12,7 +12,7 @@ import (
 // This is the failure mode the fleet has already been bitten by once, in
 // resource_billing_peer.go: "Splitting apps into their own binaries turned every
 // priced create free without changing a line of billing code." The published
-// registry is a process-global installed by marketplace.Mount, and in the shipped
+// registry is a process-global installed by marketplace.Use, and in the shipped
 // topology every app is its OWN process (manifest/apps.go + Dockerfile: one binary
 // per app, cmd/cloud loads each as a child). So in ANY process that mounts x402
 // without marketplace — which is every process that mounts x402 — the table is nil,

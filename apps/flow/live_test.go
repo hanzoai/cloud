@@ -37,8 +37,8 @@ func liveApp(t *testing.T) *zip.App {
 	t.Setenv("FLOW_API_KEY", os.Getenv("FLOW_E2E_KEY"))
 	app := zip.New(zip.Config{Logger: luxlog.New("flowlive"), DisableStartupMessage: true})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

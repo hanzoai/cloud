@@ -77,13 +77,13 @@ type state struct {
 
 // Mount wires the model plane onto app.
 //
-// It is a direct construction rather than cloud.Mount because the plane owns
+// It is a direct construction rather than cloud.Use because the plane owns
 // background work and durable state: it must be reachable from the plugin's
 // Shutdown so a rollout snapshots every resident model instead of silently
 // returning every tenant to warming.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("risk.Mount: nil app")
+		return fmt.Errorf("risk.Use:  nil app")
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "risk")}
 	p, err := newPlane(s.Base)

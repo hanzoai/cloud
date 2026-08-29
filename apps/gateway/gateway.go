@@ -5,7 +5,7 @@
 // THE GATEWAY IS PLUMBING, AND THIS IS ITS ONE PRODUCT ENDPOINT. The gateway is the
 // trust boundary — validate the IAM JWT, strip client-supplied identity, re-mint
 // X-Org-Id — and it is not a network hop: it is compiled INTO the cloud binary as
-// gateway.Mount, and hanzoai/gateway's own routes.go states the law ("ONE routing
+// gateway.Use, and hanzoai/gateway's own routes.go states the law ("ONE routing
 // source of truth = cloud's mount table, not a second map here"). Plumbing earns no
 // prefix. What earns this one is the thing a customer actually calls: the runtime
 // config plane for that policy, at /v1/gateway/config, and nothing else. It serves
@@ -69,13 +69,13 @@ type ops struct{ s *cloud.Service[state] }
 
 // Mount wires /v1/gateway/config onto app over the shared policy store. The store
 // is owned by deps (not a Base dep), so this constructs the Service value directly
-// via cloud.NewBase rather than cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// via cloud.NewBase rather than cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("gateway.Mount: nil app")
+		return fmt.Errorf("gateway.Use:  nil app")
 	}
 	if deps.GatewayPolicy == nil {
-		return fmt.Errorf("gateway.Mount: nil deps.GatewayPolicy")
+		return fmt.Errorf("gateway.Use:  nil deps.GatewayPolicy")
 	}
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "gateway"),

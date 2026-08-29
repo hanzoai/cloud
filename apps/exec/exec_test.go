@@ -38,8 +38,8 @@ func mount(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("CODE_EXEC_API_KEY", "k")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }
@@ -353,8 +353,8 @@ func TestWrongKeyIsRejectedOnEveryPath(t *testing.T) {
 
 // TestMountRejectsBadInputs.
 func TestMountRejectsBadInputs(t *testing.T) {
-	if err := Mount(nil, cloud.Deps{}); err == nil {
-		t.Fatal("Mount(nil app) should error")
+	if err := Use(nil, cloud.Deps{}); err == nil {
+		t.Fatal("Use(nil app) should error")
 	}
 }
 

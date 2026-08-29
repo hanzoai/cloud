@@ -11,7 +11,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// ingest is the registered integrations ingress consumer (channels.Mount):
+// ingest is the registered integrations ingress consumer (channels.Use):
 // normalize -> identity -> gate -> route -> inbox | pairing. It runs on a
 // detached per-event goroutine with a bounded context
 // (integrations.emitIngress), so nothing here can delay a webhook.

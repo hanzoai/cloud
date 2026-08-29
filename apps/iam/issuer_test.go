@@ -52,8 +52,8 @@ func TestDiscoveryIssuesAsTheBrandItWasAskedAs(t *testing.T) {
 	t.Setenv("initDataFile", filepath.Join(dir, "absent.json"))
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{DataDir: dir}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: dir}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 
 	for host, want := range map[string]string{

@@ -87,7 +87,7 @@ var b *broker
 // Mount wires the MQ admin surface at /v1/mq and dials the platform broker.
 // Registered in manifest/apps.go; the connection retries forever in the
 // background, so mounting never depends on broker start order.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "mq")
 
 	nc, err := nats.Connect(pubsub.URL(),
@@ -99,12 +99,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if err != nil {
 		// Fail closed: only a malformed URL/options error lands here (a down
 		// broker retries in the background); a config error must abort boot.
-		return fmt.Errorf("mq.Mount: dial %s (fail-closed): %w", pubsub.URL(), err)
+		return fmt.Errorf("mq.Use:  dial %s (fail-closed): %w", pubsub.URL(), err)
 	}
 	js, err := jetstream.New(nc)
 	if err != nil {
 		nc.Close()
-		return fmt.Errorf("mq.Mount: jetstream context: %w", err)
+		return fmt.Errorf("mq.Use:  jetstream context: %w", err)
 	}
 	b = &broker{nc: nc, js: js, mounted: time.Now()}
 

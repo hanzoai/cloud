@@ -17,7 +17,7 @@ import (
 //     the backing state for the "acted" auto-detect signal.
 //   - curriculum: at most one row — the org's custom curriculum override (raw doc).
 //
-// The caller (guide.Mount) opens it through cloud.NewOrgStore; openStore below is
+// The caller (guide.Use) opens it through cloud.NewOrgStore; openStore below is
 // the per-org open func. cloud.OrgDB has already applied the WAL/busy pragmas and
 // single-writer bound, so openStore only migrates.
 type Store struct {

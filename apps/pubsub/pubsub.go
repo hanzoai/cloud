@@ -143,25 +143,25 @@ func clientPort() (int, error) {
 
 // Mount starts the embedded PubSub server, binding NATS + JetStream in-process,
 // and registers the tenant endpoint (/v1/pubsub, typed.go) over it.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// A typed op is a route PLUS a registry entry, and the registry lives on
 	// the App. A router that cannot reach it would serve every route with no
 	// schema, no prose, no MCP tool and no SDK method — so the mount FAILS
 	// rather than quietly publishing a surface no projection knows about.
 	if cloud.ZipApp(app) == nil {
-		return fmt.Errorf("pubsub.Mount: router is not a zip app, so the typed ops have no registry")
+		return fmt.Errorf("pubsub.Use:  router is not a zip app, so the typed ops have no registry")
 	}
 	log := luxlog.Default().New("subsystem", "pubsub")
 
 	dataDir := environ.Or("CLOUD_PUBSUB_STORE_DIR",
 		filepath.Join(cmp.Or(strings.TrimSpace(deps.DataDir), "/var/lib/cloud"), "pubsub"))
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		return fmt.Errorf("pubsub.Mount: store dir %s: %w", dataDir, err)
+		return fmt.Errorf("pubsub.Use:  store dir %s: %w", dataDir, err)
 	}
 
 	port, err := clientPort()
 	if err != nil {
-		return fmt.Errorf("pubsub.Mount: %w", err)
+		return fmt.Errorf("pubsub.Use:  %w", err)
 	}
 
 	// The bus's message-body ceiling. Zero means the embed default (8 MiB), which
@@ -173,7 +173,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if v := strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_MAX_PAYLOAD")); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil || n <= 0 {
-			return fmt.Errorf("pubsub.Mount: bad CLOUD_PUBSUB_MAX_PAYLOAD %q (want a positive byte count)", v)
+			return fmt.Errorf("pubsub.Use:  bad CLOUD_PUBSUB_MAX_PAYLOAD %q (want a positive byte count)", v)
 		}
 		maxPayload = int32(n)
 	}
@@ -197,7 +197,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// by definition, so the pre-flight below would be asking whether -1 is taken.
 	if port > 0 {
 		if err := claimable(host, port); err != nil {
-			return fmt.Errorf("pubsub.Mount: cannot bind %s (fail-closed): %w", net.JoinHostPort(host, strconv.Itoa(port)), err)
+			return fmt.Errorf("pubsub.Use:  cannot bind %s (fail-closed): %w", net.JoinHostPort(host, strconv.Itoa(port)), err)
 		}
 	}
 
@@ -210,7 +210,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	})
 	if err != nil {
 		// Fail closed: a broken messaging plane must abort boot.
-		return fmt.Errorf("pubsub.Mount: open embedded server (fail-closed): %w", err)
+		return fmt.Errorf("pubsub.Use:  open embedded server (fail-closed): %w", err)
 	}
 	srv = s
 

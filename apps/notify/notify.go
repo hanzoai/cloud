@@ -102,9 +102,9 @@ type service struct {
 // tool list, the CLI and the by-name call plane all project from. Typing the
 // send routes is what lets a sibling process (IAM's OTP sender) reach them as a
 // typed zip.Call instead of hand-rolling HTTP against an undeclared shape.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("notify.Mount: nil app")
+		return fmt.Errorf("notify.Use:  nil app")
 	}
 	log := luxlog.Default()
 	if log != nil {

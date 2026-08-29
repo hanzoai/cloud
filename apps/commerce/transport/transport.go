@@ -15,7 +15,7 @@
 // cloud package, while build.go (in that same root package) needs this transport.
 // One package would close that loop into an import cycle.
 //
-// HOW. commerce.Mount registers the embedded commerce http.Handler here via
+// HOW. commerce.Use registers the embedded commerce http.Handler here via
 // SetHandler once, at boot. A subsystem builds its S2S HTTP request EXACTLY as
 // before (same path, same `Authorization: Bearer <COMMERCE_SERVICE_TOKEN>`, same
 // server-pinned `X-Org-Id`) and sends it through Transport(): when the handler is

@@ -65,7 +65,7 @@ const (
 	// moving it would break the host's forward.
 	//
 	// On the HOST the server is not here, so the host CLAIMS this path anyway and
-	// signposts it — registered by fleet.Mount, the one call that also registers
+	// signposts it — registered by fleet.Use, the one call that also registers
 	// the target, so a hop can never name an address the process does not serve.
 	//
 	// It used to be signposted from the console's terminal handler instead, on the

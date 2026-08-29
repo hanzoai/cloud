@@ -127,16 +127,16 @@ var mounted *cloud.Service[state]
 // Mount wires /v1/auto/* onto app per HIP-0106. Complex flavour: it keeps a
 // package global (mounted) for Shutdown and the engine's run hooks, so it constructs
 // the Service value directly.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("auto.Mount: nil app")
+		return fmt.Errorf("auto.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("auto.Mount: empty DataDir")
+		return fmt.Errorf("auto.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("auto.Mount: open store: %w", err)
+		return fmt.Errorf("auto.Use:  open store: %w", err)
 	}
 
 	// Parse the embedded catalogue at boot: a schema mismatch is a build-time fault,
@@ -144,7 +144,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	var catalog Catalog
 	if err := json.Unmarshal(catalogJSON, &catalog); err != nil {
 		_ = store.Close()
-		return fmt.Errorf("auto.Mount: catalog: %w", err)
+		return fmt.Errorf("auto.Use:  catalog: %w", err)
 	}
 
 	b := cloud.NewBase(deps, "auto")
@@ -178,7 +178,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// route DISTINCT from every automations route (no /v1/auto/* wildcard here, so no
 	// shadow), and was a separate Wire entry purely for that one route — fold it in as a
 	// terminal sub-mount so connector catalogue + execution are ONE automations subsystem.
-	if err := connectorruntime.Mount(app, deps); err != nil {
+	if err := connectorruntime.Use(app, deps); err != nil {
 		return err
 	}
 	return nil

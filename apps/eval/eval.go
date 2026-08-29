@@ -156,17 +156,17 @@ type service struct {
 var mounted *service
 
 // Mount registers the /v1/eval/* surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("eval.Mount: nil app")
+		return fmt.Errorf("eval.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "eval")
 	if deps.DataDir == "" {
-		return fmt.Errorf("eval.Mount: empty DataDir")
+		return fmt.Errorf("eval.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("eval.Mount: open metastore: %w", err)
+		return fmt.Errorf("eval.Use:  open metastore: %w", err)
 	}
 	tel, err := newDatastoreTelemetry(log)
 	if err != nil {

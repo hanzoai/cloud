@@ -170,8 +170,8 @@ func TestMountFailSoftWhenEngineNil(t *testing.T) {
 		t.Skip("engine already wired in this process")
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	rq := httptest.NewRequest(http.MethodGet, "/v1/tasks/settings", nil)
 	resp, err := app.Test(rq)

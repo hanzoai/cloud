@@ -147,7 +147,7 @@ func governs(path string) bool {
 }
 
 // keyed refuses to compose a DEPLOYED program that serves a governed change
-// without the key every process shares. MountAll asks it once, after the ops exist
+// without the key every process shares. UseAll asks it once, after the ops exist
 // and before anything listens.
 //
 // A CONTROL WITHOUT THE KEY IS A CONTROL THAT REFUSES EVERYTHING. The token is a

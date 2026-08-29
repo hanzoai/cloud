@@ -21,8 +21,8 @@ func newApp(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	deps := cloud.Deps{DataDir: t.TempDir()}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	// Keep the real (store-backed) "acted" detector but drop "analytics" so the HTTP
 	// tests never depend on a live warehouse. The analytics detector is exercised in

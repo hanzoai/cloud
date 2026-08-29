@@ -14,9 +14,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// noopMount mounts nothing: the fake specs below carry the behavior under test in
+// noopUse mounts nothing: the fake specs below carry the behavior under test in
 // their Shutdown, not their Mount.
-func noopMount(cloud.Router, cloud.Deps) error { return nil }
+func noopUse(cloud.Router, cloud.Deps) error { return nil }
 
 // freeAddr reserves an ephemeral loopback port and hands back its address; the
 // listener is closed so the app under test can bind it.
@@ -47,7 +47,7 @@ func waitListening(t *testing.T, addr string) {
 }
 
 // TestMountAll_ShutdownHooksLIFOAfterDrain proves the OnShutdown teardown wiring:
-// MountAll registers each ENABLED subsystem's ShutdownFunc as a zip shutdown hook,
+// UseAll registers each ENABLED subsystem's ShutdownFunc as a zip shutdown hook,
 // so on app.Shutdown they run (1) AFTER in-flight requests drain and (2) LIFO =
 // reverse-mount order (a dependency mounted before its dependents is torn down
 // after them). That is exactly the contract the deleted hand-rolled reverse-loop
@@ -71,9 +71,9 @@ func TestMountAll_ShutdownHooksLIFOAfterDrain(t *testing.T) {
 
 	// Mount order a, b, c ⇒ LIFO teardown must be c, b, a.
 	specs := []cloud.Plugin{
-		{Name: "a", Mount: noopMount, Shutdown: record("a")},
-		{Name: "b", Mount: noopMount, Shutdown: record("b")},
-		{Name: "c", Mount: noopMount, Shutdown: record("c")},
+		{Name: "a", Use: noopUse, Shutdown: record("a")},
+		{Name: "b", Use: noopUse, Shutdown: record("b")},
+		{Name: "c", Use: noopUse, Shutdown: record("c")},
 	}
 	cfg := &cloud.Config{Enable: []string{"a", "b", "c"}}
 	deps := cloud.Deps{}
@@ -91,8 +91,8 @@ func TestMountAll_ShutdownHooksLIFOAfterDrain(t *testing.T) {
 		return c.JSON(http.StatusOK, map[string]bool{"ok": true})
 	})
 
-	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, specs, cfg, deps); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	// Serve on a real loopback listener: an in-flight request over the HTTP
@@ -164,7 +164,7 @@ func TestMountAll_ShutdownHooksLIFOAfterDrain(t *testing.T) {
 	}
 }
 
-// TestMountAll_ShutdownRegistration_EnablementAndNil proves MountAll registers a
+// TestMountAll_ShutdownRegistration_EnablementAndNil proves UseAll registers a
 // teardown hook ONLY for an ENABLED spec that HAS a ShutdownFunc: a disabled spec
 // never mounts (so never registers a hook), and an enabled spec whose Shutdown is
 // nil is skipped without panicking. This keeps the enablement axis and the nil
@@ -184,14 +184,14 @@ func TestMountAll_ShutdownRegistration_EnablementAndNil(t *testing.T) {
 	}
 
 	specs := []cloud.Plugin{
-		{Name: "enabled", Mount: noopMount, Shutdown: record("enabled")},
-		{Name: "disabled", Mount: noopMount, Shutdown: record("disabled")},
-		{Name: "nilsd", Mount: noopMount}, // enabled, but no Shutdown
+		{Name: "enabled", Use: noopUse, Shutdown: record("enabled")},
+		{Name: "disabled", Use: noopUse, Shutdown: record("disabled")},
+		{Name: "nilsd", Use: noopUse}, // enabled, but no Shutdown
 	}
 	cfg := &cloud.Config{Enable: []string{"enabled", "nilsd"}} // "disabled" omitted
 
-	if err := cloud.MountAll(app, specs, cfg, cloud.Deps{}); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, specs, cfg, cloud.Deps{}); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 	if err := app.Shutdown(); err != nil {
 		t.Fatalf("Shutdown: %v", err)

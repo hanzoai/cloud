@@ -61,7 +61,7 @@ var embeddedTasks *tasksengine.Embedded
 // (apps/tasks, mounted at /v1/tasks/*) serves on THIS shared engine — there is
 // exactly one engine per process, shared by ai's durable ingest AND the Tasks
 // product surface, never a second Embed. The surface resolves it lazily (per
-// request) because subsystem Mount runs during MountAll, before installDurableIngest.
+// request) because subsystem Mount runs during UseAll, before installDurableIngest.
 func EmbeddedTasks() *tasksengine.Embedded { return embeddedTasks }
 
 // installDurableIngest embeds the ONE hanzoai/tasks engine IN-PROCESS — the unified durable
@@ -71,7 +71,7 @@ func EmbeddedTasks() *tasksengine.Embedded { return embeddedTasks }
 // tracked in the ONE Tasks product. In-process ZAP = mega fast, low latency/memory, no
 // HTTP. Fail-soft by construction: any embed error leaves ai's dialer unset →
 // EnqueueIngest returns ErrTasksNotConfigured → the handler runs ingest inline (always
-// works). Called once, after MountAll (ai is mounted) and before Listen.
+// works). Called once, after UseAll (ai is mounted) and before Listen.
 func installDurableIngest(ctx context.Context, deps Deps, app string) {
 	// A stable data dir the engine owns. Cloud's container is distroless (no /tmp), so
 	// Embed's default os.MkdirTemp("") fallback fails — pin it to cloud's data root.

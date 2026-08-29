@@ -505,7 +505,7 @@ func pushRaced(out string) bool {
 // the ref is a path and is safe to log.
 func pinToken(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if s.KMS == nil {
-		return "", fmt.Errorf("no KMS client mounted: cannot read %s", pinTokenRef)
+		return "", fmt.Errorf("no KMS client in use: cannot read %s", pinTokenRef)
 	}
 	b, err := s.KMS.GetSecret(ctx, pinTokenRef)
 	if err != nil {

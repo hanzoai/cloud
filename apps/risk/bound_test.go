@@ -486,8 +486,8 @@ func mountBilled(t *testing.T, books *ledger) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("risktest"), DisableStartupMessage: true})
 	compose(app)
 	deps := cloud.Deps{Brand: brandA, DataDir: t.TempDir(), Metering: client}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app

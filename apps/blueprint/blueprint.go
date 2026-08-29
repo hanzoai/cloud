@@ -80,9 +80,9 @@ const composeName = "compose.yml"
 type state struct{}
 
 // Mount wires the blueprint surface and validates every embedded blueprint at boot.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	rates = rateCardFromEnv() // overlay operator rate-card knobs once, at mount
-	return cloud.Mount(app, deps, "blueprint", build, routes)
+	return cloud.Use(app, deps, "blueprint", build, routes)
 }
 
 // build fails the mount closed if any embedded blueprint cannot be parsed and

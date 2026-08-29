@@ -277,7 +277,7 @@ func TestFromShape(t *testing.T) {
 func TestMountServesLiveSpecIncludingItself(t *testing.T) {
 	app := newApp()
 	app.Get("/v1/kms/health", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
-	Mount(app, Info{Title: "Hanzo Cloud", Version: "v1"})
+	Use(app, Info{Title: "Hanzo Cloud", Version: "v1"})
 
 	doc, err := Spec(app, Info{Title: "Hanzo Cloud", Version: "v1"})
 	if err != nil {

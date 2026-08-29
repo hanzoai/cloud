@@ -83,14 +83,14 @@ func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	compose(app)
 	deps := cloud.Deps{DataDir: t.TempDir()}
-	if err := visor.Mount(app, deps); err != nil { // Wire order: visor first — the shadowing mount
-		t.Fatalf("visor.Mount: %v", err)
+	if err := visor.Use(app, deps); err != nil { // Wire order: visor first — the shadowing mount
+		t.Fatalf("visor.Use:  %v", err)
 	}
 	// Mount owns the relay (run.go mounts it last, so the native control
 	// planes cannot be shadowed) — the harness mounting it AGAIN declared
 	// ALL /v1/bot/runtime/* twice, which zip's build refuses outright since v1.26.0.
-	if err := Mount(app, deps); err != nil { // …bot last, as in the manifest order
-		t.Fatalf("bot.Mount: %v", err)
+	if err := Use(app, deps); err != nil { // …bot last, as in the manifest order
+		t.Fatalf("bot.Use:  %v", err)
 	}
 	return app
 }

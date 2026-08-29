@@ -30,8 +30,8 @@ func mount(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("allowance.Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("allowance.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(t.Context()) })
 	return app

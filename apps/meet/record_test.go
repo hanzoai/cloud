@@ -237,16 +237,16 @@ func recordEnv(t *testing.T, m *media, s *httptest.Server) {
 	}
 }
 
-// recordMount is the whole deployment: the real identity boundary, a workspace
+// recordUse is the whole deployment: the real identity boundary, a workspace
 // authority that answers, and both peers a recording needs.
-func recordMount(t *testing.T, rows roster) (*zip.App, *media) {
+func recordUse(t *testing.T, rows roster) (*zip.App, *media) {
 	t.Helper()
 	m := newMedia(t)
 	recordEnv(t, m, newStore(t))
 	return mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), rows), m
 }
 
-// billedRecord is recordMount plus a ledger: the same identity boundary, the same
+// billedRecord is recordUse plus a ledger: the same identity boundary, the same
 // workspace authority and the same two peers, with money behind the meter.
 func billedRecord(t *testing.T, l *planetest.Ledger) (*zip.App, *media) {
 	t.Helper()
@@ -364,7 +364,7 @@ func TestRecordRefusesAnyoneTheRoomWouldNot(t *testing.T) {
 				if rows == nil {
 					rows = holds(map[string]string{workspaceA: token.RoleMember})
 				}
-				app, m := recordMount(t, rows)
+				app, m := recordUse(t, rows)
 				code, _, body := rec(t, app, method, c.room, c.bearer(t))
 				if code != http.StatusUnauthorized {
 					t.Fatalf("got %d %q, want 401", code, body)
@@ -379,7 +379,7 @@ func TestRecordRefusesAnyoneTheRoomWouldNot(t *testing.T) {
 	// The positive control. Without it every row above passes on a deployment that
 	// admits nobody at all.
 	t.Run("control: the ordinary member IS admitted", func(t *testing.T) {
-		app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+		app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 		code, got, body := rec(t, app, http.MethodPost, roomIn(workspaceA), access(t, ada))
 		if code != http.StatusOK {
 			t.Fatalf("got %d %q, want 200 — the refusals above prove nothing if nobody may ever record", code, body)
@@ -397,7 +397,7 @@ func TestRecordRefusesAnyoneTheRoomWouldNot(t *testing.T) {
 // HS256 workspace session as authorization; that lane is gone from the mint and it
 // must never reappear on a surface that records people.
 func TestTheSecondBearerAuthorityIsClosedForRecording(t *testing.T) {
-	app, m := recordMount(t, anyone())
+	app, m := recordUse(t, anyone())
 	tok, err := token.Generate(account, workspaceA, map[string]any{"role": token.RoleOwner}, time.Now().Add(time.Hour).Unix(), "a-real-team-secret")
 	if err != nil {
 		t.Fatalf("token.Generate: %v", err)
@@ -420,7 +420,7 @@ func TestTheSecondBearerAuthorityIsClosedForRecording(t *testing.T) {
 // answers it is — it is that no SECOND egress is started, because two recorders on
 // one room is two files, two bills and two things to stop.
 func TestASecondStartReturnsTheRunningRecording(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
 
 	_, first, body := rec(t, app, http.MethodPost, room, access(t, ada))
@@ -444,7 +444,7 @@ func TestASecondStartReturnsTheRunningRecording(t *testing.T) {
 // recording of some room, and a caller who could pass one directly would stop a
 // recording in a room it was never admitted to.
 func TestStopEndsTheRoomsOwnRecording(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
 
 	_, started, _ := rec(t, app, http.MethodPost, room, access(t, ada))
@@ -482,7 +482,7 @@ func TestStopEndsTheRoomsOwnRecording(t *testing.T) {
 // the room with no recording on it. A 404 would make a client that stops on leaving
 // a call treat the ordinary case as a failure.
 func TestStoppingAnUnrecordedRoomIsNotAnError(t *testing.T) {
-	app, _ := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, _ := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	code, got, body := rec(t, app, http.MethodDelete, roomIn(workspaceA), access(t, ada))
 	if code != http.StatusOK {
 		t.Fatalf("stop with nothing running = %d %q, want 200", code, body)
@@ -502,7 +502,7 @@ func TestStoppingAnUnrecordedRoomIsNotAnError(t *testing.T) {
 // its holder in the call; a join token that could record would let any participant
 // record from the browser without passing this surface's check at all.
 func TestTheEgressTokenRecordsAndCannotJoin(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
 	before := time.Now()
 	if code, _, body := rec(t, app, http.MethodPost, room, access(t, ada)); code != http.StatusOK {
@@ -564,7 +564,7 @@ func TestTheEgressTokenRecordsAndCannotJoin(t *testing.T) {
 // file itself, so what crosses to it is this deployment's own object-store
 // configuration — the one apps/s3admin reads — and never a second copy of it.
 func TestTheRecordingIsWrittenToThisDeploymentsStore(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	if code, _, body := rec(t, app, http.MethodPost, roomIn(workspaceA), access(t, ada)); code != http.StatusOK {
 		t.Fatalf("start = %d %q", code, body)
 	}
@@ -647,7 +647,7 @@ func TestTheObjectStaysInsideItsTenant(t *testing.T) {
 // TestTheAnswerNamesWhereTheRecordingWent: a caller is told the object key, and it
 // is the one this deployment actually asked the media server to write.
 func TestTheAnswerNamesWhereTheRecordingWent(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
 	_, got, body := rec(t, app, http.MethodPost, room, access(t, ada))
 	if got.Object == "" {
@@ -682,7 +682,7 @@ func TestTheAnswerNamesWhereTheRecordingWent(t *testing.T) {
 func TestEitherTwirpSpellingIsUnderstood(t *testing.T) {
 	for _, camel := range []bool{false, true} {
 		t.Run(map[bool]string{false: "proto names", true: "camelCase"}[camel], func(t *testing.T) {
-			app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+			app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 			m.mu.Lock()
 			m.camel = camel
 			m.mu.Unlock()
@@ -756,7 +756,7 @@ func TestRecordSaysWhyItCannot(t *testing.T) {
 	}
 	// The same table proves nothing unless a configured deployment DOES record.
 	t.Run("control: a configured deployment records", func(t *testing.T) {
-		app, _ := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+		app, _ := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 		if code, _, body := rec(t, app, http.MethodPost, roomIn(workspaceA), access(t, ada)); code != http.StatusOK {
 			t.Fatalf("got %d %q, want 200", code, body)
 		}
@@ -806,7 +806,7 @@ func TestTheMediaServersRefusalIsNamedButNotQuoted(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.code, func(t *testing.T) {
-			app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+			app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 			m.mu.Lock()
 			m.refuse = &refused{Code: c.code, Msg: "no available egress instances"}
 			m.mu.Unlock()
@@ -835,7 +835,7 @@ func TestTheMediaServersRefusalIsNamedButNotQuoted(t *testing.T) {
 // The gate is on the GROUP, so this also pins that the new routes actually sit
 // behind it rather than beside it.
 func TestRecordingWritesNeedCSRF(t *testing.T) {
-	app, _ := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, _ := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	browser := func(t *testing.T, method, path string, body io.Reader) int {
 		t.Helper()
 		rq := httptest.NewRequest(method, path, body)
@@ -1019,7 +1019,7 @@ func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head 
 // a route would have demanded is never asked for. The gate therefore cannot live on
 // the group. It lives in ops.ready, which both entry points go through.
 func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 
 	// The tool is really there — otherwise this test passes by naming nothing.
 	list := mcp(t, app, "tools/list", nil, nil)
@@ -1094,7 +1094,7 @@ func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
 				// that keeps the rest from passing because nothing is ever explicit.
 				explicit := value == basic64 && header == "Authorization"
 
-				app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+				app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 				cookie := "hanzo_iam_token=" + access(t, ada)
 				for _, surface := range []string{"rest", "mcp"} {
 					m.clear()
@@ -1211,7 +1211,7 @@ func ambient(t *testing.T, app *zip.App, method, room string, head map[string]st
 // recording is over while a second worker keeps writing. Stop ends EVERY live one
 // and answers 200 only when it did.
 func TestStopEndsEveryRecordingOfTheRoom(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
 
 	// The two-replica shape: both reads answer "nothing running", so both start.
@@ -1273,7 +1273,7 @@ func TestStopEndsEveryRecordingOfTheRoom(t *testing.T) {
 // honour the filter — a proxy, a version change, a compromised one — a read
 // returned another tenant's recording and a stop ended it.
 func TestARoomsAnswerIsAboutThatRoom(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember, workspaceB: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember, workspaceB: token.RoleMember}))
 	other := roomIn(workspaceB)
 
 	if code, _, body := rec(t, app, http.MethodPost, other, access(t, ada)); code != http.StatusOK {
@@ -1360,7 +1360,7 @@ func TestTwoRecordingsOfARoomDoNotShareAKey(t *testing.T) {
 // dropped for naming the internal host; the peer's own words are the same hazard
 // from the same direction.
 func TestThePeerCannotSpeakThroughUs(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	leak := "invalid request: fileOutputs[0].s3{endpoint=http://s3.hanzo.svc:9000 accessKey=" +
 		storeKey + " secret=" + storeSecret + "} " + strings.Repeat("detail ", 600)
 	m.mu.Lock()
@@ -1439,7 +1439,7 @@ func TestAStrangerLearnsNothingAboutTheDeployment(t *testing.T) {
 // refusing a second recording of a room that has already stopped, which is a
 // message; the other is two workers on one live conversation.
 func TestAnUnknownStateCountsAsRunning(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
 	m.seed(shot{id: "EG_future", room: room, status: "EGRESS_PAUSED", object: "acme/x/y.mp4", started: firstStart})
 
@@ -1480,7 +1480,7 @@ func TestARefusedStartBillsNothing(t *testing.T) {
 // what makes the answer safe; the filter is what keeps this from pulling every
 // recording in the deployment over the wire on every poll.
 func TestTheRoomIsNamedOnTheWayOut(t *testing.T) {
-	app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+	app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 	room := roomIn(workspaceA)
 	if code, _, body := rec(t, app, http.MethodPost, room, access(t, ada)); code != http.StatusOK {
 		t.Fatalf("start = %d %q", code, body)
@@ -1519,7 +1519,7 @@ func TestAnUnreadableEntryIsNotACleanRoom(t *testing.T) {
 		{"no id", shot{id: "", room: roomIn(workspaceA), status: "EGRESS_ACTIVE", started: firstStart}},
 	} {
 		t.Run(missing.name, func(t *testing.T) {
-			app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+			app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 			m.seed(missing.one)
 			room := roomIn(workspaceA)
 
@@ -1562,7 +1562,7 @@ func TestAnUnreadableEntryIsNotACleanRoom(t *testing.T) {
 	// It is the same axis as the int64-carried-as-a-string one surface away. The
 	// encoder's promise is not something this side can check, so both are read here.
 	t.Run("a peer that omits status is sending a STARTING recording", func(t *testing.T) {
-		app, m := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+		app, m := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 		room := roomIn(workspaceA)
 		m.seed(shot{id: "EG_live", room: room, status: "", object: "acme/x/y.mp4", started: firstStart})
 
@@ -1598,7 +1598,7 @@ func TestAnUnreadableEntryIsNotACleanRoom(t *testing.T) {
 
 	// The control: a legible answer with nothing in it IS a clean room.
 	t.Run("control: an empty room is still an empty room", func(t *testing.T) {
-		app, _ := recordMount(t, holds(map[string]string{workspaceA: token.RoleMember}))
+		app, _ := recordUse(t, holds(map[string]string{workspaceA: token.RoleMember}))
 		if code, got, body := rec(t, app, http.MethodDelete, roomIn(workspaceA), access(t, ada)); code != http.StatusOK || got.ID != "" {
 			t.Fatalf("stopping a genuinely empty room = %d %q, want 200 and no recording", code, body)
 		}

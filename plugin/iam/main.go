@@ -20,7 +20,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "iam",
 		Price:    cloud.Free,
-		Mount:    iam.Mount,
+		Use:      iam.Use,
 		Shutdown: cloud.CtxShutdown(iam.Shutdown),
 		Prefixes: manifest.PrefixesFor("iam"),
 	}}, []string{"iam"}); err != nil {

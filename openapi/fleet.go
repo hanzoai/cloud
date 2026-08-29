@@ -41,7 +41,7 @@ import (
 //
 // There is no unified cloud binary; there is a light host that mounts no
 // subsystem and 116 app binaries that each project their OWN router when they are
-// BUILT. What the host serves is the compose of those projections ([MountFleet]),
+// BUILT. What the host serves is the compose of those projections ([UseFleet]),
 // so nothing in production reads a live router, and the artifact is only as fresh
 // as the last `make -f mk/fleet.mk describe`. It shipped stale — one binary answered
 // a renamed billing route under its new name while still publishing the old one,
@@ -162,8 +162,8 @@ func Subsets(apps []string, read func(app string) []byte, stage func(app string)
 // the address the fleet actually answers on.
 func core() (Part, error) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	Mount(app, Info{})
-	mountDoor(app)
+	Use(app, Info{})
+	useDoor(app)
 	stubIndex(app)
 	doc, err := FleetSpec(app)
 	if err != nil {
@@ -184,7 +184,7 @@ func core() (Part, error) {
 //
 // ONE definition, called by both things that must agree about it — the gate that
 // WRITES openapi.yaml (openapi/compose_test.go) and the host that SERVES it
-// (MountFleet). That is what makes "the served document is the committed
+// (UseFleet). That is what makes "the served document is the committed
 // artifact" true by construction rather than by two pieces of code happening to
 // agree; a drift between them is not expressible.
 func Fleet(subsets []Part) (*Document, error) {
@@ -198,7 +198,7 @@ func Fleet(subsets []Part) (*Document, error) {
 	return Compose(parts)
 }
 
-// MountFleet serves the fleet's PUBLIC CONTRACT at Path: the composition of what
+// UseFleet serves the fleet's PUBLIC CONTRACT at Path: the composition of what
 // this deployment's plugins serve, composed from the subsets their binaries
 // projected when they were built, and then projected to the customer surface
 // ([Publish]).
@@ -226,7 +226,7 @@ func Fleet(subsets []Part) (*Document, error) {
 // opens, and a deployment that never gets asked never pays.
 //
 // Unauthenticated for the reasons stated on [Mount]: same document, same endpoint.
-func MountFleet(app *zip.App, subsets func() ([]Part, error)) {
+func UseFleet(app *zip.App, subsets func() ([]Part, error)) {
 	serve(app, func() (*Document, error) {
 		parts, err := subsets()
 		if err != nil {

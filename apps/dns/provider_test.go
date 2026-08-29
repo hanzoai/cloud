@@ -98,8 +98,8 @@ func TestHanzoIsTheDefaultPlane(t *testing.T) {
 func TestASecondPlaneIsOneFile(t *testing.T) {
 	t.Setenv("HANZO_DNS_PROVIDER", "recorder")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 
 	res, body := do(t, app, as(httptest.NewRequest(http.MethodDelete, "/v1/dns/zones/example.com/records/r1", nil), "orgA", "orgA/dave", "tokenA"))
@@ -123,8 +123,8 @@ func TestASecondPlaneIsOneFile(t *testing.T) {
 func TestAPlaneWithoutRelayHasNoOtherAddress(t *testing.T) {
 	t.Setenv("HANZO_DNS_PROVIDER", "recorder")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 
 	res, _ := do(t, app, as(httptest.NewRequest(http.MethodPost, "/v1/dns/sync", strings.NewReader(`{}`)), "orgA", "orgA/dave", "tokenA"))
@@ -139,10 +139,10 @@ func TestAPlaneWithoutRelayHasNoOtherAddress(t *testing.T) {
 // A name no adapter registered is refused at MOUNT, not at the first request: a
 // deployment configured for a plane that does not exist fails to start rather than
 // serving 502s.
-func TestAnUnknownPlaneIsRefusedAtMount(t *testing.T) {
+func TestAnUnknownPlaneIsRefusedAtUse(t *testing.T) {
 	t.Setenv("HANZO_DNS_PROVIDER", "carrier-pigeon")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	err := Mount(app, cloud.Deps{})
+	err := Use(app, cloud.Deps{})
 	if err == nil {
 		t.Fatal("Mount accepted an unregistered provider name")
 	}

@@ -124,10 +124,10 @@ type state struct {
 
 // Mount wires /v1/s3/* onto app. The unconditional route set, each operation
 // carrying its own preamble, makes this a direct construction (cloud.NewBase),
-// not cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// not cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("s3.Mount: nil app")
+		return fmt.Errorf("s3.Use:  nil app")
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "s3"), State: state{admin: s3admin.New()}}
 

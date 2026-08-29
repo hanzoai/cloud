@@ -136,12 +136,12 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the authors surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("author.Mount: nil app")
+		return fmt.Errorf("author.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("author.Mount: empty DataDir")
+		return fmt.Errorf("author.Use:  empty DataDir")
 	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on the App.
 	// A router that cannot reach it would serve every route with no schema, no prose,
@@ -149,11 +149,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// publishing a surface no projection knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("author.Mount: router is not a zip app, so the typed ops have no registry")
+		return fmt.Errorf("author.Use:  router is not a zip app, so the typed ops have no registry")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("author.Mount: open store: %w", err)
+		return fmt.Errorf("author.Use:  open store: %w", err)
 	}
 	b := cloud.NewBase(deps, "author")
 	s := &cloud.Service[state]{Base: b, State: state{

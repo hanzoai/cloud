@@ -70,8 +70,8 @@ func mountApp(t *testing.T) *zip.App {
 	// SSRF guard, which otherwise refuses loopback/private/link-local targets.
 	t.Setenv("GIT_MIRROR_ALLOW_PRIVATE_HOSTS", "127.0.0.1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	return app

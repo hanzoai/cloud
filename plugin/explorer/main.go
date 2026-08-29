@@ -19,7 +19,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "explorer",
 		Price: cloud.Free,
-		Mount: explorer.Mount,
+		Use:   explorer.Use,
 	}}, []string{"explorer"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -20,8 +20,8 @@ func TestAnExistingAddressAnswers405WithAllow(t *testing.T) {
 	post := func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "yes"}) }
 	app.Post("/v1/chat/completions", post)
 	app.Get("/v1/models", post)
-	if err := Mount(app, nil); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, nil); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	h, err := Handler(nil, app.MCP, routerAllow(app))
 	if err != nil {
@@ -55,8 +55,8 @@ func TestAnExistingAddressAnswers405WithAllow(t *testing.T) {
 // fleet reports every method as allowed and the 404 case disappears entirely.
 func TestTheCatchAllIsNotAnAllowedMethod(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "t", DisableStartupMessage: true})
-	if err := Mount(app, nil); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, nil); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	if got := routerAllow(app)("/v1/anything"); len(got) != 0 {
 		t.Fatalf("a router serving only the catch-all claims %v; it must claim nothing", got)

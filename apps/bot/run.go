@@ -197,7 +197,7 @@ type noArgs struct{}
 //
 // The MACHINE half is gone from here: a node is not a kind of bot, and it answers
 // under its own name in apps/nodes.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if err := mountRunPlane(app, deps); err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // capability, two families, one entry point.
 func mountRunPlane(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("bot.Mount: nil app")
+		return fmt.Errorf("bot.Use:  nil app")
 	}
 	s := &cloud.Service[executor]{
 		Base:  cloud.NewBase(deps, "bot"),

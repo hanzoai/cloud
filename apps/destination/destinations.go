@@ -85,23 +85,23 @@ var removeSink func()
 // Mount wires /v1/destination/* onto app. Complex flavour (a package global for the
 // client + Shutdown, and it installs the analytics fan-out sink), so it constructs the
 // Service value directly.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("destination.Mount: nil app")
+		return fmt.Errorf("destination.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("destination.Mount: empty DataDir")
+		return fmt.Errorf("destination.Use:  empty DataDir")
 	}
 	// destinations registers TYPED ops, which live on the *zip.App's registry — the
 	// one value OpenAPI, MCP and the CLI are projected from. A Router that is not
 	// backed by one must fail the mount rather than serve routes no projection knows.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("destination.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+		return fmt.Errorf("destination.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("destination.Mount: open store: %w", err)
+		return fmt.Errorf("destination.Use:  open store: %w", err)
 	}
 	kc, _ := deps.KMS.(*kms.Client)
 	b := cloud.NewBase(deps, "destination")

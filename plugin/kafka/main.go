@@ -19,7 +19,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "kafka",
 		Price:    cloud.Free,
-		Mount:    kafka.Mount,
+		Use:      kafka.Use,
 		Shutdown: kafka.Shutdown,
 	}}, []string{"kafka"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

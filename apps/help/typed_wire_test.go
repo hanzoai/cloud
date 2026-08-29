@@ -21,7 +21,7 @@ func mountHelpOnly(t *testing.T) *zip.App {
 	t.Setenv("CLOUD_HELP_PUBLIC_ORG", "acme")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("mount help: %v", err)
 	}
 	return app

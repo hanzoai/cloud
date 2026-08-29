@@ -242,13 +242,13 @@ type Fusion struct {
 // MCP tools and the generated CLI from the SAME registration — a Router without
 // the op registry cannot carry it, and the mount fails loudly rather than
 // registering routes no projection would know about.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("search.Mount: nil app")
+		return fmt.Errorf("search.Use:  nil app")
 	}
 	z := cloud.ZipApp(app)
 	if z == nil {
-		return fmt.Errorf("search.Mount: %T does not expose the typed-op registry", app)
+		return fmt.Errorf("search.Use:  %T does not expose the typed-op registry", app)
 	}
 	b := cloud.NewBase(deps, "search")
 	log = b.Log

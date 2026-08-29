@@ -94,7 +94,7 @@ var (
 	fallback   Resolver
 )
 
-// SetResolver installs the slug→Site resolver. projects.Mount calls this once
+// SetResolver installs the slug→Site resolver. projects.Use calls this once
 // with its store — the no-hop answer when the edge and projects share a process.
 func SetResolver(r Resolver) {
 	resolverMu.Lock()
@@ -336,7 +336,7 @@ func New(cfg Config, log luxlog.Logger) *Server {
 // entering the authenticated/billed API pipeline.
 // baseHostHandler serves the org's Base data plane (/v1/base, /v1/realtime, /_/)
 // on a published site host — host-as-project-ref (HIP-0014). Nil (the default)
-// leaves a site host serving only its static files; base.Mount installs it,
+// leaves a site host serving only its static files; base.Use installs it,
 // gated by CLOUD_BASE_PUBLIC_HOST. The org comes ONLY from the resolved Site
 // (the subdomain), never the caller — the same server-supplied tenant key the
 // file plane trusts. Authz is Base's own collection rules.

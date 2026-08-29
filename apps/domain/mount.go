@@ -34,8 +34,8 @@ import (
 // DOMAIN_REGISTRAR names one of the registrars registrar.go holds, defaulting to
 // name.com. Its wholesale credentials come from the platform secret store (KMS) via
 // operator-injected env, named by the registrar itself — never hard-coded here.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "domain", buildState, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "domain", buildState, routes)
 }
 
 // state is the subsystem's data: the orchestrator plus the raw registrar (for the

@@ -27,7 +27,7 @@ func main() {
 		Name:       "domain",
 		OwnsHealth: true,
 		Price:      cloud.Metered,
-		Mount:      domain.Mount,
+		Use:        domain.Use,
 	}}, []string{"domain"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

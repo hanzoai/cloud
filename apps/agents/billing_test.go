@@ -78,8 +78,8 @@ func mountBilled(t *testing.T, commerceURL string, ai types.AIClient) *zip.App {
 	// set; it never fires for a run whose model answers (or fails
 	// non-transiently), so the other billed tests are unaffected.
 	deps := cloud.Deps{DataDir: t.TempDir(), AI: ai, Metering: m}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app

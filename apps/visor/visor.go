@@ -119,9 +119,9 @@ func scope(ctx context.Context) (*zip.Ctx, string, error) {
 // OpenAPI, MCP and the CLI all project from, so a route registered any other way
 // is invisible to three of the four. The handful that stay raw are the ones with
 // no shape to state — see the note at each.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("visor.Mount: nil app")
+		return fmt.Errorf("visor.Use:  nil app")
 	}
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "visor"),
@@ -136,7 +136,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// reach it fails the mount rather than serving routes no projection knows.
 	reg := cloud.ZipApp(app)
 	if reg == nil {
-		return fmt.Errorf("visor.Mount: router carries no typed-op registry")
+		return fmt.Errorf("visor.Use:  router carries no typed-op registry")
 	}
 
 	// Static routes register before their :param siblings so Fiber's

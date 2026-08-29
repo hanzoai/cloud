@@ -115,9 +115,9 @@ func mountedStore(org, project string) (*store, error) {
 
 // Mount opens the per-org registry stores, installs the process client, and registers
 // the /v1/experiment surface.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
-		return fmt.Errorf("experiment.Mount: empty deps.DataDir")
+		return fmt.Errorf("experiment.Use:  empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "experiment")
 	mounted = &state{

@@ -52,7 +52,7 @@ type inProcessClient struct {
 
 // published is the process-global Embedded the lazy InProcessClient resolves. Mount
 // sets it once (mirrors transport.SetHandler for the http client) so the client
-// cloud builds in BuildDeps — BEFORE MountAll — still routes to the live datastore.
+// cloud builds in BuildDeps — BEFORE UseAll — still routes to the live datastore.
 var published atomic.Pointer[commercemod.Embedded]
 
 // PublishEmbedded records the mounted Embedded as the in-process entitlement source.
@@ -62,7 +62,7 @@ func PublishEmbedded(e *commercemod.Embedded) { published.Store(e) }
 func currentEmbedded() *commercemod.Embedded { return published.Load() }
 
 // InProcessClient returns the process-wide, lazily-resolved client cloud's
-// pickCommerceClient wires as deps.Commerce. BuildDeps runs before MountAll, so it
+// pickCommerceClient wires as deps.Commerce. BuildDeps runs before UseAll, so it
 // resolves the published Embedded per call rather than capturing one; brand answers
 // OrgConfig even before Mount publishes.
 func InProcessClient(brand string) Client {

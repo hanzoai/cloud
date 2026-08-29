@@ -146,8 +146,8 @@ func TestVaryIsAddedToWhatIsAlreadyThere(t *testing.T) {
 		c.Fiber().Vary("Origin")
 		return c.Continue()
 	}))
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 
 	// An answer this subsystem writes for itself, so held is on the path.

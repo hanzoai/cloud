@@ -95,7 +95,7 @@ func TestBothLanesServeOneBase(t *testing.T) {
 	seedPublicNotes(t, "acme")
 
 	// The site lane's shape: an org from somewhere other than the caller, handed
-	// to the one function base.Mount gives sites.SetBaseHostHandler.
+	// to the one function base.Use gives sites.SetBaseHostHandler.
 	p := mounted.pool
 	site := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	site.All("/v1/base/*", func(c *zip.Ctx) error { return p.serve("acme", c) })

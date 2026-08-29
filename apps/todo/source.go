@@ -76,7 +76,7 @@ const tokenRef = "orgs/hanzo/deploy/FORGE_TRACKER_TOKEN@prod"
 
 // forgeSource holds the deployment's forge client and the credential behind it.
 //
-// The client is resolved LAZILY rather than at Mount: KMS need not be reachable
+// The client is resolved LAZILY rather than at Use:  KMS need not be reachable
 // at process start, a token rotates while the process lives, and a todo that
 // refused to mount because KMS was slow would take the whole binary down with
 // it. It is cached because the alternative is a KMS read per board load.
@@ -109,7 +109,7 @@ func (f *forgeSource) resolve(ctx context.Context, s *cloud.Service[state]) (*fo
 		return f.client, nil
 	}
 	if s.KMS == nil {
-		return nil, fmt.Errorf("no KMS client mounted: cannot read %s", tokenRef)
+		return nil, fmt.Errorf("no KMS client in use: cannot read %s", tokenRef)
 	}
 	b, err := s.KMS.GetSecret(ctx, tokenRef)
 	if err != nil {

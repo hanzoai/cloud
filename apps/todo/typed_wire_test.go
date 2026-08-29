@@ -38,8 +38,8 @@ func mountWire(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	sharedKey(t)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	return app

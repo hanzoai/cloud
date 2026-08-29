@@ -32,12 +32,12 @@ import (
 	"github.com/hanzoai/cloud/types"
 )
 
-// BuildDeps constructs the Deps used by every subsystem's Mount(app, deps).
+// BuildDeps constructs the Deps used by every subsystem's Use(app, deps).
 //
 // Wiring rules per HIP-0106 inter-subsystem contract:
 //
 //  1. If the subsystem is enabled in this process, the Client field is
-//     left nil here. The subsystem's own Mount() will install a typed
+//     left nil here. The subsystem's own Use() will install a typed
 //     in-process Client into Deps via the SetClient helpers exposed by
 //     this package. (Subsystem Mounts run after BuildDeps; they have
 //     full access to construct their concrete implementation, and the
@@ -185,8 +185,8 @@ func staticEdgePolicy(cfg *Config) edge.Policy {
 // the gate stays ENABLED even after the standalone + its env are retired — a metering
 // gate that silently no-ops is a free-money hole, so it must never drop to
 // "not configured" while commerce is co-resident. The transport resolves the handler
-// lazily (published by commerce.Mount before any request), so building the client
-// here (pre-MountAll) is fine.
+// lazily (published by commerce.Use before any request), so building the client
+// here (pre-UseAll) is fine.
 //
 // SPLIT-DEPLOY (unchanged): without co-residency an empty CommerceHTTPURL yields a
 // not-Enabled() client (allow + no-op) and a set one speaks plain HTTP to the
@@ -268,8 +268,8 @@ func installTierReader(m *metering.Client, log luxlog.Logger) {
 // usage-debit hooks so the PREPAID gate dispatches DIRECTLY to it — a typed in-proc
 // call, no HTTP, no socket. There is NO exempt path (hanzoai/ai >= v1.805.8): every
 // principal is gated on a positive prepaid balance, fail-closed. MUST run before
-// ai.Mount (the ai gate reads the hook per request; the hook must be installed first)
-// — which BuildDeps guarantees (deps are built before MountAll).
+// ai.Use (the ai gate reads the hook per request; the hook must be installed first)
+// — which BuildDeps guarantees (deps are built before UseAll).
 func installFinance(cfg *Config, deps Deps, log luxlog.Logger) {
 	if !cfg.Enabled("commerce") {
 		return // money layer not co-resident (split-deploy); ai falls back to HTTP.
@@ -816,7 +816,7 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	// s.vfs.Put/Get/Delete unconditionally, so a nil here is a per-request 500
 	// (dishonest degradation) instead of a fail-closed 502. Unlike the
 	// nil-then-Mount-fills convention other subsystems use, nothing fills deps.VFS
-	// after MountAll (Mount receives deps by value), so we ALWAYS hand back a
+	// after UseAll (Mount receives deps by value), so we ALWAYS hand back a
 	// concrete client.
 	// Real blob backend (.97): the shared SeaweedFS S3 gateway — the canonical,
 	// key-based object store, reached with the SAME S3_ADMIN_* admin identity
@@ -1061,7 +1061,7 @@ func hostnameOr(def string) string {
 	return def
 }
 
-// MountFunc is a subsystem's mount contract: register your routes on app, using
+// UseFunc is a subsystem's mount contract: register your routes on app, using
 // deps for everything shared. Every subsystem in the fleet exports exactly this
 // signature, so Wire references each one directly and the compiler checks it.
 //
@@ -1082,7 +1082,7 @@ func hostnameOr(def string) string {
 // module's own mount) recovers it with [ZipApp] — the named hole, which reports
 // nil rather than pretending, so a mount that truly needs the registry fails
 // instead of serving routes no projection knows.
-type MountFunc func(app Router, deps Deps) error
+type UseFunc func(app Router, deps Deps) error
 
 // ShutdownFunc releases a subsystem's process-lifetime resources (background
 // goroutines, open DB handles) on graceful shutdown. It must be idempotent and
@@ -1104,7 +1104,7 @@ func CtxShutdown(f func() error) ShutdownFunc {
 	return func(context.Context) error { return f() }
 }
 
-// MountMetrics adapts hanzoai/o11y/metrics into a MountFunc. metrics declares its
+// UseMetrics adapts hanzoai/o11y/metrics into a UseFunc. metrics declares its
 // OWN narrow Deps (Logger, DataDir, Brand, Org) and does not import hanzoai/cloud,
 // so Typed cannot bridge it; this builds that Deps from cloud's and calls
 // metrics.Mount.
@@ -1133,12 +1133,12 @@ func CtxShutdown(f func() error) ShutdownFunc {
 // packages to the core, and zen (via hanzoai/ai/controllers) and ai import
 // hanzoai/cloud — a cycle, not a weight.
 //
-// It is a MountFunc — the doc above always CLAIMED it was one and the signature
+// It is a UseFunc — the doc above always CLAIMED it was one and the signature
 // said otherwise, which is the whole reason a per-entry-point escape hatch is a
 // bad idea. metrics installs no middleware anywhere (the package calls Use
 // nowhere), so it mounts SCOPED like everyone else; it only ever needed the
 // concrete app to register routes, and cloud.ZipApp is the named hole for that.
-func MountMetrics(app Router, deps Deps) error {
+func UseMetrics(app Router, deps Deps) error {
 	a := ZipApp(app)
 	if a == nil {
 		return fmt.Errorf("metrics: router is not a zip app")
@@ -1168,7 +1168,7 @@ func MountMetrics(app Router, deps Deps) error {
 // hanzoai/licensing is no longer such a case: since v0.1.10 it types its own ops,
 // and a typed op carries its prose in the handler's doc comment, which zipdoc lifts.
 //
-// Called from MountMetrics, never from init: prose keyed to an address is only
+// Called from UseMetrics, never from init: prose keyed to an address is only
 // true of a document that also carries the route, and every app in this repo links
 // this package while only one mounts these eleven. Registered at init, the other
 // apps' documents each grew eleven descriptions naming nothing — which is the one
@@ -1320,7 +1320,7 @@ func describeMetrics() {
 // is data read top-to-bottom in one file, not ints scattered across the tree.
 type Plugin struct {
 	Name     string
-	Mount    MountFunc
+	Use      UseFunc
 	Shutdown ShutdownFunc // optional; nil means the subsystem has nothing to tear down.
 
 	// Price is what ONE request to this subsystem's surface costs at the edge gate —
@@ -1360,7 +1360,7 @@ type Plugin struct {
 	// new grants, and no such test exists anywhere in this repo.
 	//
 	// Unbraided, the shape question has ONE answer for all 140 subsystems —
-	// [MountFunc] — so the compiler checks it at every composition root and a
+	// [UseFunc] — so the compiler checks it at every composition root and a
 	// sixth divergent signature cannot link. The concrete app is still reachable
 	// through [ZipApp], which is the named hole for it and always was; a global
 	// subsystem simply gets one whose Router IS the app.
@@ -1396,8 +1396,8 @@ func door(plugins []Plugin) (zip.Source, error) {
 	return src, nil
 }
 
-// MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
-// the composition root's (apps.Wire()); MountAll does NOT sort.
+// UseAll mounts every ENABLED subsystem in specs, in slice order — the order is
+// the composition root's (apps.Wire()); UseAll does NOT sort.
 //
 // app is the concrete *zip.App from Serve. A Global spec receives it as its
 // Router. Everyone else receives a scope bound to their declared Prefixes, so a
@@ -1406,8 +1406,8 @@ func door(plugins []Plugin) (zip.Source, error) {
 // mount — the binary refuses to boot half-gated rather than serving with a
 // stranger's gate on.
 //
-// Every spec goes through spec.Mount, whatever the grant: the Router it receives
-// is the only difference, which is what makes [MountFunc] the fleet's ONE mount
+// Every spec goes through spec.Use, whatever the grant: the Router it receives
+// is the only difference, which is what makes [UseFunc] the fleet's ONE mount
 // signature and lets the compiler check it at all 123 composition roots.
 //
 // Teardown is wired HERE, at mount time: right after a subsystem mounts, its
@@ -1417,7 +1417,7 @@ func door(plugins []Plugin) (zip.Source, error) {
 // its dependents is torn down after them) with no subsystem torn down while a
 // request still uses it. Only ENABLED specs mount, so only they register a hook;
 // teardown needs no separate enablement gate.
-func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
+func UseAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 	logger := luxlog.Default()
 	// Declare the composition root BEFORE anything mounts: TracingMiddleware resolves
 	// hanzo.subsystem off this, DefaultPrice resolves each surface's declared price off
@@ -1429,7 +1429,7 @@ func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 			logger.Debug("subsystem disabled", "name", spec.Name)
 			continue
 		}
-		if spec.Mount == nil {
+		if spec.Use == nil {
 			return fmt.Errorf("mount %s: no Mount — a subsystem that registers nothing is not composed, it is absent", spec.Name)
 		}
 		// The grant decides WHICH Router, never which signature. Global hands over
@@ -1441,7 +1441,7 @@ func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 			sc = newScope(app, spec.Name, spec.Prefixes)
 			r = sc
 		}
-		if err := spec.Mount(r, deps); err != nil {
+		if err := spec.Use(r, deps); err != nil {
 			return fmt.Errorf("mount %s: %w", spec.Name, err)
 		}
 		if sc != nil {
@@ -1455,7 +1455,7 @@ func MountAll(app *zip.App, specs []Plugin, cfg *Config, deps Deps) error {
 		if spec.Shutdown != nil {
 			app.OnShutdown(spec.Shutdown)
 		}
-		logger.Info("mounted subsystem", "name", spec.Name)
+		logger.Info("composed subsystem", "name", spec.Name)
 	}
 	return keyed(app, Deployed())
 }

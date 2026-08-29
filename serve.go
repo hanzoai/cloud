@@ -38,7 +38,7 @@ import (
 // --enable so `hanzo kms` is unambiguous.
 //
 // Listen registers the HIP-0106 liveness contract (GET /v1/<name>/health for
-// every enabled subsystem) before MountAll, runs the canonical middleware
+// every enabled subsystem) before UseAll, runs the canonical middleware
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
 func Listen(plugins []Plugin, enable []string) error {
@@ -146,7 +146,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// Telemetry bootstrap — the ONE site, and a HOST concern: every request this
 	// process serves gets a span whether or not o11y is co-resident, so the host
 	// installs the tracer and meter providers itself rather than borrowing them from
-	// a subsystem that may now be a separate binary. Runs BEFORE MountAll — so the
+	// a subsystem that may now be a separate binary. Runs BEFORE UseAll — so the
 	// providers exist before ai mounts and the composition root can adopt them into
 	// it (apps/ai/ai.go), and so every per-app plugin entrypoint, which shares
 	// this body, installs identically. Spans leave through ONE Send: Cost-0
@@ -202,7 +202,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// UI's SuperAdmin gate sees the same owner+isAdmin every /v1/admin/* route already
 	// authorizes on (a PKCE session is not one of its sessions — without this the UI
 	// bounced to login despite valid admin API access). No principal → that surface's path
-	// unchanged. Runs BEFORE MountAll mounts it.
+	// unchanged. Runs BEFORE UseAll mounts it.
 	app.Use(AccountFromPrincipal())
 
 	// Shard router (horizontal writer scale). Runs IMMEDIATELY after SanitizeIdentity
@@ -276,7 +276,7 @@ func Listen(plugins []Plugin, enable []string) error {
 
 	// Spend gate — the ONE "may this principal spend?" enforcement point. Runs AFTER
 	// the gateway (so it keys on the asserted principal + owner header, never a
-	// client X-Org-Id) and beside BillingGate, BEFORE MountAll so it precedes every
+	// client X-Org-Id) and beside BillingGate, BEFORE UseAll so it precedes every
 	// subsystem /v1/<name>/* wildcard.
 	//
 	// It replaces routers.Paywall, which asked only "does this org hold a paid PLAN?".
@@ -323,7 +323,7 @@ func Listen(plugins []Plugin, enable []string) error {
 
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
-	// MountAll so it precedes subsystem /v1/<n>/* wildcards.
+	// UseAll so it precedes subsystem /v1/<n>/* wildcards.
 	//
 	// A subsystem that owns its health (OwnsHealth, e.g. kms/paas/s3) serves its
 	// OWN fail-closed /v1/<name>/health in Mount; skip it here so this always-ok
@@ -360,14 +360,14 @@ func Listen(plugins []Plugin, enable []string) error {
 		return c.JSON(200, healthBody("ok"))
 	})
 
-	if err := MountAll(app, plugins, cfg, deps); err != nil {
+	if err := UseAll(app, plugins, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
 
 	// Browser-facing ZAP RPC plane. console (@hanzo/gui + @zap-proto/web)
 	// reaches the SAME /v1 handlers over a WebSocket carrying binary ZAP frames
 	// — no second copy of any business logic: each call is replayed in-process
-	// through this Fiber app (see zapface). Mounted AFTER MountAll so every /v1
+	// through this Fiber app (see zapface). Mounted AFTER UseAll so every /v1
 	// route exists before the dispatcher captures the app.
 	app.Get("/zap", zapface.Handler(app.Fiber(), zapface.Options{
 		OriginPatterns: cfg.ZAPWebOrigins,
@@ -377,13 +377,13 @@ func Listen(plugins []Plugin, enable []string) error {
 	// GET /v1/openapi.json — the THIRD projection of the same route table. ZAP
 	// replays the /v1 handlers, the console renders them, and this DESCRIBES
 	// them; all three read the one router, so none can drift from it. Mounted
-	// beside /zap and for the same reason: after MountAll, so the document is
+	// beside /zap and for the same reason: after UseAll, so the document is
 	// generated from a complete table. What it describes is therefore exactly
 	// what THIS deployment mounted — enablement scopes the spec for free.
 	//
 	// Unauthenticated by design (it grants no capability, and `hanzo --help`
-	// must build its command tree before login) — see openapi.Mount.
-	openapi.Mount(app,
+	// must build its command tree before login) — see openapi.Use.
+	openapi.Use(app,
 		openapi.Info{
 			Title:   deps.Brand + " cloud API",
 			Version: deps.Version,
@@ -396,7 +396,7 @@ func Listen(plugins []Plugin, enable []string) error {
 
 	// GET/POST /v1/graphql — the same route table as a graph. GET renders the
 	// schema every typed op describes; POST runs a query against it. Mounted here
-	// for the same reason the document above is: after MountAll, so it covers a
+	// for the same reason the document above is: after UseAll, so it covers a
 	// complete table.
 	//
 	// graphql, not graph: /v1/graph is the knowledge graph's address — assertions,
@@ -452,7 +452,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	// letting it start serving one later without a restart. It is still not a
 	// precondition of boot: an error here would take the API, the agent MCP endpoint and
 	// every /v1 route down with a browser bundle nothing headless asks for.
-	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+	if err := webui.Use(app, release.FS(consoleSrc)); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
@@ -569,7 +569,7 @@ func Listen(plugins []Plugin, enable []string) error {
 	}
 	// Graceful stop, owned by zip: it stops the listeners accepting, drains
 	// in-flight requests, THEN runs each subsystem's teardown hook LIFO (reverse
-	// mount order) — the hooks MountAll registered via app.OnShutdown. Draining
+	// mount order) — the hooks UseAll registered via app.OnShutdown. Draining
 	// BEFORE teardown is the fix for the old hand-rolled reverse-loop, which tore
 	// subsystems down while the listener still accepted: e.g. the agents scheduler
 	// now drains its in-flight runs (InsertRun + debit land) and closes its store

@@ -123,22 +123,22 @@ var stopScheduler = func() {}
 // Mount wires the social surface onto app per HIP-0106. It keeps a package global
 // (mounted) for Shutdown, so it constructs the Service value directly — the same
 // "complex flavour" clients/crm uses.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("social.Mount: nil app")
+		return fmt.Errorf("social.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("social.Mount: empty DataDir")
+		return fmt.Errorf("social.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("social.Mount: open store: %w", err)
+		return fmt.Errorf("social.Use:  open store: %w", err)
 	}
 	// Reset any post left mid-publish by a previous process crash (→ failed, retryable)
 	// BEFORE the scheduler starts, so a stuck claim never wedges a scheduled post.
 	if n, err := store.RecoverStuckPublishing(context.Background(), time.Now().Unix()); err != nil {
 		_ = store.Close()
-		return fmt.Errorf("social.Mount: recover: %w", err)
+		return fmt.Errorf("social.Use:  recover: %w", err)
 	} else if n > 0 {
 		luxlog.Default().Warn("social: reset interrupted publishes to failed", "count", n)
 	}

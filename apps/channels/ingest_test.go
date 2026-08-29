@@ -79,8 +79,8 @@ func newApp(t *testing.T) *testEnv {
 	compose(app)
 	dataDir := t.TempDir()
 	deps := cloud.Deps{DataDir: dataDir, Domain: "api.hanzo.ai"}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return &testEnv{app: app, logs: logs, dataDir: dataDir}

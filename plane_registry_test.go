@@ -36,7 +36,7 @@ import (
 )
 
 // liveOps mounts one app and reads back every op it registers on the plane.
-func liveOps(t *testing.T, name string, mount cloud.MountFunc, global bool) []string {
+func liveOps(t *testing.T, name string, mount cloud.UseFunc, global bool) []string {
 	t.Helper()
 	shortRun(t)
 	cloud.ResetPlane()
@@ -49,8 +49,8 @@ func liveOps(t *testing.T, name string, mount cloud.MountFunc, global bool) []st
 	t.Cleanup(done)
 	deps := cloud.BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: luxlog.Default(), DisableStartupMessage: true})
-	if err := cloud.MountAll(app, []cloud.Plugin{{
-		Name: name, Price: cloud.Free, Mount: mount, Global: global,
+	if err := cloud.UseAll(app, []cloud.Plugin{{
+		Name: name, Price: cloud.Free, Use: mount, Global: global,
 	}}, cfg, deps); err != nil {
 		t.Fatalf("mount %s: %v", name, err)
 	}
@@ -65,7 +65,7 @@ func liveOps(t *testing.T, name string, mount cloud.MountFunc, global bool) []st
 // TestGeneratedSurfaceIsTheLiveSurface: what plane/commerce offers is exactly
 // what commerce registers — no more, no less.
 func TestGeneratedSurfaceIsTheLiveSurface(t *testing.T) {
-	live := liveOps(t, commercepeer.App, commerce.Mount, true)
+	live := liveOps(t, commercepeer.App, commerce.Use, true)
 	sameSurface(t, "commerce", commercepeer.Ops, live,
 		"commerce registered no plane ops at all — the mount, not the generator, is the thing to look at")
 }
@@ -81,7 +81,7 @@ func TestGeneratedSurfaceIsTheLiveSurface(t *testing.T) {
 // precisely the failure this whole client exists to end. So the registration itself
 // is asserted, from the running registry.
 func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
-	live := liveOps(t, riskpeer.App, risk.Mount, false)
+	live := liveOps(t, riskpeer.App, risk.Use, false)
 	t.Cleanup(func() { _ = risk.Shutdown(t.Context()) })
 	sameSurface(t, "risk", riskpeer.Ops, live,
 		"risk registered no plane ops at all — every gate in the fleet reads an absent scorer, "+
@@ -99,7 +99,7 @@ func TestGeneratedRiskSurfaceIsTheLiveSurface(t *testing.T) {
 // they describe kept answering exactly as before. So the registration itself is
 // asserted, from the running registry.
 func TestGeneratedAnalyticsSurfaceIsTheLiveSurface(t *testing.T) {
-	live := liveOps(t, eventpeer.App, event.Mount, false)
+	live := liveOps(t, eventpeer.App, event.Use, false)
 	t.Cleanup(func() { _ = event.Shutdown(t.Context()) })
 	sameSurface(t, "event", eventpeer.Ops, live,
 		"analytics registered no plane ops at all — every peer that states a fact about "+
@@ -116,7 +116,7 @@ func TestGeneratedAnalyticsSurfaceIsTheLiveSurface(t *testing.T) {
 // counting while every route keeps answering — free inference, unbounded, and nothing
 // says so. So both registrations are asserted, from the running registry.
 func TestGeneratedAllowanceSurfaceIsTheLiveSurface(t *testing.T) {
-	live := liveOps(t, allowancepeer.App, allowance.Mount, false)
+	live := liveOps(t, allowancepeer.App, allowance.Use, false)
 	t.Cleanup(func() { _ = allowance.Shutdown(t.Context()) })
 	sameSurface(t, "allowance", allowancepeer.Ops, live,
 		"allowance registered no plane ops at all — the AI gate can neither admit a free "+
@@ -134,7 +134,7 @@ func TestGeneratedAllowanceSurfaceIsTheLiveSurface(t *testing.T) {
 // one reads as a 404 that is indistinguishable from the product not existing.
 // So the registration itself is asserted, from the running registry.
 func TestGeneratedFlagsSurfaceIsTheLiveSurface(t *testing.T) {
-	live := liveOps(t, flagspeer.App, flags.Mount, false)
+	live := liveOps(t, flagspeer.App, flags.Use, false)
 	t.Cleanup(func() { _ = flags.Shutdown(t.Context()) })
 	sameSurface(t, "flags", flagspeer.Ops, live,
 		"flags registered no plane ops at all — every capability that is not ga refuses "+
@@ -152,7 +152,7 @@ func TestGeneratedFlagsSurfaceIsTheLiveSurface(t *testing.T) {
 // indistinguishable from the product not existing. So the registration itself is
 // asserted, from the running registry.
 func TestGeneratedEntitlementSurfaceIsTheLiveSurface(t *testing.T) {
-	live := liveOps(t, entitlementpeer.App, entitlement.Mount, false)
+	live := liveOps(t, entitlementpeer.App, entitlement.Use, false)
 	t.Cleanup(func() { _ = entitlement.Shutdown(t.Context()) })
 	sameSurface(t, "entitlement", entitlementpeer.Ops, live,
 		"entitlement registered no plane ops at all — every elective capability refuses "+

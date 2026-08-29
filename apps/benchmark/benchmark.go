@@ -132,8 +132,8 @@ type state struct {
 }
 
 // Mount is the subsystem entrypoint (registered in apps.go).
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "benchmark", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "benchmark", build, routes)
 }
 
 func build(b cloud.Base) (state, error) {

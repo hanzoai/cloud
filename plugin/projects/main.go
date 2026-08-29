@@ -25,7 +25,7 @@ func main() {
 		// the manifest so the host's view of what projects serves and the app's own
 		// view of what it may gate are one list, not two that can drift.
 		Prefixes: manifest.PrefixesFor("projects"),
-		Mount:    projects.Mount,
+		Use:      projects.Use,
 		Shutdown: cloud.CtxShutdown(projects.Shutdown),
 	}}, []string{"projects"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

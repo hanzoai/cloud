@@ -178,9 +178,9 @@ func Shutdown() error {
 
 // Mount opens IAM's embedded store, seeds config from the same init_data.json the
 // deployment provides (non-fatal), and registers the whole IAM v2 surface at the
-// prefixes identity owns (Prefixes). Called once by cloud.MountAll when "iam" is
+// prefixes identity owns (Prefixes). Called once by cloud.UseAll when "iam" is
 // enabled.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// The identity store lives here, so every read of it is published here.
 	exposeRoster()
 	exposeProjects()

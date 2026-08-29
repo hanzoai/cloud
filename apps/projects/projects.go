@@ -337,17 +337,17 @@ func toDeployment(d Deployment) projectsDeployment {
 
 // Mount wires the projects surface onto app per HIP-0106. Complex flavour: it keeps
 // a package global (mounted) for Shutdown and registers cross-package resolvers, so
-// it constructs the Service value directly rather than through cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// it constructs the Service value directly rather than through cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("projects.Mount: nil app")
+		return fmt.Errorf("projects.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("projects.Mount: empty DataDir")
+		return fmt.Errorf("projects.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("projects.Mount: open store: %w", err)
+		return fmt.Errorf("projects.Use:  open store: %w", err)
 	}
 
 	b := cloud.NewBase(deps, "projects")

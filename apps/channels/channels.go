@@ -28,16 +28,16 @@ type state struct {
 var mounted atomic.Pointer[cloud.Service[state]]
 
 // Mount wires /v1/channels/* onto app and registers the ingress consumer.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("channels.Mount: nil app")
+		return fmt.Errorf("channels.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("channels.Mount: empty DataDir")
+		return fmt.Errorf("channels.Use:  empty DataDir")
 	}
 	st, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("channels.Mount: open store: %w", err)
+		return fmt.Errorf("channels.Use:  open store: %w", err)
 	}
 	b := cloud.NewBase(deps, "channels")
 	s := &cloud.Service[state]{Base: b, State: state{store: st}}

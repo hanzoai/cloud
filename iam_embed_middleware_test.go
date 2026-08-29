@@ -43,7 +43,7 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	// asserted — and it reads the price each surface DECLARED (price.go). Every real
 	// surface is Free or Metered, so the real table cannot supply a control: a 2xx on an
 	// auth path is equally explained by a gate that never denies anything. So the
-	// control is a DECLARED surface priced at 1c, indexed here the way MountAll indexes
+	// control is a DECLARED surface priced at 1c, indexed here the way UseAll indexes
 	// the composition root. The gate reads it through the exact production path — no
 	// hand-written price closure standing in for a declaration.
 	index(t, &Config{Enable: []string{"iam", "probe"}},

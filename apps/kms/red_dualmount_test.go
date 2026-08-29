@@ -37,11 +37,11 @@ func newDualApp(t *testing.T, mk string) *zip.App {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	specs := []cloud.Plugin{
-		{Name: "kms", Mount: kms.Mount, OwnsHealth: true},
-		{Name: "admin", Mount: admin.Mount},
+		{Name: "kms", Use: kms.Use, OwnsHealth: true},
+		{Name: "admin", Use: admin.Use},
 	}
-	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, specs, cfg, deps); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 	return app
 }

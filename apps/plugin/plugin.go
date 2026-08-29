@@ -65,10 +65,10 @@ type ops struct {
 // Mount registers the control plane. It needs the concrete *zip.App rather than
 // the Router interface, because the plugin set is app state — Plugins, Reload
 // and Unload are the app's, and no interface should widen to carry them.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	z := cloud.ZipApp(app)
 	if z == nil {
-		return fmt.Errorf("plugin.Mount: router carries no typed-op registry")
+		return fmt.Errorf("plugin.Use:  router carries no typed-op registry")
 	}
 	o := &ops{
 		z:       z,

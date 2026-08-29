@@ -115,8 +115,8 @@ type state struct{}
 
 // Mount wires /v1/engine/* onto app: a typed read lens over the engine
 // deployment, resolved per request.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "engine",
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "engine",
 		func(cloud.Base) (state, error) { return state{}, nil },
 		routes)
 }

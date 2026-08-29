@@ -60,16 +60,16 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the telecom surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("tel.Mount: nil app")
+		return fmt.Errorf("tel.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("tel.Mount: empty DataDir")
+		return fmt.Errorf("tel.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("tel.Mount: open store: %w", err)
+		return fmt.Errorf("tel.Use:  open store: %w", err)
 	}
 
 	// Configured, or the stub. A deployment with no carrier credential still

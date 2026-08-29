@@ -27,7 +27,7 @@ func newApp(t *testing.T, extra func(*zip.App)) *zip.App {
 	// Mount the plane the way the SERVER does. A typed op receives only a context,
 	// so the validated org reaches it ONLY through cloud.Bridge — which Serve
 	// installs once for the whole binary, after the identity boundary and before
-	// MountAll. This harness had no Bridge, which was invisible while every route
+	// UseAll. This harness had no Bridge, which was invisible while every route
 	// was untyped (an untyped handler reads the header itself) and would have made
 	// every typed op here answer 403 on a request that carries a valid X-Org-Id.
 	// It must precede the leaves: fiber runs middleware in registration order.
@@ -36,8 +36,8 @@ func newApp(t *testing.T, extra func(*zip.App)) *zip.App {
 		extra(app)
 	}
 	deps := cloud.Deps{DataDir: t.TempDir()}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app

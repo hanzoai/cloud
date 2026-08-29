@@ -52,8 +52,8 @@ func TestMountUsesBrandDefault(t *testing.T) {
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
 		compose(app)
 		deps := cloud.Deps{DataDir: t.TempDir(), Brand: brand}
-		if err := Mount(app, deps); err != nil {
-			t.Fatalf("Mount(brand=%q): %v", brand, err)
+		if err := Use(app, deps); err != nil {
+			t.Fatalf("Use(brand=%q): %v", brand, err)
 		}
 		t.Cleanup(func() { _ = Shutdown() })
 		// Only the store-backed detector so the read never hits a live warehouse.

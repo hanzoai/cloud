@@ -340,13 +340,13 @@ func writeRaw(c *zip.Ctx, status int, body []byte) error {
 }
 
 // Mount registers the web-search surface on app.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("websearch.Mount: nil app")
+		return fmt.Errorf("websearch.Use:  nil app")
 	}
 	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("websearch.Mount: nil luxlog.Default()")
+		return fmt.Errorf("websearch.Use:  nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "websearch")
 	// The package logs one thing and only one thing: an engine that went blind
@@ -382,7 +382,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// it (the same move apps/exec made, for the same reason).
 	reg := cloud.ZipApp(app)
 	if reg == nil {
-		return fmt.Errorf("websearch.Mount: router carries no typed-op registry")
+		return fmt.Errorf("websearch.Use:  router carries no typed-op registry")
 	}
 	// Named, not derived. The id a POST to /v1/websearch derives is
 	// `create_websearch`, which reads as "make a websearch" — a resource this

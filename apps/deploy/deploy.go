@@ -125,8 +125,8 @@ type state struct {
 }
 
 // Mount wires /v1/deploy/* onto app. Every handler gates on c.IsAdmin() first.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "deploy",
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "deploy",
 		func(b cloud.Base) (state, error) { return build(b, newOAuth(deps)) }, routes)
 }
 

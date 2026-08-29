@@ -89,19 +89,19 @@ var mounted *cloud.Service[state]
 
 // Mount wires the /v1/ingress control plane onto app and, in edge role, starts the
 // edge data plane.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("ingress.Mount: nil app")
+		return fmt.Errorf("ingress.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("ingress.Mount: empty DataDir")
+		return fmt.Errorf("ingress.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "ingress")
 	log := b.Log
 
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("ingress.Mount: open store: %w", err)
+		return fmt.Errorf("ingress.Use:  open store: %w", err)
 	}
 
 	edgeEnabled := boolEnv("CLOUD_INGRESS_EDGE_ENABLED")
@@ -130,7 +130,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	if edgeEnabled {
 		if err := os.MkdirAll(ecfg.cacheDir, 0o700); err != nil {
-			return fmt.Errorf("ingress.Mount: acme cache dir: %w", err)
+			return fmt.Errorf("ingress.Use:  acme cache dir: %w", err)
 		}
 		s.State.edge = newEdge(s.State.engine, ecfg, log)
 		s.State.edge.start()

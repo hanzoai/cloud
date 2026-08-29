@@ -156,7 +156,7 @@ func TestDoctypeInReadsTheSegment(t *testing.T) {
 func TestEachOrgGetsItsOwnBase(t *testing.T) {
 	planetest.Entitled(t, func(_, p string) bool { return p == "lane" })
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -185,7 +185,7 @@ func TestEachOrgGetsItsOwnBase(t *testing.T) {
 func TestNoOrgIsRefusedNotCrashed(t *testing.T) {
 	planetest.Entitled(t, func(string, string) bool { return true })
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

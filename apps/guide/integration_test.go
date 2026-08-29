@@ -29,18 +29,18 @@ func mountFullPlane(t *testing.T, ai cloud.AIClient) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("framework.Mount: %v", err)
+	if err := framework.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("framework.Use:  %v", err)
 	}
-	if err := content.Mount(app, cloud.Deps{AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
-		t.Fatalf("content.Mount: %v", err)
+	if err := content.Use(app, cloud.Deps{AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
+		t.Fatalf("content.Use:  %v", err)
 	}
-	if err := auto.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("auto.Mount: %v", err)
+	if err := auto.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("auto.Use:  %v", err)
 	}
 	// guide with the REAL invoke client (auto.InvokeTool) — no fake.
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
-		t.Fatalf("guide.Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
+		t.Fatalf("guide.Use:  %v", err)
 	}
 	// Keep only the store-backed "acted" detector so the read never hits a live warehouse.
 	mounted.State.detectors = map[string]Detector{"acted": mounted.State.detectors["acted"]}

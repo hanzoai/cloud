@@ -107,7 +107,7 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 			return &plane.Started{Addr: addr, Known: true}, nil
 		},
 		zip.WithOperationID(plane.HostStart),
-		zip.WithSummary("Start one lazily-mounted app"))
+		zip.WithSummary("Start one lazily-composed app"))
 
 	// done is CLOSED when Listen returns, rather than carrying the error itself: the
 	// wait below has to observe the same event, and a one-value channel would let

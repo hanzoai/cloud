@@ -49,7 +49,7 @@ import (
 //     fleet, so anything product-facing belongs in the manifest row instead.
 type Case struct {
 	Name   string
-	Mount  func(app cloud.Router, deps cloud.Deps) error
+	Use    func(app cloud.Router, deps cloud.Deps) error
 	Exempt func(pattern string) bool
 }
 
@@ -64,8 +64,8 @@ func (c Case) Run(t *testing.T) {
 	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("manifest-gate"), DisableStartupMessage: true})
-	if err := c.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("%s: Mount: %v", c.Name, err)
+	if err := c.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("%s: Use:  %v", c.Name, err)
 	}
 
 	seen := 0

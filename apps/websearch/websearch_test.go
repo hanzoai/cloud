@@ -64,7 +64,7 @@ func served(t *testing.T, app *zip.App, method, target, body string, hdr map[str
 	return resp.StatusCode, strings.TrimSpace(string(raw))
 }
 
-// Mount() must register /v1/websearch/search + the two scrape POST paths on a real
+// Use() must register /v1/websearch/search + the two scrape POST paths on a real
 // Fiber router without panicking, and requests routed through the whole app must
 // reach the native search handler + firecrawl-shaped scrape.
 func TestMountRoutesThroughRouter(t *testing.T) {
@@ -244,8 +244,8 @@ func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
 }
 
 func TestMountRejectsBadInputs(t *testing.T) {
-	if err := Mount(nil, cloud.Deps{}); err == nil {
-		t.Fatal("Mount(nil app) should error")
+	if err := Use(nil, cloud.Deps{}); err == nil {
+		t.Fatal("Use(nil app) should error")
 	}
 }
 

@@ -28,7 +28,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "sandbox",
 		Price: cloud.Metered,
-		Mount: sandbox.Mount,
+		Use:   sandbox.Use,
 		// The org stores drain on the way out: a lease ended just before SIGTERM
 		// has to reach the object store, or the successor hydrates it as still
 		// running and bills the customer for a sandbox that is gone.

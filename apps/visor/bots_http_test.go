@@ -256,8 +256,8 @@ func mountBots(t *testing.T, f *botVM, agentsURL string) *zip.App {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge()) // typed ops read tenant + request off the context (see mountApp)
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

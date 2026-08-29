@@ -14,7 +14,7 @@ import (
 )
 
 // TestBuildDeps_EnabledLeavesNil verifies that BuildDeps leaves an enabled
-// Mount-fills-it subsystem's Client field nil — the subsystem Mount() installs
+// Mount-fills-it subsystem's Client field nil — the subsystem Use() installs
 // it. KMS is the exception (see TestBuildDeps_KMSEnabledIsInProcess): it is
 // constructed eagerly in BuildDeps because its store must exist before any
 // dependent subsystem mounts.

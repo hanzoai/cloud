@@ -29,8 +29,8 @@ func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	// A test process is not the fleet. Mount starts the event sink, and a sink that
 	// reaches a bus consumes whatever is on it — including whatever an earlier run

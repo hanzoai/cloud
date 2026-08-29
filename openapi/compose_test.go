@@ -105,7 +105,7 @@ func TestFleetIsTheCompositionOfItsApps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The SAME composition the host serves (cmd/cloud spec → openapi.MountFleet),
+	// The SAME composition the host serves (cmd/cloud spec → openapi.UseFleet),
 	// which is what makes the served document and this golden one document rather
 	// than two that agree today.
 	composed, err := openapi.Fleet(subsets)

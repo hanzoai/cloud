@@ -30,8 +30,8 @@ func TestMountServesAndShutsDown(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_PORT", "-1") // random free port
 	t.Setenv("CLOUD_PUBSUB_STORE_DIR", t.TempDir())
 
-	if err := Mount(testApp(), testDeps()); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(testApp(), testDeps()); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	if srv == nil {
 		t.Fatal("Mount did not start a server")

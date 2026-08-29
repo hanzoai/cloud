@@ -111,7 +111,7 @@ func consoleTitle(host string) string {
 // at the address the server lives (see mcp.go). Nothing is configured and
 // nothing is duplicated; the console is simply handed the server the app
 // already has.
-func Mount(app *zip.App, fsys fs.FS) error {
+func Use(app *zip.App, fsys fs.FS) error {
 	h, err := Handler(fsys, app.MCP, routerAllow(app))
 	if err != nil {
 		return err

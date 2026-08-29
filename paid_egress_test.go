@@ -266,12 +266,12 @@ var freeOfVendor = map[string]string{
 	// A CHOKE POINT, CHECKED. Every Cloudflare call in this binary would have to
 	// come through cloudflare.With/New, whose only non-test caller is
 	// apps/projects/edgecred.go's newEdge, whose only caller is the edge field
-	// initialised inside projects.Mount. None of these four mounts projects, so
+	// initialised inside projects.Use. None of these four mounts projects, so
 	// that field is nil in their processes. What they reach projects FOR is one
 	// symbol each and neither touches it: catalog reads projects.Ready/LiveSites
 	// (a SQL query on the store), and billing, link and team reach it only through
 	// agents' SetDeployObserver, which stores an interface in a package global and
-	// is called from agents.Mount — which none of them run either.
+	// is called from agents.Use — which none of them run either.
 	"billing:CF_API_TOKEN": "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
 	"catalog:CF_API_TOKEN": "links apps/projects for Ready/LiveSites, which read the store; the edge client is nil here",
 	"link:CF_API_TOKEN":    "links apps/projects for SetDeployObserver only; mounts no route that reaches newEdge",
@@ -282,7 +282,7 @@ var freeOfVendor = map[string]string{
 	// apps/projects/shot.go, whose every function is UNEXPORTED: capture is
 	// reachable only from shotOf, and shotOf is registered exactly once, at
 	// apps/projects/projects.go's `GET /v1/projects/:slug/shot`, by projects'
-	// own Mount. Neither of these two calls projects.Mount, so there is no way
+	// own Mount. Neither of these two calls projects.Use, so there is no way
 	// into the renderer from either — not a nil client this time, but no
 	// callable symbol at all.
 	"billing:crawl.hanzo.svc": "reaches apps/projects for SetDeployObserver; the renderer is unexported behind a route projects alone mounts",
@@ -318,7 +318,7 @@ var freeOfVendor = map[string]string{
 
 	// The knowledge symbols these two use are the vector READ leg (Semantic →
 	// index().searchDoc). The piece runner is reachable only from syncConnector,
-	// which knowledge.routes registers and only knowledge.Mount calls — and
+	// which knowledge.routes registers and only knowledge.Use calls — and
 	// pieceSync takes a *cloud.Service[state] that only Mount constructs.
 	"search:auto.hanzo.svc":       "uses knowledge.Semantic, the vector read; syncConnector is not mounted here",
 	"search:PIECES_RUNNER_SECRET": "uses knowledge.Semantic, the vector read; the piece runner is not reachable",

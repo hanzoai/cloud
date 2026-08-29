@@ -45,7 +45,7 @@ import (
 // models. ONE mount mechanism; the host owns the routes, zen owns the family.
 //
 // Billing. cloud's edge middleware (serve.go) runs IdentityMiddleware,
-// AuditTrail, ScopeRateLimit, and BillingGate app-wide BEFORE MountAll, so a
+// AuditTrail, ScopeRateLimit, and BillingGate app-wide BEFORE UseAll, so a
 // zen-claimed request is already authenticated, audited, and rate-limited at the
 // edge. But the edge BillingGate prices bare /v1/messages, /v1/chat/completions,
 // and /v1/embeddings at 0 (zen's surface declares cloud.Metered), and
@@ -71,7 +71,7 @@ import (
 //
 // It is wired BEFORE ai in Wire() so Claim's c.Next() falls through to ai's
 // catch-all. zen's catalog reads its upstream keys from KMS via the Key resolver.
-func Mount(a cloud.Router, deps cloud.Deps) error {
+func Use(a cloud.Router, deps cloud.Deps) error {
 	z, err := zen.New(zen.Config{
 		Logger: luxlog.Default(),
 		Key:    zenKeyResolver(deps.KMS),

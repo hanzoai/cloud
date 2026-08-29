@@ -59,8 +59,8 @@ func newCloudApp(t *testing.T) (*zip.App, string, cloud.Deps) {
 	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
-	if err := cloud.MountAll(app, []cloud.Plugin{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}, cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, []cloud.Plugin{{Name: "kms", Use: kms.Use, OwnsHealth: true}}, cfg, deps); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 	return app, dir, deps
 }

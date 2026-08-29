@@ -14,7 +14,7 @@ import (
 // The site edge middleware runs at the compose root, in whatever process fronts
 // the public port; the store belongs to `projects`. In production those are
 // never the same process — the pod boots ~25 single-app processes — so the
-// package-level registry projects.Mount writes is nil where the edge reads it.
+// package-level registry projects.Use writes is nil where the edge reads it.
 // That is why every <slug>.hanzo.app served the console SPA: a nil resolver is a
 // clean miss, so the request fell through to the API pipeline with no error
 // anywhere to notice.

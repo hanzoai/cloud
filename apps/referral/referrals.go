@@ -82,17 +82,17 @@ var mounted *cloud.Service[state]
 
 // Mount wires the referrals surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can release the store, so it
-// constructs the Service value directly rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// constructs the Service value directly rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("referral.Mount: nil app")
+		return fmt.Errorf("referral.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("referral.Mount: empty DataDir")
+		return fmt.Errorf("referral.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("referral.Mount: open store: %w", err)
+		return fmt.Errorf("referral.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "referral"), State: state{
 		store:      store,

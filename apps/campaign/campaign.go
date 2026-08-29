@@ -98,12 +98,12 @@ var mounted *cloud.Service[state]
 // Mount wires the campaign surface onto app per HIP-0106. It keeps a package
 // global (mounted) for Shutdown, so it constructs the Service value directly —
 // the same "complex flavour" clients/ads uses.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("campaign.Mount: nil app")
+		return fmt.Errorf("campaign.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("campaign.Mount: empty DataDir")
+		return fmt.Errorf("campaign.Use:  empty DataDir")
 	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on the
 	// App. A router that cannot reach it would serve every route with no schema,
@@ -111,11 +111,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// quietly publishing a surface no projection knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("campaign.Mount: router is not a zip app, so the typed ops have no registry")
+		return fmt.Errorf("campaign.Use:  router is not a zip app, so the typed ops have no registry")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("campaign.Mount: open store: %w", err)
+		return fmt.Errorf("campaign.Use:  open store: %w", err)
 	}
 	b := cloud.NewBase(deps, "campaign")
 	s := &cloud.Service[state]{Base: b, State: state{store: store}}

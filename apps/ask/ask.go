@@ -189,7 +189,7 @@ func init() {
 // plane, so there is nothing for it to do with this process's router. Keeping the router
 // out of the client is what makes "which process owns that data" stop being the advisor's
 // problem.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "ask")
 	svc := &cloud.Service[*state]{Base: b, State: &state{
 		registry: NewRegistry(domains()...),

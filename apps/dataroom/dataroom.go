@@ -97,16 +97,16 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the /v1/dataroom/* surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("dataroom.Mount: nil app")
+		return fmt.Errorf("dataroom.Use:  nil app")
 	}
 	// A local child logger for the fallible pre-construction setup (the health-only
 	// degrade paths return before the Service value exists). NewBase derives the
 	// same "subsystem"=dataroom child for the mounted service below.
 	log := luxlog.Default().New("subsystem", "dataroom")
 	if deps.DataDir == "" {
-		return fmt.Errorf("dataroom.Mount: empty DataDir")
+		return fmt.Errorf("dataroom.Use:  empty DataDir")
 	}
 
 	// Native /v1/dataroom/health — always answers (HealthOwner), no auth, BEFORE any
@@ -127,7 +127,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// between a degraded plugin and a crashing one.
 	reg := cloud.ZipApp(app)
 	if reg == nil {
-		return fmt.Errorf("dataroom.Mount: router carries no typed-op registry")
+		return fmt.Errorf("dataroom.Use:  router carries no typed-op registry")
 	}
 	zip.Get(reg, "/v1/dataroom/health", probeOps{}.health)
 

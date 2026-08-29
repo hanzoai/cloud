@@ -20,9 +20,9 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "skills",
 		Price: cloud.Free,
-		Mount: skills.Mount,
+		Use:   skills.Use,
 		// This subsystem serves the ROOT discovery convention
-		// (/.well-known/agent-skills/…), so the /v1/<Name> default MountPrefixes
+		// (/.well-known/agent-skills/…), so the /v1/<Name> default UsePrefixes
 		// assumes covers NOTHING it registers: SubsystemOf resolved every request to
 		// "" and PriceOf to Undeclared, and any middleware the subsystem installed
 		// through its own router landed on "/v1/skills" and never ran. Same

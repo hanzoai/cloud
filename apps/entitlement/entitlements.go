@@ -90,17 +90,17 @@ type service struct {
 var mounted *service
 
 // Mount registers the entitlements surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("entitlement.Mount: nil app")
+		return fmt.Errorf("entitlement.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "entitlement")
 	if deps.DataDir == "" {
-		return fmt.Errorf("entitlement.Mount: empty DataDir")
+		return fmt.Errorf("entitlement.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("entitlement.Mount: open store: %w", err)
+		return fmt.Errorf("entitlement.Use:  open store: %w", err)
 	}
 	s := &service{store: store, commerce: deps.Commerce, log: log}
 	mounted = s

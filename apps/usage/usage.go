@@ -83,8 +83,8 @@ type state struct {
 
 // Mount wires the usage surface onto app per HIP-0106 — one line over the generic
 // subsystem entrypoint: build the state, register the routes.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "usage", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "usage", build, routes)
 }
 
 // build constructs the usage state: the ledger reader (which takes no

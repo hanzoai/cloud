@@ -20,7 +20,7 @@ func main() {
 		Name:       "experiment",
 		OwnsHealth: true,
 		Price:      cloud.Free,
-		Mount:      experiment.Mount,
+		Use:        experiment.Use,
 		Shutdown:   cloud.CtxShutdown(experiment.Shutdown),
 	}}, []string{"experiment"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

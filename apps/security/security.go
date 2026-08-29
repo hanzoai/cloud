@@ -67,17 +67,17 @@ var mounted *cloud.Service[state]
 // store under {DataDir}/security.db. It follows the clients/git contract:
 // validate deps, open the store, register routes, return. The store lifecycle
 // and package-global handle make this a direct construction (cloud.NewBase),
-// not cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// not cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("security.Mount: nil app")
+		return fmt.Errorf("security.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("security.Mount: empty DataDir")
+		return fmt.Errorf("security.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("security.Mount: open store: %w", err)
+		return fmt.Errorf("security.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "security"),

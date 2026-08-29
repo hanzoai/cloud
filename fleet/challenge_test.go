@@ -47,7 +47,7 @@ const callWithoutTool = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":
 
 func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	fleet.Mount(app, manifest.MCPPath, nil, nowhere)
+	fleet.Use(app, manifest.MCPPath, nil, nowhere)
 
 	code, hdr, body := post(t, app, manifest.MCPPath, callWithoutTool, nil)
 	if code != http.StatusUnauthorized {
@@ -92,7 +92,7 @@ func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 
 func TestThePlaneDoorIsNeverChallenged(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	d := fleet.Mount(zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}}), manifest.MCPPath, nil, nowhere)
+	d := fleet.Use(zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}}), manifest.MCPPath, nil, nowhere)
 	d.Serve(app, manifest.MCPPath, nowhere)
 
 	code, _, body := post(t, app, manifest.MCPPath, callWithoutTool, nil)

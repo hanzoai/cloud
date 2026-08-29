@@ -72,12 +72,12 @@ func storeFor(s *cloud.Service[state], org string) (*store, error) {
 
 // Mount wires /v1/sync, registers the git provider, and installs the reconcile func
 // as the cloud.SyncFunc so triggers (cloud.Sync) reach it.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("sync.Mount: nil app")
+		return fmt.Errorf("sync.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("sync.Mount: empty DataDir")
+		return fmt.Errorf("sync.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "sync")
 	s := &cloud.Service[state]{Base: b, State: state{
@@ -169,7 +169,7 @@ func terminal(next zip.Handler) zip.Handler { return cloud.Terminal(next) }
 func routes(app cloud.Router, s *cloud.Service[state]) error {
 	za := cloud.ZipApp(app)
 	if za == nil {
-		return fmt.Errorf("sync.Mount: router exposes no op registry")
+		return fmt.Errorf("sync.Use:  router exposes no op registry")
 	}
 	g := za.With(terminal).Group("/v1")
 	o := syncOps{s: s}

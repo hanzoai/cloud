@@ -45,13 +45,13 @@ func TestSitesEdgeIsMountedInTheRouter(t *testing.T) {
 	// ...and BEFORE the console, which owns "/" for every unclaimed path.
 	//
 	// Matched on the CALL, not on its full text: the console takes its bytes as an
-	// argument now (webui.Mount(app, release.FS(…))), and a pattern pinned to the
+	// argument now (webui.Use(app, release.FS(…))), and a pattern pinned to the
 	// old spelling would have gone quietly to -1 and asserted nothing — a test that
 	// passes because it stopped looking. The ordering it guards is the same, and it
 	// matters twice over now: mountSites installs the resolver the console reads
 	// its OWN release through, so mounting the console first would find no resolver
 	// at all.
-	console := strings.Index(run, "webui.Mount(app")
+	console := strings.Index(run, "webui.Use(app")
 	if console < 0 {
 		t.Fatal("run() does not mount the console — the host owns \"/\" and nothing would serve it")
 	}
@@ -134,7 +134,7 @@ func TestSitesConfigIsNotResolvedHere(t *testing.T) {
 // the day someone spells the return differently — a test that stops looking.
 //
 // WHAT THE POSITIVE ACT IS CHANGED, and this test changed with it. It used to be
-// webui.Mount(app, nil): the console failed to load, so the process mounted
+// webui.Use(app, nil): the console failed to load, so the process mounted
 // nothing. That kept the API up and cost a different outage — nothing was left to
 // re-read the release, so the console stayed down after the object that broke it
 // was repaired. The Source is polled now and mounts EMPTY, answering 503 until a
@@ -151,7 +151,7 @@ func TestAnUnreadableConsoleDoesNotStopTheFrontDoor(t *testing.T) {
 	}
 	run := string(src)[i:]
 
-	if !strings.Contains(run, "webui.Mount(app, release.FS(consoleSrc))") {
+	if !strings.Contains(run, "webui.Use(app, release.FS(consoleSrc))") {
 		t.Fatal("run() never mounts the console — a console the store cannot serve " +
 			"takes the whole API down with it, which is the 2026-08-15 outage")
 	}

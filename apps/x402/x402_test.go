@@ -172,8 +172,8 @@ func newHarness(t *testing.T) *harness {
 	compose(app)
 	deps := cloud.Deps{KMS: kmsClient, DataDir: dir}
 
-	if err := wallet.Mount(app, deps); err != nil {
-		t.Fatalf("wallet.Mount: %v", err)
+	if err := wallet.Use(app, deps); err != nil {
+		t.Fatalf("wallet.Use:  %v", err)
 	}
 
 	doer := &commerceDoer{}
@@ -183,8 +183,8 @@ func newHarness(t *testing.T) *harness {
 	}
 	depsX := deps
 	depsX.Metering = meter
-	if err := Mount(app, depsX); err != nil {
-		t.Fatalf("x402.Mount: %v", err)
+	if err := Use(app, depsX); err != nil {
+		t.Fatalf("x402.Use:  %v", err)
 	}
 
 	// Priced routes behind the Enforce middleware. /paid/free stays unpriced.

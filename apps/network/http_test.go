@@ -110,8 +110,8 @@ func mountApp(t *testing.T, f *fakeZT) *zip.App {
 	t.Setenv("ZT_INSECURE_SKIP_VERIFY", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }
@@ -307,8 +307,8 @@ func TestUnconfiguredFailsClosedExceptEmptyProjections(t *testing.T) {
 	t.Setenv("ZT_CLIENT_SECRET", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	// COLLECTION reads degrade to an honest-empty 200: an unconfigured deployment
 	// genuinely has no networks, and 503-ing every list turns a clean "nothing here

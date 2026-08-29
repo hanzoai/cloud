@@ -44,7 +44,7 @@ func published(t *testing.T) []byte {
 }
 
 // mounted serves the published document through serve(), which is the ONE
-// registrar both Mount and MountFleet go through — so what these tests read is
+// registrar both Mount and UseFleet go through — so what these tests read is
 // the wiring production uses, given production's document.
 func mounted(t *testing.T) *zip.App {
 	t.Helper()

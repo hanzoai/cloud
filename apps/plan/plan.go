@@ -51,23 +51,23 @@ import (
 var host *goja.Host
 
 // Mount registers the /v1/plan/* surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("plan.Mount: nil app")
+		return fmt.Errorf("plan.Use:  nil app")
 	}
 	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("plan.Mount: nil luxlog.Default()")
+		return fmt.Errorf("plan.Use:  nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "plans")
 
 	bundle, err := hplans.Bundle()
 	if err != nil {
-		return fmt.Errorf("plan.Mount: load bundle: %w", err)
+		return fmt.Errorf("plan.Use:  load bundle: %w", err)
 	}
 	data, err := hplans.Data()
 	if err != nil {
-		return fmt.Errorf("plan.Mount: load catalog: %w", err)
+		return fmt.Errorf("plan.Use:  load catalog: %w", err)
 	}
 
 	h, err := goja.New(goja.Config{
@@ -76,7 +76,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		Globals: map[string]any{"__PLANS_DATA__": data},
 	})
 	if err != nil {
-		return fmt.Errorf("plan.Mount: goja host: %w", err)
+		return fmt.Errorf("plan.Use:  goja host: %w", err)
 	}
 	host = h
 
@@ -93,7 +93,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// already uses for the same reason.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("plan.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
+		return fmt.Errorf("plan.Use:  router is not backed by a zip app — typed ops have no registry to declare into")
 	}
 	// The composer owns cloud.Bridge: the fused host installs it once at its root
 	// and the plugin constructor does the same for a plugin program, so no

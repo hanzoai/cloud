@@ -66,13 +66,13 @@ type state struct {
 
 // Mount wires /v1/kms/* onto app. The concrete-client cast (deps.KMS → *Client),
 // deps.IAMIssuer and the conditional (health-only) route set make this a direct
-// construction (cloud.NewBase), not cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// construction (cloud.NewBase), not cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// The sealed store lives here, so the reads and writes are published here.
 	exposeSecrets(deps.KMS)
 
 	if app == nil {
-		return fmt.Errorf("kms.Mount: nil app")
+		return fmt.Errorf("kms.Use:  nil app")
 	}
 
 	// deps.KMS is the in-process Client (built by the factory this package
@@ -202,7 +202,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 //     cloud.HealthOwner: Serve's generic liveness loop skips a HealthOwner, so the
 //     always-ok route never shadows the real probe with a fake 200.
 //   - cloud.RegisterKMSClientFactory hands build.go's BuildDeps the embedded-client
-//     constructor so deps.KMS is filled BEFORE MountAll WITHOUT cloud importing this
+//     constructor so deps.KMS is filled BEFORE UseAll WITHOUT cloud importing this
 //     package — the inversion that lets the KMS library (Client, New) and its REST
 //     surface share one package with no cloud⇄kms import cycle.
 //
@@ -213,7 +213,7 @@ func init() {
 
 // newEmbeddedClient builds the in-process embedded KMS client from cloud Config.
 // Registered as cloud's KMS client factory (init) so BuildDeps can populate
-// deps.KMS before MountAll. A store-open failure returns the error; build.go then
+// deps.KMS before UseAll. A store-open failure returns the error; build.go then
 // fails closed to the disabled stub rather than crashing the binary.
 func newEmbeddedClient(cfg *cloud.Config, dur *org.Durability, log luxlog.Logger) (cloud.KMSClient, error) {
 	c, err := New(Config{

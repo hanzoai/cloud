@@ -28,7 +28,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "websearch",
 		Price: cloud.Metered,
-		Mount: websearch.Mount,
+		Use:   websearch.Use,
 	}}, []string{"websearch"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

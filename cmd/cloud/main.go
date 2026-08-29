@@ -152,7 +152,7 @@ func run(addr, zapAddr string) error {
 	// build-time catalogues a host hands it. This host has neither: it registers
 	// no op, and the catalogues are deleted. What it has is CHILDREN, and the
 	// honest content of the fleet's MCP server is what they serve RIGHT NOW — so
-	// the host asks them (fleet.Mount, below, after the mount loops have built the
+	// the host asks them (fleet.Use, below, after the mount loops have built the
 	// plugin table).
 	//
 	// The host is still the only process that can own it: a plugin's MCPTools() is
@@ -366,7 +366,7 @@ func run(addr, zapAddr string) error {
 	// its tool names against the same aggregated surface. serveWake publishes
 	// this same object on the host's internal socket, so there is one gather, one
 	// routing table and one curation rule for both directions.
-	mcp := fleet.Mount(app, manifest.MCPPath, routed(composed), locate(app))
+	mcp := fleet.Use(app, manifest.MCPPath, routed(composed), locate(app))
 
 	// LISTING WHAT THE FLEET SERVES MUST NOT START THE FLEET. Discovery asks a
 	// subsystem, and asking a lazy one starts it — so one tools/list started every
@@ -451,7 +451,7 @@ func run(addr, zapAddr string) error {
 		// The alert this was reaching for is the log line, not the exit. A running
 		// process ships it; a CrashLoop takes the telemetry path down with
 		// it and ships nothing.
-		app.Logger().Error("console: no release mounted — serving the API without it",
+		app.Logger().Error("console: no release in use — serving the API without it",
 			"err", consoleErr)
 	}
 	// WATCHED EITHER WAY. A publish reaches users through this loop in one poll
@@ -469,7 +469,7 @@ func run(addr, zapAddr string) error {
 	// MOUNTED EITHER WAY, because the Source is polled: webui takes an empty one
 	// and answers 503 until a poll fills it, which is the same answer it gave when
 	// nothing was mounted — with the difference that this one can stop being true.
-	if err := webui.Mount(app, release.FS(consoleSrc)); err != nil {
+	if err := webui.Use(app, release.FS(consoleSrc)); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
@@ -559,7 +559,7 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	// answer tools/list without running anything. That artifact was a second
 	// source for a fact the child already knows, and it was wrong: o11y's held 12
 	// tools while the o11y binary at the same commit served 365. The MCP server
-	// asks the child now (fleet.Mount), so there is nothing to hand over here.
+	// asks the child now (fleet.Use), so there is nothing to hand over here.
 	p.Start = startTimeout()
 
 	// zip v1.23 removed (*App).Add: Use is the ONE composition verb, and zip.Load
@@ -578,7 +578,7 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	// Both are configuration this deployment got wrong, there is no process to
 	// degrade, and a second Load would re-register the same prefixes.
 	if p.Addr != "" {
-		return fmt.Errorf("%s mounted at %s: %w", a.Name, p.Addr, err)
+		return fmt.Errorf("%s in use at %s: %w", a.Name, p.Addr, err)
 	}
 
 	app.Logger().Error("subsystem ABSENT: it would not start, and the host is serving without it",
@@ -595,7 +595,7 @@ func mount(app *zip.App, a manifest.App, eager bool, absent map[string]string) e
 	p.Lazy = true
 	lazy, lerr := zip.Load(p, a.Prefixes...)
 	if lerr != nil {
-		return fmt.Errorf("%s: mounting it absent failed too: %w", a.Name, lerr)
+		return fmt.Errorf("%s: composing it absent failed too: %w", a.Name, lerr)
 	}
 	app.Use(lazy)
 	return nil
@@ -799,14 +799,14 @@ func unfit(absent map[string]string) map[string]string {
 // WITHOUT this registration the path is not unclaimed — it is claimed by the
 // wrong thing, silently. /v1/openapi.json matches no host route, falls to the
 // only prefix that covers it (ai's "/v1", manifest/apps.go), and is proxied to
-// the ai child, which answers with openapi.Mount reading ITS OWN router. That
+// the ai child, which answers with openapi.Use reading ITS OWN router. That
 // router's entire AI surface is one greedy All("/v1/*") (apps/ai/ai.go), so
 // api.hanzo.ai/v1/openapi.json served a 3.7 KB document of EIGHT paths — the
 // child's own health, iam edge, zap, console catch-all and wildcard — while the
 // fleet serves 1039. Every SDK generator, every spec-derived CLI and every third
 // party reading the published spec read that instead. 200 OK the whole time.
 //
-// What it answers with is the CUSTOMER contract (openapi.MountFleet): the
+// What it answers with is the CUSTOMER contract (openapi.UseFleet): the
 // endpoint takes no credential, and the same readers that meet it here are the
 // ones the audience rule is written for.
 //
@@ -835,7 +835,7 @@ func unfit(absent map[string]string) map[string]string {
 // subsystem must not publish its routes. Production sets no allowlist, so there
 // the two are the same list — which is why the artifact comparison holds.
 func spec(app *zip.App, composed []string) {
-	openapi.MountFleet(app, subsets(composed))
+	openapi.UseFleet(app, subsets(composed))
 }
 
 // index is the fleet's HYPERMEDIA layer: GET /v1 lists what this deployment
@@ -852,7 +852,7 @@ func spec(app *zip.App, composed []string) {
 // a prefix as All(prefix) too, so a host route at /v1 is two definitions claiming
 // one address and the composition is refused outright.
 func index(app *zip.App, composed []string) {
-	openapi.MountIndex(app, subsets(composed))
+	openapi.UseIndex(app, subsets(composed))
 }
 
 // graphql is the fleet's QUERY LANGUAGE, at /v1/graphql: GET renders the schema

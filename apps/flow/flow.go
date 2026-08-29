@@ -112,8 +112,8 @@ type state struct {
 // Mount wires /v1/flow/* onto app. The subsystem holds no store and runs no
 // goroutine: it resolves the caller's org per request and proxies to the flow
 // service.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "flow",
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "flow",
 		func(cloud.Base) (state, error) {
 			return state{projects: map[string]string{}}, nil
 		},

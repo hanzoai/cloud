@@ -49,7 +49,7 @@ func plane(t *testing.T) *zip.App {
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{}); err != nil {
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(nil) })
@@ -344,7 +344,7 @@ func TestDegradedIsHonest(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_URL", "nats://127.0.0.1:1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{}); err != nil {
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount must not need a live broker: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(nil) })

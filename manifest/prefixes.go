@@ -105,7 +105,7 @@ func StageOf(name string) string {
 // row therefore states no prefix — correct, and what stopped it duplicating ai's
 // routing claim. But plugin/zen/main.go fed that same nil into the GRANT, so the
 // scope zen received owned only the conventional "/v1/zen", installing the Claim
-// on "/v1" escaped it, and MountAll refused the mount outright. One field had
+// on "/v1" escaped it, and UseAll refused the mount outright. One field had
 // been answering two questions, and dropping the routing answer silently revoked
 // the gate.
 //

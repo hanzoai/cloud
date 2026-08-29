@@ -229,14 +229,14 @@ func TestTraceListClaimsTheCollectionAndNotTheDetail(t *testing.T) {
 	}
 }
 
-// TestTraceFamilyComposesOnTheRealMount is the same fact measured on the router
+// TestTraceFamilyComposesOnTheRealApp is the same fact measured on the router
 // the document is generated from, where a second declaration would have PANICKED
 // the mount rather than answered wrongly. Both halves have to be present at once:
 // the collection typed and ours, the detail and its projections still the
 // module's. Reading the composed document rather than a reconstruction is what
 // makes this evidence — the hole this route fills was a 404 at exactly one
 // address while every address under it answered.
-func TestTraceFamilyComposesOnTheRealMount(t *testing.T) {
+func TestTraceFamilyComposesOnTheRealApp(t *testing.T) {
 	served, typed := o11yOps(t)
 
 	const list = "GET /v1/o11y/traces"

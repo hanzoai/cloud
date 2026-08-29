@@ -338,9 +338,9 @@ func requestHost(ctx context.Context) string {
 // at /v1/admission/waitlist. Fail-safe: a registry error (e.g. cek master key not yet
 // injected) degrades to the in-memory seed switches — WaitlistModeForHost then
 // fail-opens. Mounts AFTER flags so the engine's platform-switch plane is installed first.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
-		return fmt.Errorf("admission.Mount: empty deps.DataDir")
+		return fmt.Errorf("admission.Use:  empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "admission")
 	log := b.Log

@@ -39,12 +39,12 @@ type state struct{}
 
 // Mount wires the KB control-plane onto app per HIP-0106. CRUD + fixtures are the
 // framework's surface; this adds only retrieval + connectors.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// kbAI reaches the lazy index() singleton (built on first use, without deps)
 	// so embeddings run through the org/project-aligned EMBED client — the read-only
 	// (pk-) credential, split from the completions (M2M) client (deps.AI).
 	kbAI = deps.Embed
-	return cloud.Mount(app, deps, "knowledge", build, routes)
+	return cloud.Use(app, deps, "knowledge", build, routes)
 }
 
 // build carries no per-org state (the vector index is the process singleton and the

@@ -133,8 +133,8 @@ type state struct {
 // goroutine: it reads the per-org token in-process per request and proxies to
 // Cloudflare. The build closure captures deps to construct the "ai"-provider meter
 // (Base.Bill is provider "cloudflare"; Workers AI must bill under "ai").
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "cloudflare",
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "cloudflare",
 		func(cloud.Base) (state, error) {
 			return state{aiBill: cloud.NewResourceMeter(deps, cloud.AIMeterProvider)}, nil
 		},

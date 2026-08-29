@@ -238,12 +238,12 @@ func storeFor(s *cloud.Service[state], org string) (*Store, error) {
 // prefix, the compute surface has held that prefix in production for months,
 // and a second `sandbox` noun is exactly the duplication this package exists to
 // remove. See apps/visor's mount, which is the only caller.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("sandbox.Mount: nil app")
+		return fmt.Errorf("sandbox.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("sandbox.Mount: empty DataDir")
+		return fmt.Errorf("sandbox.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "sandbox")
 	s := &cloud.Service[state]{Base: b, State: state{

@@ -66,9 +66,9 @@ var mounted *state
 
 // Mount opens the per-org book stores, wires the commerce posting source, and registers
 // the /v1/books surface.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
-		return fmt.Errorf("books.Mount: empty deps.DataDir")
+		return fmt.Errorf("books.Use:  empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "books")
 	mounted = &state{

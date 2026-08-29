@@ -57,8 +57,8 @@ type state struct {
 }
 
 // Mount wires the chain-data surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "explorer", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "explorer", build, routes)
 }
 
 // build dials the chain-data upstreams (INDEXER_URL / GRAPH_URL from env) and

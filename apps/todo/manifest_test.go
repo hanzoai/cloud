@@ -30,8 +30,8 @@ func TestEveryRouteTodoServesIsRoutedToIt(t *testing.T) {
 	// holds the shared anti-forgery key its writes verify against (apps/account, Shared).
 	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	manifesttest.Case{
-		Name:  "todo",
-		Mount: todo.Mount,
+		Name: "todo",
+		Use:  todo.Use,
 		// zip's own per-process control plane (the document, the agent MCP server,
 		// the op plane) is served by the HOST for itself, not routed per app. Every
 		// app inherits it, so no app's row claims it.

@@ -88,7 +88,7 @@ func TestMeteredSurfacesRequireStanding(t *testing.T) {
 
 // meteredSurfaces reads the app name out of every plugin/<name>/main.go that declares
 // Price: cloud.Metered. The name comes from the DIRECTORY, which is the same key
-// manifest.Apps and MountPrefixes use — gen-app-cmds already pins that a plugin
+// manifest.Apps and UsePrefixes use — gen-app-cmds already pins that a plugin
 // directory and a manifest row are one-to-one.
 func meteredSurfaces(t *testing.T) []string {
 	t.Helper()

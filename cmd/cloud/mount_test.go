@@ -197,7 +197,7 @@ func TestAnAbsentPrefixBeatsTheConsoleCatchAll(t *testing.T) {
 				t.Fatal(err)
 			}
 			health(app, absent)
-			if err := webui.Mount(app, consoleBundle()); err != nil {
+			if err := webui.Use(app, consoleBundle()); err != nil {
 				t.Fatalf("mount console: %v", err)
 			}
 

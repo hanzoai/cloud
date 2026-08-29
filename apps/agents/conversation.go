@@ -77,7 +77,7 @@ const chat = "/v1/agents/chat"
 // declares it beside the wire fact, which is the client for exactly the operation a
 // typed op cannot lift a doc comment into. Describe is additive metadata keyed on
 // (method, path) and renders only while the router actually serves the route, so
-// declaring the prose here — for routes hz.Mount registers — cannot invent an
+// declaring the prose here — for routes hz.Use registers — cannot invent an
 // operation, and it does not wait on the upstream work above.
 func init() {
 	openapi.Describe(chat, http.MethodPost,
@@ -146,16 +146,16 @@ func init() {
 // ROOT after the apps merged. Both names are now one.
 func mountConversation(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("agent.Mount: nil app")
+		return fmt.Errorf("agent.Use:  nil app")
 	}
 	// hanzoai/agent registers TYPED ops, and the op registry lives on the concrete
 	// App — so this is the named hole (cloud.ZipApp), not a widened parameter. The
-	// signature stays the fleet's one MountFunc, and agent installs no app-wide
+	// signature stays the fleet's one UseFunc, and agent installs no app-wide
 	// middleware (hanzoai/agent calls Use nowhere), so it mounts SCOPED: taking the
 	// concrete type used to cost it the whole binary's middleware grant.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("agent.Mount: router is not a zip app — the typed op registry is unreachable")
+		return fmt.Errorf("agent.Use:  router is not a zip app — the typed op registry is unreachable")
 	}
 	_, err := hz.MountAt(zapp, chat, hz.Deps{
 		DataDir: deps.DataDir,

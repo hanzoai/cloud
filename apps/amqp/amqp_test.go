@@ -20,7 +20,7 @@ func TestMountFailsClosedWhenPubSubUnreachable(t *testing.T) {
 	gateway = nil
 	t.Setenv("CLOUD_PUBSUB_URL", "nats://127.0.0.1:1") // the ONE bus knob; refused, fast
 	t.Setenv("CLOUD_AMQP_PORT", "0")
-	if err := Mount(testApp(), testDeps()); err == nil {
+	if err := Use(testApp(), testDeps()); err == nil {
 		t.Fatal("Mount with an unreachable pubsub must fail closed")
 	}
 	if gateway != nil {
@@ -44,7 +44,7 @@ func TestShutdownIsIdempotent(t *testing.T) {
 func TestBadPortIsRefused(t *testing.T) {
 	gateway = nil
 	t.Setenv("CLOUD_AMQP_PORT", "five thousand")
-	err := Mount(testApp(), testDeps())
+	err := Use(testApp(), testDeps())
 	if err == nil {
 		t.Fatal("a non-numeric CLOUD_AMQP_PORT must be refused")
 	}

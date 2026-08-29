@@ -93,7 +93,7 @@ func router(t *testing.T, name string) {
 	// main.go is one `defer f()()` away from never serving the endpoint at all.
 	// The agent MCP server rides the same socket, over this host's own children —
 	// which is one lazy plugin here, and none of it is what this file tests.
-	serveWake(app, fleet.Mount(app, manifest.MCPPath, routed([]string{name}), locate(app)))
+	serveWake(app, fleet.Use(app, manifest.MCPPath, routed([]string{name}), locate(app)))
 	waitFor(t, zip.SocketPath(plane.HostApp))
 }
 

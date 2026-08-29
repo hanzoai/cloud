@@ -519,7 +519,7 @@ func mountRuntime(deps cloud.Deps) error {
 // instead of a wildcard — so there is no All left here and nothing to register on
 // the host but the child itself. Everything with a shape to name is in the child,
 // which is where it always belonged.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	a := zip.New(zip.Config{
 		AppName:      "o11y",
 		Logger:       luxlog.Default(),
@@ -576,10 +576,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// route surface, delegating to the SAME gated handler mountRuntime installed via
 	// module.SetHandler. Registered LAST (after every specific /v1/o11y/* route above) so
 	// Fiber's in-order match gives those routes precedence over this catch-all. Folded
-	// in HERE — it was a second, co-named Wire entry (o11ymod.Mount) — so
+	// in HERE — it was a second, co-named Wire entry (o11ymod.Use) — so
 	// the observability plane is ONE `o11y` subsystem. /v1/o11y/health is unaffected:
 	// it stays the generic always-ok route (the o11y Wire entry keeps OwnsHealth=false),
-	// registered before MountAll and thus ahead of this wildcard.
+	// registered before UseAll and thus ahead of this wildcard.
 	// Mount takes the router and its own options, nothing else: a route table is a
 	// value, and the router it registers into already carries this deployment's
 	// logger. It used to take Deps for that one field, which made

@@ -106,8 +106,8 @@ func wireApp(t *testing.T, fsys fs.FS) *zip.App {
 	})
 	zip.Get[pingIn, pingOut](app, "/v1/probe/ping",
 		func(ctx context.Context, in *pingIn) (*pingOut, error) { return &pingOut{OK: true}, nil })
-	if err := Mount(app, fsys); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, fsys); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

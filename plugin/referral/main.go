@@ -20,7 +20,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "referral",
 		Price: cloud.Free,
-		Mount: referral.Mount,
+		Use:   referral.Use,
 		// The /v1/<Name> default covers /v1/referral but NOT the two admin leaves
 		// this subsystem also serves, /v1/admin/referral/{bonuses,sweep}: those
 		// were attributed to no subsystem by cloud.Declare, and middleware the

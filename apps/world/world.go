@@ -85,17 +85,17 @@ type service struct {
 var mounted *service
 
 // Mount registers the world surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("world.Mount: nil app")
+		return fmt.Errorf("world.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "world")
 	if deps.DataDir == "" {
-		return fmt.Errorf("world.Mount: empty DataDir")
+		return fmt.Errorf("world.Use:  empty DataDir")
 	}
 	store, err := openPipelineStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("world.Mount: open pipeline store: %w", err)
+		return fmt.Errorf("world.Use:  open pipeline store: %w", err)
 	}
 
 	s := &service{
@@ -151,7 +151,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// apps/plan already use for exactly this reason.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("world.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
+		return fmt.Errorf("world.Use:  router is not backed by a zip app — typed ops have no registry to declare into")
 	}
 	zip.Get(zapp, "/v1/world", s.index)
 	zip.Get(zapp, "/v1/world/news", s.news)

@@ -58,7 +58,7 @@ import (
 //
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-// mountAgents is the process's Mount: the agents subsystem, then the coding
+// mountAgents is the process's Use:  the agents subsystem, then the coding
 // endpoint that rides in the same process. Composition, not a second plugin —
 // the engine has to be here (the session store, the durable engine and the
 // routed mailbox are all in this process) and giving it its own binary would put

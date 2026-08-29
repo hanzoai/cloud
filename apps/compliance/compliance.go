@@ -56,16 +56,16 @@ var mounted *cloud.Service[state]
 // (idv.FromConfig): Manual by default, a real provider when named — and FAIL-CLOSED,
 // so a named-but-misconfigured provider fails the mount rather than silently
 // downgrading to Manual.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("compliance.Mount: nil app")
+		return fmt.Errorf("compliance.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("compliance.Mount: empty DataDir")
+		return fmt.Errorf("compliance.Use:  empty DataDir")
 	}
 	provider, err := idv.FromConfig(deps.Secret(), os.Getenv)
 	if err != nil {
-		return fmt.Errorf("compliance.Mount: idv provider: %w", err)
+		return fmt.Errorf("compliance.Use:  idv provider: %w", err)
 	}
 	// The signature-authenticated provider webhook is FAIL-CLOSED, and stays so: a
 	// named-but-unresolvable secret NEVER serves an unauthenticated endpoint, because
@@ -78,7 +78,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	webhook, webhookErr := idv.WebhookFromConfig(deps.Secret(), os.Getenv)
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("compliance.Mount: open store: %w", err)
+		return fmt.Errorf("compliance.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "compliance"),

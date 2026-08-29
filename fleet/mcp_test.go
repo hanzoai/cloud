@@ -104,7 +104,7 @@ func waitFor(t *testing.T, sock string) {
 func host(t *testing.T, apps []string, kids map[string]*child) *zip.App {
 	t.Helper()
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	d := fleet.Mount(h, "/v1/mcp", apps, func(app string) (addr, path string, err error) {
+	d := fleet.Use(h, "/v1/mcp", apps, func(app string) (addr, path string, err error) {
 		k := kids[app]
 		if k == nil {
 			return "", "", &net.AddrError{Err: "no instance running", Addr: app}

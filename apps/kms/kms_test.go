@@ -6,7 +6,7 @@ package kms_test
 // app.Fiber().Test — no listener, no external KMS, no PostgreSQL.
 //
 // SanitizeIdentity does not run in this harness (it is wired in serve.go, not
-// MountAll), so a test simulates a validated principal by setting the same
+// UseAll), so a test simulates a validated principal by setting the same
 // identity headers SanitizeIdentity would emit: X-Org-Id and X-User-IsAdmin. In
 // production those are stripped from client input and re-issued only for a
 // JWT-validated principal, so the org-scope gate is real; here we drive it
@@ -51,10 +51,10 @@ func masterKeyB64(t *testing.T) string {
 // tests mount exactly kms (the same spec apps.Wire() carries) without linking
 // the whole bundle. cfg.Enable still gates it, exactly as in production.
 func mountSpecs() []cloud.Plugin {
-	return []cloud.Plugin{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}
+	return []cloud.Plugin{{Name: "kms", Use: kms.Use, OwnsHealth: true}}
 }
 
-// newApp wires BuildDeps + the canonical middleware + MountAll for the kms
+// newApp wires BuildDeps + the canonical middleware + UseAll for the kms
 // subsystem, exactly like main()'s path. Returns the app and the built deps (so
 // tests can reach the in-process KMSClient directly).
 func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
@@ -63,8 +63,8 @@ func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
 	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
-	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, mountSpecs(), cfg, deps); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 	return app, deps
 }

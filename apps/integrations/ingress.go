@@ -19,7 +19,7 @@ import (
 // channels inbox, plus the transport send helpers. Token custody never leaves
 // this package; the event crosses on the PLANE.
 //
-// It used to cross on a package global — channels.Mount installed a consumer
+// It used to cross on a package global — channels.Use installed a consumer
 // function pointer here — and a package global is per-PROCESS. In production
 // integrations, channels and agents run as three separate processes, so that
 // pointer was nil on this side and every event was dropped where a nil check

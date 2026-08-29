@@ -50,7 +50,7 @@ const sendMaxBody = 1 << 20 // 1 MiB
 func routes(app cloud.Router, s *cloud.Service[state]) error {
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("channels.Mount: router exposes no zip.App, so no typed op could be registered")
+		return fmt.Errorf("channels.Use:  router exposes no zip.App, so no typed op could be registered")
 	}
 	// A typed op receives only a context, so the validated org has to be parked
 	// there. cloud.Bridge parks it, and the composer owns that install: the

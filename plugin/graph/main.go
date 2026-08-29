@@ -23,7 +23,7 @@ func main() {
 		Name:     "graph",
 		Prefixes: manifest.PrefixesFor("graph"),
 		Price:    cloud.Free,
-		Mount:    graph.Mount,
+		Use:      graph.Use,
 		Shutdown: cloud.CtxShutdown(graph.Shutdown),
 	}}, []string{"graph"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

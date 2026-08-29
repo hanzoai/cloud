@@ -16,7 +16,7 @@ import (
 // The payment rail reached from a process that does not contain it.
 //
 // The Charger is installed by the subsystem that owns the price table
-// (marketplace.Mount), and the fleet runs ONE PROCESS PER APP — so in the tools
+// (marketplace.Use), and the fleet runs ONE PROCESS PER APP — so in the tools
 // binary it is nil, and a priced dispatch answered ErrChargerUnset: a permanent 402
 // carrying no terms, which no client could ever satisfy. Prices were in the catalog
 // and revenue was not.

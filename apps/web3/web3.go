@@ -78,8 +78,8 @@ type state struct {
 }
 
 // Mount wires the chain-access surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "web3", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "web3", build, routes)
 }
 
 // Shutdown releases the upstream client's idle connections. Named so the

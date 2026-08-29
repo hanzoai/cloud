@@ -395,7 +395,7 @@ func InstallTelemetry(ctx context.Context, log luxlog.Logger, serviceName string
 	// cloud's own request path uses, rather than a second one that could differ.
 	otel.SetTextMapPropagator(propagator)
 
-	// Latch BEFORE MountAll runs, so the composition root can adopt this provider
+	// Latch BEFORE UseAll runs, so the composition root can adopt this provider
 	// into subsystems that emit their own spans. Without that adoption ai's
 	// object.InitTelemetry finds no exporter endpoint — in-process mode sets none
 	// and the OTLP env is cleared just below — and DISABLES its emit. That is

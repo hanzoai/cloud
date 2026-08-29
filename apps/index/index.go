@@ -95,16 +95,16 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the index surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("index.Mount: nil app")
+		return fmt.Errorf("index.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("index.Mount: empty DataDir")
+		return fmt.Errorf("index.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("index.Mount: open store: %w", err)
+		return fmt.Errorf("index.Use:  open store: %w", err)
 	}
 	b := cloud.NewBase(deps, "index")
 	s := &cloud.Service[state]{Base: b, State: state{store: store, taskSeq: new(atomic.Int64)}}

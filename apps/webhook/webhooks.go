@@ -60,12 +60,12 @@ var mounted *state
 // Mount opens the per-org registry stores, wires /v1/webhook, and starts the bus
 // dispatcher (fail-soft). It never returns an error for a bus problem — only for a
 // genuinely unusable Deps — so a messaging fault can never abort the binary's boot.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("webhook.Mount: nil app")
+		return fmt.Errorf("webhook.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("webhook.Mount: empty deps.DataDir")
+		return fmt.Errorf("webhook.Use:  empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "webhook")
 	stores := cloud.NewOrgStore[*store](b, "webhooks", openStore)
@@ -126,7 +126,7 @@ func routes(app cloud.Router, s *cloud.Service[*state]) error {
 	// knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("webhook.Mount: router exposes no zip.App, so no typed op could be registered")
+		return fmt.Errorf("webhook.Use:  router exposes no zip.App, so no typed op could be registered")
 	}
 	g := app.Group("/v1/webhook")
 	// A typed op receives only a context, so the validated org has to be parked

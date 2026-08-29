@@ -60,9 +60,9 @@ type ops struct{ s *cloud.Service[state] }
 // SAME *audit.Recorder Serve builds and the AuditTrail middleware writes (handed
 // through deps.Audit, which is NOT in Base) — this subsystem opens NO second store.
 // Constructs the value directly (cloud.NewBase) since the store comes from Deps.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("auditlog.Mount: nil app")
+		return fmt.Errorf("auditlog.Use:  nil app")
 	}
 	// The typed-op registry lives on the App: it is what makes the read a document
 	// operation, an MCP tool, a CLI command and an SDK method rather than only a
@@ -70,7 +70,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// route no projection knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("auditlog.Mount: router carries no typed-op registry")
+		return fmt.Errorf("auditlog.Use:  router carries no typed-op registry")
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "audit"), State: state{store: deps.Audit}}
 	routes(app, zapp, s)

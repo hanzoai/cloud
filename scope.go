@@ -12,7 +12,7 @@ package cloud
 //	app.Use(mw)                 // matches every path
 //	app.Group("/x", mw)         // matches every path under /x
 //
-// Both go through Router, and Router is the only thing MountAll hands a subsystem
+// Both go through Router, and Router is the only thing UseAll hands a subsystem
 // that is not global. Everything else — leaf routes, bare Groups, the *fiber.App
 // escape — passes through untouched, so absolute paths and fiber's most-specific-
 // wins precedence are exactly what they were.
@@ -117,7 +117,7 @@ type scope struct {
 	prefixes []string
 
 	// escaped records every middleware install the subsystem attempted outside its
-	// prefixes. Nothing is installed for those; MountAll turns the record into a
+	// prefixes. Nothing is installed for those; UseAll turns the record into a
 	// boot failure, so the binary never runs half-gated.
 	escaped *[]string
 
@@ -153,7 +153,7 @@ func (s *scope) path(p string) string {
 // same subtree Serve's generic liveness route assumes — so only a subsystem that
 // owns something else has to say so.
 func newScope(app *zip.App, name string, prefixes []string) *scope {
-	return &scope{app: app, name: name, prefixes: MountPrefixes(name, prefixes), escaped: new([]string)}
+	return &scope{app: app, name: name, prefixes: UsePrefixes(name, prefixes), escaped: new([]string)}
 }
 
 // owns reports whether path is the subsystem's own subtree or lives inside it.
@@ -190,7 +190,7 @@ func (s *scope) owns(path string) bool {
 // `owns` and the handler is skipped.
 func (s *scope) Use(cs ...zip.Component) zip.Router {
 	// A Group at a prefix the subsystem does not own: the group was legal, this is
-	// not. Record and install nothing — MountAll fails the boot on the record.
+	// not. Record and install nothing — UseAll fails the boot on the record.
 	if s.outside != "" {
 		*s.escaped = append(*s.escaped, s.outside)
 		return s.app
@@ -243,7 +243,7 @@ func (s *scope) Use(cs ...zip.Component) zip.Router {
 //
 // A prefix the subsystem does not own is still just a path (routes are not policed),
 // so the group is returned; but middleware on it would reach where the subsystem may
-// not, so the child records the attempt instead of installing, and MountAll fails the
+// not, so the child records the attempt instead of installing, and UseAll fails the
 // boot rather than running half-gated.
 func (s *scope) Group(prefix string, handlers ...zip.Handler) zip.Router {
 	full := s.path(prefix) // nested groups concatenate, as zip's own do
