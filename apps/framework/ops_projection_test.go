@@ -31,20 +31,17 @@ import (
 var typedOps = []string{
 	"DELETE /v1/framework/:doctype/:name",
 	"DELETE /v1/framework/doctypes/:name",
-	"DELETE /v1/framework/roles/:user/:role",
 	"GET /v1/framework/:doctype",
 	"GET /v1/framework/:doctype/:name",
 	"GET /v1/framework/doctypes",
 	"GET /v1/framework/doctypes/:name",
 	"GET /v1/framework/modules",
 	"GET /v1/framework/modules/:module",
-	"GET /v1/framework/roles",
 	"GET /v1/framework/summary",
 	"POST /v1/framework/:doctype/:name/cancel",
 	"POST /v1/framework/:doctype/:name/submit",
 	"POST /v1/framework/doctypes",
 	"POST /v1/framework/modules/:module/install",
-	"POST /v1/framework/roles",
 	"PUT /v1/framework/doctypes/:name",
 }
 
@@ -283,7 +280,7 @@ func TestSpecCarriesProse(t *testing.T) {
 // length assertion — which is why it is asserted on the BYTES.
 func TestEmptyCollectionsAreArrays(t *testing.T) {
 	app := mountApp(t)
-	for _, path := range []string{"/v1/framework/doctypes", "/v1/framework/roles", "/v1/framework/modules"} {
+	for _, path := range []string{"/v1/framework/doctypes", "/v1/framework/modules"} {
 		code, body := do(t, app, http.MethodGet, path, "fresh", nil)
 		if code != http.StatusOK || string(body) != `{"data":[]}` {
 			t.Errorf("GET %s on an empty org = %d %s, want 200 {\"data\":[]}", path, code, body)

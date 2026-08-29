@@ -28,7 +28,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/iam/permissions` → `iam.permission.ListResponse` object with fields: `permissions`.
-- `/v1/iam/permissions/{owner}/{name}` → `iam.Permission` object with fields: `actions`, `adapter`, `approveTime`, `approver`, `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `effect`, `groups`.
+- `/v1/iam/permissions/{owner}/{name}` → `iam.Permission` object with fields: `actions`, `adapter`, `approveTime`, `approver`, `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `effect`, `id`.
 
 ## Example
 

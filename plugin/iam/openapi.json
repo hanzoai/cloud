@@ -1322,8 +1322,8 @@
     "/v1/iam/keys": {
       "get": {
         "operationId": "get_iam_keys",
-        "summary": "Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half.",
-        "description": "Returns your organization's API keys, newest first — what each is called,\nwhat it may reach, and its publishable half. Secret halves are never listed.",
+        "summary": "Returns an organization's API keys, newest first — what each is called, what it may reach, and its publishable half.",
+        "description": "Returns an organization's API keys, newest first — what each is called,\nwhat it may reach, and its publishable half. Secret halves are never listed.\n\nWhich organization comes from your credentials, not from the request: you read\nyour own and no one else's. The capability that admits a confidential client to\nthis collection does not itself name a tenant, so the tenant is decided here.",
         "tags": [
           "iam"
         ],
@@ -1577,7 +1577,7 @@
       "get": {
         "operationId": "get_iam_memberships",
         "summary": "Answers either question about who belongs where: which organizations one person can act in, or who can act in one organization.",
-        "description": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
+        "description": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via principal.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
         "tags": [
           "iam"
         ],
@@ -3452,8 +3452,8 @@
     "/v1/iam/sessions": {
       "get": {
         "operationId": "listSessions",
-        "summary": "Returns who is currently signed in to your organization, newest first, and can be narrowed to one person or one application.",
-        "description": "Returns who is currently signed in to your organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.",
+        "summary": "Returns who is currently signed in to an organization, newest first, and can be narrowed to one person or one application.",
+        "description": "Returns who is currently signed in to an organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.\n\nWhich organization comes from your credentials, not from the request: you read\nyour own and no one else's. A session row names a live account and the\napplications it is signed in to, so the tenant is decided here rather than\ntaken from the query.",
         "tags": [
           "iam"
         ],
@@ -3461,7 +3461,7 @@
           {
             "name": "owner",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -3500,8 +3500,8 @@
       },
       "post": {
         "operationId": "createSession",
-        "summary": "Records a sign-in.",
-        "description": "Records a sign-in. Signing in again from another browser adds to the\nsession rather than replacing it, so one person can be signed in from a laptop\nand a phone at once.\n\nAsk for an exclusive sign-in and the opposite holds: the new sign-in is the only\none left and every other browser is signed out. That is the setting to use when\none person may hold only one live session at a time.",
+        "summary": "Records a sign-in and answers with the cookie id it minted.",
+        "description": "Records a sign-in and answers with the cookie id it minted. Signing in\nagain from another browser adds to the session rather than replacing it, so one\nperson can be signed in from a laptop and a phone at once.\n\nAsk for an exclusive sign-in and the opposite holds: the new sign-in is the only\none left and every other browser is signed out. That is the setting to use when\none person may hold only one live session at a time.",
         "tags": [
           "iam"
         ],
@@ -3630,8 +3630,8 @@
       },
       "put": {
         "operationId": "updateSession",
-        "summary": "Replaces the set of browsers a session covers — signing out the ones you leave off while the session itself stays live.",
-        "description": "Replaces the set of browsers a session covers — signing out the ones you\nleave off while the session itself stays live. A session that does not exist is\nreported as missing rather than created.",
+        "summary": "Names the browsers a session keeps — signing out the ones you leave off while the session itself stays live.",
+        "description": "Names the browsers a session keeps — signing out the ones you leave off\nwhile the session itself stays live. A session that does not exist is reported\nas missing rather than created.",
         "tags": [
           "iam"
         ],
@@ -3707,6 +3707,171 @@
           "iam"
         ],
         "x-public": true
+      }
+    },
+    "/v1/iam/teams": {
+      "get": {
+        "operationId": "get_iam_teams",
+        "summary": "Returns your organization's roles, newest first — each a named group of people that permissions are granted to.",
+        "description": "Returns your organization's roles, newest first — each a named group of\npeople that permissions are granted to.\n\nYou see your own organization's roles and no one else's; which organization\nthat is comes from your credentials, not from the request.",
+        "tags": [
+          "iam"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.teams.ListOutput"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_iam_teams",
+        "summary": "Makes a team — a named set of people that roles and permissions grant to.",
+        "description": "Makes a team — a named set of people that roles and permissions grant\nto. Granting to a team rather than to each person keeps access correct as\npeople come and go: add someone and they inherit what the team can do. A name\nalready used in your organization is refused.",
+        "tags": [
+          "iam"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.teams.Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Team"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/iam/teams/{name}": {
+      "delete": {
+        "operationId": "delete_iam_teams_by_name",
+        "summary": "Removes a team.",
+        "description": "Removes a team. Everyone in it loses the access it carried; their\naccounts, and any other team they are in, are untouched.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.teams.DeleteOutput"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_iam_teams_by_name",
+        "summary": "Returns one team: who is in it.",
+        "description": "Returns one team: who is in it.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Team"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_iam_teams_by_name",
+        "summary": "Changes who is in a team.",
+        "description": "Changes who is in a team. Access changes for\neveryone in it as soon as the write lands. The name and the created stamp do\nnot change.",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name addresses the team on update and names it on create; every other\nfield is content and binds from the BODY, never the URL.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.teams.Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Team"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/iam/tokens": {
@@ -3940,8 +4105,8 @@
     "/v1/iam/users": {
       "get": {
         "operationId": "get_iam_users",
-        "summary": "Returns a page of the people in your organization, with the total so you can page through the rest.",
-        "description": "Returns a page of the people in your organization, with the total so you\ncan page through the rest. Passwords, API secrets and MFA material are stripped\nfrom every entry.",
+        "summary": "Returns a page of the people in an organization, with the total so you can page through the rest.",
+        "description": "Returns a page of the people in an organization, with the total so you\ncan page through the rest. Passwords, API secrets and MFA material are stripped\nfrom every entry.\n\nWhich organization comes from your credentials, not from the request: you read\nyour own and no one else's, and a credential whose scope spans tenants reads\nthe tenant it names — or, naming none, every one of them.",
         "tags": [
           "iam"
         ],
@@ -3949,7 +4114,7 @@
           {
             "name": "owner",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -6187,12 +6352,6 @@
           "effect": {
             "type": "string"
           },
-          "groups": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "id": {
             "type": "string"
           },
@@ -6231,6 +6390,12 @@
           "submitter": {
             "description": "Submission / approval workflow.",
             "type": "string"
+          },
+          "teams": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "updatedAt": {
             "format": "date-time",
@@ -6523,12 +6688,6 @@
             },
             "type": "array"
           },
-          "groups": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "id": {
             "type": "string"
           },
@@ -6542,6 +6701,12 @@
             "type": "string"
           },
           "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "teams": {
             "items": {
               "type": "string"
             },
@@ -6743,6 +6908,55 @@
           },
           "visible": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "iam.Team": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdTime": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "users": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -7131,7 +7345,7 @@
       "iam.User": {
         "properties": {
           "accessKey": {
-            "description": "API credentials. AccessSecret / AccessSecretHash / the OAuth tokens are\nbearer material. AccessSecretHash MUST persist (orm stores via JSON; a\njson:\"-\" field is never saved), so it carries a real json tag and the\nhandler's redact() strips it (and AccessSecret + the token fields) before\nresponding.",
+            "description": "API credentials. AccessSecret / AccessSecretHash / the OAuth tokens are\nbearer material, so Mask blanks them and the handler's redact() strips them\nbefore responding. They carry real json tags because a field orm never saves\nis a field that silently vanishes.\n\nA presented secret is resolved through Key.AccessSecretDigest and nowhere\nelse, so no credential is ISSUED into these columns: they hold what older\nrows left behind, and every writer that touches them clears them.",
             "type": "string"
           },
           "accessSecret": {
@@ -7358,12 +7572,6 @@
           "google": {
             "type": "string"
           },
-          "groups": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "hash": {
             "type": "string"
           },
@@ -7585,12 +7793,6 @@
           "permanentAvatar": {
             "type": "string"
           },
-          "permissions": {
-            "items": {
-              "$ref": "#/components/schemas/iam.Permission"
-            },
-            "type": "array"
-          },
           "phone": {
             "type": "string"
           },
@@ -7629,13 +7831,6 @@
           },
           "registerType": {
             "type": "string"
-          },
-          "roles": {
-            "description": "Authorization attachments. Roles and Permissions are computed on read\nfrom the authz store and carried here for API parity with v1.",
-            "items": {
-              "$ref": "#/components/schemas/iam.Role"
-            },
-            "type": "array"
           },
           "salesforce": {
             "type": "string"
@@ -8372,12 +8567,6 @@
             },
             "type": "array"
           },
-          "groups": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "isEnabled": {
             "type": "boolean"
           },
@@ -8388,6 +8577,12 @@
             "type": "string"
           },
           "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "teams": {
             "items": {
               "type": "string"
             },
@@ -8429,6 +8624,61 @@
           },
           "type": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.teams.DeleteOutput": {
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "iam.teams.Input": {
+        "properties": {
+          "createdTime": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name addresses the team on update and names it on create; every other\nfield is content and binds from the BODY, never the URL.",
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "users": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "iam.teams.ListOutput": {
+        "properties": {
+          "teams": {
+            "items": {
+              "$ref": "#/components/schemas/iam.Team"
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"

@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 5,
+  "skill_count": 4,
   "skills": [
     {
       "description": "Read framework doctypes: Returns every DocType defined in the caller's org., Returns one DocType definition — its fields, naming rule, permissions and lifecycle flags..",
@@ -26,13 +26,6 @@
       "path": "framework_modules/SKILL.md",
       "service": "framework",
       "sha256": "dbbcb3351d5f90900f778d3f44eedcc05bb0ae6f9f42646ad42f4d9ec8d19323"
-    },
-    {
-      "description": "Read framework roles: Returns every (user, role) assignment in the caller's org..",
-      "name": "framework_roles",
-      "path": "framework_roles/SKILL.md",
-      "service": "framework",
-      "sha256": "22112fa4b9546b43f280cef85e1681c8e8e5235dfa2549e162e2b27bcac92f88"
     },
     {
       "description": "Read framework summary: Reports how much of the DocType surface the caller's org uses: how many DocTypes it has defined, and how many documents exist across them..",

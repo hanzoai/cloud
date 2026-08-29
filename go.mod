@@ -22,7 +22,7 @@ require (
 	github.com/hanzoai/decimal v0.1.2
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
-	github.com/hanzoai/iam v1.34.87
+	github.com/hanzoai/iam v1.34.91
 	github.com/hanzoai/kafka v1.3.2
 	github.com/hanzoai/money v0.2.5
 	github.com/hanzoai/namespace v1.2.0
@@ -79,6 +79,7 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
+	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -444,7 +445,7 @@ require (
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v1.0.0 // indirect
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
-	github.com/hanzoai/orm v0.6.26
+	github.com/hanzoai/orm v0.6.31
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0 // indirect
@@ -690,7 +691,7 @@ require (
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v1.0.6
 	github.com/hanzoai/ai v1.833.210
-	github.com/hanzoai/authz v1.10.34
+	github.com/hanzoai/authz v1.10.36
 	github.com/hanzoai/base v1.5.65
 	github.com/hanzoai/licensing v0.1.16
 	github.com/hanzoai/o11y v1.5.67
@@ -735,7 +736,7 @@ exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
 require (
 	github.com/hanzoai/cd/gitops-engine v0.7.3
 	github.com/hanzoai/doctype v0.1.0
-	github.com/hanzoai/framework v0.1.1
+	github.com/hanzoai/framework v0.1.2
 	k8s.io/kubernetes v1.36.1 // indirect
 )
 

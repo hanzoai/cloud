@@ -46,6 +46,7 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/plane/entitlement"
+	"github.com/hanzoai/cloud/plane/iam"
 	engine "github.com/hanzoai/framework"
 	"github.com/zap-proto/zip"
 )
@@ -92,6 +93,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = s
 
 	g := app.Group(prefix)
+	g.Use(zip.H(roles))
 	g.Use(zip.H(elective))
 
 	// No identity middleware here. Every operation reads the caller from the
@@ -117,10 +119,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(g, "/doctypes/:name", o.getDocType)
 	zip.Put(g, "/doctypes/:name", o.replaceDocType)
 	zip.Delete(g, "/doctypes/:name", o.deleteDocType)
-
-	zip.Get(g, "/roles", o.listRoles)
-	zip.Post(g, "/roles", o.assignRole, zip.WithStatus(http.StatusCreated))
-	zip.Delete(g, "/roles/:user/:role", o.revokeRole)
 
 	zip.Get(g, "/modules", o.listModules)
 	zip.Get(g, "/modules/:module", o.getModule)
@@ -265,7 +263,53 @@ func caller(c *zip.Ctx) engine.Caller {
 	if !ok {
 		return engine.Caller{}
 	}
-	return engine.Caller{Org: org, User: strings.Clone(strings.TrimSpace(c.User())), IsAdmin: c.IsAdmin()}
+	return engine.Caller{
+		Org:     org,
+		User:    strings.Clone(strings.TrimSpace(c.User())),
+		IsAdmin: c.IsAdmin(),
+		Roles:   granted(c),
+	}
+}
+
+// grants is where the middleware parks the caller's roles for the rest of the
+// request. The key is a package type so nothing else can collide with it.
+type grants struct{}
+
+// granted reads the roles resolved once for this request.
+//
+// A superuser needs none — the engine is a manager for them either way — and an
+// unresolved read leaves this empty, which denies everything a role would have
+// allowed. That is the direction to fail: a member briefly seeing less than they
+// should is recoverable, and the alternative grants what IAM did not.
+func granted(c *zip.Ctx) []string {
+	if v, ok := c.Context().Value(grants{}).([]string); ok {
+		return v
+	}
+	return nil
+}
+
+// roles resolves the caller's IAM roles ONCE per request and parks them.
+//
+// Once, because callerOf runs at fifteen sites in this file and each would
+// otherwise cross the plane. It never refuses: a caller with no roles is a caller
+// the engine denies on its own terms, which is a permission answer rather than a
+// transport one.
+func roles(c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok || org == "" || c.IsAdmin() {
+		return c.Next()
+	}
+	// The USER rides too: whose roles these are is the question.
+	who := zip.WithCaller(c.Context(), zip.Caller{User: strings.Clone(strings.TrimSpace(c.User()))})
+	ctx, cancel := context.WithTimeout(plane.For(who, org), wait)
+	defer cancel()
+	got, err := iam.IAMRoles(ctx)
+	if err != nil {
+		c.Log().Warn("framework: no roles resolved for this caller", "org", org, "err", err)
+		return c.Next()
+	}
+	c.SetContext(context.WithValue(c.Context(), grants{}, got.Roles))
+	return c.Next()
 }
 
 // callerOf is caller() reached from a typed op, which holds a context rather than
@@ -458,97 +502,6 @@ func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, err
 	}
 	if err := eng.DeleteDocType(ctx, callerOf(ctx), decodeSeg(in.Name)); err != nil {
 		return nil, fail(err, "doctype not found")
-	}
-	return nil, nil
-}
-
-// ---- Roles ----
-
-// RoleAssignment is one (user, role) grant on the wire.
-//
-// It is the engine's Role under a name that says which of the two role-shaped
-// things it is, and it exists because the fleet publishes ONE schema per name.
-// iam already publishes a Role: the role ENTITY, carrying a display name, its
-// members, its domains and the roles it includes. This is the far smaller thing —
-// the EDGE that joins one user to one role — and the two share nothing but the
-// word. The compose refuses that collision rather than pick a winner, and it is
-// right to: a generated SDK binds whichever shape it read last, so a client's
-// Role would silently mean an entity in one method and a grant in another.
-//
-// The engine type stays as it is and is still re-exported by alias.go for in-process
-// lanes; this is the name the HTTP surface publishes, converted at the handler
-// boundary, which is the only place the two need to agree.
-type RoleAssignment struct {
-	// User is the member the role is granted to.
-	User string `json:"user"`
-	// Role is the granted role's name.
-	Role string `json:"role"`
-}
-
-// roleRef addresses one role assignment by the (user, role) pair in the URL.
-type roleRef struct {
-	// User is the assignee whose grant is being revoked, from the path.
-	User string `json:"user"`
-	// Role is the role to revoke, from the path. A role name containing a space
-	// ("System Manager") arrives percent-encoded and is decoded before it is
-	// matched against the stored assignment.
-	Role string `json:"role"`
-}
-
-// roleList is a page of role assignments.
-type roleList struct {
-	// Data is every (user, role) assignment in the caller's org.
-	Data []RoleAssignment `json:"data"`
-}
-
-// listRoles returns every (user, role) assignment in the caller's org. Roles are
-// what DocType permissions are written against, so this is the grant table the
-// permission calculus resolves a member's rights from.
-func (o ops) listRoles(ctx context.Context, _ *noInput) (*roleList, error) {
-	eng, err := engineFor(o.s, ctx)
-	if err != nil {
-		return nil, fail(err, "")
-	}
-	rows, err := eng.ListRoles(ctx, callerOf(ctx))
-	if err != nil {
-		return nil, fail(err, "")
-	}
-	out := make([]RoleAssignment, len(rows))
-	for i, r := range rows {
-		out[i] = RoleAssignment{User: r.User, Role: r.Role}
-	}
-	return &roleList{Data: out}, nil
-}
-
-// assignRole grants one user one role in the caller's org — how a member gains
-// rights on a DocType, since permissions name roles and never users.
-// Manager-only. Answers 201.
-//
-// Example: {"user": "u_alice", "role": "System Manager"}
-func (o ops) assignRole(ctx context.Context, in *RoleAssignment) (*RoleAssignment, error) {
-	eng, err := engineFor(o.s, ctx)
-	if err != nil {
-		return nil, fail(err, "")
-	}
-	saved, err := eng.AssignRole(ctx, callerOf(ctx), in.User, in.Role)
-	if err != nil {
-		return nil, fail(err, "")
-	}
-	return &RoleAssignment{User: saved.User, Role: saved.Role}, nil
-}
-
-// revokeRole removes one (user, role) grant in the caller's org. Manager-only.
-// Answers 204; a grant that does not exist is not found.
-//
-// Example: {"user": "u_alice", "role": "System Manager"}
-func (o ops) revokeRole(ctx context.Context, in *roleRef) (*noContent, error) {
-	eng, err := engineFor(o.s, ctx)
-	if err != nil {
-		return nil, fail(err, "")
-	}
-	err = eng.RevokeRole(ctx, callerOf(ctx), decodeSeg(in.User), decodeSeg(in.Role))
-	if err != nil {
-		return nil, fail(err, "role assignment not found")
 	}
 	return nil, nil
 }

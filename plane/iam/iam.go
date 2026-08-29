@@ -34,6 +34,7 @@ var Ops = []string{
 	plane.IAMEmail,
 	plane.IAMMailable,
 	plane.IAMProjects,
+	plane.IAMRoles,
 }
 
 // IAMApproval whether the caller is off the waitlist.
@@ -62,4 +63,11 @@ func IAMMailable(ctx context.Context) (*plane.Roster, error) {
 // Calls plane.IAMProjects on iam over the peer plane.
 func IAMProjects(ctx context.Context) (*plane.Projects, error) {
 	return plane.Ask[struct{}, plane.Projects](ctx, App, plane.IAMProjects, &struct{}{})
+}
+
+// IAMRoles the caller's role names in their own org.
+//
+// Calls plane.IAMRoles on iam over the peer plane.
+func IAMRoles(ctx context.Context) (*plane.Roles, error) {
+	return plane.Ask[struct{}, plane.Roles](ctx, App, plane.IAMRoles, &struct{}{})
 }

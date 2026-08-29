@@ -10,12 +10,25 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/planetest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
+	return mountAs(t, func(string, string) []string { return []string{RoleSystemManager} })
+}
+
+// mountAs is mountApp with the roles IAM gives each caller — what the permission
+// tests need, since the model under test is which role admits what.
+func mountAs(t *testing.T, roles func(org, user string) []string) *zip.App {
+	t.Helper()
+	// IAM says who manages, entitlement says which modules are on. Both are peers
+	// in production; a test that mounts this surface needs them or every caller is
+	// a role-less member of an org that has enabled nothing.
+	planetest.Roled(t, roles)
+	planetest.Entitled(t, func(string, string) bool { return true })
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
@@ -292,7 +305,16 @@ func TestCrossOrgIsolation(t *testing.T) {
 // enforcement after configuration, role-scoped rights, System Manager + global
 // admin bypass.
 func TestPermissionEnforcement(t *testing.T) {
-	app := mountApp(t)
+	// The grants IAM holds: u1 manages, u2 is an Agent, u3 has nothing.
+	app := mountAs(t, func(_, user string) []string {
+		switch user {
+		case "u1":
+			return []string{RoleSystemManager}
+		case "u2":
+			return []string{"Agent"}
+		}
+		return nil
+	})
 	const org = "acme"
 
 	// u1 (bootstrap manager) defines a Ticket restricted to the Agent role.
@@ -305,15 +327,6 @@ func TestPermissionEnforcement(t *testing.T) {
 	}
 	if code, b := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "u1", false, ticket); code != http.StatusCreated {
 		t.Fatalf("u1 define ticket want 201, got %d (%s)", code, b)
-	}
-
-	// u1 grants ITSELF System Manager (else assigning roles below locks u1 out of
-	// bootstrap), then grants u2 the Agent role.
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/roles", org, "u1", false, map[string]any{"user": "u1", "role": RoleSystemManager}); code != http.StatusCreated {
-		t.Fatalf("u1 self-grant SM want 201, got %d", code)
-	}
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/roles", org, "u1", false, map[string]any{"user": "u2", "role": "Agent"}); code != http.StatusCreated {
-		t.Fatalf("grant u2 Agent want 201, got %d", code)
 	}
 
 	// The org is now configured: u3 (no roles) is DENIED read on Ticket.
@@ -525,7 +538,13 @@ func TestSingleSubmitImmutability(t *testing.T) {
 // DEFAULT-CLOSED (manager-only), not open to every org member; and the org
 // owner/creator (first to administer) is the System Manager — one-time.
 func TestPermlessDefaultClosed(t *testing.T) {
-	app := mountApp(t)
+	// owner1 manages; every other member holds nothing.
+	app := mountAs(t, func(_, user string) []string {
+		if user == "owner1" {
+			return []string{RoleSystemManager}
+		}
+		return nil
+	})
 	const org = "acme"
 	memo := map[string]any{
 		"name":   "Memo",

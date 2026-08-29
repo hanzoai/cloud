@@ -1,7 +1,7 @@
 ---
 name: iam_users
 version: "8.0.0"
-description: "Read iam users: Returns a page of the people in your organization, with the total so you can page through the rest., Returns one person in your organization, addressed by their username or by their email address.."
+description: "Read iam users: Returns a page of the people in an organization, with the total so you can page through the rest., Returns one person in your organization, addressed by their username or by their email address.."
 ---
 
 # Hanzo · IAM · users
@@ -14,7 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/iam/users` — Returns a page of the people in your organization, with the total so you can page through the rest.
+- `GET https://api.hanzo.ai/v1/iam/users` — Returns a page of the people in an organization, with the total so you can page through the rest.
 - `GET https://api.hanzo.ai/v1/iam/users/{owner}/{name}` — Returns one person in your organization, addressed by their username or by their email address.
 
 ## Parameters
@@ -26,7 +26,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | `email` | query | no | string | Email narrows the page to the accounts carrying one address. Looking a person up by their address is a QUERY over the collection, not an item read: an address is not the natural key, two rows in one org can carry one, and a caller that gets a page SEES both — where a single-item read would have to choose, and choosing is how somebody joins a team under a colleague's identity. |
 | `limit` | query | no | integer |  |
 | `offset` | query | no | integer |  |
-| `owner` | query | yes | string |  |
+| `owner` | query | no | string |  |
 
 ## Response
 

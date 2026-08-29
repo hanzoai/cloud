@@ -27,8 +27,6 @@ type (
 	DocPerm = doctype.DocPerm
 	// Document is a stored record: validated field data plus its lifecycle state.
 	Document = engine.Document
-	// Role is a (user, role) assignment within an org.
-	Role = engine.Role
 	// Store is the engine's per-org data access, reached by hooks via Event.Store.
 	Store = engine.Store
 	// Event is the value that flows through a lifecycle Hook.

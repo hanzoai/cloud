@@ -299,105 +299,6 @@
         "x-tool": true
       }
     },
-    "/v1/framework/roles": {
-      "get": {
-        "operationId": "get_framework_roles",
-        "summary": "Returns every (user, role) assignment in the caller's org.",
-        "description": "Returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
-        "tags": [
-          "framework"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/roleList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      },
-      "post": {
-        "operationId": "post_framework_roles",
-        "summary": "Grants one user one role in the caller's org — how a member gains rights on a DocType, since permissions name roles and never users.",
-        "description": "Grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
-        "tags": [
-          "framework"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "role": "System Manager",
-                "user": "u_alice"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/RoleAssignment"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleAssignment"
-                }
-              }
-            },
-            "description": "created"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
-    "/v1/framework/roles/{user}/{role}": {
-      "delete": {
-        "operationId": "delete_framework_roles_by_user_by_role",
-        "summary": "Removes one (user, role) grant in the caller's org.",
-        "description": "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
-        "tags": [
-          "framework"
-        ],
-        "parameters": [
-          {
-            "name": "user",
-            "in": "path",
-            "required": true,
-            "description": "User is the assignee whose grant is being revoked, from the path.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "u_alice"
-          },
-          {
-            "name": "role",
-            "in": "path",
-            "required": true,
-            "description": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
-            "schema": {
-              "type": "string"
-            },
-            "example": "System Manager"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "no content"
-          }
-        },
-        "x-public": true,
-        "x-tool": true
-      }
-    },
     "/v1/framework/summary": {
       "get": {
         "operationId": "get_framework_summary",
@@ -875,19 +776,6 @@
         },
         "type": "object"
       },
-      "RoleAssignment": {
-        "properties": {
-          "role": {
-            "description": "Role is the granted role's name.",
-            "type": "string"
-          },
-          "user": {
-            "description": "User is the member the role is granted to.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "docTypeList": {
         "properties": {
           "data": {
@@ -939,18 +827,6 @@
             "description": "Data is every module compiled into this binary, with the DocTypes it installs\nand whether the caller's org has turned it on.",
             "items": {
               "$ref": "#/components/schemas/module"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "roleList": {
-        "properties": {
-          "data": {
-            "description": "Data is every (user, role) assignment in the caller's org.",
-            "items": {
-              "$ref": "#/components/schemas/RoleAssignment"
             },
             "type": "array"
           }

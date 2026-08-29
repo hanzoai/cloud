@@ -37,3 +37,32 @@ func Entitled(t *testing.T, holds func(org, product string) bool) {
 
 	listen(t, app, "entitlement")
 }
+
+// Roled publishes the IAM role read on the plane, answering from roles.
+//
+// A framework lane enforces DocType permissions against the roles IAM gives the
+// caller (apps/framework), so a lane test that defines a DocType or installs a
+// module needs this peer or reads "System Manager role required".
+func Roled(t *testing.T, roles func(org, user string) []string) {
+	t.Helper()
+	runtimeDir(t)
+
+	app := zip.New(zip.Config{AppName: "iam"})
+	zip.Post[struct{}, plane.Roles](app, "/iam/roles",
+		func(ctx context.Context, _ *struct{}) (*plane.Roles, error) {
+			who := zip.CallerOf(ctx)
+			if who.Org == "" {
+				return nil, zip.ErrUnauthorized("roles: no caller on the call")
+			}
+			return &plane.Roles{Roles: roles(who.Org, who.User)}, nil
+		}, zip.WithOperationID(plane.IAMRoles))
+
+	listen(t, app, "iam")
+}
+
+// Manager serves an IAM peer that makes every caller a System Manager — the
+// shape a lane test wants when the lane, not the permission model, is under test.
+func Manager(t *testing.T) {
+	t.Helper()
+	Roled(t, func(string, string) []string { return []string{"System Manager"} })
+}

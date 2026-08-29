@@ -273,8 +273,14 @@ func Listening(path string) (bool, error) {
 // It lives beside Ask, and for the same reason Ask does: a caller that cannot import
 // cloud still has to be able to name the tenant it is calling for, and the meter — which
 // cloud itself imports — is exactly such a caller. [cloud.For] is this function.
+// It PRESERVES a caller already on ctx and replaces only the tenant, so a call
+// made on behalf of a person keeps naming them. An op whose answer is about the
+// person — their roles, their grants — cannot be answered from the tenant alone,
+// and dropping the user here left it asking about nobody.
 func For(ctx context.Context, org string) context.Context {
-	return zip.WithCaller(ctx, zip.Caller{Org: strings.TrimSpace(org)})
+	who := zip.CallerOf(ctx)
+	who.Org = strings.TrimSpace(org)
+	return zip.WithCaller(ctx, who)
 }
 
 // Ask is the whole client half: dial the app, invoke the op, close.

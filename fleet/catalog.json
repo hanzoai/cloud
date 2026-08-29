@@ -1957,10 +1957,6 @@
    "doc": "Removes a DocType and every document stored under it. The\ndefinition and its data go together — a document with no schema can be neither\nvalidated nor read back — so there is no undo. Manager-only. Answers 204."
   },
   {
-   "id": "delete_framework_roles_by_user_by_role",
-   "doc": "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found."
-  },
-  {
    "id": "get_framework_by_doctype",
    "doc": "Returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
    "read": true
@@ -1991,11 +1987,6 @@
    "read": true
   },
   {
-   "id": "get_framework_roles",
-   "doc": "Returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
-   "read": true
-  },
-  {
    "id": "get_framework_summary",
    "doc": "Reports how much of the DocType surface the caller's org uses: how\nmany DocTypes it has defined, and how many documents exist across them.",
    "read": true
@@ -2015,10 +2006,6 @@
   {
    "id": "post_framework_modules_by_module_install",
    "doc": "Creates an app lane's DocTypes in the caller's org. Idempotent\nand create-if-absent: a DocType the org already has is reported as existing\nand never replaced, so re-installing cannot clobber a definition the org has\nsince edited. Manager-only."
-  },
-  {
-   "id": "post_framework_roles",
-   "doc": "Grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201."
   },
   {
    "id": "put_framework_doctypes_by_name",
@@ -2363,7 +2350,7 @@
   },
   {
    "id": "createSession",
-   "doc": "Records a sign-in. Signing in again from another browser adds to the\nsession rather than replacing it, so one person can be signed in from a laptop\nand a phone at once.\n\nAsk for an exclusive sign-in and the opposite holds: the new sign-in is the only\none left and every other browser is signed out. That is the setting to use when\none person may hold only one live session at a time."
+   "doc": "Records a sign-in and answers with the cookie id it minted. Signing in\nagain from another browser adds to the session rather than replacing it, so one\nperson can be signed in from a laptop and a phone at once.\n\nAsk for an exclusive sign-in and the opposite holds: the new sign-in is the only\none left and every other browser is signed out. That is the setting to use when\none person may hold only one live session at a time."
   },
   {
    "id": "deleteOrganization",
@@ -2416,6 +2403,10 @@
   {
    "id": "delete_iam_roles_by_owner_by_name",
    "doc": "Removes a role. Everyone in it loses the access it carried; their\naccounts, and any other role they hold, are untouched."
+  },
+  {
+   "id": "delete_iam_teams_by_name",
+   "doc": "Removes a team. Everyone in it loses the access it carried; their\naccounts, and any other team they are in, are untouched."
   },
   {
    "id": "delete_iam_users_by_owner_by_name",
@@ -2502,7 +2493,7 @@
   },
   {
    "id": "get_iam_keys",
-   "doc": "Returns your organization's API keys, newest first — what each is called,\nwhat it may reach, and its publishable half. Secret halves are never listed.",
+   "doc": "Returns an organization's API keys, newest first — what each is called,\nwhat it may reach, and its publishable half. Secret halves are never listed.\n\nWhich organization comes from your credentials, not from the request: you read\nyour own and no one else's. The capability that admits a confidential client to\nthis collection does not itself name a tenant, so the tenant is decided here.",
    "read": true
   },
   {
@@ -2512,7 +2503,7 @@
   },
   {
    "id": "get_iam_memberships",
-   "doc": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via authz.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
+   "doc": "Answers either question about who belongs where: which organizations one\nperson can act in, or who can act in one organization.\n\nBoth are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or\nabout a user whose home org is its own, and nothing else. The bound comes from\nthe verified credential via principal.Scope, so a request parameter can never\nwiden it — a membership row names who may act and spend in an org, so a\ncross-tenant read is a customer roster leak.",
    "read": true
   },
   {
@@ -2576,8 +2567,18 @@
    "read": true
   },
   {
+   "id": "get_iam_teams",
+   "doc": "Returns your organization's roles, newest first — each a named group of\npeople that permissions are granted to.\n\nYou see your own organization's roles and no one else's; which organization\nthat is comes from your credentials, not from the request.",
+   "read": true
+  },
+  {
+   "id": "get_iam_teams_by_name",
+   "doc": "Returns one team: who is in it.",
+   "read": true
+  },
+  {
    "id": "get_iam_users",
-   "doc": "Returns a page of the people in your organization, with the total so you\ncan page through the rest. Passwords, API secrets and MFA material are stripped\nfrom every entry.",
+   "doc": "Returns a page of the people in an organization, with the total so you\ncan page through the rest. Passwords, API secrets and MFA material are stripped\nfrom every entry.\n\nWhich organization comes from your credentials, not from the request: you read\nyour own and no one else's, and a credential whose scope spans tenants reads\nthe tenant it names — or, naming none, every one of them.",
    "read": true
   },
   {
@@ -2607,7 +2608,7 @@
   },
   {
    "id": "listSessions",
-   "doc": "Returns who is currently signed in to your organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.",
+   "doc": "Returns who is currently signed in to an organization, newest first, and\ncan be narrowed to one person or one application. It is what you read before\nsigning someone out.\n\nWhich organization comes from your credentials, not from the request: you read\nyour own and no one else's. A session row names a live account and the\napplications it is signed in to, so the tenant is decided here rather than\ntaken from the query.",
    "read": true
   },
   {
@@ -2661,6 +2662,10 @@
    "doc": "Makes a role — a named group of people that permissions are granted to.\nGranting to a role rather than to each person is what keeps access correct as\nyour team changes: add someone to the role and they inherit everything it can\ndo. A name already used in your organization is refused."
   },
   {
+   "id": "post_iam_teams",
+   "doc": "Makes a team — a named set of people that roles and permissions grant\nto. Granting to a team rather than to each person keeps access correct as\npeople come and go: add someone and they inherit what the team can do. A name\nalready used in your organization is refused."
+  },
+  {
    "id": "post_iam_users",
    "doc": "Adds a person to your organization. Send a password and it becomes the\none they sign in with; it is hashed before it is stored and never comes back\nin any response.\n\nThe username is checked against the same rule every account in the Hanzo Cloud\nis held to, whichever way it was created — this call, password signup, a social\nsign-in, or SCIM — so a name accepted here works everywhere.\n\nA name already taken in your organization is refused rather than overwritten."
   },
@@ -2709,6 +2714,10 @@
    "doc": "Changes who is in a role, or which roles it includes. Access changes for\neveryone in it as soon as the write lands. What the role is called does not\nchange, and neither does when it was created."
   },
   {
+   "id": "put_iam_teams_by_name",
+   "doc": "Changes who is in a team. Access changes for\neveryone in it as soon as the write lands. The name and the created stamp do\nnot change."
+  },
+  {
    "id": "put_iam_users_by_owner_by_name",
    "doc": "Changes a person's profile, their roles, or the credentials they sign\nin with. Send a password to reset it; leave it out and their current one keeps\nworking.\n\nWho they are does not change: their organization, username and the identifier\ntheir existing sessions are keyed on all survive the write, so an update never\nsigns anyone out."
   },
@@ -2730,7 +2739,7 @@
   },
   {
    "id": "updateSession",
-   "doc": "Replaces the set of browsers a session covers — signing out the ones you\nleave off while the session itself stays live. A session that does not exist is\nreported as missing rather than created."
+   "doc": "Names the browsers a session keeps — signing out the ones you leave off\nwhile the session itself stays live. A session that does not exist is reported\nas missing rather than created."
   },
   {
    "id": "updateToken",
