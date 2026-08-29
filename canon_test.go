@@ -81,6 +81,18 @@ var canons = []canon{{
 		"caller writes for itself — into the billing and audit column, which is how one " +
 		"host becomes a million clients and defeats every per-IP limit keyed on it",
 }, {
+	fact:  "which IAM signs my token",
+	home:  "brand.Issuer — the leaf BOTH hosts can reach (package cloud and the light cmd/cloud, which does not link it)",
+	local: regexp.MustCompile(`"CLOUD_IAM_ISSUER".*IssuerFor\(`),
+	// Reading the pinned value into a field is CORRECT — config.go does exactly
+	// that and then resolves through issuerFor. What is a second answer is the
+	// env read COMBINED with the brand fallback inline, which is the shape that
+	// skipped the trim. So the row matches the combination, not the read.
+	owns: []string{"brand/brand.go", "iamurl.go"},
+	cost: "the second spelling did not trim, and an OIDC issuer is compared as a literal " +
+		"string — a pinned \"https://hanzo.id/\" and a derived \"https://hanzo.id\" are two " +
+		"issuers, so a token stamped by one fails validation against the other",
+}, {
 	fact:  "whether this process may serve, given the console anti-forgery key",
 	home:  "cloud.keyed at compose time (intent.go), cloud.Intended per request, account own for the minter",
 	local: regexp.MustCompile(`account\.Shared\(\)|accountapp\.Shared\(\)`),

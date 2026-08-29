@@ -112,6 +112,23 @@ func ForIssuer(iss string) (string, bool) {
 	return "", false
 }
 
+// Issuer is the ONE resolution of "which IAM signs my token": a pinned value if
+// there is one, else the brand's own. It trims, because an OIDC issuer is compared
+// as a literal string — a pinned "https://hanzo.id/" and a derived
+// "https://hanzo.id" are two different issuers to a validator, and the one that
+// trims and the one that does not were both being used.
+//
+// It lives HERE, in the leaf, because its two callers cannot share anything
+// heavier: package cloud resolves it for Config, and the light host cmd/cloud is
+// built specifically NOT to link package cloud, so it had spelled the rule again
+// inline — without the trim.
+func Issuer(pinned, id string) string {
+	if p := strings.TrimRight(strings.TrimSpace(pinned), "/"); p != "" {
+		return p
+	}
+	return IssuerFor(id)
+}
+
 // IssuerFor returns the canonical OIDC issuer for a brand id.
 func IssuerFor(id string) string {
 	return For(id).IAMIssuer
