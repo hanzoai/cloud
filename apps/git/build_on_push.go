@@ -204,8 +204,11 @@ func readPipeline(ctx context.Context, repo Repository, after string) (*pipeline
 			if e.Dir || (!strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml")) {
 				continue
 			}
+			// A link is not a workflow, for the reason blobs() says: its bytes are
+			// a path, and a path that happens to parse would declare an image no
+			// file in this tree carries.
 			b, berr := repo.Blob(ctx, rev, e.Path, contract.Max)
-			if berr != nil || b.Binary || b.Truncated {
+			if berr != nil || b.Link || b.Binary || b.Truncated {
 				continue
 			}
 			doc, derr := contract.Parse(e.Path, b.Content)
