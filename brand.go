@@ -13,6 +13,10 @@ const DefaultBrand = brand.Default
 var (
 	// BrandFor returns the brand.Info for a brand id (Hanzo default for unknown).
 	BrandFor = brand.For
+	// BrandDisplay renders a brand id for display ("hanzo" → "Hanzo"). One rule:
+	// the registry keys are lowercase ascii, so the first rune is the whole job,
+	// and an empty id is the default brand rather than an empty title.
+	BrandDisplay = brand.Display
 	// IssuerForBrand returns the canonical OIDC issuer for a brand id.
 	IssuerForBrand = brand.IssuerFor
 	// BrandForHostOK resolves a request Host to a brand id, ok=false if no brand

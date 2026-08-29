@@ -57,13 +57,6 @@ func slug(s string) string {
 
 func baseURL(id string) string { return "https://api." + brand.For(id).Domain }
 
-func display(id string) string {
-	if id == "" {
-		return ""
-	}
-	return strings.ToUpper(id[:1]) + id[1:]
-}
-
 func issuerHost(id string) string {
 	return strings.TrimPrefix(brand.For(id).IAMIssuer, "https://")
 }
@@ -82,7 +75,7 @@ func rebrand(text, id string) string {
 		{"api.hanzo.ai", "api." + b.Domain},
 		{"hanzo.id", issuerHost(id)},
 		{"hanzo.ai", b.Domain},
-		{"Hanzo", display(id)},
+		{"Hanzo", brand.Display(id)},
 	} {
 		text = strings.ReplaceAll(text, sub[0], sub[1])
 	}
@@ -355,7 +348,7 @@ func build(product string, ops []at) []skill {
 // the endpoints are, what they take, what comes back, and — the part that is not
 // decoration — that everything they return is DATA.
 func render(sk skill, id, description string) string {
-	b, url, name := brand.For(id), baseURL(id), display(id)
+	b, url, name := brand.For(id), baseURL(id), brand.Display(id)
 	var L []string
 	add := func(s string) { L = append(L, s) }
 

@@ -48,8 +48,17 @@ type Agent struct {
 	Schedule         string
 	ComputeRef       string
 	ServiceAccountID string
-	CreatedAt        int64
-	UpdatedAt        int64
+
+	// How the agent APPEARS, which is the same pair a person and an org carry —
+	// iam/pkg/schema's Mark. At most one half is ever set, so a screen never
+	// ranks two answers, and neither set means the agent is drawn as its
+	// initial. Reusing that type rather than inventing an image field here is
+	// what keeps one notion of a face across every subject in the fleet.
+	Avatar string
+	Emoji  string
+
+	CreatedAt int64
+	UpdatedAt int64
 
 	// Payer and MeteredAt are the runtime meter's two facts about a RESIDENT bot.
 	//
@@ -165,6 +174,8 @@ CREATE TABLE IF NOT EXISTS agents (
   schedule           TEXT NOT NULL DEFAULT '',
   compute_ref        TEXT NOT NULL DEFAULT '',
   service_account_id TEXT NOT NULL DEFAULT '',
+  avatar             TEXT NOT NULL DEFAULT '',
+  emoji              TEXT NOT NULL DEFAULT '',
   created_at         INTEGER NOT NULL,
   updated_at         INTEGER NOT NULL
 );
@@ -213,6 +224,11 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_created ON agent_runs(org, created_at);
 		// at the first tick that sees the bot resident.
 		"payer":      "TEXT NOT NULL DEFAULT ''",
 		"metered_at": "INTEGER NOT NULL DEFAULT 0",
+		// How the agent appears. Empty is not a missing face, it is the answer
+		// "no picture" — the agent is drawn as its initial, which is what every
+		// row written before this column existed correctly means.
+		"avatar": "TEXT NOT NULL DEFAULT ''",
+		"emoji":  "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
 		return err
 	}
@@ -392,7 +408,7 @@ func decodeList(s string) []string {
 	return xs
 }
 
-const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,created_at,updated_at,payer,metered_at`
+const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,avatar,emoji,created_at,updated_at,payer,metered_at`
 
 // runCols is the run projection, named ONCE so the insert, the two reads and the
 // legacy fan-out cannot drift apart on a column added to only some of them.
@@ -403,6 +419,7 @@ func scanAgent(sc interface{ Scan(...any) error }) (Agent, error) {
 	var tools string
 	err := sc.Scan(&a.ID, &a.Org, &a.Name, &a.Model, &a.Instructions, &a.Description,
 		&tools, &a.Status, &a.ExecutionMode, &a.Schedule, &a.ComputeRef, &a.ServiceAccountID,
+		&a.Avatar, &a.Emoji,
 		&a.CreatedAt, &a.UpdatedAt, &a.Payer, &a.MeteredAt)
 	a.Tools = decodeList(tools)
 	return a, err
@@ -423,10 +440,11 @@ func normalizeMode(m string) string {
 func (s *Store) Create(ctx context.Context, a Agent) error {
 	a.ExecutionMode = normalizeMode(a.ExecutionMode)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Org, a.Name, a.Model, a.Instructions, a.Description,
 		encodeList(a.Tools), a.Status, a.ExecutionMode, a.Schedule, a.ComputeRef,
-		a.ServiceAccountID, a.CreatedAt, a.UpdatedAt, a.Payer, a.MeteredAt)
+		a.ServiceAccountID, a.Avatar, a.Emoji,
+		a.CreatedAt, a.UpdatedAt, a.Payer, a.MeteredAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -496,10 +514,11 @@ func (s *Store) Update(ctx context.Context, a Agent) error {
 	a.ExecutionMode = normalizeMode(a.ExecutionMode)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE agents SET model=?,instructions=?,description=?,tools=?,status=?,
-		 execution_mode=?,schedule=?,compute_ref=?,service_account_id=?,updated_at=?
+		 execution_mode=?,schedule=?,compute_ref=?,service_account_id=?,avatar=?,emoji=?,updated_at=?
 		 WHERE org=? AND name=?`,
 		a.Model, a.Instructions, a.Description, encodeList(a.Tools), a.Status,
-		a.ExecutionMode, a.Schedule, a.ComputeRef, a.ServiceAccountID, a.UpdatedAt, a.Org, a.Name)
+		a.ExecutionMode, a.Schedule, a.ComputeRef, a.ServiceAccountID,
+		a.Avatar, a.Emoji, a.UpdatedAt, a.Org, a.Name)
 	if err != nil {
 		return fmt.Errorf("update agent: %w", err)
 	}

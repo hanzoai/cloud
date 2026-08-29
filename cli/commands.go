@@ -1,14 +1,14 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/hanzoai/cloud/contract"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 )
 
 // platform builds a platform REST client from the resolved env + the global
@@ -267,7 +267,7 @@ func printCluster(w io.Writer, c Cluster) {
 
 func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	var br BuildReq
-	var buildToken, recipe string
+	var buildToken string
 	cmd := &cobra.Command{
 		Use:   "build <repo>",
 		Short: "Enqueue a platform-native build on the runner fabric (no GitHub builders)",
@@ -281,17 +281,17 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			if len(args) == 1 {
 				br.Repo = args[0]
 			}
-			// No --image ⇒ the ARTIFACT lane: the repo's own hanzo.yml says what to
+			// No --image ⇒ the ARTIFACT lane: the repo's own contract says what to
 			// build (`binaries:`) and where it lands (`bucket:`). One declaration —
 			// the same file hanzoai/ci reads — so nothing is restated on the command
 			// line, and a project with no Dockerfile is still buildable.
 			if br.Image == "" && len(br.Binaries) == 0 {
-				if err := br.loadRecipe(recipe); err != nil {
+				if err := br.loadRecipe(cmd.Context(), "."); err != nil {
 					return err
 				}
 			}
 			if br.Repo == "" || br.SHA == "" || (br.Image == "" && len(br.Binaries) == 0) {
-				return fmt.Errorf("--repo (or positional) and --sha are required, plus --image or a hanzo.yml declaring binaries:")
+				return fmt.Errorf("--repo (or positional) and --sha are required, plus --image or a contract declaring binaries:")
 			}
 			// The platform build muscle clones an https git URL; accept the
 			// idiomatic `owner/name` shorthand and expand it to GitHub (the host
@@ -325,34 +325,38 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	f.StringVar(&br.DockerTarget, "target", "", "Docker build stage (--target)")
 	f.StringVar(&br.OS, "os", "", "linux|darwin|windows (default linux)")
 	f.StringVar(&br.Arch, "arch", "", "amd64|arm64 (default amd64)")
-	f.StringVar(&br.Bucket, "bucket", "", "object-store bucket for artifacts (default: hanzo.yml bucket:)")
+	f.StringVar(&br.Bucket, "bucket", "", "object-store bucket for artifacts (default: the contract's bucket:)")
 	f.StringVar(&br.Tag, "tag", "", "version segment artifacts publish under (default: the sha)")
-	f.StringVar(&recipe, "recipe", "hanzo.yml", "hanzo.yml to read binaries:/bucket: from when --image is absent")
 	f.StringVar(&buildToken, "build-token", "", "platform build-enqueue token (else env/credential store)")
 	return cmd
 }
 
-// loadRecipe fills Binaries/Bucket from a hanzo.yml. It reads the SAME two keys
-// hanzoai/ci reads out of the SAME file — the CLI parses no format of its own,
-// so a recipe that builds here builds identically on the GitHub lane.
-func (br *BuildReq) loadRecipe(path string) error {
-	b, err := os.ReadFile(path)
+// loadRecipe fills Binaries/Bucket from the contract in dir. It reads the SAME two
+// keys hanzoai/ci reads out of the SAME document — the CLI parses no format of its
+// own, so a recipe that builds here builds identically on the GitHub lane.
+//
+// The CLI is one of the two edges that may EVALUATE a contract written as code,
+// which is why this resolves through contract.Eval: a project whose declaration is
+// a hanzo.config.ts builds from what that prints, and everything downstream receives
+// the document.
+func (br *BuildReq) loadRecipe(ctx context.Context, dir string) error {
+	doc, err := contract.Eval(ctx, dir)
 	if err != nil {
-		return fmt.Errorf("no --image and no readable %s: %w", path, err)
+		return fmt.Errorf("no --image and no contract to build from: %w", err)
 	}
-	var doc struct {
-		Binaries []BuildBinary `yaml:"binaries"`
-		Bucket   string        `yaml:"bucket"`
+	var recipe struct {
+		Binaries []BuildBinary `json:"binaries"`
+		Bucket   string        `json:"bucket"`
 	}
-	if err := yaml.Unmarshal(b, &doc); err != nil {
-		return fmt.Errorf("parse %s: %w", path, err)
+	if err := doc.Into(&recipe); err != nil {
+		return fmt.Errorf("%s: %w", doc.Name, err)
 	}
-	if len(doc.Binaries) == 0 {
-		return fmt.Errorf("%s declares no binaries: — pass --image to build a container image instead", path)
+	if len(recipe.Binaries) == 0 {
+		return fmt.Errorf("%s declares no binaries: — pass --image to build a container image instead", doc.Name)
 	}
-	br.Binaries = doc.Binaries
+	br.Binaries = recipe.Binaries
 	if br.Bucket == "" {
-		br.Bucket = doc.Bucket
+		br.Bucket = recipe.Bucket
 	}
 	return nil
 }

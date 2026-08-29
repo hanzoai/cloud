@@ -13,7 +13,7 @@
 //
 // The round answers UNDER the agents root rather than at it, because POST
 // /v1/agents is already the typed create. Which address it takes is cloud's to
-// decide: hz.MountAt registers the four routes wherever the composer points them
+// decide: hz.MountAt registers the five routes wherever the composer points them
 // (HIP-1210), so the surface no longer needs a root of its own.
 package agents
 
@@ -43,13 +43,13 @@ const maxCompletionResponse = 8 << 20
 
 // chat is where the round answers. The agents root is spent — POST /v1/agents is
 // the typed create — so the conversation surface takes a sub-path of it, and the
-// four routes compose off this one address (HIP-1210).
+// five routes compose off this one address (HIP-1210).
 const chat = "/v1/agents/chat"
 
-// UNTYPED BY DESIGN, and not fixable here. All four operations — POST /v1/agents/chat,
-// GET /v1/agents/chat/presets, GET /v1/agents/chat/conversations,
+// UNTYPED BY DESIGN, and not fixable here. All five operations — POST /v1/agents/chat,
+// GET /v1/agents/chat/presets, POST and GET /v1/agents/chat/conversations,
 // GET /v1/agents/chat/conversations/{id} — are registered by hz.MountAt below, which
-// is github.com/hanzoai/agent's own router wiring (agent.go:181-184 in v1.0.6). This
+// is github.com/hanzoai/agent's own router wiring (agent.go in v1.0.7). This
 // package registers NO route of its own, so there is nothing in cloud to convert:
 // they become typeable in hanzoai/agent, which owns them, exactly as apps/tasks'
 // relayed operations become typeable in hanzoai/tasks.
@@ -62,7 +62,7 @@ const chat = "/v1/agents/chat"
 //     and replays the caller's own credential HEADERS into the in-process
 //     completion (credential, below). A typed op receives only a context, and
 //     hanzoai/agent deliberately imports neither cloud nor ai, so it cannot use
-//     cloud.Bridge — it needs a per-request client of its own before any of its four
+//     cloud.Bridge — it needs a per-request client of its own before any of its five
 //     handlers can lose its *zip.Ctx. The address moved and that client did not: it
 //     is a per-REQUEST hole, indifferent to which path the request arrived on.
 //   - The round passes an upstream 4xx through VERBATIM — the completion's own
@@ -72,7 +72,7 @@ const chat = "/v1/agents/chat"
 //     {status,code,error}; that route is the apps/ml refusal class and stays
 //     untyped even after the client lands.
 //
-// Until then these four remain untyped, and so carry no MCP tool, no CLI command
+// Until then these five remain untyped, and so carry no MCP tool, no CLI command
 // and no typed SDK method. What they DO carry is prose: openapi.Describe below
 // declares it beside the wire fact, which is the client for exactly the operation a
 // typed op cannot lift a doc comment into. Describe is additive metadata keyed on
@@ -107,6 +107,17 @@ func init() {
 			"`preset`.\n\n"+
 			"The catalog is compiled into the build, identical for every caller, and this is "+
 			"the one read in the group that needs no principal.")
+	openapi.Describe(chat+"/conversations", http.MethodPost,
+		"Record turns in a conversation",
+		"Writes turns to the caller's thread store without running a completion, and answers "+
+			"the `conversationId` they were written under. An absent `conversationId` opens a "+
+			"new thread; supplying one appends to it.\n\n"+
+			"This is for a client that streams its own turn through /v1/chat/completions and "+
+			"still wants the conversation in its history — the round records what IT answers, "+
+			"and is otherwise the only writer. It takes the same store, the same per-org "+
+			"isolation and the same notion of a thread: what is recorded here reads back "+
+			"through the two GETs beside it and the round can continue it by id. A validated "+
+			"principal with a non-empty org is required; 403 without one.")
 	openapi.Describe(chat+"/conversations", http.MethodGet,
 		"List the agent threads in your org",
 		"Returns a summary of every agent conversation in the caller's org — id, derived "+

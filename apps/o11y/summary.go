@@ -290,22 +290,13 @@ func buildSummary(brandID string, up []serviceUp, checkedAt time.Time) *StatusSu
 	}
 
 	return &StatusSummary{
-		PageTitle:              brandTitle(info.ID) + " status",
+		PageTitle:              cloud.BrandDisplay(info.ID) + " status",
 		PageURL:                page,
 		OngoingIncidents:       incidents,
 		InProgressMaintenances: []StatusMaintenance{},
 		ScheduledMaintenances:  []StatusMaintenance{},
 		CheckedAt:              stamp,
 	}
-}
-
-// brandTitle renders a brand id for display ("hanzo" → "Hanzo"). The registry
-// keys are lowercase ASCII ids, so upper-casing the first rune is the whole job.
-func brandTitle(id string) string {
-	if id == "" {
-		return ""
-	}
-	return strings.ToUpper(id[:1]) + id[1:]
 }
 
 // availabilitySnapshot is the cached fleet read plus when it was taken.
