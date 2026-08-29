@@ -3746,8 +3746,8 @@
     "/v1/iam/teams": {
       "get": {
         "operationId": "get_iam_teams",
-        "summary": "Returns your organization's roles, newest first — each a named group of people that permissions are granted to.",
-        "description": "Returns your organization's roles, newest first — each a named group of\npeople that permissions are granted to.\n\nYou see your own organization's roles and no one else's; which organization\nthat is comes from your credentials, not from the request.",
+        "summary": "Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to.",
+        "description": "Returns your organization's teams, newest first — each a named set of\npeople that roles and permissions are granted to.\n\nYou see your own organization's teams and no one else's; which organization\nthat is comes from your credentials, not from the request.",
         "tags": [
           "iam"
         ],

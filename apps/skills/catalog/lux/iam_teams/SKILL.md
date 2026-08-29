@@ -1,7 +1,7 @@
 ---
 name: iam_teams
 version: "8.0.0"
-description: "Read iam teams: Returns your organization's roles, newest first — each a named group of people that permissions are granted to., Returns one team: who is in it.."
+description: "Read iam teams: Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to., Returns one team: who is in it.."
 ---
 
 # Lux · IAM · teams
@@ -14,7 +14,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 
 ## Endpoints
 
-- `GET https://api.lux.network/v1/iam/teams` — Returns your organization's roles, newest first — each a named group of people that permissions are granted to.
+- `GET https://api.lux.network/v1/iam/teams` — Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to.
 - `GET https://api.lux.network/v1/iam/teams/{name}` — Returns one team: who is in it.
 
 ## Parameters
