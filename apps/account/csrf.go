@@ -33,7 +33,7 @@ package account
 //
 //	[Shared] — the checkers. A key of their own verifies nothing they will be sent,
 //	           so they refuse, and the mount fails.
-//	[MountAccount] — the minter. A key of its own works for one process over one
+//	[Use] — the minter. A key of its own works for one process over one
 //	           lifetime, so it is allowed on a laptop and refused on a deployment
 //	           ([cloud.Deployed] — this process was handed a master key, so it has a
 //	           secret store and no excuse for a missing one).

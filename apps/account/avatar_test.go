@@ -122,8 +122,8 @@ func mountAvatar(t *testing.T) (*zip.App, *memVFS, *fakeIAM) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), BodyLimit: edgeBodyLimit})
 	compose(app)
 	deps := cloud.Deps{Brand: "hanzo", Domain: "api.hanzo.ai", VFS: vfs}
-	if err := MountAccount(app, deps); err != nil {
-		t.Fatalf("MountAccount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use: %v", err)
 	}
 	return app, vfs, f
 }

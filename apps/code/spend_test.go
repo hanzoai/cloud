@@ -40,8 +40,8 @@ func visit(t *testing.T, app *zip.App, path string, extra map[string]string) (in
 
 func TestACookieAloneCannotSpendOnCode(t *testing.T) {
 	app, _ := newTestApp(t)
-	if err := account.MountAccount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
-		t.Fatalf("MountAccount: %v", err)
+	if err := account.Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("Use: %v", err)
 	}
 
 	for _, path := range []string{"/v1/code/search?q=open", "/v1/code/ask?q=open"} {
