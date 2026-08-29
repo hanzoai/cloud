@@ -31,6 +31,7 @@ func init() {
 			"ListOut.total":   "Total counts the HOSTS in Data, not the plugins on them.",
 			"Status.addr":     "Addr is the socket or address serving it.",
 			"Status.disabled": "Disabled is true when Unload stopped it deliberately, as opposed to it\nhaving crashed. Both answer 503, so without this an operator cannot tell\na maintenance window from an outage — and would page for the former.",
+			"Status.error":    "Error is why the last start attempt failed, empty when none has. It is the\nanswer Running=false cannot give: a lazy plugin that has never been asked and\none whose every start dies both report Running=false, and only this separates\nthem. Cleared when an instance comes up.",
 			"Status.pid":      "PID is the child process, or 0 when this host did not start it.",
 			"Status.prefix":   "Prefix is the FIRST subtree this plugin answers — the one a log line\nnames it by. Prefixes is every subtree, and a plugin may own several.\nReporting only the first would understate the blast radius of taking\nthis plugin down, which is the question a fleet view exists to answer.",
 			"Status.reloads":  "Reloads counts successful swaps since Load. A climbing number on one\nhost and not its peers is the signal that a rollout is uneven.",

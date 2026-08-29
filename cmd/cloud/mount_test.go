@@ -79,6 +79,15 @@ func dead(t *testing.T, name, prefix string) manifest.App {
 	return manifest.App{Name: name, Prefixes: []string{prefix}, Eager: true}
 }
 
+// lazyDead is dead's LAZY twin, and the difference is the whole of readyz_test.go's
+// newest case: the mount stands, nothing fails at boot, and the child exits 1 on the
+// first request instead. That is the shape boot's absence set cannot see.
+func lazyDead(t *testing.T, name, prefix string) manifest.App {
+	t.Helper()
+	t.Setenv("CLOUD_"+strings.ToUpper(strings.NewReplacer("-", "_").Replace(name))+"_BIN", falseBin(t))
+	return manifest.App{Name: name, Prefixes: []string{prefix}}
+}
+
 // deadline is how long an app.Test call waits, spelled ONCE for this package.
 //
 // fiber's default is one second, which makes every request here an assertion
