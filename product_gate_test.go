@@ -83,7 +83,7 @@ var unextracted = []string{
 	"payout", "plan", "plugin", "pref", "principal",
 	"projects", "prompt", "provisioning", "reference",
 	"referral", "registry", "risk", "s3", "s3admin",
-	"samples", "sandbox", "sbom", "search", "security",
+	"samples", "sandbox", "sbom", "search", "security", "space",
 	// seo is the search-visibility surface: a typed proxy onto a measurement
 	// vendor, metered at that vendor's own published prices. It imports only
 	// hanzoai/cloud and no hanzoai/seo exists to mount, so the functionality lives

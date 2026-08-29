@@ -22,7 +22,7 @@ import (
 	s3 "github.com/hanzos3/go"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/fare"
+	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/zap-proto/zip"
 )
