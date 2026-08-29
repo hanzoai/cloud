@@ -25,7 +25,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/apps/fare"
+	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/internal/planetest"

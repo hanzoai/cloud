@@ -171,7 +171,7 @@
             "name": "room",
             "in": "query",
             "required": false,
-            "description": "Room keeps issues bound to one collaboration room, spelled\n\"\u003cworkspace\u003e_\u003croom\u003e\" — the exact value GET /v1/meet/call answers with, so a\nchannel's call and its todo list name the room the same way. This is the\nread a channel view runs to draw its own list; it spans every board of the\norg, because the work a channel is about is not confined to one board.",
+            "description": "Room keeps issues bound to one collaboration room, spelled\n\"\u003cspace\u003e_\u003croom\u003e\" — the exact value GET /v1/meet/call answers with, so a\nchannel's call and its todo list name the room the same way. This is the\nread a channel view runs to draw its own list; it spans every board of the\norg, because the work a channel is about is not confined to one board.",
             "schema": {
               "type": "string"
             }
@@ -615,7 +615,7 @@
             "name": "room",
             "in": "path",
             "required": true,
-            "description": "Room is the room, spelled \"\u003cworkspace\u003e_\u003croom\u003e\" — the same value\nGET /v1/meet/call answers with, so a channel's call and its work name the\nroom identically. From the path.",
+            "description": "Room is the room, spelled \"\u003cspace\u003e_\u003croom\u003e\" — the same value\nGET /v1/meet/call answers with, so a channel's call and its work name the\nroom identically. From the path.",
             "schema": {
               "type": "string"
             }
@@ -700,7 +700,7 @@
             "type": "string"
           },
           "room": {
-            "description": "Room is the collaboration room the issue belongs to, spelled\n\"\u003cworkspace\u003e_\u003croom\u003e\" — empty when it is not room-bound, which is most of\nthem. It is here so an org-wide search says which channel each item came\nfrom without a second read.",
+            "description": "Room is the collaboration room the issue belongs to, spelled\n\"\u003cspace\u003e_\u003croom\u003e\" — empty when it is not room-bound, which is most of\nthem. It is here so an org-wide search says which channel each item came\nfrom without a second read.",
             "type": "string"
           },
           "source": {
