@@ -1984,7 +1984,7 @@ type EventCaptured struct {
 // rather than acting for a tenant: the router owns no tenant data, and starting a
 // process is not a read of anyone's books.
 type StartIn struct {
-	App string `json:"app" validate:"required"`
+	App string `json:"app" validate:"required" zap:"@0"`
 }
 
 // Started reports what the router did.
@@ -2004,8 +2004,8 @@ type StartIn struct {
 // So an answer states the fact and EVERY error is an outage. A router that cannot
 // answer this op cannot claim anything about the fleet.
 type Started struct {
-	Addr  string `json:"addr"`
-	Known bool   `json:"known"`
+	Addr  string `json:"addr" zap:"@0"`
+	Known bool   `json:"known" zap:"@8"`
 }
 
 // ---- the runtime directory both halves must agree on ------------------------
