@@ -48,6 +48,13 @@ const describeArg = "describe"
 // no writer produces.
 const SpecFile = "openapi.json"
 
+// ZAPFile is the app's ZAP schema: the same ops, written as the IDL a peer
+// needs in order to speak the binary wire without holding a copy of these Go
+// types. It sits beside the OpenAPI document because they are two projections
+// of one registry, produced in the same walk, and a reader comparing them is
+// comparing two renderings rather than two sources.
+const ZAPFile = "app.zap"
+
 // DescribeRequested reports whether argv asks this binary to describe itself, and
 // the DIRECTORY it named: `<binary> describe <dir>`. Read before any flag parsing
 // — the mode is a mode, not an option.
@@ -199,6 +206,50 @@ func Describe(dir string, app *zip.App) error {
 	// 0o600 is CreateTemp's mode; the committed artifact is world-readable like
 	// every other file in the tree, and the chmod happens before the swap so the
 	// document is never briefly published under the wrong one.
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := os.Rename(tmp.Name(), final); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	// The ZAP schema, from the same app, in the same walk.
+	//
+	// It is written HERE rather than by a command of its own because a second
+	// producer needs its own list of apps to mount, and a hand-kept copy of an
+	// authored list is the drift this program exists to end. One mount, one
+	// registry, one ownership filter, one moment.
+	//
+	// It does not gate the way openapi.Complete does. A ZAP schema is allowed to
+	// be incomplete, because incompleteness is its ANSWER: ZAP has no way to
+	// write down a map or an untyped value, so an op holding one is named in the
+	// file's own gap list rather than quietly dropped. Refusing to write would
+	// only hide the work list.
+	return writeZAP(dir, app)
+}
+
+// writeZAP publishes the app's ZAP schema by the same atomic rename the
+// document uses, for the same reason: the fleet describes in parallel and these
+// files are read while they are written.
+func writeZAP(dir string, app *zip.App) error {
+	self := filepath.Base(filepath.Clean(dir))
+	schema := zip.ZAPSchema(self, app)
+
+	final := filepath.Join(dir, ZAPFile)
+	tmp, err := os.CreateTemp(dir, "."+ZAPFile+".*")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.WriteString(schema.String()); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
 	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		os.Remove(tmp.Name())
 		return err
