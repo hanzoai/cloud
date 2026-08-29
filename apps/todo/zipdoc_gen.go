@@ -165,6 +165,7 @@ func init() {
 	zip.Describe("PATCH /v1/todo/projects/:key/issues/:num", zip.Doc{
 		Description: "Edits a work item — rename it, rewrite it, move it to another\ncolumn, or re-prioritise it. Absent fields are left alone.\n\nMOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the\nmove replaces that set rather than writing a status column here that a\nforge-side change could contradict. Moving to `done` also CLOSES the issue on\nthe forge, because a done card and an open issue are a contradiction.",
 		Fields: map[string]string{
+			"issueEdit.assignee":    "Assignee hands the work to somebody — a person or an agent, by the name\nthey are known by on the forge. \"\" TAKES IT OFF whoever holds it, which is\nwhy this is a pointer: absent leaves the holder alone.\n\nIt is the other half of `claim`, which that handler already named: a claim\ntakes work for the CALLER and refuses to name anyone else, because giving\nwork away is a different act with different authority. This is that act,\nand until it existed a board could only be worked by whoever clicked\nfirst — an agent could never be given anything.",
 			"issueEdit.description": "Description rewrites the body.",
 			"issueEdit.key":         "Key is the board — the repository name, from the path.",
 			"issueEdit.num":         "Num is the issue number on that repository, from the path.",
