@@ -110,6 +110,10 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		audience: sessionAudience(cfg),
 	}
 
+	if err := converge(root); err != nil {
+		return fmt.Errorf("team.Use:  carry the document tree: %w", err)
+	}
+
 	trans := &transServer{
 		store:     newStore(filepath.Join(root, "spaces")),
 		hier:      buildHierarchy(modelJSON),
