@@ -69,7 +69,7 @@ func TestDoStepCompletesWithoutModuleInstall(t *testing.T) {
 		"id": "positioning", "title": "Nail your positioning",
 		"tool": "content_generate", "draftInto": "brief",
 		"draft": "Write a one-line positioning statement plus three bullets. Return plain text.",
-		"args":  map[string]any{"doctype": "Campaign", "title": "Positioning"},
+		"args":  map[string]any{"doctype": "marketing.Campaign", "title": "Positioning"},
 	}}}
 	if r := req(t, app, http.MethodPut, "/v1/guide/curriculum", org, override); r.Code != http.StatusOK {
 		t.Fatalf("put override curriculum want 200, got %d (%s)", r.Code, r.Body)

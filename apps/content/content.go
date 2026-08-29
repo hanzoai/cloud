@@ -278,7 +278,7 @@ func (o contentOps) getChannels(ctx context.Context, _ *noInput) (*channelList, 
 // and a publish that loses the per-item lease to a live publisher answers status
 // "in_progress" having posted nothing.
 //
-// Example: {"doctype": "SocialPost", "name": "spring-teaser"}
+// Example: {"doctype": "marketing.SocialPost", "name": "spring-teaser"}
 func (o contentOps) postPublish(ctx context.Context, in *PublishInput) (*PublishResult, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -319,7 +319,7 @@ type transitionIn struct {
 // state is reported on the result and a distribution failure never rolls the status
 // change back.
 //
-// Example: {"doctype": "SocialPost", "name": "spring-teaser", "to": "published"}
+// Example: {"doctype": "marketing.SocialPost", "name": "spring-teaser", "to": "published"}
 func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*TransitionResult, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {

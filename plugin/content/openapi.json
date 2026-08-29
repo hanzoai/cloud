@@ -189,7 +189,7 @@
           "content": {
             "application/json": {
               "example": {
-                "doctype": "SocialPost",
+                "doctype": "marketing.SocialPost",
                 "name": "spring-teaser"
               },
               "schema": {
@@ -232,7 +232,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "SocialPost"
+            "example": "marketing.SocialPost"
           },
           {
             "name": "name",
@@ -249,7 +249,7 @@
           "content": {
             "application/json": {
               "example": {
-                "doctype": "SocialPost",
+                "doctype": "marketing.SocialPost",
                 "name": "spring-teaser",
                 "to": "published"
               },

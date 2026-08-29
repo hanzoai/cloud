@@ -32,7 +32,7 @@ steps:
       Write a single crisp research thesis (one sentence) plus three supporting
       bullets for an open-AI research org launching on Zoo. Return plain text.
     args:
-      doctype: Campaign
+      doctype: marketing.Campaign
       title: Research thesis
   - id: site
     title: "Publish your research site"
@@ -46,7 +46,7 @@ steps:
       Write research-site copy — a headline, subheadline, three research pillars,
       and a call to contribute — for the thesis above. Return plain text sections.
     args:
-      doctype: Asset
+      doctype: marketing.Asset
       title: Research site
   - {id: signals, title: "Turn on analytics", detail: "Instrument your site so events flow to Zoo Analytics (/v1/analytics). Once events arrive for your org this step completes itself.", deps: [site], enabled: true, signal: analytics}
   - {id: contributors, title: "Open a contributor waitlist", detail: "Enable the Zoo waitlist surface (/v1/waitlist) and point your site's contribute CTA at it — capture researcher interest before you are fully live.", deps: [site], enabled: true}
