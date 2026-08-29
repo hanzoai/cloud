@@ -578,6 +578,14 @@ const (
 	// enough to show a customer, this says whether the customer asked for it. The
 	// subject is the org, which rides the caller.
 	EntitlementHolds = "entitlement_holds"
+
+	// IAMRoles answers the caller's effective role names in their own org — what a
+	// capability enforcing per-role permissions needs, and the reason no subsystem
+	// keeps a role table of its own.
+	//
+	// The subject is the caller: both the org and the user ride the call, so a
+	// caller can name neither and cannot read anyone else's grants.
+	IAMRoles = "iam_roles"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -1048,6 +1056,13 @@ type ProductIn struct {
 // subsystem and still type-check.
 type Held struct {
 	On bool `json:"on"`
+}
+
+// ---- iam.roles ----
+
+// Roles is the caller's effective role names in their own org.
+type Roles struct {
+	Roles []string `json:"roles"`
 }
 
 // Product names the product whose platform configuration is wanted.

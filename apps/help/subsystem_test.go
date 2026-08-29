@@ -26,6 +26,7 @@ func mountPublic(t *testing.T, publicOrg string) *zip.App {
 	compose(app)
 	deps := cloud.Deps{DataDir: t.TempDir()}
 	// The lane is enabled for every org here; the gate is tested in apps/framework.
+	planetest.Manager(t)
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
 	if err := framework.Mount(app, deps); err != nil {
 		t.Fatalf("mount framework: %v", err)

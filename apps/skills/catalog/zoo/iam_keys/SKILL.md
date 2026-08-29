@@ -1,7 +1,7 @@
 ---
 name: iam_keys
 version: "8.0.0"
-description: "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Resolve a PUBLISHABLE key to the organization that owns it, Resolve a SECRET key to the principal it authenticates."
+description: "Read iam keys: Returns an organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Resolve a PUBLISHABLE key to the organization that owns it, Resolve a SECRET key to the principal it authenticates."
 ---
 
 # Zoo · IAM · keys
@@ -14,7 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/iam/keys` — Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half.
+- `GET https://api.zoo.ngo/v1/iam/keys` — Returns an organization's API keys, newest first — what each is called, what it may reach, and its publishable half.
 - `GET https://api.zoo.ngo/v1/iam/keys/org` — Resolve a PUBLISHABLE key to the organization that owns it
 - `GET https://api.zoo.ngo/v1/iam/keys/principal` — Resolve a SECRET key to the principal it authenticates
 - `GET https://api.zoo.ngo/v1/iam/keys/{owner}/{name}` — Returns one API key: what it is called, what it may reach, and when it was issued.

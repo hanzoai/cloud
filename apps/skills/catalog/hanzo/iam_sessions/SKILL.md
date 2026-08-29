@@ -1,7 +1,7 @@
 ---
 name: iam_sessions
 version: "8.0.0"
-description: "Read iam sessions: Returns who is currently signed in to your organization, newest first, and can be narrowed to one person or one application., Returns one person's session in one application — when it began and which browsers or devices are still carrying it.."
+description: "Read iam sessions: Returns who is currently signed in to an organization, newest first, and can be narrowed to one person or one application., Returns one person's session in one application — when it began and which browsers or devices are still carrying it.."
 ---
 
 # Hanzo · IAM · sessions
@@ -14,7 +14,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.hanzo.ai/v1/iam/sessions` — Returns who is currently signed in to your organization, newest first, and can be narrowed to one person or one application.
+- `GET https://api.hanzo.ai/v1/iam/sessions` — Returns who is currently signed in to an organization, newest first, and can be narrowed to one person or one application.
 - `GET https://api.hanzo.ai/v1/iam/sessions/{owner}/{name}/{application}` — Returns one person's session in one application — when it began and which browsers or devices are still carrying it.
 
 ## Parameters
@@ -26,7 +26,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 | `owner` | path | yes | string |  |
 | `application` | query | no | string |  |
 | `name` | query | no | string |  |
-| `owner` | query | yes | string |  |
+| `owner` | query | no | string |  |
 
 ## Response
 

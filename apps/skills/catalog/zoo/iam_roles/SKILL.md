@@ -28,7 +28,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/iam/roles` → `iam.roles.ListOutput` object with fields: `roles`, `total`.
-- `/v1/iam/roles/{owner}/{name}` → `iam.Role` object with fields: `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `groups`, `id`, `isEnabled`, `name`, `owner`, `roles`.
+- `/v1/iam/roles/{owner}/{name}` → `iam.Role` object with fields: `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `id`, `isEnabled`, `name`, `owner`, `roles`, `teams`.
 
 ## Example
 

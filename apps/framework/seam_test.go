@@ -2,7 +2,6 @@ package framework
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +77,7 @@ func TestTheCallerIsWholeOnEveryWayIn(t *testing.T) {
 // caller. Over MCP that caller must be a whole principal, so the claim lands on
 // somebody who can later grant and revoke — and an org reached with no user must
 // still be claimable afterwards.
-func TestTheOrgSeedGoesToAPerson(t *testing.T) {
+func TestNamelessCallerCannotWrite(t *testing.T) {
 	app := mountApp(t)
 
 	// A write, by name, with no user id. It must not claim the org.
@@ -88,34 +87,10 @@ func TestTheOrgSeedGoesToAPerson(t *testing.T) {
 		t.Fatalf("a nameless caller reached the engine's write path over MCP: %s", out)
 	}
 
-	// The org is still unclaimed: a real person creating a DocType is seeded
-	// System Manager and succeeds. Over the ROUTE, which is the ordinary path.
+	// A person IAM has put in the manager role writes over the ordinary route.
 	code, body := call(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", "u_real", false, taskDocType())
 	if code != http.StatusCreated && code != http.StatusOK {
-		t.Fatalf("the org must still be claimable by a person: %d %s", code, body)
-	}
-
-	// And that person really holds the role — read it back rather than inferring
-	// it from the status.
-	code, body = call(t, app, http.MethodGet, "/v1/framework/roles", "acme", "u_real", false, nil)
-	if code != http.StatusOK {
-		t.Fatalf("roles: %d %s", code, body)
-	}
-	var got struct {
-		Roles []struct{ User, Role string } `json:"data"`
-	}
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatalf("roles body %s: %v", body, err)
-	}
-	var holders []string
-	for _, r := range got.Roles {
-		holders = append(holders, r.User+"="+r.Role)
-		if strings.TrimSpace(r.User) == "" {
-			t.Errorf("a role is held by nobody: %+v", got.Roles)
-		}
-	}
-	if len(holders) == 0 {
-		t.Fatalf("the first caller was not seeded, so nothing was measured: %s", body)
+		t.Fatalf("a manager must be able to define a DocType: %d %s", code, body)
 	}
 }
 

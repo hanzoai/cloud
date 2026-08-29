@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 28,
+  "skill_count": 29,
   "skills": [
     {
       "description": "Read iam account: Returns the signed-in person's own account and the organization they belong to — what a console reads to draw the account menu..",
@@ -56,11 +56,11 @@
       "sha256": "6f34b9b7ccab12ddd251c9b01076d807eec9b4f3f470794c96f91102cae2dba3"
     },
     {
-      "description": "Read iam keys: Returns your organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Resolve a PUBLISHABLE key to the organization that owns it, Resolve a SECRET key to the principal it authenticates.",
+      "description": "Read iam keys: Returns an organization's API keys, newest first — what each is called, what it may reach, and its publishable half., Resolve a PUBLISHABLE key to the organization that owns it, Resolve a SECRET key to the principal it authenticates.",
       "name": "iam_keys",
       "path": "iam_keys/SKILL.md",
       "service": "iam",
-      "sha256": "adc0f284bd4a28f1c184fe64ffaae3cb11d40ad959dc29a3c4d6b4ed0ca9c6f1"
+      "sha256": "df5eb6a209ecf9f27686cf17dd4590a833ed9e9da2564a970fd04fa4b306fc6b"
     },
     {
       "description": "Read iam linked accounts: Returns the sign-in identities linked to the calling person's account — every provider they can currently sign in with..",
@@ -95,7 +95,7 @@
       "name": "iam_permissions",
       "path": "iam_permissions/SKILL.md",
       "service": "iam",
-      "sha256": "83a0fe714e0f15050f0a9b7b27462ebdc77469e455c3b68de1dd11caee6c8c9e"
+      "sha256": "50df5c319e39f5a22af649a6a305ff6c8c3d72d5c4060df0016f09cc6926e6ae"
     },
     {
       "description": "Read iam projects: Returns your organization's projects, newest first — the scope people pick between when their work is separated by product or client rather than by team., Returns one project: what it is called and how it is set up..",
@@ -123,7 +123,7 @@
       "name": "iam_roles",
       "path": "iam_roles/SKILL.md",
       "service": "iam",
-      "sha256": "c38724a944cefcbbb896621c45a0ed74ddfe521fe90beb42cb967980cc1fd22d"
+      "sha256": "35f8420ce23710797719b703500c2a91858ba4b696cab80a6c1862f7c998a191"
     },
     {
       "description": "Read iam scim: Returns the kinds of record this directory provisions and the address of each, so your identity provider discovers them rather than having them configured by hand., Returns one provisionable record kind in full., Returns the attribute definitions this directory und",
@@ -140,11 +140,18 @@
       "sha256": "59645375904544e5f384ca1f1ba5ed77988b5e5faad60078a4a2e78b35884116"
     },
     {
-      "description": "Read iam sessions: Returns who is currently signed in to your organization, newest first, and can be narrowed to one person or one application., Returns one person's session in one application — when it began and which browsers or devices are still carrying it..",
+      "description": "Read iam sessions: Returns who is currently signed in to an organization, newest first, and can be narrowed to one person or one application., Returns one person's session in one application — when it began and which browsers or devices are still carrying it..",
       "name": "iam_sessions",
       "path": "iam_sessions/SKILL.md",
       "service": "iam",
-      "sha256": "c040bc5f8ed1c5a09a866ada37ce9a5147c98e4e9b4c32e013fa4536b8061f7b"
+      "sha256": "dd56e28820e509bae950e06180810b5bda6452248ccc32ca49be2acc1e12ff2e"
+    },
+    {
+      "description": "Read iam teams: Returns your organization's roles, newest first — each a named group of people that permissions are granted to., Returns one team: who is in it..",
+      "name": "iam_teams",
+      "path": "iam_teams/SKILL.md",
+      "service": "iam",
+      "sha256": "5452d37e9c2cfcdb16bdc03409d7ba4b7ff44541c288e058f5a7614d78075e0d"
     },
     {
       "description": "Read iam tokens: Returns the access tokens issued in your organization, newest first, and can be narrowed to one organization., Returns one access token: who and what it was issued to, and when it expires..",
@@ -154,11 +161,11 @@
       "sha256": "db0d56a73ba777b760e5daf4584929d568d8df7c30163c0b2ac1492873b71064"
     },
     {
-      "description": "Read iam users: Returns a page of the people in your organization, with the total so you can page through the rest., Returns one person in your organization, addressed by their username or by their email address..",
+      "description": "Read iam users: Returns a page of the people in an organization, with the total so you can page through the rest., Returns one person in your organization, addressed by their username or by their email address..",
       "name": "iam_users",
       "path": "iam_users/SKILL.md",
       "service": "iam",
-      "sha256": "d9bec2f00c4a6942499b4587704713ebb6c57b33a90479110e6b727a3e115070"
+      "sha256": "25641cff8a2b808167f91be2a403d0cb9b6f38343df953f9c491f90105c9324f"
     },
     {
       "description": "Read iam web3: Starts a wallet sign-in: it returns a one-time challenge for the wallet to sign..",

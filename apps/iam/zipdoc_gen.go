@@ -36,4 +36,7 @@ func init() {
 			"Project.owner":       "the org that owns it — the tenancy key",
 		},
 	})
+	zip.Describe("POST /iam/roles", zip.Doc{
+		Description: "Resolves the caller's effective roles: the org grant they hold, plus every\nrole naming them directly or through a team.\n\nAn org owner or admin is a System Manager, which is what makes an org\nadministrable the moment it exists — the grant IAM already records, rather than\na first-caller-wins seed in whichever subsystem was reached first.\n\nIt fails closed on a store that is not open: this process owns the store, so a\nnil handle is a boot-order fault, and an empty set would read as a member with\nno grants — a refusal the caller would blame on their own permissions.",
+	})
 }

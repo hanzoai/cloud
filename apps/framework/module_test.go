@@ -119,13 +119,18 @@ func TestInstallModule_ForgedPrincipalRefused(t *testing.T) {
 // a different member of the same org who is not a System Manager cannot install.
 func TestInstallModule_NonOwnerDenied(t *testing.T) {
 	withTestModule(t, "shop", testFixtures())
-	app := mountApp(t)
+	// IAM makes u_acme a manager; u_intruder holds nothing.
+	app := mountAs(t, func(_, user string) []string {
+		if user == "u_acme" {
+			return []string{RoleSystemManager}
+		}
+		return nil
+	})
 
-	// u_acme installs first → becomes System Manager (owner seed).
 	if code, _ := call(t, app, http.MethodPost, "/v1/framework/modules/shop/install", "acme", "u_acme", false, nil); code != http.StatusOK {
-		t.Fatal("owner install failed")
+		t.Fatal("manager install failed")
 	}
-	// A different, non-admin member of acme is denied (org is now owned).
+	// A member IAM put in no role is denied.
 	if code, _ := call(t, app, http.MethodPost, "/v1/framework/modules/shop/install", "acme", "u_intruder", false, nil); code != http.StatusForbidden {
 		t.Fatalf("non-owner install want 403, got %d", code)
 	}

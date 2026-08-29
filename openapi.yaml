@@ -8890,15 +8890,6 @@ components:
             Part of the entry's identity: the two tiers keep separate renderings.
           type: string
       type: object
-    RoleAssignment:
-      properties:
-        role:
-          description: Role is the granted role's name.
-          type: string
-        user:
-          description: User is the member the role is granted to.
-          type: string
-      type: object
     Rollup:
       properties:
         balance:
@@ -24513,10 +24504,6 @@ components:
           type: array
         effect:
           type: string
-        groups:
-          items:
-            type: string
-          type: array
         id:
           type: string
         isEnabled:
@@ -24548,6 +24535,10 @@ components:
         submitter:
           description: Submission / approval workflow.
           type: string
+        teams:
+          items:
+            type: string
+          type: array
         updatedAt:
           format: date-time
           type: string
@@ -24743,10 +24734,6 @@ components:
           items:
             type: string
           type: array
-        groups:
-          items:
-            type: string
-          type: array
         id:
           type: string
         isEnabled:
@@ -24756,6 +24743,10 @@ components:
         owner:
           type: string
         roles:
+          items:
+            type: string
+          type: array
+        teams:
           items:
             type: string
           type: array
@@ -24894,6 +24885,39 @@ components:
           type: string
         visible:
           type: boolean
+      type: object
+    iam.Team:
+      properties:
+        createdAt:
+          format: date-time
+          type: string
+        createdTime:
+          type: string
+        deleted:
+          type: boolean
+        description:
+          type: string
+        displayName:
+          type: string
+        id:
+          type: string
+        isEnabled:
+          type: boolean
+        name:
+          type: string
+        organization:
+          type: string
+        owner:
+          type: string
+        parent:
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+        users:
+          items:
+            type: string
+          type: array
       type: object
     iam.ThemeData:
       properties:
@@ -25179,10 +25203,13 @@ components:
         accessKey:
           description: |-
             API credentials. AccessSecret / AccessSecretHash / the OAuth tokens are
-            bearer material. AccessSecretHash MUST persist (orm stores via JSON; a
-            json:"-" field is never saved), so it carries a real json tag and the
-            handler's redact() strips it (and AccessSecret + the token fields) before
-            responding.
+            bearer material, so Mask blanks them and the handler's redact() strips them
+            before responding. They carry real json tags because a field orm never saves
+            is a field that silently vanishes.
+
+            A presented secret is resolved through Key.AccessSecretDigest and nowhere
+            else, so no credential is ISSUED into these columns: they hold what older
+            rows left behind, and every writer that touches them clears them.
           type: string
         accessSecret:
           type: string
@@ -25338,10 +25365,6 @@ components:
           type: string
         google:
           type: string
-        groups:
-          items:
-            type: string
-          type: array
         hash:
           type: string
         heroku:
@@ -25528,10 +25551,6 @@ components:
           type: string
         permanentAvatar:
           type: string
-        permissions:
-          items:
-            $ref: '#/components/schemas/iam.Permission'
-          type: array
         phone:
           type: string
         preHash:
@@ -25558,13 +25577,6 @@ components:
           type: string
         registerType:
           type: string
-        roles:
-          description: |-
-            Authorization attachments. Roles and Permissions are computed on read
-            from the authz store and carried here for API parity with v1.
-          items:
-            $ref: '#/components/schemas/iam.Role'
-          type: array
         salesforce:
           type: string
         score:
@@ -26102,10 +26114,6 @@ components:
           items:
             type: string
           type: array
-        groups:
-          items:
-            type: string
-          type: array
         isEnabled:
           type: boolean
         name:
@@ -26113,6 +26121,10 @@ components:
         owner:
           type: string
         roles:
+          items:
+            type: string
+          type: array
+        teams:
           items:
             type: string
           type: array
@@ -26140,6 +26152,44 @@ components:
           type: boolean
         type:
           type: string
+      type: object
+    iam.teams.DeleteOutput:
+      properties:
+        deleted:
+          type: boolean
+      type: object
+    iam.teams.Input:
+      properties:
+        createdTime:
+          type: string
+        description:
+          type: string
+        displayName:
+          type: string
+        isEnabled:
+          type: boolean
+        name:
+          description: |-
+            Name addresses the team on update and names it on create; every other
+            field is content and binds from the BODY, never the URL.
+          type: string
+        organization:
+          type: string
+        parent:
+          type: string
+        users:
+          items:
+            type: string
+          type: array
+      type: object
+    iam.teams.ListOutput:
+      properties:
+        teams:
+          items:
+            $ref: '#/components/schemas/iam.Team'
+          type: array
+        total:
+          type: integer
       type: object
     iam.toggle:
       properties:
@@ -47414,14 +47464,6 @@ components:
         x:
           description: X is the coordinate in the model space, always dimensionless.
           type: number
-      type: object
-    roleList:
-      properties:
-        data:
-          description: Data is every (user, role) assignment in the caller's org.
-          items:
-            $ref: '#/components/schemas/RoleAssignment'
-          type: array
       type: object
     rollbackReq:
       properties:
@@ -81997,88 +82039,6 @@ paths:
       x-app: framework
       x-public: true
       x-tool: true
-  /v1/framework/roles:
-    get:
-      description: |-
-        Returns every (user, role) assignment in the caller's org. Roles are
-        what DocType permissions are written against, so this is the grant table the
-        permission calculus resolves a member's rights from.
-      operationId: get_framework_roles
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/roleList'
-          description: ok
-      summary: Returns every (user, role) assignment in the caller's org.
-      tags:
-      - framework
-      x-app: framework
-      x-public: true
-      x-tool: true
-    post:
-      description: |-
-        Grants one user one role in the caller's org — how a member gains
-        rights on a DocType, since permissions name roles and never users.
-        Manager-only. Answers 201.
-      operationId: post_framework_roles
-      requestBody:
-        content:
-          application/json:
-            example:
-              role: System Manager
-              user: u_alice
-            schema:
-              $ref: '#/components/schemas/RoleAssignment'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoleAssignment'
-          description: created
-      summary: Grants one user one role in the caller's org — how a member gains rights
-        on a DocType, since permissions name roles and never users.
-      tags:
-      - framework
-      x-app: framework
-      x-public: true
-      x-tool: true
-  /v1/framework/roles/{user}/{role}:
-    delete:
-      description: |-
-        Removes one (user, role) grant in the caller's org. Manager-only.
-        Answers 204; a grant that does not exist is not found.
-      operationId: delete_framework_roles_by_user_by_role
-      parameters:
-      - description: User is the assignee whose grant is being revoked, from the path.
-        example: u_alice
-        in: path
-        name: user
-        required: true
-        schema:
-          type: string
-      - description: |-
-          Role is the role to revoke, from the path. A role name containing a space
-          ("System Manager") arrives percent-encoded and is decoded before it is
-          matched against the stored assignment.
-        example: System Manager
-        in: path
-        name: role
-        required: true
-        schema:
-          type: string
-      responses:
-        "204":
-          description: no content
-      summary: Removes one (user, role) grant in the caller's org.
-      tags:
-      - framework
-      x-app: framework
-      x-public: true
-      x-tool: true
   /v1/framework/summary:
     get:
       description: |-
@@ -85968,8 +85928,12 @@ paths:
   /v1/iam/keys:
     get:
       description: |-
-        Returns your organization's API keys, newest first — what each is called,
+        Returns an organization's API keys, newest first — what each is called,
         what it may reach, and its publishable half. Secret halves are never listed.
+
+        Which organization comes from your credentials, not from the request: you read
+        your own and no one else's. The capability that admits a confidential client to
+        this collection does not itself name a tenant, so the tenant is decided here.
       operationId: get_iam_keys
       parameters:
       - in: query
@@ -85984,7 +85948,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.ListResponse'
           description: ok
-      summary: Returns your organization's API keys, newest first — what each is called,
+      summary: Returns an organization's API keys, newest first — what each is called,
         what it may reach, and its publishable half.
       tags:
       - iam
@@ -86199,7 +86163,7 @@ paths:
 
         Both are org-scoped: a non-SuperAdmin may ask about ITS OWN org's roster, or
         about a user whose home org is its own, and nothing else. The bound comes from
-        the verified credential via authz.Scope, so a request parameter can never
+        the verified credential via principal.Scope, so a request parameter can never
         widen it — a membership row names who may act and spend in an org, so a
         cross-tenant read is a customer roster leak.
       operationId: get_iam_memberships
@@ -87973,14 +87937,19 @@ paths:
   /v1/iam/sessions:
     get:
       description: |-
-        Returns who is currently signed in to your organization, newest first, and
+        Returns who is currently signed in to an organization, newest first, and
         can be narrowed to one person or one application. It is what you read before
         signing someone out.
+
+        Which organization comes from your credentials, not from the request: you read
+        your own and no one else's. A session row names a live account and the
+        applications it is signed in to, so the tenant is decided here rather than
+        taken from the query.
       operationId: listSessions
       parameters:
       - in: query
         name: owner
-        required: true
+        required: false
         schema:
           type: string
       - in: query
@@ -88000,7 +87969,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.ListSessionsOut'
           description: ok
-      summary: Returns who is currently signed in to your organization, newest first,
+      summary: Returns who is currently signed in to an organization, newest first,
         and can be narrowed to one person or one application.
       tags:
       - iam
@@ -88009,9 +87978,9 @@ paths:
       x-tool: true
     post:
       description: |-
-        Records a sign-in. Signing in again from another browser adds to the
-        session rather than replacing it, so one person can be signed in from a laptop
-        and a phone at once.
+        Records a sign-in and answers with the cookie id it minted. Signing in
+        again from another browser adds to the session rather than replacing it, so one
+        person can be signed in from a laptop and a phone at once.
 
         Ask for an exclusive sign-in and the opposite holds: the new sign-in is the only
         one left and every other browser is signed out. That is the setting to use when
@@ -88030,7 +87999,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.Session'
           description: ok
-      summary: Records a sign-in.
+      summary: Records a sign-in and answers with the cookie id it minted.
       tags:
       - iam
       x-app: iam
@@ -88112,9 +88081,9 @@ paths:
       x-tool: true
     put:
       description: |-
-        Replaces the set of browsers a session covers — signing out the ones you
-        leave off while the session itself stays live. A session that does not exist is
-        reported as missing rather than created.
+        Names the browsers a session keeps — signing out the ones you leave off
+        while the session itself stays live. A session that does not exist is reported
+        as missing rather than created.
       operationId: updateSession
       parameters:
       - in: path
@@ -88145,8 +88114,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.Session'
           description: ok
-      summary: Replaces the set of browsers a session covers — signing out the ones
-        you leave off while the session itself stays live.
+      summary: Names the browsers a session keeps — signing out the ones you leave
+        off while the session itself stays live.
       tags:
       - iam
       x-app: iam
@@ -88185,6 +88154,137 @@ paths:
       - iam
       x-app: iam
       x-public: true
+  /v1/iam/teams:
+    get:
+      description: |-
+        Returns your organization's roles, newest first — each a named group of
+        people that permissions are granted to.
+
+        You see your own organization's roles and no one else's; which organization
+        that is comes from your credentials, not from the request.
+      operationId: get_iam_teams
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.teams.ListOutput'
+          description: ok
+      summary: Returns your organization's roles, newest first — each a named group
+        of people that permissions are granted to.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Makes a team — a named set of people that roles and permissions grant
+        to. Granting to a team rather than to each person keeps access correct as
+        people come and go: add someone and they inherit what the team can do. A name
+        already used in your organization is refused.
+      operationId: post_iam_teams
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.teams.Input'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Team'
+          description: ok
+      summary: Makes a team — a named set of people that roles and permissions grant
+        to.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+  /v1/iam/teams/{name}:
+    delete:
+      description: |-
+        Removes a team. Everyone in it loses the access it carried; their
+        accounts, and any other team they are in, are untouched.
+      operationId: delete_iam_teams_by_name
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.teams.DeleteOutput'
+          description: ok
+      summary: Removes a team.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    get:
+      description: 'Returns one team: who is in it.'
+      operationId: get_iam_teams_by_name
+      parameters:
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Team'
+          description: ok
+      summary: 'Returns one team: who is in it.'
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Changes who is in a team. Access changes for
+        everyone in it as soon as the write lands. The name and the created stamp do
+        not change.
+      operationId: put_iam_teams_by_name
+      parameters:
+      - description: |-
+          Name addresses the team on update and names it on create; every other
+          field is content and binds from the BODY, never the URL.
+        in: path
+        name: name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.teams.Input'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Team'
+          description: ok
+      summary: Changes who is in a team.
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
   /v1/iam/tokens:
     get:
       description: |-
@@ -88386,14 +88486,18 @@ paths:
   /v1/iam/users:
     get:
       description: |-
-        Returns a page of the people in your organization, with the total so you
+        Returns a page of the people in an organization, with the total so you
         can page through the rest. Passwords, API secrets and MFA material are stripped
         from every entry.
+
+        Which organization comes from your credentials, not from the request: you read
+        your own and no one else's, and a credential whose scope spans tenants reads
+        the tenant it names — or, naming none, every one of them.
       operationId: get_iam_users
       parameters:
       - in: query
         name: owner
-        required: true
+        required: false
         schema:
           type: string
       - description: |-
@@ -88425,7 +88529,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.users.ListOutput'
           description: ok
-      summary: Returns a page of the people in your organization, with the total so
+      summary: Returns a page of the people in an organization, with the total so
         you can page through the rest.
       tags:
       - iam

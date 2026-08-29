@@ -236,15 +236,20 @@ func TestTenantIsolation(t *testing.T) {
 // retains full control within its OWN tenant — the framework's model, not ours to
 // override; tenant isolation (above) is the security boundary.
 func TestLedgerReadOnlyToRoles(t *testing.T) {
-	app := mount(t)
+	// IAM makes u_owner a manager and u_agent an Erp User. That is the whole
+	// setup: the engine reads what IAM says and grants nothing itself.
+	app := mountAs(t, func(_, user string) []string {
+		switch user {
+		case "u_owner":
+			return []string{"System Manager"}
+		case "u_agent":
+			return []string{RoleErpUser}
+		}
+		return nil
+	})
 	const org = "roles"
-	// u_roles installs → becomes System Manager (owner seed).
 	if code, _ := reqAs(t, app, http.MethodPost, "/v1/framework/modules/erp/install", org, "u_owner", nil); code != http.StatusOK {
 		t.Fatal("owner install failed")
-	}
-	// Grant a second user the Erp User role.
-	if code, _ := reqAs(t, app, http.MethodPost, "/v1/framework/roles", org, "u_owner", map[string]any{"user": "u_agent", "role": RoleErpUser}); code != http.StatusCreated {
-		t.Fatal("grant Erp User failed")
 	}
 	// The Erp User may read a master (has the grant)…
 	if code, _ := reqAs(t, app, http.MethodGet, "/v1/framework/"+dtItem, org, "u_agent", nil); code != http.StatusOK {
@@ -385,8 +390,16 @@ func submitStatus(app *zip.App, org, doctype, name string) int {
 
 func mount(t *testing.T) *zip.App {
 	t.Helper()
+	return mountAs(t, func(string, string) []string { return []string{"System Manager"} })
+}
+
+// mountAs is mount with the roles IAM gives each caller, for the tests that are
+// about the permission model rather than the lane.
+func mountAs(t *testing.T, roles func(org, user string) []string) *zip.App {
+	t.Helper()
 	// The lane is enabled for every org here. Whether an org may reach a module at
 	// all is apps/framework's gate and is tested there.
+	planetest.Roled(t, roles)
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)

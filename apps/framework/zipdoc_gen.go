@@ -24,14 +24,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"Task"}`),
 	})
-	zip.Describe("DELETE /v1/framework/roles/:user/:role", zip.Doc{
-		Description: "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
-		Fields: map[string]string{
-			"roleRef.role": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
-			"roleRef.user": "User is the assignee whose grant is being revoked, from the path.",
-		},
-		Example: json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
-	})
 	zip.Describe("GET /v1/framework/:doctype", zip.Doc{
 		Description: "Returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
 		Fields: map[string]string{
@@ -79,14 +71,6 @@ func init() {
 		},
 		Example: json.RawMessage(`{"module":"cms"}`),
 	})
-	zip.Describe("GET /v1/framework/roles", zip.Doc{
-		Description: "Returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
-		Fields: map[string]string{
-			"RoleAssignment.role": "Role is the granted role's name.",
-			"RoleAssignment.user": "User is the member the role is granted to.",
-			"roleList.data":       "Data is every (user, role) assignment in the caller's org.",
-		},
-	})
 	zip.Describe("GET /v1/framework/summary", zip.Doc{
 		Description: "Reports how much of the DocType surface the caller's org uses: how\nmany DocTypes it has defined, and how many documents exist across them.",
 		Fields: map[string]string{
@@ -120,14 +104,6 @@ func init() {
 			"moduleRef.module": "Module is the lane's registered name (\"cms\", \"erp\"), from the path.",
 		},
 		Example: json.RawMessage(`{"module":"cms"}`),
-	})
-	zip.Describe("POST /v1/framework/roles", zip.Doc{
-		Description: "Grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
-		Fields: map[string]string{
-			"RoleAssignment.role": "Role is the granted role's name.",
-			"RoleAssignment.user": "User is the member the role is granted to.",
-		},
-		Example: json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
 	})
 	zip.Describe("PUT /v1/framework/doctypes/:name", zip.Doc{
 		Description: "Replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",

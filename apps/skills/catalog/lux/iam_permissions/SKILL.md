@@ -28,7 +28,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Response
 
 - `/v1/iam/permissions` → `iam.permission.ListResponse` object with fields: `permissions`.
-- `/v1/iam/permissions/{owner}/{name}` → `iam.Permission` object with fields: `actions`, `adapter`, `approveTime`, `approver`, `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `effect`, `groups`.
+- `/v1/iam/permissions/{owner}/{name}` → `iam.Permission` object with fields: `actions`, `adapter`, `approveTime`, `approver`, `createdAt`, `createdTime`, `deleted`, `description`, `displayName`, `domains`, `effect`, `id`.
 
 ## Example
 
