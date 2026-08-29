@@ -231,6 +231,16 @@ func mountWith(t *testing.T, deps cloud.Deps) *zip.App {
 	return app
 }
 
+// httptestRequest builds one request without the identity headers, for the tests
+// that are about a caller who presents none.
+func httptestRequest(method, path, body string) *http.Request {
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req
+}
+
 // send drives one request as the gateway would present it: a validated principal
 // (X-User-Id) acting for an org (X-Org-Id), which is the only shape this surface
 // admits.

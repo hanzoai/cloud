@@ -476,6 +476,11 @@
       "skill_count": 4
     },
     {
+      "name": "space",
+      "path": "_space/index.json",
+      "skill_count": 3
+    },
+    {
       "name": "sync",
       "path": "_sync/index.json",
       "skill_count": 1
@@ -581,7 +586,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 670,
+  "skill_count": 673,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -4803,6 +4808,27 @@
       "path": "social_summary/SKILL.md",
       "service": "social",
       "sha256": "4b086b4f1a3d5868d3e3bb61f6efd3d773744efd2b5ae871c01fe3ed5adda417"
+    },
+    {
+      "description": "Read space drives: Lists a space's drives., Lists one folder level of a drive., Mints a URL the caller downloads the file from DIRECTLY..",
+      "name": "space_drives",
+      "path": "space_drives/SKILL.md",
+      "service": "space",
+      "sha256": "aae4167c27ab43f6bd491526ca01a74cf1487820d70eb0ccee5838821468a634"
+    },
+    {
+      "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
+      "name": "space_health",
+      "path": "space_health/SKILL.md",
+      "service": "space",
+      "sha256": "d64830ffd108d1fd628a61f624f635d09b55ea0a411c73027bbcdae086aec793"
+    },
+    {
+      "description": "Read space spaces: Lists the caller org's own spaces..",
+      "name": "space_spaces",
+      "path": "space_spaces/SKILL.md",
+      "service": "space",
+      "sha256": "ab6da9d8baef8a8d7ba036d45f8426433d9e612606c8b502d76873b57aa7af52"
     },
     {
       "description": "Read sync sync: List returns every sync link the caller's org has, each with its two endpoints, its direction and trigger policy, and the time it last reconciled., Get returns one sync by id..",

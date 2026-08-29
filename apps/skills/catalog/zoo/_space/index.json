@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read space drives: Lists a space's drives., Lists one folder level of a drive., Mints a URL the caller downloads the file from DIRECTLY..",
+      "name": "space_drives",
+      "path": "space_drives/SKILL.md",
+      "service": "space",
+      "sha256": "ddfa5c71de9e5cb26a4ff5a817e1fc20a6d07ea43d6213a8dc0bf66d142e1938"
+    },
+    {
+      "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
+      "name": "space_health",
+      "path": "space_health/SKILL.md",
+      "service": "space",
+      "sha256": "559bdf6673a2c9d29f2ee53825eede0176f3a5a0e8e5fa99a9a27a48b6b6ecf9"
+    },
+    {
+      "description": "Read space spaces: Lists the caller org's own spaces..",
+      "name": "space_spaces",
+      "path": "space_spaces/SKILL.md",
+      "service": "space",
+      "sha256": "52ba4f8f8e5d4bb5ab4240b93764968d927b2eef6b0a3b2d5df40c2c04a0e9a6"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

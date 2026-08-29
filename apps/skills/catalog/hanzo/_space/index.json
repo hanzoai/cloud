@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.hanzo.ai",
+  "brand": "hanzo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://hanzo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read space drives: Lists a space's drives., Lists one folder level of a drive., Mints a URL the caller downloads the file from DIRECTLY..",
+      "name": "space_drives",
+      "path": "space_drives/SKILL.md",
+      "service": "space",
+      "sha256": "1038a9f94302256fcc2ada1b89a60bacbe3053d75f5e603b2576b4da01aa741a"
+    },
+    {
+      "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
+      "name": "space_health",
+      "path": "space_health/SKILL.md",
+      "service": "space",
+      "sha256": "eb540633a25b9a54f4887f27d8d0ee0bccddfccb24ba5a2738b1752cd67f72e0"
+    },
+    {
+      "description": "Read space spaces: Lists the caller org's own spaces..",
+      "name": "space_spaces",
+      "path": "space_spaces/SKILL.md",
+      "service": "space",
+      "sha256": "b50c1a453149b9afcad4ce7bff6a2571cbf44d38739f8e2177c11fc450ebaf7a"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
