@@ -4798,7 +4798,7 @@ components:
           description: studio design slug (asset source)
           type: string
         doctype:
-          description: Campaign | SocialPost | Asset
+          description: marketing.Campaign | marketing.SocialPost | marketing.Asset
           type: string
         kind:
           description: 'asset kind: ecom|product|lifestyle|hover|hero'
@@ -5159,7 +5159,7 @@ components:
           type: string
         doctype:
           description: |-
-            DocType is the knowledge doctype: kb-page, kb-memory or kb-source from the
+            DocType is the knowledge doctype: kb.page, kb.memory or kb.source from the
             semantic leg, and a lexical row's own doctype/type field otherwise. Absent
             when the row carried neither.
           type: string
@@ -20459,6 +20459,46 @@ components:
           description: Yellow is how many have drifted within tolerance.
           type: integer
       type: object
+    driveIn:
+      properties:
+        name:
+          description: |-
+            Name is the drive's name, matching the same shape a space name does. It
+            becomes the FIRST SEGMENT of every key the drive holds, which is why it may
+            carry no "/".
+          type: string
+        space:
+          description: |-
+            Space is the space to create the drive in, from the path. It carries NO
+            `url:"-"`, unlike the field below it, and the difference is the whole reason
+            both tags are written out: zip's binder skips a field tagged "-" for EVERY
+            URL source, path params included, so a path-borne value that carried it
+            would arrive empty and the create would refuse a perfectly good address.
+          type: string
+      type: object
+    driveItem:
+      properties:
+        name:
+          description: Name is the drive's name — the first segment of every key it
+            holds.
+          type: string
+      type: object
+    driveList:
+      properties:
+        drives:
+          description: Drives are the drives at the space's root.
+          items:
+            $ref: '#/components/schemas/driveItem'
+          type: array
+        space:
+          description: Space is the space that was listed.
+          type: string
+        total:
+          description: |-
+            Total is how many drives came back. The listing is BOUNDED, so it is what
+            came back and not a count of what the space holds.
+          type: integer
+      type: object
     dropped:
       properties:
         deleted:
@@ -21593,6 +21633,34 @@ components:
           description: Path is the file's repo-relative path, e.g. "internal/store/db.go".
           type: string
       type: object
+    fileItem:
+      properties:
+        etag:
+          description: |-
+            ETag is the store's entity tag for the bytes currently at this name, with the
+            quotes the store wraps it in stripped. It is an opaque VERSION and not a
+            checksum to verify against: a single-part upload's tag happens to be the MD5
+            of the content and a multipart upload's is not, and nothing here says which
+            this was. Compare two reads of one file to learn whether it changed; absent
+            for a folder, and for a file the store reports none for.
+          type: string
+        isFolder:
+          description: |-
+            Folder is true for a folder entry, which is emergent from "/" in the names
+            beneath it rather than a thing that was created.
+          type: boolean
+        modifiedAt:
+          description: |-
+            ModifiedAt is when the file was last written, in unix seconds, and 0 for a
+            folder.
+          type: integer
+        name:
+          description: Name is the entry's name RELATIVE to the folder that was listed.
+          type: string
+        size:
+          description: Size is the file's size in bytes, and 0 for a folder.
+          type: integer
+      type: object
     fileJSON:
       properties:
         content:
@@ -21612,6 +21680,31 @@ components:
             Truncated marks a file past the read cap; no content is sent. A caller
             assembling a desired set must treat this as INCOMPLETE, never as empty.
           type: boolean
+      type: object
+    fileList:
+      properties:
+        drive:
+          description: Drive is the drive that was listed.
+          type: string
+        files:
+          description: Files are the entries at this level, names RELATIVE to Folder.
+          items:
+            $ref: '#/components/schemas/fileItem'
+          type: array
+        folder:
+          description: |-
+            Folder is the sub-folder the listing was scoped to, cleaned. Empty for the
+            drive's own root.
+          type: string
+        space:
+          description: Space is the space that was listed.
+          type: string
+        total:
+          description: |-
+            Total is how many entries came back. The listing is BOUNDED, so a drive with
+            more files than the cap answers the cap and this says so — it is not a count
+            of what the drive holds.
+          type: integer
       type: object
     filesJSON:
       properties:
@@ -22819,7 +22912,7 @@ components:
         from:
           description: |-
             From is the id of the node the edge starts at: the child page for a parent
-            edge, the page holding the wikilink for a link edge, the kb-source for a
+            edge, the page holding the wikilink for a link edge, the kb.source for a
             provenance edge. Always one of Nodes.
           type: string
         kind:
@@ -22828,7 +22921,7 @@ components:
         to:
           description: |-
             To is the id of the node the edge points at: the parent page, the linked
-            page, the kb-connector. Always one of Nodes — a wikilink matching no page
+            page, the kb.connector. Always one of Nodes — a wikilink matching no page
             points at a synthetic "unresolved:<lowercased title>" node rather than
             dangling.
           type: string
@@ -22960,7 +23053,7 @@ components:
           description: display label
           type: string
         type:
-          description: kb-page | kb-memory | kb-source | kb-connector | unresolved
+          description: kb.page | kb.memory | kb.source | kb.connector | unresolved
           type: string
       type: object
     graphOut:
@@ -23377,8 +23470,9 @@ components:
       properties:
         doctype:
           description: |-
-            DocType is which kind of knowledge matched: kb-page (a wiki page), kb-memory
-            (a unit of agent memory) or kb-source (a document a connector ingested).
+            DocType is which kind of knowledge matched, by address: kb.page (a wiki
+            page), kb.memory (a unit of agent memory) or kb.source (a document a
+            connector ingested).
             Those three are the whole indexed set, and searchIn.DocTypes filters on them.
           type: string
         name:
@@ -48521,7 +48615,7 @@ components:
         doctypes:
           description: |-
             DocTypes restricts retrieval to a subset of the indexed knowledge doctypes
-            (kb-page, kb-memory, kb-source). An empty or foreign list reads all of them.
+            (kb.page, kb.memory, kb.source). An empty or foreign list reads all of them.
           items:
             type: string
           type: array
@@ -49871,6 +49965,69 @@ components:
           items:
             $ref: '#/components/schemas/Tool'
           type: array
+      type: object
+    spaceHealth:
+      properties:
+        error:
+          description: Error is why the probe is degraded, in plain words. Absent
+            when it is not.
+          type: string
+        presign:
+          description: |-
+            Presign is whether upload and download URLs can be minted, which needs a
+            PUBLIC endpoint on top of the credentials. False does not make the surface
+            degraded — listing spaces, drives and folders still works, only the bytes
+            cannot be reached.
+          type: boolean
+        ready:
+          description: |-
+            Ready is whether this deployment can serve drive and file operations at all:
+            true only when object-store credentials are configured.
+          type: boolean
+        service:
+          description: Service names the subsystem this probe is for. Always "space".
+          type: string
+        status:
+          description: |-
+            Status is "ok" when the store is reachable in principle, "degraded" when it
+            is not. It is the field to read; the HTTP status carries the same fact for a
+            caller that only looks at the code.
+          type: string
+      type: object
+    spaceIn:
+      properties:
+        name:
+          description: |-
+            Name is the space's name, matching ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$ — the
+            shape a drive name takes too, so a caller learns one rule. It is validated AS
+            GIVEN and never lower-cased for you: a client that creates "Photos" and then
+            lists "photos" would be reading a space it did not make, so mixed case is a
+            clean 400.
+          type: string
+      type: object
+    spaceItem:
+      properties:
+        createdAt:
+          description: CreatedAt is when the space was made, in unix seconds.
+          type: integer
+        name:
+          description: Name is the space's name, as the org created it.
+          type: string
+      type: object
+    spaceList:
+      properties:
+        spaces:
+          description: Spaces are the caller org's spaces, oldest first as the store
+            returns them.
+          items:
+            $ref: '#/components/schemas/spaceItem'
+          type: array
+        total:
+          description: |-
+            Total is how many spaces this org has. It equals len(spaces): the listing is
+            not paged, because one bucket per (org, space) keeps an org's count small by
+            construction, which is the whole reason a drive is a prefix and not a bucket.
+          type: integer
       type: object
     stateGraph:
       properties:
@@ -81558,8 +81715,9 @@ paths:
         is refused rather than reaching the store.
       operationId: get_framework_by_doctype
       parameters:
-      - description: DocType is the DocType to list, from the path.
-        example: Task
+      - description: DocType is the DocType to list, by ADDRESS — "module.name", from
+          the path.
+        example: Projects.Task
         in: path
         name: doctype
         required: true
@@ -81644,8 +81802,9 @@ paths:
         SUBMITTED document cannot be deleted — cancel it first. Answers 204.
       operationId: delete_framework_by_doctype_by_name
       parameters:
-      - description: DocType is the document's DocType, from the path.
-        example: Task
+      - description: DocType is the document's DocType, by ADDRESS — "module.name",
+          from the path.
+        example: Projects.Task
         in: path
         name: doctype
         required: true
@@ -81674,8 +81833,9 @@ paths:
       description: Returns one document by name, with Password fields redacted.
       operationId: get_framework_by_doctype_by_name
       parameters:
-      - description: DocType is the document's DocType, from the path.
-        example: Task
+      - description: DocType is the document's DocType, by ADDRESS — "module.name",
+          from the path.
+        example: Projects.Task
         in: path
         name: doctype
         required: true
@@ -81740,8 +81900,9 @@ paths:
         cannot be re-submitted — but it CAN then be deleted.
       operationId: post_framework_by_doctype_by_name_cancel
       parameters:
-      - description: DocType is the document's DocType, from the path.
-        example: Task
+      - description: DocType is the document's DocType, by ADDRESS — "module.name",
+          from the path.
+        example: Projects.Task
         in: path
         name: doctype
         required: true
@@ -81782,8 +81943,9 @@ paths:
         lifecycle; any other docstatus is an illegal transition.
       operationId: post_framework_by_doctype_by_name_submit
       parameters:
-      - description: DocType is the document's DocType, from the path.
-        example: Task
+      - description: DocType is the document's DocType, by ADDRESS — "module.name",
+          from the path.
+        example: Projects.Task
         in: path
         name: doctype
         required: true
@@ -81851,6 +82013,7 @@ paths:
               - fieldname: subject
                 fieldtype: Data
                 reqd: true
+              module: Projects
               name: Task
             schema:
               $ref: '#/components/schemas/DocType'
@@ -81879,10 +82042,10 @@ paths:
       operationId: delete_framework_doctypes_by_name
       parameters:
       - description: |-
-          Name is the DocType's name, from the path. A name containing a space
-          ("Sales Invoice") arrives percent-encoded and is decoded before it is
-          matched against the stored one.
-        example: Task
+          Name is the DocType's ADDRESS — "module.name", e.g. "kb.page". A name
+          containing a space ("erp.Sales Invoice") arrives percent-encoded and is
+          decoded before it is matched against the stored one.
+        example: Projects.Task
         in: path
         name: name
         required: true
@@ -81905,10 +82068,10 @@ paths:
       operationId: get_framework_doctypes_by_name
       parameters:
       - description: |-
-          Name is the DocType's name, from the path. A name containing a space
-          ("Sales Invoice") arrives percent-encoded and is decoded before it is
-          matched against the stored one.
-        example: Task
+          Name is the DocType's ADDRESS — "module.name", e.g. "kb.page". A name
+          containing a space ("erp.Sales Invoice") arrives percent-encoded and is
+          decoded before it is matched against the stored one.
+        example: Projects.Task
         in: path
         name: name
         required: true
@@ -81936,7 +82099,7 @@ paths:
         Manager-only.
       operationId: put_framework_doctypes_by_name
       parameters:
-      - example: Task
+      - example: Projects.Task
         in: path
         name: name
         required: true
@@ -81949,7 +82112,7 @@ paths:
               fields:
               - fieldname: subject
                 fieldtype: Data
-              name: Task
+              name: Projects.Task
             schema:
               $ref: '#/components/schemas/DocType'
         required: true
@@ -92220,9 +92383,9 @@ paths:
   /v1/knowledge/import:
     post:
       description: |-
-        Ingests an uploaded export as a tree of kb-page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.
+        Ingests an uploaded export as a tree of kb.page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.
 
-        The pages are filed through the SAME ingest path a connector sync uses, so the kb-page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb-link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.
+        The pages are filed through the SAME ingest path a connector sync uses, so the kb.page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb.link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.
 
         Scoped to the caller's validated org; `?project=` narrows every imported page to one project. No validated principal is 403, and an org that has not installed the kb module is refused with the install call to make first. The bounds are 64 MB per upload, 5000 pages and 8 MB per archive entry: pages past the five-thousandth are dropped and a larger entry is truncated at its bound, and a page the store rejects is skipped — so the answer's `imported` count is what was actually filed, not what was sent.
       operationId: post_knowledge_import
@@ -116826,6 +116989,258 @@ paths:
       x-app: social
       x-public: true
       x-tool: true
+  /v1/space/{space}/drives:
+    get:
+      description: |-
+        Lists a space's drives.
+
+        Listing the drives IS listing the space's root folder, because a drive is the
+        first segment of a key and nothing else — so the two can never disagree the way
+        a drives table and the keys under it would. A space the caller's org does not
+        own is the same 404 an unknown name gives.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing read, and the debit lands only once the
+        listing has succeeded.
+      operationId: get_space_by_space_drives
+      parameters:
+      - description: Space is the space's name, from the path.
+        in: path
+        name: space
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/driveList'
+          description: ok
+      summary: Lists a space's drives.
+      tags:
+      - space
+      x-app: space
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Makes a new drive in a space and answers 201 with it.
+
+        A drive is a PREFIX and not a bucket, so making one writes a zero-byte marker
+        at "<name>/" — which is what makes an empty drive visible to a listing that has
+        no other key to find. A name already taken in the space is 409.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing created, and the debit lands only once the
+        drive exists.
+      operationId: post_space_by_space_drives
+      parameters:
+      - description: |-
+          Space is the space to create the drive in, from the path. It carries NO
+          `url:"-"`, unlike the field below it, and the difference is the whole reason
+          both tags are written out: zip's binder skips a field tagged "-" for EVERY
+          URL source, path params included, so a path-borne value that carried it
+          would arrive empty and the create would refuse a perfectly good address.
+        in: path
+        name: space
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/driveIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/driveItem'
+          description: created
+      summary: Makes a new drive in a space and answers 201 with it.
+      tags:
+      - space
+      x-app: space
+      x-public: true
+      x-tool: true
+  /v1/space/{space}/drives/{drive}:
+    delete:
+      description: |-
+        Removes an EMPTY drive and answers 204.
+
+        A drive holding files is 409 rather than a cascade: deleting an org's files
+        behind a single drive call is not a thing this surface will do silently. A
+        drive or space the caller's org does not own is the same 404 an unknown name
+        gives.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing deleted, and the debit lands only once the
+        drive is gone.
+      operationId: delete_space_by_space_drives_by_drive
+      parameters:
+      - description: Space is the space's name, from the path.
+        in: path
+        name: space
+        required: true
+        schema:
+          type: string
+      - description: Drive is the drive's name, from the path.
+        in: path
+        name: drive
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes an EMPTY drive and answers 204.
+      tags:
+      - space
+      x-app: space
+      x-public: true
+      x-tool: true
+  /v1/space/{space}/drives/{drive}/files:
+    get:
+      description: |-
+        Lists one folder level of a drive.
+
+        Folder-style by default: sub-folders come back as folder entries, which is the
+        file-manager view. `?recursive=true` lists every file flat under the folder
+        instead. Names are RELATIVE to `?folder=`, and the listing is bounded so a huge
+        drive cannot exhaust memory — Total is what came back, not what the drive holds.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing read, and the debit lands only once the
+        listing has succeeded.
+      operationId: get_space_by_space_drives_by_drive_files
+      parameters:
+      - description: Space is the space to list in, from the path.
+        in: path
+        name: space
+        required: true
+        schema:
+          type: string
+      - description: Drive is the drive to list, from the path.
+        in: path
+        name: drive
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: folder
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: recursive
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/fileList'
+          description: ok
+      summary: Lists one folder level of a drive.
+      tags:
+      - space
+      x-app: space
+      x-public: true
+      x-tool: true
+  /v1/space/health:
+    get:
+      description: |-
+        Health reports whether this deployment can serve spaces, drives and files.
+
+        It is a REAL probe rather than a constant: 200 when object-store credentials
+        are present, so the store is reachable in principle, and 503 with the reason
+        when they are not. It is deliberately NOT gated — liveness has to be probe-able
+        without a token — so it is the one operation here that names no space and bills
+        nothing.
+      operationId: get_space_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/spaceHealth'
+          description: ok
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/spaceHealth'
+          description: service unavailable
+      summary: Health reports whether this deployment can serve spaces, drives and
+        files.
+      tags:
+      - space
+      x-app: space
+      x-public: true
+      x-tool: true
+  /v1/space/spaces:
+    get:
+      description: |-
+        Lists the caller org's own spaces.
+
+        Only the caller's: every space is physically named under a per-org prefix and
+        the listing strips that prefix, so another org's spaces are not in the answer at
+        all. Another org's space is not refused but INVISIBLE, so this cannot be used to
+        learn that a name is taken elsewhere.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing done, and the debit lands only once the
+        work has succeeded.
+      operationId: get_space_spaces
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/spaceList'
+          description: ok
+      summary: Lists the caller org's own spaces.
+      tags:
+      - space
+      x-app: space
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Makes a new space for the caller's org and answers 201 with it.
+
+        The one bucket a space's files live in is derived from the caller's VALIDATED
+        org, so an org can only ever create inside its own namespace and no request
+        field can redirect that. A name already taken in the org is 409.
+
+        Billed per call: the balance is checked BEFORE anything is touched, so an
+        unfunded org is refused with nothing created, and the debit lands only once the
+        space exists.
+      operationId: post_space_spaces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/spaceIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/spaceItem'
+          description: created
+      summary: Makes a new space for the caller's org and answers 201 with it.
+      tags:
+      - space
+      x-app: space
+      x-public: true
+      x-tool: true
   /v1/standing/upkeep:
     post:
       description: |-
@@ -123123,6 +123538,9 @@ tags:
 - description: Package social is posting to every social account you own, now or on
     a schedule.
   name: social
+- description: 'Package space is where work lives: drives, folders and the files in
+    them.'
+  name: space
 - description: Package standing prices and tracks what it costs to KEEP a company,
     as distinct from what it cost to form one.
   name: standing
