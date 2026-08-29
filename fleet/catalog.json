@@ -2735,6 +2735,10 @@
    "doc": "Changes how an organization appears across Hanzo: the square mark\nbeside its name, as an uploaded image or as a single emoji. Sending an image\nclears the emoji and sending an emoji clears the image — an organization has\none mark, not a preference order — and sending neither clears both, which is\nhow it goes back to being drawn as its initial.\n\nAn image is an https link or the bytes inline as a data URL, up to 96 KiB.\nAnyone who administers the organization may set this; it is not reserved to\nthe platform.\n\nIt writes the two fields onto the stored row and touches nothing else, which\nupdate cannot do: update replaces the whole record, and a record read back\nfirst arrives masked, so a read-modify-write through it would persist the mask\nover the organization's own credential settings."
   },
   {
+   "id": "setOrganizationProfile",
+   "doc": "Changes how an organization reads: its display name, its website\nand its favicon.\n\nIT EXISTS FOR THE REASON SetAvatar DOES, and the reason is worth stating\nbecause the obvious alternative is a trap. Update REPLACES the whole record,\nso a caller that wants to change one field has to send every other field\nback — and a record read back first arrives MASKED, so the read half of that\nread-modify-write hands you \"***\" for the master password and the salt, and\nthe write half stores it. Renaming an organization through Update therefore\ncosts it its credential settings; sending only the new name costs it\neverything else. Neither is a rename.\n\nSo this writes the fields it names and touches nothing else. A nil pointer is\nnot sent and not changed; an empty string is sent and clears the field."
+  },
+  {
    "id": "updateOrganization",
    "doc": "Changes an organization's display, its defaults and the sign-in rules\neveryone in it inherits. Which organization it is does not change, and neither\ndoes when it was created."
   },

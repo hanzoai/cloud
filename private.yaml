@@ -12746,6 +12746,13 @@ components:
             having crashed. Both answer 503, so without this an operator cannot tell
             a maintenance window from an outage — and would page for the former.
           type: boolean
+        error:
+          description: |-
+            Error is why the last start attempt failed, empty when none has. It is the
+            answer Running=false cannot give: a lazy plugin that has never been asked and
+            one whose every start dies both report Running=false, and only this separates
+            them. Cleared when an instance comes up.
+          type: string
         name:
           type: string
         pid:
@@ -29705,6 +29712,19 @@ components:
         name:
           type: string
         owner:
+          type: string
+      type: object
+    iam.SetProfileInput:
+      properties:
+        displayName:
+          type: string
+        favicon:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+        websiteUrl:
           type: string
       type: object
     iam.SigninItem:
@@ -98043,6 +98063,44 @@ paths:
           description: ok
       summary: 'Changes how an organization appears across Hanzo: the square mark
         beside its name, as an uploaded image or as a single emoji.'
+      tags:
+      - iam
+      x-app: iam
+      x-public: true
+      x-tool: true
+  /v1/iam/organizations/profile:
+    post:
+      description: |-
+        Changes how an organization reads: its display name, its website
+        and its favicon.
+
+        IT EXISTS FOR THE REASON SetAvatar DOES, and the reason is worth stating
+        because the obvious alternative is a trap. Update REPLACES the whole record,
+        so a caller that wants to change one field has to send every other field
+        back — and a record read back first arrives MASKED, so the read half of that
+        read-modify-write hands you "***" for the master password and the salt, and
+        the write half stores it. Renaming an organization through Update therefore
+        costs it its credential settings; sending only the new name costs it
+        everything else. Neither is a rename.
+
+        So this writes the fields it names and touches nothing else. A nil pointer is
+        not sent and not changed; an empty string is sent and clears the field.
+      operationId: setOrganizationProfile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam.SetProfileInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/iam.Organization'
+          description: ok
+      summary: 'Changes how an organization reads: its display name, its website and
+        its favicon.'
       tags:
       - iam
       x-app: iam

@@ -446,6 +446,10 @@
             "description": "Disabled is true when Unload stopped it deliberately, as opposed to it\nhaving crashed. Both answer 503, so without this an operator cannot tell\na maintenance window from an outage — and would page for the former.",
             "type": "boolean"
           },
+          "error": {
+            "description": "Error is why the last start attempt failed, empty when none has. It is the\nanswer Running=false cannot give: a lazy plugin that has never been asked and\none whose every start dies both report Running=false, and only this separates\nthem. Cleared when an instance comes up.",
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
