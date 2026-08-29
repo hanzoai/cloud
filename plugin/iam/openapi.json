@@ -1952,6 +1952,40 @@
         "x-tool": true
       }
     },
+    "/v1/iam/organizations/profile": {
+      "post": {
+        "operationId": "setOrganizationProfile",
+        "summary": "Changes how an organization reads: its display name, its website and its favicon.",
+        "description": "Changes how an organization reads: its display name, its website\nand its favicon.\n\nIT EXISTS FOR THE REASON SetAvatar DOES, and the reason is worth stating\nbecause the obvious alternative is a trap. Update REPLACES the whole record,\nso a caller that wants to change one field has to send every other field\nback — and a record read back first arrives MASKED, so the read half of that\nread-modify-write hands you \"***\" for the master password and the salt, and\nthe write half stores it. Renaming an organization through Update therefore\ncosts it its credential settings; sending only the new name costs it\neverything else. Neither is a rename.\n\nSo this writes the fields it names and touches nothing else. A nil pointer is\nnot sent and not changed; an empty string is sent and clears the field.",
+        "tags": [
+          "iam"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/iam.SetProfileInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/iam.Organization"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/iam/organizations/{owner}/{name}": {
       "delete": {
         "operationId": "deleteOrganization",
@@ -6826,6 +6860,26 @@
             "type": "string"
           },
           "owner": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "iam.SetProfileInput": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "favicon": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "websiteUrl": {
             "type": "string"
           }
         },

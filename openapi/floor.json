@@ -1,6 +1,6 @@
 {
-  "paths": 1726,
-  "operations": 2386,
+  "paths": 1727,
+  "operations": 2387,
   "products": {
     "account": 10,
     "ad": 7,
@@ -55,7 +55,7 @@
     "graph": 7,
     "guide": 19,
     "help": 4,
-    "iam": 158,
+    "iam": 159,
     "index": 17,
     "ingress": 18,
     "integrations": 50,
