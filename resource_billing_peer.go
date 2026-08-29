@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/plane/commerce"
@@ -49,18 +50,18 @@ var ledgerCallTimeout = 10 * time.Second
 // contract whichever side answered: out-of-funds is 402 insufficient_balance, a
 // cap is 402 spend_cap_exceeded, and anything else is unknown — which the
 // fail-closed caller turns into 503 rather than free work.
-func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, projectValidated bool, costCents int64) error {
+func (rm *ResourceMeter) gatePeer(ctx context.Context, payer account.Account, project string, projectValidated bool, costCents int64) error {
 	in := plane.AuthorizeIn{
-		Subject:          org,
+		Subject:          payer.Subject(),
 		Amount:           plane.Amount(money.FromUSD(costCents)),
 		Project:          project,
 		Service:          rm.provider,
 		ProjectValidated: projectValidated,
 	}
-	// Subject is the WALLET, For() names the BOOKS that hold it — the same two
-	// halves the co-resident path splits (booksOf). Passing the wallet key as the
-	// tenant would ask commerce for an org named "hanzo/stranger", which is no org.
-	ctx, cancel := context.WithTimeout(For(ctx, booksOf(org)), ledgerCallTimeout)
+	// Subject is the WALLET, For() names the BOOKS that hold it — the two halves the
+	// address carries. Passing the wallet key as the tenant would ask commerce for an
+	// org named "hanzo/stranger", which is no org.
+	ctx, cancel := context.WithTimeout(For(ctx, payer.Org()), ledgerCallTimeout)
 	defer cancel()
 
 	v, err := commerce.FinanceAuthorize(ctx, &in)
@@ -90,7 +91,7 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 // received, and a request cancellation must not cancel the money. A failure is
 // logged for reconciliation rather than swallowed — an unbilled create is a number
 // somebody has to find later, so it says so now.
-func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted func()) {
+func (rm *ResourceMeter) meterPeer(payer account.Account, kind string, u metering.Usage, posted func()) {
 	// The EXACT debit, never the cents field. plane.Money is a decimal string
 	// precisely so a debit crosses the process boundary unrounded, and the
 	// receiver honors that (meter_rpc.go parses the decimal and debits it
@@ -99,7 +100,7 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted fu
 	// sources with their documented precedence; it is the same question
 	// MeterUsage already asks to decide there is anything to bill at all.
 	in := plane.RecordIn{
-		Subject: org,
+		Subject: payer.Subject(),
 		Amount:  plane.Amount(u.Money().Unwrap()),
 		Usage: plane.Usage{
 			// THE WHOLE ROW CROSSES, not the three fields it takes to move money.
@@ -134,15 +135,15 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage, posted fu
 		},
 	}
 	log := rm.log
-	settle(posted, log, org, kind, func() {
+	settle(posted, log, payer.Subject(), kind, func() {
 		// The debit acts FOR the org with no request behind it, so it states the
 		// tenant explicitly — the books it writes to are chosen here, not by
 		// whatever ran last.
-		ctx, cancel := context.WithTimeout(For(context.Background(), booksOf(org)), ledgerCallTimeout)
+		ctx, cancel := context.WithTimeout(For(context.Background(), payer.Org()), ledgerCallTimeout)
 		defer cancel()
 		if _, err := commerce.FinanceRecord(ctx, &in); err != nil && log != nil {
 			log.Error("resource debit failed over the internal plane (resource created, not billed)",
-				"org", org, "kind", kind, "amount", u.Money().String(), "err", err)
+				"payer", payer.Subject(), "books", payer.Org(), "kind", kind, "amount", u.Money().String(), "err", err)
 		}
 	})
 }

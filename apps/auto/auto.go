@@ -51,6 +51,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/connectorruntime"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -1248,7 +1249,9 @@ func recordRunEnd(s *cloud.Service[state], ctx context.Context, in RunEndInput) 
 // request and therefore no claim-bound project. It is the scope meterRun already
 // debits under, so the gate and the debit measure one thing.
 func gateRun(s *cloud.Service[state], ctx context.Context, org string) error {
-	if err := s.Bill.Gate(ctx, org, "", false, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind)); err != nil {
+	// The durable path carries the run's org as a stored string, so it is parsed into
+	// an address by the one rule — the same address meterRun debits below.
+	if err := s.Bill.Gate(ctx, account.PayerOf("", org), "", false, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind)); err != nil {
 		return cloud.Denied(err)
 	}
 	return nil
@@ -1257,7 +1260,7 @@ func gateRun(s *cloud.Service[state], ctx context.Context, org string) error {
 // meterRun records one metered unit for a flow run from the durable path (no HTTP
 // context). Nil/disabled meter → no-op.
 func meterRun(s *cloud.Service[state], org string) {
-	s.Bill.Meter(org, "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
+	s.Bill.Meter(account.PayerOf("", org), "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
 }
 
 // emitRunEvent emits the ONE o11y event per run onto the unified observability plane

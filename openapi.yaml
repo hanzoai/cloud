@@ -1001,6 +1001,34 @@ components:
             a spec).
           type: string
       type: object
+    AutoRecharge:
+      properties:
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        enabled:
+          type: boolean
+        lastRechargedAt:
+          type: string
+        stored:
+          type: boolean
+        subject:
+          type: string
+        thresholdCents:
+          type: integer
+      type: object
+    AutoRechargeEdit:
+      properties:
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        enabled:
+          type: boolean
+        thresholdCents:
+          type: integer
+      type: object
     Backend:
       properties:
         url:
@@ -7137,95 +7165,6 @@ components:
         provider:
           type: string
       type: object
-    PaymentIn:
-      properties:
-        amountCents:
-          description: |-
-            AmountCents is the amount to charge, in whole cents (5000 is $50.00).
-            Server-side bounds apply and are authoritative — the default floor is $1
-            and the ceiling $5,000, so a fat-fingered or hostile amount is refused
-            before any money moves.
-          type: integer
-        currency:
-          description: Currency is the ISO 4217 code, lower-cased. Empty means usd.
-          type: string
-        idempotencyKey:
-          description: |-
-            IdempotencyKey makes a retry safe: the same key never charges twice, it
-            replays the first result. Sending one is strongly recommended for an agent,
-            which retries by construction. Empty falls back to a windowed key derived
-            from the amount and currency, so a double-submit inside 15 minutes still
-            collapses onto one charge.
-          type: string
-        sourceId:
-          description: |-
-            SourceID is the single-use payment token that stands in for the card: a
-            Square Web Payments SDK nonce minted in the browser, or a Square sandbox
-            test nonce when the org's credentials are sandbox ones. The card number
-            itself never reaches this process, which is what keeps it out of PCI scope.
-          type: string
-      type: object
-    PaymentOut:
-      properties:
-        balanceCents:
-          description: |-
-            BalanceCents is the org's balance AFTER this payment, read back from the
-            same key just credited so it matches what the balance endpoint reports.
-          type: integer
-        id:
-          description: |-
-            ID is the ledger transaction id for the credit. It is what getPayment
-            reads back, and the customer-visible receipt for the money.
-          type: string
-        processorRef:
-          description: |-
-            ProcessorRef is the payment processor's own reference for the charge
-            (Square's payment id). It is the field that proves money actually moved at
-            the gateway rather than only in our ledger — the thing to quote when
-            reconciling against a processor dashboard.
-          type: string
-        status:
-          description: |-
-            Status is "ok" on a settled charge. A charge that did not settle is an
-            error with the processor's reason, never a status field to inspect.
-          type: string
-        test:
-          description: |-
-            Test reports which bucket this credited: true is a SANDBOX charge crediting
-            the test balance, false is live money. It is always stated so a receipt can
-            never be mistaken for the other kind.
-          type: boolean
-      type: object
-    PaymentRecord:
-      properties:
-        amountCents:
-          description: AmountCents is the credited amount in whole cents.
-          type: integer
-        createdAt:
-          description: CreatedAt is when the credit was written, RFC3339.
-          type: string
-        currency:
-          description: Currency is the ISO 4217 code.
-          type: string
-        id:
-          description: ID is the ledger transaction id.
-          type: string
-        notes:
-          description: Notes is the ledger memo, carrying the processor and its reference.
-          type: string
-        status:
-          description: |-
-            Status is the payment's state. This ledger writes a deposit only AFTER the
-            processor settled, so a payment that can be read is one that succeeded.
-          type: string
-        subject:
-          description: Subject is the billing key this payment credited.
-          type: string
-        test:
-          description: Test reports whether this was a sandbox charge (test balance)
-            or live money.
-          type: boolean
-      type: object
     Payout:
       properties:
         amount:
@@ -12784,11 +12723,15 @@ components:
       type: object
     agentDetail:
       properties:
+        avatar:
+          type: string
         computeRef:
           type: string
         createdAt:
           type: string
         description:
+          type: string
+        emoji:
           type: string
         executionMode:
           type: string
@@ -12925,6 +12868,17 @@ components:
       type: object
     agentView:
       properties:
+        avatar:
+          description: |-
+            Avatar is an image the agent is drawn as — a link to one, or the bytes
+            inline as a data URL, up to 96 KiB. Emoji is the one glyph a caller picked
+            when they had no image. At most one is ever set; neither means the agent is
+            drawn as its initial, the same way a person with no photo is. Both are
+            iam/pkg/schema's Mark, so a face means the same thing on an agent as it
+            does on a person or an org.
+            Avatar is the agent's picture: an image URL, or the image itself inline as a
+            data URL up to 96 KiB. Empty when the agent has no image.
+          type: string
         computeRef:
           description: |-
             ComputeRef is the visor machine this bot is bound to, opaque here: this
@@ -12942,6 +12896,12 @@ components:
             falling back to "agent <name>" when it is empty. It is not part of the prompt —
             Instructions is — so writing the behaviour here reaches the caller and not the
             model.
+          type: string
+        emoji:
+          description: |-
+            Emoji is the single glyph a caller picked when they had no image. At most one
+            of avatar and emoji is ever set; neither means the agent is drawn as its
+            initial, the same way a person with no photo is.
           type: string
         executionMode:
           description: |-
@@ -18828,6 +18788,14 @@ components:
       type: object
     createAgentIn:
       properties:
+        avatar:
+          description: |-
+            Avatar and Emoji are how the agent APPEARS. An image wins when both are
+            given — it is the thing somebody made — and both empty leaves the agent
+            drawn as its initial. Validated by iam/pkg/schema, the same rule a person's
+            avatar passes, so the 96 KiB bound and the accepted URL forms are stated
+            once for every subject that has a face.
+          type: string
         computeRef:
           description: |-
             ComputeRef optionally binds this bot to a visor machine. Opaque here, bounded
@@ -18839,6 +18807,12 @@ components:
             Description is the one line published as the description of the `agent_<name>`
             tool, which is how another agent decides whether to call this one. Optional,
             and worth writing for exactly that reason.
+          type: string
+        emoji:
+          description: |-
+            Emoji is the single glyph shown when there is no image. An image WINS when
+            both are given — it is the thing somebody made — and both empty leaves the
+            agent drawn as its initial.
           type: string
         executionMode:
           description: |-
@@ -51733,6 +51707,12 @@ components:
       type: object
     updateAgentIn:
       properties:
+        avatar:
+          description: |-
+            Avatar and Emoji re-draw the agent. Sending either replaces the pair, so
+            setting an image clears a glyph and "" for both goes back to the initial —
+            there is no state where a row holds two answers.
+          type: string
         computeRef:
           description: ComputeRef re-binds (or, with "", unbinds) the visor machine.
             Opaque here.
@@ -51740,6 +51720,12 @@ components:
         description:
           description: Description replaces the line other agents read in the tool
             catalogue.
+          type: string
+        emoji:
+          description: |-
+            Emoji re-draws the agent as a glyph. Sending either of the pair replaces
+            BOTH, so setting a glyph clears an image and "" for both goes back to the
+            initial — there is no state where a row holds two answers.
           type: string
         executionMode:
           description: |-
@@ -53915,6 +53901,17 @@ paths:
         Scoped to the caller's org and nothing else, and that isolation is structural rather than a filter: conversations are persisted in a store opened PER ORG, so there is no query in which another tenant's threads could appear. A validated principal with a non-empty org is required; 403 without one.
       operationId: get_agents_chat_conversations
       summary: List the agent threads in your org
+      tags:
+      - agents
+      x-app: agents
+      x-public: true
+    post:
+      description: |-
+        Writes turns to the caller's thread store without running a completion, and answers the `conversationId` they were written under. An absent `conversationId` opens a new thread; supplying one appends to it.
+
+        This is for a client that streams its own turn through /v1/chat/completions and still wants the conversation in its history — the round records what IT answers, and is otherwise the only writer. It takes the same store, the same per-org isolation and the same notion of a thread: what is recorded here reads back through the two GETs beside it and the round can continue it by id. A validated principal with a non-empty org is required; 403 without one.
+      operationId: post_agents_chat_conversations
+      summary: Record turns in a conversation
       tags:
       - agents
       x-app: agents
@@ -65832,6 +65829,67 @@ paths:
       x-app: billing
       x-public: true
       x-tool: true
+  /v1/billing/recharge:
+    get:
+      description: |-
+        Reads the caller's auto-reload rule: top the balance up by `amountCents`
+        whenever it falls below `thresholdCents`, charging the card on file
+        off-session. It is the same setting every prepaid AI account calls auto-reload.
+
+        An org that has never set one reads as disabled with zeroes rather than as an
+        error — "no rule" answers the question — and `stored` is how a caller tells
+        never-configured from deliberately-off.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: get_billing_recharge
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoRecharge'
+          description: ok
+      summary: 'Reads the caller''s auto-reload rule: top the balance up by `amountCents`
+        whenever it falls below `thresholdCents`, charging the card on file off-session.'
+      tags:
+      - billing
+      x-app: billing
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Sets the caller's auto-reload rule, and answers with the rule as stored.
+
+        ENABLING REQUIRES A CARD ON FILE (400), because the sweep charges off-session:
+        a rule naming no chargeable method is a promise the schedule cannot keep. A
+        non-positive amount and a negative threshold are refused the same way, each
+        naming the field that was wrong.
+
+        The rule is the caller's OWN. The org comes from the validated principal and
+        the body names none, so there is no field a write could be steered through onto
+        another tenant's schedule.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: put_billing_recharge
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoRechargeEdit'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoRecharge'
+          description: ok
+      summary: Sets the caller's auto-reload rule, and answers with the rule as stored.
+      tags:
+      - billing
+      x-app: billing
+      x-public: true
+      x-tool: true
   /v1/billing/recharge/run-all:
     post:
       description: |-
@@ -66147,6 +66205,45 @@ paths:
           description: ok
       summary: 'Answers one page of the caller''s own ledger, newest first: what moved,
         how much, when, and what it was tagged with.'
+      tags:
+      - billing
+      x-app: billing
+      x-public: true
+      x-tool: true
+  /v1/billing/transactions/{id}:
+    get:
+      description: |-
+        Reads one ledger entry by its id.
+
+        It is the MEMBER of the collection beside it rather than a second way to ask —
+        the same rows GET /v1/billing/transactions lists, addressed one at a time. A
+        top-up receipt is read here, because a receipt IS a ledger entry: the id this
+        takes is the `transactionId` a top-up hands back.
+
+        The read is narrower than the list: commerce's core loads the row and refuses
+        anything that is not a deposit, so a row that exists but is not a top-up
+        answers 404. That asymmetry is stated rather than closed, because widening a
+        money read to make two shapes match is not a change worth making for symmetry.
+
+        The books are the caller's own and cannot be named, so a guessed id misses
+        rather than reaching another tenant's ledger.
+
+        A named handler, not a closure, so zipdoc can lift this prose into the registry.
+      operationId: get_billing_transactions_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+          description: ok
+      summary: Reads one ledger entry by its id.
       tags:
       - billing
       x-app: billing
@@ -71451,91 +71548,6 @@ paths:
       - commerce
       x-app: commerce
       x-public: true
-  /v1/commerce/payments:
-    post:
-      description: |-
-        Takes a payment: charges a single-use card token and credits the caller's org
-        balance, exactly once.
-
-        This is the operation behind "collect money from a customer". It runs the SAME
-        core the console's card top-up runs (commerce billing.TakePayment), so the
-        server-side amount bounds, the idempotency guard and the ledger credit are
-        shared rather than reimplemented — a second charge path would eventually
-        double-charge somebody.
-
-        The ORG is the caller's, taken from the validated principal and never from the
-        input, so a payment can only ever credit the account of whoever made the call.
-
-        A payment is RISK-SCREENED before the card is charged, so this can be refused
-        without any money moving: 403 means the screen did not authorise it, and 503 means
-        the screen could not reach a decision — that one is worth retrying, and no charge
-        was attempted either way.
-
-        Send an idempotencyKey. An agent retries by construction, and the key is what
-        turns a retry into a replay of the first receipt instead of a second charge.
-
-        The answer states whether it settled in SANDBOX or live mode (`test`), and
-        carries the processor's own reference (`processorRef`) so the charge can be
-        reconciled against the processor rather than taken on trust.
-
-        A named builder, not a closure, so zipdoc can lift this prose into the registry.
-
-        It BUILDS the handler rather than being it, because the screen has to sit inside
-        the value every projection of this op dispatches to — see exposePayments. `charge`
-        is the money move, `take` is the screened entry point onto it, and the only
-        registrable one is the second.
-      operationId: takePayment
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PaymentIn'
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentOut'
-          description: created
-      summary: Take a card payment and credit the org's balance
-      tags:
-      - commerce
-      x-app: commerce
-      x-public: true
-      x-tool: true
-  /v1/commerce/payments/{id}:
-    get:
-      description: |-
-        Reads one settled payment out of the caller's org ledger.
-
-        The org scopes the read by construction — the ledger is namespaced to it — so
-        an id belonging to another tenant is simply not found rather than found and
-        then filtered. A ledger row that is not a payment is likewise not found, so
-        this cannot be used to walk the org's usage debits.
-
-        A named handler, not a closure, so zipdoc can lift this prose into the registry.
-      operationId: getPayment
-      parameters:
-      - description: ID is the ledger transaction id a payment returned.
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentRecord'
-          description: ok
-      summary: Read one settled payment by its id
-      tags:
-      - commerce
-      x-app: commerce
-      x-public: true
-      x-tool: true
   /v1/commerce/plans/entries:
     get:
       description: 'Returns every plan row as stored — the administrative view behind

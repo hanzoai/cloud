@@ -140,12 +140,12 @@ func standing(c *zip.Ctx, method, path string, plans PlanChecker, allow Allowanc
 	if principal.IsSuperAdmin(c) {
 		return "" // platform sudo, masquerade included.
 	}
-	w, ok := principal.WalletOf(c)
-	if !ok {
+	w := principal.Payer(c)
+	if w.Zero() {
 		// No resolvable payer. Unknown, not unpaid, and never a free pass.
 		return unresolved(c, "no resolvable wallet", path)
 	}
-	switch s := Stand(c.Context(), licence(c.Context(), plans, w.Ledger), AllowanceIn(c.Context(), allow, w), w); {
+	switch s := Stand(c.Context(), licence(c.Context(), plans, w.Org()), AllowanceIn(c.Context(), allow, w), w); {
 	case s.Admits():
 		return ""
 	case s == Unknown:
@@ -155,7 +155,7 @@ func standing(c *zip.Ctx, method, path string, plans PlanChecker, allow Allowanc
 		// the models are what cost. A tier's free allowance is
 		// tier.Config.DailyCreditsCents, which replenishes on a clock and so is
 		// bounded per day rather than per signup.
-		c.Log().Info("spend: no subscription and no credit", "org", w.Ledger, "account", w.Account, "path", path)
+		c.Log().Info("spend: no subscription and no credit", "org", w.Org(), "account", w.Subject(), "path", path)
 		return ReasonUnpaid
 	}
 }

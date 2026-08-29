@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/hanzoai/cloud/plane"
@@ -67,7 +68,7 @@ func meterAt(t *testing.T, l *moneyLedger) *ResourceMeter {
 	return NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "test")
 }
 
-func spender(w string) Payer { return Payer{Wallet: w} }
+func spender(w string) Payer { return Payer{Wallet: account.PayerOf("", w)} }
 
 func settles(cond func() bool) bool {
 	for range 400 {

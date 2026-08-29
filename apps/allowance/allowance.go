@@ -264,13 +264,13 @@ func (o ops) get(ctx context.Context, _ *noArgs) (*plane.Allowance, error) {
 	if !has {
 		return nil, zip.ErrForbidden("allowance: a validated principal is required")
 	}
-	w, ok := principal.WalletOf(c)
-	if !ok {
+	w := principal.Payer(c)
+	if w.Zero() {
 		return nil, zip.ErrForbidden("allowance: a validated principal is required")
 	}
 	// A read is per-caller and changes on every call, so no hop may keep it.
 	c.SetHeader("Cache-Control", "no-store")
-	return o.s.read(ctx, w.Ledger, w.Account, time.Now())
+	return o.s.read(ctx, w.Org(), w.Subject(), time.Now())
 }
 
 // bound is one ceiling over one window: the rate, or the quota.

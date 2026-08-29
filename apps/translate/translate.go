@@ -333,7 +333,7 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	// the same ResourceMeter contract every non-LLM unit uses. quality needs none:
 	// deps.AI already authorizes and debits its own tokens, and a second charge here
 	// would double-bill.
-	payer := principal.Ledger(c)
+	payer := principal.Payer(c)
 	project, projectValidated := principal.ValidatedProject(c)
 	if tier == TierBulk {
 		if err := s.Bill.Gate(ctx, payer, project, projectValidated, meterKind, cloud.MicrosToGateCents(bulkMicros(ctx, usage.Characters))); err != nil {
@@ -343,7 +343,7 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 
 	res, err := s.State.engine(tier).Translate(ctx, Job{
 		Texts: missText, Source: source, Target: target, Format: format, Glossary: in.Glossary,
-		Org: org, BillingOrg: payer, Project: project,
+		Org: org, BillingOrg: payer.Subject(), Project: project,
 	})
 	if err != nil {
 		if errors.Is(err, ErrNoEngine) {

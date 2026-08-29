@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 18,
+  "skill_count": 19,
   "skills": [
     {
       "description": "Read billing accounts: Answers the caller's billing accounts: the org itself, its currency, when it was opened, and the caller's own standing in it., Answers one billing account's roster..",
@@ -91,6 +91,13 @@
       "sha256": "4ac9737ba43ad863dc74896f7fe284463c79c8cb786ab6bbbcf5988291a7e3ca"
     },
     {
+      "description": "Read billing recharge: Reads the caller's auto-reload rule: top the balance up by `amountCents` whenever it falls below `thresholdCents`, charging the card on file off-session..",
+      "name": "billing_recharge",
+      "path": "billing_recharge/SKILL.md",
+      "service": "billing",
+      "sha256": "ee4f3b34d05bcfe9f2237d79ff2211da386f89c690e57cb75a50e5d476b2712e"
+    },
+    {
       "description": "Read billing settings: Answers the PUBLIC half of this org's processor configuration — the ids a browser needs to tokenize a card, and the environment it must tokenize against..",
       "name": "billing_settings",
       "path": "billing_settings/SKILL.md",
@@ -112,11 +119,11 @@
       "sha256": "0a244fa77d29d20b3d1c9aecbabd19d2b15b0d4abc7a6b30c6c1cbf1def6598b"
     },
     {
-      "description": "Read billing transactions: Answers one page of the caller's own ledger, newest first: what moved, how much, when, and what it was tagged with..",
+      "description": "Read billing transactions: Answers one page of the caller's own ledger, newest first: what moved, how much, when, and what it was tagged with., Reads one ledger entry by its id..",
       "name": "billing_transactions",
       "path": "billing_transactions/SKILL.md",
       "service": "billing",
-      "sha256": "e94d121526a6e6a0e026bbf012dc5f5954d0cd622707254c4eacbfb6f00b912e"
+      "sha256": "f314a2d2b3ff870c7b607c2499a02e14a11744a0d677bc7b7098e51123c5f7de"
     },
     {
       "description": "Read billing usage: Every billed call the caller's org made, attributed to a product, Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum., Ans",

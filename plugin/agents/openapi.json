@@ -207,6 +207,15 @@
           "agents"
         ],
         "x-public": true
+      },
+      "post": {
+        "operationId": "post_agents_chat_conversations",
+        "summary": "Record turns in a conversation",
+        "description": "Writes turns to the caller's thread store without running a completion, and answers the `conversationId` they were written under. An absent `conversationId` opens a new thread; supplying one appends to it.\n\nThis is for a client that streams its own turn through /v1/chat/completions and still wants the conversation in its history — the round records what IT answers, and is otherwise the only writer. It takes the same store, the same per-org isolation and the same notion of a thread: what is recorded here reads back through the two GETs beside it and the round can continue it by id. A validated principal with a non-empty org is required; 403 without one.",
+        "tags": [
+          "agents"
+        ],
+        "x-public": true
       }
     },
     "/v1/agents/chat/conversations/{id}": {
@@ -1604,6 +1613,9 @@
       },
       "agentDetail": {
         "properties": {
+          "avatar": {
+            "type": "string"
+          },
           "computeRef": {
             "type": "string"
           },
@@ -1611,6 +1623,9 @@
             "type": "string"
           },
           "description": {
+            "type": "string"
+          },
+          "emoji": {
             "type": "string"
           },
           "executionMode": {
@@ -1735,6 +1750,10 @@
       },
       "agentView": {
         "properties": {
+          "avatar": {
+            "description": "Avatar is an image the agent is drawn as — a link to one, or the bytes\ninline as a data URL, up to 96 KiB. Emoji is the one glyph a caller picked\nwhen they had no image. At most one is ever set; neither means the agent is\ndrawn as its initial, the same way a person with no photo is. Both are\niam/pkg/schema's Mark, so a face means the same thing on an agent as it\ndoes on a person or an org.\nAvatar is the agent's picture: an image URL, or the image itself inline as a\ndata URL up to 96 KiB. Empty when the agent has no image.",
+            "type": "string"
+          },
           "computeRef": {
             "description": "ComputeRef is the visor machine this bot is bound to, opaque here: this\npackage stores and echoes it, and the binding's lifecycle belongs elsewhere.\nEmpty means unbound, which is what every one-shot agent is.",
             "type": "string"
@@ -1745,6 +1764,10 @@
           },
           "description": {
             "description": "Description is the one line another agent reads when deciding whether to call\nthis one: the tool catalogue publishes it as the description of `agent_\u003cname\u003e`,\nfalling back to \"agent \u003cname\u003e\" when it is empty. It is not part of the prompt —\nInstructions is — so writing the behaviour here reaches the caller and not the\nmodel.",
+            "type": "string"
+          },
+          "emoji": {
+            "description": "Emoji is the single glyph a caller picked when they had no image. At most one\nof avatar and emoji is ever set; neither means the agent is drawn as its\ninitial, the same way a person with no photo is.",
             "type": "string"
           },
           "executionMode": {
@@ -2023,12 +2046,20 @@
       },
       "createAgentIn": {
         "properties": {
+          "avatar": {
+            "description": "Avatar and Emoji are how the agent APPEARS. An image wins when both are\ngiven — it is the thing somebody made — and both empty leaves the agent\ndrawn as its initial. Validated by iam/pkg/schema, the same rule a person's\navatar passes, so the 96 KiB bound and the accepted URL forms are stated\nonce for every subject that has a face.",
+            "type": "string"
+          },
           "computeRef": {
             "description": "ComputeRef optionally binds this bot to a visor machine. Opaque here, bounded\nat 256 characters, and not resolved — this package stores the reference and\nthe binding's lifecycle belongs elsewhere.",
             "type": "string"
           },
           "description": {
             "description": "Description is the one line published as the description of the `agent_\u003cname\u003e`\ntool, which is how another agent decides whether to call this one. Optional,\nand worth writing for exactly that reason.",
+            "type": "string"
+          },
+          "emoji": {
+            "description": "Emoji is the single glyph shown when there is no image. An image WINS when\nboth are given — it is the thing somebody made — and both empty leaves the\nagent drawn as its initial.",
             "type": "string"
           },
           "executionMode": {
@@ -2844,12 +2875,20 @@
       },
       "updateAgentIn": {
         "properties": {
+          "avatar": {
+            "description": "Avatar and Emoji re-draw the agent. Sending either replaces the pair, so\nsetting an image clears a glyph and \"\" for both goes back to the initial —\nthere is no state where a row holds two answers.",
+            "type": "string"
+          },
           "computeRef": {
             "description": "ComputeRef re-binds (or, with \"\", unbinds) the visor machine. Opaque here.",
             "type": "string"
           },
           "description": {
             "description": "Description replaces the line other agents read in the tool catalogue.",
+            "type": "string"
+          },
+          "emoji": {
+            "description": "Emoji re-draws the agent as a glyph. Sending either of the pair replaces\nBOTH, so setting a glyph clears an image and \"\" for both goes back to the\ninitial — there is no state where a row holds two answers.",
             "type": "string"
           },
           "executionMode": {

@@ -29,7 +29,7 @@ import (
 // on a request-free context.
 //
 // Both shapes are exercised against BOTH resolvers — callerOrg, which the eight
-// ledger ops read by, and payingOrg, which the payment and cart ops read by — so
+// ledger ops read by, and orgOf, which the payment and cart ops read by — so
 // neither can drift onto a second rule. Two copies of one rule is two rules, and
 // the two ends of that drift fail opposite ways: too strict refuses the trusted
 // service that legitimately carries no session, too loose asks nothing of a
@@ -67,11 +67,11 @@ func TestOnARequestOnlyAVouchedOrgResolvesATenant(t *testing.T) {
 		return &tenantProbe{}, nil
 	}, zip.WithOperationID("probeCallerOrg"))
 	zip.Get(app, "/paying", func(ctx context.Context, _ *tenantProbe) (*tenantProbe, error) {
-		if _, err := payingOrg(ctx, "probe"); err != nil {
+		if _, err := orgOf(ctx, "probe"); err != nil {
 			return nil, err
 		}
 		return &tenantProbe{}, nil
-	}, zip.WithOperationID("probePayingOrg"))
+	}, zip.WithOperationID("probeOrgOf"))
 
 	for _, tc := range []struct {
 		what    string
@@ -122,7 +122,7 @@ func TestOnARequestOnlyAVouchedOrgResolvesATenant(t *testing.T) {
 // THE PLANE SHAPE. No request, so the org is whatever the caller stated — and the
 // only thing that states one is an endpoint that already validated it.
 //
-// payingOrg checks the tenant BEFORE co-residency, which is what makes this
+// orgOf checks the tenant BEFORE co-residency, which is what makes this
 // readable without a commerce embed: unresolved says "no validated org on the
 // call", resolved gets past it and says "not co-resident". So the second message
 // is the PASS. One refusal for one rule — the shape it was refused in is not
@@ -145,13 +145,13 @@ func TestOffARequestTheStatedOrgIsTheTenant(t *testing.T) {
 			t.Errorf("callerOrg %s: %q %v — want resolved=%v", tc.what, org, err, tc.resolved)
 		}
 
-		_, err = payingOrg(tc.ctx, "probe")
+		_, err = orgOf(tc.ctx, "probe")
 		if err == nil {
-			t.Errorf("payingOrg %s: succeeded with no commerce co-resident", tc.what)
+			t.Errorf("orgOf %s: succeeded with no commerce co-resident", tc.what)
 			continue
 		}
 		if strings.Contains(err.Error(), "no validated org on the call") == tc.resolved {
-			t.Errorf("payingOrg %s: %v — want tenant-resolved=%v", tc.what, err, tc.resolved)
+			t.Errorf("orgOf %s: %v — want tenant-resolved=%v", tc.what, err, tc.resolved)
 		}
 	}
 }

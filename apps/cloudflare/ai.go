@@ -106,7 +106,7 @@ func (o ops) aiRun(c *zip.Ctx) error {
 	// Billing PAYER = the HOME org (X-User-Owner; falls back to the effective org for a
 	// normal caller). Project narrows the scope + its validated cap, exactly as the
 	// edge/LLM meters thread it.
-	payer := principal.Ledger(c)
+	payer := principal.Payer(c)
 	project, projectValidated := principal.ValidatedProject(c)
 
 	// BALANCE/FREEZE gate BEFORE any Cloudflare contact. The BYO fee is FLOORED

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/finance"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
@@ -437,7 +437,7 @@ func TestSpendGateUnmountedSwitchNeverEnforces(t *testing.T) {
 // BOTH authorities to have answered no. Anything less is Unknown, and enforcement —
 // not this predicate — decides what to do about that.
 func TestStandNeverInventsAnUnpaid(t *testing.T) {
-	w := principal.Wallet{Ledger: "hanzo", Account: "hanzo/stranger"}
+	w := account.PayerOf("", "hanzo/stranger")
 	cases := []struct {
 		name   string
 		lic    Licence
@@ -469,7 +469,7 @@ func TestStandNeverInventsAnUnpaid(t *testing.T) {
 func TestStandSubscribedNeverReadsTheLedger(t *testing.T) {
 	led := &spendLedger{credit: atto(0)}
 	publishLedger(t, led)
-	if got := Stand(context.Background(), LicenceActive, AllowanceUnknown, principal.Wallet{Ledger: "acme", Account: "acme/bob"}); got != Subscribed {
+	if got := Stand(context.Background(), LicenceActive, AllowanceUnknown, account.PayerOf("", "acme/bob")); got != Subscribed {
 		t.Fatalf("Stand = %v, want Subscribed", got)
 	}
 	if led.reads != 0 {
@@ -487,7 +487,7 @@ func TestStandSubscribedNeverReadsTheLedger(t *testing.T) {
 // their included usage falls through to the credit leg and pays as they go. They
 // are refused only when they have neither.
 func TestAllowanceOnlyEverRemovesAnAdmission(t *testing.T) {
-	w := principal.Wallet{Ledger: "hanzo", Account: "hanzo/subscriber"}
+	w := account.PayerOf("", "hanzo/subscriber")
 
 	cases := []struct {
 		name   string

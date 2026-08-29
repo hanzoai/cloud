@@ -53,6 +53,12 @@ func mountCards(app cloud.Router, o ops) {
 	// the same bytes. See untypedByDesign.
 	app.Post("/v1/billing/subscribe/card", cloud.Handle(o.s, subscribeWithCard))
 	zip.Post(zapp, "/v1/billing/recharge/run-all", o.rechargeAll)
+	// THE RULE THE SWEEP ABOVE ACTS ON. It shipped without these for months: the
+	// sweep recharged "every org below its own threshold" and no customer could set
+	// a threshold, so it fired for nobody. A schedule with no way to opt into it is
+	// a feature that exists only in its own log line.
+	zip.Get(zapp, "/v1/billing/recharge", o.autoRecharge)
+	zip.Put(zapp, "/v1/billing/recharge", o.setAutoRecharge)
 }
 
 // The prose for all four is declared here rather than lifted off the handlers:
@@ -171,3 +177,51 @@ func subscribeWithCard(s *cloud.Service[state], c *zip.Ctx) error {
 // derivation over the stable facts — which is what a browser sending no header
 // has always relied on.
 func retryKey(c *zip.Ctx) string { return strings.TrimSpace(c.Header("X-Idempotency-Key")) }
+
+// Reads the caller's auto-reload rule: top the balance up by `amountCents`
+// whenever it falls below `thresholdCents`, charging the card on file
+// off-session. It is the same setting every prepaid AI account calls auto-reload.
+//
+// An org that has never set one reads as disabled with zeroes rather than as an
+// error — "no rule" answers the question — and `stored` is how a caller tells
+// never-configured from deliberately-off.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (o ops) autoRecharge(ctx context.Context, _ *noInput) (*plane.AutoRecharge, error) {
+	org, _, err := payer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ask(ctx, org, "auto-recharge", func(ctx context.Context) (*plane.AutoRecharge, error) {
+		return commercepeer.BillingAutoRecharge(ctx)
+	})
+}
+
+// Sets the caller's auto-reload rule, and answers with the rule as stored.
+//
+// ENABLING REQUIRES A CARD ON FILE (400), because the sweep charges off-session:
+// a rule naming no chargeable method is a promise the schedule cannot keep. A
+// non-positive amount and a negative threshold are refused the same way, each
+// naming the field that was wrong.
+//
+// The rule is the caller's OWN. The org comes from the validated principal and
+// the body names none, so there is no field a write could be steered through onto
+// another tenant's schedule.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func (o ops) setAutoRecharge(ctx context.Context, in *plane.AutoRechargeEdit) (*plane.AutoRecharge, error) {
+	// The control is asked IN THE OPERATION, not on the route: MCP, the call plane
+	// and the CLI reach this op without touching route middleware, and a browser
+	// authenticates this surface from an ambient session cookie that any origin's
+	// request carries. See changesSomething in change_control_test.go.
+	if err := account.CSRF(ctx); err != nil {
+		return nil, err
+	}
+	org, _, err := payer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ask(ctx, org, "set auto-recharge", func(ctx context.Context) (*plane.AutoRecharge, error) {
+		return commercepeer.BillingAutoRechargeSet(ctx, in)
+	})
+}

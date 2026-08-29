@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 28,
+  "skill_count": 27,
   "skills": [
     {
       "description": "Read commerce admin: The catalog projection with cost and margin included.",
@@ -89,13 +89,6 @@
       "path": "commerce_org/SKILL.md",
       "service": "commerce",
       "sha256": "95d9bacb29e1fb01364ddb22cc41d2f78eb20c59f4c2733fa8707f8901d7c83a"
-    },
-    {
-      "description": "Read commerce payments: Read one settled payment by its id.",
-      "name": "commerce_payments",
-      "path": "commerce_payments/SKILL.md",
-      "service": "commerce",
-      "sha256": "2ffda619120e76a67c27b9bd56e494def0587c97096964e1088ed1435f4f3339"
     },
     {
       "description": "Read commerce plans: The raw plan authority rows.",

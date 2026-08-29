@@ -42,6 +42,7 @@ import (
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/zap-proto/zip"
@@ -535,7 +536,10 @@ func dropDedicated(s *cloud.Service[state], ctx context.Context, r Resource) err
 // org with a size dimension, via the ONE commerce meter (never a parallel path).
 // No-op when billing is unconfigured or the kind is free (fee 0).
 func meterProvision(s *cloud.Service[state], org, kind, size string, fee int64, requestID, clientIP string) {
-	s.Bill.MeterUsage(org, kind, metering.Usage{
+	// org arrives as a bare string parameter — the create path already resolved it and
+	// this function holds no request — so the address is parsed back out of it. PayerOf
+	// answers a bare slug with that org's own account, which is what the create gated on.
+	s.Bill.MeterUsage(account.PayerOf("", org), kind, metering.Usage{
 		AmountCents: fee,
 		Model:       kind + ":" + size, // e.g. datastore:10Gi — names the instance on the invoice
 		RequestID:   requestID,
@@ -563,7 +567,10 @@ func meterDedicatedFootprint(s *cloud.Service[state], ctx context.Context) {
 		if cents <= 0 {
 			continue
 		}
-		s.Bill.MeterUsage(r.Org, r.Kind, metering.Usage{
+		// r.Org is a column on the stored instance row, written when the instance was
+		// provisioned; this sweep runs on a ticker with no request behind it, so the
+		// address is parsed back out of the stored string.
+		s.Bill.MeterUsage(account.PayerOf("", r.Org), r.Kind, metering.Usage{
 			AmountCents: cents,
 			Model:       r.Kind + ":" + r.Size + ":gbday",
 			RequestID:   r.ID,

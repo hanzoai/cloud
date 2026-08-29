@@ -107,7 +107,7 @@ func resolve(s *cloud.Service[state], c *zip.Ctx, want string) (string, error) {
 	case Private:
 		fee := cloud.ResourceFeeCents(deployFeeEnvPrefix, privateKind)
 		project, validated := principal.ValidatedProject(c)
-		if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), project, validated, privateKind, fee); err != nil {
+		if err := s.State.bill.Gate(c.Context(), principal.Payer(c), project, validated, privateKind, fee); err != nil {
 			return "", err
 		}
 		return Private, nil

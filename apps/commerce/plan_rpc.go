@@ -58,7 +58,7 @@ func exposePlan() {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeTier(ctx context.Context, in *plane.TierIn) (*plane.Tier, error) {
-	org, err := payingOrg(ctx, "tier")
+	org, err := orgOf(ctx, "tier")
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func planeTier(ctx context.Context, in *plane.TierIn) (*plane.Tier, error) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeRollup(ctx context.Context, in *plane.RollupIn) (*plane.Rollup, error) {
-	org, err := payingOrg(ctx, "rollup")
+	org, err := orgOf(ctx, "rollup")
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func planeRollup(ctx context.Context, in *plane.RollupIn) (*plane.Rollup, error)
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeSubscriptions(ctx context.Context, in *plane.SubsIn) (*plane.Subscriptions, error) {
-	org, err := payingOrg(ctx, "subscriptions")
+	org, err := orgOf(ctx, "subscriptions")
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func planeSubscriptions(ctx context.Context, in *plane.SubsIn) (*plane.Subscript
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeSubscriptionCancel(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
-	org, err := payingOrg(ctx, "cancel subscription")
+	org, err := orgOf(ctx, "cancel subscription")
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func planeSubscriptionCancel(ctx context.Context, in *plane.SubscriptionRef) (*p
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeSubscriptionReactivate(ctx context.Context, in *plane.SubscriptionRef) (*plane.Subscription, error) {
-	org, err := payingOrg(ctx, "reactivate subscription")
+	org, err := orgOf(ctx, "reactivate subscription")
 	if err != nil {
 		return nil, err
 	}

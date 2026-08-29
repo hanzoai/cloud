@@ -285,15 +285,15 @@ func TestRefusal_PicksTheWordingForTheCallerItHas(t *testing.T) {
 
 // ── the wallet: who pays, and the rules that decide it ──────────────────────
 
-// WalletFor addresses a wallet with no request behind it, so it cannot ask the
+// PayerFor addresses a wallet with no request behind it, so it cannot ask the
 // credential rules a request-borne payer goes through. Its three refusals and its
 // one carve-out are therefore the whole contract, and each is here.
-func TestWalletFor_TheRulesThatDecideAnAddress(t *testing.T) {
+func TestPayerFor_TheRulesThatDecideAnAddress(t *testing.T) {
 	t.Run("no org is no wallet", func(t *testing.T) {
-		if _, ok := principal.WalletFor("", "alice"); ok {
-			t.Error("WalletFor with a blank org resolved a wallet; there is no ledger to key")
+		if !principal.PayerFor("", "alice").Zero() {
+			t.Error("PayerFor with a blank org resolved a wallet; there is no ledger to key")
 		}
-		if _, ok := principal.WalletFor("   ", "alice"); ok {
+		if !principal.PayerFor("   ", "alice").Zero() {
 			t.Error("a whitespace org is a blank org")
 		}
 	})
@@ -303,8 +303,8 @@ func TestWalletFor_TheRulesThatDecideAnAddress(t *testing.T) {
 	// than escaped, which is the only version of this that cannot be got wrong.
 	t.Run("a slash in the name is refused, not escaped", func(t *testing.T) {
 		for _, name := range []string{"acme/bob", "/bob", "bob/", "a/b/c"} {
-			if _, ok := principal.WalletFor("hanzo", name); ok {
-				t.Errorf("WalletFor(hanzo, %q) resolved — a name may not address another org", name)
+			if !principal.PayerFor("hanzo", name).Zero() {
+				t.Errorf("PayerFor(hanzo, %q) resolved — a name may not address another org", name)
 			}
 		}
 	})
@@ -314,11 +314,11 @@ func TestWalletFor_TheRulesThatDecideAnAddress(t *testing.T) {
 	// Routing it through the credential rule would make funding that pool
 	// impossible in the one org that holds it.
 	t.Run("a blank name addresses the org account", func(t *testing.T) {
-		w, ok := principal.WalletFor("hanzo", "")
-		if !ok {
-			t.Fatal("WalletFor(hanzo, \"\") = !ok — the org's own account must be addressable")
+		w := principal.PayerFor("hanzo", "")
+		if w.Zero() {
+			t.Fatal("PayerFor(hanzo, \"\") = zero — the org's own account must be addressable")
 		}
-		if w.Ledger == "" || w.Account == "" {
+		if w.Org() == "" || w.Subject() == "" {
 			t.Errorf("wallet = %+v; both halves come from the resolved account", w)
 		}
 	})
@@ -327,10 +327,10 @@ func TestWalletFor_TheRulesThatDecideAnAddress(t *testing.T) {
 	// folded org rather than the raw string — a caller spelling the org with
 	// different case or padding must not open a second ledger beside the first.
 	t.Run("the ledger is canonical, not the string handed in", func(t *testing.T) {
-		plain, ok1 := principal.WalletFor("hanzo", "")
-		padded, ok2 := principal.WalletFor("  hanzo  ", "")
-		if !ok1 || !ok2 {
-			t.Fatalf("both spellings must resolve: %v %v", ok1, ok2)
+		plain := principal.PayerFor("hanzo", "")
+		padded := principal.PayerFor("  hanzo  ", "")
+		if plain.Zero() || padded.Zero() {
+			t.Fatal("both spellings must resolve")
 		}
 		if plain != padded {
 			t.Errorf("padding opened a second wallet: %+v vs %+v", plain, padded)
@@ -338,22 +338,22 @@ func TestWalletFor_TheRulesThatDecideAnAddress(t *testing.T) {
 	})
 }
 
-// Payer is TOTAL where WalletOf is partial: it answers the empty string rather
-// than a second ok, because a caller hands it straight to a gate and wants the
-// gate's own fail-closed refusal (ErrNoLedger) instead of branching itself.
-func TestPayer_IsEmptyRatherThanASecondBranch(t *testing.T) {
+// Payer is TOTAL: it answers the ZERO account rather than a second ok, because a
+// caller hands it straight to a gate and wants the gate's own fail-closed refusal
+// (ErrNoLedger) instead of branching itself.
+func TestPayer_IsZeroRatherThanASecondBranch(t *testing.T) {
 	// No validated principal: a ledger must never be keyed on a restored,
 	// client-stated org, or an anonymous caller could probe a victim's balance.
 	serve(t, map[string]string{"X-Org-Id": "victim"}, func(c *zip.Ctx) error {
-		if got := principal.Payer(c); got != "" {
-			t.Errorf("Payer = %q for an unvalidated caller — that keys a ledger on a forgeable header", got)
+		if got := principal.Payer(c); !got.Zero() {
+			t.Errorf("Payer = %q for an unvalidated caller — that keys a ledger on a forgeable header", got.Subject())
 		}
 		return c.NoContent(200)
 	})
 
 	serve(t, validated(map[string]string{"X-User-Name": "alice"}), func(c *zip.Ctx) error {
-		if got := principal.Payer(c); got == "" {
-			t.Error("Payer = \"\" for a validated caller with an org and a name")
+		if got := principal.Payer(c); got.Zero() {
+			t.Error("Payer = zero for a validated caller with an org and a name")
 		}
 		return c.NoContent(200)
 	})
@@ -363,8 +363,8 @@ func TestPayer_IsEmptyRatherThanASecondBranch(t *testing.T) {
 // functions. A context with no caller behind it has no org and no user, so it
 // resolves nobody — the plane's form of "unvalidated".
 func TestPayerFrom_NoCallerIsNoPayer(t *testing.T) {
-	if got := principal.PayerFrom(context.Background()); got != "" {
-		t.Errorf("PayerFrom(bare ctx) = %q want \"\" — no caller is no payer", got)
+	if got := principal.PayerFrom(context.Background()); !got.Zero() {
+		t.Errorf("PayerFrom(bare ctx) = %q want zero — no caller is no payer", got.Subject())
 	}
 }
 

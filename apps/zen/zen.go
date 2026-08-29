@@ -120,16 +120,16 @@ func Mount(a cloud.Router, deps cloud.Deps) error {
 // gate refuses with its 402 (no free, anonymous usage) — the ok-bit is the answer
 // and it propagates; there is no substitute payer.
 func cloudTenantResolver(c *zip.Ctx) zen.Tenant {
-	w, ok := principal.WalletOf(c)
-	if !ok {
+	w := principal.Payer(c)
+	if w.Zero() {
 		return zen.Tenant{}
 	}
 	project, _ := principal.ValidatedProject(c)
 	return zen.Tenant{
 		Org:        c.Org(),
 		User:       c.User(),
-		BillingOrg: w.Ledger,
-		Wallet:     w.Account,
+		BillingOrg: w.Org(),
+		Wallet:     w.Subject(),
 		Project:    project,
 	}
 }

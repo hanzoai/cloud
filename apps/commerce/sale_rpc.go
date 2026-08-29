@@ -21,6 +21,7 @@ package commerce
 
 import (
 	"context"
+	"errors"
 
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	"github.com/zap-proto/zip"
@@ -79,6 +80,12 @@ func exposeSale(s screen) {
 			}, planeSubscribe),
 		zip.WithOperationID(plane.BillingSubscribe),
 		zip.WithSummary("Buy a plan with a card"))
+	zip.Post[struct{}, plane.AutoRecharge](cloud.Plane(), "/billing/auto-recharge", planeAutoRecharge,
+		zip.WithOperationID(plane.BillingAutoRecharge),
+		zip.WithSummary("This org's auto-reload rule"))
+	zip.Post[plane.AutoRechargeEdit, plane.AutoRecharge](cloud.Plane(), "/billing/auto-recharge/set", planeAutoRechargeSet,
+		zip.WithOperationID(plane.BillingAutoRechargeSet),
+		zip.WithSummary("Set this org's auto-reload rule"))
 	zip.Post[struct{}, plane.Recharge](cloud.Plane(), "/billing/recharge", planeRecharge,
 		zip.WithOperationID(plane.BillingRecharge),
 		zip.WithSummary("Recharge every org that has fallen below its threshold"))
@@ -96,7 +103,7 @@ func exposeSale(s screen) {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeTopupCard(ctx context.Context, in *plane.CardIn) (*plane.Charged, error) {
-	org, err := payingOrg(ctx, "topup")
+	org, err := orgOf(ctx, "topup")
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +139,7 @@ func planeTopupCard(ctx context.Context, in *plane.CardIn) (*plane.Charged, erro
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, error) {
-	org, err := payingOrg(ctx, "topup")
+	org, err := orgOf(ctx, "topup")
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +177,7 @@ func planeTopup(ctx context.Context, in *plane.SavedCardIn) (*plane.Charged, err
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeSubscribe(ctx context.Context, in *plane.SaleIn) (*plane.Sold, error) {
-	org, err := payingOrg(ctx, "subscribe")
+	org, err := orgOf(ctx, "subscribe")
 	if err != nil {
 		return nil, err
 	}
@@ -304,4 +311,73 @@ func saleFault(err error) error {
 		return zip.Errorf(400, "%v", err)
 	}
 	return zip.Errorf(500, "failed to create subscription")
+}
+
+// Reads this org's auto-reload rule — the threshold the sweep measures against and
+// the amount it charges when the balance falls below it.
+//
+// An org that never set one reads as DISABLED with zeroes rather than as an error:
+// "no rule" is a true answer to "what is your rule", and `stored` carries the
+// difference between never having set one and having turned one off.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeAutoRecharge(ctx context.Context, _ *struct{}) (*plane.AutoRecharge, error) {
+	org, err := orgOf(ctx, "auto-recharge")
+	if err != nil {
+		return nil, err
+	}
+	cfg, rerr := commercebilling.ReadAutoRecharge(ctx, org)
+	if rerr != nil {
+		return nil, zip.Errorf(502, "auto-recharge: %v", rerr)
+	}
+	return autoRechargeView(cfg), nil
+}
+
+// Sets this org's auto-reload rule.
+//
+// ENABLING REQUIRES A CARD ON FILE, because the sweep charges off-session and a
+// rule that names no chargeable method is a promise the schedule cannot keep. The
+// three refusals a caller can provoke — a non-positive amount, a negative
+// threshold, no default payment method — are the module's own sentinels, mapped
+// here to 400 so a caller learns which of its own values was wrong rather than
+// reading a 500 and guessing.
+//
+// The rule is the caller's own: the org comes from the validated principal and the
+// input names none, so a write cannot be steered onto another tenant's schedule.
+//
+// A named handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeAutoRechargeSet(ctx context.Context, in *plane.AutoRechargeEdit) (*plane.AutoRecharge, error) {
+	org, err := orgOf(ctx, "set auto-recharge")
+	if err != nil {
+		return nil, err
+	}
+	cfg, werr := commercebilling.WriteAutoRecharge(ctx, org, commercebilling.AutoRechargeEdit{
+		Enabled:        in.Enabled,
+		ThresholdCents: in.ThresholdCents,
+		AmountCents:    in.AmountCents,
+		Currency:       in.Currency,
+	})
+	switch {
+	case errors.Is(werr, commercebilling.ErrAmountNotPositive),
+		errors.Is(werr, commercebilling.ErrThresholdNegative),
+		errors.Is(werr, commercebilling.ErrNoDefaultPaymentMethod):
+		return nil, zip.Errorf(400, "%s", werr.Error())
+	case werr != nil:
+		return nil, zip.Errorf(502, "set auto-recharge: %v", werr)
+	}
+	return autoRechargeView(cfg), nil
+}
+
+// autoRechargeView is the ONE mapping from the module's record to the wire, so the
+// read and the write cannot describe one rule two ways.
+func autoRechargeView(cfg commercebilling.AutoRecharge) *plane.AutoRecharge {
+	return &plane.AutoRecharge{
+		Subject:         cfg.Subject,
+		Enabled:         cfg.Enabled,
+		ThresholdCents:  cfg.ThresholdCents,
+		AmountCents:     cfg.AmountCents,
+		Currency:        cfg.Currency,
+		LastRechargedAt: cfg.LastRechargedAt,
+		Stored:          cfg.Stored,
+	}
 }

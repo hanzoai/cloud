@@ -53,8 +53,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/finance"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/manifest"
 )
 
@@ -148,7 +148,7 @@ func (s Standing) String() string {
 // counter was unreadable is a worse failure than serving one request past a
 // bound, and this codebase already takes that side everywhere else — "a balance
 // that cannot be read is unknown, never zero".
-func Stand(ctx context.Context, lic Licence, allow Allowance, w principal.Wallet) Standing {
+func Stand(ctx context.Context, lic Licence, allow Allowance, w account.Account) Standing {
 	if lic == LicenceActive && allow != AllowanceSpent {
 		return Subscribed
 	}
@@ -177,15 +177,15 @@ func Stand(ctx context.Context, lic Licence, allow Allowance, w principal.Wallet
 //
 // The read is against the LIVE books (test=false). Sandbox money must never buy
 // live product access.
-func creditIn(ctx context.Context, w principal.Wallet) (ok, funded bool) {
-	if w.Account == "" {
+func creditIn(ctx context.Context, w account.Account) (ok, funded bool) {
+	if w.Zero() {
 		return false, false
 	}
 	fin := finance.Current()
 	if fin == nil {
 		return false, false
 	}
-	bal, err := fin.Balance(ctx, w.Ledger, w.Account, creditUnit, false)
+	bal, err := fin.Balance(ctx, w.Org(), w.Subject(), creditUnit, false)
 	if err != nil {
 		return false, false
 	}
@@ -546,11 +546,11 @@ type AllowanceChecker interface {
 //
 // Every failure is AllowanceUnknown — absent reader, empty address, a reader that
 // could not answer — because this leg may only ever REMOVE an admission.
-func AllowanceIn(ctx context.Context, a AllowanceChecker, w principal.Wallet) Allowance {
-	if a == nil || w.Ledger == "" {
+func AllowanceIn(ctx context.Context, a AllowanceChecker, w account.Account) Allowance {
+	if a == nil || w.Zero() {
 		return AllowanceUnknown
 	}
-	spent, ok := a.WithinAllowance(ctx, w.Ledger, w.Account)
+	spent, ok := a.WithinAllowance(ctx, w.Org(), w.Subject())
 	if !ok {
 		return AllowanceUnknown
 	}
