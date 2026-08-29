@@ -63,13 +63,13 @@ type Project struct {
 // FILTER + a projection over the one table, exactly like the board, and neither
 // view can drift from the other's data.
 type Issue struct {
-	ID          string
-	ProjectID   string
-	Org         string
-	Number      int
-	Kind        string // issue | pr | epic (default "issue")
-	Source      string // team | git | crm | helpdesk | cms | agent (default "team")
-	Repo        string // git repo binding; "" = not repo-bound
+	ID        string
+	ProjectID string
+	Org       string
+	Number    int
+	Kind      string // issue | pr | epic (default "issue")
+	Source    string // team | git | crm | helpdesk | cms | agent (default "team")
+	Repo      string // git repo binding; "" = not repo-bound
 	// Room binding — the collaboration room this item belongs to (HIP-0523),
 	// spelled "<workspace>_<room>"; "" = not room-bound.
 	//
