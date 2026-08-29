@@ -339,7 +339,7 @@ func run(addr, zapAddr string) error {
 	// Where the API's clients sign in — the authorization server is this
 	// deployment's issuer, the value every child validates a token against
 	// (oauth.go). Host-served for the reason /healthz is.
-	protectedResource(app, environ.Or("CLOUD_IAM_ISSUER", brand.IssuerFor(environ.Or("CLOUD_BRAND", brand.Default))))
+	protectedResource(app, brand.Issuer(os.Getenv("CLOUD_IAM_ISSUER"), environ.Or("CLOUD_BRAND", brand.Default)))
 
 	// The fleet's own description, at /v1/openapi.json. Same reasoning as
 	// /healthz, and the same layer: it is the HOST's, because it is about the

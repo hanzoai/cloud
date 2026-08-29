@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"github.com/hanzoai/cloud/brand"
 	"os"
 	"strings"
 
@@ -49,12 +50,7 @@ func IAMBaseURL(publicIssuer string) string {
 //
 // IssuerForBrand never returns empty (an unknown brand folds to hanzo), so that
 // failure is now unreachable rather than merely unlikely.
-func issuerFor(pinned, brandID string) string {
-	if p := strings.TrimRight(strings.TrimSpace(pinned), "/"); p != "" {
-		return p
-	}
-	return IssuerForBrand(brandID)
-}
+func issuerFor(pinned, brandID string) string { return brand.Issuer(pinned, brandID) }
 
 // IAMIssuer is the PUBLIC identity host this deployment presents (hanzo.id for
 // the Hanzo brand, lux.id for Lux, ...). One name for one fact: the issuer
