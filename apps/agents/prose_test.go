@@ -84,8 +84,10 @@ var proseless = map[string]bool{
 	"sessionDetail.updatedAt":       true,
 
 	// agentView, promoted into agentDetail.
+	"agentDetail.avatar":           true,
 	"agentDetail.computeRef":       true,
 	"agentDetail.createdAt":        true,
+	"agentDetail.emoji":            true,
 	"agentDetail.description":      true,
 	"agentDetail.executionMode":    true,
 	"agentDetail.id":               true,

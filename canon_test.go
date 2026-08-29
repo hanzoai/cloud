@@ -107,7 +107,17 @@ func TestOneFactHasOneHome(t *testing.T) {
 	for _, c := range canons {
 		found := map[string]int{}
 		err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			if err != nil {
+				return nil
+			}
+			// .claude/worktrees holds agent checkouts of OTHER commits — not this
+			// repo's source. Reading them makes the invariant a fact about whatever
+			// is on this disk, and it failed here against worktrees pinned before
+			// the knob was deleted.
+			if d.IsDir() && d.Name() == ".claude" {
+				return filepath.SkipDir
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") {
 				return nil
 			}
 			if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/testdata/") {

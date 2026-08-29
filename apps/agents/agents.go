@@ -244,8 +244,10 @@ type agentView struct {
 	// drawn as its initial, the same way a person with no photo is. Both are
 	// iam/pkg/schema's Mark, so a face means the same thing on an agent as it
 	// does on a person or an org.
+	// Avatar is the agent's picture, or empty when it has none.
 	Avatar string `json:"avatar,omitempty"`
-	Emoji  string `json:"emoji,omitempty"`
+	// Emoji is the glyph drawn in place of a picture, or empty when it has none.
+	Emoji string `json:"emoji,omitempty"`
 	// Runs is how many executions the org has recorded against this agent, counted
 	// at read time. The list and update reads count the WHOLE history; the detail
 	// read reports the size of the RecentRuns page it carries, which stops at 20 —
@@ -707,8 +709,10 @@ type createAgentIn struct {
 	// drawn as its initial. Validated by iam/pkg/schema, the same rule a person's
 	// avatar passes, so the 96 KiB bound and the accepted URL forms are stated
 	// once for every subject that has a face.
+	// Avatar is the agent's picture, or empty when it has none.
 	Avatar string `json:"avatar"`
-	Emoji  string `json:"emoji"`
+	// Emoji is the glyph drawn in place of a picture, or empty when it has none.
+	Emoji string `json:"emoji"`
 }
 
 // CreateAgent defines an agent in the caller's org: a model, a system prompt
@@ -906,8 +910,10 @@ type updateAgentIn struct {
 	// Avatar and Emoji re-draw the agent. Sending either replaces the pair, so
 	// setting an image clears a glyph and "" for both goes back to the initial —
 	// there is no state where a row holds two answers.
+	// Avatar sets the agent's picture. Sending it clears any glyph.
 	Avatar *string `json:"avatar"`
-	Emoji  *string `json:"emoji"`
+	// Emoji sets the glyph drawn in place of a picture. Sending it clears any image.
+	Emoji *string `json:"emoji"`
 }
 
 // UpdateAgent changes an agent in place. Every field is optional; a field the
