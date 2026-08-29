@@ -1048,6 +1048,14 @@ type IssuePatch struct {
 	Title *string `json:"title,omitempty"`
 	Body  *string `json:"body,omitempty"`
 	State *string `json:"state,omitempty"`
+	// Assignees is who holds the issue, REPLACING the set — an empty slice
+	// clears it, which is why the field is a pointer: absent leaves the holder
+	// alone, and present-and-empty takes the work off everybody.
+	//
+	// The forge keeps a SET and this surface offers one holder, because two
+	// workers on one item is the state `claim` exists to refuse. Sending a set
+	// of one keeps the wire honest to the forge's own shape.
+	Assignees *[]string `json:"assignees,omitempty"`
 }
 
 // PatchIssue edits an issue's fields as the actor.

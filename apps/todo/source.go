@@ -931,6 +931,16 @@ type issueEdit struct {
 	Status string `json:"status"`
 	// Priority re-prioritises it.
 	Priority string `json:"priority"`
+	// Assignee hands the work to somebody — a person or an agent, by the name
+	// they are known by on the forge. "" TAKES IT OFF whoever holds it, which is
+	// why this is a pointer: absent leaves the holder alone.
+	//
+	// It is the other half of `claim`, which that handler already named: a claim
+	// takes work for the CALLER and refuses to name anyone else, because giving
+	// work away is a different act with different authority. This is that act,
+	// and until it existed a board could only be worked by whoever clicked
+	// first — an agent could never be given anything.
+	Assignee *string `json:"assignee"`
 }
 
 // UpdateIssue edits a work item — rename it, rewrite it, move it to another
@@ -965,7 +975,17 @@ func (o ops) forgePatchIssue(ctx context.Context, in *issueEdit) (*issueView, er
 			}
 			patch.State = &state
 		}
-		if patch.Title != nil || patch.Body != nil || patch.State != nil {
+		if in.Assignee != nil {
+			// A SET OF ONE, or none. The forge models assignment as a set; this
+			// surface offers a single holder, so the set it sends has one member
+			// or is empty.
+			held := []string{}
+			if who := strings.TrimSpace(*in.Assignee); who != "" {
+				held = append(held, who)
+			}
+			patch.Assignees = &held
+		}
+		if patch.Title != nil || patch.Body != nil || patch.State != nil || patch.Assignees != nil {
 			if err := cl.PatchIssue(ctx, org, in.Key, in.Num, patch); err != nil {
 				return nil, o.answer(err)
 			}
