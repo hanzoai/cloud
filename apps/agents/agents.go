@@ -56,6 +56,7 @@ import (
 	"github.com/hanzoai/cloud/internal/mint"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
+	iamschema "github.com/hanzoai/iam/pkg/schema"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -237,6 +238,14 @@ type agentView struct {
 	// principal rather than only to the org; empty means the org itself wears the
 	// spend.
 	ServiceAccountID string `json:"serviceAccountId,omitempty"`
+	// Avatar is an image the agent is drawn as — a link to one, or the bytes
+	// inline as a data URL, up to 96 KiB. Emoji is the one glyph a caller picked
+	// when they had no image. At most one is ever set; neither means the agent is
+	// drawn as its initial, the same way a person with no photo is. Both are
+	// iam/pkg/schema's Mark, so a face means the same thing on an agent as it
+	// does on a person or an org.
+	Avatar string `json:"avatar,omitempty"`
+	Emoji  string `json:"emoji,omitempty"`
 	// Runs is how many executions the org has recorded against this agent, counted
 	// at read time. The list and update reads count the WHOLE history; the detail
 	// read reports the size of the RecentRuns page it carries, which stops at 20 —
@@ -420,6 +429,7 @@ func toView(a Agent, runs int) agentView {
 		Tools: nonNil(a.Tools), Status: a.Status,
 		ExecutionMode: a.ExecutionMode, Schedule: a.Schedule,
 		ComputeRef: a.ComputeRef, ServiceAccountID: a.ServiceAccountID,
+		Avatar: a.Avatar, Emoji: a.Emoji,
 		Runs:      runs,
 		CreatedAt: rfc3339(a.CreatedAt), UpdatedAt: rfc3339(a.UpdatedAt),
 	}
@@ -692,6 +702,13 @@ type createAgentIn struct {
 	// principal rather than only to the org. Same 256-character bound, also
 	// unresolved here.
 	ServiceAccountID string `json:"serviceAccountId"`
+	// Avatar and Emoji are how the agent APPEARS. An image wins when both are
+	// given — it is the thing somebody made — and both empty leaves the agent
+	// drawn as its initial. Validated by iam/pkg/schema, the same rule a person's
+	// avatar passes, so the 96 KiB bound and the accepted URL forms are stated
+	// once for every subject that has a face.
+	Avatar string `json:"avatar"`
+	Emoji  string `json:"emoji"`
 }
 
 // CreateAgent defines an agent in the caller's org: a model, a system prompt
@@ -751,6 +768,10 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 	if err != nil {
 		return nil, err
 	}
+	mark, err := iamschema.MarkOf(body.Avatar, body.Emoji)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
+	}
 	// Cap the org's scheduler footprint (Red LOW-1): a tenant cannot create an
 	// unbounded number of scheduled agents that each add recurring load to the
 	// shared store. Only counts when this create is itself long-running.
@@ -771,6 +792,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 		Description: strings.TrimSpace(body.Description), Tools: cleanList(body.Tools),
 		Status: "ready", ExecutionMode: mode, Schedule: schedule,
 		ComputeRef: computeRef, ServiceAccountID: serviceAccountID,
+		Avatar: mark.Avatar, Emoji: mark.Emoji,
 		CreatedAt: now, UpdatedAt: now,
 		// A bot born RESIDENT starts accruing now. A one-shot agent starts no
 		// clock at all — it costs its per-run fee when it is invoked and nothing
@@ -881,6 +903,11 @@ type updateAgentIn struct {
 	// ServiceAccountID re-points (or, with "", clears) the IAM service account a
 	// scheduled run is billed as. Clearing it puts that spend back on the org.
 	ServiceAccountID *string `json:"serviceAccountId"`
+	// Avatar and Emoji re-draw the agent. Sending either replaces the pair, so
+	// setting an image clears a glyph and "" for both goes back to the initial —
+	// there is no state where a row holds two answers.
+	Avatar *string `json:"avatar"`
+	Emoji  *string `json:"emoji"`
 }
 
 // UpdateAgent changes an agent in place. Every field is optional; a field the
@@ -935,6 +962,23 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 		if a.ServiceAccountID, err = validateRef("serviceAccountId", *body.ServiceAccountID); err != nil {
 			return nil, err
 		}
+	}
+	if body.Avatar != nil || body.Emoji != nil {
+		// The pair moves together. Reading the unsent half off the stored row is
+		// what makes "set an emoji" clear an image rather than leave the agent
+		// holding both.
+		avatar, emoji := a.Avatar, a.Emoji
+		if body.Avatar != nil {
+			avatar = *body.Avatar
+		}
+		if body.Emoji != nil {
+			emoji = *body.Emoji
+		}
+		mark, merr := iamschema.MarkOf(avatar, emoji)
+		if merr != nil {
+			return nil, zip.ErrBadRequest(merr.Error())
+		}
+		a.Avatar, a.Emoji = mark.Avatar, mark.Emoji
 	}
 	// Re-validate the lifecycle from the RESULTING mode+schedule so a partial
 	// update can't leave a long-running agent without a valid cron (which the

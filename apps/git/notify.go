@@ -243,15 +243,10 @@ func lifecycleMessage(s *cloud.Service[state], ctx context.Context, ev cloud.Lif
 
 	header := mrkdwnSection(emoji + " *" + title + "* — <" + link + "|" + repo + ">")
 	section := map[string]any{"type": "section", "fields": fields}
-	brand := strings.TrimSpace(s.Brand)
-	if brand == "" {
-		brand = "Hanzo"
-	} else {
-		brand = strings.ToUpper(brand[:1]) + brand[1:]
-	}
+	brandName := cloud.BrandDisplay(strings.TrimSpace(s.Brand))
 	ctxBlock := map[string]any{
 		"type":     "context",
-		"elements": []any{map[string]any{"type": "mrkdwn", "text": brand + " Git"}},
+		"elements": []any{map[string]any{"type": "mrkdwn", "text": brandName + " Git"}},
 	}
 	return summary, []any{header, section, ctxBlock}
 }

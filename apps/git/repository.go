@@ -59,13 +59,16 @@ type Entry struct {
 // Blob is the content of one path at one revision. Binary reports that the
 // bytes are not valid text; Truncated reports that the file exceeded the caller's
 // limit, in which case Content is empty — a large file is offered as a clone,
-// never as megabytes of JSON.
+// never as megabytes of JSON. Link reports that the path is a symbolic link, so
+// Content is the target's PATH and not any file's contents — the distinction
+// Entry draws with Dir, drawn again for the bytes.
 type Blob struct {
 	Path      string
 	Size      int64
 	Content   []byte
 	Binary    bool
 	Truncated bool
+	Link      bool
 }
 
 // Change is one entry of a revision's history.

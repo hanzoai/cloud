@@ -18,9 +18,9 @@ import (
 // refusal that names its own expiry condition still needs something that checks
 // whether the condition arrived.
 //
-// SIX remain, in three families:
+// SEVEN remain, in three families:
 //
-//   - THE CHAT ROUND (4). Registered by github.com/hanzoai/agent, not by this
+//   - THE CHAT ROUND (5). Registered by github.com/hanzoai/agent, not by this
 //     package: apps/agents calls hz.MountAt and adds no route of its own there.
 //     Two facts have to move upstream with them — every handler resolves its
 //     caller through a func(*zip.Ctx) (Principal, bool), and the round dispatches
@@ -39,6 +39,7 @@ import (
 var untypedByDesign = map[string]string{
 	"POST /v1/agents/chat":                   "registered by github.com/hanzoai/agent, and it relays an upstream 4xx's status and body verbatim.",
 	"GET /v1/agents/chat/conversations":      "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
+	"POST /v1/agents/chat/conversations":     "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
 	"GET /v1/agents/chat/conversations/{id}": "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
 	"GET /v1/agents/chat/presets":            "registered by github.com/hanzoai/agent; typing it is that repo's change, not this one.",
 	"GET /v1/agents/sessions/stream": "an open SSE response written by a loop that outlives the handler " +

@@ -286,8 +286,8 @@ func createItem(ctx context.Context, store *Store, p tools.Principal, args map[s
 		// #bugfix-1010 is the only party that knows which room it was addressed
 		// in, and binding it wrongly costs a list entry rather than a claim about
 		// who did the work.
-		Room:        strings.TrimSpace(str(args, "room")),
-		Labels:      str(args, "labels"),
+		Room:   strings.TrimSpace(str(args, "room")),
+		Labels: str(args, "labels"),
 	}
 	created, err := store.CreateIssue(ctx, i)
 	if err != nil {

@@ -304,16 +304,18 @@ type DeployResult struct {
 // organization that credential carries.
 // ---------------------------------------------------------------------------
 
-// BuildBinary is ONE hanzo.yml `binaries:` entry, sent verbatim. The recipe a
-// repo declares IS the request body — there is no CLI-side recipe format.
+// BuildBinary is ONE `binaries:` entry from a repo's contract, sent verbatim. The
+// recipe a repo declares IS the request body — there is no CLI-side recipe format.
+// One set of names does both jobs: a contract's canonical form is JSON, so these
+// tags read the declaration and write the request.
 type BuildBinary struct {
-	Name      string   `json:"name" yaml:"name"`
-	Main      string   `json:"main,omitempty" yaml:"main"`
-	Run       string   `json:"run,omitempty" yaml:"run"`
-	Out       string   `json:"out,omitempty" yaml:"out"`
-	Ldflags   string   `json:"ldflags,omitempty" yaml:"ldflags"`
-	Platforms []string `json:"platforms,omitempty" yaml:"platforms"`
-	Image     string   `json:"image,omitempty" yaml:"image"`
+	Name      string   `json:"name"`
+	Main      string   `json:"main,omitempty"`
+	Run       string   `json:"run,omitempty"`
+	Out       string   `json:"out,omitempty"`
+	Ldflags   string   `json:"ldflags,omitempty"`
+	Platforms []string `json:"platforms,omitempty"`
+	Image     string   `json:"image,omitempty"`
 }
 
 // BuildReq is the direct-enqueue body. Repo/SHA are required, plus EITHER Image

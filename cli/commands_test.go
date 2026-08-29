@@ -1,14 +1,19 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/contract"
 )
 
 func TestNormalizeRepoURL(t *testing.T) {
@@ -273,13 +278,11 @@ func TestConfigSetGetCommand(t *testing.T) {
 	}
 }
 
-// `hanzo build` with no --image reads the repo's OWN hanzo.yml — the same file
-// and the same two keys hanzoai/ci reads — so nothing about the recipe is
-// restated on the command line and a project with no Dockerfile still builds.
+// `hanzo build` with no --image reads the repo's OWN contract — the same document
+// and the same two keys hanzoai/ci reads — so nothing about the recipe is restated
+// on the command line and a project with no Dockerfile still builds.
 func TestBuildReqLoadRecipe(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "hanzo.yml")
-	if err := os.WriteFile(path, []byte(`binaries:
+	const recipe = `binaries:
   - name: hanzo-demo
     main: ./cmd/demo
     platforms: [linux/amd64, darwin/arm64]
@@ -288,11 +291,13 @@ func TestBuildReqLoadRecipe(t *testing.T) {
     run: npm install && npm run build && npm pack --pack-destination .
     out: "*.tgz"
 bucket: plugins
-`), 0o644); err != nil {
+`
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hanzo.yml"), []byte(recipe), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var br BuildReq
-	if err := br.loadRecipe(path); err != nil {
+	if err := br.loadRecipe(context.Background(), dir); err != nil {
 		t.Fatalf("loadRecipe: %v", err)
 	}
 	if len(br.Binaries) != 2 || br.Bucket != "plugins" {
@@ -304,13 +309,46 @@ bucket: plugins
 	if br.Binaries[1].Image != "node:22-bookworm" || br.Binaries[1].Out != "*.tgz" || br.Binaries[1].Run == "" {
 		t.Errorf("run lane: %+v", br.Binaries[1])
 	}
-	// A hanzo.yml with no binaries: is an error naming the alternative, not a
-	// silent empty build.
-	empty := filepath.Join(dir, "empty.yml")
-	if err := os.WriteFile(empty, []byte("images:\n  - {name: api}\n"), 0o644); err != nil {
+
+	// THE SAME RECIPE, SPELT AS JSON, IS THE SAME BUILD. The CLI reads a document,
+	// not a filename, so a project declaring its build either way enqueues the same
+	// binaries.
+	asJSON := t.TempDir()
+	doc, err := contract.Parse("hanzo.yml", []byte(recipe))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (&BuildReq{}).loadRecipe(empty); err == nil {
-		t.Error("a hanzo.yml declaring no binaries: must be refused")
+	if err := os.WriteFile(filepath.Join(asJSON, "hanzo.json"), doc.Data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var other BuildReq
+	if err := other.loadRecipe(context.Background(), asJSON); err != nil {
+		t.Fatalf("json spelling: %v", err)
+	}
+	if !reflect.DeepEqual(other.Binaries, br.Binaries) || other.Bucket != br.Bucket {
+		t.Errorf("the json spelling built something else:\n %+v\n %+v", other, br)
+	}
+
+	// A contract with no binaries: is an error naming the alternative, not a
+	// silent empty build.
+	none := t.TempDir()
+	if err := os.WriteFile(filepath.Join(none, "hanzo.yml"), []byte("images:\n  - {name: api}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&BuildReq{}).loadRecipe(context.Background(), none); err == nil {
+		t.Error("a contract declaring no binaries: must be refused")
+	}
+	// So is no contract at all, and so is two of them.
+	if err := (&BuildReq{}).loadRecipe(context.Background(), t.TempDir()); !errors.Is(err, contract.ErrNone) {
+		t.Errorf("no contract: %v", err)
+	}
+	two := t.TempDir()
+	for _, name := range []string{"hanzo.yml", "hanzo.json"} {
+		if err := os.WriteFile(filepath.Join(two, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := (&BuildReq{}).loadRecipe(context.Background(), two); !errors.Is(err, contract.ErrMany) {
+		t.Errorf("two contracts: %v", err)
 	}
 }

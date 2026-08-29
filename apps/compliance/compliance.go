@@ -39,7 +39,12 @@ type state struct {
 	store   *Store
 	idv     idv.Provider
 	webhook *idv.Webhook
-	audit   *audit.Recorder
+	// webhookErr is a webhook that was NAMED and did not resolve. It is carried
+	// rather than returned from Mount because one route reads it and sixteen do
+	// not: a secret for the provider callback is no reason for /records, /audit
+	// or the accreditation decisions to answer 503.
+	webhookErr error
+	audit      *audit.Recorder
 }
 
 // mounted is the process-wide handle so Shutdown can close the store (mirrors
@@ -58,42 +63,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("compliance.Mount: empty DataDir")
 	}
-	provider, err := idv.FromConfig(kmsGetter(deps), os.Getenv)
+	provider, err := idv.FromConfig(deps.Secret(), os.Getenv)
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: idv provider: %w", err)
 	}
-	// The signature-authenticated provider webhook is FAIL-CLOSED at mount, like the
-	// provider itself: a named-but-unresolvable secret fails the mount rather than
-	// silently serving an unauthenticated endpoint. Nil (the default) means no webhook
-	// path is served at all.
-	webhook, err := idv.WebhookFromConfig(kmsGetter(deps), os.Getenv)
-	if err != nil {
-		return fmt.Errorf("compliance.Mount: idv webhook: %w", err)
-	}
+	// The signature-authenticated provider webhook is FAIL-CLOSED, and stays so: a
+	// named-but-unresolvable secret NEVER serves an unauthenticated endpoint, because
+	// WebhookFromConfig returns nil on both of its error branches and the route
+	// refuses on nil. Nil (the default) means no webhook path is served at all.
+	//
+	// The error is carried to that route instead of failing the mount, so the refusal
+	// names the unresolved ref rather than answering 503 "no instance running" for
+	// this whole surface — which, on a Lazy app, is a sentence about nothing.
+	webhook, webhookErr := idv.WebhookFromConfig(deps.Secret(), os.Getenv)
 	store, err := openStore(deps.DataDir)
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: open store: %w", err)
 	}
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "compliance"),
-		State: state{store: store, idv: provider, webhook: webhook, audit: deps.Audit},
+		State: state{store: store, idv: provider, webhook: webhook, webhookErr: webhookErr, audit: deps.Audit},
 	}
 	mounted = s
 	routes(app, s)
 	s.Log.Info("compliance mounted", "brand", deps.Brand, "provider", provider.Name(), "webhook", webhook != nil, "audit", deps.Audit != nil)
 	return nil
-}
-
-// kmsGetter adapts deps.KMS into the idv.SecretFn the provider uses to resolve its
-// sealed key. A nil KMS yields a resolver that errors — so a real provider that
-// needs a key fails closed at mount rather than running keyless.
-func kmsGetter(deps cloud.Deps) idv.SecretFn {
-	if deps.KMS == nil {
-		return func(context.Context, string) ([]byte, error) {
-			return nil, fmt.Errorf("KMS not available")
-		}
-	}
-	return deps.KMS.GetSecret
 }
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -696,6 +690,11 @@ func (o ops) refreshVerification(ctx context.Context, in *verificationRef) (*che
 // reordering the authentication — and cannot answer two 200 shapes.
 func verificationWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	if s.State.webhook == nil {
+		// A webhook that was named and did not resolve is a different answer from one
+		// that was never configured, and the caller cannot fix what it cannot see.
+		if s.State.webhookErr != nil {
+			return zip.Errorf(http.StatusBadGateway, "verification webhook: %v", s.State.webhookErr)
+		}
 		return zip.Errorf(http.StatusNotImplemented, "verification webhook is not configured")
 	}
 	body := c.Fiber().Body()

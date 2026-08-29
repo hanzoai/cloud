@@ -5577,6 +5577,104 @@ Two things worth knowing when reading this:
   record and the value is nowhere in its bytes. The PLUGINS serve `/v1/health`,
   and they are stamped.
 
+## The repo contract is ONE document, in several spellings (`contract/`)
+
+A repository declares what it builds, deploys and publishes in one document at its
+root. `contract/` is the only thing in this repo that finds and reads it — the two
+readers that used to inline the filename (`apps/git/build_on_push.go`,
+`cli/commands.go`) both resolve through it, and a new reader must not re-invent the
+lookup.
+
+**Spellings.** `hanzo.yml`, `hanzo.yaml` and `hanzo.json` are three ways to write the
+SAME document: YAML 1.2 is a superset of JSON, so one parser reads all three against
+one schema. `hanzo.config.js`, `hanzo.config.ts` and `.hanzo/contract.go` are
+GENERATORS — they are run, and what they print is the document.
+
+**A GENERATOR'S NAME CANNOT BE A NAME ORDINARY SOURCE HAS.** The generators were
+first spelled `hanzo.js`, `hanzo.ts` and `hanzo.go`, and both of those are names a
+repository already uses for something else:
+
+- `hanzo-js/hanzo.js` tracks a **37 kB browser bundle called `hanzo.js` at its
+  root** — its published artifact. Under the first list that repository resolved to a
+  generator, so the CLI's `contract.Eval` would have run `node hanzo.js` on it, and
+  the reactor's `contract.Load` refused the repository outright. `hanzo.config.js` /
+  `hanzo.config.ts` is the name every JS project already reserves for configuration
+  (`vite.config`, `next.config`, `tailwind.config` — that repo's own `tsup.config.ts`),
+  and nothing is ever bundled to one.
+- A root `hanzo.go` is worse, because a root `.go` file is part of the repository's
+  OWN package: it would be compiled into the project and read as the project's
+  contract at the same time. `.hanzo/contract.go` is neither — the go tool skips a
+  dot-directory when it walks packages, so `go build ./...` and `go vet ./...` never
+  see it while `go run .hanzo/contract.go` still runs it. `.hanzo/` is already where
+  a repository keeps its workflows, and no `//go:build ignore` line is needed.
+
+`TestOrdinarySourceIsNotAContract` is that regression: a repository carrying
+`hanzo.js`, `hanzo.ts` and `hanzo.go` and nothing else declares NOTHING.
+
+**Scan order is not a tie-break.** `contract.Names` fixes which name is looked at
+first and so the order an error lists them in. Two contract files in one repository
+is REFUSED (`contract.ErrMany`), because two files each claiming to be the contract
+is genuinely ambiguous and a reader that silently picked one would disagree with the
+reader that picked the other. `TestReorderIsNotATieBreak` reverses `Names` and asks
+for the same answers, so the claim is checked rather than asserted.
+
+**One canonical form, one digest.** Whatever the spelling, a resolved contract is
+JSON with names in sorted order (`Doc.Data`), and `Doc.Digest()` is its sha256. Every
+spelling of one declaration has one digest — that is the property that makes a
+receipt, or eventually a chain, able to name what a repository declared without
+holding the declaration. Anchors and `<<` merges are resolved before hashing, a
+number keeps its literal where JSON spells it the same way, and a date is text
+because JSON has no other way to hold one.
+
+**Two doors, and only one of them runs anything.**
+
+- `contract.Load(read)` READS. It refuses a generator spelling by name. Every
+  downstream reader — CI, platform, the operator — holds this and no other, so a
+  repository cannot get code executed by naming its declaration `hanzo.config.ts`.
+- `contract.Eval(ctx, dir)` is the ONE evaluator, at the edge where the project's
+  own toolchain already is (`node`, `tsx`, `go run`). Stdout is the document.
+  Nothing is embedded; nothing downstream learns to execute.
+
+The reason for that split is what the downstream readers have to agree on. A document
+has a hash; a program does not. Agreeing on "run this JavaScript and see what
+deploys" would need a build box, an operator pod and a validator each to run it and
+each to get the same answer, which none of them can promise the others.
+
+**THE ESTATE, SWEPT.** Point `contract.Load` at every checkout under
+`~/work/{hanzo,lux,zoo,hanzo-js}` twice — `Names` set to the first generator list,
+then to this one — and compare the two answers. `Load` and never `Eval`, so no
+repository's file is run. 235 checkouts, 179 distinct repositories, 110 of which
+declare something: **234 resolve identically and exactly one moves**,
+`hanzo-js/hanzo.js`, from a generator refusal to `none`.
+
+`hanzo-js` has to be in that walk. Its repos are checked out under their own org
+name beside `~/work/hanzo`, not inside it, so a walk of the three brand directories
+cannot see the one repository the names were changed for — it answers "nothing
+changed", which is a scan that found nothing wearing the face of a pass. Any sweep
+here is worth only what its known-positive is worth.
+
+**`hanzo.yaml` is taken, once, in the estate.** `hanzoai/openapi` tracks a 2.25 MB
+`hanzo.yaml` that is its aggregated OpenAPI master (generated by `merge.py`,
+referenced by name through that repo's docs and SDK codegen) alongside the
+`hanzo.yml` that is its actual contract. It is the one repository still refusing, and
+it refuses on SIZE rather than on `ErrMany`: 2.25 MB is past `contract.Max`, `find`
+stops on a read that failed rather than reading past it, and the count of contracts
+is never reached. So the fix is the same either way — that master wants renaming to
+`openapi.yaml`, which is what it is — and it is not this resolver's to make: the name
+is referenced from that repo's docs and its SDK codegen. Nothing live reads through
+here for that repo yet (`hanzoai/ci` reads `hanzo.yml` by name and the native reactor
+ships dormant), so arming the reactor is what the rename gates.
+
+`apps/author` separately uses a repo-root `hanzo.json` carrying `hanzoAuthorCode` as
+its proof-of-control artifact; no repo in the estate carries one today, and the
+resolution is for that code to become a name IN the contract.
+
+**Two contracts is louder than a bad moment.** The reactor is best-effort, so its one
+log line is the whole account of a repository that has stopped building. `ErrMany` is
+a misconfiguration — it repeats on every push until somebody deletes a file, and
+nothing downstream finds out — so `apps/git`'s `level` reports it at ERROR, while a
+read that failed once and clears next push stays at WARN.
+
 ## The `hanzo` name is TWO binaries — the Rust CLI, and cmd/hanzo's control half
 
 The `hanzo` fabric CLI is the RUST binary at `~/work/hanzo/cli`. Its control-plane
@@ -5692,8 +5790,8 @@ it destroys the only spec for work that is owed.
 but unauthored in `hanzoai/openapi`, and the bare name `runner` is already taken by
 the Rust CLI's CI-runner daemon. Authoring it needs a name decision first. Called
 directly, with `image:` it builds a container image; with NO `image:` it reads the
-repo's own `hanzo.yml` (`binaries:` + `bucket:`) and builds the ARTIFACT lane
-instead — see below.
+repo's own contract (`binaries:` + `bucket:`, in whichever spelling — see
+`contract/`) and builds the ARTIFACT lane instead — see below.
 
 ### `/v1/platform/runner` builds ANY project, not only a Dockerfile
 

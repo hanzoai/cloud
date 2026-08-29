@@ -190,7 +190,7 @@ type runtime struct {
 	// own. Resolved once, against the cluster, because containment is the
 	// cluster's fact and a setting that claimed it would be the one thing here
 	// worth lying about. See confine.
-	bare         string
+	bare string
 	// fast is the boundary a sandbox takes when nobody chose one and it CAN take
 	// it — a microVM, which is the strongest isolation we run. It is empty until
 	// the cluster is seen to install it, for the same reason `bare` is: a class
