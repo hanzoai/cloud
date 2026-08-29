@@ -88220,10 +88220,10 @@ paths:
   /v1/iam/teams:
     get:
       description: |-
-        Returns your organization's roles, newest first — each a named group of
-        people that permissions are granted to.
+        Returns your organization's teams, newest first — each a named set of
+        people that roles and permissions are granted to.
 
-        You see your own organization's roles and no one else's; which organization
+        You see your own organization's teams and no one else's; which organization
         that is comes from your credentials, not from the request.
       operationId: get_iam_teams
       responses:
@@ -88233,8 +88233,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/iam.teams.ListOutput'
           description: ok
-      summary: Returns your organization's roles, newest first — each a named group
-        of people that permissions are granted to.
+      summary: Returns your organization's teams, newest first — each a named set
+        of people that roles and permissions are granted to.
       tags:
       - iam
       x-app: iam

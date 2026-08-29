@@ -147,11 +147,11 @@
       "sha256": "dd56e28820e509bae950e06180810b5bda6452248ccc32ca49be2acc1e12ff2e"
     },
     {
-      "description": "Read iam teams: Returns your organization's roles, newest first — each a named group of people that permissions are granted to., Returns one team: who is in it..",
+      "description": "Read iam teams: Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to., Returns one team: who is in it..",
       "name": "iam_teams",
       "path": "iam_teams/SKILL.md",
       "service": "iam",
-      "sha256": "5452d37e9c2cfcdb16bdc03409d7ba4b7ff44541c288e058f5a7614d78075e0d"
+      "sha256": "209b3c65b205e0c95922a7f2b4e394f0540573517340038133020771bc8bf1e3"
     },
     {
       "description": "Read iam tokens: Returns the access tokens issued in your organization, newest first, and can be narrowed to one organization., Returns one access token: who and what it was issued to, and when it expires..",

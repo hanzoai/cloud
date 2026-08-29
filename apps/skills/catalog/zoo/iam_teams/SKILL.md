@@ -1,7 +1,7 @@
 ---
 name: iam_teams
 version: "8.0.0"
-description: "Read iam teams: Returns your organization's roles, newest first — each a named group of people that permissions are granted to., Returns one team: who is in it.."
+description: "Read iam teams: Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to., Returns one team: who is in it.."
 ---
 
 # Zoo · IAM · teams
@@ -14,7 +14,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 ## Endpoints
 
-- `GET https://api.zoo.ngo/v1/iam/teams` — Returns your organization's roles, newest first — each a named group of people that permissions are granted to.
+- `GET https://api.zoo.ngo/v1/iam/teams` — Returns your organization's teams, newest first — each a named set of people that roles and permissions are granted to.
 - `GET https://api.zoo.ngo/v1/iam/teams/{name}` — Returns one team: who is in it.
 
 ## Parameters
