@@ -4126,50 +4126,6 @@
         "x-public": true
       }
     },
-    "/v1/ai/messages/global": {
-      "get": {
-        "operationId": "get_ai_messages_global",
-        "summary": "List messages across tenants",
-        "description": "Cross-tenant listing. Admin-only; a tenant caller is refused.",
-        "tags": [
-          "ai"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Envelope"
-                    },
-                    {
-                      "properties": {
-                        "data": {
-                          "items": {
-                            "$ref": "#/components/schemas/Message"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "type": "object"
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "Envelope. `status` is \"ok\" or \"error\" — check it; a handled failure is still HTTP 200."
-          },
-          "401": {
-            "description": "No credential, or one this service does not accept."
-          },
-          "403": {
-            "description": "A valid credential that may not do this."
-          }
-        },
-        "x-public": true
-      }
-    },
     "/v1/ai/messages/welcome": {
       "delete": {
         "operationId": "delete_ai_messages_welcome",

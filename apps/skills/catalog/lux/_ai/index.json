@@ -119,11 +119,11 @@
       "sha256": "3adc13835e034f8a52ae1a987b9d60316a6fae4db37dc20764395411c6a7f2d2"
     },
     {
-      "description": "Read ai messages: List messages, List messages across tenants, Retrieve a message.",
+      "description": "Read ai messages: List messages, Retrieve a message, Answer (message).",
       "name": "ai_messages",
       "path": "ai_messages/SKILL.md",
       "service": "ai",
-      "sha256": "12f26dc78b6cdeebb030e18c91c73e29a3d8741eeb9de55e5b2de85ab1344124"
+      "sha256": "8a710efe1660dfaec71244e2b385834849c9f3ae9524b6ad0186b0745c14aa17"
     },
     {
       "description": "Read ai nodes: List nodes, Retrieve a node, Tunnel (node).",

@@ -1,7 +1,7 @@
 ---
 name: ai_messages
 version: "8.0.0"
-description: "Read ai messages: List messages, List messages across tenants, Retrieve a message."
+description: "Read ai messages: List messages, Retrieve a message, Answer (message)."
 ---
 
 # Zoo · AI · messages
@@ -15,7 +15,6 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.zoo.ngo/v1/ai/messages` — List messages
-- `GET https://api.zoo.ngo/v1/ai/messages/global` — List messages across tenants
 - `GET https://api.zoo.ngo/v1/ai/messages/{owner}/{name}` — Retrieve a message
 - `GET https://api.zoo.ngo/v1/ai/messages/{owner}/{name}/answer` — Answer (message)
 
@@ -29,7 +28,6 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 ## Response
 
 - `/v1/ai/messages` → JSON object.
-- `/v1/ai/messages/global` → JSON object.
 - `/v1/ai/messages/{owner}/{name}` → JSON object.
 - `/v1/ai/messages/{owner}/{name}/answer` → `Envelope` object with fields: `data`, `data2`, `msg`, `status`.
 
