@@ -6,7 +6,7 @@ import (
 )
 
 // TestParseFulltextParams pins the two request shapes the SPA actually sends —
-// a bare string and Huly's {query} object — plus the options limit. A parser that
+// a bare string and the {query} object — plus the options limit. A parser that
 // silently returned "" for the object form would reinstate the old bug (a search
 // box that always reports no matches) while looking wired up.
 func TestParseFulltextParams(t *testing.T) {

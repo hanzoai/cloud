@@ -14,7 +14,7 @@ package team
 // reach one was the transactor WebSocket — a client opens a socket, replays the
 // model, and issues findAll. That is right for the SPA, which holds a live query
 // open, and it is the wrong and only door for everything else: a second surface
-// reading the same rooms had to speak the Huly protocol to list them.
+// reading the same rooms had to speak the document protocol to list them.
 //
 // So these two ops are not a second store. They read the SAME documents the
 // transactor serves, through the SAME docStore, under the SAME (org, workspace)
@@ -23,7 +23,7 @@ package team
 // # The work facet, and why it is a MIXIN
 //
 // A room that is a unit of work carries two things Chunter has no attribute
-// for: whether it is meant to outlive its task, and what it is ABOUT. Huly's own
+// for: whether it is meant to outlive its task, and what it is ABOUT. The
 // extension point for exactly this is the mixin — a namespaced sub-object on a
 // document, written by TxMixin, which the platform is built to carry on classes
 // it does not own. So the facet lives at `hanzo:mixin:Work` on the room
