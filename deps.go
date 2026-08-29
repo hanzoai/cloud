@@ -10,6 +10,8 @@
 package cloud
 
 import (
+	"context"
+	"fmt"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/ha"
 
@@ -26,6 +28,26 @@ import (
 // implementation. Out-of-process (legacy split deploys): the same Client
 // resolves to a ZAP-RPC implementation. Subsystem code does not branch
 // on which mode; the interface is the contract.
+// Secret resolves a KMS-sealed secret by reference, for a subsystem that must not
+// import the KMS client type to read one. A nil KMS yields a resolver that errors,
+// so a caller needing a sealed key fails closed rather than reading a zero value.
+//
+// It lives on Deps because Deps is what HAS the KMS. It was written twice — byte
+// for byte, in apps/company and apps/compliance — which is how a helper with no
+// home ends up with two, free to drift apart while both look canonical.
+//
+// The return type is the bare signature, not any subsystem's named alias, so this
+// package stays ignorant of who consumes it and the consumers keep their own names
+// for it.
+func (d Deps) Secret() func(ctx context.Context, ref string) ([]byte, error) {
+	if d.KMS == nil {
+		return func(context.Context, string) ([]byte, error) {
+			return nil, fmt.Errorf("KMS not available")
+		}
+	}
+	return d.KMS.GetSecret
+}
+
 type Deps struct {
 	// Logger is not here. The process default is (luxlog.Default, installed by
 	// BuildDeps before anything can log), so a subsystem derives its scoped child
