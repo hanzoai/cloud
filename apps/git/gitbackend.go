@@ -158,7 +158,7 @@ func (g *gitRepository) Blob(_ context.Context, rev Revision, path string, maxBy
 	if err != nil {
 		return Blob{}, fmt.Errorf("%w: %s", ErrNoPath, path)
 	}
-	out := Blob{Path: path, Size: file.Size}
+	out := Blob{Path: path, Size: file.Size, Link: file.Mode == filemode.Symlink}
 	if maxBytes > 0 && file.Size > maxBytes {
 		out.Truncated = true
 		return out, nil

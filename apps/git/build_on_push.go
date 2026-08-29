@@ -247,6 +247,11 @@ func readPipeline(ctx context.Context, repo Repository, after string) (*pipeline
 // is a real failure resolution must stop on rather than read past. A file too big
 // or too binary to read is one of those — skipping it would let a repository lose
 // its declaration without a word.
+//
+// A LINK IS ABSENT, which is the same answer a checkout gives. Its bytes are a
+// path, so reading them as a declaration would mean this reader and a checkout
+// disagreeing about the repository they both hold: one sees the target's name,
+// the other the target's document.
 func blobs(ctx context.Context, repo Repository, rev Revision) contract.Read {
 	return func(name string) ([]byte, error) {
 		b, err := repo.Blob(ctx, rev, name, contract.Max)
@@ -255,6 +260,8 @@ func blobs(ctx context.Context, repo Repository, rev Revision) contract.Read {
 			return nil, fs.ErrNotExist
 		case err != nil:
 			return nil, err
+		case b.Link:
+			return nil, fs.ErrNotExist
 		case b.Truncated:
 			return nil, fmt.Errorf("%d bytes; a declaration is smaller than %d", b.Size, contract.Max)
 		case b.Binary:
