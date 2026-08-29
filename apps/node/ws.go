@@ -567,7 +567,7 @@ func (t *wsTransport) log() luxlog.Logger {
 	if t.opts.Logger != nil {
 		return t.opts.Logger
 	}
-	return luxlog.NewNoOpLogger()
+	return luxlog.Default()
 }
 
 // ── outbound framing ─────────────────────────────────────────────────────────
