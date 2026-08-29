@@ -52,6 +52,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -141,7 +142,7 @@ func build(b cloud.Base, o oauth) (state, error) {
 		st.dyn, st.clientset = dyn, cs
 	}
 	b.Log.Info("deploy control plane mounted", "prefix", "/v1/deploy", "k8s", st.dyn != nil,
-		"brand", b.Brand, "env", b.Env, "iam", o.issuer, "client", o.clientID, "adminOrg", o.adminOrg)
+		"brand", b.Brand, "env", b.Env, "iam", o.issuer, "client", o.clientID, "adminOrg", authz.AdminOrg)
 	return st, nil
 }
 

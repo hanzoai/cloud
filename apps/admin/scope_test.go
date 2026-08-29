@@ -271,7 +271,7 @@ func TestScope_MemberWithoutOrgAdminDenied(t *testing.T) {
 // parent-org field yet, so the subtree is the singleton. When IAM adds the parent link,
 // this test changes (and descendants becomes the BFS) — nothing else does.
 func TestScope_DescendantsSingletonToday(t *testing.T) {
-	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}}
+	s := &cloud.Service[core.State]{State: core.State{}}
 	got := core.Descendants(s, "maxpower")
 	if len(got) != 1 || got[0] != "maxpower" {
 		t.Fatalf("descendants(maxpower) = %v, want [maxpower] (IAM has no parent-org field yet)", got)

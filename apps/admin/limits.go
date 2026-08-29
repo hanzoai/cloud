@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/authz"
 	"net/http"
 	"strings"
 
@@ -76,7 +77,7 @@ func (o ops) getPromo(ctx context.Context, _ *core.None) (*rawOut, error) {
 		return nil, err
 	}
 	s := o.s
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodGet, "/v1/platform/promo", s.State.AdminOrg, nil)
+	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodGet, "/v1/platform/promo", authz.AdminOrg, nil)
 	return relay(raw, status, err)
 }
 
@@ -95,7 +96,7 @@ func (o ops) putPromo(ctx context.Context, _ *promoIn) (*rawOut, error) {
 		return nil, err
 	}
 	s := o.s
-	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPut, "/v1/platform/promo", s.State.AdminOrg, c.Body())
+	raw, status, err := s.State.Commerce.Forward(ctx, http.MethodPut, "/v1/platform/promo", authz.AdminOrg, c.Body())
 	return relay(raw, status, err)
 }
 

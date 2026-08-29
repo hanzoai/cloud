@@ -40,7 +40,7 @@ func mountWithStore(t *testing.T) (string, *auditstore.Recorder, func(method, pa
 	t.Cleanup(func() { _ = rec.Close() })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin", AuditStore: rec}}
+	s := &cloud.Service[core.State]{State: core.State{AuditStore: rec}}
 	// Stand in for the composer: the principal enrichment at the root, then the
 	// typed ops — the order cloud.App gives every production program. A typed op
 	// sees the caller only through what the enrichment parks, and a group at
@@ -307,7 +307,7 @@ func TestAdminAudit_DeniedWithoutSuperAdmin(t *testing.T) {
 // configured" rather than panicking.
 func TestAdminAudit_VerifyWithoutStore(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}} // no auditStore
+	s := &cloud.Service[core.State]{State: core.State{}} // no auditStore
 	app.Use(cloud.Bridge())
 	Routes(app, s)
 	req := httptest.NewRequest("GET", "/v1/admin/audit/verify", nil)
