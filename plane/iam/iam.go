@@ -32,7 +32,9 @@ const App = "iam"
 var Ops = []string{
 	plane.IAMApproval,
 	plane.IAMEmail,
+	plane.IAMGrant,
 	plane.IAMMailable,
+	plane.IAMMembers,
 	plane.IAMProjects,
 	plane.IAMRoles,
 }
@@ -51,11 +53,25 @@ func IAMEmail(ctx context.Context) (*plane.Email, error) {
 	return plane.Ask[struct{}, plane.Email](ctx, App, plane.IAMEmail, &struct{}{})
 }
 
+// IAMGrant record that a user may act in a scope of the caller's org.
+//
+// Calls plane.IAMGrant on iam over the peer plane.
+func IAMGrant(ctx context.Context, in *plane.GrantIn) (*struct{}, error) {
+	return plane.Ask[plane.GrantIn, struct{}](ctx, App, plane.IAMGrant, in)
+}
+
 // IAMMailable who this org may mail.
 //
 // Calls plane.IAMMailable on iam over the peer plane.
 func IAMMailable(ctx context.Context) (*plane.Roster, error) {
 	return plane.Ask[struct{}, plane.Roster](ctx, App, plane.IAMMailable, &struct{}{})
+}
+
+// IAMMembers who may act in one scope of the caller's org.
+//
+// Calls plane.IAMMembers on iam over the peer plane.
+func IAMMembers(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
+	return plane.Ask[plane.Scope, plane.Memberships](ctx, App, plane.IAMMembers, in)
 }
 
 // IAMProjects projects this org owns.

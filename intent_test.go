@@ -250,7 +250,17 @@ func TestAKeylessProcessRefusesTheChangeAndServesTheRead(t *testing.T) {
 func TestTheReservedAdminOrgIsNotConfigurable(t *testing.T) {
 	var found []string
 	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+		if err != nil {
+			return nil
+		}
+		// .claude/worktrees holds agent checkouts of OTHER commits. They are not
+		// this repo's source, and reading them makes the invariant a fact about
+		// whatever anyone has checked out on this disk — it failed here against
+		// twenty worktrees pinned before the knob was deleted.
+		if d.IsDir() && d.Name() == ".claude" {
+			return filepath.SkipDir
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}
 		if strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/testdata/") {

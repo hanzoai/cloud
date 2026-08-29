@@ -17,6 +17,9 @@ func init() {
 			"Email.verified": "Verified is whether the person proved the address. False is a real answer\nand callers must refuse on it, never treat it as \"probably fine\".",
 		},
 	})
+	zip.Describe("POST /iam/grant", zip.Doc{
+		Description: "Records one membership in the caller's org, idempotently.",
+	})
 	zip.Describe("POST /iam/mailable", zip.Doc{
 		Description: "Answers with the people in the CALLER'S OWN org who may be sent mail —\nid, owner, name and email, and nothing else.\n\nIt is the internal-plane replacement for reading the identity store through DB().\nThat read worked only while every subsystem shared one binary and returned nil\nthe moment one did not, so marketing resolved every audience to \"IAM unavailable\"\nand could mail nobody. This op runs in the process that owns the store, so it\nanswers wherever the caller happens to live.\n\nThe org is taken from the authenticated call and can never be named in an\nargument: it is the tenancy key for the whole identity store, so a caller able to\npass it could enumerate another tenant's people. A call carrying no org is\nrefused, not answered with an empty roster.\n\nThe projection is deliberately narrow. Four fields are what it takes to name a\nperson and reach them; returning the identity record itself would put every\ncredential column on the wire for what is only an audience count.\n\nIt fails closed on a store that is not open: this process owns the store, so a\nnil handle is a boot-order fault, and an empty roster would read as \"this org has\nnobody\" — an announcement that silently reaches no one is worse than one that\nrefuses out loud.",
 		Fields: map[string]string{
@@ -26,6 +29,9 @@ func init() {
 			"Recipient.owner":   "the org that owns the record — the tenancy key",
 			"Roster.recipients": "everyone in the org who may be mailed; empty is a real answer, not an error",
 		},
+	})
+	zip.Describe("POST /iam/members", zip.Doc{
+		Description: "Lists the grants in one scope, each with the display name IAM holds for\nthe person — so a caller never keeps a copy of somebody's name to show it.",
 	})
 	zip.Describe("POST /iam/projects", zip.Doc{
 		Description: "Answers with the projects owned by the CALLER'S OWN org.\n\nThe org comes from the authenticated call and can never be an argument. Owner\nis the tenancy key of the whole project table, so a caller able to pass it\ncould list another tenant's work — which is exactly the hole the HTTP client\nthis replaces had to mint a per-org credential to close.\n\nThe projection is narrow on purpose: five fields are what it takes to key,\nname and date a project. Returning the record itself would put IAM's metadata\nand workspace columns on a wire whose layout is positional, so every field\nhere is one the contract can never reorder.\n\nIt fails closed on a store that is not open. This process owns the store, so a\nnil handle is a boot-order fault, and an empty list would read as \"this org has\nno projects\" — a lie that a caller would act on by offering to create one that\nalready exists.",
