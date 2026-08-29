@@ -203,7 +203,7 @@ func TestResolvePublishesItsAddress(t *testing.T) {
 			"generated from this document sends the braces literally.", inPath)
 	}
 	if strings.TrimSpace(inPath[0].Description) == "" {
-		t.Errorf("the `wildcard1` parameter carries no description. It is lifted from the doc "+
+		t.Errorf("the `wildcard1` parameter carries no description. It is lifted from the doc " +
 			"comment on the SbomRef field it binds — write that comment, then run: " +
 			"make -C apps/sbom describe")
 	}

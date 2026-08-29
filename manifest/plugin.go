@@ -141,7 +141,6 @@ type App struct {
 	// visible the day it lands, rather than hidden and reachable by nobody, which
 	// is not visible at all.
 	Stage string
-
 }
 
 // The stages a row may declare. There is no `ga` constant because ga is the
