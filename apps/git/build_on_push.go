@@ -160,7 +160,7 @@ func buildOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycl
 	}
 	pl, path, err := readPipeline(ctx, repo, ev.After)
 	if err != nil {
-		s.Log.Warn("native ci/cd: read pipeline", "org", ev.Org, "repo", ev.Repo, "err", err)
+		level(s, err)("native ci/cd: read pipeline", "org", ev.Org, "repo", ev.Repo, "err", err)
 		return
 	}
 	if pl == nil || len(pl.Images) == 0 {
@@ -169,6 +169,19 @@ func buildOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycl
 	enqueued, failed := enqueuePipeline(ctx, s, ev, pl)
 	s.Log.Info("native ci/cd: enqueued", "org", ev.Org, "repo", ev.Repo, "config", path,
 		"images", len(pl.Images), "enqueued", enqueued, "failed", failed, "commit", shortSHA(ev.After))
+}
+
+// level says how loudly a failed pipeline read is reported. Two contracts is a
+// MISCONFIGURATION and not a bad moment: it stops this repository building on every
+// push until somebody deletes a file, and nothing downstream ever finds out — the
+// reactor is best-effort by design, so this line is the only account of it. A read
+// that failed once clears on the next push. One line, two levels, because the two
+// want two different answers from whoever is reading the log.
+func level(s *cloud.Service[state], err error) func(string, ...interface{}) {
+	if errors.Is(err, contract.ErrMany) {
+		return s.Log.Error
+	}
+	return s.Log.Warn
 }
 
 // readPipeline resolves the repo's native pipeline at the pushed commit: it merges

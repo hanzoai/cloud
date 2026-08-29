@@ -3,6 +3,7 @@ package contract
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,12 +12,14 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
-// A contract can be WRITTEN as code — hanzo.js, hanzo.ts, hanzo.go — and code is a
-// generator, never the contract. It runs exactly once, here, at the edge where the
-// project's own toolchain already is, and what it prints is the document.
+// A contract can be WRITTEN as code — hanzo.config.js, hanzo.config.ts,
+// .hanzo/contract.go — and code is a generator, never the contract. It runs exactly
+// once, here, at the edge where the project's own toolchain already is, and what it
+// prints is the document.
 // Everything downstream — CI, platform.hanzo.ai, the operator, and a chain that one
 // day witnesses a release — reads that document and nothing else.
 //
@@ -70,11 +73,16 @@ func Eval(ctx context.Context, dir string) (Doc, error) {
 	return Parse(name, out)
 }
 
-// open takes one file from a checkout, bounded. A directory carrying the name is
-// absent rather than unreadable — a directory cannot be a document and no author
-// ever meant one as one — which is also what reading a tree at a revision answers.
+// open takes one file from a checkout, bounded. A path that cannot be holding a
+// document is ABSENT rather than unreadable: a directory carrying the name, and a
+// plain file where .hanzo/ has to be a directory. Neither was ever meant as a
+// declaration, and reading a tree at a revision answers absent for both, so the
+// checkout reader and the git reader cannot disagree about the same repository.
 func open(dir, name string) ([]byte, error) {
 	f, err := os.Open(filepath.Join(dir, name))
+	if errors.Is(err, syscall.ENOTDIR) {
+		return nil, fs.ErrNotExist
+	}
 	if err != nil {
 		return nil, err
 	}
