@@ -141,9 +141,21 @@ func run() error {
 			return err
 		}
 	}
+	// The second projection: the ZAP codec for every plane type that has declared
+	// its wire. It is the same job — project the one declaration — so it is the
+	// same command, and there is nothing to remember to run separately.
+	wired, err := codecs(root)
+	if err != nil {
+		return err
+	}
+
 	fmt.Printf("plane/gen: %d peers\n", len(names))
 	for _, n := range names {
 		fmt.Printf("  %-12s %d ops\n", n, len(byApp[n].Ops))
+	}
+	fmt.Printf("plane/gen: %d types carry their own wire\n", len(wired))
+	for _, n := range wired {
+		fmt.Printf("  %s\n", n)
 	}
 	return nil
 }
