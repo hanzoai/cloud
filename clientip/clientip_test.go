@@ -292,3 +292,49 @@ func TestClientCountry_OverARealRequest(t *testing.T) {
 		t.Fatalf("a request stating no jurisdiction produced %q", got)
 	}
 }
+
+// TestTheNetHTTPFormRefusesAChosenAddress pins the defect that produced ClientIPOf.
+//
+// apps/metering had its own body, and it returned the LEFT-MOST X-Forwarded-For
+// entry — the one value in the chain a caller writes for itself — into
+// Usage.ClientIP, the billing and audit column. This asserts the shared rule does
+// not, which is the whole reason the copy is gone.
+func TestTheNetHTTPFormRefusesAChosenAddress(t *testing.T) {
+	r := httptest.NewRequest("GET", "/v1/anything", nil)
+	r.RemoteAddr = "203.0.113.7:44321" // a DIRECT caller: the peer is not our proxy
+	r.Header.Set("X-Forwarded-For", "1.2.3.4")
+
+	got := ClientIPOf(r)
+	if got == "1.2.3.4" {
+		t.Errorf("ClientIPOf = %q — it read the address the caller wrote for itself, "+
+			"which is what put a chosen value in the billing and audit column", got)
+	}
+	if got != "203.0.113.7" {
+		t.Errorf("ClientIPOf = %q, want the socket peer 203.0.113.7 — a direct caller's "+
+			"TCP source cannot be forged, so it is the truth", got)
+	}
+}
+
+// TestTheNetHTTPFormAgreesWithTheZipForm: one rule, two callers. If these two ever
+// disagree there are two rules again, which is the thing ClientIPOf was added to
+// prevent rather than to duplicate.
+func TestTheNetHTTPFormAgreesWithTheZipForm(t *testing.T) {
+	for _, tc := range []struct{ peer, xff string }{
+		{"203.0.113.7:1", ""},
+		{"203.0.113.7:1", "1.2.3.4"},
+		{"203.0.113.7:1", "1.2.3.4, 5.6.7.8"},
+		{"[2001:db8::1]:1", "1.2.3.4"},
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = tc.peer
+		var chain [][]byte
+		if tc.xff != "" {
+			r.Header.Set("X-Forwarded-For", tc.xff)
+			chain = [][]byte{[]byte(tc.xff)}
+		}
+		if got, want := ClientIPOf(r), clientAddr(tc.peer, chain, trustedProxies()); got != want {
+			t.Errorf("peer=%q xff=%q: ClientIPOf=%q, clientAddr=%q — two rules again",
+				tc.peer, tc.xff, got, want)
+		}
+	}
+}

@@ -151,6 +151,27 @@ func ClientIP(c *zip.Ctx) string {
 	return clientAddr(c.Fiber().IP(), c.Fiber().Request().Header.PeekAll("X-Forwarded-For"), trustedProxies())
 }
 
+// ClientIPOf is the same rule read off net/http's facts, for a product that serves
+// on the standard library rather than on zip. The peer is r.RemoteAddr and the chain
+// is every X-Forwarded-For line — the three facts clientAddr already turns on, so
+// this is the same answer, not a second one.
+//
+// It exists because apps/metering had written its own, and that one returned the
+// LEFT-MOST forwarded entry: the single value in the chain a caller writes for
+// itself. It fed Usage.ClientIP, so a caller could choose the address that landed
+// in the billing and audit column — the failure this package's doc opens with.
+func ClientIPOf(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	lines := r.Header.Values("X-Forwarded-For")
+	chain := make([][]byte, 0, len(lines))
+	for _, l := range lines {
+		chain = append(chain, []byte(l))
+	}
+	return clientAddr(r.RemoteAddr, chain, trustedProxies())
+}
+
 // clientAddr IS the rule, as a pure function of the three facts it turns on: the
 // socket peer, the forwarded chain, and which addresses are ours. Everything
 // interesting about ClientIP is here, where it can be read and tested without a
