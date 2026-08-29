@@ -29,14 +29,14 @@ import (
 func init() {
 	openapi.Describe("/v1/knowledge/import", http.MethodPost,
 		"Import an Obsidian, Notion, Roam or Evernote export into the org's knowledge base",
-		"Ingests an uploaded export as a tree of kb-page documents with its link structure "+
+		"Ingests an uploaded export as a tree of kb.page documents with its link structure "+
 			"intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and "+
 			"the export arrives as a multipart `file` part, or as the raw request body when there "+
 			"is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside "+
 			"the zip Roam downloads), or an Evernote .enex.\n\n"+
 			"The pages are filed through the SAME ingest path a connector sync uses, so the "+
-			"kb-page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into "+
-			"kb-link edges — the imported vault is searchable and its graph is navigable without "+
+			"kb.page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into "+
+			"kb.link edges — the imported vault is searchable and its graph is navigable without "+
 			"a second pass. Parents are filed before their children, and each page takes a slug "+
 			"unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages "+
 			"rather than overwriting the ones already there.\n\n"+
@@ -51,11 +51,11 @@ func init() {
 
 // import.go serves POST /v1/knowledge/import: an Obsidian-importer-equivalent that ingests
 // an uploaded export (Obsidian vault zip, Notion export zip, Evernote .enex, Roam
-// JSON) as a tree of kb-page documents with the link structure intact. Each format
+// JSON) as a tree of kb.page documents with the link structure intact. Each format
 // is normalized by a pure package (obsidian/notion/roam/evernote) into []vault.Page
 // with "[[wikilinks]]" preserved in the body; this handler files them through the
-// SAME framework.Ingest path a connector sync uses, so the kb-page after_save hook
-// indexes each page AND extracts its wikilinks into kb-link edges — one write path,
+// SAME framework.Ingest path a connector sync uses, so the kb.page after_save hook
+// indexes each page AND extracts its wikilinks into kb.link edges — one write path,
 // one link-extraction path. It is org-scoped via principal.Org.
 
 // Import bounds: the upload size, the page count, and the per-entry extract size,
@@ -206,8 +206,8 @@ func pathExt(p string) string {
 	return ""
 }
 
-// fileVaultPages files normalized pages as kb-page documents, filing parents before
-// children so the kb-page `parent` Link resolves. It assigns each page a slug unique
+// fileVaultPages files normalized pages as kb.page documents, filing parents before
+// children so the kb.page `parent` Link resolves. It assigns each page a slug unique
 // within the org (suffixing on collision) and remaps parent references to the final
 // slugs. Returns the count filed and their final names.
 func fileVaultPages(ctx context.Context, org string, pages []vault.Page, project string) (int, []string, error) {
@@ -286,7 +286,7 @@ func uniqueSlug(ctx context.Context, org, base string, used map[string]bool) str
 	}
 }
 
-// pageExists reports whether a kb-page with this name already exists in the org.
+// pageExists reports whether a kb.page with this name already exists in the org.
 func pageExists(ctx context.Context, org, name string) bool {
 	docs, err := framework.Search(ctx, org, DTPage, map[string]string{"name": name}, 1)
 	return err == nil && len(docs) == 1

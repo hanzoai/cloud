@@ -1,7 +1,7 @@
 // connectors.go is the per-org app-connector control plane: OAuth into Slack /
 // GitHub / Google, store the token in KMS (never plaintext, never logged), and sync
 // external documents INTO the same per-org knowledge store + vector index as manual
-// pages. A connector is a pure PRODUCER of framework documents (kb-source) — it
+// pages. A connector is a pure PRODUCER of framework documents (kb.source) — it
 // creates them through framework.Ingest, so the SAME after_save indexing hook that
 // serves manual pages indexes them. One knowledge store, many sources, one index.
 //
@@ -11,7 +11,7 @@
 //     org, and synced docs are written into that org's store only.
 //   - The OAuth token is a RETRIEVABLE secret (it must be presented to the provider
 //     API), so it lives in KMS at a deterministic per-org path — never in the
-//     kb-connector document, never in a log line. The document holds only the KMS
+//     kb.connector document, never in a log line. The document holds only the KMS
 //     PATH (kms_ref) and non-secret connection metadata.
 //   - The OAuth `state` is an HMAC over (org|provider|nonce|expiry) keyed by a
 //     server secret, so the callback re-derives the org from the STATE it signed —
@@ -487,7 +487,7 @@ func (o ops) disconnectConnector(ctx context.Context, in *providerIn) (*connecti
 	return &connectionOut{Provider: provider, Status: "disconnected"}, nil
 }
 
-// upsertConnector creates or updates the org's kb-connector document for a provider
+// upsertConnector creates or updates the org's kb.connector document for a provider
 // (one per provider per org, named by provider). It merges the given fields onto the
 // existing document so a partial status update (e.g. "syncing") doesn't drop the
 // account/kms_ref. Uses the framework in-process API so the write is validated and

@@ -7,8 +7,8 @@
 // in a folder named after the page) and links between pages as relative file links
 // ([text](Child%20<id>.md) or <a href="Child%20<id>.html">). This normalizer
 // rebuilds the parent tree from the folder nesting and rewrites intra-export links
-// to "[[Title]]" wikilinks, so the kb-page after_save hook extracts them into
-// kb-link edges — the export's link structure survives as real KB links.
+// to "[[Title]]" wikilinks, so the kb.page after_save hook extracts them into
+// kb.link edges — the export's link structure survives as real KB links.
 package notion
 
 import (

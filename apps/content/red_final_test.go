@@ -26,7 +26,7 @@ import (
 
 func getDoc(t *testing.T, org, name string) map[string]any {
 	t.Helper()
-	doc, err := framework.Get(context.Background(), org, "SocialPost", name)
+	doc, err := framework.Get(context.Background(), org, DocTypeSocialPost, name)
 	if err != nil {
 		t.Fatalf("framework.Get(%s): %v", name, err)
 	}
@@ -92,7 +92,7 @@ func TestRedFinal_ExternalIDs_OmitPreserves_NoWipe_NoForge(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "launch", "channels": "x"})
 	for _, to := range []string{StatusInReview, StatusApproved, StatusPublished} {
-		if code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, b)
 		}
@@ -113,21 +113,21 @@ func TestRedFinal_ExternalIDs_OmitPreserves_NoWipe_NoForge(t *testing.T) {
 	}
 
 	// (a) WIPE via empty map — must be REJECTED (4xx), skip-set intact.
-	if code, b := req(t, app, http.MethodPut, "/v1/framework/SocialPost/"+name, org,
+	if code, b := req(t, app, http.MethodPut, "/v1/framework/"+DocTypeSocialPost.String()+"/"+name, org,
 		withField("external_ids", map[string]any{})); code < 400 || code >= 500 {
 		t.Fatalf("external_ids:{} against a non-empty recorded set must 4xx (no wipe), got %d %s", code, b)
 	}
 	assertExternalID(t, org, name, realID, "after {} wipe attempt")
 
 	// (b) WIPE via JSON null — must be REJECTED.
-	if code, b := req(t, app, http.MethodPut, "/v1/framework/SocialPost/"+name, org,
+	if code, b := req(t, app, http.MethodPut, "/v1/framework/"+DocTypeSocialPost.String()+"/"+name, org,
 		withField("external_ids", nil)); code < 400 || code >= 500 {
 		t.Fatalf("external_ids:null against a non-empty recorded set must 4xx (no wipe), got %d %s", code, b)
 	}
 	assertExternalID(t, org, name, realID, "after null wipe attempt")
 
 	// (c) FORGE a different value — must be REJECTED.
-	if code, b := req(t, app, http.MethodPut, "/v1/framework/SocialPost/"+name, org,
+	if code, b := req(t, app, http.MethodPut, "/v1/framework/"+DocTypeSocialPost.String()+"/"+name, org,
 		withField("external_ids", map[string]any{"int_x": "HACKED", "int_evil": "E"})); code < 400 || code >= 500 {
 		t.Fatalf("forged external_ids must 4xx, got %d %s", code, b)
 	}
@@ -135,13 +135,13 @@ func TestRedFinal_ExternalIDs_OmitPreserves_NoWipe_NoForge(t *testing.T) {
 
 	// (d) OMIT external_ids on a legit partial edit — must SUCCEED and PRESERVE (full-replace
 	// would otherwise drop the reconciliation state).
-	if code, b := req(t, app, http.MethodPut, "/v1/framework/SocialPost/"+name, org, base); code != http.StatusOK {
+	if code, b := req(t, app, http.MethodPut, "/v1/framework/"+DocTypeSocialPost.String()+"/"+name, org, base); code != http.StatusOK {
 		t.Fatalf("omitting external_ids on a legit edit must succeed (preserve), got %d %s", code, b)
 	}
 	assertExternalID(t, org, name, realID, "after omit-preserve edit")
 
 	// (e) The skip-set survived every attack: a re-publish posts NOTHING (idempotent).
-	if _, err := Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost, Name: name}); err != nil {
+	if _, err := Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost.String(), Name: name}); err != nil {
 		t.Fatalf("re-publish: %v", err)
 	}
 	if got := stubPosts(stub); got != postsAfterSetup {
@@ -167,7 +167,7 @@ func TestRedFinal_PublishedAt_ForgeAndFormat(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "launch", "channels": "x"})
 	for _, to := range []string{StatusInReview, StatusApproved, StatusPublished} {
-		if code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, b)
 		}
@@ -191,7 +191,7 @@ func TestRedFinal_PublishedAt_ForgeAndFormat(t *testing.T) {
 		if pa != nil {
 			m["published_at"] = pa
 		}
-		return req(t, app, http.MethodPut, "/v1/framework/SocialPost/"+name, org, m)
+		return req(t, app, http.MethodPut, "/v1/framework/"+DocTypeSocialPost.String()+"/"+name, org, m)
 	}
 
 	// FORGE a different instant — must 4xx, stored value unchanged.
@@ -238,14 +238,14 @@ func TestRedFinal_TransitionCannotSmuggleServerOwned(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "launch", "channels": "x"})
 	for _, to := range []string{StatusInReview, StatusApproved} {
-		if code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, b)
 		}
 	}
 	// Transition to published while trying to SMUGGLE external_ids + a forged published_at in
 	// the same body. The smuggle must be ignored; only the real fan-out id lands.
-	code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org, map[string]any{
+	code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org, map[string]any{
 		"to":           StatusPublished,
 		"external_ids": map[string]any{"int_x": "SMUGGLE", "int_evil": "E"},
 		"published_at": "2999-01-01 00:00:00",
@@ -279,7 +279,7 @@ func TestRedFinal_SameItemFlood(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "flood", "channels": "x"})
 	for _, to := range []string{StatusInReview, StatusApproved} {
-		if code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, b)
 		}
@@ -297,7 +297,7 @@ func TestRedFinal_SameItemFlood(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			_, errs[i] = Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost, Name: name})
+			_, errs[i] = Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost.String(), Name: name})
 		}(i)
 	}
 	close(start)
@@ -319,7 +319,7 @@ func TestRedFinal_SameItemFlood(t *testing.T) {
 	}
 
 	// Lease is free again — a fresh publisher wins immediately (no dead-lease wedge).
-	if _, err := Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost, Name: name}); err != nil {
+	if _, err := Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost.String(), Name: name}); err != nil {
 		t.Fatalf("post-flood publish (lease must be free): %v", err)
 	}
 
@@ -358,7 +358,7 @@ func TestRedFinal_TwoConcurrentTransitionsPublished_OneFanout(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "race", "channels": "x"})
 	for _, to := range []string{StatusInReview, StatusApproved} {
-		if code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, b)
 		}
@@ -372,7 +372,7 @@ func TestRedFinal_TwoConcurrentTransitionsPublished_OneFanout(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			_, errs[i] = Transition(context.Background(), org, DocTypeSocialPost, name, StatusPublished, "")
+			_, errs[i] = Transition(context.Background(), org, DocTypeSocialPost.String(), name, StatusPublished, "")
 		}(i)
 	}
 	close(start)
@@ -429,7 +429,7 @@ func TestRedFinal_SkipSetEmptyDuringFanout(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "slow", "channels": "x"})
 	for _, to := range []string{StatusInReview, StatusApproved} {
-		if code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, b)
 		}
@@ -437,7 +437,7 @@ func TestRedFinal_SkipSetEmptyDuringFanout(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		_, _ = Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost, Name: name})
+		_, _ = Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost.String(), Name: name})
 		close(done)
 	}()
 

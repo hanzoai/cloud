@@ -1,6 +1,6 @@
 // Package lexical builds a Lexical EditorState JSON string from block-structured
 // content. It is the ONE place a KB importer turns markdown / HTML / plain text
-// into the kb-page `body` shape the console's Lexical editor renders and the KB
+// into the kb.page `body` shape the console's Lexical editor renders and the KB
 // indexer flattens (clients/knowledge.lexicalText is the inverse reader).
 //
 // It is pure (no cloud, no I/O). Inline content — including "[[wikilinks]]" — is

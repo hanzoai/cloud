@@ -133,7 +133,7 @@ func TestGenerate201IsByteIdentical(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatalf("a client decoding into GenerateResult can no longer read the answer: %v (%s)", err, b)
 	}
-	if got.DocType != DocTypeAsset || got.Name == "" || got.Status != StatusDraft {
+	if got.DocType != DocTypeAsset.String() || got.Name == "" || got.Status != StatusDraft {
 		t.Fatalf("201 body %+v is not the draft's identity (%s)", got, b)
 	}
 }
@@ -212,7 +212,7 @@ func TestGenerateStillReadsTheBodyAndOnlyTheBody(t *testing.T) {
 
 	// No body doctype, only a query one: the route must refuse exactly as it always
 	// has, because the query is not an input here.
-	code, b := req(t, app, http.MethodPost, "/v1/content/generate?doctype="+DocTypeAsset, org,
+	code, b := req(t, app, http.MethodPost, "/v1/content/generate?doctype="+DocTypeAsset.String(), org,
 		map[string]any{"design": "spring"})
 	if code != http.StatusBadRequest {
 		t.Fatalf("a doctype supplied ONLY in the query want 400, got %d (%s) — the query string became an input", code, b)

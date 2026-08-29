@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Doc is a normalized Notion record ready to file as a kb-source. The KB sync maps it
+// Doc is a normalized Notion record ready to file as a kb.source. The KB sync maps it
 // onto the framework document fields (title/body/external_id/url/source_ts).
 type Doc struct {
 	Title      string

@@ -44,11 +44,11 @@ func TestBuildGraph_ShapesNodesAndEdges(t *testing.T) {
 			t.Fatalf("node %q (type %s) missing; nodes=%+v", id, typ, nodes)
 		}
 	}
-	mustNode("kb-page:home", DTPage)
-	mustNode("kb-page:runbook", DTPage)
-	mustNode("kb-memory:m1", DTMemory)
-	mustNode("kb-source:s1", DTSource)
-	mustNode("kb-connector:github", DTConnector)
+	mustNode("kb.page:home", DTPage.String())
+	mustNode("kb.page:runbook", DTPage.String())
+	mustNode("kb.memory:m1", DTMemory.String())
+	mustNode("kb.source:s1", DTSource.String())
+	mustNode("kb.connector:github", DTConnector.String())
 	mustNode("unresolved:ghost", "unresolved")
 
 	has := func(from, to, kind string) bool {
@@ -59,21 +59,21 @@ func TestBuildGraph_ShapesNodesAndEdges(t *testing.T) {
 		}
 		return false
 	}
-	if !has("kb-page:runbook", "kb-page:home", "parent") {
+	if !has("kb.page:runbook", "kb.page:home", "parent") {
 		t.Errorf("missing parent edge; edges=%+v", edges)
 	}
-	if !has("kb-page:home", "kb-page:runbook", "link") {
+	if !has("kb.page:home", "kb.page:runbook", "link") {
 		t.Errorf("missing resolved wikilink edge; edges=%+v", edges)
 	}
-	if !has("kb-page:home", "unresolved:ghost", "link") {
+	if !has("kb.page:home", "unresolved:ghost", "link") {
 		t.Errorf("missing dangling wikilink edge; edges=%+v", edges)
 	}
-	if !has("kb-source:s1", "kb-connector:github", "provenance") {
+	if !has("kb.source:s1", "kb.connector:github", "provenance") {
 		t.Errorf("missing provenance edge; edges=%+v", edges)
 	}
 	// The edge from a page outside the set must NOT appear.
 	for _, e := range edges {
-		if e.From == "kb-page:elsewhere" {
+		if e.From == "kb.page:elsewhere" {
 			t.Errorf("edge from out-of-set page leaked: %+v", e)
 		}
 	}
@@ -85,7 +85,7 @@ type graphResp struct {
 }
 
 // TestGraphEndpoint_EndToEnd drives the REAL HTTP surface: creating pages fires the
-// after_save hook that extracts wikilinks into kb-link edges, and GET /v1/knowledge/graph
+// after_save hook that extracts wikilinks into kb.link edges, and GET /v1/knowledge/graph
 // returns the resolved graph. Cross-org isolation is asserted too.
 func TestGraphEndpoint_EndToEnd(t *testing.T) {
 	fv := newFakeVector(t)
@@ -101,11 +101,11 @@ func TestGraphEndpoint_EndToEnd(t *testing.T) {
 	}
 	// Home links to Runbook (will resolve) and to Ghost (dangling).
 	home := map[string]any{"title": "Home", "slug": "home", "body": lexBody("See [[Runbook]] and [[Ghost]]")}
-	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb-page", "A", home); code != http.StatusCreated {
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb.page", "A", home); code != http.StatusCreated {
 		t.Fatalf("create home: %d %s", code, b)
 	}
 	runbook := map[string]any{"title": "Runbook", "slug": "runbook", "parent": "home", "body": lexBody("Back to [[Home]]")}
-	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb-page", "A", runbook); code != http.StatusCreated {
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb.page", "A", runbook); code != http.StatusCreated {
 		t.Fatalf("create runbook: %d %s", code, b)
 	}
 
@@ -122,7 +122,7 @@ func TestGraphEndpoint_EndToEnd(t *testing.T) {
 	for _, n := range g.Nodes {
 		ids[n.ID] = true
 	}
-	for _, want := range []string{"kb-page:home", "kb-page:runbook", "unresolved:ghost"} {
+	for _, want := range []string{"kb.page:home", "kb.page:runbook", "unresolved:ghost"} {
 		if !ids[want] {
 			t.Errorf("graph missing node %q; got %+v", want, g.Nodes)
 		}
@@ -135,16 +135,16 @@ func TestGraphEndpoint_EndToEnd(t *testing.T) {
 		}
 		return false
 	}
-	if !has("kb-page:runbook", "kb-page:home", "parent") {
+	if !has("kb.page:runbook", "kb.page:home", "parent") {
 		t.Errorf("missing parent edge: %+v", g.Edges)
 	}
-	if !has("kb-page:home", "kb-page:runbook", "link") {
+	if !has("kb.page:home", "kb.page:runbook", "link") {
 		t.Errorf("missing resolved wikilink edge (home→runbook): %+v", g.Edges)
 	}
-	if !has("kb-page:runbook", "kb-page:home", "link") {
+	if !has("kb.page:runbook", "kb.page:home", "link") {
 		t.Errorf("missing resolved wikilink edge (runbook→home): %+v", g.Edges)
 	}
-	if !has("kb-page:home", "unresolved:ghost", "link") {
+	if !has("kb.page:home", "unresolved:ghost", "link") {
 		t.Errorf("missing dangling wikilink edge: %+v", g.Edges)
 	}
 

@@ -340,7 +340,7 @@
             "type": "string"
           },
           "doctype": {
-            "description": "Campaign | SocialPost | Asset",
+            "description": "marketing.Campaign | marketing.SocialPost | marketing.Asset",
             "type": "string"
           },
           "kind": {

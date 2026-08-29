@@ -361,10 +361,10 @@ func TestRed_BodyCannotForgeBillingOrgOrTenant(t *testing.T) {
 		t.Fatalf("CROSS-ORG BILL: inference org = %v, want %q", last, caller)
 	}
 	// The draft landed in the caller's org, and the victim's board is empty.
-	if _, bb := req(t, app, http.MethodGet, "/v1/content/board", caller, nil); !strings.Contains(string(bb), `"doctype":"SocialPost"`) {
+	if _, bb := req(t, app, http.MethodGet, "/v1/content/board", caller, nil); !strings.Contains(string(bb), `"doctype":"`+DocTypeSocialPost.String()+`"`) {
 		t.Fatalf("caller must own the draft: %s", bb)
 	}
-	if _, vb := req(t, app, http.MethodGet, "/v1/content/board", victim, nil); strings.Contains(string(vb), `"doctype":"SocialPost"`) {
+	if _, vb := req(t, app, http.MethodGet, "/v1/content/board", victim, nil); strings.Contains(string(vb), `"doctype":"`+DocTypeSocialPost.String()+`"`) {
 		t.Fatalf("CROSS-ORG LEAK: victim board shows the caller's draft: %s", vb)
 	}
 }
@@ -417,7 +417,7 @@ func TestRed_PublishBodyOrgFieldIgnored(t *testing.T) {
 
 	name := createSocialPost(t, app, caller, map[string]any{"caption": "hi", "channels": "x"})
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", caller, map[string]any{
-		"doctype": "SocialPost", "name": name,
+		"doctype": DocTypeSocialPost.String(), "name": name,
 		"org": victim, "owner": victim, // injected — PublishInput has no such field
 	})
 	if code != http.StatusOK {
@@ -566,7 +566,7 @@ func TestRed_SocialUpstreamHostileNo5xx(t *testing.T) {
 	}
 	name := createSocialPost(t, app, org, map[string]any{"caption": "x", "channels": "x"})
 	if code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name}); code != http.StatusServiceUnavailable {
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name}); code != http.StatusServiceUnavailable {
 		t.Fatalf("garbage integrations must be 503, got %d %s", code, b)
 	}
 
@@ -576,7 +576,7 @@ func TestRed_SocialUpstreamHostileNo5xx(t *testing.T) {
 	useStub(t, stub)
 	name2 := createSocialPost(t, app, org, map[string]any{"caption": "y", "channels": "x"})
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name2})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name2})
 	if code != http.StatusOK {
 		t.Fatalf("per-channel failure must be 200, got %d %s", code, b)
 	}
@@ -614,7 +614,7 @@ func TestRed_MergeCoexistence_GenerateThenPublish(t *testing.T) {
 	// published, and confirm the generated copy actually fanned out.
 	stub := newSocialStub(t, threeChannels)
 	useStub(t, stub)
-	tpath := "/v1/content/SocialPost/" + gen.Name + "/transition"
+	tpath := "/v1/content/" + DocTypeSocialPost.String() + "/" + gen.Name + "/transition"
 	for _, to := range []string{StatusInReview, StatusApproved, StatusPublished} {
 		if code, bb := req(t, app, http.MethodPost, tpath, org, map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, bb)
@@ -647,7 +647,7 @@ func TestRed_QueuedThenPublishedDoubleDistributes_BUG(t *testing.T) {
 	useStub(t, stub)
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "hello", "channels": "x"})
-	tpath := "/v1/content/SocialPost/" + name + "/transition"
+	tpath := "/v1/content/" + DocTypeSocialPost.String() + "/" + name + "/transition"
 
 	// draft → in_review → approved (no distribution yet).
 	for _, to := range []string{StatusInReview, StatusApproved} {

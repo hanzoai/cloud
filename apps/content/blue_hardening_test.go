@@ -28,7 +28,7 @@ func TestBlue_PublishIsIdempotentPerChannel(t *testing.T) {
 
 	// Publish #1: both enabled channels go out; ids recorded.
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name})
 	if code != http.StatusOK {
 		t.Fatalf("publish#1: %d %s", code, b)
 	}
@@ -47,7 +47,7 @@ func TestBlue_PublishIsIdempotentPerChannel(t *testing.T) {
 
 	// Publish #2 (retry / reconcile): NOTHING re-posts; external_ids preserved.
 	code, b = req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name})
 	if code != http.StatusOK {
 		t.Fatalf("publish#2: %d %s", code, b)
 	}

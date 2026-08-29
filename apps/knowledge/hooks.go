@@ -7,7 +7,7 @@ import (
 )
 
 // hooks.go is the client between the framework DocType lifecycle and the ONE vector
-// index (index.go). For every KNOWLEDGE doctype (kb-page, kb-memory, kb-source) it
+// index (index.go). For every KNOWLEDGE doctype (kb.page, kb.memory, kb.source) it
 // registers:
 //
 //   - after_save → indexDoc: on create AND update, (re)embed the document and
@@ -19,18 +19,18 @@ import (
 //     is a GATE (a returned error would abort the delete), so this hook SWALLOWS the
 //     index error and returns nil — a vector outage must never wedge a delete.
 //
-// kb-connector is intentionally NOT indexed: it is connection metadata, never
+// kb.connector is intentionally NOT indexed: it is connection metadata, never
 // knowledge text. This is the whole extension surface — kb adds no second hook path.
 //
-// kb-page ALSO maintains wikilink EDGES (links.go): its save reconciles "[[…]]"
-// references into kb-link edges, and its trash removes its outgoing edges. Because
+// kb.page ALSO maintains wikilink EDGES (links.go): its save reconciles "[[…]]"
+// references into kb.link edges, and its trash removes its outgoing edges. Because
 // runHooks stops at the first erroring hook, indexing and edge maintenance are
 // combined into ONE page hook that runs both INDEPENDENTLY — a vector outage that
 // fails indexing must never skip edge extraction, and vice-versa.
 func registerHooks() {
 	for _, dt := range indexedDocTypes {
 		if dt == DTPage {
-			continue // kb-page uses the combined index+link hooks below
+			continue // kb.page uses the combined index+link hooks below
 		}
 		framework.RegisterHook(dt, framework.ActionAfterSave, indexOnSave)
 		framework.RegisterHook(dt, framework.ActionOnTrash, deindexOnTrash)

@@ -15,8 +15,9 @@ const Module = "crm"
 // (System Manager) assigns it via /v1/framework/roles.
 const RoleCrmUser = "CRM User"
 
-// DocType names are slug-style with a "crm-" prefix: no collision with the cms or
-// erp lanes, and no space for the console's path filter to reject.
+// The DocType set, by address. Names are bare and slug-style — the module keeps
+// them clear of the cms and erp lanes, and nothing carries a space the console's
+// path filter would reject.
 var (
 	dtCompany     = framework.ID{Module: Module, Name: "company"}
 	dtContact     = framework.ID{Module: Module, Name: "contact"}

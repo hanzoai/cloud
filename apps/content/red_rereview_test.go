@@ -216,7 +216,7 @@ func TestRedReview_ForgeExternalIDs_Rejected(t *testing.T) {
 		"status":       StatusDraft,
 		"external_ids": map[string]any{"int_x": "FORGED", "int_ig": "FORGED"},
 	}
-	code, b := req(t, app, http.MethodPut, "/v1/framework/SocialPost/"+name, org, forge)
+	code, b := req(t, app, http.MethodPut, "/v1/framework/"+DocTypeSocialPost.String()+"/"+name, org, forge)
 	if code < 400 || code >= 500 {
 		t.Fatalf("forge PUT external_ids must be rejected with a 4xx, got %d %s", code, b)
 	}
@@ -228,7 +228,7 @@ func TestRedReview_ForgeExternalIDs_Rejected(t *testing.T) {
 	// Walk to published — the ONE distribution edge. The skip-set now derives from SERVER
 	// truth (empty), so the real fan-out runs.
 	for _, to := range []string{StatusInReview, StatusApproved, StatusPublished} {
-		if code, bb := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, bb := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, bb)
 		}
@@ -273,7 +273,7 @@ func TestRedReview_ConcurrentPublish_PostsExactlyOnce(t *testing.T) {
 	name := createSocialPost(t, app, org, map[string]any{"caption": "concurrent", "channels": "x"})
 	// Advance to approved so the item is a legal publish target, WITHOUT distributing.
 	for _, to := range []string{StatusInReview, StatusApproved} {
-		if code, b := req(t, app, http.MethodPost, "/v1/content/SocialPost/"+name+"/transition", org,
+		if code, b := req(t, app, http.MethodPost, "/v1/content/"+DocTypeSocialPost.String()+"/"+name+"/transition", org,
 			map[string]any{"to": to}); code != http.StatusOK {
 			t.Fatalf("transition →%s: %d %s", to, code, b)
 		}
@@ -288,7 +288,7 @@ func TestRedReview_ConcurrentPublish_PostsExactlyOnce(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start // release all goroutines at once to maximize the read-read overlap
-			_, errs[i] = Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost, Name: name})
+			_, errs[i] = Publish(context.Background(), org, PublishInput{DocType: DocTypeSocialPost.String(), Name: name})
 		}(i)
 	}
 	close(start)

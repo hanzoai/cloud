@@ -34,8 +34,8 @@ func gated() *zip.App {
 	g.Use(zip.H(elective))
 	served := func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"served": c.Path()}) }
 	g.Get("/modules", served) // static: carries no dot, so it addresses no DocType
-	g.Get("/:module.:kind", served)
-	g.Get("/:module.:kind/:name", served)
+	g.Get("/:doctype", served)
+	g.Get("/:doctype/:name", served)
 	return app
 }
 
