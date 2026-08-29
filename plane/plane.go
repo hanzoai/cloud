@@ -586,6 +586,15 @@ const (
 	// The subject is the caller: both the org and the user ride the call, so a
 	// caller can name neither and cannot read anyone else's grants.
 	IAMRoles = "iam_roles"
+
+	// IAMMembers lists who may act in one scope of the caller's org, with the role
+	// each holds and the name IAM has for them. It is the read that lets a
+	// subsystem show a roster without keeping one.
+	IAMMembers = "iam_members"
+
+	// IAMGrant records that a user may act in a scope of the caller's org, with a
+	// role. Idempotent.
+	IAMGrant = "iam_grant"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -1063,6 +1072,36 @@ type Held struct {
 // Roles is the caller's effective role names in their own org.
 type Roles struct {
 	Roles []string `json:"roles"`
+}
+
+// ---- iam.members / iam.grant ------------------------------------------------
+
+// Scope narrows a membership question inside the caller's org. Empty Workspace is
+// the org itself; Project narrows further and needs a Workspace.
+type Scope struct {
+	Workspace string `json:"workspace,omitempty"`
+	Project   string `json:"project,omitempty"`
+}
+
+// Membership is one person's grant in a scope, as IAM holds it.
+type Membership struct {
+	User string `json:"user"`
+	Role string `json:"role"`
+	Name string `json:"name"`
+}
+
+// Memberships is every grant in one scope.
+type Memberships struct {
+	Memberships []Membership `json:"memberships"`
+}
+
+// GrantIn records one membership. The org is the caller's and is never an
+// argument.
+type GrantIn struct {
+	User      string `json:"user"`
+	Workspace string `json:"workspace,omitempty"`
+	Project   string `json:"project,omitempty"`
+	Role      string `json:"role"`
 }
 
 // Product names the product whose platform configuration is wanted.

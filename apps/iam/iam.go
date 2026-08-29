@@ -185,6 +185,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	exposeRoster()
 	exposeProjects()
 	exposeRoles()
+	exposeMembers()
 	exposeApproval()
 	exposeEmail()
 
