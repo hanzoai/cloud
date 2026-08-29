@@ -13,7 +13,7 @@
 // this needs to be.
 //
 // The module is aliased because this package is also called ai: unaliased,
-// `return ai.Use(...)` inside `func Mount` reads as recursion.
+// `return ai.Use(...)` inside `func Use` reads as recursion.
 package ai
 
 import (
