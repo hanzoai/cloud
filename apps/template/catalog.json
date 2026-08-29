@@ -3,7 +3,7 @@
     "slug": "synapse",
     "title": "Synapse",
     "category": "AI/SaaS",
-    "description": "AI chat workspace — conversation lists, prompt composer, subscription and settings screens.",
+    "description": "AI chat workspace \u2014 conversation lists, prompt composer, subscription and settings screens.",
     "framework": "Next.js 14.2 + TS",
     "features": [
       "AI Chat",
@@ -16,14 +16,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-synapse",
-    "preview": "https://gallery.hanzo.ai/screenshots/synapse.png",
     "demo": "https://synapse.hanzo.app"
   },
   {
     "slug": "circle",
     "title": "Circle",
     "category": "Social Media",
-    "description": "Social platform UI — feed, profile and messaging screens.",
+    "description": "Social platform UI \u2014 feed, profile and messaging screens.",
     "framework": "Next.js 14.2 + TS",
     "features": [
       "Posts",
@@ -36,13 +35,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-circle",
-    "preview": "https://gallery.hanzo.ai/screenshots/circle.png"
+    "preview": "https://hanzo.app/templates/circle.webp"
   },
   {
     "slug": "metrics",
     "title": "Metrics",
     "category": "Dashboard",
-    "description": "Admin dashboard — sales, purchases and returns over a leaderboard, product list and transaction history.",
+    "description": "Admin dashboard \u2014 sales, purchases and returns over a leaderboard, product list and transaction history.",
     "framework": "Next.js 13.3 + TS",
     "features": [
       "Analytics",
@@ -55,14 +54,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-metrics",
-    "preview": "https://gallery.hanzo.ai/screenshots/metrics.png",
     "demo": "https://metrics-template.hanzo.app"
   },
   {
     "slug": "kinetic",
     "title": "Kinetic",
     "category": "Portfolio",
-    "description": "Creative portfolio driven by GSAP and smooth scroll — a project reel over case-study pages.",
+    "description": "Creative portfolio driven by GSAP and smooth scroll \u2014 a project reel over case-study pages.",
     "framework": "Next.js 14.2 + TS",
     "features": [
       "GSAP",
@@ -74,13 +72,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-kinetic",
-    "preview": "https://gallery.hanzo.ai/screenshots/kinetic.png"
+    "preview": "https://hanzo.app/templates/kinetic.webp"
   },
   {
     "slug": "quantum",
     "title": "Quantum",
     "category": "SaaS",
-    "description": "SaaS landing page — hero, feature grid, pricing and FAQ.",
+    "description": "SaaS landing page \u2014 hero, feature grid, pricing and FAQ.",
     "framework": "Next.js 14.1",
     "features": [
       "Framer Motion",
@@ -91,8 +89,7 @@
     "useCase": "SaaS landing pages",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-apps/template-quantum",
-    "preview": "https://gallery.hanzo.ai/screenshots/quantum.png"
+    "source": "https://github.com/hanzo-apps/template-quantum"
   },
   {
     "slug": "blocks",
@@ -110,14 +107,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-blocks",
-    "preview": "https://gallery.hanzo.ai/screenshots/blocks.png",
     "demo": "https://blocks.hanzo.app"
   },
   {
     "slug": "savor",
     "title": "Savor",
     "category": "E-commerce",
-    "description": "Food-delivery storefront — menu, favourites and cart over a restaurant home page.",
+    "description": "Food-delivery storefront \u2014 menu, favourites and cart over a restaurant home page.",
     "framework": "Next.js 14.2 + TS",
     "features": [
       "Food",
@@ -129,14 +125,14 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-savor",
-    "preview": "https://gallery.hanzo.ai/screenshots/savor.png",
+    "preview": "https://hanzo.app/templates/savor.webp",
     "demo": "https://savor.hanzo.app"
   },
   {
     "slug": "mint",
     "title": "Mint",
     "category": "Portfolio",
-    "description": "Creative-studio portfolio — work index, about and contact behind a full-screen menu.",
+    "description": "Creative-studio portfolio \u2014 work index, about and contact behind a full-screen menu.",
     "framework": "Next.js 14 + TS",
     "features": [
       "Portfolio",
@@ -148,7 +144,7 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-mint",
-    "preview": "https://gallery.hanzo.ai/screenshots/mint.png",
+    "preview": "https://hanzo.app/templates/mint.webp",
     "demo": "https://mint.hanzo.app"
   },
   {
@@ -167,7 +163,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-matrix",
-    "preview": "https://gallery.hanzo.ai/screenshots/matrix.png",
     "demo": "https://matrix.hanzo.app",
     "variants": [
       {
@@ -201,7 +196,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-mosaic",
-    "preview": "https://gallery.hanzo.ai/screenshots/mosaic.png",
     "demo": "https://mosaic.hanzo.app",
     "variants": [
       {
@@ -223,7 +217,7 @@
     "slug": "prism",
     "title": "Prism",
     "category": "Portfolio",
-    "description": "Creative-agency portfolio built on GSAP — one scroll through work, services and contact.",
+    "description": "Creative-agency portfolio built on GSAP \u2014 one scroll through work, services and contact.",
     "framework": "HTML/SCSS + GSAP",
     "features": [
       "GSAP",
@@ -235,7 +229,7 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-prism",
-    "preview": "https://gallery.hanzo.ai/screenshots/prism.png",
+    "preview": "https://hanzo.app/templates/prism-react.webp",
     "variants": [
       {
         "id": "default",
@@ -263,7 +257,7 @@
     "slug": "soar",
     "title": "Soar",
     "category": "Business",
-    "description": "Web-studio landing page — services, team and work, with a contact call-to-action.",
+    "description": "Web-studio landing page \u2014 services, team and work, with a contact call-to-action.",
     "framework": "React 18 + CRA",
     "features": [
       "Agency",
@@ -275,7 +269,7 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-soar",
-    "preview": "https://gallery.hanzo.ai/screenshots/soar.png",
+    "preview": "https://hanzo.app/templates/soar.webp",
     "variants": [
       {
         "id": "default",
@@ -297,7 +291,7 @@
     "slug": "cipher",
     "title": "Cipher",
     "category": "Bento Cards",
-    "description": "Bento card grid for crypto products — wallet keys, exchange and blockchain explainer cards.",
+    "description": "Bento card grid for crypto products \u2014 wallet keys, exchange and blockchain explainer cards.",
     "framework": "HTML/Gulp",
     "features": [
       "Bento Layout",
@@ -309,7 +303,7 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-cipher",
-    "preview": "https://gallery.hanzo.ai/screenshots/cipher-html.png",
+    "preview": "https://hanzo.app/templates/cipher-react.webp",
     "demo": "https://cipher.hanzo.app",
     "variants": [
       {
@@ -345,7 +339,7 @@
     "slug": "launch",
     "title": "Launch",
     "category": "SaaS",
-    "description": "SaaS launch page — waitlist capture, feature tour and pricing.",
+    "description": "SaaS launch page \u2014 waitlist capture, feature tour and pricing.",
     "framework": "Next.js 13",
     "features": [
       "Landing",
@@ -357,13 +351,13 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-launch",
-    "preview": "https://gallery.hanzo.ai/screenshots/launch.png"
+    "preview": "https://hanzo.app/templates/launch.webp"
   },
   {
     "slug": "construct",
     "title": "Construct",
     "category": "Landing",
-    "description": "App landing page — feature tour, screenshots and a download call-to-action.",
+    "description": "App landing page \u2014 feature tour, screenshots and a download call-to-action.",
     "framework": "Next.js 14",
     "features": [
       "App",
@@ -375,13 +369,13 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-construct",
-    "preview": "https://gallery.hanzo.ai/screenshots/construct.png"
+    "preview": "https://hanzo.app/templates/construct.webp"
   },
   {
     "slug": "deploy",
     "title": "Deploy",
     "category": "Bento Cards",
-    "description": "Bento list cards — grouped task lists with per-card icon, colour and duplicate/delete.",
+    "description": "Bento list cards \u2014 grouped task lists with per-card icon, colour and duplicate/delete.",
     "framework": "Next.js 14",
     "features": [
       "Bento Layout",
@@ -393,14 +387,14 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-deploy",
-    "preview": "https://gallery.hanzo.ai/screenshots/deploy.png",
+    "preview": "https://hanzo.app/templates/deploy.webp",
     "demo": "https://deploy.hanzo.app"
   },
   {
     "slug": "loop",
     "title": "Loop",
     "category": "Web3",
-    "description": "Crypto-card product site — virtual card, NFT and metaverse pages with light and dark blog.",
+    "description": "Crypto-card product site \u2014 virtual card, NFT and metaverse pages with light and dark blog.",
     "framework": "React 18",
     "features": [
       "Crypto Card",
@@ -412,7 +406,7 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-loop",
-    "preview": "https://gallery.hanzo.ai/screenshots/loop.png",
+    "preview": "https://hanzo.app/templates/loop.webp",
     "variants": [
       {
         "id": "default",
@@ -434,7 +428,7 @@
     "slug": "unity",
     "title": "Unity",
     "category": "Dashboard",
-    "description": "Creator admin app — products, campaigns, schedules, payouts, statements and insights.",
+    "description": "Creator admin app \u2014 products, campaigns, schedules, payouts, statements and insights.",
     "framework": "Next.js 14 + TS",
     "features": [
       "Products",
@@ -446,14 +440,14 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-unity",
-    "preview": "https://gallery.hanzo.ai/screenshots/unity.png",
+    "preview": "https://hanzo.app/templates/unity.webp",
     "demo": "https://unity.hanzo.app"
   },
   {
     "slug": "canvas",
     "title": "Canvas",
     "category": "Portfolio",
-    "description": "Personal portfolio — animated name marquee over about, projects and contact.",
+    "description": "Personal portfolio \u2014 animated name marquee over about, projects and contact.",
     "framework": "HTML/SCSS + GSAP",
     "features": [
       "Portfolio",
@@ -465,14 +459,13 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-canvas",
-    "preview": "https://gallery.hanzo.ai/screenshots/canvas.png",
     "demo": "https://canvas.hanzo.app"
   },
   {
     "slug": "vault",
     "title": "Vault",
     "category": "Portfolio",
-    "description": "Architecture-studio site — architecture, landscape and interior work with a studio profile.",
+    "description": "Architecture-studio site \u2014 architecture, landscape and interior work with a studio profile.",
     "framework": "HTML/CSS/JS",
     "features": [
       "Architecture",
@@ -484,14 +477,14 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-vault",
-    "preview": "https://gallery.hanzo.ai/screenshots/vault.png",
+    "preview": "https://hanzo.app/templates/vault.webp",
     "demo": "https://vault.hanzo.app"
   },
   {
     "slug": "studio",
     "title": "Studio",
     "category": "Portfolio",
-    "description": "Digital-agency portfolio — expertise, projects and articles behind an animated wordmark.",
+    "description": "Digital-agency portfolio \u2014 expertise, projects and articles behind an animated wordmark.",
     "framework": "HTML/CSS/JS",
     "features": [
       "Agency",
@@ -503,14 +496,14 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-studio",
-    "preview": "https://gallery.hanzo.ai/screenshots/studio.png",
+    "preview": "https://hanzo.app/templates/studio.webp",
     "demo": "https://studio.hanzo.app"
   },
   {
     "slug": "drive",
     "title": "Drive",
     "category": "Business",
-    "description": "Electric-vehicle marketing site — models, technology, news and ordering.",
+    "description": "Electric-vehicle marketing site \u2014 models, technology, news and ordering.",
     "framework": "HTML/CSS",
     "features": [
       "Automotive",
@@ -522,7 +515,7 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-drive",
-    "preview": "https://gallery.hanzo.ai/screenshots/drive.png",
+    "preview": "https://hanzo.app/templates/drive.webp",
     "demo": "https://drive.hanzo.app",
     "variants": [
       {
@@ -544,7 +537,7 @@
     "slug": "oasis",
     "title": "Oasis",
     "category": "Hospitality",
-    "description": "Resort site — accommodation, dining, spa, weddings and tour booking, in four languages.",
+    "description": "Resort site \u2014 accommodation, dining, spa, weddings and tour booking, in four languages.",
     "framework": "HTML/CSS",
     "features": [
       "Hospitality",
@@ -556,14 +549,14 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-oasis",
-    "preview": "https://gallery.hanzo.ai/screenshots/oasis.png",
+    "preview": "https://hanzo.app/templates/oasis.webp",
     "demo": "https://oasis.hanzo.app"
   },
   {
     "slug": "solo",
     "title": "Solo",
     "category": "SaaS",
-    "description": "Productivity-app landing page — tasks, lists and reminders with pricing and downloads.",
+    "description": "Productivity-app landing page \u2014 tasks, lists and reminders with pricing and downloads.",
     "framework": "HTML/Gulp",
     "features": [
       "SaaS",
@@ -575,14 +568,14 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-solo",
-    "preview": "https://gallery.hanzo.ai/screenshots/solo.png",
+    "preview": "https://hanzo.app/templates/solo.webp",
     "demo": "https://solo.hanzo.app"
   },
   {
     "slug": "forge",
     "title": "Forge",
     "category": "SaaS",
-    "description": "SaaS product landing page — feature blocks, pricing, FAQ and light/dark toggle.",
+    "description": "SaaS product landing page \u2014 feature blocks, pricing, FAQ and light/dark toggle.",
     "framework": "HTML/Gulp",
     "features": [
       "Landing",
@@ -594,14 +587,14 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-forge",
-    "preview": "https://gallery.hanzo.ai/screenshots/forge.png",
+    "preview": "https://hanzo.app/templates/forge.webp",
     "demo": "https://forge.hanzo.app"
   },
   {
     "slug": "beta",
     "title": "Beta",
     "category": "Dashboard",
-    "description": "Admin dashboard — projects, tasks, kanban, calendar, contacts, invoices and a file browser.",
+    "description": "Admin dashboard \u2014 projects, tasks, kanban, calendar, contacts, invoices and a file browser.",
     "framework": "HTML/Gulp",
     "features": [
       "CRM",
@@ -613,14 +606,13 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-beta",
-    "preview": "https://gallery.hanzo.ai/screenshots/beta.png",
     "demo": "https://beta.hanzo.app"
   },
   {
     "slug": "hygge",
     "title": "Hygge",
     "category": "E-commerce",
-    "description": "Skincare storefront — category browsing, product pages and a slide-out cart.",
+    "description": "Skincare storefront \u2014 category browsing, product pages and a slide-out cart.",
     "framework": "HTML/Gulp",
     "features": [
       "E-commerce",
@@ -632,7 +624,7 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-hygge",
-    "preview": "https://gallery.hanzo.ai/screenshots/hygge.png",
+    "preview": "https://hanzo.app/templates/hygge-html.webp",
     "demo": "https://hygge.hanzo.app",
     "variants": [
       {
@@ -654,7 +646,7 @@
     "slug": "folio",
     "title": "Folio",
     "category": "Portfolio",
-    "description": "Creative portfolio kit — 26 pages of masonry and grid layouts plus agency, designer, developer and photography variants.",
+    "description": "Creative portfolio kit \u2014 26 pages of masonry and grid layouts plus agency, designer, developer and photography variants.",
     "framework": "HTML/Gulp",
     "features": [
       "Portfolio",
@@ -666,7 +658,7 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-folio",
-    "preview": "https://gallery.hanzo.ai/screenshots/folio-html.png",
+    "preview": "https://hanzo.app/templates/folio-full.webp",
     "demo": "https://folio.hanzo.app",
     "variants": [
       {
@@ -831,7 +823,7 @@
     "slug": "jobfinder",
     "title": "Job Finder",
     "category": "Mobile App",
-    "description": "Job-search app UI — listings, filters, company profiles and applications.",
+    "description": "Job-search app UI \u2014 listings, filters, company profiles and applications.",
     "framework": "React Native",
     "features": [
       "Jobs",
@@ -842,14 +834,13 @@
     "useCase": "Job search mobile apps",
     "tier": 2,
     "rating": 4,
-    "source": "https://github.com/hanzo-apps/template-jobfinder",
-    "preview": "https://gallery.hanzo.ai/screenshots/jobfinder.png"
+    "source": "https://github.com/hanzo-apps/template-jobfinder"
   },
   {
     "slug": "pixel",
     "title": "Pixel",
     "category": "Portfolio",
-    "description": "Web-studio portfolio — work, expertise and a playground page.",
+    "description": "Web-studio portfolio \u2014 work, expertise and a playground page.",
     "framework": "HTML/CSS/JS",
     "features": [
       "Studio",
@@ -861,14 +852,14 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-pixel",
-    "preview": "https://gallery.hanzo.ai/screenshots/pixel.png",
+    "preview": "https://hanzo.app/templates/pixel.webp",
     "demo": "https://pixel.hanzo.app"
   },
   {
     "slug": "saas-landing",
     "title": "SaaS Landing",
     "category": "SaaS",
-    "description": "SaaS landing page on @hanzo/ui — hero, feature grid, social proof and pricing.",
+    "description": "SaaS landing page on @hanzo/ui \u2014 hero, feature grid, social proof and pricing.",
     "framework": "Next.js 14.2",
     "features": [
       "Landing",
@@ -880,14 +871,14 @@
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-saas-landing",
-    "preview": "https://gallery.hanzo.ai/screenshots/saas-landing.png",
+    "preview": "https://hanzo.app/templates/saas-landing.webp",
     "demo": "https://saas-landing.hanzo.app"
   },
   {
     "slug": "serif",
     "title": "Serif",
     "category": "Magazine",
-    "description": "Editorial magazine — section fronts, article pages and a shop in a serif type system.",
+    "description": "Editorial magazine \u2014 section fronts, article pages and a shop in a serif type system.",
     "framework": "HTML/Sass",
     "features": [
       "Magazine",
@@ -899,140 +890,130 @@
     "tier": 3,
     "rating": 3,
     "source": "https://github.com/hanzo-apps/template-serif",
-    "preview": "https://gallery.hanzo.ai/screenshots/serif.png",
     "demo": "https://serif.hanzo.app"
   },
   {
     "slug": "analytics-dashboard",
     "title": "Analytics Dashboard",
     "category": "Dashboard",
-    "description": "Analytics dashboard on @hanzo/ui — revenue, users and sales tiles over an overview chart.",
+    "description": "Analytics dashboard on @hanzo/ui \u2014 revenue, users and sales tiles over an overview chart.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-analytics-dashboard",
-    "preview": "https://gallery.hanzo.ai/screenshots/analytics-dashboard.png",
     "demo": "https://analytics-dashboard.hanzo.app"
   },
   {
     "slug": "blog-platform",
     "title": "Blog Platform",
     "category": "Blog",
-    "description": "Blog on @hanzo/ui — tag filters, post list and a writing view.",
+    "description": "Blog on @hanzo/ui \u2014 tag filters, post list and a writing view.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-blog-platform",
-    "preview": "https://gallery.hanzo.ai/screenshots/blog-platform.png",
     "demo": "https://blog-platform.hanzo.app"
   },
   {
     "slug": "changelog",
     "title": "Changelog",
     "category": "Blog",
-    "description": "Product changelog — dated releases with tags, a version timeline and dark mode.",
+    "description": "Product changelog \u2014 dated releases with tags, a version timeline and dark mode.",
     "framework": "Next.js 15.3 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-changelog",
-    "preview": "https://gallery.hanzo.ai/screenshots/changelog.png",
     "demo": "https://changelog.hanzo.app"
   },
   {
     "slug": "crypto-portfolio",
     "title": "Crypto Portfolio",
     "category": "Web3",
-    "description": "Crypto portfolio tracker on @hanzo/ui — holdings, performance and transaction history.",
+    "description": "Crypto portfolio tracker on @hanzo/ui \u2014 holdings, performance and transaction history.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-crypto-portfolio",
-    "preview": "https://gallery.hanzo.ai/screenshots/crypto-portfolio.png",
     "demo": "https://crypto-portfolio.hanzo.app"
   },
   {
     "slug": "ecommerce-storefront",
     "title": "Ecommerce Storefront",
     "category": "E-commerce",
-    "description": "Storefront on @hanzo/ui — category filters, product grid and add-to-cart.",
+    "description": "Storefront on @hanzo/ui \u2014 category filters, product grid and add-to-cart.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-ecommerce-storefront",
-    "preview": "https://gallery.hanzo.ai/screenshots/ecommerce-storefront.png",
     "demo": "https://ecommerce-storefront.hanzo.app"
   },
   {
     "slug": "kanban-board",
     "title": "Kanban Board",
     "category": "Productivity",
-    "description": "Kanban board on @hanzo/ui — To Do / In Progress / Done with labelled, assigned cards.",
+    "description": "Kanban board on @hanzo/ui \u2014 To Do / In Progress / Done with labelled, assigned cards.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-kanban-board",
-    "preview": "https://gallery.hanzo.ai/screenshots/kanban-board.png",
     "demo": "https://kanban-board.hanzo.app"
   },
   {
     "slug": "markdown-editor",
     "title": "Markdown Editor",
     "category": "Productivity",
-    "description": "Markdown editor on @hanzo/ui — live preview, syntax highlighting, copy and export.",
+    "description": "Markdown editor on @hanzo/ui \u2014 live preview, syntax highlighting, copy and export.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-markdown-editor",
-    "preview": "https://gallery.hanzo.ai/screenshots/markdown-editor.png",
     "demo": "https://markdown-editor.hanzo.app"
   },
   {
     "slug": "portfolio",
     "title": "Portfolio",
     "category": "Portfolio",
-    "description": "Personal developer portfolio — intro, about, projects and contact on one page.",
+    "description": "Personal developer portfolio \u2014 intro, about, projects and contact on one page.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-portfolio",
-    "preview": "https://gallery.hanzo.ai/screenshots/portfolio.png",
     "demo": "https://portfolio.hanzo.app"
   },
   {
     "slug": "video-streaming",
     "title": "Video Streaming",
     "category": "Media",
-    "description": "Video watch page on @hanzo/ui — player, chapters, transcript and channel subscribe.",
+    "description": "Video watch page on @hanzo/ui \u2014 player, chapters, transcript and channel subscribe.",
     "framework": "Next.js 14.2 + TS",
     "features": [],
     "useCase": "",
     "tier": 2,
     "rating": 4,
     "source": "https://github.com/hanzo-apps/template-video-streaming",
-    "preview": "https://gallery.hanzo.ai/screenshots/video-streaming.png",
     "demo": "https://video-streaming.hanzo.app"
   },
   {
     "slug": "mobile",
     "title": "Hanzo Mobile",
     "category": "Mobile",
-    "description": "Expo Router tab starter — iOS, Android and web from one tree. Feed, search, settings and a dynamic detail route.",
+    "description": "Expo Router tab starter \u2014 iOS, Android and web from one tree. Feed, search, settings and a dynamic detail route.",
     "framework": "Expo SDK 54 + expo-router 6",
     "features": [
       "Expo Router",
@@ -1045,7 +1026,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-apps/template-mobile",
-    "preview": "https://gallery.hanzo.ai/screenshots/mobile.png",
     "demo": "https://mobile.hanzo.app"
   },
   {
@@ -1065,7 +1045,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/expo-chat",
-    "preview": "https://gallery.hanzo.ai/screenshots/expo-chat.png",
     "demo": "https://expo-chat.hanzo.app"
   },
   {
@@ -1085,7 +1064,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/expo-shop",
-    "preview": "https://gallery.hanzo.ai/screenshots/expo-shop.png",
     "demo": "https://expo-shop.hanzo.app"
   },
   {
@@ -1105,14 +1083,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/expo-auth",
-    "preview": "https://gallery.hanzo.ai/screenshots/expo-auth.png",
     "demo": "https://expo-auth.hanzo.app"
   },
   {
     "slug": "flutter",
     "title": "Hanzo Flutter",
     "category": "Mobile",
-    "description": "Material 3 starter — NavigationBar over an IndexedStack, search, detail route and widget tests.",
+    "description": "Material 3 starter \u2014 NavigationBar over an IndexedStack, search, detail route and widget tests.",
     "framework": "Flutter 3.44 + Material 3",
     "features": [
       "Material 3",
@@ -1125,7 +1102,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/flutter",
-    "preview": "https://gallery.hanzo.ai/screenshots/flutter.png",
     "demo": "https://flutter.hanzo.app"
   },
   {
@@ -1145,14 +1121,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/flutter-chat",
-    "preview": "https://gallery.hanzo.ai/screenshots/flutter-chat.png",
     "demo": "https://flutter-chat.hanzo.app"
   },
   {
     "slug": "swiftui",
     "title": "Hanzo SwiftUI",
     "category": "Mobile",
-    "description": "Native iOS 17 starter — TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
+    "description": "Native iOS 17 starter \u2014 TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
     "framework": "SwiftUI + Swift 6 (iOS 17)",
     "features": [
       "TabView",
@@ -1164,14 +1139,13 @@
     "useCase": "Native iOS apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/swiftui",
-    "preview": "https://gallery.hanzo.ai/screenshots/swiftui.png"
+    "source": "https://github.com/hanzo-templates/swiftui"
   },
   {
     "slug": "swiftui-chat",
     "title": "Hanzo Chat (SwiftUI)",
     "category": "Mobile",
-    "description": "Native streaming AI chat — @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
+    "description": "Native streaming AI chat \u2014 @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
     "framework": "SwiftUI + Swift 6 (iOS 17)",
     "features": [
       "@Observable",
@@ -1183,14 +1157,13 @@
     "useCase": "Native iOS apps",
     "tier": 1,
     "rating": 5,
-    "source": "https://github.com/hanzo-templates/swiftui-chat",
-    "preview": "https://gallery.hanzo.ai/screenshots/swiftui-chat.png"
+    "source": "https://github.com/hanzo-templates/swiftui-chat"
   },
   {
     "slug": "desktop-tauri",
     "title": "Hanzo Desktop",
     "category": "Desktop",
-    "description": "Tauri v2 + React 19 desktop starter — Rust command round-trip, Hanzo Base backend, frameless chrome, one web preview build.",
+    "description": "Tauri v2 + React 19 desktop starter \u2014 Rust command round-trip, Hanzo Base backend, frameless chrome, one web preview build.",
     "framework": "Tauri v2 + React 19 + Vite 7",
     "features": [
       "Rust core",
@@ -1203,14 +1176,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-tauri",
-    "preview": "https://desktop-tauri.hanzo.app/preview.png",
     "demo": "https://desktop-tauri.hanzo.app"
   },
   {
     "slug": "desktop-notes",
     "title": "Notes",
     "category": "Desktop",
-    "description": "Local-first markdown notes — one .md file per note in the OS app-data dir, split editor/preview, autosave, optional Base sync.",
+    "description": "Local-first markdown notes \u2014 one .md file per note in the OS app-data dir, split editor/preview, autosave, optional Base sync.",
     "framework": "Tauri v2 + React 19 + marked",
     "features": [
       "Local-first",
@@ -1223,14 +1195,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-notes",
-    "preview": "https://desktop-notes.hanzo.app/preview.png",
     "demo": "https://desktop-notes.hanzo.app"
   },
   {
     "slug": "desktop-chat",
     "title": "Chat",
     "category": "Desktop",
-    "description": "Desktop AI client — streaming SSE to any OpenAI-compatible gateway, threads and API key kept in the OS config dir, not web storage.",
+    "description": "Desktop AI client \u2014 streaming SSE to any OpenAI-compatible gateway, threads and API key kept in the OS config dir, not web storage.",
     "framework": "Tauri v2 + React 19",
     "features": [
       "SSE streaming",
@@ -1243,14 +1214,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-chat",
-    "preview": "https://desktop-chat.hanzo.app/preview.png",
     "demo": "https://desktop-chat.hanzo.app"
   },
   {
     "slug": "desktop-monitor",
     "title": "Monitor",
     "category": "Desktop",
-    "description": "Native system monitor — per-core CPU, memory, process table, disks and interfaces via sysinfo, sampled at 1 Hz.",
+    "description": "Native system monitor \u2014 per-core CPU, memory, process table, disks and interfaces via sysinfo, sampled at 1 Hz.",
     "framework": "Tauri v2 + React 19 + sysinfo",
     "features": [
       "Per-core CPU",
@@ -1263,14 +1233,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-monitor",
-    "preview": "https://desktop-monitor.hanzo.app/preview.png",
     "demo": "https://desktop-monitor.hanzo.app"
   },
   {
     "slug": "desktop-editor",
     "title": "Editor",
     "category": "Desktop",
-    "description": "CodeMirror 6 code editor in a Tauri window — real filesystem tree, syntax highlighting, native folder picker, Cmd-S writes through.",
+    "description": "CodeMirror 6 code editor in a Tauri window \u2014 real filesystem tree, syntax highlighting, native folder picker, Cmd-S writes through.",
     "framework": "Tauri v2 + CodeMirror 6",
     "features": [
       "Filesystem tree",
@@ -1283,14 +1252,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-editor",
-    "preview": "https://desktop-editor.hanzo.app/preview.png",
     "demo": "https://desktop-editor.hanzo.app"
   },
   {
     "slug": "desktop-tray",
     "title": "Tray",
     "category": "Desktop",
-    "description": "Menubar/tray utility — resident clipboard history, global shortcut, close-hides-not-quits, background watcher thread in Rust.",
+    "description": "Menubar/tray utility \u2014 resident clipboard history, global shortcut, close-hides-not-quits, background watcher thread in Rust.",
     "framework": "Tauri v2 + tray-icon",
     "features": [
       "Tray icon",
@@ -1303,14 +1271,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-tray",
-    "preview": "https://desktop-tray.hanzo.app/preview.png",
     "demo": "https://desktop-tray.hanzo.app"
   },
   {
     "slug": "desktop-electron",
     "title": "Electron",
     "category": "Desktop",
-    "description": "Electron 43 + Forge + Vite + React baseline — contextIsolated IPC allowlist, native dialogs, app metrics, frameless chrome.",
+    "description": "Electron 43 + Forge + Vite + React baseline \u2014 contextIsolated IPC allowlist, native dialogs, app metrics, frameless chrome.",
     "framework": "Electron 43 + Forge + React 19",
     "features": [
       "IPC allowlist",
@@ -1323,14 +1290,13 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-electron",
-    "preview": "https://desktop-electron.hanzo.app/preview.png",
     "demo": "https://desktop-electron.hanzo.app"
   },
   {
     "slug": "desktop-recorder",
     "title": "Recorder",
     "category": "Desktop",
-    "description": "Screen recorder — desktopCapturer enumerates every screen and window with no OS prompt, MediaRecorder writes webm to disk.",
+    "description": "Screen recorder \u2014 desktopCapturer enumerates every screen and window with no OS prompt, MediaRecorder writes webm to disk.",
     "framework": "Electron 43 + Forge + React 19",
     "features": [
       "desktopCapturer",
@@ -1343,7 +1309,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/desktop-recorder",
-    "preview": "https://desktop-recorder.hanzo.app/preview.png",
     "demo": "https://desktop-recorder.hanzo.app"
   },
   {
@@ -1363,7 +1328,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/godot-arcade",
-    "preview": "https://godot-arcade.hanzo.app/preview.png",
     "demo": "https://godot-arcade.hanzo.app"
   },
   {
@@ -1383,7 +1347,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/unity-webgl",
-    "preview": "https://unity-webgl.hanzo.app/preview.png",
     "demo": "https://unity-webgl.hanzo.app"
   },
   {
@@ -1403,7 +1366,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/three-webgpu",
-    "preview": "https://three-webgpu.hanzo.app/preview.png",
     "demo": "https://three-webgpu.hanzo.app"
   },
   {
@@ -1423,7 +1385,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/rapier-physics",
-    "preview": "https://rapier-physics.hanzo.app/preview.png",
     "demo": "https://rapier-physics.hanzo.app"
   },
   {
@@ -1443,7 +1404,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/voxel-craft",
-    "preview": "https://voxel-craft.hanzo.app/preview.png",
     "demo": "https://voxel-craft.hanzo.app"
   },
   {
@@ -1463,7 +1423,6 @@
     "tier": 1,
     "rating": 5,
     "source": "https://github.com/hanzo-templates/kart-racer",
-    "preview": "https://kart-racer.hanzo.app/preview.png",
     "demo": "https://kart-racer.hanzo.app"
   }
 ]
