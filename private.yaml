@@ -68637,34 +68637,6 @@ paths:
       - ai
       x-app: ai
       x-public: true
-  /v1/ai/messages/global:
-    get:
-      description: Cross-tenant listing. Admin-only; a tenant caller is refused.
-      operationId: get_ai_messages_global
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                allOf:
-                - $ref: '#/components/schemas/Envelope'
-                - properties:
-                    data:
-                      items:
-                        $ref: '#/components/schemas/Message'
-                      type: array
-                  type: object
-          description: Envelope. `status` is "ok" or "error" — check it; a handled
-            failure is still HTTP 200.
-        "401":
-          description: No credential, or one this service does not accept.
-        "403":
-          description: A valid credential that may not do this.
-      summary: List messages across tenants
-      tags:
-      - ai
-      x-app: ai
-      x-public: true
   /v1/ai/messages/welcome:
     delete:
       operationId: delete_ai_messages_welcome
