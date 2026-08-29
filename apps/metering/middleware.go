@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/account"
+	"github.com/hanzoai/cloud/clientip"
 )
 
 // Identity headers minted by the Hanzo gateway (the trust boundary). A product
@@ -203,15 +204,10 @@ func statusLabel(code int) string {
 	return "error"
 }
 
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
-	}
-	return r.RemoteAddr
-}
+// clientIP is cloud's one address rule, read off net/http. The body that stood here
+// returned the LEFT-MOST X-Forwarded-For entry — the one value in the chain a caller
+// writes for itself — straight into the billing and audit column.
+func clientIP(r *http.Request) string { return clientip.ClientIPOf(r) }
 
 // statusWriter captures the response status code for outcome-based pricing.
 type statusWriter struct {
