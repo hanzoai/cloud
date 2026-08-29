@@ -994,6 +994,8 @@ github.com/hanzoai/account v0.3.3 h1:Kn45AOIQVS7BuYDKuM1OWsxlPj4EbOSVWTrMknjHVQA
 github.com/hanzoai/account v0.3.3/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v1.0.6 h1:fOTziUUcwdP82BU0+UfiCy3x7YMpcjwgSdiyebNltYI=
 github.com/hanzoai/agent v1.0.6/go.mod h1:3bqSx+EkF4Lm0BxJEEb7TbV0Ck1EsBgt6tteHJmX1nk=
+github.com/hanzoai/agent v1.0.7 h1:1SACAvFbQAKNF5vr93QPg4Lb9pZABOPd066oCJAhQQg=
+github.com/hanzoai/agent v1.0.7/go.mod h1:rthcHFPngphEhDrpd0V65shWhk9bfB7/faetAT87GYk=
 github.com/hanzoai/ai v1.833.206 h1:FXNcmfnNwa0uXi51nNgvNbqFjGjy0LbGlVpMwrbh9jI=
 github.com/hanzoai/ai v1.833.206/go.mod h1:Vc4ZpE1QbgNYtPWZUa7zuvM4/lX+2v9dZshN8q9zRgI=
 github.com/hanzoai/ai v1.833.207 h1:40P0az6kkpc712HwGxjGD0Ajh4xyCRAvnk6QXLFjMV8=
