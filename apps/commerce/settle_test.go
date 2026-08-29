@@ -217,17 +217,15 @@ func TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads(t *testing.T) {
 // TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool — the AGENT's endpoint, and the
 // divergence it closes.
 //
-// commerce's typed core credits its own store under the ORG POOL (org.Name), while the
+// commerce's money core credits its own store under the ORG POOL (org.Name), while the
 // wallet the spend gate reads is account.Payer's answer — the org's pool for a
 // dedicated tenant, and a PERSON for a member of the shared signup org or a credential
-// carrying a signed `person:` billing_account claim. For that population the agent's
-// endpoint funded a balance nobody could spend while the payer stayed at zero. The
-// spendable credit is posted at the payer's own address, so both endpoints fund one
-// wallet.
+// carrying a signed `person:` billing_account claim. For that population the endpoint
+// funded a balance nobody could spend while the payer stayed at zero. The spendable
+// credit is posted at the payer's own address.
 //
-// Mutation proof: delete the s.settle call from [screen.op] and this reads 0 — the
-// browser endpoint would still credit, so the cross-endpoint test alone cannot see it.
-func TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
+// Mutation proof: delete the s.settle call from [screen.route] and this reads 0.
+func TestSettle_TheDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 	// A member of the SHARED SIGNUP ORG, which is the population where the pool and the
 	// payer are different keys — account.Payer resolves a person there and the org's
 	// slug everywhere else. A dedicated tenant would make the two the same string and
@@ -243,20 +241,20 @@ func TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 	quiet(t)
 	fin := finance.Current()
 	cloud.SetRiskScorer(allowAll)
-	typedDoor(t, app, riskGate(luxlog.New("settletest")), func() string { return settledRef })
+	browserDoor(app, riskGate(luxlog.New("settletest")), func() string { return settledRef })
 
-	r := httptest.NewRequest(http.MethodPost, paymentsDoor, strings.NewReader(gateBody))
+	r := httptest.NewRequest(http.MethodPost, topupDoor, strings.NewReader(gateBody))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Org-Id", org)
 	r.Header.Set("X-User-Id", user)
 	resp, err := app.Test(r)
 	if err != nil {
-		t.Fatalf("post %s: %v", paymentsDoor, err)
+		t.Fatalf("post %s: %v", topupDoor, err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("the typed endpoint answered %d %s, want 201", resp.StatusCode, body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("the endpoint answered %d %s, want 200", resp.StatusCode, body)
 	}
 
 	ctx := context.Background()
@@ -265,8 +263,8 @@ func TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 		t.Fatalf("read the payer's wallet: %v", err)
 	}
 	if paid.Cents() != gateCents {
-		t.Fatalf("the payer's wallet holds %d cents after an agent's settled payment, want %d — "+
-			"the agent's endpoint credits a wallet the spend gate does not read", paid.Cents(), gateCents)
+		t.Fatalf("the payer's wallet holds %d cents after a settled payment, want %d — "+
+			"the endpoint credits a wallet the spend gate does not read", paid.Cents(), gateCents)
 	}
 	pool, err := fin.Balance(ctx, org, org, "usd", false)
 	if err != nil {
@@ -302,43 +300,6 @@ func TestSettle_ASettledTopUpCreditsExactlyOncePerSettlement(t *testing.T) {
 	if got := spendable(t, fin, false); got != gateCents {
 		t.Fatalf("three posts of ONE settlement credited %d cents, want %d — a replayed settlement "+
 			"credits again, so a retrying client mints balance", got, gateCents)
-	}
-}
-
-// TestSettle_OnePaymentThroughBothDoorsIsOneCredit — the cross-endpoint convergence, on
-// the money rather than on the model.
-//
-// The browser's raw route and the agent's typed op are two endpoints onto ONE charge
-// core, so one payment can be answered at both — a retry that changes client, an agent
-// finishing what a browser started. Both answers carry the processor's own reference
-// for that charge, and the deposit is keyed on it, so the two endpoints credit one
-// wallet once.
-//
-// Mutation proof: key the deposit on the RECEIPT instead of [firstRef]'s answer (each
-// endpoint writes its own row, so the two receipts differ) and this credits twice.
-func TestSettle_OnePaymentThroughBothDoorsIsOneCredit(t *testing.T) {
-	const one = "sq_pay_the_same_charge"
-	s := riskGate(luxlog.New("settletest"))
-
-	// payApp publishes the ledger this reads back, so it is resolved AFTER the fixture
-	// rather than beside it — two ledgers published in one test would leave the
-	// assertions reading the one the endpoints did not credit.
-	app := payApp(t)
-	quiet(t)
-	fin := finance.Current()
-	cloud.SetRiskScorer(allowAll)
-	browserDoor(app, s, func() string { return one })
-	typedDoor(t, app, s, func() string { return one })
-
-	if code, body := pay(t, app, "/v1/billing/topup/token"); code != http.StatusOK {
-		t.Fatalf("the browser endpoint answered %d %s", code, body)
-	}
-	if code, body := pay(t, app, paymentsDoor); code != http.StatusCreated {
-		t.Fatalf("the typed endpoint answered %d %s", code, body)
-	}
-	if got := spendable(t, fin, false); got != gateCents {
-		t.Fatalf("one payment answered at BOTH endpoints credited %d cents, want %d — the two endpoints are "+
-			"not keying the same settlement, so a payment taken once is funded twice", got, gateCents)
 	}
 }
 
@@ -458,7 +419,7 @@ var callers = []struct {
 //
 // A card top-up names two organisations. The RECEIPT is written by commerce under the
 // EFFECTIVE org — the org the endpoint is acting in, which is what iammiddleware resolves
-// for the browser route and [payingOrg] for the typed op — and the BALANCE it funds is
+// for the browser route and [orgOf] for the typed op — and the BALANCE it funds is
 // principal.WalletOf's, which for a platform SuperAdmin is its OWN books, because
 // platform sudo is not a statement about who pays. For every other caller the two are
 // one string, which is exactly why one value could do both jobs through a green suite.

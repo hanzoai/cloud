@@ -18,7 +18,7 @@
       "name": "agents_agents",
       "path": "agents_agents/SKILL.md",
       "service": "agents",
-      "sha256": "a83e78127e3c3e9b7f75efca7d211abdd6ea86e04830c157fed2b1b7e95235ec"
+      "sha256": "d504b7fb95105d75d5e514248dd285f4319d1f1bd33cf603a65095764f613108"
     },
     {
       "description": "Read agents builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the rea",

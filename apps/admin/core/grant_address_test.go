@@ -32,16 +32,17 @@ func TestGrantAddressIsTheSpendAddress(t *testing.T) {
 		{"", "bob", "", false},                                                     // no org, no address — never mint an orphan
 		{account.SignupOrg, "hanzo/alice", "", false},                              // a key is not a name; refuse rather than address something else
 	} {
-		w, ok := principal.WalletFor(tc.org, tc.user)
+		w := principal.PayerFor(tc.org, tc.user)
+		ok := !w.Zero()
 		if ok != tc.ok {
-			t.Errorf("WalletFor(%q,%q) ok = %v, want %v", tc.org, tc.user, ok, tc.ok)
+			t.Errorf("PayerFor(%q,%q) ok = %v, want %v", tc.org, tc.user, ok, tc.ok)
 			continue
 		}
 		if !ok {
 			continue
 		}
-		if w.Account != tc.want {
-			t.Errorf("WalletFor(%q,%q) account = %q, want %q", tc.org, tc.user, w.Account, tc.want)
+		if w.Subject() != tc.want {
+			t.Errorf("PayerFor(%q,%q) account = %q, want %q", tc.org, tc.user, w.Subject(), tc.want)
 		}
 		// The two halves must come from one resolved Account, or a folded subject
 		// could sit under an unfolded ledger and address a second file. Stated as
@@ -50,8 +51,8 @@ func TestGrantAddressIsTheSpendAddress(t *testing.T) {
 		// signup org, while a blank name here is a caller deliberately addressing
 		// that org's account — so asking it would compare against the answer to a
 		// different question.
-		if w.Account != w.Ledger && !strings.HasPrefix(w.Account, w.Ledger+"/") {
-			t.Errorf("WalletFor(%q,%q) = ledger %q, account %q — not two halves of one Account", tc.org, tc.user, w.Ledger, w.Account)
+		if w.Subject() != w.Org() && !strings.HasPrefix(w.Subject(), w.Org()+"/") {
+			t.Errorf("WalletFor(%q,%q) = ledger %q, account %q — not two halves of one Account", tc.org, tc.user, w.Org(), w.Subject())
 		}
 	}
 }

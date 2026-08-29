@@ -97,7 +97,7 @@ func installRiskScorer(lg luxlog.Logger) {
 	// which is the same reason apps/risk announces a jurisdiction listing it cannot
 	// use at mount rather than on the first decision that wanted one.
 	lg.Info("credit endpoint risk axes", "armed", paymentAxes, "unarmed", paymentUnarmed,
-		"doors", []string{"/v1/billing/topup/token", paymentsPrefix},
+		"doors", []string{"/v1/billing/topup/token"},
 		"why", "no device fingerprint reaches this binary from a card payment")
 }
 
@@ -313,7 +313,7 @@ type payment struct {
 	// org is the organisation the charge is WRITTEN under — the commerce namespace
 	// holding the receipt the money core produced ([chargedOrg], the EFFECTIVE org).
 	// It is what both endpoints' handlers charge through: the browser route's org comes
-	// from iammiddleware.IAMTokenRequired and the typed op's from [payingOrg], and
+	// from iammiddleware.IAMTokenRequired and the typed op's from [orgOf], and
 	// both are that same effective org.
 	org string
 	// ledger is the organisation whose BALANCE this credits, and therefore the one
@@ -482,48 +482,6 @@ func (s screen) record(ctx context.Context, p payment, ref, id string) error {
 	return credit
 }
 
-// op composes the screen onto a TYPED op's handler — the form that reaches every
-// projection of that op rather than only the one served over HTTP.
-//
-// IT READS VALUES, NOT THE WIRE, and that is what lets it work off the REST path at
-// all. Two facts the screen needs are carried differently by each transport and
-// identically by the op's own types:
-//
-//	THE AMOUNT is the DECODED input's, never a second parse of the request body.
-//	Over MCP the body is a JSON-RPC envelope and the payment is inside `arguments`,
-//	so a body reader would state no value on exactly the endpoint an agent calls — the
-//	value axis, which is the sharpest one a credit endpoint has, blind on the agent
-//	plane while reading fine on the browser's.
-//
-//	THE SETTLEMENT is the RETURNED receipt, never the response bytes. Over MCP the
-//	op's answer is wrapped in a tools/call result and no HTTP response exists yet
-//	when this returns, so a response reader would watch an agent's payment settle
-//	and teach nothing.
-//
-// WHAT A PROJECTION CANNOT SUPPLY IS OMITTED, NEVER SKIPPED. The payer, the address
-// and the jurisdiction are read off the request the op is being served over
-// ([cloud.Request], parked by the app-wide Bridge, which runs for /mcp and the op
-// plane exactly as it does for a REST route) — so all three resolve on every plane
-// that has a connection behind it. A call with NO request at all, which is the CLI's
-// LocalInvoke, resolves no payer: that is the same state a request naming no
-// organisation is in, it is screened as that state rather than exempted from it, and
-// the handler's own gate refuses it after ([payingOrg]).
-//
-// There is ONE typed mint op today and this is typed to it. A second one composes its
-// handler here, beside this one, where the argument that they are one control can be
-// read; the structural check (risk_payments_test.go) is what makes that the only way
-// a new mint op can be registered at all.
-func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandler[PaymentIn, PaymentOut] {
-	return screened(s, paymentsPrefix,
-		func(in *PaymentIn) (int64, string) { return in.AmountCents, in.Currency },
-		func(out *PaymentOut) (string, string) {
-			// An op that RETURNED a receipt returned it because the charge cleared, so
-			// the answer's own fields are the settlement fact the raw endpoint has to read
-			// its response bytes for.
-			ref, _ := firstRef(out.ProcessorRef, out.ID)
-			return ref, out.ID
-		}, core)
-}
 
 // screened composes the screen onto ANY typed mint op's handler, and it is the
 // ONE composition point for all of them.
@@ -553,7 +511,7 @@ func (s screen) op(core zip.TypedHandler[PaymentIn, PaymentOut]) zip.TypedHandle
 // op plane exactly as for a REST route). A call with NO request at all — the
 // CLI's local invoke — resolves no payer: that is the same state a request
 // naming no organisation is in, it is screened AS that state rather than
-// exempted from it, and the handler's own gate refuses it after ([payingOrg]).
+// exempted from it, and the handler's own gate refuses it after ([orgOf]).
 //
 // THE ORDER IS THE CONTROL. decide runs before the core, so a refusal costs no
 // card authorization; record runs after it and only on an answer, so the model
@@ -729,7 +687,7 @@ func seen(c *zip.Ctx, door string, amountCents int64, currency string) payment {
 	return payment{
 		org:      chargedOrg(c),
 		ledger:   ledger,
-		subject:  principal.Subject(c, ledger),
+		subject:  principal.PayerIn(c, ledger).Subject(),
 		door:     door,
 		via:      c.Path(),
 		cents:    amountCents,
@@ -985,7 +943,7 @@ func settlementOf(body []byte) (ref, receipt string) {
 //
 // The typed endpoint admits the first lane only — it has no service-token branch, and
 // its handler resolves the same validated tenant off the context (payments.go
-// payingOrg) — so ONE resolver answers for both addresses. That is the point: an
+// orgOf) — so ONE resolver answers for both addresses. That is the point: an
 // accrual is only a bound if both endpoints key it the same way, and a second resolver
 // written for the second endpoint would be two payers wearing one name.
 //
@@ -1005,7 +963,7 @@ func payerOrg(c *zip.Ctx) string {
 // It is [payerOrg]'s twin and the two differ in exactly one caller: a platform
 // SuperAdmin acting inside a customer's org. Both endpoints charge through the
 // effective org — the browser route resolves it in iammiddleware.IAMTokenRequired and
-// the typed op in [payingOrg], and both read the same validated X-Org-Id — while the
+// the typed op in [orgOf], and both read the same validated X-Org-Id — while the
 // balance a SuperAdmin funds is its OWN (principal.BillingOrg substitutes the home org
 // for exactly that identity, because platform sudo is not a statement about who pays).
 // Reading the receipt out of the payer's org therefore looked in the admin's books for

@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 28,
+  "skill_count": 27,
   "skills": [
     {
       "description": "Read commerce admin: The catalog projection with cost and margin included.",
@@ -89,13 +89,6 @@
       "path": "commerce_org/SKILL.md",
       "service": "commerce",
       "sha256": "fe0ff2764c7880af6da29d6d36ebe5bbfe406132eea3798ea16ffe7b2dd59fae"
-    },
-    {
-      "description": "Read commerce payments: Read one settled payment by its id.",
-      "name": "commerce_payments",
-      "path": "commerce_payments/SKILL.md",
-      "service": "commerce",
-      "sha256": "6efbaef572b30fc2c4b8ed9e499021c550e82b6e93d2c365d467fad75a37c89a"
     },
     {
       "description": "Read commerce plans: The raw plan authority rows.",

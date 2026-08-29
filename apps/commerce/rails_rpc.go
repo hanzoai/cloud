@@ -73,7 +73,7 @@ func planeCryptoOptions(ctx context.Context, _ *struct{}) (*plane.CryptoOptions,
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCryptoMint(ctx context.Context, in *plane.CryptoMintIn) (*plane.CryptoDeposit, error) {
-	org, err := payingOrg(ctx, "crypto deposit")
+	org, err := orgOf(ctx, "crypto deposit")
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func planeCryptoMint(ctx context.Context, in *plane.CryptoMintIn) (*plane.Crypto
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeCryptoDeposit(ctx context.Context, in *plane.CryptoDepositIn) (*plane.CryptoDeposit, error) {
-	org, err := payingOrg(ctx, "crypto deposit")
+	org, err := orgOf(ctx, "crypto deposit")
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func planeCryptoDeposit(ctx context.Context, in *plane.CryptoDepositIn) (*plane.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func planeWire(ctx context.Context, in *plane.WireIn) (*plane.WireInstructions, error) {
-	if _, err := payingOrg(ctx, "wire"); err != nil {
+	if _, err := orgOf(ctx, "wire"); err != nil {
 		return nil, err
 	}
 	w, werr := commercebilling.WireFor(ctx, in.Host, in.Payer, kmsFrom(ctx))

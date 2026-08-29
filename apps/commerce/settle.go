@@ -51,7 +51,7 @@ package commerce
 // inside a customer's org — and holding one value for both was a card taken with no
 // way to credit it. commerce writes the receipt under the EFFECTIVE org (the org being
 // acted in: iammiddleware.IAMTokenRequired resolves it for the browser route,
-// [payingOrg] for the typed op), while principal.BillingOrg funds the SuperAdmin's own
+// [orgOf] for the typed op), while principal.BillingOrg funds the SuperAdmin's own
 // books, because platform sudo is not a statement about who pays. Reading the receipt
 // out of the payer's namespace therefore looked in the admin's books for a row written
 // in the customer's, found nothing, and refused — permanently, since the retry replays

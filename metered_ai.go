@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/types"
@@ -100,7 +101,7 @@ type meteredAIStream struct{ *meteredAI }
 // streaming can never be a cheaper way to buy inference.
 func (m *meteredAIStream) ChatStream(ctx context.Context, req *types.ChatRequest, emit func(string) error) (*types.ChatResponse, error) {
 	req = named(ctx, req)
-	payer := billedOrg(req.BillingOrg, req.Org)
+	payer := account.PayerOf("", billedOrg(req.BillingOrg, req.Org))
 	h, err := m.reserve(ctx, payer, req.Project, atMost(req))
 	if err != nil {
 		return nil, err
@@ -131,7 +132,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 	// for its data scope (BYO keys, RAG). billedOrg falls back to req.Org when the
 	// caller did not split them (home==effective for a normal caller).
 	req = named(ctx, req)
-	payer := billedOrg(req.BillingOrg, req.Org)
+	payer := account.PayerOf("", billedOrg(req.BillingOrg, req.Org))
 	h, err := m.reserve(ctx, payer, req.Project, atMost(req))
 	if err != nil {
 		return nil, err
@@ -149,7 +150,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 // debit is computed, shared by the buffered and streamed deliveries so they can
 // never price differently. A gateway that omits usage falls back to the same
 // prompt estimate the gate used.
-func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.ChatResponse, h *hold) {
+func (m *meteredAI) settle(payer account.Account, req *types.ChatRequest, resp *types.ChatResponse, h *hold) {
 	if resp == nil {
 		return
 	}
@@ -187,7 +188,7 @@ func (m *meteredAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]flo
 	// API returns no usage, so the input estimate is both the reservation and the
 	// charge) — there is no completion to bound.
 	toks := EstTokens(req.Inputs...)
-	payer := billedOrg(req.BillingOrg, req.Org) // HOME org pays; req.Org stays the data scope.
+	payer := account.PayerOf("", billedOrg(req.BillingOrg, req.Org)) // HOME org pays; req.Org stays the data scope.
 	h, err := m.reserve(ctx, payer, req.Project, toks)
 	if err != nil {
 		return nil, err
@@ -252,18 +253,18 @@ func billedOrg(billing, effective string) string {
 // this pod already has in flight, and returns the hold the settlement releases.
 //
 // The returned hold is never nil, so a caller may unconditionally defer its
-// release; a system call (org=="") is not gated and holds nothing.
-func (m *meteredAI) reserve(ctx context.Context, org, project string, tokens int) (*hold, error) {
-	if org == "" {
+// release; a system call (an unattributable payer) is not gated and holds nothing.
+func (m *meteredAI) reserve(ctx context.Context, payer account.Account, project string, tokens int) (*hold, error) {
+	if payer.Zero() {
 		return &hold{}, nil
 	}
 	cost := m.cents(tokens)
-	h := &hold{to: &m.inflight, org: org, cost: cost}
+	h := &hold{to: &m.inflight, org: payer.Subject(), cost: cost}
 	// Commit FIRST, then weigh. The figure the balance must cover is this call's
 	// cost PLUS every other call already committed — which is what makes two
 	// simultaneous callers see each other instead of both clearing the same cents.
-	committed := m.inflight.commit(org, cost)
-	if err := m.gate(ctx, org, project, committed); err != nil {
+	committed := m.inflight.commit(payer.Subject(), cost)
+	if err := m.gate(ctx, payer, project, committed); err != nil {
 		h.release()
 		return &hold{}, err
 	}
@@ -272,15 +273,15 @@ func (m *meteredAI) reserve(ctx context.Context, org, project string, tokens int
 
 // gate asks the ONE metering path whether org can afford cents right now. A
 // system call (org=="") is not gated (no customer to bill).
-func (m *meteredAI) gate(ctx context.Context, org, project string, cents int64) error {
-	if org == "" {
+func (m *meteredAI) gate(ctx context.Context, payer account.Account, project string, cents int64) error {
+	if payer.Zero() {
 		return nil
 	}
 	// project rides the ChatRequest/EmbedRequest value (internal S2S), not a
 	// server-minted identity claim, so it is unvalidated here → a project-scoped
 	// cap stays soft. The request-edge BillingGate already hardens the validated
 	// project axis for the inbound LLM path.
-	return m.meter.Gate(ctx, org, project, false, AIMeterProvider, cents)
+	return m.meter.Gate(ctx, payer, project, false, AIMeterProvider, cents)
 }
 
 // atMost is what a chat could cost at most: the prompt, which is known before
@@ -365,8 +366,8 @@ func maxCompletionTokens() int {
 // h, when non-nil, is the pre-call reservation this debit settles: it is released
 // once the debit REACHES the ledger, so the balance the next gate reads has
 // already had this call taken out of it.
-func (m *meteredAI) record(org, project, model string, u metering.Usage, tokens int, h *hold) {
-	if org == "" {
+func (m *meteredAI) record(payer account.Account, project, model string, u metering.Usage, tokens int, h *hold) {
+	if payer.Zero() {
 		h.release()
 		if m.log != nil {
 			m.log.Warn("AI call with no billing org — inference not attributed", "model", model, "tokens", tokens)
@@ -377,7 +378,7 @@ func (m *meteredAI) record(org, project, model string, u metering.Usage, tokens 
 	u.Project = project
 	u.Model = model
 	u.Service = AIMeterProvider
-	m.meter.meterUsage(org, AIMeterProvider, u, h.release)
+	m.meter.meterUsage(payer, AIMeterProvider, u, h.release)
 }
 
 // micros converts a token count to the debit in micro-USD at the configured rate.

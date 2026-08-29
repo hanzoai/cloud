@@ -92,7 +92,7 @@ func exposeInvoices() {
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoices, error) {
-	org, err := payingOrg(ctx, "invoices")
+	org, err := orgOf(ctx, "invoices")
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (invoiceOps) list(ctx context.Context, in *plane.InvoicesIn) (*plane.Invoic
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (invoiceOps) pdf(ctx context.Context, in *plane.InvoiceRef) (*plane.Document, error) {
-	org, err := payingOrg(ctx, "invoice pdf")
+	org, err := orgOf(ctx, "invoice pdf")
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (invoiceOps) pdf(ctx context.Context, in *plane.InvoiceRef) (*plane.Documen
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (invoiceOps) raise(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice, error) {
-	org, err := payingOrg(ctx, "raise invoice")
+	org, err := orgOf(ctx, "raise invoice")
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (invoiceOps) raise(ctx context.Context, in *plane.RaiseIn) (*plane.Invoice,
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (invoiceOps) read(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	org, err := payingOrg(ctx, "read invoice")
+	org, err := orgOf(ctx, "read invoice")
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (invoiceOps) read(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoic
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (invoiceOps) issue(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	org, err := payingOrg(ctx, "issue invoice")
+	org, err := orgOf(ctx, "issue invoice")
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (invoiceOps) issue(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoi
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (invoiceOps) void(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoice, error) {
-	org, err := payingOrg(ctx, "void invoice")
+	org, err := orgOf(ctx, "void invoice")
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (invoiceOps) void(ctx context.Context, in *plane.InvoiceRef) (*plane.Invoic
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
 func (invoiceOps) collect(ctx context.Context, in *plane.InvoiceRef) (*plane.Collected, error) {
-	org, err := payingOrg(ctx, "collect invoice")
+	org, err := orgOf(ctx, "collect invoice")
 	if err != nil {
 		return nil, err
 	}

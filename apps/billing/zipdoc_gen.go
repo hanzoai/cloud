@@ -112,6 +112,9 @@ func init() {
 	zip.Describe("GET /v1/billing/payouts", zip.Doc{
 		Description: "Answers the org's outbound payouts, newest first — amount, destination,\nstatus, and the failure reason where one applies.\n\nA payout is ORG-scoped rather than subject-scoped, so there is nothing to pin\nbeyond the tenant the caller already is, and no query can widen it.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
+	zip.Describe("GET /v1/billing/recharge", zip.Doc{
+		Description: "Reads the caller's auto-reload rule: top the balance up by `amountCents`\nwhenever it falls below `thresholdCents`, charging the card on file\noff-session. It is the same setting every prepaid AI account calls auto-reload.\n\nAn org that has never set one reads as disabled with zeroes rather than as an\nerror — \"no rule\" answers the question — and `stored` is how a caller tells\nnever-configured from deliberately-off.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
 	zip.Describe("GET /v1/billing/settings", zip.Doc{
 		Description: "Answers the PUBLIC half of this org's processor configuration — the ids a\nbrowser needs to tokenize a card, and the environment it must tokenize\nagainst.\n\nIt carries no secret: an application id is published to every checkout page by\ndesign. What matters is that it names the SAME processor account the charge\nwill be made on, because a card vaulted against one account and charged\nagainst another is a card that saves and then cannot be used.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
@@ -135,6 +138,9 @@ func init() {
 			"ledgerPage.limit":    "Limit is the page size; absent or non-positive takes the default 100.",
 			"ledgerPage.offset":   "Offset is how far into the history the page starts.",
 		},
+	})
+	zip.Describe("GET /v1/billing/transactions/:id", zip.Doc{
+		Description: "Reads one ledger entry by its id.\n\nIt is the MEMBER of the collection beside it rather than a second way to ask —\nthe same rows GET /v1/billing/transactions lists, addressed one at a time. A\ntop-up receipt is read here, because a receipt IS a ledger entry: the id this\ntakes is the `transactionId` a top-up hands back.\n\nThe read is narrower than the list: commerce's core loads the row and refuses\nanything that is not a deposit, so a row that exists but is not a top-up\nanswers 404. That asymmetry is stated rather than closed, because widening a\nmoney read to make two shapes match is not a change worth making for symmetry.\n\nThe books are the caller's own and cannot be named, so a guessed id misses\nrather than reaching another tenant's ledger.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 	zip.Describe("GET /v1/billing/usage/accounts", zip.Doc{
 		Description: "Answers per-account totals for the linked provider accounts the\ngateway ROUTED this caller's traffic through — requests, prompt and completion\ntokens, recorded cost — plus their honest sum.\n\nThis is the one read in the billing namespace scoped to the PERSON, not the\norg. Rows are keyed on (validated org, validated user), so a caller sees the\naccounts THEY linked and never a colleague's, even inside one org — everything\nelse under /v1/billing is org-wide. Neither key is ever read from the request\nbody or the query.\n\nIt is a ROUTING counter, not the money ledger. `costCents` is 0 for an account\nbilled by its own subscription, where the plan pays the provider directly, so\nthese totals do not reconcile against what the org was charged.\n/v1/billing/usage is the charged ledger.\n\n401 without a validated principal. Where the linked-account plane is not\nresident the answer is an honest 501 — never an empty breakdown, which would\nread as no usage.",
@@ -326,5 +332,8 @@ func init() {
 			"topupIn.paymentMethodId": "MethodID names a card the subject already saved, for the saved-card endpoint.",
 			"topupIn.sourceId":        "SourceID is a single-use card token from the payment form, for the token\nendpoint. It is vaulted as part of the charge, so a caller never holds card\nnumbers and this service never sees one.",
 		},
+	})
+	zip.Describe("PUT /v1/billing/recharge", zip.Doc{
+		Description: "Sets the caller's auto-reload rule, and answers with the rule as stored.\n\nENABLING REQUIRES A CARD ON FILE (400), because the sweep charges off-session:\na rule naming no chargeable method is a promise the schedule cannot keep. A\nnon-positive amount and a negative threshold are refused the same way, each\nnaming the field that was wrong.\n\nThe rule is the caller's OWN. The org comes from the validated principal and\nthe body names none, so there is no field a write could be steered through onto\nanother tenant's schedule.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 }

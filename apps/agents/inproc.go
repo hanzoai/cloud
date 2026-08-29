@@ -62,7 +62,7 @@ func OpenSession(ctx context.Context, org, actor, agent, title string) (string, 
 		// This is the session that STAYS OPEN — a coding run holds it for as long
 		// as the agent is working — so it is the one the sweep bills hour after
 		// hour, and the one whose payer has to be right.
-		Payer: payerOf(ctx, org), MeteredAt: now,
+		Payer: payerOf(ctx, org).Subject(), MeteredAt: now,
 	}
 	if err := sto.CreateSession(ctx, x); err != nil {
 		return "", fmt.Errorf("agents: create session: %w", err)

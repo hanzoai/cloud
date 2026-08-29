@@ -203,11 +203,11 @@ func RequireProduct(commerce cloud.CommerceClient, product string) zip.Handler {
 		if !ok {
 			return zip.ErrForbidden("no validated principal")
 		}
-		// The credit leg reads the address the DEBIT writes (principal.WalletOf), not
+		// The credit leg reads the address the DEBIT writes (principal.Payer), not
 		// the org pool — reading the pool would admit every member of the shared signup
 		// org against the platform's own balance. A caller with no resolvable wallet
 		// simply has no credit leg; the subscription leg still answers.
-		w, _ := principal.WalletOf(c)
+		w := principal.Payer(c)
 		switch s := cloud.Stand(c.Context(), licensedBy(c.Context(), commerce, org, product), cloud.AllowanceIn(c.Context(), allow, w), w); {
 		case s.Admits():
 			return c.Next()

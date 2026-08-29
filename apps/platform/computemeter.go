@@ -40,6 +40,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/blueprint"
 	"github.com/hanzoai/cloud/apps/metering"
@@ -187,7 +188,12 @@ func runComputeMeter(s *cloud.Service[state], ctx context.Context) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	s.Log.Info("platform compute meter started (running-deployment SBOM compute → org spend → 20% author royalty)", "interval", interval)
-	emit := func(org string, u metering.Usage) { s.Bill.MeterUsage(org, "compute", u) }
+	// org reaches this closure from the swept Application row (sweepComputeMeter reads
+	// a.Org), so it is a stored string and not a live principal — the address is parsed
+	// back out of it here.
+	emit := func(org string, u metering.Usage) {
+		s.Bill.MeterUsage(account.PayerOf("", org), "compute", u)
+	}
 	for {
 		select {
 		case <-ctx.Done():

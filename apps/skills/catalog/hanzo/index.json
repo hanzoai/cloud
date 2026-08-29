@@ -78,7 +78,7 @@
     {
       "name": "billing",
       "path": "_billing/index.json",
-      "skill_count": 18
+      "skill_count": 19
     },
     {
       "name": "blueprint",
@@ -128,7 +128,7 @@
     {
       "name": "commerce",
       "path": "_commerce/index.json",
-      "skill_count": 28
+      "skill_count": 27
     },
     {
       "name": "company",
@@ -952,7 +952,7 @@
       "name": "agents_agents",
       "path": "agents_agents/SKILL.md",
       "service": "agents",
-      "sha256": "a83e78127e3c3e9b7f75efca7d211abdd6ea86e04830c157fed2b1b7e95235ec"
+      "sha256": "d504b7fb95105d75d5e514248dd285f4319d1f1bd33cf603a65095764f613108"
     },
     {
       "description": "Read agents builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the rea",
@@ -1480,6 +1480,13 @@
       "sha256": "975e8dceb59656569ab6b9eb1d8f91f1c02cfcfc49161410870c42aa3842c082"
     },
     {
+      "description": "Read billing recharge: Reads the caller's auto-reload rule: top the balance up by `amountCents` whenever it falls below `thresholdCents`, charging the card on file off-session..",
+      "name": "billing_recharge",
+      "path": "billing_recharge/SKILL.md",
+      "service": "billing",
+      "sha256": "79e63be3855f169db2bcdd70a1bd493828042658366b0be5fbfa10015fe8dc26"
+    },
+    {
       "description": "Read billing settings: Answers the PUBLIC half of this org's processor configuration — the ids a browser needs to tokenize a card, and the environment it must tokenize against..",
       "name": "billing_settings",
       "path": "billing_settings/SKILL.md",
@@ -1501,11 +1508,11 @@
       "sha256": "003f02d21b96b39e47319726a2e476b1cd94571a1f5261463de3649487d4430a"
     },
     {
-      "description": "Read billing transactions: Answers one page of the caller's own ledger, newest first: what moved, how much, when, and what it was tagged with..",
+      "description": "Read billing transactions: Answers one page of the caller's own ledger, newest first: what moved, how much, when, and what it was tagged with., Reads one ledger entry by its id..",
       "name": "billing_transactions",
       "path": "billing_transactions/SKILL.md",
       "service": "billing",
-      "sha256": "c5a60518bb87b965526dbf601c5e2a905b2c87588ad206893e842005ae9f5b29"
+      "sha256": "df09d0d67f0bcdf3e2be83db71d91beeb5bddaf9a0bb3e42c4f7be4e692ce5b7"
     },
     {
       "description": "Read billing usage: Every billed call the caller's org made, attributed to a product, Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum., Ans",
@@ -1933,13 +1940,6 @@
       "path": "commerce_org/SKILL.md",
       "service": "commerce",
       "sha256": "fe0ff2764c7880af6da29d6d36ebe5bbfe406132eea3798ea16ffe7b2dd59fae"
-    },
-    {
-      "description": "Read commerce payments: Read one settled payment by its id.",
-      "name": "commerce_payments",
-      "path": "commerce_payments/SKILL.md",
-      "service": "commerce",
-      "sha256": "6efbaef572b30fc2c4b8ed9e499021c550e82b6e93d2c365d467fad75a37c89a"
     },
     {
       "description": "Read commerce plans: The raw plan authority rows.",

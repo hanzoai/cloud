@@ -49,6 +49,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -244,9 +245,12 @@ type agentView struct {
 	// drawn as its initial, the same way a person with no photo is. Both are
 	// iam/pkg/schema's Mark, so a face means the same thing on an agent as it
 	// does on a person or an org.
-	// Avatar is the agent's picture, or empty when it has none.
+	// Avatar is the agent's picture: an image URL, or the image itself inline as a
+	// data URL up to 96 KiB. Empty when the agent has no image.
 	Avatar string `json:"avatar,omitempty"`
-	// Emoji is the glyph drawn in place of a picture, or empty when it has none.
+	// Emoji is the single glyph a caller picked when they had no image. At most one
+	// of avatar and emoji is ever set; neither means the agent is drawn as its
+	// initial, the same way a person with no photo is.
 	Emoji string `json:"emoji,omitempty"`
 	// Runs is how many executions the org has recorded against this agent, counted
 	// at read time. The list and update reads count the WHOLE history; the detail
@@ -709,9 +713,10 @@ type createAgentIn struct {
 	// drawn as its initial. Validated by iam/pkg/schema, the same rule a person's
 	// avatar passes, so the 96 KiB bound and the accepted URL forms are stated
 	// once for every subject that has a face.
-	// Avatar is the agent's picture, or empty when it has none.
 	Avatar string `json:"avatar"`
-	// Emoji is the glyph drawn in place of a picture, or empty when it has none.
+	// Emoji is the single glyph shown when there is no image. An image WINS when
+	// both are given — it is the thing somebody made — and both empty leaves the
+	// agent drawn as its initial.
 	Emoji string `json:"emoji"`
 }
 
@@ -802,7 +807,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 		// clock at all — it costs its per-run fee when it is invoked and nothing
 		// while it sits in the roster — so its watermark stays zero and the sweep
 		// never sees it.
-		Payer: payerOf(ctx, org),
+		Payer: payerOf(ctx, org).Subject(),
 	}
 	if mode == ModeLongRunning {
 		a.MeteredAt = now
@@ -910,9 +915,10 @@ type updateAgentIn struct {
 	// Avatar and Emoji re-draw the agent. Sending either replaces the pair, so
 	// setting an image clears a glyph and "" for both goes back to the initial —
 	// there is no state where a row holds two answers.
-	// Avatar sets the agent's picture. Sending it clears any glyph.
 	Avatar *string `json:"avatar"`
-	// Emoji sets the glyph drawn in place of a picture. Sending it clears any image.
+	// Emoji re-draws the agent as a glyph. Sending either of the pair replaces
+	// BOTH, so setting a glyph clears an image and "" for both goes back to the
+	// initial — there is no state where a row holds two answers.
 	Emoji *string `json:"emoji"`
 }
 
@@ -1037,7 +1043,7 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 	// change reaches them. Same shape as the cap check above, and gated on the
 	// same `!wasLongRunning`.
 	if a.ExecutionMode == ModeLongRunning && !wasLongRunning {
-		if serr := sto.Stamp(ctx, org, a.Name, payerOf(ctx, org), a.UpdatedAt); serr != nil {
+		if serr := sto.Stamp(ctx, org, a.Name, payerOf(ctx, org).Subject(), a.UpdatedAt); serr != nil {
 			s.Log.Warn("runtime meter: a bot went resident unstamped", "org", org, "agent", a.Name, "err", serr)
 		}
 	}
@@ -1243,7 +1249,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// Gate the AGENT's own org — never a caller default, never another tenant.
 	// fee<=0 or unconfigured billing makes this a no-op (allows). Background run
 	// path: no request principal, so the project axis is empty + unvalidated (soft).
-	if err := s.State.bill.Gate(ctx, a.Org, "", false, meterKind, fee); err != nil {
+	if err := s.State.bill.Gate(ctx, account.PayerOf("", a.Org), "", false, meterKind, fee); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "balance gate denied")
 		return Run{}, err
@@ -1293,7 +1299,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// the throttled one it started on), and the actor for the audit trail.
 	// Fire-and-forget on a background context.
 	if r.Status == "ok" {
-		s.State.bill.MeterUsage(a.Org, meterKind, metering.Usage{
+		s.State.bill.MeterUsage(account.PayerOf("", a.Org), meterKind, metering.Usage{
 			AmountCents: fee,
 			Model:       r.Model,
 			Actor:       actor,

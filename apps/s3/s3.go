@@ -258,7 +258,7 @@ func admit(s *cloud.Service[state], c *zip.Ctx) (string, error) {
 		return "", err
 	}
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, "op", fee()); err != nil {
+	if err := s.Bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, "op", fee()); err != nil {
 		return "", cloud.Denied(err)
 	}
 	return org, nil
@@ -269,7 +269,7 @@ func admit(s *cloud.Service[state], c *zip.Ctx) (string, error) {
 // edge gate's rule ("do not bill failed work"). The debit is async best-effort, so
 // it never blocks the answer; fee==0 or unconfigured billing makes it a no-op.
 func settle(s *cloud.Service[state], c *zip.Ctx) {
-	s.Bill.Meter(principal.Ledger(c), principal.Project(c), "op", fee(), c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(principal.Payer(c), principal.Project(c), "op", fee(), c.RequestID(), cloud.ClientIP(c))
 }
 
 // paid composes admit and settle onto an operation. Every operation on this

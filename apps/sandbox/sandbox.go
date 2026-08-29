@@ -69,6 +69,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -196,13 +197,27 @@ type state struct {
 	// test that observed it there would be timing a network client while trying to
 	// measure whether a span was billed once — and would go green on a debit that
 	// was emitted twice and lost once in flight.
+	//
+	// The payer is a STRING because cloud.RuntimeSweep hands it one: the sweep's only
+	// caller is that function, and what it emits is cloud.Running.Payer, a column read
+	// off the stored lease row. So the seam's shape is the sweep's, not a choice made
+	// here; it says account.Account the day Running.Payer does.
 	debit func(payer string, u metering.Usage)
 }
 
 // debit is the deployment's money sink: the runtime meter's debits, on the org's
 // commerce ledger, under this package's own name.
+//
+// This is where the lease row's stored payer becomes an address. It is the last
+// point this package holds the value — the string comes off Running.Payer, which
+// the store wrote when the lease was taken — so parsing it here is one site rather
+// than one per RuntimeSweep call. PayerOf is upstream's own parse: a bare slug is
+// that org's account, an "<org>/<name>" key the member's, which is exactly what
+// principal.Ledger recorded on the row.
 func debit(b cloud.Base) func(string, metering.Usage) {
-	return func(payer string, u metering.Usage) { b.Bill.MeterUsage(payer, "sandbox", u) }
+	return func(payer string, u metering.Usage) {
+		b.Bill.MeterUsage(account.PayerOf("", payer), "sandbox", u)
+	}
 }
 
 // storeFor is the ONE way this package reaches a store, through

@@ -51,12 +51,12 @@ func tenant(t *testing.T, headers map[string]string) zen.Tenant {
 
 // walletOf is the address every non-zen money path resolves: the edge BillingGate,
 // the ai prepaid gate, the ai usage debit and GET /v1/billing/balance.
-func walletOf(t *testing.T, headers map[string]string) principal.Wallet {
+func walletOf(t *testing.T, headers map[string]string) account.Account {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Get("/w", func(c *zip.Ctx) error {
-		w, ok := principal.WalletOf(c)
-		return c.JSON(200, map[string]any{"ledger": w.Ledger, "account": w.Account, "ok": ok})
+		w := principal.Payer(c)
+		return c.JSON(200, map[string]any{"ledger": w.Org(), "account": w.Subject(), "ok": !w.Zero()})
 	})
 	req := httptest.NewRequest("GET", "/w", nil)
 	for h, v := range headers {
@@ -75,7 +75,9 @@ func walletOf(t *testing.T, headers map[string]string) principal.Wallet {
 	if err := json.Unmarshal(b, &out); err != nil {
 		t.Fatalf("wallet decode: %v (%s)", err, b)
 	}
-	return principal.Wallet{Ledger: out.Ledger, Account: out.Account}
+	// Rebuilt from the wire the probe rendered: the subject alone determines the
+	// address, and PayerOf is the one parse back from it.
+	return account.PayerOf("", out.Account)
 }
 
 // signupMember is the live shape of a self-serve account: home org == the shared
@@ -112,15 +114,15 @@ func TestZenAddressIsTheOneAddress(t *testing.T) {
 	} {
 		want := walletOf(t, h)
 		got := tenant(t, h)
-		if got.BillingOrg != want.Ledger {
-			t.Errorf("%s: zen ledger = %q, want %q", name, got.BillingOrg, want.Ledger)
+		if got.BillingOrg != want.Org() {
+			t.Errorf("%s: zen ledger = %q, want %q", name, got.BillingOrg, want.Org())
 		}
 		// The gate reads Payer; so does the debit, through meterUsage.
-		if got.Payer() != want.Account {
-			t.Errorf("%s: zen gate address = %q, want %q — a funded member 402s, or an empty one serves free", name, got.Payer(), want.Account)
+		if got.Payer() != want.Subject() {
+			t.Errorf("%s: zen gate address = %q, want %q — a funded member 402s, or an empty one serves free", name, got.Payer(), want.Subject())
 		}
-		if debit := meterUsage(zen.Usage{Tenant: got}); debit.User != want.Account || debit.Org != want.Ledger {
-			t.Errorf("%s: zen debit address = (%q,%q), want (%q,%q) — the gate and the debit have separated", name, debit.Org, debit.User, want.Ledger, want.Account)
+		if debit := meterUsage(zen.Usage{Tenant: got}); debit.User != want.Subject() || debit.Org != want.Org() {
+			t.Errorf("%s: zen debit address = (%q,%q), want (%q,%q) — the gate and the debit have separated", name, debit.Org, debit.User, want.Org(), want.Subject())
 		}
 	}
 }

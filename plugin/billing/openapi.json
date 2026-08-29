@@ -897,6 +897,62 @@
         "x-tool": true
       }
     },
+    "/v1/billing/recharge": {
+      "get": {
+        "operationId": "get_billing_recharge",
+        "summary": "Reads the caller's auto-reload rule: top the balance up by `amountCents` whenever it falls below `thresholdCents`, charging the card on file off-session.",
+        "description": "Reads the caller's auto-reload rule: top the balance up by `amountCents`\nwhenever it falls below `thresholdCents`, charging the card on file\noff-session. It is the same setting every prepaid AI account calls auto-reload.\n\nAn org that has never set one reads as disabled with zeroes rather than as an\nerror — \"no rule\" answers the question — and `stored` is how a caller tells\nnever-configured from deliberately-off.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "billing"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoRecharge"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_billing_recharge",
+        "summary": "Sets the caller's auto-reload rule, and answers with the rule as stored.",
+        "description": "Sets the caller's auto-reload rule, and answers with the rule as stored.\n\nENABLING REQUIRES A CARD ON FILE (400), because the sweep charges off-session:\na rule naming no chargeable method is a promise the schedule cannot keep. A\nnon-positive amount and a negative threshold are refused the same way, each\nnaming the field that was wrong.\n\nThe rule is the caller's OWN. The org comes from the validated principal and\nthe body names none, so there is no field a write could be steered through onto\nanother tenant's schedule.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "billing"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoRechargeEdit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoRecharge"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/billing/recharge/run-all": {
       "post": {
         "operationId": "post_billing_recharge_run-all",
@@ -1233,6 +1289,40 @@
         "x-tool": true
       }
     },
+    "/v1/billing/transactions/{id}": {
+      "get": {
+        "operationId": "get_billing_transactions_by_id",
+        "summary": "Reads one ledger entry by its id.",
+        "description": "Reads one ledger entry by its id.\n\nIt is the MEMBER of the collection beside it rather than a second way to ask —\nthe same rows GET /v1/billing/transactions lists, addressed one at a time. A\ntop-up receipt is read here, because a receipt IS a ledger entry: the id this\ntakes is the `transactionId` a top-up hands back.\n\nThe read is narrower than the list: commerce's core loads the row and refuses\nanything that is not a deposit, so a row that exists but is not a top-up\nanswers 404. That asymmetry is stated rather than closed, because widening a\nmoney read to make two shapes match is not a change worth making for symmetry.\n\nThe books are the caller's own and cannot be named, so a guessed id misses\nrather than reaching another tenant's ledger.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transaction"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/billing/usage": {
       "get": {
         "operationId": "get_billing_usage",
@@ -1475,6 +1565,49 @@
           },
           "title": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AutoRecharge": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "lastRechargedAt": {
+            "type": "string"
+          },
+          "stored": {
+            "type": "boolean"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "thresholdCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AutoRechargeEdit": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "thresholdCents": {
+            "type": "integer"
           }
         },
         "type": "object"

@@ -4,7 +4,7 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "skill_count": 28,
+  "skill_count": 27,
   "skills": [
     {
       "description": "Read commerce admin: The catalog projection with cost and margin included.",
@@ -89,13 +89,6 @@
       "path": "commerce_org/SKILL.md",
       "service": "commerce",
       "sha256": "ab4ccfea4a4f548ddfd586057ae6d0fb757611a312cd09d4a24d744c6a6fe2da"
-    },
-    {
-      "description": "Read commerce payments: Read one settled payment by its id.",
-      "name": "commerce_payments",
-      "path": "commerce_payments/SKILL.md",
-      "service": "commerce",
-      "sha256": "06065755474f39ad88af63d9b313728ba1aad11b8e815999c82d9ab410dd5677"
     },
     {
       "description": "Read commerce plans: The raw plan authority rows.",

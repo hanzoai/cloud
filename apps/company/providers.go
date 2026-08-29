@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/internal/mint"
@@ -163,7 +164,10 @@ func (rc resourceCharger) Charge(ctx context.Context, org string, amountCents in
 	// Gate first: an unfunded org is refused BEFORE the formation proceeds
 	// (ErrInsufficientBalance → 402, unreachable commerce → 503, both via
 	// cloud.DenyResource at the handler).
-	if err := rc.bill.Gate(ctx, org, "", false, "company-formation", amountCents); err != nil {
+	// The formation's payer arrives as a stored org string, not a live request, so it
+	// is parsed by the one rule into the address the debit below lands on.
+	payer := account.PayerOf("", org)
+	if err := rc.bill.Gate(ctx, payer, "", false, "company-formation", amountCents); err != nil {
 		return "", err
 	}
 	ref := mint.ID("pay")
@@ -171,7 +175,7 @@ func (rc resourceCharger) Charge(ctx context.Context, org string, amountCents in
 	// already advanced, mirroring every ResourceMeter caller). ref names the ACT — it
 	// is minted here and handed back to the caller, so the formation and its debit are
 	// the same thing under the same name.
-	rc.bill.MeterUsage(org, "company-formation", metering.Usage{
+	rc.bill.MeterUsage(payer, "company-formation", metering.Usage{
 		Model:       "company-formation",
 		AmountCents: amountCents,
 		Ref:         ref,
