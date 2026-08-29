@@ -328,7 +328,25 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 	defer func() { _ = c.Close() }()
 	out, err := zip.Call[In, Out](ctx, c, op, in)
 	if out != nil {
-		detach(reflect.ValueOf(out).Elem())
+		// A reply that owns its wire detaches its own strings, in generated code
+		// with no walk at all — so the reflection below is for the types that have
+		// not declared one yet, and it goes when the last of them does.
+		//
+		// The skip is safe BY CONSTRUCTION rather than by observation, and the
+		// construction is that both sides read the SAME interface: zip's decoder
+		// dispatches on zip.Wire before it reaches for reflect, so a value that
+		// satisfies the test below was decoded by its own generated UnmarshalZAP,
+		// which copies as it reads. There is no arrangement where this is true and
+		// the copy did not happen.
+		//
+		// A test that watched a pooled frame get overwritten was written for this
+		// and DELETED: whether the transport reuses a given buffer is not something
+		// a caller can make happen, so it passed with the copy removed. The property
+		// is pinned where it is deterministic instead — plane.TestAReplyDetachesItself
+		// overwrites the buffer it owns, and goes red when the codec stops cloning.
+		if _, owns := any(out).(zip.Wire); !owns {
+			detach(reflect.ValueOf(out).Elem())
+		}
 	}
 	return out, err
 }
@@ -349,6 +367,11 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 // It runs HERE because Ask is the one client half. A rule every caller must remember
 // is a rule some caller forgets — and this one costs money three hops away from the
 // line that forgot it.
+//
+// A type that owns its wire does not come through here: its generated decoder
+// clones as it reads, so the copy happens once at the field rather than in a
+// second walk of the whole value. This is the last reflection on the read path,
+// and it is skipped for every type that has declared its wire.
 //
 // The kinds it walks are exactly the kinds ZAP carries: scalars, strings, byte
 // slices, structs, slices of those, and pointers to them. A map cannot cross the
