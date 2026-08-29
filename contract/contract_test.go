@@ -480,6 +480,99 @@ func TestEvalReadsData(t *testing.T) {
 	}
 }
 
+// A LINK IS NOT A CONTRACT — the third shape of "a path that cannot be holding a
+// document", and the one with teeth.
+//
+// A contract is a file a repository CONTAINS, never a pointer to one it does not.
+// A tree stores a link as a link, mode 120000, whose bytes are the target's PATH:
+// a reader at a revision never sees what the link points at, and cannot descend
+// one at all. So following one here is not a smaller reading of the same
+// repository, it is a DIFFERENT repository — and for `.hanzo` it is a different
+// repository's CODE, because a generator is `go run` and one link is enough to
+// aim that at any file on the box. The link's own text is not a way in either: it
+// is a path, and a path is not a declaration.
+//
+// Every shape below answers the same as an empty directory does, which is the
+// answer a tree at a revision gives for all of them.
+func TestLinkIsNotAContract(t *testing.T) {
+	for _, c := range []struct {
+		what string
+		link func(t *testing.T, repo, outside string)
+	}{
+		// .hanzo is a link: the whole repository is one entry, and resolving it
+		// would run a generator the repository does not carry.
+		{".hanzo -> outside", func(t *testing.T, repo, outside string) {
+			link(t, outside, filepath.Join(repo, ".hanzo"))
+		}},
+		// The same aimed by a relative path, which survives being cloned anywhere
+		// the shape above it repeats.
+		{".hanzo -> ../outside", func(t *testing.T, repo, outside string) {
+			link(t, "../outside", filepath.Join(repo, ".hanzo"))
+		}},
+		// .hanzo/ is real; the generator inside it is the link.
+		{".hanzo/contract.go -> outside", func(t *testing.T, repo, outside string) {
+			write(t, repo, ".hanzo/keep", "")
+			link(t, filepath.Join(outside, "contract.go"), filepath.Join(repo, ".hanzo", "contract.go"))
+		}},
+		// A data spelling is only read, never run — and it is still a different
+		// repository's document, carrying whatever that one declares.
+		{"hanzo.yml -> outside", func(t *testing.T, repo, outside string) {
+			link(t, filepath.Join(outside, "hanzo.yml"), filepath.Join(repo, "hanzo.yml"))
+		}},
+		// A link needs no target to be a problem: the text alone parses.
+		{`hanzo.yml -> "images: [{name: link/text}]"`, func(t *testing.T, repo, _ string) {
+			link(t, "images: [{name: link/text}]", filepath.Join(repo, "hanzo.yml"))
+		}},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			base := t.TempDir()
+			repo, outside := filepath.Join(base, "repo"), filepath.Join(base, "outside")
+			if err := os.MkdirAll(repo, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			// What the link would reach: a generator that reports having run, and
+			// a document declaring an image nobody in the repository asked for.
+			ran := filepath.Join(base, "ran")
+			write(t, outside, "contract.go", `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	os.WriteFile(`+fmt.Sprintf("%q", ran)+`, nil, 0o600)
+	fmt.Println(`+"`"+`{"images":[{"name":"outside"}]}`+"`"+`)
+}
+`)
+			write(t, outside, "hanzo.yml", "images: [{name: outside}]\n")
+			c.link(t, repo, outside)
+
+			if _, err := Eval(t.Context(), repo); !errors.Is(err, ErrNone) {
+				t.Errorf("a linked contract resolved: %v", err)
+			}
+			if _, err := os.Stat(ran); err == nil {
+				t.Error("the generator ran: a link made Eval run a file the repository does not contain")
+			}
+		})
+	}
+}
+
+// And a link does not shadow the contract a repository actually wrote, or make it
+// ambiguous: it is absent, so the real one resolves alone.
+func TestLinkBesideAContract(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "hanzo.yaml", "bucket: plugins\n")
+	link(t, "/etc/passwd", filepath.Join(dir, "hanzo.yml"))
+	doc, err := Eval(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	if doc.Name != "hanzo.yaml" || string(doc.Data) != `{"bucket":"plugins"}` {
+		t.Errorf("resolved %q = %s", doc.Name, doc.Data)
+	}
+}
+
 // THE CONTRACTS ALREADY COMMITTED. This repository's own hanzo.yml is a real
 // one — mostly comments, a `test:` block, no `images:` and no `binaries:` —
 // and it must read exactly as it always has: a document, with no image to build,
@@ -519,6 +612,17 @@ func write(t *testing.T, dir, name, body string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(at, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// link points at, which needs no target to exist — a link is its text.
+func link(t *testing.T, target, at string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(at), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, at); err != nil {
 		t.Fatal(err)
 	}
 }

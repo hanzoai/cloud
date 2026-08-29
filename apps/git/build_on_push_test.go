@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/contract"
 	luxlog "github.com/luxfi/log"
@@ -290,4 +291,93 @@ func TestPipelineMergeShape(t *testing.T) {
 	if strings.Join(names, ",") != "api,worker" {
 		t.Fatalf("merge lost an image: %v (from %s)", names, from)
 	}
+}
+
+// A LINK IS NOT A CONTRACT, and this reader answers that the way a checkout does.
+//
+// git stores a link as a blob of mode 120000 whose bytes are the target's PATH, so
+// this reader never sees what a link points at while a checkout follows it. Read
+// one as a declaration and the two disagree about the repository they both hold:
+// worst case the link's own TEXT parses, and CI queues a build for an image the
+// repository declares nowhere — off a tree carrying no such document, which no
+// developer can reproduce locally. Absent, on both sides, is what keeps them
+// together.
+//
+// Driven through the real backend, because the claim is about the mode git
+// records and only git records it.
+func TestLinkedContractIsAbsent(t *testing.T) {
+	for _, c := range []struct{ what, target string }{
+		{"the link's text is itself a document", "images: [{name: link/text}]"},
+		{"the link points inside the repository", "config/hanzo.yml"},
+		{"the link points out of the repository", "../../elsewhere/hanzo.yml"},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, "config"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, filepath.Join(dir, "config"), "hanzo.yml", "images: [{name: elsewhere, repo: ghcr.io/x/y}]\n")
+			if err := os.Symlink(c.target, filepath.Join(dir, "hanzo.yml")); err != nil {
+				t.Fatal(err)
+			}
+			repo := committed(t, dir)
+
+			// The mode is the whole claim, so assert it before the answer built on it.
+			b, err := repo.Blob(context.Background(), headOf(t, repo), "hanzo.yml", contract.Max)
+			if err != nil {
+				t.Fatalf("blob: %v", err)
+			}
+			if !b.Link {
+				t.Fatalf("git stored a link and the read model did not say so: %+v", b)
+			}
+
+			pl, from, err := readPipeline(context.Background(), repo, "")
+			if err != nil {
+				t.Fatalf("a linked contract was read: %v", err)
+			}
+			if pl != nil {
+				t.Errorf("a link declared a pipeline: %+v (from %q)", pl, from)
+			}
+		})
+	}
+}
+
+// A link does not shadow the contract a repository actually wrote.
+func TestLinkBesideAContract(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "hanzo.yaml", "images: [{name: api, repo: ghcr.io/hanzoai/api}]\n")
+	if err := os.Symlink("/etc/passwd", filepath.Join(dir, "hanzo.yml")); err != nil {
+		t.Fatal(err)
+	}
+	repo := committed(t, dir)
+	pl, from, err := readPipeline(context.Background(), repo, "")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if pl == nil || len(pl.Images) != 1 || pl.Images[0].Name != "api" {
+		t.Fatalf("a repository's own contract did not resolve beside a link: %+v (from %q)", pl, from)
+	}
+}
+
+// committed makes dir a repository holding one commit of everything in it, and
+// answers it as the read model — the type the reactor is handed in production.
+func committed(t *testing.T, dir string) Repository {
+	t.Helper()
+	gitRun(t, dir, "init", "-q", "-b", "main")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "contract")
+	r, err := gogit.PlainOpen(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &gitRepository{repo: r}
+}
+
+func headOf(t *testing.T, repo Repository) Revision {
+	t.Helper()
+	rev, _, err := repo.Resolve(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rev
 }

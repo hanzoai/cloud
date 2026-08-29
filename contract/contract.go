@@ -76,6 +76,12 @@ var (
 // is not there answers an error satisfying errors.Is(err, fs.ErrNotExist); anything
 // else is a real failure and resolution stops on it, so an unreadable contract is
 // never mistaken for an absent one.
+//
+// A LINK IS NOT THERE. A contract is a file a repository contains, never a pointer
+// to one it does not, and a tree stores a link as its target's PATH — so a reader
+// that followed one would resolve a document its revision does not carry, and
+// disagree with every reader that did not. Absent is the answer that keeps them
+// together, whichever way a reader gets at the bytes.
 type Read func(name string) ([]byte, error)
 
 // Doc is a repository's contract in canonical form.

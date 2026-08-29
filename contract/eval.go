@@ -74,11 +74,15 @@ func Eval(ctx context.Context, dir string) (Doc, error) {
 }
 
 // open takes one file from a checkout, bounded. A path that cannot be holding a
-// document is ABSENT rather than unreadable: a directory carrying the name, and a
-// plain file where .hanzo/ has to be a directory. Neither was ever meant as a
-// declaration, and reading a tree at a revision answers absent for both, so the
-// checkout reader and the git reader cannot disagree about the same repository.
+// document is ABSENT rather than unreadable: a directory carrying the name, a
+// plain file where .hanzo/ has to be a directory, and a link anywhere along the
+// way. None of the three was ever meant as a declaration, and reading a tree at a
+// revision answers absent for all three, so the checkout reader and the git reader
+// cannot disagree about the same repository.
 func open(dir, name string) ([]byte, error) {
+	if linked(dir, name) {
+		return nil, fs.ErrNotExist
+	}
 	f, err := os.Open(filepath.Join(dir, name))
 	if errors.Is(err, syscall.ENOTDIR) {
 		return nil, fs.ErrNotExist
@@ -100,6 +104,35 @@ func open(dir, name string) ([]byte, error) {
 		return nil, fmt.Errorf("larger than %d bytes", Max)
 	}
 	return b, nil
+}
+
+// linked reports whether any part of name under dir is a symbolic link.
+//
+// A contract is a file a repository CONTAINS, never a pointer to one it does not.
+// A tree stores a link as a link — mode 120000, whose bytes are the target's PATH
+// — so a reader at a revision never sees what the link points at and cannot
+// descend one at all. Following one here is what makes the two readers disagree
+// about the same repository: `hanzo.yml -> anywhere.yml` reads as the target's
+// document in a checkout and as the target's NAME at a revision, whether or not
+// the target is in the repository. `.hanzo -> anywhere` is worse — the tree holds
+// one link and no generator, while a checkout hands Eval a .hanzo/contract.go to
+// `go run` that the repository does not contain.
+//
+// An lstat that fails answers nothing: the open below is what separates absent
+// from unreadable, so a path nobody may read is still reported as one.
+func linked(dir, name string) bool {
+	at := dir
+	for _, part := range strings.Split(name, "/") {
+		at = filepath.Join(at, part)
+		fi, err := os.Lstat(at)
+		if err != nil {
+			return false
+		}
+		if fi.Mode()&fs.ModeSymlink != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // emit runs one generator and returns what it printed. Stdout is the document;
