@@ -69,8 +69,8 @@ func auditedWorld(t *testing.T) (*zip.App, *audit.Recorder, *rsa.PrivateKey, str
 	app.Use(middleware.Recover())
 	app.Use(cloud.IdentityMiddleware(cfg))
 	app.Use(cloud.AuditTrail(rec))
-	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, mountSpecs(), cfg, deps); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // maxpower — the target

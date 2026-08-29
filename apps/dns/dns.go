@@ -189,7 +189,7 @@ type edge struct{ p Provider }
 // Mount registers the DNS control plane's addresses under /v1/dns, every one
 // answered by the same relay. Registered as a subsystem in apps.Wire(); on by
 // default.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	p, err := selected()
 	if err != nil {
 		return err

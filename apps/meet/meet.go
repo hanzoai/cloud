@@ -307,7 +307,7 @@ func init() {
 // the surface always answers under its OWN name with an honest 503, rather than
 // falling through to some other subsystem's catch-all and reporting a 404 for a
 // service that exists but has no keys.
-func Mount(app cloud.Router, deps cloud.Deps) error { return serve(app, deps, load()) }
+func Use(app cloud.Router, deps cloud.Deps) error { return serve(app, deps, load()) }
 
 // serve hangs the routes on app for a state already assembled. Reading the
 // deployment (load) and hanging the routes are two jobs, and Mount is the one
@@ -316,7 +316,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error { return serve(app, deps, lo
 // in another process — serves it directly rather than through the environment.
 func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	if app == nil {
-		return fmt.Errorf("meet.Mount: nil app")
+		return fmt.Errorf("meet.Use:  nil app")
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "meet"), State: st}
 

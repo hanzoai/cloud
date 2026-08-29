@@ -6,7 +6,7 @@ package s3_test
 // via app.Fiber().Test — no listener, no live SeaweedFS.
 //
 // SanitizeIdentity does not run in this harness (it is wired in serve.go, not
-// MountAll), so a test simulates a validated principal by setting the identity
+// UseAll), so a test simulates a validated principal by setting the identity
 // headers SanitizeIdentity would emit (X-Org-Id, X-User-IsAdmin). In production
 // those are stripped from client input and re-issued only for a JWT-validated
 // principal, so the org gate is real; here we drive it directly.
@@ -60,7 +60,7 @@ func store(t *testing.T) string {
 	return srv.Listener.Addr().String()
 }
 
-// newApp wires BuildDeps + canonical middleware + MountAll, like main()'s path.
+// newApp wires BuildDeps + canonical middleware + UseAll, like main()'s path.
 // `creds` toggles whether S3 admin credentials are present (fail-closed testing).
 func newApp(t *testing.T, creds bool) *zip.App {
 	t.Helper()
@@ -104,11 +104,11 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	// reason that has nothing to do with the gate under test.
 	app.Use(cloud.Bridge())
 	specs := []cloud.Plugin{
-		{Name: "s3", Mount: s3.Mount, OwnsHealth: true},
-		{Name: "provisioning", Mount: provisioning.Mount},
+		{Name: "s3", Use: s3.Use, OwnsHealth: true},
+		{Name: "provisioning", Use: provisioning.Use},
 	}
-	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, specs, cfg, deps); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 	return app
 }
@@ -174,7 +174,7 @@ func TestHealthFailClosedWithoutCreds(t *testing.T) {
 // subsystem's, NOT serve.go's generic GET /v1/<name>/health (which would be a
 // fake 200). Proven by: it 503s without creds AND returns 200 WITH creds carrying
 // the s3-specific "presign" field. (serve.go's generic route is not mounted in
-// this MountAll-only harness; in production the s3 subsystem registers with
+// this UseAll-only harness; in production the s3 subsystem registers with
 // cloud.HealthOwner, so Serve skips the generic route entirely and this real
 // probe owns /v1/s3/health.)
 func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {

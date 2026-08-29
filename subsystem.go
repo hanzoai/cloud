@@ -18,7 +18,7 @@ package cloud
 //
 // The binary is a single process mounting ~60 subsystems, so "which subsystem served
 // this request" is not recoverable from a span unless something records it. That
-// something is here, and only here: MountAll indexes every spec's declared prefixes
+// something is here, and only here: UseAll indexes every spec's declared prefixes
 // once at boot, and TracingMiddleware stamps the resolved name onto the request span
 // as hanzo.subsystem.
 //
@@ -61,14 +61,14 @@ type subsystemRoute struct {
 	price        Price
 }
 
-// subsystems is written ONCE by Declare — which MountAll calls before anything mounts
+// subsystems is written ONCE by Declare — which UseAll calls before anything mounts
 // — and read by every traced request after. The atomic pointer keeps that read
 // lock-free on the hot path; a nil index (an entrypoint or test that never declared)
 // resolves every path to "" and Undeclared, so the label is simply absent rather than
 // wrong and the price is unanswered rather than free.
 var subsystems atomic.Pointer[subsystemIndex]
 
-// MountPrefixes is the ONE rule for which subtrees a subsystem owns: the prefixes it
+// UsePrefixes is the ONE rule for which subtrees a subsystem owns: the prefixes it
 // declared, else the /v1/<name> convention. scope's middleware gate and this index
 // MUST agree on that rule, so they share this function instead of each spelling the
 // fallback — a drift between them would mislabel every span of the subsystem that
@@ -85,7 +85,7 @@ var subsystems atomic.Pointer[subsystemIndex]
 // So a subsystem whose surface is not /v1/<name> states its own bound —
 // `Prefixes: manifest.PrefixesFor(name)` where the two genuinely coincide, which is
 // what referrals and 21 others do.
-func MountPrefixes(name string, declared []string) []string {
+func UsePrefixes(name string, declared []string) []string {
 	if len(declared) == 0 {
 		return []string{"/v1/" + name}
 	}
@@ -97,7 +97,7 @@ func MountPrefixes(name string, declared []string) []string {
 // disabled subsystem is inventoried but claims NO prefix: it serves nothing, so
 // letting it own a path would attribute another subsystem's requests (or a 404) to it.
 //
-// MountAll calls it before anything mounts, and that is the only call a running binary
+// UseAll calls it before anything mounts, and that is the only call a running binary
 // makes. It is exported for the tests that must ask what the REAL composition root
 // declares — apps.Wire() — without booting 111 subsystems' stores and dialling their
 // providers to find out. Those tests are why the price a request resolves to can be
@@ -108,7 +108,7 @@ func Declare(specs []Plugin, cfg *Config) {
 		routes: make([]subsystemRoute, 0, len(specs)),
 	}
 	for _, spec := range specs {
-		prefixes := MountPrefixes(spec.Name, spec.Prefixes)
+		prefixes := UsePrefixes(spec.Name, spec.Prefixes)
 		enabled := cfg.Enabled(spec.Name)
 		idx.all = append(idx.all, Subsystem{Name: spec.Name, Prefixes: prefixes, Enabled: enabled, Price: spec.Price})
 		if !enabled {
@@ -144,7 +144,7 @@ func SubsystemOf(path string) string { r, _ := ownerOf(path); return r }
 
 // PriceOf resolves what the edge charges for path: the declared Price of the
 // subsystem that owns it (price.go). Undeclared when no subsystem owns the path —
-// which includes every request in a process that never ran MountAll, so a caller
+// which includes every request in a process that never ran UseAll, so a caller
 // that reads this as "free" is reading an absence as an answer. Cents() is the one
 // that turns it into money, and it charges nothing for Undeclared.
 func PriceOf(path string) Price { _, p := ownerOf(path); return p }

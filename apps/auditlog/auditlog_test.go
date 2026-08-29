@@ -47,8 +47,8 @@ func mountApp(t *testing.T, store *audit.Recorder) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{Audit: store}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{Audit: store}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

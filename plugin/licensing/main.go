@@ -33,7 +33,7 @@ func main() {
 		// adapter is a copy and not a translation — but it is a copy across a
 		// BOUNDARY, which is what lets licensing be built, tested and released
 		// without cloud in its graph at all.
-		Mount: func(app cloud.Router, deps cloud.Deps) error {
+		Use: func(app cloud.Router, deps cloud.Deps) error {
 			sub, err := licensing.App(deps.Brand, deps.DataDir, entitlements{deps.Commerce})
 			if err != nil {
 				return err

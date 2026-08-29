@@ -62,8 +62,8 @@ const healthWire = "a REAL probe: 503 carries the degraded REPORT as its body " 
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("mltest"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

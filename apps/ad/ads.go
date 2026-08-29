@@ -81,16 +81,16 @@ var mounted *cloud.Service[state]
 // Mount wires the ads surface onto app per HIP-0106. It keeps a package global
 // (mounted) for Shutdown, so it constructs the Service value directly — the same
 // "complex flavour" clients/crm uses.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("ad.Mount: nil app")
+		return fmt.Errorf("ad.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("ad.Mount: empty DataDir")
+		return fmt.Errorf("ad.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("ad.Mount: open store: %w", err)
+		return fmt.Errorf("ad.Use:  open store: %w", err)
 	}
 	b := cloud.NewBase(deps, "ad")
 	s := &cloud.Service[state]{Base: b, State: state{store: store}}

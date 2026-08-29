@@ -35,8 +35,8 @@ func TestRed_BotProxyForwardsForgedOrgNoPrincipal(t *testing.T) {
 	t.Setenv("BOT_GATEWAY_URL", upstream.URL)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 
 	// The off-gateway forge, post-SanitizeIdentity: forged org, NO validated user.

@@ -76,21 +76,21 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the /v1/trust/* surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("trust.Mount: nil app")
+		return fmt.Errorf("trust.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("trust.Mount: empty DataDir")
+		return fmt.Errorf("trust.Use:  empty DataDir")
 	}
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("trust.Mount: router carries no typed-op registry")
+		return fmt.Errorf("trust.Use:  router carries no typed-op registry")
 	}
 
 	bundle, err := htrust.Bundle()
 	if err != nil {
-		return fmt.Errorf("trust.Mount: load bundle: %w", err)
+		return fmt.Errorf("trust.Use:  load bundle: %w", err)
 	}
 
 	// The organization whose inventory is compiled in is the deployment's OWN
@@ -113,7 +113,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("trust.Mount: goja NewBase host: %w", err)
+		return fmt.Errorf("trust.Use:  goja NewBase host: %w", err)
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "trust"), State: state{host: host}}

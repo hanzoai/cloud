@@ -227,7 +227,7 @@ func describe(specs []Plugin, dir string) error {
 
 	deps := BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: luxlog.Default(), DisableStartupMessage: true})
-	if err := MountAll(app, specs, cfg, deps); err != nil {
+	if err := UseAll(app, specs, cfg, deps); err != nil {
 		return err
 	}
 	return Describe(dir, app)

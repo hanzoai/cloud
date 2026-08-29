@@ -76,12 +76,12 @@ type service struct {
 var mounted *service
 
 // Mount wires /v1/code/* onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("code.Mount: nil app")
+		return fmt.Errorf("code.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("code.Mount: empty DataDir")
+		return fmt.Errorf("code.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "code")
 	s := &service{

@@ -140,7 +140,7 @@ func (s *Source) Client(ctx context.Context, kms Secrets, domain string) (*Clien
 		return s.c, nil
 	}
 	if kms == nil {
-		return nil, fmt.Errorf("no KMS client mounted: cannot read %s", TokenRef)
+		return nil, fmt.Errorf("no KMS client in use: cannot read %s", TokenRef)
 	}
 	b, err := kms.GetSecret(ctx, TokenRef)
 	if err != nil {

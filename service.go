@@ -52,7 +52,7 @@ type Base struct {
 // NewBase derives the shared deps for a named subsystem: a scoped child logger,
 // the embedded KMS client, and the per-org resource meter (provider = name).
 //
-// Most packages never call this — cloud.Mount does. It is exported for the few
+// Most packages never call this — cloud.Use does. It is exported for the few
 // subsystems whose Mount is more than build+routes (a background reconciler, a
 // package-global for cross-package hooks, a shutdown cancel): they construct the
 // value directly — `s := &cloud.Service[state]{Base: cloud.NewBase(deps, "x"),
@@ -83,18 +83,18 @@ type Service[S any] struct {
 // Mount is the one generic subsystem entrypoint. `build` constructs the typed
 // State from Base (open stores, dial clients — returns an error to fail the
 // mount closed); `routes` registers the handlers. A package's exported Mount is
-// then one line: `return cloud.Mount(app, deps, "name", build, routes)`.
-func Mount[S any](app Router, deps Deps, name string, build func(Base) (S, error), routes func(Router, *Service[S])) error {
+// then one line: `return cloud.Use(app, deps, "name", build, routes)`.
+func Use[S any](app Router, deps Deps, name string, build func(Base) (S, error), routes func(Router, *Service[S])) error {
 	if app == nil {
-		return fmt.Errorf("%s.Mount: nil app", name)
+		return fmt.Errorf("%s.Use:  nil app", name)
 	}
 	if luxlog.Default() == nil {
-		return fmt.Errorf("%s.Mount: nil luxlog.Default()", name)
+		return fmt.Errorf("%s.Use:  nil luxlog.Default()", name)
 	}
 	b := NewBase(deps, name)
 	state, err := build(b)
 	if err != nil {
-		return fmt.Errorf("%s.Mount: %w", name, err)
+		return fmt.Errorf("%s.Use:  %w", name, err)
 	}
 	routes(app, &Service[S]{Base: b, State: state})
 	b.Log.Info(name + " mounted")

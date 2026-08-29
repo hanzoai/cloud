@@ -64,7 +64,7 @@ var (
 	keyFallback KeyResolver = planeKeys{}
 )
 
-// SetKeyResolver installs the in-process resolver. projects.Mount calls it with
+// SetKeyResolver installs the in-process resolver. projects.Use calls it with
 // its store — the no-hop answer when ingest and the project store share a process.
 func SetKeyResolver(r KeyResolver) {
 	keyMu.Lock()

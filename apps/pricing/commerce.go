@@ -48,7 +48,7 @@ import (
 // modes are logged at a level that gets read: an unreachable store is an error,
 // and a store that prices nothing is a warning naming exactly what that means.
 //
-// commerce reaches its database through a process-global set at commerce.Mount,
+// commerce reaches its database through a process-global set at commerce.Use,
 // so this resolves in the fused binary. Run as a lone plugin with no commerce in
 // the process, the query fails and the snapshot is served — which is why the
 // error says which prices are then suspect.

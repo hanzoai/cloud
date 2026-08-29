@@ -157,9 +157,9 @@ var mounted *subsystem
 // Mount wires the base subsystem onto app per HIP-0106: the always-on health
 // route, then — behind CLOUD_BASE_EMBED — the public waitlist lane and the
 // authenticated per-org hosting lane.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("base.Mount: nil app")
+		return fmt.Errorf("base.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "base")
 
@@ -169,7 +169,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// than quietly publishing a surface no projection knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("base.Mount: router is not a zip app, so the typed ops have no registry")
+		return fmt.Errorf("base.Use:  router is not a zip app, so the typed ops have no registry")
 	}
 
 	// Native /v1/base/health — always answers (OwnsHealth), no auth, BEFORE the
@@ -216,14 +216,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("base.Mount: empty DataDir")
+		return fmt.Errorf("base.Use:  empty DataDir")
 	}
 
 	// Pin Base's router prefix to /v1/base (its documented multi-app knob) unless
 	// the operator already set one. Read once, applied to EVERY app built below.
 	if strings.TrimRight(os.Getenv("BASE_API_PREFIX"), "/") == "" {
 		if err := os.Setenv("BASE_API_PREFIX", apiPrefix); err != nil {
-			return fmt.Errorf("base.Mount: set BASE_API_PREFIX: %w", err)
+			return fmt.Errorf("base.Use:  set BASE_API_PREFIX: %w", err)
 		}
 	}
 
@@ -232,7 +232,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// it for every app built below unless the operator explicitly set the knob.
 	if _, set := os.LookupEnv("ZAP_DISABLED"); !set {
 		if err := os.Setenv("ZAP_DISABLED", "true"); err != nil {
-			return fmt.Errorf("base.Mount: set ZAP_DISABLED: %w", err)
+			return fmt.Errorf("base.Use:  set ZAP_DISABLED: %w", err)
 		}
 	}
 
@@ -243,7 +243,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// and refusals are that program's, not this package's to declare.
 	platformApp, h, err := newPlatformApp(filepath.Join(root, platformSeg))
 	if err != nil {
-		return fmt.Errorf("base.Mount: platform waitlist app: %w", err)
+		return fmt.Errorf("base.Use:  platform waitlist app: %w", err)
 	}
 	app.All("/v1/waitlist", h)
 	app.All("/v1/waitlist/*", h)

@@ -346,8 +346,8 @@ type state struct {
 	wh     *warehouse
 }
 
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "research", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "research", build, routes)
 }
 
 func build(b cloud.Base) (state, error) {

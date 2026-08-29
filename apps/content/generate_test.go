@@ -110,11 +110,11 @@ func mountWith(t *testing.T, deps cloud.Deps) *zip.App {
 	// The lane is enabled for every org here; the gate is tested in apps/framework.
 	planetest.Manager(t)
 	planetest.Entitled(t, func(_, product string) bool { return product == Module })
-	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("framework.Mount: %v", err)
+	if err := framework.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("framework.Use:  %v", err)
 	}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("content.Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("content.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(); _ = framework.Shutdown() })
 	return app

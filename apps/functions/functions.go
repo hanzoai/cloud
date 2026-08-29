@@ -206,13 +206,13 @@ func httpTrigger(f Function) triggerView {
 
 // Mount wires the functions surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can close every per-org store, so
-// it constructs the Service value directly rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// it constructs the Service value directly rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("functions.Mount: nil app")
+		return fmt.Errorf("functions.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("functions.Mount: empty DataDir")
+		return fmt.Errorf("functions.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "functions")
 	s := &cloud.Service[state]{Base: b, State: state{

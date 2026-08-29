@@ -94,17 +94,17 @@ var mounted *cloud.Service[state]
 
 // Mount wires the /v1/link surface. The sessions client is set from the agents
 // in-process adapter (adapters.go) so a revoke can stop the affected sessions.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("link.Mount: nil app")
+		return fmt.Errorf("link.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "link")
 	if deps.DataDir == "" {
-		return fmt.Errorf("link.Mount: empty DataDir")
+		return fmt.Errorf("link.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("link.Mount: open store: %w", err)
+		return fmt.Errorf("link.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "link"),
@@ -120,7 +120,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// program, so this package does not install its own.
 	r := cloud.ZipApp(app)
 	if r == nil {
-		return fmt.Errorf("link.Mount: router carries no typed-op registry")
+		return fmt.Errorf("link.Use:  router carries no typed-op registry")
 	}
 	o := ops{s: s}
 	zip.Post(r, "/v1/link", o.upsertLink, zip.WithStatus(http.StatusCreated))

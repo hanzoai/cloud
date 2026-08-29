@@ -9,7 +9,7 @@ package tools
 //
 //   - the validated TENANT. It comes off the context, parked there by
 //     cloud.Bridge (installed once for the whole binary in Serve, after the
-//     identity boundary and before MountAll). It is NEVER an In field: an In
+//     identity boundary and before UseAll). It is NEVER an In field: an In
 //     field is caller-supplied, so a tenant key read from one is a cross-tenant
 //     read the caller asserted for itself.
 //   - the PROJECT, the org's sub-scope every activation and listing is keyed on.

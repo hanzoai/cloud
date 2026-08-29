@@ -61,17 +61,17 @@ var mounted *cloud.Service[state]
 // Mount wires the /v1/captable/* surface onto app per HIP-0106. Constructs the
 // value directly (cloud.NewBase) — this subsystem keeps a package global for the
 // Shutdown hook and opens a per-tenant goja host from deps.DataDir.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("captable.Mount: nil app")
+		return fmt.Errorf("captable.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("captable.Mount: empty DataDir")
+		return fmt.Errorf("captable.Use:  empty DataDir")
 	}
 
 	bundle, err := hcaptable.Bundle()
 	if err != nil {
-		return fmt.Errorf("captable.Mount: load bundle: %w", err)
+		return fmt.Errorf("captable.Use:  load bundle: %w", err)
 	}
 	host, err := goja.NewBase(goja.BaseConfig{
 		Name:    "captable",
@@ -81,7 +81,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		OnOpen:  seedCompany,
 	})
 	if err != nil {
-		return fmt.Errorf("captable.Mount: goja NewBase host: %w", err)
+		return fmt.Errorf("captable.Use:  goja NewBase host: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "captable"), State: state{host: host}}
 	mounted = s

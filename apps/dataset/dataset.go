@@ -167,9 +167,9 @@ type scan struct {
 //	logs         cloud.NewBase(deps, "dataset") gives the scoped logger.
 //	traces       global and already ZAP-native (OTLZ). This package imports no
 //	             otlp transport, deliberately.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("dataset.Mount: nil app")
+		return fmt.Errorf("dataset.Use:  nil app")
 	}
 	if err := tenant.Vouches(deps.Brand); err != nil {
 		// The brand is half the tenant key, and the half that must be a brand the
@@ -177,7 +177,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		// other, so a key minted under one would read a tenant nobody can write.
 		// A deployment that cannot mint a key would 403 every request; better said
 		// once at boot than once per caller.
-		return fmt.Errorf("dataset.Mount: %q cannot mint a tenant key: %w", deps.Brand, err)
+		return fmt.Errorf("dataset.Use:  %q cannot mint a tenant key: %w", deps.Brand, err)
 	}
 	base := cloud.NewBase(deps, "dataset")
 	p := &plane{
@@ -242,7 +242,7 @@ func mount(p *plane, app cloud.Router) error {
 	// decision plane's — which is the escape the scope exists to refuse.
 	z := cloud.ZipApp(app)
 	if z == nil {
-		return fmt.Errorf("dataset.Mount: the router carries no typed-op registry")
+		return fmt.Errorf("dataset.Use:  the router carries no typed-op registry")
 	}
 	// DenyEnvelope renders a gate refusal as the money wire's own bytes, the same
 	// ones every other Hanzo surface emits — one error contract for "no funds"

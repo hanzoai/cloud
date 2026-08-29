@@ -19,7 +19,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "dns",
 		Price: cloud.Free,
-		Mount: dns.Mount,
+		Use:   dns.Use,
 		// The plane's own /v1/dns/health is one of the addresses Mount declares,
 		// so serve.go must not declare it too: one address claimed twice is a
 		// composition zip refuses outright, and the subsystem would not start.

@@ -17,12 +17,12 @@ func index(t *testing.T, cfg *Config, plugins ...Plugin) {
 // set is taken verbatim. scope's middleware gate and the span index share this, so a
 // regression here mislabels spans AND misplaces middleware.
 func TestMountPrefixesIsTheOneRule(t *testing.T) {
-	got := MountPrefixes("kms", nil)
+	got := UsePrefixes("kms", nil)
 	if len(got) != 1 || got[0] != "/v1/kms" {
 		t.Fatalf("undeclared prefixes = %v, want [/v1/kms]", got)
 	}
 	declared := []string{"/v1/chat", "/v1/messages"}
-	got = MountPrefixes("ai", declared)
+	got = UsePrefixes("ai", declared)
 	if len(got) != 2 || got[0] != "/v1/chat" || got[1] != "/v1/messages" {
 		t.Fatalf("declared prefixes = %v, want %v", got, declared)
 	}
@@ -94,7 +94,7 @@ func TestSubsystemsSnapshotIsIsolated(t *testing.T) {
 }
 
 // TestSubsystemOfWithoutIndex proves the un-mounted case (a test or entrypoint that
-// never calls MountAll) is label-absent rather than a panic or a wrong guess.
+// never calls UseAll) is label-absent rather than a panic or a wrong guess.
 func TestSubsystemOfWithoutIndex(t *testing.T) {
 	prev := subsystems.Load()
 	t.Cleanup(func() { subsystems.Store(prev) })

@@ -108,7 +108,7 @@ func wireApp(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("CLOUD_PUBSUB_URL", "nats://127.0.0.1:1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{}); err != nil {
+	if err := Use(app, cloud.Deps{}); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(nil) })

@@ -62,18 +62,18 @@ var mounted *cloud.Service[state]
 
 // Mount wires the wallets surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted, the finance client singleton) so it constructs
-// the Service value directly rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// the Service value directly rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("wallet.Mount: nil app")
+		return fmt.Errorf("wallet.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "wallet")
 	if deps.DataDir == "" {
-		return fmt.Errorf("wallet.Mount: empty DataDir")
+		return fmt.Errorf("wallet.Use:  empty DataDir")
 	}
 	st, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("wallet.Mount: open store: %w", err)
+		return fmt.Errorf("wallet.Use:  open store: %w", err)
 	}
 
 	custody := buildCustody(deps, log)
@@ -123,7 +123,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	// knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("wallet.Mount: router exposes no zip.App, so no typed op could be registered")
+		return fmt.Errorf("wallet.Use:  router exposes no zip.App, so no typed op could be registered")
 	}
 	// cloud.Bridge parks the validated org on the context a typed op receives; it
 	// is the composer's install — once at the root of every program — so this

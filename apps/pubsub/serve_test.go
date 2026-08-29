@@ -83,7 +83,7 @@ func TestMountFailsClosedWhenPortIsTaken(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_PORT", port)
 	t.Setenv("CLOUD_PUBSUB_STORE_DIR", t.TempDir())
 
-	err = Mount(testApp(), testDeps())
+	err = Use(testApp(), testDeps())
 	if err == nil {
 		t.Fatal("Mount returned nil on a taken port: boot would continue with NO messaging plane")
 	}
@@ -106,7 +106,7 @@ func TestMountFailsClosedWhenStoreDirUnusable(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_PORT", "-1")
 	t.Setenv("CLOUD_PUBSUB_STORE_DIR", filepath.Join(blocked, "store"))
 
-	if err := Mount(testApp(), testDeps()); err == nil {
+	if err := Use(testApp(), testDeps()); err == nil {
 		t.Fatal("Mount returned nil with an unusable store dir: boot would continue with NO messaging plane")
 	}
 	if srv != nil {
@@ -139,8 +139,8 @@ func mountForTest(t *testing.T) string {
 	t.Setenv("CLOUD_PUBSUB_PORT", "-1") // random free port
 	t.Setenv("CLOUD_PUBSUB_STORE_DIR", t.TempDir())
 
-	if err := Mount(testApp(), testDeps()); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(testApp(), testDeps()); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	if srv == nil {
 		t.Fatal("Mount started no server")

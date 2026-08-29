@@ -92,8 +92,8 @@ ORDER BY (image_digest, component_name, component_version, purl)`
 type state struct{}
 
 // Mount wires the SBOM surface onto app and bootstraps the global table.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "sbom", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "sbom", build, routes)
 }
 
 // build best-effort bootstraps the global table: create it now IF the datastore is

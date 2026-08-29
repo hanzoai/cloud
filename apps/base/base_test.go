@@ -35,8 +35,8 @@ func mountApp(t *testing.T) (*zip.App, string) {
 	t.Setenv("BASE_API_PREFIX", apiPrefix)
 	dataDir := t.TempDir()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{DataDir: dataDir}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: dataDir}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app, dataDir
@@ -114,8 +114,8 @@ func listTitles(t *testing.T, app *zip.App, org string) []string {
 func TestHealthNoEmbed(t *testing.T) {
 	t.Setenv("CLOUD_BASE_EMBED", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 

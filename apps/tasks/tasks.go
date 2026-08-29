@@ -12,7 +12,7 @@
 // ingest. This subsystem does NOT Embed a second engine; it mounts that ONE
 // engine's HTTP handlers on the shared zip mux, so the Tasks product (console/
 // studio) reads the SAME durable state as ai ingest — one engine, one binary,
-// one way. The engine is created after MountAll, so the surface resolves it
+// one way. The engine is created after UseAll, so the surface resolves it
 // LAZILY per request (503 until it is live).
 //
 // Surface (all under /v1/tasks/*; the studio is its own image on tasks.hanzo.ai):
@@ -161,9 +161,9 @@ func init() {
 
 // Mount adapts the shared engine's HTTP surface onto app. It creates NO engine —
 // the ONE engine lives in cloud.EmbeddedTasks (durable.go).
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("tasks.Mount: nil app")
+		return fmt.Errorf("tasks.Use:  nil app")
 	}
 
 	// TWO REGISTRATIONS, ONE HANDLER, AND ONLY ONE OF THEM IS EVER ENTERED. The
@@ -235,9 +235,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Platform cron is a FACET of tasks, not its own subsystem: it mounts NO routes,
 	// only registers durable schedules on the SAME shared engine (cloud.EmbeddedTasks)
 	// this surface fronts. Folded in here as a terminal sub-mount (was a separate Wire
-	// entry) so there is ONE tasks subsystem. cron.Mount just launches a background
-	// starter that waits for the engine wired after MountAll — no ordering dependency.
-	if err := cron.Mount(app, deps); err != nil {
+	// entry) so there is ONE tasks subsystem. cron.Use just launches a background
+	// starter that waits for the engine wired after UseAll — no ordering dependency.
+	if err := cron.Use(app, deps); err != nil {
 		return err
 	}
 
@@ -260,7 +260,7 @@ var engine = cloud.EmbeddedTasks
 var notReady = []byte(`{"error":"tasks engine not ready","code":503}`)
 
 // surface serves the Tasks HTTP API off the shared engine. The engine is created
-// after MountAll, so it is resolved lazily on the first request (by which point
+// after UseAll, so it is resolved lazily on the first request (by which point
 // Serve has run installDurableIngest); the per-engine route mux is then cached
 // once. A nil engine (embed failed / not yet wired) fails soft with 503.
 type surface struct {
@@ -289,7 +289,7 @@ func (s *surface) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //   - /v1/tasks/settings, /v1/tasks/cluster[/health] are OPEN (capability flags
 //     and probes carry no per-org data), matching tasksd registering them outside
 //     its identity wrap. (/v1/tasks/health is the generic per-subsystem liveness
-//     route cloud registers before MountAll, which wins ahead of this mux.)
+//     route cloud registers before UseAll, which wins ahead of this mux.)
 //   - the data surface (the /v1/tasks/ catch-all, /v1/tasks/mcp, /v1/tasks/events)
 //     is gated: a request without a validated principal is refused, exactly as the
 //     rest of the cloud data plane (clients/principal.Org) and tasksd's

@@ -36,12 +36,12 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "zen",
 		Price:    cloud.Metered,
-		Mount:    zen.Mount,
+		Use:      zen.Use,
 		Prefixes: manifest.GrantFor("zen"),
 	}, {
 		Name:  "ai",
 		Price: cloud.Metered,
-		Mount: ai.Mount,
+		Use:   ai.Use,
 		// ai's embedded module installs its gate across /v1 (hanzoai/ai mount.go
 		// registers one All("/v1/*") route plus the completion gate), so the grant
 		// is real. It is now DECLARED here rather than implied by the signature.

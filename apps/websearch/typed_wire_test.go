@@ -25,8 +25,8 @@ func mounted(t *testing.T) *zip.App {
 	t.Setenv(account.KeyEnv, testCSRFKey)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

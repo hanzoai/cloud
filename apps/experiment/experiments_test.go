@@ -33,13 +33,13 @@ func mountStack(t *testing.T) *zip.App {
 	// production (serve.go); this stack composes the same way.
 	app.Use(cloud.Bridge())
 	deps := cloud.Deps{DataDir: dir}
-	if err := flags.Mount(app, deps); err != nil {
+	if err := flags.Use(app, deps); err != nil {
 		t.Fatalf("flags mount: %v", err)
 	}
-	if err := research.Mount(app, deps); err != nil {
+	if err := research.Use(app, deps); err != nil {
 		t.Fatalf("research mount: %v", err)
 	}
-	if err := Mount(app, deps); err != nil {
+	if err := Use(app, deps); err != nil {
 		t.Fatalf("experiments mount: %v", err)
 	}
 	t.Cleanup(func() {

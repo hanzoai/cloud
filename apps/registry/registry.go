@@ -144,8 +144,8 @@ type token struct {
 // Mount wires /v1/registry/* onto app. The subsystem holds no store and runs
 // no goroutine: it probes the registries per request and caches only the token
 // challenge and the short-lived tokens it minted.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "registry",
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "registry",
 		func(cloud.Base) (state, error) {
 			return state{tokens: map[string]token{}}, nil
 		},

@@ -190,7 +190,7 @@ func served(t *testing.T, app *zip.App, method, path string) (*http.Response, st
 func indexed(t *testing.T) *zip.App {
 	t.Helper()
 	app := newApp()
-	MountIndex(app, func() ([]Part, error) { return parts(), nil })
+	UseIndex(app, func() ([]Part, error) { return parts(), nil })
 	app.Get("/v1/agents", func(c *zip.Ctx) error {
 		c.SetHeader("Link", `</v1/agents?page=2>; rel="next"`)
 		return c.String(http.StatusOK, "the agents collection")
@@ -283,7 +283,7 @@ func TestEveryAnswerCarriesItsLinksAndClobbersNone(t *testing.T) {
 // generated off it can call the index it needs in order to discover anything else.
 func TestBothDoorsAreInTheDocument(t *testing.T) {
 	app := newApp()
-	Mount(app, Info{Title: "t", Version: "v1"})
+	Use(app, Info{Title: "t", Version: "v1"})
 	stubIndex(app)
 	doc, err := Spec(app, Info{Title: "t", Version: "v1"})
 	if err != nil {

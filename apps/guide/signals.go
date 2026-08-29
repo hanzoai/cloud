@@ -48,7 +48,7 @@ type Signals struct {
 var boundSignals Signals
 
 // BindSignals installs the cross-subsystem reads. The composition root
-// (plugin/guide/clients.go) calls it once at init, before guide.Mount. Last write wins;
+// (plugin/guide/clients.go) calls it once at init, before guide.Use. Last write wins;
 // guide never mutates it after mount.
 func BindSignals(s Signals) { boundSignals = s }
 

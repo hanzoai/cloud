@@ -105,7 +105,7 @@ type state struct {
 func (s state) ship() error {
 	// A state with no plane is a store somebody opened directly, which is a lone
 	// process — the same case OrgStore.Sync answers with a successful no-op when
-	// the deployment has no object store. It cannot arise from Mount: the store
+	// the deployment has no object store. It cannot arise from Use:  the store
 	// this state holds COMES from the plane, so a live one always has both.
 	if s.stores == nil {
 		return nil
@@ -125,20 +125,20 @@ func (s state) ship() error {
 var mounted *cloud.Service[state]
 
 // Mount wires the treasury surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("treasury.Mount: nil app")
+		return fmt.Errorf("treasury.Use:  nil app")
 	}
 	log := luxlog.Default()
 	if log == nil {
-		return fmt.Errorf("treasury.Mount: nil luxlog.Default()")
+		return fmt.Errorf("treasury.Use:  nil luxlog.Default()")
 	}
 	log = log.New("subsystem", "treasury")
 	if deps.DataDir == "" {
-		return fmt.Errorf("treasury.Mount: empty DataDir")
+		return fmt.Errorf("treasury.Use:  empty DataDir")
 	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("treasury.Mount: data dir: %w", err)
+		return fmt.Errorf("treasury.Use:  data dir: %w", err)
 	}
 	// ON THE DURABLE PLANE, like every other store the fleet keeps. The reserve is
 	// ONE file and the deployment may run several pods; without a fence each of
@@ -157,7 +157,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	})
 	store, err := stores.For(namespace.System())
 	if err != nil {
-		return fmt.Errorf("treasury.Mount: open store: %w", err)
+		return fmt.Errorf("treasury.Use:  open store: %w", err)
 	}
 	// Select the ledger of RECORD. Formance (Postgres-backed, the production ledger)
 	// when FORMANCE_LEDGER_URL is wired; else the native Base/SQLite engine (the

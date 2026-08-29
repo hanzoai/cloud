@@ -36,10 +36,10 @@ func TestGrantMatchesPrefixesForRoutedApps(t *testing.T) {
 }
 
 // TestCoresidentAppStatesItsGate closes the hole that actually shipped. A
-// co-resident app claims no prefix, so MountPrefixes falls back to the
+// co-resident app claims no prefix, so UsePrefixes falls back to the
 // conventional "/v1/<name>" — a subtree it does not serve and did not ask for.
 // zen mounted its Claim on "/v1" against a grant of "/v1/zen", scope recorded the
-// escape, and MountAll refused the mount: the zen plugin binary could not boot.
+// escape, and UseAll refused the mount: the zen plugin binary could not boot.
 //
 // A co-resident app is middleware BY DEFINITION, so it always wraps something,
 // and that something can never be inferred from a routing table it is absent

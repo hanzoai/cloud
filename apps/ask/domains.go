@@ -10,7 +10,7 @@ package ask
 //
 // EVERY DOMAIN IS A PLANE CALL, and that is the whole correction this file
 // carries. /v1/ask ships as its own plugin binary (plugin/ask/main.go mounts
-// ask.Mount and nothing else), so the pod runs the advisor and every domain it
+// ask.Use and nothing else), so the pod runs the advisor and every domain it
 // asks as separate pids. The first contributor read its figures by replaying an
 // HTTP request against the advisor's OWN router — which in production holds one
 // route, /v1/ask — so the read 404'd, the gather failed, and every money

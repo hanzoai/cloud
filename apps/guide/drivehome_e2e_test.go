@@ -36,24 +36,24 @@ func mountAgenticStack(t *testing.T, ai cloud.AIClient) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := framework.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("framework.Mount: %v", err)
+	if err := framework.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("framework.Use:  %v", err)
 	}
-	if err := content.Mount(app, cloud.Deps{AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
-		t.Fatalf("content.Mount: %v", err)
+	if err := content.Use(app, cloud.Deps{AI: ai, Domain: "api.test", Env: "testnet"}); err != nil {
+		t.Fatalf("content.Use:  %v", err)
 	}
-	if err := auto.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("auto.Mount: %v", err)
+	if err := auto.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("auto.Use:  %v", err)
 	}
 	// guide with the REAL invoke client (auto.InvokeTool) — no fake tool plane.
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
-		t.Fatalf("guide.Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), AI: ai}); err != nil {
+		t.Fatalf("guide.Use:  %v", err)
 	}
 	// company: the incorporation state machine on its own per-org store, manual KYC
 	// provider (the honest default — a pass requires a reviewer decision, never a
 	// client assertion).
-	if err := company.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("company.Mount: %v", err)
+	if err := company.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("company.Use:  %v", err)
 	}
 	// Keep only the store-backed "acted" detector so a checklist read never blocks on a
 	// live analytics warehouse (the growth STAGE is driven by observe/signals, not by

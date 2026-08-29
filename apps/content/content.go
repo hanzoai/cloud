@@ -58,9 +58,9 @@ var mounted *cloud.Service[state]
 // Mount wires the content control-plane onto app. It is a "complex" mount (a package
 // global for the exported ops the connector calls), so it builds the Service value
 // directly per the cloud.Service convention.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("content.Mount: nil app")
+		return fmt.Errorf("content.Use:  nil app")
 	}
 	b := cloud.NewBase(deps, "content")
 

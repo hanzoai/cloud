@@ -18,7 +18,7 @@ import (
 //
 // IT DECLARES NO Prefixes, and that is what the rename bought. Named "zt" it
 // served neither /v1/zt nor anything under it, so the /v1/<Name> convention
-// MountPrefixes assumes covered NOTHING it registers: every request here was
+// UsePrefixes assumes covered NOTHING it registers: every request here was
 // attributed to no subsystem and any middleware installed through the scoped
 // Router landed on "/v1/zt" and never ran. The workaround was to restate the
 // manifest's routing table here. Named for the address it serves, the convention
@@ -27,7 +27,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "network",
 		Price: cloud.Free,
-		Mount: network.Mount,
+		Use:   network.Use,
 	}}, []string{"network"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

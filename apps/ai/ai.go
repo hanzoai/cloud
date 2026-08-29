@@ -13,7 +13,7 @@
 // this needs to be.
 //
 // The module is aliased because this package is also called ai: unaliased,
-// `return ai.Mount(...)` inside `func Mount` reads as recursion.
+// `return ai.Use(...)` inside `func Mount` reads as recursion.
 package ai
 
 import (
@@ -38,7 +38,7 @@ import (
 
 // The MODEL API IS THE RELAY'S REGISTRY, and it is asked rather than described.
 //
-// aimod.Mount registers one greedy `app.All("/v1/*")` — the whole model API,
+// aimod.Use registers one greedy `app.All("/v1/*")` — the whole model API,
 // ~200 routes, reaching the wire through a single wildcard. Read the router alone
 // and the published document says `/v1/{wildcard1}` and seven operations, which is
 // why no generated SDK and no MCP tool list carried chat completions: the fleet's
@@ -274,19 +274,19 @@ func countFree(ctx context.Context, u aiobject.UsageEvent) error {
 // Mount installs the money, ingest and telemetry wiring, then mounts ai. A nil
 // callback is left alone — cloud leaves one nil exactly when that subsystem
 // isn't co-resident, and the module's own fallback applies.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// The typed MCP op and hanzoai/ai's own mount both register on the concrete
 	// App, which cloud.ZipApp is the named hole for. ai's app-wide reach is
 	// DECLARED as Plugin.Global at its composition root — it is a policy fact, not
 	// something a parameter type should be able to grant on its own.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("ai.Mount: router is not a zip app — the typed op registry is unreachable")
+		return fmt.Errorf("ai.Use:  router is not a zip app — the typed op registry is unreachable")
 	}
 	// One provider, one wire. cloud.Listen installed the process-global tracer
-	// provider before MountAll; DECLARE it to ai here so ai emits every gen_ai span
+	// provider before UseAll; DECLARE it to ai here so ai emits every gen_ai span
 	// through THAT provider instead of forking its own. Without this ai's
-	// object.InitTelemetry (run inside ai.Mount, just below) finds no exporter
+	// object.InitTelemetry (run inside ai.Use, just below) finds no exporter
 	// endpoint — in-process mode sets none and Serve clears the OTLP env — and
 	// DISABLES its emit, which is exactly why the gen_ai plane was dark while
 	// cloud's own /v1/* request spans reached o11y_traces.
@@ -373,7 +373,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// completion with 503 balance_unavailable. Do not install what we cannot answer.
 	//
 	// In the cloud process the snapshot is safe by construction: installFinance runs in
-	// BuildDeps, which completes before MountAll — the ordering its own doc comment
+	// BuildDeps, which completes before UseAll — the ordering its own doc comment
 	// guarantees. The tier read below is the exception that is NOT a snapshot: cap.go
 	// resolves it per call, because a ceiling that cannot read the plan is uncapped
 	// and benign, so there is nothing to shadow by asking late.

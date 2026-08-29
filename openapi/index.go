@@ -218,7 +218,7 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 	return root, per
 }
 
-// MountIndex installs the hypermedia layer on the EDGE: the two index
+// UseIndex installs the hypermedia layer on the EDGE: the two index
 // endpoints, and the RFC 8288 links every /v1 answer carries.
 //
 // It must be composed BEFORE the subsystems are mounted. zip visits an included
@@ -235,7 +235,7 @@ func Discover(d *Document) (*Root, map[string]*Index) {
 // composes rather than sharing [serve]'s. Sharing would mean one of them holding
 // the whole decoded document alive for the life of the process, and this host is
 // the one that has been evicted for the memory it holds.
-func MountIndex(app *zip.App, subsets func() ([]Part, error)) {
+func UseIndex(app *zip.App, subsets func() ([]Part, error)) {
 	render := sync.OnceValues(func() (*rendered, error) {
 		parts, err := subsets()
 		if err != nil {
@@ -396,7 +396,7 @@ func leaf(path string) string {
 // rendered is what one compose of the fleet document leaves behind: the bodies of
 // the two index endpoints, and what the contract says about every other address.
 //
-// The document itself is dropped — see [MountIndex] — and this is deliberately
+// The document itself is dropped — see [UseIndex] — and this is deliberately
 // the small residue of it. Per address that is a method list and two booleans.
 type rendered struct {
 	doors map[string][]byte

@@ -82,7 +82,7 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 	}
 }
 
-// TestCollabRPCBridgedUnderBareMount is the regression bar for the defect that
+// TestCollabRPCBridgedUnderABareApp is the regression bar for the defect that
 // typing this route surfaced, and it is deliberately mounted with NO COMPOSER:
 // zip.New, Mount, and nothing else.
 //
@@ -98,12 +98,12 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 // The collaborator plane is the sharpest case because it is a BRANCH of
 // /v1/team, registered from a different file's group — so a 200 also proves the
 // install reaches every group team builds and not merely the one it sits beside.
-func TestCollabRPCBridgedUnderBareMount(t *testing.T) {
+func TestCollabRPCBridgedUnderABareApp(t *testing.T) {
 	t.Setenv("SERVER_SECRET", testSecret)
 	planetest.ServeIdentity(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 
@@ -116,7 +116,7 @@ func TestCollabRPCBridgedUnderBareMount(t *testing.T) {
 	code, body := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docID, bearerFor(t, acct, org),
 		map[string]any{"method": "getContent", "payload": map[string]any{}})
 	if code != http.StatusOK {
-		t.Fatalf("collab RPC under a BARE mount = %d (%s), want 200 — team.Mount does not install its own "+
+		t.Fatalf("collab RPC under a BARE mount = %d (%s), want 200 — team.Use does not install its own "+
 			"cloud.Bridge, so a typed op resolves no caller without a composer", code, body)
 	}
 }
@@ -156,8 +156,8 @@ func TestClearCookieDegraded(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	if code, body := call(t, app, http.MethodDelete, "/v1/team/account/cookie", nil, nil); code != http.StatusServiceUnavailable {

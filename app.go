@@ -126,7 +126,7 @@ func App(name string, cfg *Config, deps Deps, tools zip.Source) *zip.App {
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
 	// The edge asks the app that owns the store when it is not in this process,
 	// which in production is always: the pod boots ~25 single-app processes, so
-	// the registry projects.Mount writes is nil here. Co-resident still wins with
+	// the registry projects.Use writes is nil here. Co-resident still wins with
 	// no hop — currentResolver prefers the in-process one.
 	sites.SetFallbackResolver(planeSites{})
 	app.Use(sites.New(sites.ConfigFromEnv(cfg.Domain), luxlog.Default()).Middleware())

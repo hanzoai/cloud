@@ -2,7 +2,7 @@
 //
 // One Go binary mounts every Hanzo-native subsystem (iam, base, kms,
 // commerce, ai, gateway, o11y, vfs, mq, dns, amqp, mcp, ...) via the
-// canonical Mount(app cloud.Router, deps cloud.Deps) error contract. Brand,
+// canonical Use(app cloud.Router, deps cloud.Deps) error contract. Brand,
 // enabled subsystems, and org scope are deployment configuration; the
 // binary is the same artifact across every white-label deployment.
 //
@@ -22,7 +22,7 @@ import (
 )
 
 // Deps is the shared dependency surface passed to every subsystem's
-// Mount(app, deps) function. Subsystems consume only what they need.
+// Use(app, deps) function. Subsystems consume only what they need.
 //
 // In-process: each Client below resolves to a direct Go method-call
 // implementation. Out-of-process (legacy split deploys): the same Client

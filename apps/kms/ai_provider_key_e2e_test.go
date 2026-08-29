@@ -44,7 +44,7 @@ func TestAIProviderKeySealsAndResolvesEndToEnd(t *testing.T) {
 		t.Fatal("deps.KMS is nil; expected the in-process client")
 	}
 
-	// Exactly what ai.Mount does when cloud mounts it.
+	// Exactly what ai.Use does when cloud mounts it.
 	aiobject.SetSecretStore(deps.KMS)
 	t.Cleanup(func() { aiobject.SetSecretStore(nil) })
 

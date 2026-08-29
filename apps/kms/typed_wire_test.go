@@ -86,8 +86,8 @@ func broker(t *testing.T) *zip.App {
 		t.Fatalf("New: %v", err)
 	}
 	t.Cleanup(func() { _ = c.Close() })
-	if err := Mount(app, cloud.Deps{KMS: c, Brand: "hanzo", IAMIssuer: "https://hanzo.id/"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{KMS: c, Brand: "hanzo", IAMIssuer: "https://hanzo.id/"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }
@@ -853,8 +853,8 @@ func TestHealthFailsClosedWithBothStatuses(t *testing.T) {
 	// No in-process client at all: health-only mode, which must SAY so rather
 	// than pretend to host secrets it cannot open.
 	bare := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := Mount(bare, cloud.Deps{Brand: "hanzo"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(bare, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	status, body = ask(t, bare, http.MethodGet, "/v1/kms/health", "", false, "")
 	if status != http.StatusServiceUnavailable {

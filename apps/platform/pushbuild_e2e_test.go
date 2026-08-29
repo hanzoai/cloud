@@ -13,7 +13,7 @@ package platform
 // cloud.OnGitPush) so a regression on either side, or in the global inversion
 // point between them, fails here.
 //
-// Wiring mirrors platform.Mount exactly: the forge is mounted on its own live
+// Wiring mirrors platform.Use exactly: the forge is mounted on its own live
 // server (its own store, its own Domain-derived clone URL); the platform Service
 // registers buildFromPush as the cloud.PushBuilder; the two subsystems share
 // NOTHING but the cloud globals and a matching clone URL — the same decoupling
@@ -99,7 +99,7 @@ func TestPushToForgeEnqueuesBuild(t *testing.T) {
 	const gitHost = "git.hanzo.ai"
 
 	// 1. Platform Service over a READY fake cluster, and register the REAL push
-	//    builder exactly as platform.Mount does. This is the one production client.
+	//    builder exactly as platform.Use does. This is the one production client.
 	_, s := mountSvcK8s(t, fakeK8s())
 	prev := selfGitHost
 	selfGitHost = gitHost
@@ -113,8 +113,8 @@ func TestPushToForgeEnqueuesBuild(t *testing.T) {
 	//    port so it never collides with :2222.
 	t.Setenv("GIT_SSH_ADDR", "127.0.0.1:0")
 	gitApp := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := gitforge.Mount(gitApp, cloud.Deps{DataDir: t.TempDir(), Domain: gitHost}); err != nil {
-		t.Fatalf("git.Mount: %v", err)
+	if err := gitforge.Use(gitApp, cloud.Deps{DataDir: t.TempDir(), Domain: gitHost}); err != nil {
+		t.Fatalf("git.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = gitforge.Shutdown() })
 	base := e2eLiveServer(t, gitApp)

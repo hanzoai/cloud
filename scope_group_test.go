@@ -77,20 +77,20 @@ func patterns(t *testing.T, app *zip.App) []string {
 func TestGroupWithLaterUseComposes(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "avatar", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "avatar", Use: func(r cloud.Router, _ cloud.Deps) error {
 			g := r.Group("/v1/avatar") // no middleware yet — the group is bare
 			g.Use(zip.H(deny))         // …and it arrives here, after the fact
 			// Through ZipApp: the ROOT. Nothing lands under the group node.
 			zip.Get(cloud.ZipApp(r), "/v1/avatar/me", okOp)
 			return nil
 		}},
-		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "neighbour", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	// THE assertion. Build is Listen without the sockets: same walk, same
@@ -125,7 +125,7 @@ func TestGroupWithLaterUseComposes(t *testing.T) {
 func TestGroupPrefixesWhatRegistersThroughIt(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "bots", Prefixes: []string{"/v1"}, Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "bots", Prefixes: []string{"/v1"}, Use: func(r cloud.Router, _ cloud.Deps) error {
 			v1 := r.Group("/v1")
 			zip.Get(v1, "/bots", okOp)         // typed: through OpScope
 			v1.Get("/bots/plain", pong)        // untyped: through the route method
@@ -135,7 +135,7 @@ func TestGroupPrefixesWhatRegistersThroughIt(t *testing.T) {
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	want := []string{
@@ -158,27 +158,27 @@ func TestGroupPrefixesWhatRegistersThroughIt(t *testing.T) {
 	}
 }
 
-// TestGroupUseOutsideThePrefixesFailsTheMount is confinement through the router
+// TestGroupUseOutsideThePrefixesIsRefused is confinement through the router
 // Group returned. scope_test.go already covers `r.Group(p, mw)` — middleware
 // passed INTO Group. This is the other spelling, `g := r.Group(p); g.Use(mw)`,
 // which is the one that used to bypass confinement entirely by handing back the raw
 // router. Nothing is installed and the mount fails, so the binary refuses to
 // boot half-wrapped rather than serving under a stranger's middleware.
-func TestGroupUseOutsideThePrefixesFailsTheMount(t *testing.T) {
+func TestGroupUseOutsideThePrefixesIsRefused(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "neighbour", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
 		}},
-		{Name: "greedy", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "greedy", Use: func(r cloud.Router, _ cloud.Deps) error {
 			g := r.Group("/v1/neighbour") // legal: a prefix is just a path
 			g.Use(zip.H(deny))            // NOT legal: it reaches where greedy may not
 			return nil
 		}},
 	})
 	if err == nil {
-		t.Fatal("MountAll succeeded — greedy wrapped a neighbour's subtree without declaring it")
+		t.Fatal("UseAll succeeded — greedy wrapped a neighbour's subtree without declaring it")
 	}
 	if !strings.Contains(err.Error(), "/v1/neighbour") {
 		t.Errorf("error does not name the escape: %v", err)
@@ -201,7 +201,7 @@ func TestGroupUseOutsideThePrefixesFailsTheMount(t *testing.T) {
 func TestBareGroupOutsideThePrefixesIsAllowed(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "thing", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "thing", Use: func(r cloud.Router, _ cloud.Deps) error {
 			elsewhere := r.Group("/v1/somewhere") // outside /v1/thing, and fine
 			elsewhere.Get("/:id/thing", pong)
 			r.Get("/v1/thing", pong)
@@ -209,7 +209,7 @@ func TestBareGroupOutsideThePrefixesIsAllowed(t *testing.T) {
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v — a bare group outside the prefixes is a path, not middleware", err)
+		t.Fatalf("UseAll: %v — a bare group outside the prefixes is a path, not middleware", err)
 	}
 	if got := patterns(t, app); len(got) != 2 || got[0] != "GET /v1/somewhere/:id/thing" || got[1] != "GET /v1/thing" {
 		t.Errorf("routes = %v, want the two the subsystem registered", got)

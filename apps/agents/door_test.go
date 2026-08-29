@@ -107,7 +107,7 @@ func fleetDoor(t *testing.T, at map[string]string, inside map[string]string) {
 		}
 		return sock, manifest.FrameworkMCPPath, nil
 	}
-	d := fleet.Mount(host, manifest.MCPPath, apps, edge)
+	d := fleet.Use(host, manifest.MCPPath, apps, edge)
 	// nil would mean the catalog THIS binary embeds, which is the real fleet's —
 	// it does not carry these children, so the MCP server would list nothing for
 	// them and every assertion below would read as "the agent was offered 0".

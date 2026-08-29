@@ -816,8 +816,8 @@ func TestIAMError_SurfacedNotFabricated(t *testing.T) {
 
 // TestMount_NilGuards keeps the Mount contract honest (nil app / nil logger).
 func TestMount_NilGuards(t *testing.T) {
-	if err := Mount(nil, cloud.Deps{}); err == nil {
-		t.Error("Mount(nil app) must error")
+	if err := Use(nil, cloud.Deps{}); err == nil {
+		t.Error("Use(nil app) must error")
 	}
 }
 

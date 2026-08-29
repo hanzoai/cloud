@@ -20,7 +20,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "zen",
 		Price: cloud.Metered,
-		Mount: zen.Mount,
+		Use:   zen.Use,
 		// WHAT ZEN GATES, WHICH IS NOT WHAT ZEN ROUTES. These are two facts and
 		// this repo has one field for each: manifest.App.Prefixes is "the absolute
 		// paths it answers" (the host's routing table) and cloud.Plugin.Prefixes is
@@ -30,7 +30,7 @@ func main() {
 		// router — so its manifest row correctly states no prefix. This read that
 		// row (manifest.PrefixesFor("zen") == nil) and fed a ROUTING answer to a
 		// MIDDLEWARE question, so the scope zen got owned only the conventional
-		// "/v1/zen"; installing the Claim on "/v1" then escaped it and MountAll
+		// "/v1/zen"; installing the Claim on "/v1" then escaped it and UseAll
 		// refused the mount outright. Braiding the two is what broke it: dropping
 		// "/v1" from the manifest row was right for routing (it duplicated ai's
 		// claim) and silently revoked the gate.

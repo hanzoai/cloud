@@ -316,7 +316,7 @@ func grantDeposit(c *zip.Ctx, org, subject, currency, notes, tag, source string,
 		return before, id, after, afterExact, nil
 	}
 	// Split deploy: the credit ledger is not in THIS process, which is the ORDINARY case
-	// and not a gap. Apps are their own binaries, so commerce.Mount — and with it the
+	// and not a gap. Apps are their own binaries, so commerce.Use — and with it the
 	// injected credit ledger and finance.Current — runs in the commerce process alone;
 	// creditledger.Get() above is permanently nil in admin's. So ASK the process that
 	// owns the books, by name, over the internal plane.

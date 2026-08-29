@@ -389,7 +389,7 @@ func TestAQueryThatCannotBeParsedNeverBegins(t *testing.T) {
 // does not prove is a successful authenticated call: that needs a credential the
 // child validates, which is IAM's boundary and not this endpoint's.
 func TestTheDoorReachesARealPluginOverItsSocket(t *testing.T) {
-	kid := darkChild(t, "graph", graph.Mount)
+	kid := darkChild(t, "graph", graph.Use)
 	g := doorTo(t, "graph", kid.addr)
 
 	res := run(t, g, `{ graphVocabulary { relations } }`, nil)

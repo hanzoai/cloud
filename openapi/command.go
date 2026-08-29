@@ -91,7 +91,7 @@ type catalog struct {
 // The command list is itself a command — the same self-description [Path] has,
 // and for the same reason: it is the one operation with no owning subsystem, so
 // nothing else would ever declare it. In an init rather than in serveCommands
-// because serve runs once per document source (Mount and MountFleet) and
+// because serve runs once per document source (Mount and UseFleet) and
 // Describe refuses a duplicate.
 func init() {
 	Describe(CommandPath, http.MethodGet,

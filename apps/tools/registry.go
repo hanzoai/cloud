@@ -93,7 +93,7 @@ func (r *Registry) Register(p Provider) {
 	r.providers = append(r.providers, p)
 }
 
-// SetActivation installs the activation store (called by tools.Mount once DataDir
+// SetActivation installs the activation store (called by tools.Use once DataDir
 // is known). A nil store fails every dispatch closed (nothing is activated).
 func (r *Registry) SetActivation(a *ActivationStore) {
 	r.mu.Lock()

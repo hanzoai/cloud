@@ -439,8 +439,8 @@ func newAppMCP(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	// zip installs /mcp in prepare(), which Listen would call; a Fiber().Test app
 	// never listens. Once-guarded, so calling it here is safe.

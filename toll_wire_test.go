@@ -56,7 +56,7 @@ func shapes(r cloud.Router) []string {
 
 // TestTheRuleReachesEveryOperationTheProgramServes.
 //
-// Mounted through cloud.MountAll — the same call Listen makes, building the same
+// Mounted through cloud.UseAll — the same call Listen makes, building the same
 // router a subsystem is handed — so the composition under test is the program's
 // own and not a model of it.
 //
@@ -69,12 +69,12 @@ func TestTheRuleReachesEveryOperationTheProgramServes(t *testing.T) {
 	app := newApp()
 	var declared []string
 	if err := mountAll(t, app, []cloud.Plugin{
-		{Name: "probe", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "probe", Use: func(r cloud.Router, _ cloud.Deps) error {
 			declared = shapes(r)
 			return nil
 		}},
 	}); err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	// The rule, installed the way serve.go installs it: once, on the program,
@@ -116,9 +116,9 @@ func TestTheRuleReachesEveryOperationTheProgramServes(t *testing.T) {
 func TestEveryOperationIsUnderTheRule(t *testing.T) {
 	app := newApp()
 	if err := mountAll(t, app, []cloud.Plugin{
-		{Name: "probe", Mount: func(r cloud.Router, _ cloud.Deps) error { shapes(r); return nil }},
+		{Name: "probe", Use: func(r cloud.Router, _ cloud.Deps) error { shapes(r); return nil }},
 	}); err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	seen := map[string]bool{}
 	app.Authorize(func(_ context.Context, op zip.Op, _ any) error {
@@ -192,16 +192,16 @@ func TestTheProgramArmsItsRule(t *testing.T) {
 		cloud.Deps{Metering: led.Client(t)}, nil)
 	free := func(ctx context.Context, _ *none) (*ok, error) { return &ok{OK: true}, nil }
 	if err := mountAll(t, app, []cloud.Plugin{
-		{Name: "probe", Price: 500, Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "probe", Price: 500, Use: func(r cloud.Router, _ cloud.Deps) error {
 			zip.Post(r, "/v1/probe/run", free, zip.WithOperationID("probe_run"))
 			return nil
 		}},
-		{Name: "audit", Price: cloud.Free, Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "audit", Price: cloud.Free, Use: func(r cloud.Router, _ cloud.Deps) error {
 			zip.Post(r, "/v1/audit/write", free, zip.WithOperationID("audit_write"))
 			return nil
 		}},
 	}); err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	if err := app.Build(); err != nil {
 		t.Fatalf("Build: %v", err)
@@ -269,9 +269,9 @@ func TestTheInternalPlaneIsOutsideThePricedSurface(t *testing.T) {
 	// is the composition root's, so it is declared the way a program declares one.
 	cloud.ResetPlane()
 	if err := mountAll(t, newApp(), []cloud.Plugin{
-		{Name: "probe", Price: 500, Mount: func(cloud.Router, cloud.Deps) error { return nil }},
+		{Name: "probe", Price: 500, Use: func(cloud.Router, cloud.Deps) error { return nil }},
 	}); err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	zip.Post(cloud.Plane(), "/v1/probe/run", free, zip.WithOperationID("plane_priced"))
 	if _, err := cloud.ServePlane("probeplane2", nil); err == nil {

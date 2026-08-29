@@ -32,9 +32,9 @@ import (
 // subsystems compose without collision. It is a TYPED op — one registry entry
 // from which the REST route, the OpenAPI operation, the MCP tool, the CLI
 // command and every generated SDK method follow.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("connectorruntime.Mount: nil app")
+		return fmt.Errorf("connectorruntime.Use:  nil app")
 	}
 	log := luxlog.Default()
 	g := app.Group("/v1/auto/connectors")

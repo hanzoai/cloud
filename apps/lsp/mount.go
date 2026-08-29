@@ -36,12 +36,12 @@ type state struct {
 }
 
 // Mount wires /v1/lsp onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("lsp.Mount: nil app")
+		return fmt.Errorf("lsp.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("lsp.Mount: empty DataDir")
+		return fmt.Errorf("lsp.Use:  empty DataDir")
 	}
 	s := &state{Base: cloud.NewBase(deps, "lsp"), daemon: newDaemon()}
 

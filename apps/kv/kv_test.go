@@ -39,7 +39,7 @@ const wireTimeout = 15 * time.Second
 
 // mount brings up the plane and this subsystem over it, on ONE app.
 //
-// It calls pubsub.Mount for the server rather than reaching for a fake, and
+// It calls pubsub.Use for the server rather than reaching for a fake, and
 // that is the composition the fleet ships minus a process boundary: one embedded
 // node, one connection, two subsystems. See TestRidesThePlaneFromItsOwnBinary for
 // the other half — the same subsystem with the plane on the far side of a socket.
@@ -50,12 +50,12 @@ func mount(t *testing.T) *zip.App {
 	t.Setenv("CLOUD_PUBSUB_STORE_DIR", t.TempDir())
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := pubsub.Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("pubsub.Mount: %v", err)
+	if err := pubsub.Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("pubsub.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = pubsub.Shutdown(context.Background()) })
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }
@@ -234,8 +234,8 @@ func TestRidesThePlaneFromItsOwnBinary(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_PORT", "") // and no server of its own to fall back on
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = pubsub.Shutdown(context.Background()) })
 
@@ -255,7 +255,7 @@ func TestRidesThePlaneFromItsOwnBinary(t *testing.T) {
 	}
 }
 
-// plane starts the node DIRECTLY, not through pubsub.Mount, and returns the
+// plane starts the node DIRECTLY, not through pubsub.Use, and returns the
 // address to dial it at.
 //
 // That distinction is the whole test. Mounting would leave the server parked in
@@ -286,8 +286,8 @@ func TestBusUnreachableFailsClosed(t *testing.T) {
 	t.Setenv("CLOUD_PUBSUB_URL", "nats://127.0.0.1:1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v — mounting must not depend on the plane being up", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v — mounting must not depend on the plane being up", err)
 	}
 	t.Cleanup(func() { _ = pubsub.Shutdown(context.Background()) })
 
@@ -377,8 +377,8 @@ func TestEveryRouteIsTypedAndDescribed(t *testing.T) {
 func TestMessagingIsNotThisApps(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	for _, path := range []string{"/v1/pubsub/publish", "/v1/pubsub/request", "/v1/kv/publish/x/y"} {
 		if code, _ := send(t, app, http.MethodPost, path, "org_x", "application/json", "{}"); code != http.StatusNotFound {
@@ -391,7 +391,7 @@ func TestMessagingIsNotThisApps(t *testing.T) {
 // entry, so a router that cannot hold the registry would serve six routes with
 // no schema, no prose, no MCP tool and no SDK method. Mount fails instead.
 func TestMountRefusesARouterWithNoRegistry(t *testing.T) {
-	if err := Mount(bare{}, cloud.Deps{}); err == nil {
+	if err := Use(bare{}, cloud.Deps{}); err == nil {
 		t.Fatal("Mount accepted a router with no registry — the surface would publish nothing")
 	}
 }

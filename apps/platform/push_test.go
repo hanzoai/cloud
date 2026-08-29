@@ -26,7 +26,7 @@ func seedGitApp(t *testing.T, s *cloud.Service[state], org, slug, repoURL, branc
 
 // pushService mounts a Service over a ready fake cluster (no HTTP routes needed —
 // buildFromPush is called directly) and trusts the embedded-git apex as a build
-// source, exactly as platform.Mount does from deps.Domain.
+// source, exactly as platform.Use does from deps.Domain.
 func pushService(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	_, s := mountSvcK8s(t, fakeK8s())

@@ -67,7 +67,7 @@ func TestHealthNamesTheRegistrarsOwnCredentials(t *testing.T) {
 
 // A name no file registered is refused at MOUNT, so a deployment configured for a
 // registrar that does not exist fails to start rather than 503ing every purchase.
-func TestAnUnknownRegistrarIsRefusedAtMount(t *testing.T) {
+func TestAnUnknownRegistrarIsRefusedAtUse(t *testing.T) {
 	t.Setenv("DOMAIN_REGISTRAR", "carrier-pigeon")
 	_, err := buildState(cloud.NewBase(cloud.Deps{}, "domain"))
 	if err == nil {

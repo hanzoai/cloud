@@ -42,7 +42,7 @@ func mountAll(t *testing.T, app *zip.App, specs []cloud.Plugin) error {
 	for _, s := range specs {
 		enable = append(enable, s.Name)
 	}
-	return cloud.MountAll(app, specs,
+	return cloud.UseAll(app, specs,
 		&cloud.Config{Enable: enable},
 		cloud.Deps{})
 }
@@ -60,18 +60,18 @@ func newApp() *zip.App {
 func TestScopeConfinesUseToTheSubsystem(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "guard", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "guard", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Use(zip.H(deny))
 			r.Get("/v1/guard/whoami", pong)
 			return nil
 		}},
-		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "neighbour", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	if got := get(t, app, "/v1/neighbour/ping"); got != http.StatusOK {
@@ -89,19 +89,19 @@ func TestScopeHonoursDeclaredPrefixes(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
 		{Name: "identity", Prefixes: []string{"/v1/identity", "/login/oauth"},
-			Mount: func(r cloud.Router, _ cloud.Deps) error {
+			Use: func(r cloud.Router, _ cloud.Deps) error {
 				r.Use(zip.H(deny))
 				r.Get("/v1/identity/me", pong)
 				r.Get("/login/oauth/authorize", pong)
 				return nil
 			}},
-		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "neighbour", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	for _, p := range []string{"/v1/identity/me", "/login/oauth/authorize"} {
@@ -121,17 +121,17 @@ func TestScopeHonoursDeclaredPrefixes(t *testing.T) {
 func TestScopeRefusesMiddlewareOutsideItsPrefixes(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "neighbour", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
 		}},
-		{Name: "greedy", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "greedy", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Group("/v1", deny)
 			return nil
 		}},
 	})
 	if err == nil {
-		t.Fatal("MountAll succeeded — a subsystem gated /v1 without declaring it")
+		t.Fatal("UseAll succeeded — a subsystem gated /v1 without declaring it")
 	}
 	if got := get(t, app, "/v1/neighbour/ping"); got != http.StatusOK {
 		t.Errorf("neighbour = %d, want 200 — the refused middleware was installed anyway", got)
@@ -143,7 +143,7 @@ func TestScopeRefusesMiddlewareOutsideItsPrefixes(t *testing.T) {
 func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "vault", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "vault", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Group("/v1/vault/auth", deny)
 			r.Get("/v1/vault/auth/login", pong)
 			r.Get("/v1/vault/status", pong)
@@ -151,7 +151,7 @@ func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	if got := get(t, app, "/v1/vault/auth/login"); got != http.StatusUnauthorized {
 		t.Errorf("vault auth = %d, want 401", got)
@@ -170,17 +170,17 @@ func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 func TestGlobalIsTheOnlyAppWideDoor(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "edge", Global: true, Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "edge", Global: true, Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Use(zip.H(deny))
 			return nil
 		}},
-		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "neighbour", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	if got := get(t, app, "/v1/neighbour/ping"); got != http.StatusUnauthorized {
 		t.Errorf("neighbour = %d, want 401 — Global middleware must still reach every route", got)
@@ -202,13 +202,13 @@ func TestScopedRouterReportsHostPlugins(t *testing.T) {
 
 	var seen []zip.Status
 	err = mountAll(t, app, []cloud.Plugin{
-		{Name: "board", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "board", Use: func(r cloud.Router, _ cloud.Deps) error {
 			seen = r.Plugins() // a scope, not the bare app
 			return nil
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	if len(seen) != 1 || seen[0].Name != "remote" {
 		t.Fatalf("scoped Plugins() = %+v, want the host's one plugin", seen)

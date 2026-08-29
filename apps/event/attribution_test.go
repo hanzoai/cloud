@@ -302,13 +302,13 @@ func TestAttributeProjectIsPureAndTotal(t *testing.T) {
 	}
 }
 
-// TestTheKeyDoorNeedsNoMount: the cross-process resolver is the package DEFAULT, so
+// TestTheKeyDoorNeedsNoComposition: the cross-process resolver is the package DEFAULT, so
 // every binary that links this package resolves a project key — the one that mounts
 // analytics and the one that only calls Admit (apps/integrations serves the
 // OpenRouter webhook). While a Mount installed it, a key resolved in one process and
 // named nothing in the next, and no behavioural test inside this package could see
 // that, because the package is correct either way. So the default itself is asserted.
-func TestTheKeyDoorNeedsNoMount(t *testing.T) {
+func TestTheKeyDoorNeedsNoComposition(t *testing.T) {
 	if _, ok := bootKeys.(planeKeys); !ok {
 		t.Fatalf("a process that mounts nothing resolves keys through %T, not the plane; "+
 			"every project key it is handed would name no org", bootKeys)

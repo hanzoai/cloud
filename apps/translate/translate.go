@@ -169,12 +169,12 @@ func storeFor(s *cloud.Service[*state], org string) (*memory, error) {
 // Mount wires the /v1/translate surface: the quality engine over the model plane
 // deps.AI already gates and meters, and the bulk engine over the MADLAD backend
 // named by TRANSLATE_BULK_URL (unset ⇒ the tier answers 503).
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("translate.Mount: nil app")
+		return fmt.Errorf("translate.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("translate.Mount: empty deps.DataDir")
+		return fmt.Errorf("translate.Use:  empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "translate")
 	mounted = &state{

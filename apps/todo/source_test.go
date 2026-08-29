@@ -299,12 +299,12 @@ func mountForge(t *testing.T, f *stubForge) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	sharedKey(t)
-	err := Mount(app, cloud.Deps{
+	err := Use(app, cloud.Deps{
 		DataDir: t.TempDir(),
 		KMS:     kmsStub{token: f.token},
 	})
 	if err != nil {
-		t.Fatalf("Mount: %v", err)
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	return app
@@ -1261,13 +1261,13 @@ func mountForgeBranded(t *testing.T, f *stubForge, brand string) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	sharedKey(t)
-	err := Mount(app, cloud.Deps{
+	err := Use(app, cloud.Deps{
 		DataDir: t.TempDir(),
 		Brand:   brand,
 		KMS:     kmsStub{token: f.token},
 	})
 	if err != nil {
-		t.Fatalf("Mount: %v", err)
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	return app

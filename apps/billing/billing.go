@@ -129,8 +129,8 @@ type state struct {
 // minted. Whether this process holds that key is not asked here: the catalog read
 // at /v1/billing/plans is public and answers no token at all, so a key question
 // gets between an anonymous caller and a price list it does not need.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "billing", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "billing", build, routes)
 }
 
 // build constructs the billing state: the commerce S2S proxy from its env

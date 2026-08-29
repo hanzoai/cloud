@@ -57,7 +57,7 @@ const startupProbe = 3 * time.Second
 var broker *protocol.Broker
 
 // Mount starts the embedded Kafka adaptor over the embedded JetStream.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "kafka")
 
 	port, err := envInt("CLOUD_KAFKA_PORT", 9092)
@@ -89,9 +89,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	select {
 	case serveErr := <-errc:
 		if serveErr != nil {
-			return fmt.Errorf("kafka.Mount: broker serve (fail-closed): %w", serveErr)
+			return fmt.Errorf("kafka.Use:  broker serve (fail-closed): %w", serveErr)
 		}
-		return fmt.Errorf("kafka.Mount: broker exited immediately (fail-closed)")
+		return fmt.Errorf("kafka.Use:  broker exited immediately (fail-closed)")
 	case <-time.After(startupProbe):
 	}
 
@@ -128,7 +128,7 @@ func envInt(k string, def int) (int, error) {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return 0, fmt.Errorf("kafka.Mount: bad %s %q: %w", k, v, err)
+		return 0, fmt.Errorf("kafka.Use:  bad %s %q: %w", k, v, err)
 	}
 	return n, nil
 }

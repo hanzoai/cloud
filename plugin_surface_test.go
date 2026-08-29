@@ -43,15 +43,15 @@ type spec struct {
 	name       string   // cloud.Plugin.Name
 	ownsHealth bool     // cloud.Plugin.OwnsHealth
 	prefixes   []string // cloud.Plugin.Prefixes, as declared (nil = the /v1/<name> default)
-	global     bool     // App instead of Mount: the whole binary, bounded by nothing
+	global     bool     // App instead of Use:  the whole binary, bounded by nothing
 	paths      []string // every address the projection says this dir's program answers
 }
 
-// owns is production's rule, not a copy of it: MountPrefixes fills the
+// owns is production's rule, not a copy of it: UsePrefixes fills the
 // /v1/<name> default, and `under` is the same subtree test scope.go applies to
 // every request.
 func (s spec) owns(path string) bool {
-	for _, p := range cloud.MountPrefixes(s.name, s.prefixes) {
+	for _, p := range cloud.UsePrefixes(s.name, s.prefixes) {
 		if under(path, p) {
 			return true
 		}
@@ -273,7 +273,7 @@ func TestHealthOwnershipMatchesWhatIsRegistered(t *testing.T) {
 // TestDeclaredPrefixesCoverTheSurface is the other release cycle. label answers
 // /v1/risk/labels and team answers /collaborator, and neither main said so — so
 // scope defaulted both to the /v1/<name> convention, every group they built sat
-// outside the subtrees they owned, and MountAll refused their mounts.
+// outside the subtrees they owned, and UseAll refused their mounts.
 //
 // THE ASSERTION IS ONE-DIRECTIONAL, AND THE DIRECTION MATTERS. It says every
 // route the app registers is under a prefix it owns. It does NOT say the
@@ -286,14 +286,14 @@ func TestHealthOwnershipMatchesWhatIsRegistered(t *testing.T) {
 //
 // It reads a PROJECTION, and a projection holds addresses. Middleware has no
 // address, so no projection can see where a subsystem installed any — which is
-// the fact MountAll actually refuses on. This therefore checks the half a
+// the fact UseAll actually refuses on. This therefore checks the half a
 // document can answer: A DECLARATION IS A CLAIM, AND A CLAIM MUST BE TRUE. A
 // main that writes `Prefixes:` and names less than it serves has written a
 // falsehood, and this finds it before a build.
 //
 // The other half — a main that declares NOTHING, takes the /v1/<name> default,
 // and serves somewhere else — is decided by running the binary, because that is
-// where middleware exists: MountAll refuses the mount and the process dies at
+// where middleware exists: UseAll refuses the mount and the process dies at
 // boot. `make compose` is that check and it covers all 120 apps. Restating it
 // here from a document would be a worse copy of a check that already runs.
 //
@@ -301,7 +301,7 @@ func TestHealthOwnershipMatchesWhatIsRegistered(t *testing.T) {
 // receives the bare app because it means to reach the whole binary, and that
 // grant is stated in its main where a reviewer reads it. There is no prefix to
 // be under, so this rule is silent about it — and stays silent by DERIVATION,
-// off the same field MountAll switches on.
+// off the same field UseAll switches on.
 func TestDeclaredPrefixesCoverTheSurface(t *testing.T) {
 	byDir := map[string][]spec{}
 	for _, s := range specs(t) {
@@ -328,12 +328,12 @@ func TestDeclaredPrefixesCoverTheSurface(t *testing.T) {
 			var have []string
 			for _, s := range ss {
 				owned = owned || s.owns(p)
-				have = append(have, cloud.MountPrefixes(s.name, s.prefixes)...)
+				have = append(have, cloud.UsePrefixes(s.name, s.prefixes)...)
 			}
 			if !owned {
 				t.Errorf("plugin/%s/main.go grants %s and the app serves %s, which is under "+
 					"none of them — its middleware installs on the grant and can never run "+
-					"here, and the day it builds a group at this path MountAll refuses the "+
+					"here, and the day it builds a group at this path UseAll refuses the "+
 					"mount. The grant in that file is a claim, and it is not true.",
 					dir, strings.Join(have, ", "), p)
 			}

@@ -215,8 +215,8 @@ type state struct {
 //	            charges nothing and the debit below is the whole charge — a
 //	            promise this package keeps in run().
 //	logs        cloud.NewBase gives the scoped luxlog.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "seo", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "seo", build, routes)
 }
 
 func build(b cloud.Base) (*state, error) {

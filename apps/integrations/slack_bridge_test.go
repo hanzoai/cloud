@@ -18,7 +18,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The bridge routes are registered by the real integrations.Mount (via newApp),
+// The bridge routes are registered by the real integrations.Use (via newApp),
 // so tests drive them directly — no test-only route wiring.
 
 // slackSign computes Slack's v0 request signature over (timestamp, rawBody).

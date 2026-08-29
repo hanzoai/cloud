@@ -48,22 +48,22 @@ var mounted *cloud.Service[state]
 //
 // The uniform /v1/team/health liveness route is provided by the compose root
 // (serve.go registers GET /v1/<name>/health for every enabled subsystem BEFORE
-// MountAll, HIP-0106) — the SAME contract apps/todo, apps/crm and
+// UseAll, HIP-0106) — the SAME contract apps/todo, apps/crm and
 // clients/agents rely on. Mount does NOT re-register it (a second identical route
 // is dead — Fiber matches the first-registered — and violates one-way).
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("team.Mount: nil app")
+		return fmt.Errorf("team.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "team")
 	if deps.DataDir == "" {
-		return fmt.Errorf("team.Mount: empty DataDir")
+		return fmt.Errorf("team.Use:  empty DataDir")
 	}
 	root := filepath.Join(deps.DataDir, "team")
 
 	accounts, err := openAccountStore(root)
 	if err != nil {
-		return fmt.Errorf("team.Mount: open account store: %w", err)
+		return fmt.Errorf("team.Use:  open account store: %w", err)
 	}
 
 	// The rosters move to IAM. It runs here rather than in a job because it must
@@ -83,7 +83,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// route is guarded to 503 and NO token is ever decoded/accepted, so a forged
 	// token cannot be used — while Mount still SUCCEEDS so the cloud binary and all
 	// other subsystems stay up (mirrors clients/kms; erroring here would fail the
-	// whole MountAll). /v1/team/health (serve.go's uniform contract) is unaffected.
+	// whole UseAll). /v1/team/health (serve.go's uniform contract) is unaffected.
 	degraded := resolveSecret(&cfg, log)
 
 	// guard wraps a handler so it 503s in degraded mode. Applied per-route (NEVER to

@@ -15,7 +15,7 @@ import (
 // deliberate. ai keeps its own for its WRITE path; this one serves cloud's read
 // path. The reason cloud cannot just call ai's: aiobject.EnsureCloudUsageTable
 // execs through object.DatastoreExec, whose connection is opened only by
-// object.InitDatastore, which runs only inside aimod.Mount. None of
+// object.InitDatastore, which runs only inside aimod.Use. None of
 // cmd/{analytics,ask,evals,leaderboard,link,usage} link the ai module,
 // so that call ALWAYS returned "datastore: not connected" and every caller
 // silently took its failure branch — an honest-empty dashboard on a warehouse

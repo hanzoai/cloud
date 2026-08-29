@@ -11,7 +11,7 @@
 // decodes.
 //
 // The subsystem is decomposed into a shared kernel (clients/admin/core) plus one package
-// per handler domain (audit/customer/revenue/finance). This file is the Mount: it builds
+// per handler domain (audit/customer/revenue/finance). This file is the Use:  it builds
 // the ONE core.State from Deps, then registers each domain's routes alongside the
 // top-level reads (me/overview/orgs/users/usage/roles/applications/products/compute/o11y/
 // analytics/bases + the flags/waitlist control plane).
@@ -72,16 +72,16 @@ import (
 //
 // The state is built from Deps fields NOT on cloud.Base (deps.Audit, deps.IAMIssuer), so
 // it constructs the cloud.Service value directly (cloud.NewBase + &cloud.Service[core.State]{…})
-// rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("admin.Mount: nil app")
+		return fmt.Errorf("admin.Use:  nil app")
 	}
 	// Every route here is a typed op, and the op registry lives on the App. A Router
 	// that is not one cannot carry this surface, so the mount fails rather than
 	// registering routes no projection would know about.
 	if cloud.ZipApp(app) == nil {
-		return fmt.Errorf("admin.Mount: %T does not expose the typed-op registry", app)
+		return fmt.Errorf("admin.Use:  %T does not expose the typed-op registry", app)
 	}
 	b := cloud.NewBase(deps, "admin")
 	s := &cloud.Service[core.State]{

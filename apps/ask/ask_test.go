@@ -153,8 +153,8 @@ func newAskApp(t *testing.T, ai types.AIClient, books, projects byOrg, repos byR
 	stubInventory(t, repos)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	if err := Mount(app, cloud.Deps{DataDir: filepath.Join(dir, "data"), AI: ai}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: filepath.Join(dir, "data"), AI: ai}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

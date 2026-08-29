@@ -61,12 +61,12 @@ func storeFor(stores *cloud.OrgStore[*Store], org string) (*Store, error) {
 
 // Mount wires /v1/guide/* onto app. Complex flavour (a package global for Shutdown
 // + a per-org OrgStore), so it constructs the Service value directly.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("guide.Mount: nil app")
+		return fmt.Errorf("guide.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("guide.Mount: empty DataDir")
+		return fmt.Errorf("guide.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "guide")
 	stores := cloud.NewOrgStore(b, "guide", openStore)
@@ -77,12 +77,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// authoritative; the embedded fixture is only the seed source + fail-safe fallback.
 	blueprints, err := openBlueprintStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("guide.Mount: open blueprint store: %w", err)
+		return fmt.Errorf("guide.Use:  open blueprint store: %w", err)
 	}
 	seeded, err := seedBlueprints(context.Background(), blueprints)
 	if err != nil {
 		_ = blueprints.Close()
-		return fmt.Errorf("guide.Mount: seed blueprints: %w", err)
+		return fmt.Errorf("guide.Use:  seed blueprints: %w", err)
 	}
 
 	s := &cloud.Service[state]{Base: b, State: state{

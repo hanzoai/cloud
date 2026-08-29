@@ -102,8 +102,8 @@ func runChild(role string) int {
 			return childFail("kms.New: %v", err)
 		}
 		deps.KMS = k
-		if err := wallet.Mount(app, deps); err != nil {
-			return childFail("wallet.Mount: %v", err)
+		if err := wallet.Use(app, deps); err != nil {
+			return childFail("wallet.Use:  %v", err)
 		}
 		id, err := seedWallet(app, sellerOrg)
 		if err != nil {
@@ -120,15 +120,15 @@ func runChild(role string) int {
 		if err != nil {
 			return childFail("metering.New: %v", err)
 		}
-		// commerce.Mount publishes the ledger ops before it validates its HTTP
+		// commerce.Use publishes the ledger ops before it validates its HTTP
 		// dependencies, which is stated at its definition — so this process serves
 		// the real finance_record / finance_credit handlers against the real ledger
 		// without also standing up a payments provider it will never be asked for.
-		_ = commerce.Mount(app, cloud.Deps{DataDir: dir, Metering: meter})
+		_ = commerce.Use(app, cloud.Deps{DataDir: dir, Metering: meter})
 
 	case "marketplace":
-		if err := Mount(app, deps); err != nil {
-			return childFail("marketplace.Mount: %v", err)
+		if err := Use(app, deps); err != nil {
+			return childFail("marketplace.Use:  %v", err)
 		}
 		if err := seedListing(mounted.State.store, os.Getenv("CLOUD_SPLIT_WALLET")); err != nil {
 			return childFail("seed listing: %v", err)
@@ -137,8 +137,8 @@ func runChild(role string) int {
 	case "x402":
 		// No metering client, no ledger, no wallet store, no price table — the
 		// shipped x402 binary exactly. Everything it needs, it asks for.
-		if err := x402.Mount(app, deps); err != nil {
-			return childFail("x402.Mount: %v", err)
+		if err := x402.Use(app, deps); err != nil {
+			return childFail("x402.Use:  %v", err)
 		}
 
 	default:
@@ -287,8 +287,8 @@ func splitFleet(t *testing.T) *fleet {
 	log := luxlog.New("tools")
 	f.app = zip.New(zip.Config{Logger: log})
 	f.app.Use(cloud.Bridge())
-	if err := tools.Mount(f.app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("tools.Mount: %v", err)
+	if err := tools.Use(f.app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("tools.Use:  %v", err)
 	}
 	tools.Default().Register(&fakeProvider{tools: []tools.Tool{
 		{Name: pricedTool, Source: tools.SourceConnector, Dispatchable: true},

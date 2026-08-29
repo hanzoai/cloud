@@ -63,7 +63,7 @@ const (
 	// ConfigMap add/remove/schedule-change to take effect.
 	reconcileEvery = "*/5 * * * *"
 	// engineWait bounds how long Mount's background starter waits for
-	// cloud.EmbeddedTasks (wired after MountAll) before giving up.
+	// cloud.EmbeddedTasks (wired after UseAll) before giving up.
 	engineWait = 5 * time.Minute
 )
 
@@ -78,11 +78,11 @@ func org() string {
 }
 
 // Mount registers the durable platform cron. The engine is wired after
-// MountAll (durable.go), so the actual start happens in a bounded background
+// UseAll (durable.go), so the actual start happens in a bounded background
 // wait; until then nothing is scheduled. Fail-soft: no engine or no k8s API
 // leaves the subsystem idle (ConfigMap-less environments simply have zero
 // entries), never blocks boot.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "cron")
 	go start(context.Background(), log)
 	return nil
@@ -153,7 +153,7 @@ func start(ctx context.Context, log luxlog.Logger) {
 		"org", org(), "namespace", namespace, "queue", taskQueue, "reconcile", reconcileEvery)
 }
 
-// waitEngine polls for the shared engine wired by serve.go after MountAll.
+// waitEngine polls for the shared engine wired by serve.go after UseAll.
 func waitEngine(ctx context.Context) *tasksengine.Embedded {
 	deadline := time.Now().Add(engineWait)
 	for {

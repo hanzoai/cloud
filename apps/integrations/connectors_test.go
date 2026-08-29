@@ -160,8 +160,8 @@ func newLogApp(t *testing.T, kc *kms.Client) (*zip.App, *syncBuf) {
 	if kc != nil {
 		deps.KMS = kc
 	}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app, logs

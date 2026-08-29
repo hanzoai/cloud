@@ -101,22 +101,22 @@ var mounted *service
 
 // Mount opens the taxonomy store, seeds it on a first-ever boot, and registers the
 // surface per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("taxonomy.Mount: nil app")
+		return fmt.Errorf("taxonomy.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("taxonomy.Mount: empty DataDir")
+		return fmt.Errorf("taxonomy.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("taxonomy.Mount: open taxonomy store: %w", err)
+		return fmt.Errorf("taxonomy.Use:  open taxonomy store: %w", err)
 	}
 	log := luxlog.Default().New("subsystem", "taxonomy")
 	seeded, err := seed(context.Background(), store)
 	if err != nil {
 		_ = store.Close()
-		return fmt.Errorf("taxonomy.Mount: seed: %w", err)
+		return fmt.Errorf("taxonomy.Use:  seed: %w", err)
 	}
 	s := &service{store: store, log: log}
 	mounted = s

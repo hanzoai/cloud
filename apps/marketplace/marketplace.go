@@ -83,16 +83,16 @@ var mounted *cloud.Service[state]
 
 // Mount wires /v1/marketplace/* and closes the payment client both ways, so a
 // published listing's price is challenged and settled at every call.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("marketplace.Mount: nil app")
+		return fmt.Errorf("marketplace.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("marketplace.Mount: empty DataDir")
+		return fmt.Errorf("marketplace.Use:  empty DataDir")
 	}
 	store, err := Open(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("marketplace.Mount: open store: %w", err)
+		return fmt.Errorf("marketplace.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "marketplace"), State: state{store: store, audit: deps.Audit}}
 	mounted = s
@@ -120,7 +120,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// op's published path exactly the path the router matches.
 	za := cloud.ZipApp(app)
 	if za == nil {
-		return fmt.Errorf("marketplace.Mount: router exposes no op registry")
+		return fmt.Errorf("marketplace.Use:  router exposes no op registry")
 	}
 	o := marketOps{s: s}
 	zip.Get(za, "/v1/marketplace", o.discover)

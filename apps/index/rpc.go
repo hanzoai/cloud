@@ -10,7 +10,7 @@ package index
 // because the app that OWNS a corpus is not the app that owns the store.
 //
 // Both halves broke, and they broke differently. The read announced itself: GET
-// /v1/catalog answered {"status":503,"error":"catalog: index not mounted"} on
+// /v1/catalog answered {"status":503,"error":"catalog: index not composed"} on
 // every request, and hanzo.app's Community page rendered "ERROR: CATALOG: 503"
 // under an otherwise fully-drawn page. The write said nothing at all — the
 // hourly reconcile assembled the corpus correctly, handed it to a global that

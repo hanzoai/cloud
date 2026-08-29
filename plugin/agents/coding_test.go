@@ -79,13 +79,13 @@ func agentsChild(t *testing.T) string {
 	return ""
 }
 
-// door composes the real fleet MCP server over that child — fleet.Mount, the
+// door composes the real fleet MCP server over that child — fleet.Use, the
 // same call cmd/cloud makes, with the same MCP path.
 func door(t *testing.T) *zip.App {
 	t.Helper()
 	sock := agentsChild(t)
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
-	fleet.Mount(h, manifest.MCPPath, []string{"agents"}, func(app string) (addr, path string, err error) {
+	fleet.Use(h, manifest.MCPPath, []string{"agents"}, func(app string) (addr, path string, err error) {
 		if app != "agents" {
 			return "", "", &net.AddrError{Err: "no instance running", Addr: app}
 		}

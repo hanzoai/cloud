@@ -19,7 +19,7 @@ func main() {
 		Name:       "metrics",
 		OwnsHealth: true,
 		Price:      cloud.Free,
-		Mount:      cloud.MountMetrics,
+		Use:        cloud.UseMetrics,
 	}}, []string{"metrics"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

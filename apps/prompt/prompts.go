@@ -171,17 +171,17 @@ func nonNil(xs []string) []string {
 
 // Mount wires the prompts surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can release the store, so it
-// constructs the Service value directly rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// constructs the Service value directly rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("prompt.Mount: nil app")
+		return fmt.Errorf("prompt.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("prompt.Mount: empty DataDir")
+		return fmt.Errorf("prompt.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("prompt.Mount: open store: %w", err)
+		return fmt.Errorf("prompt.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "prompt"), State: state{store: store}}
 	mounted = s
@@ -216,7 +216,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func routes(app cloud.Router, s *cloud.Service[state]) error {
 	za := cloud.ZipApp(app)
 	if za == nil {
-		return fmt.Errorf("prompt.Mount: router exposes no op registry")
+		return fmt.Errorf("prompt.Use:  router exposes no op registry")
 	}
 	o := promptOps{s: s}
 	zip.Get(za, "/v1/prompt", o.list)

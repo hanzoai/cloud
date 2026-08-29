@@ -135,12 +135,12 @@ var running struct {
 }
 
 // Mount brings up the registry and registers /v1/node/{connect,,{id}/invoke,peer}.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return errors.New("node.Mount: nil app")
+		return errors.New("node.Use:  nil app")
 	}
 	if luxlog.Default() == nil {
-		return errors.New("node.Mount: nil luxlog.Default()")
+		return errors.New("node.Use:  nil luxlog.Default()")
 	}
 	base := cloud.NewBase(deps, "node")
 

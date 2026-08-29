@@ -97,7 +97,7 @@ func mount(t *testing.T, m *model) *zip.App {
 	if m != nil {
 		deps.AI = m
 	}
-	if err := Mount(app, deps); err != nil {
+	if err := Use(app, deps); err != nil {
 		t.Fatalf("mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

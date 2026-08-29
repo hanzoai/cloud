@@ -388,7 +388,7 @@ func (k *secret) settle(v string, err error) {
 // errUnread forever.
 func fetch(s *cloud.Service[state], ctx context.Context) (string, error) {
 	if s.KMS == nil {
-		return "", fmt.Errorf("no KMS client mounted: cannot read %s", forge.WebhookRef)
+		return "", fmt.Errorf("no KMS client in use: cannot read %s", forge.WebhookRef)
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hookRead)
 	defer cancel()

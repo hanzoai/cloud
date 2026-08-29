@@ -121,9 +121,9 @@ var mounted *state
 // ground truth for a decision it is about to be challenged on. The DoS bound is
 // carried by the per-op limits in typed.go instead, which cost nothing to be
 // wrong about.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("label.Mount: nil app")
+		return fmt.Errorf("label.Use:  nil app")
 	}
 	s, err := build(deps)
 	if err != nil {
@@ -141,16 +141,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // reason.
 func build(deps cloud.Deps) (*cloud.Service[*state], error) {
 	if luxlog.Default() == nil {
-		return nil, fmt.Errorf("label.Mount: nil luxlog.Default()")
+		return nil, fmt.Errorf("label.Use:  nil luxlog.Default()")
 	}
 	if deps.DataDir == "" {
-		return nil, fmt.Errorf("label.Mount: empty deps.DataDir, so no record could be kept")
+		return nil, fmt.Errorf("label.Use:  empty deps.DataDir, so no record could be kept")
 	}
 	if deps.Brand == "" {
 		// The brand is half the tenant key. A deployment that did not state one
 		// cannot mint a key and every request would refuse — better to say so at
 		// boot than once per request.
-		return nil, fmt.Errorf("label.Mount: no brand, so no tenant key can be minted")
+		return nil, fmt.Errorf("label.Use:  no brand, so no tenant key can be minted")
 	}
 	b := cloud.NewBase(deps, "label")
 	return &cloud.Service[*state]{Base: b, State: &state{

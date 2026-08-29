@@ -56,8 +56,8 @@ func liveCommerce(t *testing.T) {
 	t.Cleanup(done)
 	deps := cloud.BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: luxlog.Default(), DisableStartupMessage: true})
-	if err := cloud.MountAll(app, []cloud.Plugin{{
-		Name: commercepeer.App, Price: cloud.Free, Mount: commerce.Mount,
+	if err := cloud.UseAll(app, []cloud.Plugin{{
+		Name: commercepeer.App, Price: cloud.Free, Use: commerce.Use,
 		// commerce wraps all of /v1, exactly as plugin/commerce/main.go declares.
 		// Mounting it any other way is refused by the scope check, and rightly.
 		Global: true,

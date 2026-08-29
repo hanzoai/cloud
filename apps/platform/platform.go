@@ -115,17 +115,17 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the /v1/platform surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("platform.Mount: nil app")
+		return fmt.Errorf("platform.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "platform")
 	if deps.DataDir == "" {
-		return fmt.Errorf("platform.Mount: empty DataDir")
+		return fmt.Errorf("platform.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("platform.Mount: open store: %w", err)
+		return fmt.Errorf("platform.Use:  open store: %w", err)
 	}
 
 	// Build Jobs run in a DEDICATED, isolated namespace — NOT the main platform
@@ -154,7 +154,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// projection knows.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("platform.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+		return fmt.Errorf("platform.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	// UNIFIED PAYWALL (server-side enforcement). To hold the /v1/platform surface to
 	// the caller's plan, ask entitlement in each operation's PREAMBLE. Wrapping the

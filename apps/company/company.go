@@ -111,12 +111,12 @@ var mounted *cloud.Service[state]
 
 // Mount wires the company surface. It keeps a package global for Shutdown, so it
 // constructs the Service value directly (the "complex flavour").
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("company.Mount: nil app")
+		return fmt.Errorf("company.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("company.Mount: empty DataDir")
+		return fmt.Errorf("company.Use:  empty DataDir")
 	}
 	// A typed op is a route PLUS a registry entry, and the registry lives on the
 	// App. A router that cannot reach it would serve every route with no schema,
@@ -124,11 +124,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// quietly publishing a surface no projection knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("company.Mount: router is not a zip app, so the typed ops have no registry")
+		return fmt.Errorf("company.Use:  router is not a zip app, so the typed ops have no registry")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("company.Mount: open store: %w", err)
+		return fmt.Errorf("company.Use:  open store: %w", err)
 	}
 	// A misconfigured provider refuses the two ops that read it (brokenKYC) rather
 	// than the whole surface — see resolveKYC.

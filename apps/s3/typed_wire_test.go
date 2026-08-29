@@ -194,8 +194,8 @@ func live(t *testing.T) (*zip.App, *string) {
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("s3-live"), DisableStartupMessage: true})
 	app.Use(cloud.Bridge())
-	if err := s3.Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := s3.Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app, &asked
 }
@@ -423,8 +423,8 @@ func alone(t *testing.T) *zip.App {
 	// verifier holding a key nobody else does — so Mount needs one to return.
 	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	app := zip.New(zip.Config{Logger: luxlog.New("s3-doc"), DisableStartupMessage: true})
-	if err := s3.Mount(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := s3.Use(app, cloud.Deps{}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

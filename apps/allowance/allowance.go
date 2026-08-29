@@ -196,19 +196,19 @@ type service struct {
 var mounted *service
 
 // Mount registers the allowance surface and the plane op the AI gate asks.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("allowance.Mount: nil app")
+		return fmt.Errorf("allowance.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("allowance.Mount: empty DataDir")
+		return fmt.Errorf("allowance.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("allowance.Mount: open store: %w", err)
+		return fmt.Errorf("allowance.Use:  open store: %w", err)
 	}
 	log := luxlog.Default().New("subsystem", "allowance")
-	// cloud.TierReader is installed by BuildDeps, which completes before MountAll —
+	// cloud.TierReader is installed by BuildDeps, which completes before UseAll —
 	// so it is already there when this reads it, in whichever process mounts this.
 	s := &service{store: store, tier: cloud.TierReader(), log: log}
 	mounted = s

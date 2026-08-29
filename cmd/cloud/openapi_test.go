@@ -19,7 +19,7 @@ package main
 //	                                              with is the CUSTOMER contract, the
 //	                                              same bytes every SDK is generated
 //	                                              from. It answered with the internal
-//	                                              document until openapi.MountFleet
+//	                                              document until openapi.UseFleet
 //	                                              projected it.
 //
 // Both are asked of the real thing: mount() and spec() are the host's own, in the
@@ -64,7 +64,7 @@ func (o oracle) Do(_ *fasthttp.Request, resp *fasthttp.Response) error {
 
 // host builds the host's whole routing surface — every app at its declared
 // prefixes, the spec endpoint, and the console catch-all — through the same
-// mount(), spec() and webui.Mount() run() calls, in the same order. It starts
+// mount(), spec() and webui.Use() run() calls, in the same order. It starts
 // no process: CLOUD_<NAME>_ADDR resolves every app to the oracle, which is the
 // rung of manifest's ladder that mounts a client and spawns nothing.
 func host(t *testing.T) *zip.App {
@@ -85,7 +85,7 @@ func host(t *testing.T) *zip.App {
 	health(app, absent)
 	spec(app, manifest.Names()) // no --enable: the whole fleet, as production runs it
 	graphql(app, manifest.Names())
-	if err := webui.Mount(app, consoleBundle()); err != nil {
+	if err := webui.Use(app, consoleBundle()); err != nil {
 		t.Fatalf("mount console: %v", err)
 	}
 	return app
@@ -143,7 +143,7 @@ func TestTheSpecDoorIsTheHostsNotACatchAlls(t *testing.T) {
 // duplicate operationId (get_billing_portal_methods, two billing routes), so
 // the host answers 500 on BOTH endpoints. Add it in the commit that fixes the
 // compose.
-func TestTheCommandDoorOpensOnTheHostsOwnMount(t *testing.T) {
+func TestTheCommandDoorOpensOnTheHostsOwnApp(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	spec(app, []string{"kms", "flags"})
 

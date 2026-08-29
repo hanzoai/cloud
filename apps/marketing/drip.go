@@ -28,7 +28,7 @@ import (
 // fires the schedule; runs are durable workflows visible in the Tasks console),
 // state owns the schedule (each enrollment's next_run_at in SQLite). There is no
 // bespoke ticker and no second queue. Fail-soft: the engine is wired after
-// MountAll, so start() waits for it in the background; no engine simply means the
+// UseAll, so start() waits for it in the background; no engine simply means the
 // drip is idle (state is preserved and resumes when an engine appears), never a
 // blocked boot.
 

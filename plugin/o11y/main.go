@@ -6,7 +6,7 @@
 // The same binary therefore covers both deployments without a second code path.
 //
 // It mounts EXACTLY what the fused binary used to mount in-process, by calling
-// the same o11y.Mount. The subsystem's code did not move and did not fork;
+// the same o11y.Use. The subsystem's code did not move and did not fork;
 // only the process it runs in changed, which is the point — where a subsystem
 // runs is a deployment decision, not a property of the source.
 //
@@ -77,7 +77,7 @@ func run() error {
 
 	app := newApp(cfg, deps)
 
-	if err := o11y.Mount(app, deps); err != nil {
+	if err := o11y.Use(app, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
 
@@ -91,7 +91,7 @@ func run() error {
 	// Teardown belongs to the process that owns the resources. The OTLP
 	// collector, the trace sink and the event-ingest Datastore all live HERE
 	// now, so their flush-and-close runs here on our own shutdown rather than
-	// in the host's MountAll teardown.
+	// in the host's UseAll teardown.
 	app.OnShutdown(o11y.ShutdownO11y)
 
 	// Bind the CANONICAL plane socket before serving the edge.

@@ -9,7 +9,7 @@ import "sync"
 // hooks, the admin credit grant, the edge meter) resolves by the NARROW 3-method
 // finance.Client it actually needs. This mirrors commerce's PublishEmbedded /
 // currentEmbedded in-proc client and deliberately AVOIDS threading a wide Deps bag
-// through every Mount: a small, focused interface between systems, not a god-object.
+// through every Use:  a small, focused interface between systems, not a god-object.
 var (
 	currentMu sync.RWMutex
 	current   Client

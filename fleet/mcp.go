@@ -138,7 +138,7 @@ func descriptorOf(app string, op Op) json.RawMessage {
 //
 // A signpost is only true where the server actually moved, and this is the one
 // place that knows it did — the same call that registers the target names it.
-func Mount(host *zip.App, path string, apps []string, at At) *Door {
+func Use(host *zip.App, path string, apps []string, at At) *Door {
 	d := &Door{host: host, apps: apps, owner: map[string]string{}}
 	// The EDGE endpoint: the one address a client with no credential can reach, and
 	// therefore the one that has to say where a credential comes from (challenge).

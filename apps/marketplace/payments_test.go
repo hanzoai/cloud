@@ -111,22 +111,22 @@ func newMarket(t *testing.T, sellerOrg string, offered ...string) *market {
 	// app-wide and fiber runs middleware in REGISTRATION order, so it must be
 	// registered before the tool plane's leaves or a dispatch reaches no parked
 	// request — no attested payer, and every priced tool 424s.
-	if err := wallet.Mount(app, deps); err != nil {
-		t.Fatalf("wallet.Mount: %v", err)
+	if err := wallet.Use(app, deps); err != nil {
+		t.Fatalf("wallet.Use:  %v", err)
 	}
-	if err := x402.Mount(app, deps); err != nil {
-		t.Fatalf("x402.Mount: %v", err)
+	if err := x402.Use(app, deps); err != nil {
+		t.Fatalf("x402.Use:  %v", err)
 	}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("marketplace.Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("marketplace.Use:  %v", err)
 	}
 
 	// The REAL tool plane, not a stand-in for it. A payment client proved through a
 	// hand-rolled route proves the client and not the product: the handler that has
 	// to carry a payer, map a 402 and let the challenge header out is tools' own
 	// callTool, so that is the handler every test here calls.
-	if err := tools.Mount(app, deps); err != nil {
-		t.Fatalf("tools.Mount: %v", err)
+	if err := tools.Use(app, deps); err != nil {
+		t.Fatalf("tools.Use:  %v", err)
 	}
 	var offer []tools.Tool
 	for _, name := range offered {

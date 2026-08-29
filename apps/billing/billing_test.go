@@ -74,8 +74,8 @@ func mountApp(t *testing.T, base, token string) *zip.App {
 	// The composer's install, once at the root, ahead of every route it serves:
 	// cloud.Bridge parks the validated org on the context for the typed finance ops.
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	return app
 }

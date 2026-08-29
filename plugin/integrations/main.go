@@ -27,7 +27,7 @@ func main() {
 		// them while the host kept forwarding them: served, and served wrong.
 		Prefixes: manifest.PrefixesFor("integrations"),
 		Price:    cloud.Free,
-		Mount:    integrations.Mount,
+		Use:      integrations.Use,
 		Shutdown: integrations.Shutdown,
 	}}, []string{"integrations"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

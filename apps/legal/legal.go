@@ -36,16 +36,16 @@ var mounted *cloud.Service[state]
 // Mount wires /v1/legal/* and opens the sealed store under DataDir. The
 // e-sign and filing clients default to the honest stubs; a real provider is a
 // config-driven swap (the clients are provider-agnostic).
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("legal.Mount: nil app")
+		return fmt.Errorf("legal.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("legal.Mount: empty DataDir")
+		return fmt.Errorf("legal.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("legal.Mount: open store: %w", err)
+		return fmt.Errorf("legal.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "legal"),

@@ -43,7 +43,7 @@ func hostApp(t *testing.T) *zip.App {
 		MCP: zip.MCPConfig{Path: manifest.MCPPath}})
 	zip.Get[pingIn, pingOut](app, "/v1/probe/ping",
 		func(ctx context.Context, in *pingIn) (*pingOut, error) { return &pingOut{OK: true}, nil })
-	if err := Mount(app, testBundle()); err != nil {
+	if err := Use(app, testBundle()); err != nil {
 		t.Fatal(err)
 	}
 	return app
@@ -57,7 +57,7 @@ func pluginApp(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{AppName: "plug", DisableStartupMessage: true})
 	zip.Get[pingIn, pingOut](app, "/v1/probe/ping",
 		func(ctx context.Context, in *pingIn) (*pingOut, error) { return &pingOut{OK: true}, nil })
-	if err := Mount(app, testBundle()); err != nil {
+	if err := Use(app, testBundle()); err != nil {
 		t.Fatal(err)
 	}
 	return app
@@ -136,7 +136,7 @@ func TestMCPDoorAnswersMCP(t *testing.T) {
 // The original bug, still pinned: the framework default must never render the
 // console. What it is answered WITH has changed — this process's own MCP server,
 // not a redirect. The 308 belongs to a host that moved its MCP endpoint and is
-// registered by the same call that registers the target (fleet.Mount); the
+// registered by the same call that registers the target (fleet.Use); the
 // end-to-end host is pinned in cmd/cloud/mcp_test.go, where both halves are
 // composed. Here the rule is the one the terminal handler can actually keep on
 // its own.
@@ -228,7 +228,7 @@ func doorlessApp(t *testing.T) *zip.App {
 	app.Get("/v1/kms/health", func(c *zip.Ctx) error {
 		return c.JSON(200, map[string]string{"status": "ok"})
 	})
-	if err := Mount(app, nil); err != nil {
+	if err := Use(app, nil); err != nil {
 		t.Fatal(err)
 	}
 	return app

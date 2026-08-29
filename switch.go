@@ -30,7 +30,7 @@ const SwitchPaywallEnforced = "paywall_enforced"
 // entitlements, which also REGISTERS it) must name one string.
 const SwitchPaywallStrict = "paywall_strict"
 
-// switchReader is the flag engine's Bool, installed by clients/flags.Mount.
+// switchReader is the flag engine's Bool, installed by clients/flags.Use.
 // atomic because Mount runs during boot while requests may already be served.
 var switchReader atomic.Pointer[func(string) bool]
 

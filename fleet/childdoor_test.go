@@ -49,21 +49,21 @@ import (
 
 // darkChild brings up apps/exec as its own plugin process does, on its own
 // socket. Nothing here is a fixture: cloud.App is the one constructor every
-// plugin main reaches Serve through, MountAll is the loop Serve runs, and
-// webui.Mount is the terminal handler Serve installs last in EVERY process —
+// plugin main reaches Serve through, UseAll is the loop Serve runs, and
+// webui.Use is the terminal handler Serve installs last in EVERY process —
 // which is the handler that answered the ask.
-func darkChild(t *testing.T, name string, mount cloud.MountFunc) *child {
+func darkChild(t *testing.T, name string, mount cloud.UseFunc) *child {
 	t.Helper()
 	cfg := &cloud.Config{Brand: "hanzo", Domain: "api.hanzo.ai", DataDir: t.TempDir(), Enable: []string{name}}
 	deps := cloud.BuildDeps(cfg)
 
 	app := cloud.App(name, cfg, deps, nil)
-	if err := cloud.MountAll(app, []cloud.Plugin{{Name: name, Price: cloud.Free, Mount: mount}}, cfg, deps); err != nil {
+	if err := cloud.UseAll(app, []cloud.Plugin{{Name: name, Price: cloud.Free, Use: mount}}, cfg, deps); err != nil {
 		t.Fatalf("mount %s: %v", name, err)
 	}
 	// LAST, and with no console bundle — a child cannot bootstrap one (serve.go),
 	// so this is the shape production runs.
-	if err := webui.Mount(app, nil); err != nil {
+	if err := webui.Use(app, nil); err != nil {
 		t.Fatalf("console %s: %v", name, err)
 	}
 
@@ -77,7 +77,7 @@ func darkChild(t *testing.T, name string, mount cloud.MountFunc) *child {
 // TestASubsystemWithNoTypedOpStillAnswersTheDoor is the regression, from both
 // ends of the hop.
 func TestASubsystemWithNoTypedOpStillAnswersTheDoor(t *testing.T) {
-	kid := darkChild(t, "exec", exec.Mount)
+	kid := darkChild(t, "exec", exec.Use)
 
 	// END ONE — the child's own MCP server, at the address the fleet asks. The claim is
 	// about the BYTES: a JSON-RPC result with a tools array. A 308 has neither, and

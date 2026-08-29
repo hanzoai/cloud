@@ -58,23 +58,23 @@ var (
 )
 
 // Mount registers the pricing surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("pricing.Mount: nil app")
+		return fmt.Errorf("pricing.Use:  nil app")
 	}
 	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("pricing.Mount: nil luxlog.Default()")
+		return fmt.Errorf("pricing.Use:  nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "pricing")
 
 	bundle, err := hpricing.Bundle()
 	if err != nil {
-		return fmt.Errorf("pricing.Mount: load bundle: %w", err)
+		return fmt.Errorf("pricing.Use:  load bundle: %w", err)
 	}
 	pricingData, err := hpricing.Pricing()
 	if err != nil {
-		return fmt.Errorf("pricing.Mount: load pricing.json: %w", err)
+		return fmt.Errorf("pricing.Use:  load pricing.json: %w", err)
 	}
 	// The embedded snapshot ships the document's shape and the resold section;
 	// commerce owns the retail number on the models we make. See commerce.go.
@@ -82,20 +82,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	pricingData = overlay(context.Background(), pricingData, logger)
 	plansExtra, err := hpricing.PlansExtra()
 	if err != nil {
-		return fmt.Errorf("pricing.Mount: load plans-extra: %w", err)
+		return fmt.Errorf("pricing.Use:  load plans-extra: %w", err)
 	}
 	// The pricing bundle also reads the @hanzo/plans catalog for the
 	// subscription/blockchain/policy/tools/gpu endpoints. We pull that from the
 	// plans embed module so both subsystems share ONE source of truth.
 	plansData, err := loadPlansCatalog()
 	if err != nil {
-		return fmt.Errorf("pricing.Mount: load plans catalog: %w", err)
+		return fmt.Errorf("pricing.Use:  load plans catalog: %w", err)
 	}
 	// The Datastore rate card is authored in the pricing repo rather than produced
 	// by the sync, so it is its own file and its own global.
 	datastoreCard, err := hpricing.Datastore()
 	if err != nil {
-		return fmt.Errorf("pricing.Mount: load datastore card: %w", err)
+		return fmt.Errorf("pricing.Use:  load datastore card: %w", err)
 	}
 
 	h, err := goja.New(goja.Config{
@@ -113,7 +113,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("pricing.Mount: goja host: %w", err)
+		return fmt.Errorf("pricing.Use:  goja host: %w", err)
 	}
 	host = h
 
@@ -124,11 +124,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// (prod sets CLOUD_DATA_DIR), never a silent downgrade. provisioning already
 	// requires DataDir, so the unified binary always provides one.
 	if deps.DataDir == "" {
-		return fmt.Errorf("pricing.Mount: empty DataDir — the catalog enablement overlay requires a persistent data dir (set CLOUD_DATA_DIR); refusing to boot with a non-persistent overlay that would re-expose admin-hidden models on restart")
+		return fmt.Errorf("pricing.Use:  empty DataDir — the catalog enablement overlay requires a persistent data dir (set CLOUD_DATA_DIR); refusing to boot with a non-persistent overlay that would re-expose admin-hidden models on restart")
 	}
 	cstore, err := openCatalog(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("pricing.Mount: open catalog overlay: %w", err)
+		return fmt.Errorf("pricing.Use:  open catalog overlay: %w", err)
 	}
 	cat = cstore
 
@@ -145,7 +145,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// one, and it is the form apps/marketing already uses.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("pricing.Mount: router is not backed by a zip app — typed ops have no registry to declare into")
+		return fmt.Errorf("pricing.Use:  router is not backed by a zip app — typed ops have no registry to declare into")
 	}
 	// A typed op receives only a context, so the validated org — and the request
 	// the admin gate reads X-User-IsAdmin off — reach it by being parked there by

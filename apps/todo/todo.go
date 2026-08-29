@@ -156,13 +156,13 @@ func storeFor(s *cloud.Service[state], org, project string) (*Store, error) {
 
 // Mount wires the todo surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can close every per-tenant store,
-// so it constructs the Service value directly rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// so it constructs the Service value directly rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("todo.Mount: nil app")
+		return fmt.Errorf("todo.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("todo.Mount: empty DataDir")
+		return fmt.Errorf("todo.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "todo")
 	s := &cloud.Service[state]{Base: b, State: state{

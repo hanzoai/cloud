@@ -123,23 +123,23 @@ var mounted *cloud.Service[state]
 // Mount wires the marketing surface onto app per HIP-0106. It keeps a package
 // global (mounted) for Shutdown, so it constructs the Service value directly —
 // the same "complex flavour" clients/crm uses.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("marketing.Mount: nil app")
+		return fmt.Errorf("marketing.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("marketing.Mount: empty DataDir")
+		return fmt.Errorf("marketing.Use:  empty DataDir")
 	}
 	// marketing registers TYPED ops, which live on the *zip.App's registry — the
 	// one value OpenAPI, MCP and the CLI are projected from. A Router that is not
 	// backed by one must fail the mount rather than serve routes no projection knows.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("marketing.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+		return fmt.Errorf("marketing.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("marketing.Mount: open store: %w", err)
+		return fmt.Errorf("marketing.Use:  open store: %w", err)
 	}
 	b := cloud.NewBase(deps, "marketing")
 	// The subscription read is an optional capability on the commerce client; a
@@ -152,7 +152,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	routes(app, zapp, s)
 
 	// Bind the drip + calendar engine to the durable tasks clock. The engine is
-	// wired after MountAll, so this waits for it in the background (fail-soft: no
+	// wired after UseAll, so this waits for it in the background (fail-soft: no
 	// engine simply means scheduled sends stay pending until one appears).
 	go startDrip(context.Background(), b.Log)
 

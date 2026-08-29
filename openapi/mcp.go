@@ -2,7 +2,7 @@ package openapi
 
 // THE AGENT MCP SERVER'S PLACE IN THE DOCUMENT.
 //
-// POST /v1/mcp is served by the host (fleet.Mount), named by the manifest
+// POST /v1/mcp is served by the host (fleet.Use), named by the manifest
 // (manifest.MCPPath), and owned by no app — the fourth address beside the
 // document endpoint, its well-known alias and the command projection. Like them
 // it is projected rather than written down: [core] mounts a stub at the
@@ -64,9 +64,9 @@ func init() {
 	Register(door.Path, http.MethodPost, MCPRequest{}, MCPResponse{})
 }
 
-// mountDoor puts the agent endpoint on core's throwaway router so Spec projects
+// useDoor puts the agent endpoint on core's throwaway router so Spec projects
 // it. The handler is never reached: the real endpoint is the host's.
-func mountDoor(app *zip.App) {
+func useDoor(app *zip.App) {
 	app.Post(door.Path, func(*zip.Ctx) error {
 		return zip.ErrInternal("the document's stub for the agent endpoint — the host serves it")
 	})

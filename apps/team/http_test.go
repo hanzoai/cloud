@@ -24,11 +24,11 @@ const testSecret = "team-http-test-secret"
 
 // compose installs what a HOST installs — cloud.Bridge, once at the root, which
 // is what Serve does binary-wide. In a test the test IS the composer, so it owes
-// the same thing, and modelling production means BOTH installs: team.Mount
+// the same thing, and modelling production means BOTH installs: team.Use
 // carries its own bridge too (team.go), because no package's harness runs Serve
 // and an embedder that mounts team without one would otherwise 403 every typed
 // op. The two nest and that is harmless — both park the same values off the same
-// request. TestCollabRPCBridgedUnderBareMount is the one that deliberately does
+// request. TestCollabRPCBridgedUnderABareApp is the one that deliberately does
 // NOT compose, so Mount's own install is what it measures.
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
@@ -48,8 +48,8 @@ func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
 	t.Setenv("SERVER_SECRET", testSecret)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	return app
@@ -365,7 +365,7 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "") // unset
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount must SUCCEED in degraded mode (health-only), got: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -386,7 +386,7 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "secret")
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app2)
-	if err := Mount(app2, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Use(app2, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
 	}
 	if code, _ := call(t, app2, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
@@ -402,8 +402,8 @@ func TestInsecureHatchRemoved(t *testing.T) {
 	t.Setenv("TEAM_DEV_INSECURE", "1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	if code, body := call(t, app, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {

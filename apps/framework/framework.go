@@ -67,12 +67,12 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the framework surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("framework.Mount: nil app")
+		return fmt.Errorf("framework.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("framework.Mount: empty DataDir")
+		return fmt.Errorf("framework.Use:  empty DataDir")
 	}
 	log := luxlog.Default().New("subsystem", "framework")
 

@@ -20,11 +20,11 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:       "dataroom",
 		Price:      cloud.Free,
-		Mount:      dataroom.Mount,
+		Use:        dataroom.Use,
 		Shutdown:   dataroom.Shutdown,
 		OwnsHealth: true,
 		// The trust centre's platform roster answers at /v1/admin/dataroom, which
-		// MountPrefixes' /v1/<name> default does not cover — so without this the
+		// UsePrefixes' /v1/<name> default does not cover — so without this the
 		// scoped router owns one of the two subtrees the app serves, its middleware
 		// lands outside the other, and cloud.Declare attributes that traffic to
 		// nobody. The manifest is the one place those prefixes are written down.

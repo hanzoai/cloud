@@ -156,17 +156,17 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires /v1/x402 and the settlement store. Direct construction (not
-// cloud.Mount) because it holds the package singleton the middleware reaches.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// cloud.Use) because it holds the package singleton the middleware reaches.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil || luxlog.Default() == nil {
-		return errMount("nil app or logger")
+		return errUse("nil app or logger")
 	}
 	if deps.DataDir == "" {
-		return errMount("empty DataDir")
+		return errUse("empty DataDir")
 	}
 	st, err := openStore(deps.DataDir)
 	if err != nil {
-		return errMount("open store: " + err.Error())
+		return errUse("open store: " + err.Error())
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, providerLabel), State: state{
 		store: st,
@@ -230,7 +230,7 @@ var (
 // alternative renders both as "free", permanently and silently.
 //
 // That is not hypothetical. The published Registry is a process-global installed by
-// marketplace.Mount, and the shipped topology is one binary per app (manifest/apps.go;
+// marketplace.Use, and the shipped topology is one binary per app (manifest/apps.go;
 // Dockerfile builds a plugin per row; cmd/cloud loads each as a child process), so a
 // process that mounts x402 does NOT have marketplace in it and the table is nil. The
 // fleet has been bitten by exactly this once already — see resource_billing_peer.go:
@@ -330,7 +330,7 @@ func Settle(ctx context.Context, resource string) error {
 // that offers EVERY call to the payment client cannot exist.
 //
 // TWO TRANSPORTS, ONE TABLE. The published Registry is a process-global installed
-// by marketplace.Mount, and the fleet runs one process per app — so in the x402
+// by marketplace.Use, and the fleet runs one process per app — so in the x402
 // binary it is nil, and reading that as "nothing is priced" was the fail-OPEN half
 // of this defect. Nil means "the table is not HERE", and the process that owns it is
 // asked. A table that cannot be asked leaves the price UNKNOWN, which is an error
@@ -939,11 +939,11 @@ func envInt(key string, def int) int {
 	return def
 }
 
-func errMount(msg string) error { return &mountErr{msg} }
+func errUse(msg string) error { return &useErr{msg} }
 
-type mountErr struct{ s string }
+type useErr struct{ s string }
 
-func (e *mountErr) Error() string { return "x402.Mount: " + e.s }
+func (e *useErr) Error() string { return "x402.Use:  " + e.s }
 
 func mustJSON(v any) json.RawMessage {
 	b, err := json.Marshal(v)

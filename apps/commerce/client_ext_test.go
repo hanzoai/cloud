@@ -30,8 +30,8 @@ func mountPlansVocab(t *testing.T) {
 	t.Helper()
 	plansOnce.Do(func() {
 		app := zip.New(zip.Config{Logger: luxlog.New("test-plans")})
-		if err := plan.Mount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
-			t.Fatalf("plan.Mount: %v", err)
+		if err := plan.Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+			t.Fatalf("plan.Use:  %v", err)
 		}
 	})
 }

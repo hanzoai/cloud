@@ -25,7 +25,7 @@ func main() {
 		// resolves to no subsystem and its price is Undeclared. Kept in sync
 		// with manifest/apps.go, which states the same thing for the fused host.
 		Prefixes: manifest.PrefixesFor("tools"),
-		Mount:    tools.Mount,
+		Use:      tools.Use,
 		Shutdown: tools.Shutdown,
 		// The per-caller half of the fleet's ONE MCP server. This app's typed ops are
 		// projected into mcp.json at build time like every other app's; what cannot

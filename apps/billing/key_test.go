@@ -32,7 +32,7 @@ func TestTheCatalogSurvivesAMissingKey(t *testing.T) {
 	t.Setenv(account.KeyEnv, "")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
 		t.Fatalf("billing refused to mount with no shared key: %v\n"+
 			"the key gates one branch of one control; it does not gate the surface", err)
 	}

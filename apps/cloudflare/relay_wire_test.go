@@ -284,8 +284,8 @@ func TestBridgeIsInstalledOnThePlanesOwnGroup(t *testing.T) {
 	t.Cleanup(func() { tokenFor = prev })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	code, body, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/d1/databases/orders/query",
 		"u1", "acme", true, `{"sql":"SELECT 1"}`)

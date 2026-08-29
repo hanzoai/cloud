@@ -30,7 +30,7 @@ import (
 // (c.Next()) to the embedded account surface unchanged — the anonymous sign-in page
 // and any caller still holding one of its sessions are untouched. Additive, fail-open
 // to the old path. MUST be registered AFTER IdentityMiddleware (needs the minted
-// headers) and BEFORE MountAll (so it precedes that surface's own account handler).
+// headers) and BEFORE UseAll (so it precedes that surface's own account handler).
 // accountPath is the account read this middleware fronts. It is a named constant
 // because the interception is a PATH MATCH: when the /v1 surface was namespaced
 // (/v1/get-account → /v1/ai/account) a literal left un-updated here would not

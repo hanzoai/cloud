@@ -114,7 +114,7 @@ func TestTheAliasOutranksZipsOwnDocument(t *testing.T) {
 	zip.Get(a, "/v1/probe/thing", func(context.Context, *struct{}) (*probeOut, error) {
 		return &probeOut{OK: true}, nil
 	})
-	openapi.Mount(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})
+	openapi.Use(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})
 
 	get := served(t, a)
 	code, body := get(openapi.WellKnown)
@@ -133,7 +133,7 @@ func TestTheAliasOutranksZipsOwnDocument(t *testing.T) {
 // answers are free to diverge as the route table does.
 func TestBothAddressesAreOneDocument(t *testing.T) {
 	a := app()
-	openapi.Mount(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})
+	openapi.Use(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})
 
 	get := served(t, a)
 	_, canonical := get(openapi.Path)
@@ -150,7 +150,7 @@ func TestBothAddressesAreOneDocument(t *testing.T) {
 // endpoint a client must already hold a token to read, is made of.
 func TestTheAliasIsPublishedAndOpen(t *testing.T) {
 	a := app()
-	openapi.Mount(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})
+	openapi.Use(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})
 
 	doc, err := openapi.Spec(a, openapi.Info{Title: "Hanzo Cloud", Version: "v1"})
 	if err != nil {

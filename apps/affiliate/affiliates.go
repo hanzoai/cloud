@@ -266,17 +266,17 @@ var mounted *cloud.Service[state]
 
 // Mount wires the affiliates surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can release the store, so it
-// constructs the Service value directly rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// constructs the Service value directly rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("affiliate.Mount: nil app")
+		return fmt.Errorf("affiliate.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("affiliate.Mount: empty DataDir")
+		return fmt.Errorf("affiliate.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("affiliate.Mount: open store: %w", err)
+		return fmt.Errorf("affiliate.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "affiliate"), State: state{
 		store:      store,

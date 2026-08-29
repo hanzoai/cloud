@@ -24,8 +24,8 @@ func newApp(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	deps := cloud.Deps{DataDir: t.TempDir()}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app
@@ -42,8 +42,8 @@ func newAppMCP(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.Bridge())
 	deps := cloud.Deps{DataDir: t.TempDir()}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	// zip installs /mcp in prepare(), which Listen would call; a Fiber().Test app
 	// never listens. Once-guarded, so calling it here is safe.
@@ -102,8 +102,8 @@ func newAppWithAudit(t *testing.T) (*zip.App, *audit.Recorder) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
 	deps := cloud.Deps{DataDir: t.TempDir(), Audit: rec}
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app, rec

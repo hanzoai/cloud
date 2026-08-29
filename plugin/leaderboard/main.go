@@ -24,7 +24,7 @@ func main() {
 		// compose (see plugin/account/main.go).
 		Prefixes: manifest.PrefixesFor("leaderboard"),
 		Price:    cloud.Free,
-		Mount:    leaderboard.Mount,
+		Use:      leaderboard.Use,
 		Shutdown: leaderboard.Shutdown,
 	}}, []string{"leaderboard"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

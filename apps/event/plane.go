@@ -13,7 +13,7 @@ import (
 //
 // This endpoint serves api.hanzo.ai; the key is a column on a project row. In
 // production those are never the same process — the pod boots ~25 single-app
-// processes — so the registry projects.Mount writes is nil here. It is the package
+// processes — so the registry projects.Use writes is nil here. It is the package
 // DEFAULT (attribution.go) and a co-resident store still answers with no hop,
 // because currentKeyResolver prefers the in-process one.
 //

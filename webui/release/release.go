@@ -128,7 +128,7 @@ func (s *Source) Watch(ctx context.Context) {
 			changed, err := s.refresh(ctx)
 			switch {
 			case err != nil:
-				s.log.Warn("console release poll failed — serving the release already mounted",
+				s.log.Warn("console release poll failed — serving the release already in use",
 					"release", s.Release(), "err", err)
 			case changed:
 				b := s.cur.Load()
@@ -171,7 +171,7 @@ func (s *Source) refresh(ctx context.Context) (bool, error) {
 func (s *Source) resolve(ctx context.Context) (sites.Site, error) {
 	r := sites.CurrentResolver()
 	if r == nil {
-		return sites.Site{}, fmt.Errorf("console site %s/%s: no site resolver installed — the site edge must be mounted before the console", s.cfg.Org, s.cfg.Slug)
+		return sites.Site{}, fmt.Errorf("console site %s/%s: no site resolver installed — the site edge must be composed before the console", s.cfg.Org, s.cfg.Slug)
 	}
 	site, found, err := r.ResolveOrg(ctx, s.cfg.Org, s.cfg.Slug)
 	switch {
@@ -225,7 +225,7 @@ func read(ctx context.Context, cli *s3.Client, bucket, prefix string) (*bundle, 
 	return &bundle{prefix: prefix, files: len(files), bytes: total, fsys: files}, nil
 }
 
-// FS presents a Source as the fs.FS webui.Mount takes, INCLUDING the nil case.
+// FS presents a Source as the fs.FS webui.Use takes, INCLUDING the nil case.
 //
 // A nil *Source assigned straight to an fs.FS is a non-nil interface holding a
 // nil pointer — Go's oldest trap — and here it would turn "this process mounted
@@ -256,5 +256,5 @@ func FS(s *Source) fs.FS {
 // never watched serves the release it already has.
 func (s *Source) Polled() bool { return true }
 
-// compile-time assertion: a Source is what webui.Mount takes.
+// compile-time assertion: a Source is what webui.Use takes.
 var _ fs.FS = (*Source)(nil)

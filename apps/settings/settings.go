@@ -77,17 +77,17 @@ type service struct {
 var mounted *service
 
 // Mount registers the settings surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("settings.Mount: nil app")
+		return fmt.Errorf("settings.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "settings")
 	if deps.DataDir == "" {
-		return fmt.Errorf("settings.Mount: empty DataDir")
+		return fmt.Errorf("settings.Use:  empty DataDir")
 	}
 	store, err := openSettingsStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("settings.Mount: open settings store: %w", err)
+		return fmt.Errorf("settings.Use:  open settings store: %w", err)
 	}
 	s := &service{store: store, kms: deps.KMS, log: log}
 	mounted = s

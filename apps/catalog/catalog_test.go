@@ -27,12 +27,12 @@ func mount(t *testing.T) *zip.App {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	compose(app)
 	deps := cloud.Deps{DataDir: t.TempDir()}
-	if err := index.Mount(app, deps); err != nil {
-		t.Fatalf("index.Mount: %v", err)
+	if err := index.Use(app, deps); err != nil {
+		t.Fatalf("index.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = index.Shutdown() })
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("catalog.Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("catalog.Use:  %v", err)
 	}
 	return app
 }

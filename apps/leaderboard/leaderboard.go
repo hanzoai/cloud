@@ -76,8 +76,8 @@ var mountedStore *optinStore
 
 // Mount wires the leaderboard surface onto app per HIP-0106 — one line over the
 // generic subsystem entrypoint.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "leaderboard", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "leaderboard", build, routes)
 }
 
 // build opens the opt-in store under the shared data dir (mirrors clients/settings).

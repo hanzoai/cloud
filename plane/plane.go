@@ -276,7 +276,7 @@ const (
 	// guards its browse on index.Ready(), which reports whether the index is
 	// mounted IN THIS BINARY — true when everything was one fused process, false
 	// the moment catalog and index became two plugin rows. So /v1/catalog answered
-	// {"status":503,"error":"catalog: index not mounted"} on every request, and
+	// {"status":503,"error":"catalog: index not composed"} on every request, and
 	// hanzo.app's Community page rendered "ERROR: CATALOG: 503".
 	//
 	// The index is asked, not opened: its store is one encrypted SQLite with a
@@ -352,7 +352,7 @@ const (
 
 	// ChannelsIngest carries one authenticated inbound chat event from the platform
 	// adapters to the channels inbox. It replaces integrations.RegisterIngress — a
-	// package-global function pointer that channels.Mount installed, which is the
+	// package-global function pointer that channels.Use installed, which is the
 	// same mistake AgentsRunOnBehalf above was written to undo. In production
 	// integrations, channels and agents are three separate processes, so that
 	// pointer was nil on the emitting side and EVERY event was dropped: the inbox

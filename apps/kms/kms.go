@@ -11,7 +11,7 @@
 //	KMSClient  — the in-process cloud.KMSClient (GetSecret/PutSecret/Sign) other
 //	             subsystems call via deps.KMS. No RPC, no external DB. Built once by
 //	             the factory this package registers (init, mount.go), filled into
-//	             deps.KMS by build.go's BuildDeps before MountAll, and reused by Mount.
+//	             deps.KMS by build.go's BuildDeps before UseAll, and reused by Mount.
 //	/v1/kms/*  — the secrets-manager REST surface the KMS console (kms.hanzo.ai)
 //	             calls, mounted onto cloud's Fiber app: JWT-gated, org-scoped
 //	             secrets CRUD + a real health probe + the SPA admin config (mount.go).
@@ -57,7 +57,7 @@
 // The REST face (mount.go) imports cloud to mount /v1/kms/* and register the
 // subsystem. build.go does NOT import this package; it receives the embedded-client
 // constructor via cloud.RegisterKMSClientFactory (init, mount.go), so deps.KMS is
-// built by BuildDeps before MountAll with no cloud⇄kms import cycle — the same
+// built by BuildDeps before UseAll with no cloud⇄kms import cycle — the same
 // inversion cloud already uses to mount every subsystem it never imports.
 package kms
 

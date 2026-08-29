@@ -35,7 +35,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:  "bot",
 		Price: cloud.Free,
-		Mount: bot.Mount,
+		Use:   bot.Use,
 	}}, []string{"bot"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -114,8 +114,8 @@ func newAppWithIdentity(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) 
 	app := zip.New(zip.Config{Logger: luxlog.Default()})
 	app.Use(middleware.Recover())
 	app.Use(cloud.IdentityMiddleware(cfg))
-	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	if err := cloud.UseAll(app, mountSpecs(), cfg, deps); err != nil {
+		t.Fatalf("UseAll: %v", err)
 	}
 	return app, deps
 }

@@ -79,17 +79,17 @@ type prefsView struct {
 }
 
 // Mount registers the prefs surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("pref.Mount: nil app")
+		return fmt.Errorf("pref.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "pref")
 	if deps.DataDir == "" {
-		return fmt.Errorf("pref.Mount: empty DataDir")
+		return fmt.Errorf("pref.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("pref.Mount: open prefs store: %w", err)
+		return fmt.Errorf("pref.Use:  open prefs store: %w", err)
 	}
 	s := &service{store: store, log: log}
 	mounted = s

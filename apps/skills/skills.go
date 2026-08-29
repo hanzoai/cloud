@@ -123,18 +123,18 @@ type handler struct {
 }
 
 // Mount registers the discovery routes on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("skills.Mount: nil app")
+		return fmt.Errorf("skills.Use:  nil app")
 	}
 	sub, err := fs.Sub(catalogFS, "catalog")
 	if err != nil {
-		return fmt.Errorf("skills.Mount: %w", err)
+		return fmt.Errorf("skills.Use:  %w", err)
 	}
 	h := &handler{fsys: sub, brands: map[string]bool{}, fallback: deps.Brand}
 	entries, err := fs.ReadDir(sub, ".")
 	if err != nil {
-		return fmt.Errorf("skills.Mount: read catalog: %w", err)
+		return fmt.Errorf("skills.Use:  read catalog: %w", err)
 	}
 	for _, e := range entries {
 		if e.IsDir() {
@@ -142,7 +142,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 	}
 	if len(h.brands) == 0 {
-		return fmt.Errorf("skills.Mount: empty catalog (run `make skills`)")
+		return fmt.Errorf("skills.Use:  empty catalog (run `make skills`)")
 	}
 
 	// BOTH routes are UNTYPED BY DESIGN, and neither is a judgement call — see

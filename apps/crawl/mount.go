@@ -147,13 +147,13 @@ const Path = "/v1/crawl"
 // request is (it is a header, which a typed op cannot see), and the DECISION is
 // made in the handler, where every caller reaches it. The middleware only ever
 // adds a fact; it never admits by itself.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("crawl.Mount: nil app")
+		return fmt.Errorf("crawl.Use:  nil app")
 	}
 	logger := luxlog.Default()
 	if logger == nil {
-		return fmt.Errorf("crawl.Mount: nil luxlog.Default()")
+		return fmt.Errorf("crawl.Use:  nil luxlog.Default()")
 	}
 	logger = logger.New("subsystem", "crawl")
 
@@ -186,7 +186,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	reg := cloud.ZipApp(app)
 	if reg == nil {
-		return fmt.Errorf("crawl.Mount: router carries no typed-op registry")
+		return fmt.Errorf("crawl.Use:  router carries no typed-op registry")
 	}
 	// ONE registration, at the address this API is called on. Declaring the whole
 	// path here — rather than a leaf on a Group — is the fix LLM.md prescribes for

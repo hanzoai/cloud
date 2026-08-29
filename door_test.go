@@ -91,7 +91,7 @@ func doors(t *testing.T) (fromEdge, fromInside *zip.App) {
 	fromEdge = zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
 	fromInside = zip.New(zip.Config{AppName: "plane", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
 
-	d := fleet.Mount(fromEdge, manifest.MCPPath, []string{"websearch"},
+	d := fleet.Use(fromEdge, manifest.MCPPath, []string{"websearch"},
 		func(string) (string, string, error) { return edge, manifest.FrameworkMCPPath, nil })
 	// The MCP server lists from the build-time catalog and asks nothing, so a
 	// child this binary did not build publishes nothing and every route below is

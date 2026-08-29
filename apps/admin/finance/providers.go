@@ -187,7 +187,7 @@ func providerBurnCents(ctx context.Context) map[string]int64 {
 		return burn
 	}
 	// datastore's DDL, not ai's. ai's EnsureCloudUsageTable execs through a
-	// connection opened only inside aimod.Mount, and admin does not link the ai
+	// connection opened only inside aimod.Use, and admin does not link the ai
 	// module — so that call ALWAYS returned "datastore: not connected" here and
 	// this function always took the branch below, reporting every provider's burn
 	// as zero on a warehouse that was up. Same table, same idempotent DDL, on the

@@ -19,7 +19,7 @@ func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
 		Name:     "webhook",
 		Price:    cloud.Free,
-		Mount:    webhook.Mount,
+		Use:      webhook.Use,
 		Shutdown: webhook.Shutdown,
 	}}, []string{"webhook"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

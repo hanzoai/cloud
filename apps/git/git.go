@@ -192,9 +192,9 @@ func toView(s *cloud.Service[state], r Repo, branches []string, head string) rep
 }
 
 // Mount wires the git surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("git.Mount: nil app")
+		return fmt.Errorf("git.Use:  nil app")
 	}
 	// git registers TYPED ops, which live on the *zip.App's registry (ops.go) —
 	// they are DECLARED on the /v1/git group (routes below), which resolves to
@@ -202,21 +202,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// cannot carry them fails the mount rather than serving a surface no
 	// projection knows about.
 	if cloud.ZipApp(app) == nil {
-		return fmt.Errorf("git.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+		return fmt.Errorf("git.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("git.Mount: empty DataDir")
+		return fmt.Errorf("git.Use:  empty DataDir")
 	}
 	gitRoot := filepath.Join(deps.DataDir, "git")
 	st, err := newStorage(gitRoot)
 	if err != nil {
-		return fmt.Errorf("git.Mount: open storage: %w", err)
+		return fmt.Errorf("git.Use:  open storage: %w", err)
 	}
 	// The SSH public-key registry: ONE global file (the PublicKeyCallback runs
 	// before any org is known, so auth is a single fingerprint lookup).
 	keys, err := openKeyStore(gitRoot)
 	if err != nil {
-		return fmt.Errorf("git.Mount: open ssh key store: %w", err)
+		return fmt.Errorf("git.Use:  open ssh key store: %w", err)
 	}
 	b := cloud.NewBase(deps, "git")
 	s := &cloud.Service[state]{Base: b, State: state{
@@ -267,12 +267,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	sshSrv, err := newSSHServer(s, sshConfig(deps, gitRoot))
 	if err != nil {
 		_ = keys.Close()
-		return fmt.Errorf("git.Mount: init ssh: %w", err)
+		return fmt.Errorf("git.Use:  init ssh: %w", err)
 	}
 	s.State.ssh = sshSrv
 	if err := sshSrv.start(); err != nil {
 		_ = keys.Close()
-		return fmt.Errorf("git.Mount: start ssh: %w", err)
+		return fmt.Errorf("git.Use:  start ssh: %w", err)
 	}
 
 	b.Log.Info("git mounted", "brand", deps.Brand, "storage", "osfs", "root", gitRoot,

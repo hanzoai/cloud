@@ -26,8 +26,8 @@ func mountLink(t *testing.T) *zip.App {
 	// receives; it is the composer's install — once at the root of every program
 	// — so this package does not install its own and a test app owes it.
 	app.Use(cloud.Bridge())
-	if err := Mount(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app
@@ -249,12 +249,12 @@ func TestRevokeStopsSessions(t *testing.T) {
 	// (see mountLink); without it every typed op here answers 403.
 	app.Use(cloud.Bridge())
 	deps := cloud.Deps{DataDir: dir}
-	if err := agents.Mount(app, deps); err != nil {
-		t.Fatalf("agents.Mount: %v", err)
+	if err := agents.Use(app, deps); err != nil {
+		t.Fatalf("agents.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = agents.Shutdown(context.Background()) })
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("link.Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("link.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 
@@ -343,12 +343,12 @@ func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
 	// (see mountLink); without it every typed op here answers 403.
 	app.Use(cloud.Bridge())
 	deps := cloud.Deps{DataDir: dir}
-	if err := agents.Mount(app, deps); err != nil {
-		t.Fatalf("agents.Mount: %v", err)
+	if err := agents.Use(app, deps); err != nil {
+		t.Fatalf("agents.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = agents.Shutdown(context.Background()) })
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("link.Mount: %v", err)
+	if err := Use(app, deps); err != nil {
+		t.Fatalf("link.Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 

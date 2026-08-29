@@ -79,13 +79,13 @@ type state struct{}
 type noContent = struct{}
 
 // Mount registers the surface. There is nothing to start.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// A typed op is a route PLUS a registry entry, and the registry lives on
 	// the App. A router that cannot reach it would serve every route with no
 	// schema, no prose, no MCP tool and no SDK method — so the mount FAILS
 	// rather than quietly publishing a surface no projection knows about.
 	if cloud.ZipApp(app) == nil {
-		return fmt.Errorf("kv.Mount: router is not a zip app, so the typed ops have no registry")
+		return fmt.Errorf("kv.Use:  router is not a zip app, so the typed ops have no registry")
 	}
 	routes(app, &cloud.Service[state]{Base: cloud.NewBase(deps, "kv")})
 	return nil

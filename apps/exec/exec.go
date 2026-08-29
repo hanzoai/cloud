@@ -814,9 +814,9 @@ func checkKey(c *zip.Ctx) error {
 }
 
 // Mount registers the code-interpreter surface.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("exec.Mount: nil app")
+		return fmt.Errorf("exec.Use:  nil app")
 	}
 	if b := strings.TrimSpace(deps.Brand); b != "" {
 		brandOrg = b
@@ -878,7 +878,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// scoped router, where the prefix guard applies to it.
 	reg := cloud.ZipApp(app)
 	if reg == nil {
-		return fmt.Errorf("exec.Mount: router carries no typed-op registry")
+		return fmt.Errorf("exec.Use:  router carries no typed-op registry")
 	}
 	zip.Post[CodeRun, CodeResult](reg, Path, run,
 		zip.WithSummary("Run a code snippet in a sandboxed interpreter"))

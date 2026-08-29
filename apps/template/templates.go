@@ -174,28 +174,28 @@ var mounted *cloud.Service[state]
 // (a package-global `mounted` so Lookup is ONE entry point for the projects fork
 // flow, and a shutdown that closes the store), so it builds the Service value
 // directly.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("template.Mount: nil app")
+		return fmt.Errorf("template.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("template.Mount: empty DataDir")
+		return fmt.Errorf("template.Use:  empty DataDir")
 	}
 	// templates registers TYPED ops, which live on the *zip.App's registry — the
 	// one value OpenAPI, MCP and the CLI are projected from. A Router that is not
 	// backed by one must fail the mount rather than serve routes no projection knows.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("template.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+		return fmt.Errorf("template.Use:  router is not backed by a *zip.App; typed ops have nowhere to register")
 	}
 	// Validate the embedded gallery here, failing the mount closed on a malformed
 	// catalog rather than on the first browse.
 	if _, err := catalog(); err != nil {
-		return fmt.Errorf("template.Mount: %w", err)
+		return fmt.Errorf("template.Use:  %w", err)
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("template.Mount: open store: %w", err)
+		return fmt.Errorf("template.Use:  open store: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "template"), State: state{store: store}}
 	mounted = s

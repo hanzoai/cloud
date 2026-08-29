@@ -61,7 +61,7 @@ const startup = 15 * time.Second
 var gateway *protocol.Broker
 
 // Mount starts the embedded AMQP gateway over the embedded JetStream.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "amqp")
 
 	port, err := envInt("CLOUD_AMQP_PORT", 5672)
@@ -83,13 +83,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	select {
 	case serveErr := <-errc:
 		if serveErr != nil {
-			return fmt.Errorf("amqp.Mount: gateway serve (fail-closed): %w", serveErr)
+			return fmt.Errorf("amqp.Use:  gateway serve (fail-closed): %w", serveErr)
 		}
-		return fmt.Errorf("amqp.Mount: gateway exited immediately (fail-closed)")
+		return fmt.Errorf("amqp.Use:  gateway exited immediately (fail-closed)")
 	case <-b.Ready():
 	case <-time.After(startup):
 		b.Shutdown()
-		return fmt.Errorf("amqp.Mount: gateway not ready within %s (fail-closed): pubsub %s", startup, pubsub.URL())
+		return fmt.Errorf("amqp.Use:  gateway not ready within %s (fail-closed): pubsub %s", startup, pubsub.URL())
 	}
 
 	gateway = b
@@ -126,7 +126,7 @@ func envInt(k string, def int) (int, error) {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return 0, fmt.Errorf("amqp.Mount: bad %s %q: %w", k, v, err)
+		return 0, fmt.Errorf("amqp.Use:  bad %s %q: %w", k, v, err)
 	}
 	return n, nil
 }

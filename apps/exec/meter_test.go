@@ -28,8 +28,8 @@ func billed(t *testing.T, l *planetest.Ledger) *zip.App {
 	// of its leaves. It used to be installed by hand right at this line, which is the
 	// tell the audit turned on — a package whose only Bridge lives in a test is a
 	// package proving its org path with the org absent everywhere else.
-	if err := Mount(app, cloud.Deps{Brand: "hanzo"}); err != nil {
-		t.Fatalf("Mount: %v", err)
+	if err := Use(app, cloud.Deps{Brand: "hanzo"}); err != nil {
+		t.Fatalf("Use:  %v", err)
 	}
 	// Mount binds a meter from deps; replace it with one that has a ledger behind
 	// it. Rebinding rather than passing Metering through Deps keeps this test

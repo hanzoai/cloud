@@ -212,9 +212,9 @@ func (ops) upkeep(_ context.Context, in *upkeepIn) (*Upkeep, error) {
 }
 
 // Mount registers the standing surface on app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("standing.Mount: nil app")
+		return fmt.Errorf("standing.Use:  nil app")
 	}
 	log := luxlog.Default().New("subsystem", "standing")
 	o := ops{}

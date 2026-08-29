@@ -421,24 +421,24 @@ type authorizeOut struct {
 // Mount wires /v1/integrations/* onto app. Complex flavour: it publishes the
 // package global `mounted` (the in-process token-custody client) and pairs with a
 // Shutdown, so it constructs the cloud.Service value directly (cloud.NewBase +
-// &cloud.Service[state]{…}) rather than via cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// &cloud.Service[state]{…}) rather than via cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("integrations.Mount: nil app")
+		return fmt.Errorf("integrations.Use:  nil app")
 	}
 	// The typed-op registry lives on the concrete app (ops.go). A Router that is
 	// neither an App nor a scope cannot reach it, and serving routes no projection
 	// knows is worse than not serving them — fail the mount instead.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
-		return fmt.Errorf("integrations.Mount: router does not expose the typed-op registry")
+		return fmt.Errorf("integrations.Use:  router does not expose the typed-op registry")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("integrations.Mount: empty DataDir")
+		return fmt.Errorf("integrations.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("integrations.Mount: open store: %w", err)
+		return fmt.Errorf("integrations.Use:  open store: %w", err)
 	}
 
 	// deps.KMS is the cloud.KMSClient, and it is USED as that interface — no
@@ -465,17 +465,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			if p.Authorize != nil || p.Exchange != nil || p.Revoke != nil ||
 				p.RedirectPath != "" || p.Configured != nil || p.Creds != nil {
 				_ = store.Close()
-				return fmt.Errorf("integrations.Mount: user-scoped provider %q must not declare org OAuth/config fields", id)
+				return fmt.Errorf("integrations.Use:  user-scoped provider %q must not declare org OAuth/config fields", id)
 			}
 			if p.Device == nil && p.Adopt == nil && p.Verify == nil {
 				_ = store.Close()
-				return fmt.Errorf("integrations.Mount: user-scoped provider %q needs at least one of Device/Adopt/Verify", id)
+				return fmt.Errorf("integrations.Use:  user-scoped provider %q needs at least one of Device/Adopt/Verify", id)
 			}
 			continue
 		}
 		if p.Configured == nil || p.Creds == nil {
 			_ = store.Close()
-			return fmt.Errorf("integrations.Mount: org provider %q must declare Configured and Creds", id)
+			return fmt.Errorf("integrations.Use:  org provider %q must declare Configured and Creds", id)
 		}
 		if p.Kind == apiKeyKind {
 			// apikey providers have no OAuth callback; RedirectPath is unused.
@@ -483,7 +483,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		}
 		if want := callbackPath(id); p.RedirectPath != want {
 			_ = store.Close()
-			return fmt.Errorf("integrations.Mount: provider %q RedirectPath %q must equal %q", id, p.RedirectPath, want)
+			return fmt.Errorf("integrations.Use:  provider %q RedirectPath %q must equal %q", id, p.RedirectPath, want)
 		}
 	}
 

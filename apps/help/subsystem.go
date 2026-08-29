@@ -60,8 +60,8 @@ type state struct {
 // conversation thread) is the framework's generic role-gated surface
 // (/v1/framework/hd-*); this adds ONLY the public help center. It owns no store —
 // every read/write delegates to the framework in-process API.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "help", build, routes)
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "help", build, routes)
 }
 
 func build(b cloud.Base) (state, error) {

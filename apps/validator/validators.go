@@ -67,16 +67,16 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the validators surface onto app per HIP-0106.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("validator.Mount: nil app")
+		return fmt.Errorf("validator.Use:  nil app")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("validator.Mount: empty DataDir")
+		return fmt.Errorf("validator.Use:  empty DataDir")
 	}
 	store, err := openStore(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("validator.Mount: open store: %w", err)
+		return fmt.Errorf("validator.Use:  open store: %w", err)
 	}
 
 	slots := uint64(envInt("VALIDATORS_SLOTS", 100))
@@ -87,14 +87,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	)
 	if err != nil {
 		_ = store.Close()
-		return fmt.Errorf("validator.Mount: nft reader: %w", err)
+		return fmt.Errorf("validator.Use:  nft reader: %w", err)
 	}
 
 	network := environ.Or("VALIDATORS_NETWORK", "devnet")
 	netID, ok := networkIDs[network]
 	if !ok {
 		_ = store.Close()
-		return fmt.Errorf("validator.Mount: unknown VALIDATORS_NETWORK %q", network)
+		return fmt.Errorf("validator.Use:  unknown VALIDATORS_NETWORK %q", network)
 	}
 
 	prov := newK8sProvisioner(crConfig{

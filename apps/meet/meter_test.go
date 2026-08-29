@@ -19,9 +19,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// billedMount is mountWith plus a ledger: the same real identity boundary and the
+// billedUse is mountWith plus a ledger: the same real identity boundary and the
 // same workspace authority, with a meter that has money behind it.
-func billedMount(t *testing.T, l *planetest.Ledger) *zip.App {
+func billedUse(t *testing.T, l *planetest.Ledger) *zip.App {
 	t.Helper()
 	iamIssuer(t)
 	t.Setenv(keyFileEnv, keyFileWith(t, keyBody("APIkey", "apisecret")))
@@ -40,7 +40,7 @@ func billedMount(t *testing.T, l *planetest.Ledger) *zip.App {
 // A mint bills the caller's own org at the declared fee.
 func TestMintBillsTheCaller(t *testing.T) {
 	l := planetest.Money(t, 100000)
-	app := billedMount(t, l)
+	app := billedUse(t, l)
 
 	code, tok := ask(t, app, roomIn(workspaceA), "person-42", access(t, ada))
 	if code != http.StatusOK {
@@ -65,7 +65,7 @@ func TestMintBillsTheCaller(t *testing.T) {
 // never handed out rather than handed out unbilled.
 func TestUnfundedCallerGetsNoSeat(t *testing.T) {
 	l := planetest.Money(t, 0)
-	app := billedMount(t, l)
+	app := billedUse(t, l)
 
 	code, tok := ask(t, app, roomIn(workspaceA), "person-42", access(t, ada))
 	if code == http.StatusOK {

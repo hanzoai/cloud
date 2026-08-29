@@ -165,7 +165,7 @@ func commerceMasterKey(master []byte, lg luxlog.Logger) []byte {
 // checkout SPA root catch-all, Listen) are skipped by the SharedApp contract.
 // This adapter registers the remaining wire-contract families with commerce's
 // own gate chains (see Prefixes).
-func Mount(app cloud.Router, deps cloud.Deps) error {
+func Use(app cloud.Router, deps cloud.Deps) error {
 	// The ledger lives here, so the methods that read and move it are published
 	// here: balance, the prepaid gate, the debit and the credit.
 	exposeBalance()

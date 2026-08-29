@@ -159,10 +159,10 @@ type state struct {
 
 // Mount wires the /v1/ml/* surface onto app per HIP-0106. The
 // "compute"-product meter, the k8s client bring-up and the shared fleet registry
-// make this a direct construction (cloud.NewBase), not cloud.Mount.
-func Mount(app cloud.Router, deps cloud.Deps) error {
+// make this a direct construction (cloud.NewBase), not cloud.Use.
+func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("ml.Mount: nil app")
+		return fmt.Errorf("ml.Use:  nil app")
 	}
 
 	s := &cloud.Service[state]{

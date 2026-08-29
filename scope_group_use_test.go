@@ -37,13 +37,13 @@ import (
 //   - vault nests a group inside a group, which is where a bound that behaved
 //     like a place would leak into the parent.
 //
-// Every one of them must compose (MountAll succeeds — zip's inert-middleware
+// Every one of them must compose (UseAll succeeds — zip's inert-middleware
 // rule runs on Test's Build), guard exactly its own subtree, and leave every
 // sibling reachable.
 func TestGroupThenUseGuardsOnlyItsSubtree(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "account", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "account", Use: func(r cloud.Router, _ cloud.Deps) error {
 			g := r.Group("/v1/account/admin")
 			g.Use(zip.H(deny))
 			r.Get("/v1/account/admin/purge", pong)
@@ -51,7 +51,7 @@ func TestGroupThenUseGuardsOnlyItsSubtree(t *testing.T) {
 			return nil
 		}},
 		{Name: "avatar", Prefixes: []string{"/v1/avatar", "/v1/gravatar"},
-			Mount: func(r cloud.Router, _ cloud.Deps) error {
+			Use: func(r cloud.Router, _ cloud.Deps) error {
 				g := r.Group("/v1/gravatar/admin")
 				g.Use(zip.H(deny))
 				r.Get("/v1/gravatar/admin/flush", pong)
@@ -59,7 +59,7 @@ func TestGroupThenUseGuardsOnlyItsSubtree(t *testing.T) {
 				r.Get("/v1/avatar/image", pong)
 				return nil
 			}},
-		{Name: "vault", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "vault", Use: func(r cloud.Router, _ cloud.Deps) error {
 			auth := r.Group("/v1/vault/auth")
 			admin := auth.Group("/admin")
 			admin.Use(zip.H(deny))
@@ -68,13 +68,13 @@ func TestGroupThenUseGuardsOnlyItsSubtree(t *testing.T) {
 			r.Get("/v1/vault/status", pong)
 			return nil
 		}},
-		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "neighbour", Use: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 
 	for _, c := range []struct {
@@ -114,7 +114,7 @@ func TestGroupThenUseGuardsOnlyItsSubtree(t *testing.T) {
 func TestGroupPrefixesTheRoutesRegisteredThroughIt(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "guide", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "guide", Use: func(r cloud.Router, _ cloud.Deps) error {
 			g := r.Group("/v1/guide")
 			g.Get("/topics", pong)         // -> /v1/guide/topics
 			g.Group("/v2").Get("/x", pong) // -> /v1/guide/v2/x
@@ -122,7 +122,7 @@ func TestGroupPrefixesTheRoutesRegisteredThroughIt(t *testing.T) {
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	for _, p := range []string{"/v1/guide/topics", "/v1/guide/v2/x"} {
 		if got := get(t, app, p); got != http.StatusOK {
@@ -160,13 +160,13 @@ func TestGroupPrefixesTheRoutesRegisteredThroughIt(t *testing.T) {
 func TestScopedUseGatesOnlyWhatFollowsIt(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
-		{Name: "early", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "early", Use: func(r cloud.Router, _ cloud.Deps) error {
 			g := r.Group("/v1/early")
 			g.Use(zip.H(deny))
 			g.Get("/x", pong)
 			return nil
 		}},
-		{Name: "late", Mount: func(r cloud.Router, _ cloud.Deps) error {
+		{Name: "late", Use: func(r cloud.Router, _ cloud.Deps) error {
 			g := r.Group("/v1/late")
 			g.Get("/x", pong)
 			g.Use(zip.H(deny))
@@ -174,7 +174,7 @@ func TestScopedUseGatesOnlyWhatFollowsIt(t *testing.T) {
 		}},
 	})
 	if err != nil {
-		t.Fatalf("MountAll: %v", err)
+		t.Fatalf("UseAll: %v", err)
 	}
 	if got := get(t, app, "/v1/early/x"); got != http.StatusUnauthorized {
 		t.Errorf("/v1/early/x = %d, want 401 — Use before the routes must guard them", got)
