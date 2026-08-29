@@ -57,47 +57,6 @@ func TestOnlyAGovernedChangeIsAsked(t *testing.T) {
 	}
 }
 
-// TestADeploymentWithoutTheKeyDoesNotCompose: a process that would refuse every
-// change a browser makes says so at BOOT, in one line naming the value to set,
-// rather than 403-ing silently for as long as the pod runs. That failure cannot be
-// seen from inside one process, so refusing to compose is the only place to catch it.
-func TestADeploymentWithoutTheKeyDoesNotCompose(t *testing.T) {
-	app := zip.New(zip.Config{})
-	sc := newScope(app, "crm", nil)
-	zip.Post(sc.Group("/v1/crm"), "/companies",
-		func(context.Context, *struct{}) (*struct{}, error) { return nil, nil })
-
-	t.Setenv(attest.KeyEnv, "")
-	err := keyed(app, true)
-	if err == nil {
-		t.Fatal("a deployment serving a governed change composed on a key of its own")
-	}
-	if !strings.Contains(err.Error(), attest.KeyEnv) || !strings.Contains(err.Error(), "/v1/crm/companies") {
-		t.Errorf("the refusal names neither the value to set nor the surface that needs it: %v", err)
-	}
-	if err := keyed(app, false); err != nil {
-		t.Errorf("a machine with no secret store was refused: %v", err)
-	}
-	t.Setenv(attest.KeyEnv, goodKey)
-	if err := keyed(app, true); err != nil {
-		t.Errorf("a provisioned deployment was refused: %v", err)
-	}
-}
-
-// TestAnUngovernedProgramNeedsNoKey: the boot rule is scoped to what the process
-// SERVES, so the 100-odd apps outside the governed list keep composing without a
-// value they have no use for. It is what makes the rollout increment-sized.
-func TestAnUngovernedProgramNeedsNoKey(t *testing.T) {
-	app := zip.New(zip.Config{})
-	sc := newScope(app, "projects", nil)
-	zip.Post(sc.Group("/v1/projects"), "/",
-		func(context.Context, *struct{}) (*struct{}, error) { return nil, nil })
-	t.Setenv(attest.KeyEnv, "")
-	if err := keyed(app, true); err != nil {
-		t.Errorf("a deployment serving no governed change was refused a key it does not use: %v", err)
-	}
-}
-
 // TestTheRuleCoversTheGraph closes the seam inventory. A field of the graph
 // resolves through op.direct — validate, authorize, the handler — with the
 // REQUEST's context, so the control answers there as it does over REST. It is
@@ -151,35 +110,26 @@ func TestTheRuleCoversTheGraph(t *testing.T) {
 	if ran != 0 {
 		t.Errorf("the handler ran %d times for a change nobody asked for", ran)
 	}
-	tok, _ := attest.Process().Mint("u", "acme")
-	if body := ask(map[string]string{"Cookie": "hanzo_iam_token=v", attest.Header: tok}); strings.Contains(body, Unasked) {
-		t.Errorf("the graph refused a caller who echoed the token: %s", body)
+	if body := ask(map[string]string{"Cookie": "hanzo_iam_token=v", "Sec-Fetch-Site": "same-origin"}); strings.Contains(body, Unasked) {
+		t.Errorf("the graph refused the console's own change: %s", body)
 	}
 	if ran != 1 {
 		t.Errorf("the handler ran %d times for a change that was asked for; want 1", ran)
 	}
 }
 
-// TestAKeylessProcessRefusesTheChangeAndServesTheRead is why the eleven mount-time
-// account.Shared checks are gone, and it is the property they were mistaken for.
+// TestTheBrowserSaysWhereAChangeCameFrom is the whole anti-forgery control now.
 //
-// Those checks read the same environment this one does and refused the whole app —
-// every route, every caller — when the key was absent. That is not what the control
-// protects. Intended consults the key in exactly one of its four branches, and that
-// branch already returns 403; the other three answer before the key is ever read.
-// A process with no key holds a random one (attest.Process), so it REFUSES every
-// token minted elsewhere and can be handed no forgery. Refusing to serve on top of
-// that bought nothing and cost the public reads — /v1/billing/plans, /v1/s3/health,
-// /v1/code/tree — which answer no token at all.
+// It replaced a 32-byte key every process had to hold the same copy of. That key
+// proved a caller had first read GET /v1/account/csrf from THIS origin —
+// which is the fact Sec-Fetch-Site states outright, and states unforgeably: it is
+// a forbidden header, so no page can write it.
 //
-// So: keyless is not keyless-and-open. It is keyless-and-refusing, on the one path
-// that asks.
-func TestAKeylessProcessRefusesTheChangeAndServesTheRead(t *testing.T) {
-	t.Setenv(attest.KeyEnv, "")
-
-	// The RAW-ROUTE shape of the control, which is what apps/account RequireCSRF
-	// installs and one line over Intended — the same decision the typed-op
-	// authorizer reaches, asked where an HTTP request can actually meet it.
+// The case that matters is the one SameSite cannot cover. SameSite is scoped to
+// the registrable domain, so a page on any *.hanzo.ai host sends the session
+// cookie and its request looks like the console's own. That request carries
+// `same-site`, NOT `same-origin`, which is exactly where this refuses.
+func TestTheBrowserSaysWhereAChangeCameFrom(t *testing.T) {
 	app := zip.New(zip.Config{})
 	app.Post("/v1/crm/companies", func(c *zip.Ctx) error {
 		if err := Intended(c); err != nil {
@@ -188,44 +138,65 @@ func TestAKeylessProcessRefusesTheChangeAndServesTheRead(t *testing.T) {
 		return c.String(200, "served")
 	})
 
-	// COMPOSES. A process serving a governed change answers to `keyed`, and to
-	// nothing else — that is the whole of this change.
-	if err := keyed(app, false); err != nil {
-		t.Fatalf("a machine with no secret store was refused: %v", err)
+	call := func(hdr map[string]string) int {
+		req := httptest.NewRequest("POST", "/v1/crm/companies", strings.NewReader("{}"))
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("test request: %v", err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
 	}
 
-	// AND THE AMBIENT CHANGE IS STILL REFUSED. This is the security property the
-	// mount checks were credited with and never held: it lives here, per request.
-	req := httptest.NewRequest("POST", "/v1/crm/companies", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cookie", "session=whatever")
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("test request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 403 {
-		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("POST with an ambient cookie and no shared key = %d %q, want 403 — "+
-			"a keyless process must refuse the change, not serve it", resp.StatusCode, string(body))
+	cookie := map[string]string{"Cookie": "session=whatever"}
+	with := func(extra map[string]string) map[string]string {
+		m := map[string]string{}
+		for k, v := range cookie {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
 	}
 
-	// AND IT STILL SERVES THE CALLERS THE KEY NEVER GATED. No Cookie means no
-	// ambient credential and nothing a page could have sent — the in-cluster hop
-	// and the machine caller. The mount checks 503'd these too, which is the cost
-	// that bought nothing: websearch's API-key arm, s3's ungated probe, code's
-	// free reads and billing's public catalog all live on this branch.
-	req = httptest.NewRequest("POST", "/v1/crm/companies", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = app.Test(req)
-	if err != nil {
-		t.Fatalf("test request: %v", err)
+	// THE ATTACK. A sibling subdomain rides the cookie and looks identical to the
+	// console at every layer SameSite can see. The browser still tells us.
+	if got := call(with(map[string]string{"Sec-Fetch-Site": "same-site"})); got != 403 {
+		t.Errorf("a same-site (sibling subdomain) change = %d, want 403 — "+
+			"this is the case SameSite cannot refuse and the whole reason the control exists", got)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		t.Errorf("POST with no ambient credential and no shared key = %d %q, want 200 — "+
-			"a key question got between a machine caller and a surface it does not gate",
-			resp.StatusCode, string(body))
+	if got := call(with(map[string]string{"Sec-Fetch-Site": "cross-site"})); got != 403 {
+		t.Errorf("a cross-site change = %d, want 403", got)
+	}
+
+	// THE CONSOLE ITSELF, and a typed URL.
+	if got := call(with(map[string]string{"Sec-Fetch-Site": "same-origin"})); got != 200 {
+		t.Errorf("the console's own change = %d, want 200", got)
+	}
+	if got := call(with(map[string]string{"Sec-Fetch-Site": "none"})); got != 200 {
+		t.Errorf("a user-initiated navigation = %d, want 200", got)
+	}
+
+	// NO SIGNAL AT ALL, with a cookie: refuse. A state change that will not say
+	// where it came from is the shape being defended against, so absence is a no.
+	if got := call(cookie); got != 403 {
+		t.Errorf("a cookie-authenticated change with no Sec-Fetch-Site and no Origin = %d, "+
+			"want 403 — absence must fail closed", got)
+	}
+
+	// A PRESENTED CREDENTIAL is not forgeable from a page, so it is never asked.
+	// This is what keeps the CLI, the SDKs and every machine caller free.
+	if got := call(map[string]string{"Authorization": "Bearer sk-whatever", "Sec-Fetch-Site": "cross-site"}); got != 200 {
+		t.Errorf("a bearer-presenting caller = %d, want 200 — a page cannot set that header", got)
+	}
+
+	// NO COOKIE, no ambient credential, nothing to forge.
+	if got := call(map[string]string{}); got != 200 {
+		t.Errorf("a request with no ambient credential = %d, want 200", got)
 	}
 }

@@ -203,7 +203,7 @@ func TestTheTokenTheControlAsksForIsAccepted(t *testing.T) {
 		t.Fatalf("no token in %s", body)
 	}
 
-	held := map[string]string{"X-CSRF-Token": mint.Token}
+	held := map[string]string{"Sec-Fetch-Site": "same-origin"}
 	if st, body = asVisitor(t, app, restReq(), held); st != http.StatusOK {
 		t.Fatalf("REST with the minted token = %d %s, want 200", st, body)
 	}
@@ -214,18 +214,16 @@ func TestTheTokenTheControlAsksForIsAccepted(t *testing.T) {
 		t.Fatalf("the engine was asked %d times by two attested callers, want 2", got)
 	}
 
-	// A token minted for somebody else is not this caller's.
-	r := restReq()
-	r.Header.Set("Cookie", "hanzo_iam_token=whatever")
-	r.Header.Set("X-Org-Id", "other")
-	r.Header.Set("X-User-Id", "u-other")
-	r.Header.Set("X-CSRF-Token", mint.Token)
-	resp, err := app.Test(r)
-	if err != nil {
-		t.Fatalf("other org: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("another org's token = %d, want 403 — the token is bound to who it was minted for", resp.StatusCode)
+	// A SIBLING SUBDOMAIN is refused. This stood as "a token minted for somebody
+	// else is not this caller's" — identity binding, which was how the old MAC
+	// covered a page on another *.hanzo.ai host: such a page CAN set a custom
+	// header, so a token was the only thing separating it from the console.
+	//
+	// Sec-Fetch-Site separates them at the door and needs no token: that page's
+	// request says `same-site`, and only the console's says `same-origin`. A
+	// legitimate caller from another org is not forgery and is not refused here —
+	// the old assertion could not tell those apart because a token was all it had.
+	if st, _ = asVisitor(t, app, restReq(), map[string]string{"Sec-Fetch-Site": "same-site"}); st != http.StatusForbidden {
+		t.Fatalf("a sibling *.hanzo.ai page = %d, want 403", st)
 	}
 }
