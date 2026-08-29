@@ -257,7 +257,7 @@ var personalities = []persona{
 
 // SeedPersonalities ensures the built-in crew exists for org. Idempotent: an
 // already-present persona (UNIQUE org+name) is left untouched, so it is safe to
-// call on every org first-touch (a new Team workspace, say). Returns the number
+// call on every org first-touch (a new Team space, say). Returns the number
 // newly created.
 //
 // It needs a model to attach — the deployment's configured default. With no

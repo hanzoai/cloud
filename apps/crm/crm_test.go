@@ -27,7 +27,7 @@ func TestEveryDocTypeIsValid(t *testing.T) {
 func TestEveryLinkResolves(t *testing.T) {
 	declared := map[string]bool{}
 	for _, dt := range DocTypes() {
-		declared[dt.Name] = true
+		declared[dt.ID().String()] = true
 	}
 	for _, dt := range DocTypes() {
 		for _, f := range dt.Fields {
@@ -49,13 +49,13 @@ func TestModuleIsRegistered(t *testing.T) {
 		t.Fatalf("registry holds %d fixtures for %q, DocTypes() returns %d",
 			len(fixtures), Module, len(DocTypes()))
 	}
-	got := map[string]bool{}
+	got := map[doctype.ID]bool{}
 	for _, dt := range fixtures {
-		got[dt.Name] = true
+		got[dt.ID()] = true
 	}
-	for _, want := range []string{dtCompany, dtContact, dtOpportunity, dtApplication} {
+	for _, want := range []doctype.ID{dtCompany, dtContact, dtOpportunity, dtApplication} {
 		if !got[want] {
-			t.Errorf("%q is not in the registered module", want)
+			t.Errorf("%s is not in the registered module", want)
 		}
 	}
 }

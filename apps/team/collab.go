@@ -6,7 +6,7 @@ package team
 //
 //	POST {COLLABORATOR_URL http(s)}/rpc/{documentId}   body {method, payload}
 //
-//	documentId = "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>"
+//	documentId = "<spaceUuid>|<objectClass>|<objectId>|<objectAttr>"
 //	  - createContent {content:{field:markup}, updates?:{field:b64yUpdate}}
 //	                                           → {content:{field:blobRef}}
 //	  - updateContent {content:{field:markup}} → {}
@@ -31,9 +31,9 @@ package team
 // transform lives in the relay lane).
 //
 // TENANT ISOLATION (same invariant as files.go, defense in depth): org is the
-// VERIFIED token claim; the documentId's workspace segment must be the token's
-// workspace (when the token carries one) AND the caller must be a MEMBER of it;
-// the physical key embeds org+workspace so a foreign ref cannot resolve.
+// VERIFIED token claim; the documentId's space segment must be the token's
+// space (when the token carries one) AND the caller must be a MEMBER of it;
+// the physical key embeds org+space so a foreign ref cannot resolve.
 
 import (
 	"context"
@@ -95,7 +95,7 @@ func (s *collabService) register(app cloud.Router, guard guardFn) {
 
 // collabDoc is the decoded documentId (collaborator-client encodeDocumentId).
 type collabDoc struct {
-	workspace   string
+	space       string
 	objectClass string
 	objectID    string
 	objectAttr  string
@@ -109,8 +109,8 @@ func decodeCollabDoc(raw string) (collabDoc, error) {
 	if len(parts) != 4 {
 		return collabDoc{}, fmt.Errorf("malformed documentId")
 	}
-	d := collabDoc{workspace: parts[0], objectClass: parts[1], objectID: parts[2], objectAttr: parts[3]}
-	if d.workspace == "" || d.objectID == "" || d.objectAttr == "" {
+	d := collabDoc{space: parts[0], objectClass: parts[1], objectID: parts[2], objectAttr: parts[3]}
+	if d.space == "" || d.objectID == "" || d.objectAttr == "" {
 		return collabDoc{}, fmt.Errorf("malformed documentId")
 	}
 	return d, nil
@@ -144,9 +144,9 @@ func (s *collabService) seedYLog(ctx context.Context, org string, doc collabDoc,
 	if err != nil || len(update) == 0 || len(update) > maxMarkupSize {
 		return nil
 	}
-	fieldDoc := collabDoc{workspace: doc.workspace, objectClass: doc.objectClass, objectID: doc.objectID, objectAttr: field}
-	docName := fieldDoc.workspace + "|" + fieldDoc.objectClass + "|" + fieldDoc.objectID + "|" + fieldDoc.objectAttr
-	return s.hub.seedIfAbsent(ctx, org, doc.workspace, docName, fieldDoc, update)
+	fieldDoc := collabDoc{space: doc.space, objectClass: doc.objectClass, objectID: doc.objectID, objectAttr: field}
+	docName := fieldDoc.space + "|" + fieldDoc.objectClass + "|" + fieldDoc.objectID + "|" + fieldDoc.objectAttr
+	return s.hub.seedIfAbsent(ctx, org, doc.space, docName, fieldDoc, update)
 }
 
 // collabPayload is the argument of one collaborator RPC — the union of what the
@@ -171,7 +171,7 @@ type collabPayload struct {
 // and the verb's payload.
 type collabRequest struct {
 	// DocumentID addresses the document field, as
-	// "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>" — the
+	// "<spaceUuid>|<objectClass>|<objectId>|<objectAttr>" — the
 	// collaborator-client encodeDocumentId shape, from the path.
 	DocumentID string `json:"documentId"`
 	// Method is the verb: createContent, updateContent or getContent.
@@ -207,10 +207,10 @@ type collabResult struct {
 // updateContent never touches that log: peers may be live-editing the document,
 // and their edits are not this call's to overwrite.
 //
-// Every call is scoped to the caller's VERIFIED session or workspace token: the
-// documentId's workspace must be the token's workspace when the token names one,
-// and the caller must be a member of it. An unknown workspace, another tenant's
-// workspace and a workspace the caller is not in all answer the same 404, so a
+// Every call is scoped to the caller's VERIFIED session or space token: the
+// documentId's space must be the token's space when the token names one,
+// and the caller must be a member of it. An unknown space, another tenant's
+// space and a space the caller is not in all answer the same 404, so a
 // probe learns nothing about what exists.
 //
 // Example: {"documentId": "6579…|tracker:class:Issue|issue-1|description", "method": "getContent", "payload": {"source": "issue-1-description-1730000000000"}}
@@ -230,16 +230,16 @@ func (s *collabService) rpc(ctx context.Context, in *collabRequest) (*collabResu
 	if err != nil {
 		return nil, zip.ErrBadRequest("malformed documentId")
 	}
-	// An HS256 workspace token names its workspace — the documentId must agree. A
+	// An HS256 space token names its space — the documentId must agree. A
 	// credential that names none (a session token, and every IAM caller) falls
 	// through to the membership check, which is the whole authorization there.
-	if cl.workspace != "" && cl.workspace != doc.workspace {
+	if cl.space != "" && cl.space != doc.space {
 		return nil, zip.ErrNotFound("document not found")
 	}
 	if s.accounts == nil {
 		return nil, zip.Errorf(http.StatusServiceUnavailable, "team: collaborator unavailable")
 	}
-	if _, err := s.ident.admit(ctx, cl, doc.workspace); err != nil {
+	if _, err := s.ident.admit(ctx, cl, doc.space); err != nil {
 		return nil, zip.ErrNotFound("document not found")
 	}
 
@@ -252,7 +252,7 @@ func (s *collabService) rpc(ctx context.Context, in *collabRequest) (*collabResu
 				return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "markup too large (max %d bytes)", maxMarkupSize)
 			}
 			blobID := collabJSONID(doc.objectID, field, now)
-			if err := s.vfs.Put(ctx, blobKey(org, doc.workspace, blobID), []byte(markup)); err != nil {
+			if err := s.vfs.Put(ctx, blobKey(org, doc.space, blobID), []byte(markup)); err != nil {
 				return nil, zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
 			}
 			refs[field] = blobID
@@ -275,7 +275,7 @@ func (s *collabService) rpc(ctx context.Context, in *collabRequest) (*collabResu
 	case "getContent":
 		content := map[string]string{}
 		if src := strings.TrimSpace(in.Payload.Source); src != "" {
-			data, err := s.vfs.Get(ctx, blobKey(org, doc.workspace, src))
+			data, err := s.vfs.Get(ctx, blobKey(org, doc.space, src))
 			if err != nil || data == nil {
 				// A miss is a real empty answer (the client renders empty markup); a
 				// broken backend must not fabricate content either — same shape.

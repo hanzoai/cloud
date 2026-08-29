@@ -6,7 +6,7 @@ package base
 // bases.go answers WHICH BASES A CALLER CAN REACH, which is the one question the
 // per-org engine behind /v1/base/* cannot answer about itself: that wildcard
 // hands every request to ONE org's Base, so a listing addressed there arrives at
-// an engine that has no route for it and reports not-found. The workspace read
+// an engine that has no route for it and reports not-found. The space read
 // that as "you have no Bases" and showed an empty account — the whole product,
 // invisible, with every other part working.
 //
@@ -61,7 +61,7 @@ type baseView struct {
 
 // baseList is the listing's answer, and a NAMED SLICE because the wire is a bare
 // JSON array. An envelope struct is the shape a typed op reaches for by reflex
-// and would be a silent wire break here: the workspace reads `Base[]`.
+// and would be a silent wire break here: the space reads `Base[]`.
 type baseList []baseView
 
 // baseOps carries no state: it reads the mounted subsystem at REQUEST time, so

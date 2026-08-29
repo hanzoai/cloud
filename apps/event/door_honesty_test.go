@@ -180,7 +180,7 @@ func TestFullCapabilityUnroutableBodyIs400(t *testing.T) {
 	refused(t, "authenticated unroutable batch", code, body, http.StatusBadRequest, "unroutable_events")
 }
 
-// TestGuestRefusalIsCapabilityNotCredential: a guest's workspace token RESOLVED. It has
+// TestGuestRefusalIsCapabilityNotCredential: a guest's space token RESOLVED. It has
 // a credential and the credential is not the problem — it lacks capability into an org
 // it was invited into for one channel. 401 "key required" would be a false instruction;
 // 403 is the true one, and the code says which.

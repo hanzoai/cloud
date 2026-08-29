@@ -79,13 +79,13 @@ type Session struct {
 	Published bool
 
 	// Room is the collaborative room this session was started IN (HIP-0523) — the
-	// room a person mentioned an agent in, so a workspace view can ask "what has
+	// room a person mentioned an agent in, so a space view can ask "what has
 	// been run in #bugfix-1010" and a run can be read back to the conversation that
 	// asked for it.
 	//
 	// It is a LABEL the starting surface reports, exactly as Repo and Host are,
 	// and it is deliberately not resolved: the channel lives in another app's
-	// per-workspace document store, and a session that outlives its channel
+	// per-space document store, and a session that outlives its channel
 	// should keep saying where it came from rather than losing its provenance to
 	// a dangling reference. Empty means the run has no room — a CLI session, a
 	// schedule, an API call — which is most of them.

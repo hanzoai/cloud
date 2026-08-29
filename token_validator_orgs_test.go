@@ -2,7 +2,7 @@ package cloud
 
 // The `orgs` membership-set claim must survive verification into
 // VerifiedIdentity.Orgs — that is the value clients/team copies into a session so
-// a user's workspaces union across every org. These drive a real RSA-signed token
+// a user's spaces union across every org. These drive a real RSA-signed token
 // through the SAME validator the identity boundary uses.
 
 import (

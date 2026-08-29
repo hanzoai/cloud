@@ -59,14 +59,14 @@ func parseFrame(t *testing.T, frame []byte) (string, uint64, *lreader) {
 	return doc, typ, r
 }
 
-// collabHarness mounts team, seeds one workspace, and hands back the live
+// collabHarness mounts team, seeds one space, and hands back the live
 // collabService plus a member token and a valid documentName.
 func collabHarness(t *testing.T) (svc *collabService, docName, memberTok string) {
 	t.Helper()
 	vfs := newMemVFS()
 	_ = mountTeamVFS(t, vfs)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(context.Background(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestCollabWSCompaction(t *testing.T) {
 }
 
 // TestCollabWSTenancy is the red bar mirrored from the RPC lane: a bad token,
-// a foreign org, a workspace-pinned token naming another workspace, and any
+// a foreign org, a space-pinned token naming another space, and any
 // pre-auth traffic are ALL refused with PermissionDenied — and never joined.
 func TestCollabWSTenancy(t *testing.T) {
 	svc, doc, _ := collabHarness(t)
@@ -345,7 +345,7 @@ func TestCollabWSTenancy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deny("workspace pin mismatch", clientAuthFrame(doc, pinned))
+	deny("space pin mismatch", clientAuthFrame(doc, pinned))
 
 	deny("pre-auth sync", clientSyncFrame(doc, ySyncStep1, yEmptySV))
 }

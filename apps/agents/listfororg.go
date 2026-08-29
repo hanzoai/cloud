@@ -9,7 +9,7 @@ import "context"
 // It is the decompleced replacement for the old bots-as-members path, which
 // enumerated agents over HTTP (/v1/agents with a forwarded bearer) and broke
 // when HANZO_API_KEY was rejected (bot_members=0). clients/team calls this
-// directly to project each agent as a workspace Employee.
+// directly to project each agent as a space Employee.
 //
 // ISOLATION: org is the ONLY tenant key and is used VERBATIM (Store.List filters
 // WHERE org=?), so a caller for org A can never enumerate org B's agents. The

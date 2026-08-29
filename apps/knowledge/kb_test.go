@@ -17,7 +17,7 @@ func TestDocTypesValidate(t *testing.T) {
 	if len(dts) != 5 {
 		t.Fatalf("expected 5 KB doctypes, got %d", len(dts))
 	}
-	names := map[string]framework.DocType{}
+	byID := map[framework.ID]framework.DocType{}
 	for _, dt := range dts {
 		if dt.Module != Module {
 			t.Errorf("doctype %q: module = %q, want %q", dt.Name, dt.Module, Module)
@@ -25,11 +25,11 @@ func TestDocTypesValidate(t *testing.T) {
 		if err := dt.Validate(); err != nil {
 			t.Errorf("doctype %q failed engine Validate: %v", dt.Name, err)
 		}
-		names[dt.Name] = dt
+		byID[dt.ID()] = dt
 	}
-	for _, want := range []string{DTPage, DTMemory, DTSource, DTConnector, DTLink} {
-		if _, ok := names[want]; !ok {
-			t.Errorf("missing expected doctype %q", want)
+	for _, want := range []framework.ID{DTPage, DTMemory, DTSource, DTConnector, DTLink} {
+		if _, ok := byID[want]; !ok {
+			t.Errorf("missing expected doctype %s", want)
 		}
 	}
 }
@@ -45,8 +45,8 @@ func TestLinkEdgeIsSourceLinkPlusTitle(t *testing.T) {
 		fields[f.Fieldname] = f
 	}
 	src, ok := fields["source"]
-	if !ok || src.Fieldtype != framework.FieldLink || src.Options != DTPage || !src.Reqd {
-		t.Errorf("kb-link.source must be a required Link to %q, got %+v", DTPage, src)
+	if !ok || src.Fieldtype != framework.FieldLink || src.Options != DTPage.String() || !src.Reqd {
+		t.Errorf("%s.source must be a required Link to %s, got %+v", DTLink, DTPage, src)
 	}
 	tt, ok := fields["target_title"]
 	if !ok || tt.Fieldtype != framework.FieldData || !tt.Reqd {
@@ -78,8 +78,8 @@ func TestPageHierarchyIsSelfLink(t *testing.T) {
 			body = &p.Fields[i]
 		}
 	}
-	if parent == nil || parent.Fieldtype != framework.FieldLink || parent.Options != DTPage {
-		t.Errorf("kb-page.parent must be a Link to %q, got %+v", DTPage, parent)
+	if parent == nil || parent.Fieldtype != framework.FieldLink || parent.Options != DTPage.String() {
+		t.Errorf("%s.parent must be a Link to %s, got %+v", DTPage, DTPage, parent)
 	}
 	if body == nil || body.Fieldtype != framework.FieldRichText {
 		t.Errorf("kb-page.body must be RichText (Lexical), got %+v", body)
@@ -116,9 +116,9 @@ func TestConnectorHasNoTokenField(t *testing.T) {
 // never collide on a point even if a collection were shared. This underpins per-org
 // isolation at the vector layer.
 func TestPointIDDeterministicAndPerOrg(t *testing.T) {
-	a1 := pointID("orgA", DTPage, "welcome")
-	a2 := pointID("orgA", DTPage, "welcome")
-	b1 := pointID("orgB", DTPage, "welcome")
+	a1 := pointID("orgA", DTPage.String(), "welcome")
+	a2 := pointID("orgA", DTPage.String(), "welcome")
+	b1 := pointID("orgB", DTPage.String(), "welcome")
 	if a1 != a2 {
 		t.Errorf("pointID not deterministic: %q != %q", a1, a2)
 	}
@@ -191,13 +191,13 @@ func TestDocText(t *testing.T) {
 // TestDocMetaAlwaysCarriesOrg proves the vector payload always pins the org (the
 // defense-in-depth filter key) and never leaks a secret.
 func TestDocMetaAlwaysCarriesOrg(t *testing.T) {
-	m := docMeta("orgA", DTSource, "n1", "GH README", map[string]any{
+	m := docMeta("orgA", DTSource.String(), "n1", "GH README", map[string]any{
 		"project": "p1", "provider": "github", "url": "https://x", "external_id": "e1",
 	})
 	if m["org"] != "orgA" {
 		t.Errorf("payload missing org pin: %+v", m)
 	}
-	if m["doctype"] != DTSource || m["project"] != "p1" || m["provider"] != "github" {
+	if m["doctype"] != DTSource.String() || m["project"] != "p1" || m["provider"] != "github" {
 		t.Errorf("payload metadata wrong: %+v", m)
 	}
 	if _, leaked := m["body"]; leaked {
@@ -271,12 +271,12 @@ func TestKMSRefPerOrg(t *testing.T) {
 // TestSanitizeDocTypes proves a client can only ever narrow a search to KB knowledge
 // doctypes — a foreign doctype (another lane's) is dropped, never widening the query.
 func TestSanitizeDocTypes(t *testing.T) {
-	got := sanitizeDocTypes([]string{DTPage, "Sales Invoice", DTMemory, "hd-ticket"})
+	got := sanitizeDocTypes([]string{DTPage.String(), "erp.invoice", DTMemory.String(), "help.ticket"})
 	if len(got) != 2 {
 		t.Fatalf("expected 2 allowed doctypes, got %v", got)
 	}
 	for _, d := range got {
-		if d != DTPage && d != DTMemory && d != DTSource {
+		if d != DTPage.String() && d != DTMemory.String() && d != DTSource.String() {
 			t.Errorf("leaked non-KB doctype: %q", d)
 		}
 	}

@@ -696,7 +696,7 @@ func TestAnonSubject_EmptyAndOversized(t *testing.T) {
 }
 
 // TestAttribute_StillOwnsTheSignedIdentity: the signed lane is unchanged. attribute runs
-// AFTER the projection, so a workspace token's own subject replaces the namespaced one
+// AFTER the projection, so a space token's own subject replaces the namespaced one
 // and the alias is cleared — the reduced-capability contract the endpoint documents.
 func TestAttribute_StillOwnsTheSignedIdentity(t *testing.T) {
 	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", DistinctID: "victim@corp.com", AnonymousID: "a-1"}})

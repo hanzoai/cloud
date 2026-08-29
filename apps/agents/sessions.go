@@ -72,7 +72,7 @@ const (
 	maxProvider     = 64
 	maxAccount      = 256
 	// maxRoom bounds the room label. A team room is addressed by document id and
-	// workspace uuid, so this is generous for the pair and still a bound.
+	// space uuid, so this is generous for the pair and still a bound.
 	maxRoom = 256
 )
 
@@ -157,7 +157,7 @@ type sessionView struct {
 	Account string `json:"account,omitempty"`
 	// Room is the collaborative room this run was started in (HIP-0523), empty
 	// when it came from anywhere else — a CLI, a schedule, an API call. It is what
-	// lets a workspace view show the runs of one room beside its messages.
+	// lets a space view show the runs of one room beside its messages.
 	Room string `json:"room,omitempty"`
 	// The readable build: the product this session built and whether its story
 	// is public (provenance.go).
@@ -498,7 +498,7 @@ type sessionQuery struct {
 	// Project filters to the sessions tagged with one product slug.
 	Project string `json:"project"`
 	// Room filters to the sessions started in one collaborative room — the query a
-	// workspace view runs to show what has been run in it.
+	// space view runs to show what has been run in it.
 	Room string `json:"room"`
 	// Limit caps the page. Absent, zero or over 500 reads as 100.
 	Limit int `json:"limit"`
@@ -565,7 +565,7 @@ type registerReq struct {
 	// the sessions it was paying for.
 	Account string `json:"account"`
 	// Room is the collaborative room this run was started in (HIP-0523), so a
-	// workspace view can list the sessions of one room. It is PROVENANCE and is set
+	// space view can list the sessions of one room. It is PROVENANCE and is set
 	// only here: there is deliberately no way to move a session to another room, so
 	// it is absent from the patch input and from UpdateSession's SET list.
 	Room string `json:"room"`

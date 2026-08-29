@@ -9,7 +9,7 @@ package team
 // and a second failure mode to reach a package already linked in.
 //
 // TENANT. The org is s.org — the transactor token's VERIFIED extra.org, never a
-// client field — so a workspace can only ever search its own org's knowledge.
+// client field — so a space can only ever search its own org's knowledge.
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 // cap so the two cannot disagree about what "too much" means.
 const maxFulltextLimit = 50
 
-// searchFulltext runs the workspace's query through the fused retrieval path and
+// searchFulltext runs the space's query through the fused retrieval path and
 // renders the result in the shape the client's reviver expects: {docs, total}.
 //
 // DEGRADATION IS NOT AN ERROR HERE. When a leg is down the surface still answers

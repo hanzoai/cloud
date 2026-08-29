@@ -16,7 +16,7 @@ import (
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
-// TestOrgGrantRoleCaps proves a workspace invite can never confer an org-level
+// TestOrgGrantRoleCaps proves a space invite can never confer an org-level
 // IAM admin/owner: owner/admin collapse to member; member and guest pass through.
 func TestOrgGrantRoleCaps(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
@@ -73,7 +73,7 @@ func TestSendInviteGuestOverCapObserved(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	ws, _ := store.EnsureWorkspace(ctx, org, inviterAcct, "Max Power")
+	ws, _ := store.EnsureSpace(ctx, org, inviterAcct, "Max Power")
 	// One guest already present (join order 1) — the plan's cap of 1 is now full.
 	if err := store.AddMember(ctx, org, ws.UUID, "00000000-0000-4000-8000-000000000001", roleGuest); err != nil {
 		t.Fatal(err)
@@ -144,7 +144,7 @@ func TestSendInviteGuestInfraErrorAdmits(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	ws, _ := store.EnsureWorkspace(ctx, org, inviterAcct, "Max Power")
+	ws, _ := store.EnsureSpace(ctx, org, inviterAcct, "Max Power")
 
 	commerce := &fakeCommerce{err: fmt.Errorf("commerce not co-resident")}
 	g := &api{

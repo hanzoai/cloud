@@ -12,12 +12,12 @@ import (
 	"github.com/hanzoai/orm/query"
 )
 
-// Moving the workspace roster into IAM.
+// Moving the space roster into IAM.
 //
 // Team held members(workspace_id, user_id, role, …) beside IAM's own membership,
-// so who may act in a workspace had two answers. IAM is the one now, and these
+// so who may act in a space had two answers. IAM is the one now, and these
 // rows are what the estate already believes — they have to arrive there before
-// the table goes, or every live workspace loses its roster on the deploy that
+// the table goes, or every live space loses its roster on the deploy that
 // stops reading it.
 
 // backfill copies every member row into IAM and drops the table once they all
@@ -42,7 +42,7 @@ func backfill(ctx context.Context, s *accountStore) error {
 		return s.dropMembers(ctx)
 	}
 	for _, r := range rows {
-		if r.Org == "" || r.WorkspaceUUID == "" || r.Account == "" {
+		if r.Org == "" || r.SpaceUUID == "" || r.Account == "" {
 			continue // a row naming no scope or nobody grants nothing
 		}
 		role := r.Role
@@ -50,7 +50,7 @@ func backfill(ctx context.Context, s *accountStore) error {
 			role = "member"
 		}
 		if _, err := iam.IAMGrant(cloud.For(ctx, r.Org), &plane.GrantIn{
-			User: r.Account, Workspace: r.WorkspaceUUID, Role: role,
+			User: r.Account, Space: r.SpaceUUID, Role: role,
 		}); err != nil {
 			return fmt.Errorf("team: backfill %s/%s: %w", r.Org, r.Account, err)
 		}
@@ -60,20 +60,25 @@ func backfill(ctx context.Context, s *accountStore) error {
 
 // grant is one member row resolved to the scope IAM files it against.
 type grant struct {
-	Org           string `db:"owner_org"`
-	WorkspaceUUID string `db:"uuid"`
-	Account       string `db:"user_id"`
-	Role          string `db:"role"`
+	Org       string `db:"owner_org"`
+	SpaceUUID string `db:"uuid"`
+	Account   string `db:"user_id"`
+	Role      string `db:"role"`
 }
 
-// pendingGrants reads every member row with its workspace's org and uuid. It
+// pendingGrants reads every member row with its space's org and uuid. It
 // returns an error when the table is absent, which is how a second boot knows
 // there is nothing left to move.
 func (s *accountStore) pendingGrants(ctx context.Context) ([]grant, error) {
 	var out []grant
 	err := s.db.Select("w.owner_org", "w.uuid", "m.user_id", "m.role").
 		From("members m").
-		InnerJoin("workspaces w", query.NewExp("w.id = m.workspace_id")).
+		// `members` is the LEGACY table and workspace_id is the column it was
+		// written with. It is read once and dropped, never created again, so the
+		// name stays what is actually on disk — renaming it here reads nothing on
+		// every deployment that has rows to move, which is the only kind that
+		// matters.
+		InnerJoin("spaces w", query.NewExp("w.id = m.workspace_id")).
 		Where(query.NewExp("m.active = 1")).
 		WithContext(ctx).All(&out)
 	if err != nil {

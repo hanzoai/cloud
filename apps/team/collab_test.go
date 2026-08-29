@@ -26,7 +26,7 @@ func collabDocID(ws, objClass, objID, attr string) string {
 func TestCollabRPCRoundTrip(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(context.Background(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestCollabCreateContentSeedsYLog(t *testing.T) {
 	app := mountTeamVFS(t, vfs)
 	ctx := context.Background()
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(ctx, org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(ctx, org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,28 +132,28 @@ func TestCollabCreateContentSeedsYLog(t *testing.T) {
 	}
 }
 
-// TestCollabRPCTenancy is the red bar: no token → 401; a foreign workspace in the
-// documentId → 404 (no oracle); a workspace token pinned to another workspace →
+// TestCollabRPCTenancy is the red bar: no token → 401; a foreign space in the
+// documentId → 404 (no oracle); a space token pinned to another space →
 // 404 even for a member of the named one.
 func TestCollabRPCTenancy(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acctA, acctB = "aaaaaaaa-0000-4000-8000-00000000000a", "bbbbbbbb-0000-4000-8000-00000000000b"
-	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
-	wsB, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
+	wsA, _ := mounted.State.accounts.EnsureSpace(ctx, "org-a", acctA, "Alice")
+	wsB, _ := mounted.State.accounts.EnsureSpace(ctx, "org-b", acctB, "Bob")
 	docA := collabDocID(wsA.UUID, "tracker:class:Issue", "issue-1", "description")
 	payload := map[string]any{"method": "createContent", "payload": map[string]any{"content": map[string]string{"description": "{}"}}}
 
 	if code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docA, nil, payload); code != http.StatusUnauthorized {
 		t.Fatalf("unauth = %d, want 401", code)
 	}
-	// org-b caller naming org-a's workspace → 404.
+	// org-b caller naming org-a's space → 404.
 	if code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+docA, bearerFor(t, acctB, "org-b"), payload); code != http.StatusNotFound {
 		t.Fatalf("cross-org = %d, want 404", code)
 	}
-	// A WORKSPACE token names its workspace; a documentId for a different one is
+	// A SPACE token names its space; a documentId for a different one is
 	// refused even though the account is a member of both.
-	if _, err := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob Two"); err != nil {
+	if _, err := mounted.State.accounts.EnsureSpace(ctx, "org-b", acctB, "Bob Two"); err != nil {
 		t.Fatal(err)
 	}
 	wsTok, err := token.Generate(acctB, wsB.UUID, map[string]any{"org": "org-b"}, expUnix(sessionTokenTTL), testSecret)
@@ -164,7 +164,7 @@ func TestCollabRPCTenancy(t *testing.T) {
 	code, _ := call(t, app, http.MethodPost, "/v1/team/collaborator/rpc/"+otherDoc,
 		map[string]string{"Authorization": "Bearer " + wsTok}, payload)
 	if code != http.StatusNotFound {
-		t.Fatalf("workspace-token mismatch = %d, want 404", code)
+		t.Fatalf("space-token mismatch = %d, want 404", code)
 	}
 }
 

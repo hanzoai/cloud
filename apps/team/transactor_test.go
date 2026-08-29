@@ -6,17 +6,17 @@ import (
 	"testing"
 )
 
-// testSession wires a session onto a fresh per-workspace store + the real embedded
+// testSession wires a session onto a fresh per-space store + the real embedded
 // model hierarchy. Ported from team-go/pkg/transactor (server → transServer).
 func testSession() *session {
 	dir, _ := os.MkdirTemp("", "team-test")
 	return &session{
-		server:    &transServer{hub: newHub()},
-		store:     newStore(dir),
-		hier:      buildHierarchy(modelJSON),
-		org:       "test-org", // the token's extra.org claim; a session never has none
-		account:   "2d4d67ab-30f1-474e-b81f-f60461852259",
-		workspace: "e48f81fd-12be-4bcd-aecb-3eaa9a9b5b18",
+		server:  &transServer{hub: newHub()},
+		store:   newStore(dir),
+		hier:    buildHierarchy(modelJSON),
+		org:     "test-org", // the token's extra.org claim; a session never has none
+		account: "2d4d67ab-30f1-474e-b81f-f60461852259",
+		space:   "e48f81fd-12be-4bcd-aecb-3eaa9a9b5b18",
 	}
 }
 
@@ -102,7 +102,7 @@ func TestHandleMisc(t *testing.T) {
 	if string(s.handle([]byte("ping"))) != "pong!" {
 		t.Fatal("ping must answer pong!")
 	}
-	// findAll over an empty workspace → an empty TotalArray (the wire shape the
+	// findAll over an empty space → an empty TotalArray (the wire shape the
 	// client's rpc reviver turns back into a FindResult).
 	var fa struct {
 		Result struct {
@@ -167,7 +167,7 @@ func TestEnvelopeWrapsRPC(t *testing.T) {
 // console.hanzo.ai USED to be admitted, by a `.hanzo.ai` suffix arm. A WebSocket is
 // exempt from CORS, so this list is the socket's access control rather than a hint
 // about it, and a wildcard over the registrable domain put every first-party host
-// inside the workspace data plane's trust boundary: one page anywhere in the estate
+// inside the space data plane's trust boundary: one page anywhere in the estate
 // running attacker script reads and writes the whole stream. A host that genuinely
 // needs the socket is named here on purpose.
 func TestOriginAllowed(t *testing.T) {

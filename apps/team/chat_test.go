@@ -341,7 +341,7 @@ func (c *countingRunner) calls() int {
 }
 
 // TestNoReplyToBacklogAtBoot is the anti-storm invariant the writer post-mortem
-// demands: a workspace with a BACKLOG of old messages, replayed through the
+// demands: a space with a BACKLOG of old messages, replayed through the
 // responder right after boot, must produce ZERO outbound model calls. Only a
 // genuinely fresh (post-boot) message is ever answered. This is what prevents "a
 // replayed message backlog fans out into thousands of HTTP calls".
@@ -415,7 +415,7 @@ func TestConcurrencyCapBounded(t *testing.T) {
 }
 
 // TestSingleFlightPerConversation proves at most one in-flight answer per
-// (workspace, space, bot): a burst of 5 messages to the SAME DM collapses to ONE
+// (space, space, bot): a burst of 5 messages to the SAME DM collapses to ONE
 // turn while it runs; the rest are dropped.
 func TestSingleFlightPerConversation(t *testing.T) {
 	const org, human = "acme", "22222222-2222-4222-8222-222222222222"

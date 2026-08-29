@@ -283,7 +283,7 @@ func Query(ctx context.Context, in *Request) (*Fusion, error) {
 
 // ForOrg is the composition itself, for callers that have ALREADY established the
 // tenant by some other means than an HTTP principal — notably the Team transactor,
-// which runs in this same binary and holds a session whose workspace is its org.
+// which runs in this same binary and holds a session whose space is its org.
 // Such a caller gets the identical fused answer with no HTTP hop and no second
 // retrieval path.
 //

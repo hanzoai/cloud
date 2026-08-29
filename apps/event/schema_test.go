@@ -260,8 +260,8 @@ func TestGroupsIsAMapAndNotFiveSlots(t *testing.T) {
 	if got := f.groups["organization"]; got != "org_7" {
 		t.Fatalf("groups = %v, want the default grouping keyed `organization`", f.groups)
 	}
-	f, _ = normalize("acme", time.Now().UTC(), CaptureEvent{Event: "x", GroupID: "w1", GroupType: "workspace"})
-	if got := f.groups["workspace"]; got != "w1" {
+	f, _ = normalize("acme", time.Now().UTC(), CaptureEvent{Event: "x", GroupID: "w1", GroupType: "space"})
+	if got := f.groups["space"]; got != "w1" {
 		t.Fatalf("groups = %v, want the caller's own grouping key", f.groups)
 	}
 	// No grouping is an absent map, not one holding a blank.

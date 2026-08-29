@@ -37,7 +37,7 @@ type issueSearch struct {
 	// Repo keeps issues bound to one git repository.
 	Repo string `json:"repo"`
 	// Room keeps issues bound to one collaboration room, spelled
-	// "<workspace>_<room>" — the exact value GET /v1/meet/call answers with, so a
+	// "<space>_<room>" — the exact value GET /v1/meet/call answers with, so a
 	// channel's call and its todo list name the room the same way. This is the
 	// read a channel view runs to draw its own list; it spans every board of the
 	// org, because the work a channel is about is not confined to one board.
@@ -73,7 +73,7 @@ type issueHit struct {
 	// repo-bound.
 	Repo string `json:"repo"`
 	// Room is the collaboration room the issue belongs to, spelled
-	// "<workspace>_<room>" — empty when it is not room-bound, which is most of
+	// "<space>_<room>" — empty when it is not room-bound, which is most of
 	// them. It is here so an org-wide search says which channel each item came
 	// from without a second read.
 	Room string `json:"room,omitempty"`

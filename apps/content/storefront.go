@@ -296,10 +296,10 @@ func StorefrontPublish(ctx context.Context, org, doctype, name string) *Storefro
 	if s == nil {
 		return nil
 	}
-	if doctype != DocTypeAsset {
+	if doctype != DocTypeAsset.String() {
 		return nil // only rendered assets become product imagery
 	}
-	doc, err := framework.Get(ctx, org, doctype, name)
+	doc, err := framework.Get(ctx, org, DocTypeAsset, name)
 	if err != nil {
 		return nil // the transition already read/updated it; a re-read miss is not fatal
 	}

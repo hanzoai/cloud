@@ -79,7 +79,7 @@ var allowedRequestUses = map[string]string{
 		"question from the attribution the debit records). Neither is the org and neither can be an In " +
 		"field — a caller that could name its own payer would bill another org. ONE call site, guarded " +
 		"by onHTTP so it fails closed off the HTTP path, where there is no principal and so nobody to " +
-		"charge; the cold price is gated on every query because whether a workspace is warm is not " +
+		"charge; the cold price is gated on every query because whether a space is warm is not " +
 		"known until the pool is asked, and the debit in apps/lsp/meter.go charges the real one.",
 	"apps/o11y/summary.go": "brandForRequest — the o11y summary is white-labelled by the request HOST " +
 		"(BrandForHostOK(c.Host())), a value that is neither the org nor nameable on an In field: it is " +
@@ -169,7 +169,7 @@ var allowedRequestUses = map[string]string{
 		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
 		"and principal.Acting has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
-	"apps/s3/s3.go":         "paid — the preamble every object-storage operation opens with, composed onto the HANDLER so it runs on every way in rather than on the route alone. It reads the request to admit the caller, name their tenant and take the fee, and FAILS CLOSED where there is no request at all: a CLI LocalInvoke has no principal to name a tenant with, and answering with an unscoped bucket list would be worse than refusing.",
+	"apps/fare/fare.go":     "Paid — the preamble every operation on a metered, org-scoped surface opens with, composed onto the HANDLER so it runs on every way in rather than on the route alone. It reads the request to admit the caller, resolve the org they act for and take the fee, and FAILS CLOSED where there is no request at all: a CLI LocalInvoke has no principal to name an org with, and answering with an unscoped listing would be worse than refusing. ONE call site for the whole class — apps/s3 and apps/space both take it from here, so the hatch is opened once by the shared preamble rather than once per subsystem that charges for a read.",
 	"apps/graph/graph.go": "actor — every assertion records WHO asserted it, and that identity is " +
 		"the caller's home org plus their user name (principal.Owner + c.User), strictly more than " +
 		"the tenant OrgFrom carries. The org itself still resolves through principal.OrgFrom beside " +
@@ -276,7 +276,7 @@ var allowedRequestUses = map[string]string{
 	"apps/team/typed.go": "callerOf / sessionOf / admin / noStore / cookie — team authenticates its billing, " +
 		"files and collaborator planes with a CALLER (identity.who): an IAM access token, else team's own " +
 		"HS256 session token, riding Authorization or an HttpOnly cookie. principal.OrgFrom carries none of " +
-		"those (nor the WORKSPACE an HS256 workspace token pins, which the collaborator plane gates on), and " +
+		"those (nor the SPACE an HS256 space token pins, which the collaborator plane gates on), and " +
 		"bots/sync additionally needs admin-ness (X-User-IsAdmin). The cookie WRITER is the other end of that " +
 		"same identity — the account-token cookie is set on the RESPONSE, which only the request reaches. It " +
 		"is ONE file for the whole subsystem on purpose — the resolvers live here so the planes that use them " +
@@ -300,14 +300,14 @@ var allowedRequestUses = map[string]string{
 		"needs the REQUEST for the two facts that decision is built from, neither of which any ctx " +
 		"accessor carries. principal.Minted is the identity boundary's OWN attestation and is parked on " +
 		"the request — apps/principal publishes it for *zip.Ctx and for nothing else, so there is no " +
-		"context-side twin to read. cloud.As re-points the workspace-membership Ask at that ATTESTED org, " +
+		"context-side twin to read. cloud.As re-points the space-membership Ask at that ATTESTED org, " +
 		"which is what keeps the peer answering about the caller's own tenant. The ctx-side facts a typed " +
 		"op CAN read (OrgFrom / ValidatedFrom) derive from headers nothing strips in a hand-written " +
 		"plugin main, which is this app and is exactly the forgeable signal admits was fixed to stop " +
 		"selecting on; reading the weaker one here would tell a client-set header where a colleague's " +
 		"call is. It is its own entry rather than record.go's because the two surfaces spend different " +
 		"halves of that one decision — recording lifts the ORG off the attestation to prefix the object " +
-		"key, this read wants only the seat. The workspace and the room stay In fields: they are the " +
+		"key, this read wants only the seat. The space and the room stay In fields: they are the " +
 		"ADDRESS the membership check runs against, not identity, and the composition of the two is the " +
 		"thing being published. Fails closed off the HTTP path, where there is no attested caller and so " +
 		"nobody who is in the room.",

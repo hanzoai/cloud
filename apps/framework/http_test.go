@@ -106,7 +106,7 @@ func TestDocTypeAndDocumentRoundTrip(t *testing.T) {
 	}
 
 	// Create a document via the generic surface; naming series applies.
-	code, body = do(t, app, http.MethodPost, "/v1/framework/Task", "acme",
+	code, body = do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme",
 		map[string]any{"subject": "Ship framework", "priority": "High", "estimate": 5})
 	if code != http.StatusCreated {
 		t.Fatalf("create doc want 201, got %d (%s)", code, body)
@@ -122,13 +122,13 @@ func TestDocTypeAndDocumentRoundTrip(t *testing.T) {
 	}
 
 	// Get it back.
-	code, body = do(t, app, http.MethodGet, "/v1/framework/Task/"+name, "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get doc want 200, got %d (%s)", code, body)
 	}
 
 	// Update it.
-	code, body = do(t, app, http.MethodPut, "/v1/framework/Task/"+name, "acme",
+	code, body = do(t, app, http.MethodPut, "/v1/framework/Projects.Task/"+name, "acme",
 		map[string]any{"subject": "Ship it", "priority": "Low", "estimate": 8})
 	_ = json.Unmarshal(body, &doc)
 	if code != http.StatusOK || doc["subject"] != "Ship it" || doc["estimate"] != float64(8) {
@@ -136,7 +136,7 @@ func TestDocTypeAndDocumentRoundTrip(t *testing.T) {
 	}
 
 	// List.
-	code, body = do(t, app, http.MethodGet, "/v1/framework/Task", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task", "acme", nil)
 	var list struct {
 		Data []map[string]any `json:"data"`
 	}
@@ -146,10 +146,10 @@ func TestDocTypeAndDocumentRoundTrip(t *testing.T) {
 	}
 
 	// Delete.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/framework/Task/"+name, "acme", nil); code != http.StatusNoContent {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete doc want 204, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Task/"+name, "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("get deleted want 404, got %d", code)
 	}
 }
@@ -160,19 +160,19 @@ func TestWireValidation(t *testing.T) {
 	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
 
 	// Missing reqd subject → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Task", "acme", map[string]any{"priority": "High"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"priority": "High"}); code != http.StatusBadRequest {
 		t.Fatalf("missing reqd want 400, got %d", code)
 	}
 	// Bad Select option → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Task", "acme", map[string]any{"subject": "x", "priority": "Urgent"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "x", "priority": "Urgent"}); code != http.StatusBadRequest {
 		t.Fatalf("bad select want 400, got %d", code)
 	}
 	// Int as text → 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Task", "acme", map[string]any{"subject": "x", "estimate": "five"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "x", "estimate": "five"}); code != http.StatusBadRequest {
 		t.Fatalf("bad int want 400, got %d", code)
 	}
 	// Unknown doctype → 404.
-	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Ghost", "acme", map[string]any{"a": "b"}); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Ghost", "acme", map[string]any{"a": "b"}); code != http.StatusNotFound {
 		t.Fatalf("unknown doctype want 404, got %d", code)
 	}
 }
@@ -181,33 +181,33 @@ func TestWireValidation(t *testing.T) {
 func TestSubmitCancelLifecycle(t *testing.T) {
 	app := mountApp(t)
 	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
-	_, body := do(t, app, http.MethodPost, "/v1/framework/Task", "acme", map[string]any{"subject": "x"})
+	_, body := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "x"})
 	var doc map[string]any
 	_ = json.Unmarshal(body, &doc)
 	name := doc["name"].(string)
 
 	// submit 0→1.
-	code, body := do(t, app, http.MethodPost, "/v1/framework/Task/"+name+"/submit", "acme", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/framework/Projects.Task/"+name+"/submit", "acme", nil)
 	_ = json.Unmarshal(body, &doc)
 	if code != http.StatusOK || doc["docstatus"] != float64(1) {
 		t.Fatalf("submit want docstatus 1, got %d %v", code, doc["docstatus"])
 	}
 	// editing a submitted doc → 409.
-	if code, _ := do(t, app, http.MethodPut, "/v1/framework/Task/"+name, "acme", map[string]any{"subject": "y"}); code != http.StatusConflict {
+	if code, _ := do(t, app, http.MethodPut, "/v1/framework/Projects.Task/"+name, "acme", map[string]any{"subject": "y"}); code != http.StatusConflict {
 		t.Fatalf("edit submitted want 409, got %d", code)
 	}
 	// deleting a submitted doc → 409.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/framework/Task/"+name, "acme", nil); code != http.StatusConflict {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusConflict {
 		t.Fatalf("delete submitted want 409, got %d", code)
 	}
 	// cancel 1→2.
-	code, body = do(t, app, http.MethodPost, "/v1/framework/Task/"+name+"/cancel", "acme", nil)
+	code, body = do(t, app, http.MethodPost, "/v1/framework/Projects.Task/"+name+"/cancel", "acme", nil)
 	_ = json.Unmarshal(body, &doc)
 	if code != http.StatusOK || doc["docstatus"] != float64(2) {
 		t.Fatalf("cancel want docstatus 2, got %d %v", code, doc["docstatus"])
 	}
 	// re-submit a cancelled doc → 409.
-	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Task/"+name+"/submit", "acme", nil); code != http.StatusConflict {
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Projects.Task/"+name+"/submit", "acme", nil); code != http.StatusConflict {
 		t.Fatalf("resubmit cancelled want 409, got %d", code)
 	}
 }
@@ -247,10 +247,10 @@ func TestForgedPrincipalRefused(t *testing.T) {
 	}{
 		{http.MethodGet, "/v1/framework/doctypes", nil},
 		{http.MethodPost, "/v1/framework/doctypes", taskDocType()},
-		{http.MethodGet, "/v1/framework/Task", nil},
-		{http.MethodPost, "/v1/framework/Task", map[string]any{"subject": "pwn"}},
-		{http.MethodGet, "/v1/framework/Task/TASK-00001", nil},
-		{http.MethodDelete, "/v1/framework/Task/TASK-00001", nil},
+		{http.MethodGet, "/v1/framework/Projects.Task", nil},
+		{http.MethodPost, "/v1/framework/Projects.Task", map[string]any{"subject": "pwn"}},
+		{http.MethodGet, "/v1/framework/Projects.Task/TASK-00001", nil},
+		{http.MethodDelete, "/v1/framework/Projects.Task/TASK-00001", nil},
 		{http.MethodGet, "/v1/framework/roles", nil},
 		{http.MethodPost, "/v1/framework/roles", map[string]any{"user": "x", "role": "System Manager"}},
 		{http.MethodGet, "/v1/framework/summary", nil},
@@ -268,7 +268,7 @@ func TestCrossOrgIsolation(t *testing.T) {
 	app := mountApp(t)
 	// acme defines Task and creates a doc.
 	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
-	_, body := do(t, app, http.MethodPost, "/v1/framework/Task", "acme", map[string]any{"subject": "acme secret"})
+	_, body := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "acme secret"})
 	var doc map[string]any
 	_ = json.Unmarshal(body, &doc)
 	name := doc["name"].(string)
@@ -278,16 +278,16 @@ func TestCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("evil GET acme doctype want 404, got %d", code)
 	}
 	// evil listing acme's Task doctype documents → 404 (doctype unknown in evil).
-	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Task", "evil", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task", "evil", nil); code != http.StatusNotFound {
 		t.Fatalf("evil list Task want 404, got %d", code)
 	}
 	// Even if evil defines its OWN Task, it cannot read acme's document by name.
 	do(t, app, http.MethodPost, "/v1/framework/doctypes", "evil", taskDocType())
-	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Task/"+name, "evil", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "evil", nil); code != http.StatusNotFound {
 		t.Fatalf("evil GET acme doc want 404, got %d", code)
 	}
 	// evil's own list is empty (its own Task has no docs).
-	code, body := do(t, app, http.MethodGet, "/v1/framework/Task", "evil", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/framework/Projects.Task", "evil", nil)
 	var list struct {
 		Data []map[string]any `json:"data"`
 	}
@@ -296,7 +296,7 @@ func TestCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("evil Task list want empty, got %d %+v", code, list.Data)
 	}
 	// acme's doc survives.
-	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Task/"+name, "acme", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/Projects.Task/"+name, "acme", nil); code != http.StatusOK {
 		t.Fatalf("acme doc must survive, got %d", code)
 	}
 }
@@ -409,7 +409,7 @@ func TestListFilterAndOrder(t *testing.T) {
 		{"subject": "b", "priority": "High", "estimate": 1},
 		{"subject": "c", "priority": "High", "estimate": 2},
 	} {
-		if code, b := do(t, app, http.MethodPost, "/v1/framework/Task", org, tk); code != http.StatusCreated {
+		if code, b := do(t, app, http.MethodPost, "/v1/framework/Projects.Task", org, tk); code != http.StatusCreated {
 			t.Fatalf("seed want 201, got %d (%s)", code, b)
 		}
 	}
@@ -431,7 +431,7 @@ func TestListFilterAndOrder(t *testing.T) {
 		t.Fatalf("filter High want 2 rows, got %d %+v", code, rows)
 	}
 	// order_by estimate asc → first is estimate 1.
-	code, body = do(t, app, http.MethodGet, "/v1/framework/Task?order_by=estimate%20asc", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task?order_by=estimate%20asc", org, nil)
 	if rows := unmarshalList(body); code != http.StatusOK || len(rows) != 3 || rows[0]["estimate"] != float64(1) {
 		t.Fatalf("order_by estimate asc want first=1, got %d %+v", code, rows)
 	}
@@ -440,7 +440,7 @@ func TestListFilterAndOrder(t *testing.T) {
 		t.Fatalf("unknown filter want 400, got %d", code)
 	}
 	// fields projection returns only requested + envelope keys.
-	code, body = do(t, app, http.MethodGet, "/v1/framework/Task?fields=subject&limit=1", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Projects.Task?fields=subject&limit=1", org, nil)
 	rows := unmarshalList(body)
 	if code != http.StatusOK || len(rows) != 1 {
 		t.Fatalf("projection want 1 row, got %d", code)
@@ -585,7 +585,7 @@ func TestPermlessDefaultClosed(t *testing.T) {
 // TestNoOrgRefused is the belt-and-suspenders no-principal check on the read path.
 func TestNoOrgRefused(t *testing.T) {
 	app := mountApp(t)
-	for _, p := range []string{"/v1/framework/doctypes", "/v1/framework/roles", "/v1/framework/summary", "/v1/framework/Task"} {
+	for _, p := range []string{"/v1/framework/doctypes", "/v1/framework/roles", "/v1/framework/summary", "/v1/framework/Projects.Task"} {
 		if code, _ := call(t, app, http.MethodGet, p, "", "", false, nil); code != http.StatusForbidden {
 			t.Fatalf("no-principal GET %s want 403, got %d", p, code)
 		}

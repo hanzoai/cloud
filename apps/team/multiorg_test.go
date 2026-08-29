@@ -33,23 +33,23 @@ func orgsExtra(home string, refs ...model.OrgRef) map[string]any {
 	return map[string]any{"org": home, "orgs": orgsClaim(refs, home)}
 }
 
-// seedMember inserts a workspace with an EXPLICIT slug plus an active member row
+// seedMember inserts a space with an EXPLICIT slug plus an active member row
 // for account — the lower-level seed the multi-org/ambiguity tests need (the
-// public EnsureWorkspace auto-generates a random slug, so it cannot produce the
+// public EnsureSpace auto-generates a random slug, so it cannot produce the
 // same slug in two orgs). Same-package test reaches s.db directly.
-func seedMember(t *testing.T, s *accountStore, org, account, slug, role string) workspace {
+func seedMember(t *testing.T, s *accountStore, org, account, slug, role string) space {
 	t.Helper()
 	ctx := context.Background()
-	w := workspace{
+	w := space{
 		ID: uuid.NewString(), Slug: slug, Name: slug, UUID: uuid.NewString(),
 		Owner: account, OwnerOrg: org,
 	}
-	if _, err := s.db.Insert("workspaces", query.Params{
+	if _, err := s.db.Insert("spaces", query.Params{
 		"id": w.ID, "slug": w.Slug, "name": w.Name, "uuid": w.UUID,
 		"owner": w.Owner, "owner_org": w.OwnerOrg, "data_id": w.DataID,
 		"region": w.Region, "created_at": int64(1),
 	}).WithContext(ctx).Execute(); err != nil {
-		t.Fatalf("seed workspace: %v", err)
+		t.Fatalf("seed space: %v", err)
 	}
 	if err := s.AddMember(ctx, org, w.UUID, account, role); err != nil {
 		t.Fatalf("seed member: %v", err)
@@ -92,7 +92,7 @@ func TestOrgsClaimRoundTrip(t *testing.T) {
 // TestOrgsClaimAlwaysIncludesHome reproduces the wallet "Seats: 0" defect at its
 // root. The IAM orgs claim does not always list a user's OWN home org — it can
 // carry only explicit team memberships. When it names other orgs but NOT home,
-// establishSession's ensure-a-workspace-per-claimed-org loop skips the home org,
+// establishSession's ensure-a-space-per-claimed-org loop skips the home org,
 // so the wallet — which counts the HOME org (extra.org) — finds no member row and
 // reports 0 seats. orgsClaim must therefore keep home in the set unconditionally.
 func TestOrgsClaimAlwaysIncludesHome(t *testing.T) {
@@ -119,8 +119,8 @@ func TestOrgsClaimAlwaysIncludesHome(t *testing.T) {
 	const acct = "aaaaaaaa-0000-4000-8000-00000000dave"
 	for _, o := range out {
 		org, _ := o["org"].(string)
-		if _, err := s.EnsureWorkspace(ctx, org, acct, "Dave"); err != nil {
-			t.Fatalf("ensure workspace %s: %v", org, err)
+		if _, err := s.EnsureSpace(ctx, org, acct, "Dave"); err != nil {
+			t.Fatalf("ensure space %s: %v", org, err)
 		}
 	}
 	if seats, _, _ := s.Seats(ctx, home); seats < 1 {
@@ -128,18 +128,18 @@ func TestOrgsClaimAlwaysIncludesHome(t *testing.T) {
 	}
 }
 
-// TestGetUserWorkspacesUnionsOrgs is the Slack-model bar: a multi-org session
-// token lists the caller's workspaces from EVERY org they belong to, each tagged
+// TestGetUserSpacesUnionsOrgs is the Slack-model bar: a multi-org session
+// token lists the caller's spaces from EVERY org they belong to, each tagged
 // with its owning org, in one union.
-func TestGetUserWorkspacesUnionsOrgs(t *testing.T) {
+func TestGetUserSpacesUnionsOrgs(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acct = "550e8400-e29b-41d4-a716-446655440000"
-	wsHome, err := mounted.State.accounts.EnsureWorkspace(ctx, "davelorenzini", acct, "Dave")
+	wsHome, err := mounted.State.accounts.EnsureSpace(ctx, "davelorenzini", acct, "Dave")
 	if err != nil {
 		t.Fatal(err)
 	}
-	wsTeam, err := mounted.State.accounts.EnsureWorkspace(ctx, "maxpower", acct, "Max Power")
+	wsTeam, err := mounted.State.accounts.EnsureSpace(ctx, "maxpower", acct, "Max Power")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,34 +157,34 @@ func TestGetUserWorkspacesUnionsOrgs(t *testing.T) {
 		t.Fatalf("getUserWorkspaces status %d: %s", code, body)
 	}
 	var wl struct {
-		Result []WorkspaceInfo `json:"result"`
+		Result []SpaceInfo `json:"result"`
 	}
 	if err := json.Unmarshal(body, &wl); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(wl.Result) != 2 {
-		t.Fatalf("workspaces = %d, want 2 (home + team org): %s", len(wl.Result), body)
+		t.Fatalf("spaces = %d, want 2 (home + team org): %s", len(wl.Result), body)
 	}
-	byOrg := map[string]WorkspaceInfo{}
+	byOrg := map[string]SpaceInfo{}
 	for _, w := range wl.Result {
 		byOrg[w.Org] = w
 	}
 	if byOrg["davelorenzini"].UUID != wsHome.UUID {
-		t.Fatalf("home workspace not tagged davelorenzini: %+v", wl.Result)
+		t.Fatalf("home space not tagged davelorenzini: %+v", wl.Result)
 	}
 	if byOrg["maxpower"].UUID != wsTeam.UUID {
-		t.Fatalf("team workspace not tagged maxpower: %+v", wl.Result)
+		t.Fatalf("team space not tagged maxpower: %+v", wl.Result)
 	}
 }
 
-// TestGetUserWorkspacesLegacyToken proves a pre-orgs-claim session token (only
-// extra.org) still resolves the home org's workspaces — no regression for live
+// TestGetUserSpacesLegacyToken proves a pre-orgs-claim session token (only
+// extra.org) still resolves the home org's spaces — no regression for live
 // sessions minted before this change.
-func TestGetUserWorkspacesLegacyToken(t *testing.T) {
+func TestGetUserSpacesLegacyToken(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(ctx, org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(ctx, org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,27 +199,27 @@ func TestGetUserWorkspacesLegacyToken(t *testing.T) {
 		t.Fatalf("status %d: %s", code, body)
 	}
 	var wl struct {
-		Result []WorkspaceInfo `json:"result"`
+		Result []SpaceInfo `json:"result"`
 	}
 	if err := json.Unmarshal(body, &wl); err != nil || len(wl.Result) != 1 || wl.Result[0].UUID != ws.UUID {
 		t.Fatalf("legacy getUserWorkspaces = %s (err %v)", body, err)
 	}
 	if wl.Result[0].Org != org {
-		t.Fatalf("legacy workspace org tag = %q, want %q", wl.Result[0].Org, org)
+		t.Fatalf("legacy space org tag = %q, want %q", wl.Result[0].Org, org)
 	}
 }
 
-// TestSelectWorkspaceCrossOrg proves a multi-org caller can select a workspace in
+// TestSelectSpaceCrossOrg proves a multi-org caller can select a space in
 // a NON-home org they belong to — the resolver searches the whole membership set,
-// and the minted workspace token carries THAT org (not the home org).
-func TestSelectWorkspaceCrossOrg(t *testing.T) {
+// and the minted space token carries THAT org (not the home org).
+func TestSelectSpaceCrossOrg(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acct = "550e8400-e29b-41d4-a716-446655440000"
-	if _, err := mounted.State.accounts.EnsureWorkspace(ctx, "davelorenzini", acct, "Dave"); err != nil {
+	if _, err := mounted.State.accounts.EnsureSpace(ctx, "davelorenzini", acct, "Dave"); err != nil {
 		t.Fatal(err)
 	}
-	teamWS, err := mounted.State.accounts.EnsureWorkspace(ctx, "maxpower", acct, "Max Power")
+	teamWS, err := mounted.State.accounts.EnsureSpace(ctx, "maxpower", acct, "Max Power")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,8 +234,8 @@ func TestSelectWorkspaceCrossOrg(t *testing.T) {
 		t.Fatalf("status %d: %s", code, body)
 	}
 	var sw struct {
-		Result WorkspaceLoginInfo `json:"result"`
-		Error  *Status            `json:"error"`
+		Result SpaceLoginInfo `json:"result"`
+		Error  *Status        `json:"error"`
 	}
 	if err := json.Unmarshal(body, &sw); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
@@ -243,30 +243,30 @@ func TestSelectWorkspaceCrossOrg(t *testing.T) {
 	if sw.Error != nil {
 		t.Fatalf("cross-org select errored: %+v", sw.Error)
 	}
-	if sw.Result.Workspace != teamWS.UUID {
-		t.Fatalf("selected workspace = %q, want %q", sw.Result.Workspace, teamWS.UUID)
+	if sw.Result.Space != teamWS.UUID {
+		t.Fatalf("selected space = %q, want %q", sw.Result.Space, teamWS.UUID)
 	}
-	// The workspace token carries the NON-home org (maxpower), so the transactor
+	// The space token carries the NON-home org (maxpower), so the transactor
 	// routes to the right tenant.
 	dec, err := token.Decode(sw.Result.Token, testSecret, true)
 	if err != nil || dec.Org() != "maxpower" {
-		t.Fatalf("workspace token org = %v (err %v), want maxpower", dec.Org(), err)
+		t.Fatalf("space token org = %v (err %v), want maxpower", dec.Org(), err)
 	}
 }
 
-// TestSelectWorkspaceNoDefault proves the no-silent-default contract: an absent
-// workspaceUrl is a clean BadRequest, never a first-workspace default.
-func TestSelectWorkspaceNoDefault(t *testing.T) {
+// TestSelectSpaceNoDefault proves the no-silent-default contract: an absent
+// workspaceUrl is a clean BadRequest, never a first-space default.
+func TestSelectSpaceNoDefault(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	if _, err := mounted.State.accounts.EnsureWorkspace(ctx, org, acct, "Ada"); err != nil {
+	if _, err := mounted.State.accounts.EnsureSpace(ctx, org, acct, "Ada"); err != nil {
 		t.Fatal(err)
 	}
 	sess, _ := token.Generate(acct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 
-	// No workspaceUrl → BadRequest, and NO workspace token leaked.
+	// No workspaceUrl → BadRequest, and NO space token leaked.
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
 		authAs(sess, org, acct),
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{}})
@@ -274,21 +274,21 @@ func TestSelectWorkspaceNoDefault(t *testing.T) {
 		t.Fatalf("status %d: %s", code, body)
 	}
 	var sw struct {
-		Result *WorkspaceLoginInfo `json:"result"`
-		Error  *Status             `json:"error"`
+		Result *SpaceLoginInfo `json:"result"`
+		Error  *Status         `json:"error"`
 	}
 	_ = json.Unmarshal(body, &sw)
 	if sw.Error == nil || sw.Error.Code != "account:status:BadRequest" {
 		t.Fatalf("no-workspaceUrl select = %s, want BadRequest", body)
 	}
 	if sw.Result != nil && sw.Result.Token != "" {
-		t.Fatalf("no-default violated: a token was minted for an unspecified workspace: %+v", sw.Result)
+		t.Fatalf("no-default violated: a token was minted for an unspecified space: %+v", sw.Result)
 	}
 }
 
-// TestSelectWorkspaceAmbiguous proves an explicit slug that resolves in TWO of the
+// TestSelectSpaceAmbiguous proves an explicit slug that resolves in TWO of the
 // caller's orgs is refused (Ambiguous) — the server never silently picks one.
-func TestSelectWorkspaceAmbiguous(t *testing.T) {
+func TestSelectSpaceAmbiguous(t *testing.T) {
 	app := mountTeam(t)
 	const acct = "550e8400-e29b-41d4-a716-446655440000"
 	s := mounted.State.accounts
@@ -307,12 +307,12 @@ func TestSelectWorkspaceAmbiguous(t *testing.T) {
 		t.Fatalf("status %d: %s", code, body)
 	}
 	var sw struct {
-		Result *WorkspaceLoginInfo `json:"result"`
-		Error  *Status             `json:"error"`
+		Result *SpaceLoginInfo `json:"result"`
+		Error  *Status         `json:"error"`
 	}
 	_ = json.Unmarshal(body, &sw)
 	if sw.Error == nil || sw.Error.Code != "account:status:WorkspaceAmbiguous" {
-		t.Fatalf("ambiguous select = %s, want WorkspaceAmbiguous", body)
+		t.Fatalf("ambiguous select = %s, want SpaceAmbiguous", body)
 	}
 	if sw.Result != nil && sw.Result.Token != "" {
 		t.Fatalf("ambiguous select must not mint a token: %+v", sw.Result)
@@ -320,7 +320,7 @@ func TestSelectWorkspaceAmbiguous(t *testing.T) {
 }
 
 // TestGuestSelectUnaffected proves the guest-cap path is untouched by the
-// cross-org rewrite: a guest member resolves + selects their workspace, the role
+// cross-org rewrite: a guest member resolves + selects their space, the role
 // surfaces as GUEST, and the entitle gate still runs on the resolved (org, role)
 // exactly as before (admitting here — no commerce wired).
 func TestGuestSelectUnaffected(t *testing.T) {
@@ -338,54 +338,54 @@ func TestGuestSelectUnaffected(t *testing.T) {
 		t.Fatalf("status %d: %s", code, body)
 	}
 	var sw struct {
-		Result WorkspaceLoginInfo `json:"result"`
-		Error  *Status            `json:"error"`
+		Result SpaceLoginInfo `json:"result"`
+		Error  *Status        `json:"error"`
 	}
 	if err := json.Unmarshal(body, &sw); err != nil || sw.Error != nil {
 		t.Fatalf("guest select = %s (err %v)", body, err)
 	}
-	if sw.Result.Role != "GUEST" || sw.Result.Workspace != ws.UUID {
-		t.Fatalf("guest select role=%q ws=%q, want GUEST + %s", sw.Result.Role, sw.Result.Workspace, ws.UUID)
+	if sw.Result.Role != "GUEST" || sw.Result.Space != ws.UUID {
+		t.Fatalf("guest select role=%q ws=%q, want GUEST + %s", sw.Result.Role, sw.Result.Space, ws.UUID)
 	}
 }
 
-// TestGetWorkspaceInfoNoDefault proves getWorkspaceInfo resolves the token's
-// explicit workspace claim and NEVER falls back to the caller's first workspace: a
-// token with no workspace claim is WorkspaceNotFound, and a workspace-scoped token
-// resolves exactly that workspace.
-func TestGetWorkspaceInfoNoDefault(t *testing.T) {
+// TestGetSpaceInfoNoDefault proves getWorkspaceInfo resolves the token's
+// explicit space claim and NEVER falls back to the caller's first space: a
+// token with no space claim is SpaceNotFound, and a space-scoped token
+// resolves exactly that space.
+func TestGetSpaceInfoNoDefault(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(ctx, org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(ctx, org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Account-scoped token (NO workspace claim) → no default, WorkspaceNotFound.
+	// Account-scoped token (NO space claim) → no default, SpaceNotFound.
 	acctTok, _ := token.Generate(acct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
 		map[string]string{"Authorization": "Bearer " + acctTok}, rpcRequest{Method: "getWorkspaceInfo"})
 	var r struct {
-		Result *WorkspaceInfo `json:"result"`
-		Error  *Status        `json:"error"`
+		Result *SpaceInfo `json:"result"`
+		Error  *Status    `json:"error"`
 	}
 	_ = json.Unmarshal(body, &r)
 	if code != http.StatusOK || r.Error == nil || r.Error.Code != "account:status:WorkspaceNotFound" {
-		t.Fatalf("no-workspace-claim getWorkspaceInfo = %s, want WorkspaceNotFound", body)
+		t.Fatalf("no-space-claim getWorkspaceInfo = %s, want SpaceNotFound", body)
 	}
 	if r.Result != nil && r.Result.UUID != "" {
-		t.Fatalf("no-default violated: getWorkspaceInfo returned a workspace off an account token: %+v", r.Result)
+		t.Fatalf("no-default violated: getWorkspaceInfo returned a space off an account token: %+v", r.Result)
 	}
 
-	// Workspace-scoped token → resolves exactly that workspace.
-	wsTok, _ := token.Generate(acct, ws.UUID, map[string]any{"org": org}, expUnix(workspaceTokenTTL), testSecret)
+	// Space-scoped token → resolves exactly that space.
+	wsTok, _ := token.Generate(acct, ws.UUID, map[string]any{"org": org}, expUnix(spaceTokenTTL), testSecret)
 	code, body = call(t, app, http.MethodPost, "/v1/team/account",
 		map[string]string{"Authorization": "Bearer " + wsTok}, rpcRequest{Method: "getWorkspaceInfo"})
 	_ = json.Unmarshal(body, &r)
 	if code != http.StatusOK || r.Result == nil || r.Result.UUID != ws.UUID {
-		t.Fatalf("ws-scoped getWorkspaceInfo = %s, want the token's workspace", body)
+		t.Fatalf("ws-scoped getWorkspaceInfo = %s, want the token's space", body)
 	}
 }
 
@@ -427,7 +427,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	ws, err := store.EnsureWorkspace(context.Background(), org, inviterAcct, "Max Power")
+	ws, err := store.EnsureSpace(context.Background(), org, inviterAcct, "Max Power")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +479,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 }
 
 // TestSendInviteRequiresAdmin proves a plain member cannot invite — only an
-// owner/admin of the target workspace.
+// owner/admin of the target space.
 func TestSendInviteRequiresAdmin(t *testing.T) {
 	const org = "maxpower"
 	const ownerAcct = "550e8400-e29b-41d4-a716-446655440000"
@@ -499,7 +499,7 @@ func TestSendInviteRequiresAdmin(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	ctx := context.Background()
-	ws, _ := store.EnsureWorkspace(ctx, org, ownerAcct, "Max Power")
+	ws, _ := store.EnsureSpace(ctx, org, ownerAcct, "Max Power")
 	if err := store.AddMember(ctx, org, ws.UUID, memberAcct, "member"); err != nil {
 		t.Fatal(err)
 	}

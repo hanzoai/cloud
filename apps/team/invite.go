@@ -1,23 +1,23 @@
 package team
 
-// The workspace invite plane — the write half of the Slack-model tenancy contract.
+// The space invite plane — the write half of the Slack-model tenancy contract.
 //
-// When a workspace admin invites someone by email, TWO relations must record it:
+// When a space admin invites someone by email, TWO relations must record it:
 //
 //   - IAM's Membership(User × Org × Role) — the source of truth the `orgs` claim
 //     is minted from, so the invitee's NEXT token (and a mid-session
-//     get-memberships refresh) carries the workspace's org and they can act in it
+//     get-memberships refresh) carries the space's org and they can act in it
 //     with no re-provisioning. Written via POST /v1/iam/memberships as the
 //     confidential hanzo-team app (the app allow-listed under
 //     IAM_MEMBERSHIP_ADMIN_APPS / CapMembershipAdmin — the SAME credential
 //     establishSession's confidential code-exchange uses, so no new secret).
 //   - team's own members row — the local roster the transactor projects and the
-//     workspace switcher reads, keyed by the account uuid derived from the
+//     space switcher reads, keyed by the account uuid derived from the
 //     invitee's IAM subject.
 //
 // One invite, two writes, both idempotent. The IAM write first (it is the tenancy
 // grant); the local row second (the projection). A caller must be an owner/admin
-// of the target workspace — enforced here before either write.
+// of the target space — enforced here before either write.
 //
 // The accounts protocol's invite verb is `sendInvite`; this implements that
 // backend RPC (account method "sendInvite") plus "getMemberships" for the
@@ -113,8 +113,8 @@ func (g *api) iamDo(ctx context.Context, method, path string, q url.Values, body
 }
 
 // iamGetUserByEmail resolves the invitee's IAM identity by (org, email). The
-// lookup is org-scoped — the Slack model invites someone INTO a workspace within
-// your org, so the workspace's org is the lookup tenant. Returns a clean "not
+// lookup is org-scoped — the Slack model invites someone INTO a space within
+// your org, so the space's org is the lookup tenant. Returns a clean "not
 // found" when IAM has no such user (so the invite refuses rather than writing a
 // dangling row).
 func (g *api) iamGetUserByEmail(ctx context.Context, org, email string) (iamUser, error) {
@@ -162,8 +162,8 @@ func (g *api) iamGetMemberships(ctx context.Context, user string) ([]model.OrgRe
 	return refs, nil
 }
 
-// sendInvite is the account RPC "sendInvite" — a workspace admin invites an email
-// into the workspace. It resolves the EXPLICIT target workspace (workspaceUrl)
+// sendInvite is the account RPC "sendInvite" — a space admin invites an email
+// into the space. It resolves the EXPLICIT target space (workspaceUrl)
 // among the caller's orgs, requires the caller to be an owner/admin of it, then
 // records the invite in BOTH relations (IAM membership + local roster row). The
 // role defaults to member and must be one of the coarse tenancy roles.
@@ -187,15 +187,15 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 	if wsURL == "" {
 		return g.fail(c, statusBadRequest("workspaceUrl is required"))
 	}
-	ws, callerRole, err := g.resolveWorkspace(c.Context(), orgs, account, wsURL)
+	ws, callerRole, err := g.resolveSpace(c.Context(), orgs, account, wsURL)
 	if err != nil {
-		if err == errAmbiguousWorkspace {
+		if err == errAmbiguousSpace {
 			return g.fail(c, statusAmbiguous(wsURL))
 		}
-		return g.fail(c, statusWorkspaceNotFound(wsURL))
+		return g.fail(c, statusSpaceNotFound(wsURL))
 	}
 	if callerRole != "owner" && callerRole != "admin" {
-		return g.fail(c, statusUnauthorized("only a workspace owner or admin can invite"))
+		return g.fail(c, statusUnauthorized("only a space owner or admin can invite"))
 	}
 	org := ws.OwnerOrg
 
@@ -207,11 +207,11 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 		g.log.Warn("team: invite — invitee not resolvable in IAM", "org", org, "err", err)
 		return g.fail(c, statusInvite("no Hanzo account for "+email+" in this org"))
 	}
-	// Least privilege: a WORKSPACE invite grants at most a coarse `member` at the
-	// ORG level. The rich role (owner/admin) is workspace-scoped only (the local
+	// Least privilege: a SPACE invite grants at most a coarse `member` at the
+	// ORG level. The rich role (owner/admin) is space-scoped only (the local
 	// roster row below); it must never escalate to an org-level IAM admin/owner
 	// grant that other surfaces trust via IsAdmin. Org admin/owner is granted
-	// through a deliberate org-admin path, not a per-workspace invite. Guest stays
+	// through a deliberate org-admin path, not a per-space invite. Guest stays
 	// guest (lesser privilege, and load-bearing for the team.guests cap).
 	if err := g.iamAddMembership(c.Context(), u.idKey(), org, orgGrantRole(role)); err != nil {
 		g.log.Error("team: invite — add-membership failed", "org", org, "err", err)
@@ -223,8 +223,8 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 	}
 	// The name is IAM's and is read with the roster, so nothing is copied here.
 	if err := g.accounts.AddMember(c.Context(), org, ws.UUID, inviteeAccount, role); err != nil {
-		g.log.Error("team: invite — workspace grant failed", "err", err)
-		return g.fail(c, statusInvite("could not add workspace member: "+err.Error()))
+		g.log.Error("team: invite — space grant failed", "err", err)
+		return g.fail(c, statusInvite("could not add space member: "+err.Error()))
 	}
 	// The entitlement gate AT THE ADD POINT — the SAME client selectWorkspace gates login
 	// with (entitle). A guest added beyond the plan's team.guests cap is caught here too,
@@ -237,10 +237,10 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 		return c.JSON(http.StatusPaymentRequired, map[string]any{"error": *st, "upgradeUrl": upgradeURL})
 	}
 	return g.ok(c, map[string]any{
-		"invited":   email,
-		"workspace": ws.UUID,
-		"org":       org,
-		"role":      role,
+		"invited": email,
+		"space":   ws.UUID,
+		"org":     org,
+		"role":    role,
 	})
 }
 
@@ -279,11 +279,11 @@ func validInviteRole(role string) bool {
 	return false
 }
 
-// orgGrantRole caps the ORG-level IAM membership a workspace invite may confer:
-// owner/admin (workspace-scoped roles) collapse to a coarse `member` at the org
-// level so a per-workspace invite can never mint an org IAM admin/owner. member
+// orgGrantRole caps the ORG-level IAM membership a space invite may confer:
+// owner/admin (space-scoped roles) collapse to a coarse `member` at the org
+// level so a per-space invite can never mint an org IAM admin/owner. member
 // and guest pass through unchanged (guest is lesser privilege and drives the
-// team.guests cap). The rich role still lands on the local workspace roster row.
+// team.guests cap). The rich role still lands on the local space roster row.
 func orgGrantRole(role string) string {
 	switch role {
 	case "owner", "admin":

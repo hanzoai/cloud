@@ -63,7 +63,7 @@ func admin(ctx context.Context) bool {
 // absent one gives.
 //
 // It is the caller, not the (account, org) pair, because the collaborator plane
-// gates on the WORKSPACE too: an HS256 workspace token names its workspace, and a
+// gates on the SPACE too: an HS256 space token names its space, and a
 // documentId for a different one is refused.
 func callerOf(ctx context.Context, id *identity) (caller, error) {
 	c, ok := cloud.Request(ctx)

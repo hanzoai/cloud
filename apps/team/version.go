@@ -6,9 +6,9 @@ package team
 //
 // It is DISTINCT from the cloud binary's own release identity: MODEL_VERSION is
 // the Team model the front validates against — the transactor hello's
-// serverVersion AND each workspace's versionMajor/Minor/Patch. Both places that
+// serverVersion AND each space's versionMajor/Minor/Patch. Both places that
 // answer the front's model-version handshake read from HERE, so serverVersion and
-// the per-workspace version can never drift: one source, one number, parsed one
+// the per-space version can never drift: one source, one number, parsed one
 // way.
 
 import (
@@ -33,7 +33,7 @@ func modelVersion() string {
 }
 
 // modelMajor, modelMinor and modelPatch are modelVersion parsed into its numeric
-// components — the shape the workspace-info handshake needs. A missing or
+// components — the shape the space-info handshake needs. A missing or
 // non-numeric component reads as 0, so a malformed override degrades to 0.0.0
 // rather than panicking.
 func modelMajor() int { return versionPart(0) }

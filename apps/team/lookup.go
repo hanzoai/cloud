@@ -45,7 +45,7 @@ func (s *session) applyLookups(docs []map[string]any, lookup map[string]any) []m
 			// Forward: spec is the target class (unused — resolution is by _id);
 			// doc[field] holds the referenced doc's _id.
 			if ref := toStr(d[field]); ref != "" {
-				if td, _ := s.store.get(s.org, s.workspace, ref); td != nil {
+				if td, _ := s.store.get(s.org, s.space, ref); td != nil {
 					joined[field] = td
 				}
 			}
@@ -64,7 +64,7 @@ func (s *session) reverseLookup(childClass, childField, parentID string) []map[s
 	if parentID == "" {
 		return []map[string]any{}
 	}
-	docs, err := s.store.byClasses(s.org, s.workspace, s.hier.candidates(childClass))
+	docs, err := s.store.byClasses(s.org, s.space, s.hier.candidates(childClass))
 	if err != nil {
 		return []map[string]any{}
 	}

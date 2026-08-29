@@ -109,9 +109,14 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	o := ops{s: s}
 
-	// STATIC routes register BEFORE the generic /:doctype routes so Fiber's
-	// first-match scan resolves them unambiguously; their names are also
-	// reserved DocType names, so no document route can shadow them.
+	// A DocType is addressed as module.kind, in ONE segment: an address is one
+	// value, so it is one path parameter and an SDK method takes one argument for
+	// it rather than two halves a caller has to reassemble. The DOCUMENT keeps its
+	// own segment after it.
+	//
+	// The dot is also what keeps the static routes below unambiguous. They carry
+	// none, so no address can be mistaken for one and no DocType name has to be
+	// reserved to stop it — which is why there is no reserved-name list any more.
 	zip.Get(g, "/summary", o.summary)
 
 	zip.Get(g, "/doctypes", o.listDocTypes)
@@ -377,6 +382,10 @@ func decodeSeg(raw string) string {
 // pathParam reads a URL path parameter and decodes it.
 func pathParam(c *zip.Ctx, name string) string { return decodeSeg(c.Param(name)) }
 
+// addressed is the DocType a raw handler's URL names, read through the same one
+// rule the typed ops use.
+func addressed(c *zip.Ctx) (ID, error) { return address(c.Param("doctype")) }
+
 // body binds a document request body through the engine's size guard, so every
 // host enforces the same bound.
 func body(c *zip.Ctx) (map[string]any, error) {
@@ -408,12 +417,32 @@ type noContent = struct{}
 
 // ---- DocType registry ----
 
-// docTypeRef addresses one DocType by the name in the URL.
+// docTypeRef addresses one DocType by its address in the URL.
 type docTypeRef struct {
-	// Name is the DocType's name, from the path. A name containing a space
-	// ("Sales Invoice") arrives percent-encoded and is decoded before it is
-	// matched against the stored one.
+	// Name is the DocType's ADDRESS — "module.name", e.g. "kb.page". A name
+	// containing a space ("erp.Sales Invoice") arrives percent-encoded and is
+	// decoded before it is matched against the stored one.
 	Name string `json:"name"`
+}
+
+// id is the DocType this path names, or the refusal an unreadable address earns.
+//
+// THE ONE PLACE an address becomes an identity on this surface: every op asks
+// here, so a malformed one is refused once, with one answer, instead of reaching
+// the store as half a key.
+func (r docTypeRef) id() (ID, error) { return address(r.Name) }
+
+// address reads a path segment as a DocType address.
+//
+// NOT FOUND, not bad request: a segment that is not an address names a DocType
+// that cannot exist, which is the same answer as one that merely does not, and
+// two answers here would tell a stranger which of the two they had found.
+func address(seg string) (ID, error) {
+	id, err := ParseID(decodeSeg(seg))
+	if err != nil {
+		return ID{}, zip.ErrNotFound("doctype not found")
+	}
+	return id, nil
 }
 
 // docTypeList is a page of DocType definitions.
@@ -465,7 +494,11 @@ func (o ops) getDocType(ctx context.Context, in *docTypeRef) (*DocType, error) {
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	dt, err := eng.DocTypeOf(ctx, callerOf(ctx), decodeSeg(in.Name))
+	id, err := in.id()
+	if err != nil {
+		return nil, err
+	}
+	dt, err := eng.DocTypeOf(ctx, callerOf(ctx), id)
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -483,7 +516,11 @@ func (o ops) replaceDocType(ctx context.Context, in *DocType) (*DocType, error) 
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	saved, err := eng.ReplaceDocType(ctx, callerOf(ctx), decodeSeg(in.Name), *in)
+	id, err := address(in.Name)
+	if err != nil {
+		return nil, err
+	}
+	saved, err := eng.ReplaceDocType(ctx, callerOf(ctx), id, *in)
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -500,7 +537,11 @@ func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, err
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	if err := eng.DeleteDocType(ctx, callerOf(ctx), decodeSeg(in.Name)); err != nil {
+	id, err := in.id()
+	if err != nil {
+		return nil, err
+	}
+	if err := eng.DeleteDocType(ctx, callerOf(ctx), id); err != nil {
 		return nil, fail(err, "doctype not found")
 	}
 	return nil, nil
@@ -605,9 +646,10 @@ type documentList struct {
 	Data []docView `json:"data"`
 }
 
-// docRef addresses one document by the (doctype, name) pair in the URL.
+// docRef addresses one document: its DocType's address, then the document's own
+// name in its own segment.
 type docRef struct {
-	// DocType is the document's DocType, from the path.
+	// DocType is the document's DocType, by ADDRESS — "module.name", from the path.
 	DocType string `json:"doctype"`
 	// Name is the document's name — its key within the DocType — from the path.
 	// A name containing a space arrives percent-encoded and is decoded before it
@@ -615,9 +657,12 @@ type docRef struct {
 	Name string `json:"name"`
 }
 
+// id is the DocType this document belongs to.
+func (r docRef) id() (ID, error) { return address(r.DocType) }
+
 // listDocumentsIn lists one DocType's documents. Every filter rides in the URL.
 type listDocumentsIn struct {
-	// DocType is the DocType to list, from the path.
+	// DocType is the DocType to list, by ADDRESS — "module.name", from the path.
 	DocType string `json:"doctype"`
 	// Filters is a JSON object of equality matches, e.g. {"priority":"High"}.
 	// Every key must be a field the DocType declares (or the managed name /
@@ -633,6 +678,9 @@ type listDocumentsIn struct {
 	Limit string `json:"limit"`
 }
 
+// id is the DocType being listed.
+func (in listDocumentsIn) id() (ID, error) { return address(in.DocType) }
+
 // listDocuments returns the caller org's documents of one DocType, filtered,
 // ordered and projected by the query. The DocType is resolved FIRST — through
 // the same permission gate the list itself uses — because the query is validated
@@ -642,12 +690,15 @@ type listDocumentsIn struct {
 // Example: {"doctype": "Task", "filters": "{\"priority\":\"High\"}", "order_by": "estimate asc", "limit": "20"}
 func (o ops) listDocuments(ctx context.Context, in *listDocumentsIn) (*documentList, error) {
 	cl := callerOf(ctx)
-	dtName := decodeSeg(in.DocType)
+	id, err := in.id()
+	if err != nil {
+		return nil, err
+	}
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	dt, err := eng.DocTypeOf(ctx, cl, dtName)
+	dt, err := eng.DocTypeOf(ctx, cl, id)
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -660,7 +711,7 @@ func (o ops) listDocuments(ctx context.Context, in *listDocumentsIn) (*documentL
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	docs, err := eng.ListDocuments(ctx, cl, dtName, opts)
+	docs, err := eng.ListDocuments(ctx, cl, id, opts)
 	if err != nil {
 		return nil, fail(err, "doctype not found")
 	}
@@ -679,7 +730,11 @@ func (o ops) getDocument(ctx context.Context, in *docRef) (*docView, error) {
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	doc, err := eng.GetDocument(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	id, err := in.id()
+	if err != nil {
+		return nil, err
+	}
+	doc, err := eng.GetDocument(ctx, callerOf(ctx), id, decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -696,7 +751,11 @@ func (o ops) deleteDocument(ctx context.Context, in *docRef) (*noContent, error)
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	err = eng.DeleteDocument(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	id, err := in.id()
+	if err != nil {
+		return nil, err
+	}
+	err = eng.DeleteDocument(ctx, callerOf(ctx), id, decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -714,7 +773,11 @@ func (o ops) submitDocument(ctx context.Context, in *docRef) (*docView, error) {
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	doc, err := eng.Submit(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	id, err := in.id()
+	if err != nil {
+		return nil, err
+	}
+	doc, err := eng.Submit(ctx, callerOf(ctx), id, decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -732,7 +795,11 @@ func (o ops) cancelDocument(ctx context.Context, in *docRef) (*docView, error) {
 	if err != nil {
 		return nil, fail(err, "")
 	}
-	doc, err := eng.Cancel(ctx, callerOf(ctx), decodeSeg(in.DocType), decodeSeg(in.Name))
+	id, err := in.id()
+	if err != nil {
+		return nil, err
+	}
+	doc, err := eng.Cancel(ctx, callerOf(ctx), id, decodeSeg(in.Name))
 	if err != nil {
 		return nil, fail(err, "document not found")
 	}
@@ -779,7 +846,11 @@ func createDocument(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return fail(err, "")
 	}
-	doc, err := eng.CreateDocument(c.Context(), caller(c), pathParam(c, "doctype"), in)
+	id, err := addressed(c)
+	if err != nil {
+		return err
+	}
+	doc, err := eng.CreateDocument(c.Context(), caller(c), id, in)
 	if err != nil {
 		return fail(err, "doctype not found")
 	}
@@ -795,7 +866,11 @@ func updateDocument(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return fail(err, "")
 	}
-	doc, err := eng.UpdateDocument(c.Context(), caller(c), pathParam(c, "doctype"), pathParam(c, "name"), in)
+	id, err := addressed(c)
+	if err != nil {
+		return err
+	}
+	doc, err := eng.UpdateDocument(c.Context(), caller(c), id, pathParam(c, "name"), in)
 	if err != nil {
 		return fail(err, "document not found")
 	}
@@ -845,68 +920,68 @@ func engineOfService(s *cloud.Service[state], org string) (*engine.Engine, error
 
 // Ingest creates a document from already-trusted field data, running the full
 // validate + lifecycle-hook pipeline.
-func Ingest(ctx context.Context, org, doctype string, data map[string]any, requestedName string) (Ingested, error) {
+func Ingest(ctx context.Context, org string, id ID, data map[string]any, requestedName string) (Ingested, error) {
 	e, err := engineOf(org)
 	if err != nil {
 		return Ingested{}, err
 	}
-	return e.Ingest(ctx, org, doctype, data, requestedName)
+	return e.Ingest(ctx, org, id, data, requestedName)
 }
 
 // UpdateData replaces an existing draft document's data, running before_save +
 // after_save — the in-process twin of the HTTP PUT.
-func UpdateData(ctx context.Context, org, doctype, name string, data map[string]any) error {
+func UpdateData(ctx context.Context, org string, id ID, name string, data map[string]any) error {
 	e, err := engineOf(org)
 	if err != nil {
 		return err
 	}
-	return e.UpdateData(ctx, org, doctype, name, data)
+	return e.UpdateData(ctx, org, id, name, data)
 }
 
 // Delete removes a document after running the on_trash gate hooks.
-func Delete(ctx context.Context, org, doctype, name string) error {
+func Delete(ctx context.Context, org string, id ID, name string) error {
 	e, err := engineOf(org)
 	if err != nil {
 		return err
 	}
-	return e.Delete(ctx, org, doctype, name)
+	return e.Delete(ctx, org, id, name)
 }
 
-// Get returns one document by name in (org, doctype).
-func Get(ctx context.Context, org, doctype, name string) (Document, error) {
+// Get returns one document by name in (org, id).
+func Get(ctx context.Context, org string, id ID, name string) (Document, error) {
 	e, err := engineOf(org)
 	if err != nil {
 		return Document{}, err
 	}
-	return e.Get(ctx, org, doctype, name)
+	return e.Get(ctx, org, id, name)
 }
 
 // Search is the in-process, org-scoped document list.
-func Search(ctx context.Context, org, doctype string, filters map[string]string, limit int) ([]Document, error) {
+func Search(ctx context.Context, org string, id ID, filters map[string]string, limit int) ([]Document, error) {
 	e, err := engineOf(org)
 	if err != nil {
 		return nil, err
 	}
-	return e.Search(ctx, org, doctype, filters, limit)
+	return e.Search(ctx, org, id, filters, limit)
 }
 
 // FindByField returns the name of the first document whose `field` equals
 // `value`, or "" if none.
-func FindByField(ctx context.Context, org, doctype, field, value string) (string, error) {
+func FindByField(ctx context.Context, org string, id ID, field, value string) (string, error) {
 	e, err := engineOf(org)
 	if err != nil {
 		return "", err
 	}
-	return e.FindByField(ctx, org, doctype, field, value)
+	return e.FindByField(ctx, org, id, field, value)
 }
 
-// Installed reports whether `doctype` exists in `org`.
-func Installed(ctx context.Context, org, doctype string) bool {
+// Installed reports whether the DocType `id` exists in `org`.
+func Installed(ctx context.Context, org string, id ID) bool {
 	e, err := engineOf(org)
 	if err != nil {
 		return false
 	}
-	return e.Installed(ctx, org, doctype)
+	return e.Installed(ctx, org, id)
 }
 
 // ModuleInstalled reports whether a module's content model resolves for `org`.

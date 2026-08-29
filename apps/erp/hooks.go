@@ -46,7 +46,7 @@ import (
 // registerHooks wires every ERP behavior to its DocType. Called once from init().
 func registerHooks() {
 	// Totals: line amounts + document total, on create and update.
-	for _, dt := range []string{dtSalesOrder, dtSalesInvoice, dtPurchaseOrder} {
+	for _, dt := range []framework.ID{dtSalesOrder, dtSalesInvoice, dtPurchaseOrder} {
 		framework.RegisterHook(dt, framework.ActionBeforeSave, computeSalesTotals)
 	}
 	framework.RegisterHook(dtJournalEntry, framework.ActionBeforeSave, computeJournalTotals)
@@ -378,13 +378,13 @@ func legName(voucherNo, kind string, i int) string {
 // consult DocPerm, which is why the ledger stays System-Manager read-only on the HTTP
 // surface while the hook can still post it.
 func postLeg(ctx context.Context, ev *framework.Event, dt *framework.DocType, name string, data map[string]any) error {
-	if _, err := ev.Store.GetDocument(ctx, ev.Org, dt.Name, name); err == nil {
+	if _, err := ev.Store.GetDocument(ctx, ev.Org, dt.ID(), name); err == nil {
 		return nil // already posted — idempotent no-op
 	}
 	if _, err := ev.Store.CreateDocument(ctx, ev.Org, dt, data, name); err != nil {
 		// A concurrent poster may have inserted this exact leg between our read and
 		// create. If it now exists, that is success (idempotent), not a failure.
-		if _, gerr := ev.Store.GetDocument(ctx, ev.Org, dt.Name, name); gerr == nil {
+		if _, gerr := ev.Store.GetDocument(ctx, ev.Org, dt.ID(), name); gerr == nil {
 			return nil
 		}
 		return fmt.Errorf("post %s %q: %w", dt.Name, name, err)

@@ -20,8 +20,8 @@ import (
 	_ "github.com/hanzoai/sqlite"
 )
 
-// docStore keeps ONE SQLite database per (org, workspace) — the SPA data plane is
-// SQLite scoped per tenant, no KV and no Postgres. The workspace is the PROJECT of
+// docStore keeps ONE SQLite database per (org, space) — the SPA data plane is
+// SQLite scoped per tenant, no KV and no Postgres. The space is the PROJECT of
 // its org, so hanzoai/namespace names the file: <dir>/orgs/<org>/projects/<ws>/docs.db.
 // An org's data is physically isolated (full multitenancy) and the whole tree can
 // live on one durable mount. The storage LOGIC is ported verbatim from
@@ -57,17 +57,17 @@ func seg(s string) string {
 	return pathSanitize.ReplaceAllString(s, "_")
 }
 
-// db opens (creating on first use) the (org, workspace) SQLite file and caches
+// db opens (creating on first use) the (org, space) SQLite file and caches
 // the handle. WAL + busy_timeout make concurrent sessions safe; a single open
 // connection serializes writes (sqlite is single-writer) which is plenty for a
-// per-workspace store. On a network FS that lacks WAL shared-memory the journal
+// per-space store. On a network FS that lacks WAL shared-memory the journal
 // mode falls back via the SQLITE_JOURNAL_MODE env knob.
-func (s *docStore) db(org, workspace string) (*sql.DB, error) {
+func (s *docStore) db(org, space string) (*sql.DB, error) {
 	// The namespace is the key AND the name: cached by the value rather than by a
 	// rendering of it, so two spellings that resolve to one file can never become
 	// two open handles on that file. cloud.OrgNamespace is the ONE path — org is
-	// the VERIFIED workspace-token claim, never a client header.
-	ns, err := cloud.OrgNamespace(org, workspace)
+	// the VERIFIED space-token claim, never a client header.
+	ns, err := cloud.OrgNamespace(org, space)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +108,8 @@ func (s *docStore) db(org, workspace string) (*sql.DB, error) {
 }
 
 // get returns the stored JSON for a doc, or nil if absent.
-func (s *docStore) get(org, workspace, id string) (map[string]any, error) {
-	db, err := s.db(org, workspace)
+func (s *docStore) get(org, space, id string) (map[string]any, error) {
+	db, err := s.db(org, space)
 	if err != nil {
 		return nil, err
 	}
@@ -130,14 +130,18 @@ func (s *docStore) get(org, workspace, id string) (map[string]any, error) {
 
 // put upserts a doc keyed by its _id; _class/space mirror into columns for the
 // findAll candidate scan.
-func (s *docStore) put(org, workspace string, doc map[string]any) error {
-	db, err := s.db(org, workspace)
+func (s *docStore) put(org, space string, doc map[string]any) error {
+	db, err := s.db(org, space)
 	if err != nil {
 		return err
 	}
 	id, _ := doc["_id"].(string)
 	class, _ := doc["_class"].(string)
-	space, _ := doc["space"].(string)
+	// The transactor's documents carry a `space` of their own — the upstream
+	// platform's containing space, `core:space:*` — which is a different thing
+	// from the SPACE this store is partitioned by and keeps the wire spelling it
+	// has always had. Only the local yields, so the two are never one name.
+	docSpace, _ := doc["space"].(string)
 	if id == "" || class == "" {
 		return nil
 	}
@@ -147,13 +151,13 @@ func (s *docStore) put(org, workspace string, doc map[string]any) error {
 	}
 	_, err = db.Exec(`INSERT INTO docs (id, class, space, json) VALUES (?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET class=excluded.class, space=excluded.space, json=excluded.json`,
-		id, class, space, string(raw))
+		id, class, docSpace, string(raw))
 	return err
 }
 
 // del removes a doc by id.
-func (s *docStore) del(org, workspace, id string) error {
-	db, err := s.db(org, workspace)
+func (s *docStore) del(org, space, id string) error {
+	db, err := s.db(org, space)
 	if err != nil {
 		return err
 	}
@@ -164,8 +168,8 @@ func (s *docStore) del(org, workspace, id string) error {
 // byClasses returns the JSON of every doc whose _class is in the given set (the
 // caller passes the descendant set of the queried class). Go-side matchQuery,
 // sort and limit run over these.
-func (s *docStore) byClasses(org, workspace string, classes []string) ([]map[string]any, error) {
-	db, err := s.db(org, workspace)
+func (s *docStore) byClasses(org, space string, classes []string) ([]map[string]any, error) {
+	db, err := s.db(org, space)
 	if err != nil {
 		return nil, err
 	}
@@ -201,10 +205,10 @@ func (s *docStore) byClasses(org, workspace string, classes []string) ([]map[str
 	return out, rows.Err()
 }
 
-// count returns how many docs the (org, workspace) holds — used to seed system
+// count returns how many docs the (org, space) holds — used to seed system
 // spaces exactly once.
-func (s *docStore) count(org, workspace string) (int, error) {
-	db, err := s.db(org, workspace)
+func (s *docStore) count(org, space string) (int, error) {
+	db, err := s.db(org, space)
 	if err != nil {
 		return 0, err
 	}
@@ -215,7 +219,7 @@ func (s *docStore) count(org, workspace string) (int, error) {
 	return n, nil
 }
 
-// Close closes every cached per-workspace handle. Idempotent.
+// Close closes every cached per-space handle. Idempotent.
 func (s *docStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

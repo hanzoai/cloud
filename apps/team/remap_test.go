@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// putMigratedDoc writes a doc straight into a workspace store — used to reconstruct
+// putMigratedDoc writes a doc straight into a space store — used to reconstruct
 // the exact row shape a Jul-5 team-go→cloud migration left behind, BEFORE any
 // reconcile runs.
 func putMigratedDoc(t *testing.T, s *session, doc map[string]any) {
 	t.Helper()
-	if err := s.store.put(s.org, s.workspace, doc); err != nil {
+	if err := s.store.put(s.org, s.space, doc); err != nil {
 		t.Fatalf("seed migrated doc %v: %v", doc["_id"], err)
 	}
 }
@@ -20,21 +20,21 @@ func socialIdsForKey(s *session, key string) []map[string]any {
 }
 
 // TestRemapMigratedSocialIdExistingPerson is the primary reproduction: the migrated
-// workspace ALREADY has the deterministic person-<account> (team-go projected it),
+// space ALREADY has the deterministic person-<account> (team-go projected it),
 // AND a confirmed hanzo:<account> SocialIdentity still attached to a team-go-era
 // Person id (a second Person row for the same account). Because person-<account>
 // exists, MemberTxes never re-creates the social identity, so WITHOUT the remap the
 // confirmed identity stays on the wrong person and the workbench throws "Confirmed
 // social identity is attached to the wrong person" on transactor connect. The remap
 // re-points it onto person-<account>, satisfying the exact invariant a fresh
-// workspace has.
+// space has.
 func TestRemapMigratedSocialIdExistingPerson(t *testing.T) {
 	const org = "hanzo"
 	const human = "2d4d67ab-30f1-474e-b81f-f60461852259"
 	const oldPid = "person-teamgo-legacy-9f3a" // the team-go-era Person id (the wrong one)
 	_, sess, _ := rosterServer(t, org, human, "Dave Lorenzini", nil)
 
-	sess.seedWorkspace()
+	sess.seedSpace()
 
 	pid := PersonRef(human)
 	socialKey := "hanzo:" + human
@@ -118,7 +118,7 @@ func TestRemapMigratedSocialIdStrayDuplicate(t *testing.T) {
 	const strayID = "sid-legacy-random-b2c3"
 	_, sess, _ := rosterServer(t, org, human, "Ada Lovelace", nil)
 
-	sess.seedWorkspace()
+	sess.seedSpace()
 	socialKey := "hanzo:" + human
 	putMigratedDoc(t, sess, map[string]any{
 		"_id": oldPid, "_class": clPerson, "space": spaceContacts,
@@ -145,7 +145,7 @@ func TestRemapMigratedSocialIdStrayDuplicate(t *testing.T) {
 		}
 	}
 	// The stray row itself was re-pointed in place (not deleted — no data loss).
-	stray, _ := sess.store.get(sess.org, sess.workspace, strayID)
+	stray, _ := sess.store.get(sess.org, sess.space, strayID)
 	if stray == nil {
 		t.Fatalf("stray social identity was deleted, want re-pointed in place")
 	}
@@ -154,7 +154,7 @@ func TestRemapMigratedSocialIdStrayDuplicate(t *testing.T) {
 	}
 }
 
-// TestRemapIdempotentAndFreshUnaffected proves the guard: on a FRESH workspace the
+// TestRemapIdempotentAndFreshUnaffected proves the guard: on a FRESH space the
 // remap is a no-op (the social identity is attached to person-<account> from the
 // start), and re-running reconcile after a remap produces no further changes.
 func TestRemapIdempotentAndFreshUnaffected(t *testing.T) {
@@ -162,13 +162,13 @@ func TestRemapIdempotentAndFreshUnaffected(t *testing.T) {
 	const human = "9999aaaa-bbbb-4ccc-8ddd-eeeeffff0000"
 	_, sess, _ := rosterServer(t, org, human, "Grace Hopper", nil)
 
-	// Fresh workspace: reconcile builds the deterministic person + social identity.
-	sess.seedWorkspace()
+	// Fresh space: reconcile builds the deterministic person + social identity.
+	sess.seedSpace()
 	sess.reconcileRoster()
 
-	// A fresh workspace has NOTHING to remap — the invariant already holds.
+	// A fresh space has NOTHING to remap — the invariant already holds.
 	if txes := sess.remapMigratedSocialIds(human); txes != nil {
-		t.Fatalf("fresh workspace produced remap txes = %v, want none", txes)
+		t.Fatalf("fresh space produced remap txes = %v, want none", txes)
 	}
 	pid := PersonRef(human)
 	sids := socialIdsForKey(sess, "hanzo:"+human)

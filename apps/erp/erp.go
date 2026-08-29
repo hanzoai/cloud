@@ -39,31 +39,31 @@ const RoleErpUser = "Erp User"
 // Child DocType names — the line-item schemas embedded in their parents as Table
 // fields. They are real DocTypes (the engine validates each row against them) but
 // are never addressed standalone; the parent owns their rows atomically.
-const (
-	dtSalesOrderItem    = "erp-sales-item"
-	dtSalesInvoiceItem  = "erp-invoice-item"
-	dtPurchaseOrderItem = "erp-purchase-item"
-	dtStockEntryItem    = "erp-stock-item"
-	dtJournalAccount    = "erp-journal-account"
+var (
+	dtSalesOrderItem    = framework.ID{Module: Module, Name: "sales-item"}
+	dtSalesInvoiceItem  = framework.ID{Module: Module, Name: "invoice-item"}
+	dtPurchaseOrderItem = framework.ID{Module: Module, Name: "purchase-item"}
+	dtStockEntryItem    = framework.ID{Module: Module, Name: "stock-item"}
+	dtJournalAccount    = framework.ID{Module: Module, Name: "journal-account"}
 )
 
 // Parent / master / ledger DocType names.
-const (
-	dtItem          = "erp-item"
-	dtWarehouse     = "erp-warehouse"
-	dtCustomer      = "erp-customer"
-	dtSupplier      = "erp-supplier"
-	dtAccount       = "erp-account"
-	dtDepartment    = "erp-department"
-	dtEmployee      = "erp-employee"
-	dtSalesOrder    = "erp-sales"
-	dtSalesInvoice  = "erp-invoice"
-	dtPurchaseOrder = "erp-purchase"
-	dtStockEntry    = "erp-stock"
-	dtJournalEntry  = "erp-journal"
-	dtPaymentEntry  = "erp-payment"
-	dtGLEntry       = "erp-gl-entry"
-	dtStockLedger   = "erp-stock-ledger"
+var (
+	dtItem          = framework.ID{Module: Module, Name: "item"}
+	dtWarehouse     = framework.ID{Module: Module, Name: "warehouse"}
+	dtCustomer      = framework.ID{Module: Module, Name: "customer"}
+	dtSupplier      = framework.ID{Module: Module, Name: "supplier"}
+	dtAccount       = framework.ID{Module: Module, Name: "account"}
+	dtDepartment    = framework.ID{Module: Module, Name: "department"}
+	dtEmployee      = framework.ID{Module: Module, Name: "employee"}
+	dtSalesOrder    = framework.ID{Module: Module, Name: "sales"}
+	dtSalesInvoice  = framework.ID{Module: Module, Name: "invoice"}
+	dtPurchaseOrder = framework.ID{Module: Module, Name: "purchase"}
+	dtStockEntry    = framework.ID{Module: Module, Name: "stock"}
+	dtJournalEntry  = framework.ID{Module: Module, Name: "journal"}
+	dtPaymentEntry  = framework.ID{Module: Module, Name: "payment"}
+	dtGLEntry       = framework.ID{Module: Module, Name: "gl-entry"}
+	dtStockLedger   = framework.ID{Module: Module, Name: "stock-ledger"}
 )
 
 // init registers the ERP content model AND its native-Go business hooks with the
@@ -98,7 +98,7 @@ func DocTypes() []framework.DocType {
 // it on write, so the document name is URL-safe); item_name is the human title.
 func item() framework.DocType {
 	return framework.DocType{
-		Name: dtItem, Module: Module, Autoname: "field:item_code", TitleField: "item_name",
+		Name: dtItem.Name, Module: dtItem.Module, Autoname: "field:item_code", TitleField: "item_name",
 		Fields: []framework.DocField{
 			{Fieldname: "item_code", Fieldtype: framework.FieldData, Label: "Item Code", Reqd: true, InListView: true},
 			{Fieldname: "item_name", Fieldtype: framework.FieldData, Label: "Item Name", Reqd: true, InListView: true},
@@ -115,7 +115,7 @@ func item() framework.DocType {
 // warehouse is a stock location — the source/target a stock movement debits/credits.
 func warehouse() framework.DocType {
 	return framework.DocType{
-		Name: dtWarehouse, Module: Module, Autoname: "field:warehouse_name", TitleField: "warehouse_name",
+		Name: dtWarehouse.Name, Module: dtWarehouse.Module, Autoname: "field:warehouse_name", TitleField: "warehouse_name",
 		Fields: []framework.DocField{
 			{Fieldname: "warehouse_name", Fieldtype: framework.FieldData, Label: "Warehouse Name", Reqd: true, InListView: true},
 			{Fieldname: "is_group", Fieldtype: framework.FieldCheck, Label: "Group Node"},
@@ -128,7 +128,7 @@ func warehouse() framework.DocType {
 // customer is the sell-side party master (the Sales Order/Invoice Link target).
 func customer() framework.DocType {
 	return framework.DocType{
-		Name: dtCustomer, Module: Module, Autoname: "field:customer_name", TitleField: "customer_name",
+		Name: dtCustomer.Name, Module: dtCustomer.Module, Autoname: "field:customer_name", TitleField: "customer_name",
 		Fields: append(partyFields("customer_name", "Customer Name", "customer_group", "Customer Group"),
 			framework.DocField{Fieldname: "territory", Fieldtype: framework.FieldData, Label: "Territory"}),
 		Perms: erpPerms(),
@@ -138,7 +138,7 @@ func customer() framework.DocType {
 // supplier is the buy-side party master (the Purchase Order Link target).
 func supplier() framework.DocType {
 	return framework.DocType{
-		Name: dtSupplier, Module: Module, Autoname: "field:supplier_name", TitleField: "supplier_name",
+		Name: dtSupplier.Name, Module: dtSupplier.Module, Autoname: "field:supplier_name", TitleField: "supplier_name",
 		Fields: partyFields("supplier_name", "Supplier Name", "supplier_group", "Supplier Group"),
 		Perms:  erpPerms(),
 	}
@@ -148,7 +148,7 @@ func supplier() framework.DocType {
 // ledger. Kept flat (no forced parent Link) so a fresh org needs no COA import.
 func account() framework.DocType {
 	return framework.DocType{
-		Name: dtAccount, Module: Module, Autoname: "field:account_name", TitleField: "account_name",
+		Name: dtAccount.Name, Module: dtAccount.Module, Autoname: "field:account_name", TitleField: "account_name",
 		Fields: []framework.DocField{
 			{Fieldname: "account_name", Fieldtype: framework.FieldData, Label: "Account Name", Reqd: true, InListView: true},
 			{Fieldname: "account_number", Fieldtype: framework.FieldData, Label: "Account Number", InListView: true},
@@ -163,7 +163,7 @@ func account() framework.DocType {
 // department is an HR org node.
 func department() framework.DocType {
 	return framework.DocType{
-		Name: dtDepartment, Module: Module, Autoname: "field:department_name", TitleField: "department_name",
+		Name: dtDepartment.Name, Module: dtDepartment.Module, Autoname: "field:department_name", TitleField: "department_name",
 		Fields: []framework.DocField{
 			{Fieldname: "department_name", Fieldtype: framework.FieldData, Label: "Department", Reqd: true, InListView: true},
 			{Fieldname: "cost_center", Fieldtype: framework.FieldData, Label: "Cost Center", InListView: true},
@@ -175,11 +175,11 @@ func department() framework.DocType {
 // employee is the HR master. Named by employee_id; department is an in-lane Link.
 func employee() framework.DocType {
 	return framework.DocType{
-		Name: dtEmployee, Module: Module, Autoname: "field:employee_id", TitleField: "employee_name",
+		Name: dtEmployee.Name, Module: dtEmployee.Module, Autoname: "field:employee_id", TitleField: "employee_name",
 		Fields: []framework.DocField{
 			{Fieldname: "employee_id", Fieldtype: framework.FieldData, Label: "Employee ID", Reqd: true, InListView: true},
 			{Fieldname: "employee_name", Fieldtype: framework.FieldData, Label: "Full Name", Reqd: true, InListView: true},
-			{Fieldname: "department", Fieldtype: framework.FieldLink, Label: "Department", Options: dtDepartment, InListView: true},
+			{Fieldname: "department", Fieldtype: framework.FieldLink, Label: "Department", Options: dtDepartment.String(), InListView: true},
 			{Fieldname: "designation", Fieldtype: framework.FieldData, Label: "Designation"},
 			{Fieldname: "date_of_joining", Fieldtype: framework.FieldDate, Label: "Date of Joining"},
 			{Fieldname: "status", Fieldtype: framework.FieldSelect, Label: "Status", Options: "Active\nInactive", Default: "Active", InListView: true},
@@ -196,12 +196,12 @@ func employee() framework.DocType {
 // lifecycle (0 draft → 1 submitted → 2 cancelled).
 func salesOrder() framework.DocType {
 	return framework.DocType{
-		Name: dtSalesOrder, Module: Module, Autoname: "erp-so-.#####", TitleField: "customer", IsSubmittable: true,
+		Name: dtSalesOrder.Name, Module: dtSalesOrder.Module, Autoname: "erp-so-.#####", TitleField: "customer", IsSubmittable: true,
 		Fields: []framework.DocField{
-			{Fieldname: "customer", Fieldtype: framework.FieldLink, Label: "Customer", Options: dtCustomer, Reqd: true, InListView: true},
+			{Fieldname: "customer", Fieldtype: framework.FieldLink, Label: "Customer", Options: dtCustomer.String(), Reqd: true, InListView: true},
 			{Fieldname: "order_date", Fieldtype: framework.FieldDate, Label: "Order Date", InListView: true},
 			{Fieldname: "delivery_date", Fieldtype: framework.FieldDate, Label: "Delivery Date"},
-			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtSalesOrderItem},
+			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtSalesOrderItem.String()},
 			{Fieldname: "grand_total", Fieldtype: framework.FieldCurrency, Label: "Grand Total", ReadOnly: true, InListView: true},
 		},
 		Perms: erpPerms(),
@@ -212,14 +212,14 @@ func salesOrder() framework.DocType {
 // (Dr receivable, Cr income) for grand_total — the "GL entry on invoice submit".
 func salesInvoice() framework.DocType {
 	return framework.DocType{
-		Name: dtSalesInvoice, Module: Module, Autoname: "erp-sinv-.#####", TitleField: "customer", IsSubmittable: true,
+		Name: dtSalesInvoice.Name, Module: dtSalesInvoice.Module, Autoname: "erp-sinv-.#####", TitleField: "customer", IsSubmittable: true,
 		Fields: []framework.DocField{
-			{Fieldname: "customer", Fieldtype: framework.FieldLink, Label: "Customer", Options: dtCustomer, Reqd: true, InListView: true},
+			{Fieldname: "customer", Fieldtype: framework.FieldLink, Label: "Customer", Options: dtCustomer.String(), Reqd: true, InListView: true},
 			{Fieldname: "posting_date", Fieldtype: framework.FieldDate, Label: "Posting Date", InListView: true},
-			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtSalesInvoiceItem},
+			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtSalesInvoiceItem.String()},
 			{Fieldname: "grand_total", Fieldtype: framework.FieldCurrency, Label: "Grand Total", ReadOnly: true, InListView: true},
-			{Fieldname: "debit_to", Fieldtype: framework.FieldLink, Label: "Receivable Account", Options: dtAccount},
-			{Fieldname: "income_account", Fieldtype: framework.FieldLink, Label: "Income Account", Options: dtAccount},
+			{Fieldname: "debit_to", Fieldtype: framework.FieldLink, Label: "Receivable Account", Options: dtAccount.String()},
+			{Fieldname: "income_account", Fieldtype: framework.FieldLink, Label: "Income Account", Options: dtAccount.String()},
 		},
 		Perms: erpPerms(),
 	}
@@ -228,11 +228,11 @@ func salesInvoice() framework.DocType {
 // purchaseOrder is a submittable supplier order. before_save totals; on_submit gates.
 func purchaseOrder() framework.DocType {
 	return framework.DocType{
-		Name: dtPurchaseOrder, Module: Module, Autoname: "erp-po-.#####", TitleField: "supplier", IsSubmittable: true,
+		Name: dtPurchaseOrder.Name, Module: dtPurchaseOrder.Module, Autoname: "erp-po-.#####", TitleField: "supplier", IsSubmittable: true,
 		Fields: []framework.DocField{
-			{Fieldname: "supplier", Fieldtype: framework.FieldLink, Label: "Supplier", Options: dtSupplier, Reqd: true, InListView: true},
+			{Fieldname: "supplier", Fieldtype: framework.FieldLink, Label: "Supplier", Options: dtSupplier.String(), Reqd: true, InListView: true},
 			{Fieldname: "transaction_date", Fieldtype: framework.FieldDate, Label: "Date", InListView: true},
-			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtPurchaseOrderItem},
+			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtPurchaseOrderItem.String()},
 			{Fieldname: "grand_total", Fieldtype: framework.FieldCurrency, Label: "Grand Total", ReadOnly: true, InListView: true},
 		},
 		Perms: erpPerms(),
@@ -244,11 +244,11 @@ func purchaseOrder() framework.DocType {
 // update on submit". Race-free: the ledger is append-only, current stock is a SUM.
 func stockEntry() framework.DocType {
 	return framework.DocType{
-		Name: dtStockEntry, Module: Module, Autoname: "erp-ste-.#####", TitleField: "stock_entry_type", IsSubmittable: true,
+		Name: dtStockEntry.Name, Module: dtStockEntry.Module, Autoname: "erp-ste-.#####", TitleField: "stock_entry_type", IsSubmittable: true,
 		Fields: []framework.DocField{
 			{Fieldname: "stock_entry_type", Fieldtype: framework.FieldSelect, Label: "Type", Options: "Receipt\nIssue\nTransfer", Default: "Receipt", InListView: true},
 			{Fieldname: "posting_date", Fieldtype: framework.FieldDate, Label: "Posting Date", InListView: true},
-			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtStockEntryItem},
+			{Fieldname: "items", Fieldtype: framework.FieldTable, Label: "Items", Options: dtStockEntryItem.String()},
 		},
 		Perms: erpPerms(),
 	}
@@ -258,10 +258,10 @@ func stockEntry() framework.DocType {
 // on_submit GATES debits == credits (> 0) then posts one GL entry per account row.
 func journalEntry() framework.DocType {
 	return framework.DocType{
-		Name: dtJournalEntry, Module: Module, Autoname: "erp-je-.#####", TitleField: "user_remark", IsSubmittable: true,
+		Name: dtJournalEntry.Name, Module: dtJournalEntry.Module, Autoname: "erp-je-.#####", TitleField: "user_remark", IsSubmittable: true,
 		Fields: []framework.DocField{
 			{Fieldname: "posting_date", Fieldtype: framework.FieldDate, Label: "Posting Date", InListView: true},
-			{Fieldname: "accounts", Fieldtype: framework.FieldTable, Label: "Accounts", Options: dtJournalAccount},
+			{Fieldname: "accounts", Fieldtype: framework.FieldTable, Label: "Accounts", Options: dtJournalAccount.String()},
 			{Fieldname: "total_debit", Fieldtype: framework.FieldCurrency, Label: "Total Debit", ReadOnly: true, InListView: true},
 			{Fieldname: "total_credit", Fieldtype: framework.FieldCurrency, Label: "Total Credit", ReadOnly: true, InListView: true},
 			{Fieldname: "user_remark", Fieldtype: framework.FieldSmall, Label: "Remark"},
@@ -274,7 +274,7 @@ func journalEntry() framework.DocType {
 // posts a balanced GL pair (Cash vs the party account) — reusing the SAME postGL.
 func paymentEntry() framework.DocType {
 	return framework.DocType{
-		Name: dtPaymentEntry, Module: Module, Autoname: "erp-pe-.#####", TitleField: "party", IsSubmittable: true,
+		Name: dtPaymentEntry.Name, Module: dtPaymentEntry.Module, Autoname: "erp-pe-.#####", TitleField: "party", IsSubmittable: true,
 		Fields: []framework.DocField{
 			{Fieldname: "payment_type", Fieldtype: framework.FieldSelect, Label: "Type", Options: "Receive\nPay", Default: "Receive", InListView: true},
 			{Fieldname: "party_type", Fieldtype: framework.FieldSelect, Label: "Party Type", Options: "Customer\nSupplier", Default: "Customer"},
@@ -299,12 +299,12 @@ func purchaseOrderItem() framework.DocType { return lineItem(dtPurchaseOrderItem
 // source/target warehouses the qty flows between.
 func stockEntryItem() framework.DocType {
 	return framework.DocType{
-		Name: dtStockEntryItem, Module: Module,
+		Name: dtStockEntryItem.Name, Module: dtStockEntryItem.Module,
 		Fields: []framework.DocField{
-			{Fieldname: "item", Fieldtype: framework.FieldLink, Label: "Item", Options: dtItem, Reqd: true, InListView: true},
+			{Fieldname: "item", Fieldtype: framework.FieldLink, Label: "Item", Options: dtItem.String(), Reqd: true, InListView: true},
 			{Fieldname: "qty", Fieldtype: framework.FieldFloat, Label: "Quantity", Reqd: true, Default: "1", InListView: true},
-			{Fieldname: "source_warehouse", Fieldtype: framework.FieldLink, Label: "Source", Options: dtWarehouse, InListView: true},
-			{Fieldname: "target_warehouse", Fieldtype: framework.FieldLink, Label: "Target", Options: dtWarehouse, InListView: true},
+			{Fieldname: "source_warehouse", Fieldtype: framework.FieldLink, Label: "Source", Options: dtWarehouse.String(), InListView: true},
+			{Fieldname: "target_warehouse", Fieldtype: framework.FieldLink, Label: "Target", Options: dtWarehouse.String(), InListView: true},
 		},
 		Perms: erpPerms(),
 	}
@@ -313,9 +313,9 @@ func stockEntryItem() framework.DocType {
 // journalEntryAccount is one JE line: an account and its debit/credit.
 func journalEntryAccount() framework.DocType {
 	return framework.DocType{
-		Name: dtJournalAccount, Module: Module,
+		Name: dtJournalAccount.Name, Module: dtJournalAccount.Module,
 		Fields: []framework.DocField{
-			{Fieldname: "account", Fieldtype: framework.FieldLink, Label: "Account", Options: dtAccount, Reqd: true, InListView: true},
+			{Fieldname: "account", Fieldtype: framework.FieldLink, Label: "Account", Options: dtAccount.String(), Reqd: true, InListView: true},
 			{Fieldname: "debit", Fieldtype: framework.FieldCurrency, Label: "Debit", Default: "0", InListView: true},
 			{Fieldname: "credit", Fieldtype: framework.FieldCurrency, Label: "Credit", Default: "0", InListView: true},
 		},
@@ -335,7 +335,7 @@ func journalEntryAccount() framework.DocType {
 // escalation.
 func glEntry() framework.DocType {
 	return framework.DocType{
-		Name: dtGLEntry, Module: Module, Autoname: "prompt", TitleField: "account",
+		Name: dtGLEntry.Name, Module: dtGLEntry.Module, Autoname: "prompt", TitleField: "account",
 		Fields: []framework.DocField{
 			{Fieldname: "posting_date", Fieldtype: framework.FieldData, Label: "Posting Date", InListView: true},
 			{Fieldname: "account", Fieldtype: framework.FieldData, Label: "Account", InListView: true},
@@ -355,7 +355,7 @@ func glEntry() framework.DocType {
 // a concurrent or retried post is idempotent; read-only to non-manager roles.
 func stockLedgerEntry() framework.DocType {
 	return framework.DocType{
-		Name: dtStockLedger, Module: Module, Autoname: "prompt", TitleField: "item",
+		Name: dtStockLedger.Name, Module: dtStockLedger.Module, Autoname: "prompt", TitleField: "item",
 		Fields: []framework.DocField{
 			{Fieldname: "posting_date", Fieldtype: framework.FieldData, Label: "Posting Date", InListView: true},
 			{Fieldname: "item", Fieldtype: framework.FieldData, Label: "Item", InListView: true},
@@ -372,11 +372,11 @@ func stockLedgerEntry() framework.DocType {
 
 // lineItem is the shared sales/purchase line schema (item, qty, rate, amount) —
 // three DocTypes share it, so it is one builder, not three copies.
-func lineItem(name string) framework.DocType {
+func lineItem(id framework.ID) framework.DocType {
 	return framework.DocType{
-		Name: name, Module: Module,
+		Name: id.Name, Module: id.Module,
 		Fields: []framework.DocField{
-			{Fieldname: "item", Fieldtype: framework.FieldLink, Label: "Item", Options: dtItem, Reqd: true, InListView: true},
+			{Fieldname: "item", Fieldtype: framework.FieldLink, Label: "Item", Options: dtItem.String(), Reqd: true, InListView: true},
 			{Fieldname: "qty", Fieldtype: framework.FieldFloat, Label: "Quantity", Reqd: true, Default: "1", InListView: true},
 			{Fieldname: "rate", Fieldtype: framework.FieldCurrency, Label: "Rate", Reqd: true, InListView: true},
 			{Fieldname: "amount", Fieldtype: framework.FieldCurrency, Label: "Amount", ReadOnly: true, InListView: true},

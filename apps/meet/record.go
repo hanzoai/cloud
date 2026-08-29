@@ -55,7 +55,7 @@ import (
 // bodyless methods, so one type is one wire on each of them.
 type recordIn struct {
 	// Room is the LiveKit room, named the way the office client names one
-	// (`<workspace>_<name>_<id>`). Its leading segment is what binds the room to a
+	// (`<space>_<name>_<id>`). Its leading segment is what binds the room to a
 	// tenant, and it is the segment the caller's membership is checked against.
 	Room string `json:"room" validate:"required"`
 }
@@ -428,10 +428,10 @@ func (o ops) admitted(c *zip.Ctx, name string) (principal.Principal, joiner, err
 //
 //	<org>/<room>/<utc>-<random>.mp4
 //
-// THE ROOM NAME IS THE CALLER'S TEXT past its leading workspace segment, so it is
+// THE ROOM NAME IS THE CALLER'S TEXT past its leading space segment, so it is
 // folded to a single safe label before it becomes part of a key. A name carrying
 // `/` or `..` would otherwise write outside its tenant's prefix — the room
-// `<workspace>_../../other` is admitted by every rule above it, because only the
+// `<space>_../../other` is admitted by every rule above it, because only the
 // segment before the first underscore is checked. Folding, rather than refusing,
 // keeps a legal room name from becoming an unrecordable one.
 //

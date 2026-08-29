@@ -1,14 +1,14 @@
 package team
 
 // room.go is the ROOM as a unit of work (HIP-0523) — the read surface a
-// workspace view asks, and the one write that binds a room to what it is about.
+// space view asks, and the one write that binds a room to what it is about.
 //
 // The word is ROOM, not channel, and HIP-0523 §1 is why: "channel" already means
 // a connected transport (slack, telegram) in apps/channels and a connected social
 // account in apps/social. Room is the wire word and the specification's;
 // "#bugfix-1010" is what a person calls it on screen.
 //
-// A team room is a Chunter document: a row in the per-workspace `docs` store
+// A team room is a Chunter document: a row in the per-space `docs` store
 // whose `_class` is chunter:class:Channel (a named room) or
 // chunter:class:DirectMessage (a room between people). Until now the ONLY way to
 // reach one was the transactor WebSocket — a client opens a socket, replays the
@@ -17,7 +17,7 @@ package team
 // reading the same rooms had to speak the document protocol to list them.
 //
 // So these two ops are not a second store. They read the SAME documents the
-// transactor serves, through the SAME docStore, under the SAME (org, workspace)
+// transactor serves, through the SAME docStore, under the SAME (org, space)
 // isolation — and they add the one fact a document store cannot hold on its own.
 //
 // # The work facet, and why it is a MIXIN
@@ -114,20 +114,20 @@ func (b *roomBridge) register(app cloud.Router) {
 // teamRooms is the org's rooms, newest activity irrelevant — the order is
 // by name, because a list a person reads is sorted by the thing they read.
 type teamRooms struct {
-	// Rooms is every room of every workspace the caller's org owns, each
+	// Rooms is every room of every space the caller's org owns, each
 	// with the work facet it carries.
 	Rooms []teamRoom `json:"rooms"`
 }
 
-// teamRoom is one room, as a workspace view reads it.
+// teamRoom is one room, as a space view reads it.
 type teamRoom struct {
 	// ID is the room document's own id, and the value the bind op addresses.
-	// It is unique within a workspace, not across the org.
+	// It is unique within a space, not across the org.
 	ID string `json:"id"`
-	// Workspace is the workspace uuid holding this room. It is part of the
-	// room's address: two workspaces of one org may each hold a room with
+	// Space is the space uuid holding this room. It is part of the
+	// room's address: two spaces of one org may each hold a room with
 	// the same name, and only the pair identifies one.
-	Workspace string `json:"workspace"`
+	Space string `json:"space"`
 	// Name is what a person sees in a sidebar. A direct message carries none, so
 	// this is empty for one — the members are its name.
 	Name string `json:"name"`
@@ -144,7 +144,7 @@ type teamRoom struct {
 	// the work facet, so there is exactly one answer to "is this room open".
 	Archived bool `json:"archived"`
 	// Members are the account uuids in the room, agents included: an agent
-	// projects as a workspace member under a uuid derived from its id, so a
+	// projects as a space member under a uuid derived from its id, so a
 	// caller comparing this against GET /v1/team/bots learns which rooms an
 	// agent is in.
 	Members []string `json:"members"`
@@ -169,10 +169,10 @@ type teamRoomBind struct {
 	// ID is the room to bind, from the path. The URL is the authority; a body
 	// carrying another id cannot redirect the write.
 	ID string `json:"id"`
-	// Workspace names the workspace holding the room. It is required, because
-	// a room id is unique only within one and searching every workspace for a
+	// Space names the space holding the room. It is required, because
+	// a room id is unique only within one and searching every space for a
 	// matching id would make the write's target depend on iteration order.
-	Workspace string `json:"workspace" url:"-"`
+	Space string `json:"space" url:"-"`
 	// Life sets the lifecycle intent: "standing" or "bound". Any other
 	// value is refused rather than stored, so a reader never has to interpret a
 	// third one. Empty leaves the current intent unchanged.
@@ -184,7 +184,7 @@ type teamRoomBind struct {
 	Bindings []string `json:"bindings,omitempty" url:"-"`
 }
 
-// ListChannels returns every room of the caller's org, across the workspaces
+// ListChannels returns every room of the caller's org, across the spaces
 // it owns, with the work facet each carries.
 //
 // It reads the SAME Chunter documents the transactor serves, so a room opened
@@ -201,29 +201,29 @@ func (b *roomBridge) listRooms(ctx context.Context, _ *none) (*teamRooms, error)
 	if err != nil {
 		return nil, err
 	}
-	wss, err := b.accounts.WorkspacesForOrg(ctx, org)
+	wss, err := b.accounts.SpacesForOrg(ctx, org)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "team: workspaces: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "team: spaces: %v", err)
 	}
 	out := make([]teamRoom, 0, len(wss))
 	for _, ws := range wss {
 		docs, err := b.trans.store.byClasses(org, ws.UUID, []string{clChannel, clDirectMessage})
 		if err != nil {
-			// One unreadable workspace must not blank the whole list, and it must
+			// One unreadable space must not blank the whole list, and it must
 			// not be silent either: the caller is told which one, and the rest of
 			// the org's rooms still answer.
-			return nil, zip.Errorf(http.StatusBadGateway, "team: rooms of workspace %s: %v", ws.UUID, err)
+			return nil, zip.Errorf(http.StatusBadGateway, "team: rooms of space %s: %v", ws.UUID, err)
 		}
 		for _, doc := range docs {
 			out = append(out, roomOf(ws.UUID, doc))
 		}
 	}
 	// A stable order, because a list that reshuffles between two identical reads
-	// is one no client can diff. Workspace first, then name, then id — the last
+	// is one no client can diff. Space first, then name, then id — the last
 	// being what separates two direct messages, which carry no name at all.
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Workspace != out[j].Workspace {
-			return out[i].Workspace < out[j].Workspace
+		if out[i].Space != out[j].Space {
+			return out[i].Space < out[j].Space
 		}
 		if out[i].Name != out[j].Name {
 			return out[i].Name < out[j].Name
@@ -238,10 +238,10 @@ func (b *roomBridge) listRooms(ctx context.Context, _ *none) (*teamRooms, error)
 //
 // The write is a platform MIXIN on the room document, applied through the
 // SAME applyTx path the Team client's own writes take and broadcast to every
-// connected client — so a room bound here updates live in an open workspace
+// connected client — so a room bound here updates live in an open space
 // rather than on the next reload.
 //
-// Example: {"workspace": "0e3c…", "life": "bound", "bindings": ["repo:hanzoai/cloud", "issue:1010"]}
+// Example: {"space": "0e3c…", "life": "bound", "bindings": ["repo:hanzoai/cloud", "issue:1010"]}
 func (b *roomBridge) bindRoom(ctx context.Context, in *teamRoomBind) (*teamRoom, error) {
 	if b.degraded {
 		return nil, unavailable()
@@ -251,21 +251,21 @@ func (b *roomBridge) bindRoom(ctx context.Context, in *teamRoomBind) (*teamRoom,
 		return nil, err
 	}
 	id := strings.TrimSpace(in.ID)
-	ws := strings.TrimSpace(in.Workspace)
+	ws := strings.TrimSpace(in.Space)
 	if id == "" || ws == "" {
-		return nil, zip.ErrBadRequest("room id and workspace are required")
+		return nil, zip.ErrBadRequest("room id and space are required")
 	}
-	// The workspace must be one the caller's ORG owns. Without this the id and
-	// the workspace both come from the request and the org would bound nothing —
-	// a caller could name any workspace uuid and write into another tenant's
-	// documents. WorkspacesForOrg is the only thing that ties the pair to the
+	// The space must be one the caller's ORG owns. Without this the id and
+	// the space both come from the request and the org would bound nothing —
+	// a caller could name any space uuid and write into another tenant's
+	// documents. SpacesForOrg is the only thing that ties the pair to the
 	// validated principal.
-	owned, err := b.accounts.WorkspacesForOrg(ctx, org)
+	owned, err := b.accounts.SpacesForOrg(ctx, org)
 	if err != nil {
-		return nil, zip.Errorf(http.StatusInternalServerError, "team: workspaces: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "team: spaces: %v", err)
 	}
-	if !ownsWorkspace(owned, ws) {
-		// 404, not 403: a caller who may not touch this workspace must not learn
+	if !ownsSpace(owned, ws) {
+		// 404, not 403: a caller who may not touch this space must not learn
 		// whether it exists.
 		return nil, zip.ErrNotFound("room not found")
 	}
@@ -283,7 +283,7 @@ func (b *roomBridge) bindRoom(ctx context.Context, in *teamRoomBind) (*teamRoom,
 	// Written as a mixin tx rather than by mutating the document here, so the one
 	// write path stays the one write path: applyTx persists it, the triggers and
 	// notification projections run, and the applied tx is broadcast to every live
-	// client of the workspace.
+	// client of the space.
 	tx := map[string]any{
 		"_class":      clTxMixin,
 		"objectId":    id,
@@ -298,7 +298,7 @@ func (b *roomBridge) bindRoom(ctx context.Context, in *teamRoomBind) (*teamRoom,
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "team: bind: %v", err)
 	}
-	sess := &session{server: b.trans, store: b.trans.store, hier: b.trans.hier, org: org, workspace: ws, account: acctSystem}
+	sess := &session{server: b.trans, store: b.trans.store, hier: b.trans.hier, org: org, space: ws, account: acctSystem}
 	_, applied := sess.applyTx(raw)
 	if len(applied) > 0 {
 		b.trans.hub.broadcast(ws, applied)
@@ -362,18 +362,18 @@ func workOf(in *teamRoomBind) (map[string]any, error) {
 // reads the work facet where the document carries one and defaults where it does
 // not, so a room that predates the facet reads as an ordinary persistent
 // room rather than as a hole.
-func roomOf(workspace string, doc map[string]any) teamRoom {
+func roomOf(space string, doc map[string]any) teamRoom {
 	out := teamRoom{
-		ID:        str(doc["_id"]),
-		Workspace: workspace,
-		Name:      str(doc["name"]),
-		Topic:     str(doc["topic"]),
-		Direct:    str(doc["_class"]) == clDirectMessage,
-		Private:   truthy(doc["private"]),
-		Archived:  truthy(doc["archived"]),
-		Members:   toStringSlice(doc["members"]),
-		Life:      lifeStanding,
-		Bindings:  []string{},
+		ID:       str(doc["_id"]),
+		Space:    space,
+		Name:     str(doc["name"]),
+		Topic:    str(doc["topic"]),
+		Direct:   str(doc["_class"]) == clDirectMessage,
+		Private:  truthy(doc["private"]),
+		Archived: truthy(doc["archived"]),
+		Members:  toStringSlice(doc["members"]),
+		Life:     lifeStanding,
+		Bindings: []string{},
 	}
 	if out.Members == nil {
 		out.Members = []string{}
@@ -396,8 +396,8 @@ func roomOf(workspace string, doc map[string]any) teamRoom {
 // which is what keeps "everything is a room" true of this surface.
 func isRoom(class string) bool { return class == clChannel || class == clDirectMessage }
 
-// ownsWorkspace reports whether uuid is one of the org's own workspaces.
-func ownsWorkspace(owned []workspace, uuid string) bool {
+// ownsSpace reports whether uuid is one of the org's own spaces.
+func ownsSpace(owned []space, uuid string) bool {
 	for _, ws := range owned {
 		if ws.UUID == uuid {
 			return true

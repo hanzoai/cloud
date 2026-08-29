@@ -20,17 +20,17 @@ import (
 // self-consistent content model (no dangling Link target that would 422 at write).
 func TestFixturesValid(t *testing.T) {
 	dts := DocTypes()
-	names := map[string]framework.DocType{}
+	addrs := map[string]framework.DocType{}
 	for _, dt := range dts {
 		if err := dt.Validate(); err != nil {
 			t.Fatalf("fixture %q invalid: %v", dt.Name, err)
 		}
-		names[dt.Name] = dt
+		addrs[dt.ID().String()] = dt
 	}
 	for _, dt := range dts {
 		for _, f := range dt.Fields {
 			if f.Fieldtype == framework.FieldLink {
-				if _, ok := names[f.Options]; !ok {
+				if _, ok := addrs[f.Options]; !ok {
 					t.Fatalf("%s.%s links to %q which is not a CMS DocType", dt.Name, f.Fieldname, f.Options)
 				}
 			}
@@ -68,8 +68,8 @@ func TestContentModelSpec(t *testing.T) {
 			t.Fatalf("%s: status options want Draft/Published, got %q", name, status.Options)
 		}
 		author, ok := fieldOf(dt, "author")
-		if !ok || author.Fieldtype != framework.FieldLink || author.Options != "Author" {
-			t.Fatalf("%s: expected an author Link to Author, got %+v", name, author)
+		if !ok || author.Fieldtype != framework.FieldLink || author.Options != dtAuthor.String() {
+			t.Fatalf("%s: expected an author Link to %s, got %+v", name, dtAuthor, author)
 		}
 	}
 	// Media is Attach-backed (the DAM).
@@ -109,7 +109,7 @@ func TestInstallAndPublishRoundTrip(t *testing.T) {
 	}
 
 	// Create an Author (hash-named) to link.
-	code, body := call(t, app, http.MethodPost, "/v1/framework/Author", org, map[string]any{"name": "Ada Lovelace", "email": "ada@example.com"})
+	code, body := call(t, app, http.MethodPost, "/v1/framework/"+dtAuthor.String(), org, map[string]any{"name": "Ada Lovelace", "email": "ada@example.com"})
 	if code != http.StatusCreated {
 		t.Fatalf("create author want 201, got %d (%s)", code, body)
 	}
@@ -121,7 +121,7 @@ func TestInstallAndPublishRoundTrip(t *testing.T) {
 	}
 
 	// Create a Page linking the author; slug becomes the document name; Draft.
-	code, body = call(t, app, http.MethodPost, "/v1/framework/Page", org, map[string]any{
+	code, body = call(t, app, http.MethodPost, "/v1/framework/"+dtPage.String(), org, map[string]any{
 		"title": "About Us", "slug": "about-us", "body": "<h1>About</h1>", "author": authorName,
 	})
 	if code != http.StatusCreated {
@@ -137,22 +137,22 @@ func TestInstallAndPublishRoundTrip(t *testing.T) {
 	}
 
 	// No published pages yet.
-	if n := listCount(t, app, org, `/v1/framework/Page?filters={"status":"Published"}`); n != 0 {
+	if n := listCount(t, app, org, "/v1/framework/"+dtPage.String()+`?filters={"status":"Published"}`); n != 0 {
 		t.Fatalf("published pages want 0, got %d", n)
 	}
 
 	// Publish = set the status field.
-	if code, body := call(t, app, http.MethodPut, "/v1/framework/Page/about-us", org, map[string]any{
+	if code, body := call(t, app, http.MethodPut, "/v1/framework/"+dtPage.String()+"/about-us", org, map[string]any{
 		"title": "About Us", "slug": "about-us", "status": "Published", "author": authorName,
 	}); code != http.StatusOK {
 		t.Fatalf("publish page want 200, got %d (%s)", code, body)
 	}
-	if n := listCount(t, app, org, `/v1/framework/Page?filters={"status":"Published"}`); n != 1 {
+	if n := listCount(t, app, org, "/v1/framework/"+dtPage.String()+`?filters={"status":"Published"}`); n != 1 {
 		t.Fatalf("published pages want 1, got %d", n)
 	}
 
 	// A dangling author Link is refused (422) — Link integrity within the org.
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/Page", org, map[string]any{
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtPage.String(), org, map[string]any{
 		"title": "Ghost", "slug": "ghost", "author": "nonexistent-author",
 	}); code != http.StatusUnprocessableEntity {
 		t.Fatalf("dangling author link want 422, got %d", code)

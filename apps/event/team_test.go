@@ -513,7 +513,7 @@ func TestGuestWritesProjectedIntoItsOwnOrg(t *testing.T) {
 }
 
 // TestUnprovenRoleIsNotPrivileged: fail-closed on the claim's absence. A token that
-// never proved a workspace role gets the projection, not the benefit of the doubt.
+// never proved a space role gets the projection, not the benefit of the doubt.
 func TestUnprovenRoleIsNotPrivileged(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	hour := time.Now().Add(time.Hour).Unix()

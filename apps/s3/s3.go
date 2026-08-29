@@ -57,8 +57,6 @@
 package s3
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -67,14 +65,10 @@ import (
 	"strings"
 	"time"
 
-	s3 "github.com/hanzos3/go"
-
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/apps/fare"
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/s3admin"
-	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 )
 
@@ -180,11 +174,11 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// change of fiber's key from "*1" to "+1", so it is a decision rather than a
 	// tidy-up. Written down because the registration order reads as though the more
 	// specific address wins, and it does not.
-	zip.Get(g, "/buckets", paid(s, o.listBuckets))
-	zip.Post(g, "/buckets", paid(s, o.createBucket), zip.WithStatus(http.StatusCreated))
-	zip.Delete(g, "/buckets/:bucket", paid(s, o.deleteBucket))
-	zip.Get(g, "/buckets/:bucket/objects", paid(s, o.listObjects))
-	zip.Post(g, "/buckets/:bucket/objects", paid(s, o.presignUpload))
+	zip.Get(g, "/buckets", fare.Paid(s, o.listBuckets))
+	zip.Post(g, "/buckets", fare.Paid(s, o.createBucket), zip.WithStatus(http.StatusCreated))
+	zip.Delete(g, "/buckets/:bucket", fare.Paid(s, o.deleteBucket))
+	zip.Get(g, "/buckets/:bucket/objects", fare.Paid(s, o.listObjects))
+	zip.Post(g, "/buckets/:bucket/objects", fare.Paid(s, o.presignUpload))
 	// `+` and not `*`: a greedy `*` matches the EMPTY remainder and beats an exact
 	// sibling whichever order they register in, so /objects — the collection —
 	// arrived here as an object request with no key and was refused 400 before the
@@ -195,8 +189,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// The published document does not move for this: fiber keys the capture "+1"
 	// where it keyed "*1", and the In binds that, but the segment's DOCUMENT name
 	// is positional — {wildcard1} either way.
-	zip.Get(g, "/buckets/:bucket/objects/+", paid(s, o.presignDownload))
-	zip.Delete(g, "/buckets/:bucket/objects/+", paid(s, o.deleteObject))
+	zip.Get(g, "/buckets/:bucket/objects/+", fare.Paid(s, o.presignDownload))
+	zip.Delete(g, "/buckets/:bucket/objects/+", fare.Paid(s, o.deleteObject))
 
 	if !s.State.admin.Configured() {
 		s.Log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
@@ -211,157 +205,24 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// fee is what one object-storage operation costs, from operator config. Read per
+// Ready and Fee are the two facts [fare.Paid] asks this surface about itself.
+// A not-Configured() admin means no credentials are present, so the subsystem
+// mounts health/config only and every operation fails closed 503; a nil/!Enabled()
+// Bill makes the money leg a no-op.
+
+// Ready is nil when the object store is configured, and the honest refusal
+// otherwise. It is what makes the whole route set answer 503 under its own name
+// rather than falling through to a different subsystem's 404.
+func (st state) Ready() error {
+	if !st.admin.Configured() {
+		return zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
+	}
+	return nil
+}
+
+// Fee is what one object-storage operation costs, from operator config. Read per
 // call rather than once at mount, so the knob takes effect without a restart.
-func fee() int64 { return cloud.ResourceFeeCents(opFeeEnvPrefix, "op") }
-
-// admit is the sentence every data-plane operation opens with, and it answers the
-// caller's org so the operation can address storage inside it.
-//
-// Four refusals in the order they have to be asked. A subsystem that cannot serve
-// anyone says so before it says who it serves, so the readiness check comes first.
-// Then the tenant boundary — cloud.Member (a validated principal, HIP-0519's one
-// predicate set) and an org to act for — because billing an unauthenticated caller
-// would read an empty ledger and answer a money question about nobody. Then the
-// anti-forgery token, immediately before the money, because that is what it is
-// about: this plane spends the caller's balance on a READ, so a page the caller
-// never visited must not be able to spend it for them by sending them here with a
-// cookie they already hold. Then the balance itself: an unfunded org is 402 and,
-// in the fail-closed posture, an unreachable commerce is 503, both with NOTHING
-// touched.
-//
-// THE TOKEN IS ASKED HERE RATHER THAN ON THE ROUTE, and it is free to ask here.
-// account's control refuses a caller with no request, and this plane has none to
-// serve: every operation resolves its tenant from the request, so a caller without
-// one is already refused above. Asking in the preamble therefore costs no CLI, no
-// agent and no service caller, and it covers the seams a route cannot — the same
-// reason the money moved here. account's gate is a no-op the moment a caller
-// PRESENTS a credential (Bearer, gateway, API key), which is every client that
-// reaches this surface; only the ambient-cookie path is asked for the echoed token.
-//
-// The denial travels as an ERROR (cloud.Denied), which is the one refusal channel
-// every shape here shares — serve.go installs DenyEnvelope app-wide, so a REST
-// caller reads the money wire's own nested {"error":{"code","message"}} bytes, and
-// off the HTTP path deniedErr.Unwrap keeps the same status and sentence.
-func admit(s *cloud.Service[state], c *zip.Ctx) (string, error) {
-	if !s.State.admin.Configured() {
-		return "", zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
-	}
-	if !cloud.Member.Admits(cloud.AuthorityOf(c)) {
-		return "", cloud.Member.Refusal()
-	}
-	org, ok := tenant(c)
-	if !ok {
-		return "", principal.Refused(c)
-	}
-	if err := account.CSRF(c.Context()); err != nil {
-		return "", err
-	}
-	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, "op", fee()); err != nil {
-		return "", cloud.Denied(err)
-	}
-	return org, nil
-}
-
-// settle debits the caller's ledger for one operation, and runs only after the
-// work succeeded — a failed operation is surfaced and not billed, which is the
-// edge gate's rule ("do not bill failed work"). The debit is async best-effort, so
-// it never blocks the answer; fee==0 or unconfigured billing makes it a no-op.
-func settle(s *cloud.Service[state], c *zip.Ctx) {
-	s.Bill.Meter(principal.Payer(c), principal.Project(c), "op", fee(), c.RequestID(), cloud.ClientIP(c))
-}
-
-// paid composes admit and settle onto an operation. Every operation on this
-// surface but the probe is registered through it, so there is one decision about
-// money and tenancy and no second place to keep in step with it.
-//
-// IT WRAPS THE HANDLER, WHICH IS THE WHOLE POINT. zip records a typed op and its
-// route's fiber handler as two fields of one entry and wraps only the second, so a
-// gate handed to Group or composed through With runs for REST and for nothing
-// else — while MCP, the call plane, the graph and the CLI invoke the op directly
-// and the depth-0 identity middleware has already authenticated whoever is
-// calling. The handler is the one value every way in dispatches to, so an
-// operation that costs money asks for it there.
-//
-// The org travels DOWN in the context, put there by the same call that took the
-// money, which is what makes [orgOf] the only way an operation here learns one: an
-// operation registered without paid can name no tenant and so can touch nothing.
-func paid[In, Out any](s *cloud.Service[state], core zip.TypedHandler[In, Out]) zip.TypedHandler[In, Out] {
-	return func(ctx context.Context, in *In) (*Out, error) {
-		c, ok := cloud.Request(ctx)
-		if !ok {
-			return nil, principal.RefusedFrom(ctx) // no request: no credential, no tenant
-		}
-		org, err := admit(s, c)
-		if err != nil {
-			return nil, err
-		}
-		out, err := core(context.WithValue(ctx, orgKey{}, org), in)
-		if err != nil {
-			return nil, err
-		}
-		settle(s, c)
-		return out, nil
-	}
-}
-
-// orgKey names the request-scoped slot the admitted org travels in. Unexported
-// zero-size type: unforgeable from another package.
-type orgKey struct{}
-
-// orgOf is the caller's org as [admit] resolved it, and the ONLY way a typed
-// operation here learns one. It is not a second resolution — it reads the value
-// [paid] carried down, so the org an operation addresses storage under is by
-// construction the org whose balance was checked and whose ledger is debited.
-//
-// FAILS CLOSED. An operation reached with no admission — off the HTTP path, or
-// registered without paid — has no org and refuses rather than defaulting to one.
-func orgOf(ctx context.Context) (string, error) {
-	org, _ := ctx.Value(orgKey{}).(string)
-	if org == "" {
-		return "", principal.RefusedFrom(ctx)
-	}
-	return org, nil
-}
-
-// tenant resolves the caller's org exactly as clients/provisioning does — the
-// SAME sanitized slug the control plane keys on, so buckets allocated there and
-// operated on here share one org tag.
-//
-// A VALIDATED PRINCIPAL IS ALREADY ESTABLISHED (RED HIGH): admit asks
-// cloud.Member before this, so the forgeable data path is closed before the org
-// is read. SanitizeIdentity sets X-User-Id ONLY when it validated a bearer/cookie;
-// on the no-principal "Phase-1 data" path it RESTORES the client's raw X-Org-Id
-// but leaves X-User-Id empty. A pure data plane that trusted X-Org-Id alone would
-// let an in-cluster caller (a co-namespace pod within the cloud-api NetworkPolicy)
-// forge `X-Org-Id: victim` with NO bearer and get cross-tenant object CRUD. Every
-// legitimate caller reaches this through the console BFF /cloud proxy, which mints
-// a user-bound bearer, so the gate refuses ONLY the anonymous-forge path and
-// breaks no real client. Object storage is a data plane; it never serves an
-// unauthenticated principal.
-//
-// Empty org falls back to the literal "admin" bucket for a SuperAdmin, and only
-// for one: SanitizeIdentity mints X-User-IsAdmin solely for a JWT-verified
-// SuperAdmin (HIP-0026), and that fallback reaches the admin bucket, never a real
-// tenant's.
-//
-// NORMALIZATION — this uses namespace.Sanitize (case-folds to a DNS slug),
-// NOT KMS's exact-match, ON PURPOSE: the S3 bucket name is derived through
-// provisioning's SAME sanitized slug (BucketName), so a bucket provisioned via
-// POST /v1/s3 is findable here — exact-match would break that lockstep. A real
-// IAM owner claim is already a lowercase DNS label, so the fold is a no-op on
-// validated input (and, post the gate, only a validated principal reaches it).
-// The divergence from KMS is intentional per-subsystem, not drift.
-func tenant(ctx *zip.Ctx) (string, bool) {
-	if org := namespace.Sanitize(ctx.Org()); org != "" {
-		return org, true
-	}
-	if principal.IsSuperAdmin(ctx) {
-		return "admin", true
-	}
-	return "", false
-}
+func (st state) Fee() (string, int64) { return "op", cloud.ResourceFeeCents(opFeeEnvPrefix, "op") }
 
 // ── bucket name mapping (tenant ↔ physical) ─────────────────────────────────
 
@@ -526,20 +387,4 @@ func modTime(t time.Time) int64 {
 		return 0
 	}
 	return t.Unix()
-}
-
-// isNoSuchBucket / isBucketNotEmpty classify the S3 error codes we map to a
-// clean 404/409 instead of a generic 502.
-func isNoSuchBucket(err error) bool {
-	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
-		return resp.Code == "NoSuchBucket"
-	}
-	return false
-}
-
-func isBucketNotEmpty(err error) bool {
-	if resp, ok := errors.AsType[s3.ErrorResponse](err); ok {
-		return resp.Code == "BucketNotEmpty"
-	}
-	return false
 }

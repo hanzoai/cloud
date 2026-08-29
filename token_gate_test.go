@@ -38,9 +38,9 @@ import (
 // hanzoai/iam, not a licence to mint one here.
 var allowedTokenPrimitives = map[string]string{
 	"apps/team/token/token.go": "CONDEMNED, not excused — the second bearer authority: hand-rolled " +
-		"HS256 mint+verify under SERVER_SECRET for team sessions and workspaces. IAM alone mints; the " +
+		"HS256 mint+verify under SERVER_SECRET for team sessions and spaces. IAM alone mints; the " +
 		"cutover deletes this package (the session lane reads the hanzo_iam_token the browser already " +
-		"holds, the workspace grant moves behind the authority). Do not add readers — the entries below " +
+		"holds, the space grant moves behind the authority). Do not add readers — the entries below " +
 		"are the complete set and it only shrinks.",
 	"apps/team/account.go": "where the HS256 arm is DEFINED (identity.hs256), and one of its two callers. " +
 		"identity.who resolves an IAM access token first and falls back to that decode, so every other team " +
@@ -62,12 +62,12 @@ var allowedTokenPrimitives = map[string]string{
 		"identity.hs256 on the credential in its path segment — and it is what actually blocks the deletion. " +
 		"Cut the arm and this is the one file left that will not compile.\n\n" +
 		"IT HAS NO IAM LANE BY DECISION. A browser can put a credential on a WebSocket in two places. The URL " +
-		"is where the HS256 workspace token already sits, survivable only because that token names one " +
-		"workspace for twelve hours; an estate-wide IAM bearer in a path that proxies and access logs record " +
+		"is where the HS256 space token already sits, survivable only because that token names one " +
+		"space for twelve hours; an estate-wide IAM bearer in a path that proxies and access logs record " +
 		"is not. The cookie is worse here than anywhere else: a WebSocket is EXEMPT FROM CORS, so a foreign " +
 		"page may open one and read every frame, leaving an Origin check as the only access control. The lane " +
 		"that works is the sibling socket's — upgrade first, take the credential in an in-band Auth frame, " +
-		"authorize the workspace the client NAMES through admit — and the client that must send that frame is " +
+		"authorize the space the client NAMES through admit — and the client that must send that frame is " +
 		"the team front (hanzoai/team, live at team.hanzo.ai), a different repo. So this entry does not shrink " +
 		"from inside cloud, and neither does the one above it.",
 	"apps/event/team.go": "reader of the condemned team token — the ingest trust order already resolves " +
@@ -79,7 +79,7 @@ var allowedTokenPrimitives = map[string]string{
 		"(roomJoin into one room) and the credential this binary presents to LiveKit's own Egress API " +
 		"(roomRecord, apps/meet/egress.go, which imports no primitive of its own). Neither can be " +
 		"replayed as the other, because neither grant type can express the other's field. It no longer " +
-		"READS anything: the second arm, which decoded the condemned team token and let a workspace " +
+		"READS anything: the second arm, which decoded the condemned team token and let a space " +
 		"claim be its own authorization, is gone. A caller arrives with an IAM identity or is refused, " +
 		"and what that identity may do is asked of the process that owns the membership rows.",
 	"apps/wallet/safeclient.go": "speaks the mpc ring's CURRENT wire: the ring (iss=mpc.lux.network, " +

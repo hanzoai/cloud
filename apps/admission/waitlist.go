@@ -392,7 +392,7 @@ func seedWaitlist(brand string) []SeedService {
 		{Service: "console", DisplayName: "Console", Description: "Cloud console", Hosts: []string{"console." + d}},
 		{Service: "app", DisplayName: "App", Description: "App builder", Hosts: hostsFor(brand, "app", "app."+d)},
 		{Service: "api", DisplayName: "API", Description: "Inference API gateway", Hosts: []string{"api." + d}},
-		{Service: "team", DisplayName: "Team", Description: "Team workspace", Hosts: hostsFor(brand, "team", "team."+d)},
+		{Service: "team", DisplayName: "Team", Description: "Team space", Hosts: hostsFor(brand, "team", "team."+d)},
 	}
 }
 

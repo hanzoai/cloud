@@ -1,7 +1,7 @@
 package team
 
 // This file applies platform Tx (Create/Update/Remove/Mixin/Collection/ApplyIf)
-// to the per-workspace docs store — ported VERBATIM from
+// to the per-space docs store — ported VERBATIM from
 // github.com/hanzoai/team/pkg/transactor/txapply.go. It is the write path both
 // the live SPA (tx RPC) and the in-process projection (Apply) run through.
 
@@ -20,7 +20,7 @@ const (
 	clTxCollection = "core:class:TxCollectionCUD"
 )
 
-// applyTx applies one platform Tx to the workspace store and returns (txResult,
+// applyTx applies one platform Tx to the space store and returns (txResult,
 // appliedTxes). appliedTxes is the flat list of CUD txes that actually landed —
 // the transactor broadcasts them so live queries refresh.
 func (s *session) applyTx(raw json.RawMessage) (any, []json.RawMessage) {
@@ -39,7 +39,7 @@ func (s *session) applyTx(raw json.RawMessage) (any, []json.RawMessage) {
 		}
 		return map[string]any{}, []json.RawMessage{raw}
 	case clTxRemove:
-		_ = s.store.del(s.org, s.workspace, str(t["objectId"]))
+		_ = s.store.del(s.org, s.space, str(t["objectId"]))
 		return map[string]any{}, []json.RawMessage{raw}
 	case clTxMixin:
 		s.txMixin(t)
@@ -79,14 +79,14 @@ func (s *session) txCreate(t map[string]any) {
 	doc["modifiedOn"] = t["modifiedOn"]
 	doc["createdBy"] = firstNonNil(t["createdBy"], t["modifiedBy"])
 	doc["createdOn"] = firstNonNil(t["createdOn"], t["modifiedOn"])
-	_ = s.store.put(s.org, s.workspace, doc)
+	_ = s.store.put(s.org, s.space, doc)
 	s.trigger(doc)                 // emulate server triggers (PersonSpace, notify contexts)
 	s.projectNotifications(t, doc) // fan mentions/comments/assignments into the Inbox feed
 }
 
 // txUpdate ports updateDoc2Doc/applyUpdate.
 func (s *session) txUpdate(t map[string]any) map[string]any {
-	doc, _ := s.store.get(s.org, s.workspace, str(t["objectId"]))
+	doc, _ := s.store.get(s.org, s.space, str(t["objectId"]))
 	if doc == nil {
 		return nil
 	}
@@ -95,7 +95,7 @@ func (s *session) txUpdate(t map[string]any) map[string]any {
 	}
 	doc["modifiedBy"] = t["modifiedBy"]
 	doc["modifiedOn"] = t["modifiedOn"]
-	_ = s.store.put(s.org, s.workspace, doc)
+	_ = s.store.put(s.org, s.space, doc)
 	s.trigger(doc)                 // member joins/leaves reconcile the chat notify contexts
 	s.projectNotifications(t, doc) // an assignee change fans an "assigned you" notification
 	return doc
@@ -103,7 +103,7 @@ func (s *session) txUpdate(t map[string]any) map[string]any {
 
 // txMixin ports updateMixin4Doc: mixin data lives under the mixin's class id key.
 func (s *session) txMixin(t map[string]any) {
-	doc, _ := s.store.get(s.org, s.workspace, str(t["objectId"]))
+	doc, _ := s.store.get(s.org, s.space, str(t["objectId"]))
 	if doc == nil {
 		return
 	}
@@ -121,7 +121,7 @@ func (s *session) txMixin(t map[string]any) {
 	doc[mixin] = sub
 	doc["modifiedBy"] = t["modifiedBy"]
 	doc["modifiedOn"] = t["modifiedOn"]
-	_ = s.store.put(s.org, s.workspace, doc)
+	_ = s.store.put(s.org, s.space, doc)
 	s.trigger(doc)
 }
 

@@ -22,7 +22,7 @@
 // media is not a thing to proxy through an API binary. What moved into this binary
 // is the ONE decision a server has to make about a call — may this caller join this
 // room — which needs the LiveKit signing key and an answer from the process that
-// owns the workspace rows, and needs no pod of its own to hold either.
+// owns the space rows, and needs no pod of its own to hold either.
 //
 // ONE KEY, and it signs the ANSWER only. It is read from the SAME keys.yaml file
 // the LiveKit server itself validates against (Secret `livekit-keys`, mounted
@@ -116,12 +116,12 @@ type state struct {
 	egress    egress // where a recording is made and where it lands, see egress.go
 }
 
-// roster is the workspace-membership authority — the process that OWNS the rows,
+// roster is the space-membership authority — the process that OWNS the rows,
 // asked across a process boundary.
 //
 // It is an interface for ONE reason, and the reason is a bug it already hid. The
 // decisions above it are made HERE: whether a machine credential may take a seat,
-// whether a guest may, which workspaces to offer. But every one of them is reached
+// whether a guest may, which spaces to offer. But every one of them is reached
 // only AFTER the peer answers, and no test had a peer — so each IAM-lane test
 // stopped at an unanswerable ask and passed for the wrong reason. Mutation proved
 // it: deleting the machine-credential exclusion (p.Subject != "") changed nothing
@@ -133,22 +133,22 @@ type state struct {
 // when these were bare cloud.Ask calls, so a caller cannot ask about another
 // tenant by naming one.
 type roster interface {
-	member(ctx context.Context, workspace, subject string) (*plane.Member, error)
-	workspaces(ctx context.Context, subject string) (*plane.Spaces, error)
+	member(ctx context.Context, space, subject string) (*plane.Member, error)
+	spaces(ctx context.Context, subject string) (*plane.Spaces, error)
 }
 
 // peer is the real authority: apps/team over the internal plane. Stateless, so
 // the zero value is the whole implementation.
 type peer struct{}
 
-func (peer) member(ctx context.Context, workspace, subject string) (*plane.Member, error) {
+func (peer) member(ctx context.Context, space, subject string) (*plane.Member, error) {
 	return cloud.Ask[plane.MemberIn, plane.Member](ctx, "team", plane.TeamMember,
-		&plane.MemberIn{Workspace: workspace, Subject: subject})
+		&plane.MemberIn{Space: space, Subject: subject})
 }
 
-func (peer) workspaces(ctx context.Context, subject string) (*plane.Spaces, error) {
-	return cloud.Ask[plane.WorkspacesIn, plane.Spaces](ctx, "team", plane.TeamWorkspaces,
-		&plane.WorkspacesIn{Subject: subject})
+func (peer) spaces(ctx context.Context, subject string) (*plane.Spaces, error) {
+	return cloud.Ask[plane.SpacesIn, plane.Spaces](ctx, "team", plane.TeamSpaces,
+		&plane.SpacesIn{Subject: subject})
 }
 
 // rows is the authority to ask. A state that names none asks the real peer — so
@@ -268,15 +268,15 @@ func init() {
 		"Answers with a LiveKit join token for exactly the room named in the body. The body "+
 			"is the RAW token as text/plain — one opaque string, not JSON and not wrapped in "+
 			"an envelope, which is what the office client reads.\n\n"+
-			"The caller presents its workspace session as a Bearer. Every clause is a "+
-			"refusal: the session must verify, its SIGNED workspace claim must equal the "+
-			"room's leading name segment — rooms are named `<workspace>_<room>_<id>`, and "+
+			"The caller presents its space session as a Bearer. Every clause is a "+
+			"refusal: the session must verify, its SIGNED space claim must equal the "+
+			"room's leading name segment — rooms are named `<space>_<room>_<id>`, and "+
 			"that prefix is the only thing binding a room to a tenant — and the session must "+
-			"carry a privileged workspace role, so a guest is refused rather than seated.\n\n"+
+			"carry a privileged space role, so a guest is refused rather than seated.\n\n"+
 			"The participant identity is the SESSION'S, never the body's. `_id` is accepted "+
 			"for compatibility with the published client bundle and deliberately ignored: "+
 			"LiveKit treats the identity as unique and ejects a duplicate, so honouring a "+
-			"caller-chosen one would let anyone in a workspace kick out a colleague and "+
+			"caller-chosen one would let anyone in a space kick out a colleague and "+
 			"impersonate them. `participantName` is a display name only.\n\n"+
 			"An unconfigured deployment answers 503 under its own name rather than 404, and "+
 			"the refusal states only that the office is unconfigured — the reason names key "+
@@ -285,14 +285,14 @@ func init() {
 		"What this caller may open a room in",
 		"Answers the three facts the native lobby cannot know on its own: the identity a "+
 			"seat would be taken under, the LiveKit address the browser dials, and the "+
-			"workspaces this caller may open a room in.\n\n"+
+			"spaces this caller may open a room in.\n\n"+
 			"It is the SAME decision getToken makes, asked before the room exists rather "+
 			"than after it is named. A room is bound to its tenant by its name's leading "+
-			"workspace segment, and only a workspace this answer lists will be admitted — "+
+			"space segment, and only a space this answer lists will be admitted — "+
 			"so the lobby offers exactly what the mint would grant, and a person is never "+
-			"shown a room they would then be refused. Workspaces the caller holds only a "+
+			"shown a room they would then be refused. Spaces the caller holds only a "+
 			"guest role in are omitted for that reason.\n\n"+
-			"An empty list is a real answer, not a fault: an IAM identity with no workspace "+
+			"An empty list is a real answer, not a fault: an IAM identity with no space "+
 			"has no room to open, and the lobby says so instead of failing.\n\n"+
 			"`ws` is empty when this deployment has not been told where its media plane is "+
 			"(LIVEKIT_WS). Token minting is unaffected — the published office client "+
@@ -312,7 +312,7 @@ func Use(app cloud.Router, deps cloud.Deps) error { return serve(app, deps, load
 // serve hangs the routes on app for a state already assembled. Reading the
 // deployment (load) and hanging the routes are two jobs, and Mount is the one
 // composition of them; a caller that already holds a state — this package's own
-// tests, which must supply the workspace authority the routes ask, since it lives
+// tests, which must supply the space authority the routes ask, since it lives
 // in another process — serves it directly rather than through the environment.
 func serve(app cloud.Router, deps cloud.Deps, st state) error {
 	if app == nil {
@@ -390,7 +390,7 @@ func serve(app cloud.Router, deps cloud.Deps, st state) error {
 		zip.WithSummary("What is being recorded in a room, and where the file goes"))
 
 	// Where a collaboration room's call happens (room.go). It answers the media
-	// room a (workspace, room) pair resolves to, so a surface rendering a channel
+	// room a (space, room) pair resolves to, so a surface rendering a channel
 	// asks for the call instead of composing the name itself — one spelling of that
 	// rule, here, rather than one per client.
 	//
@@ -501,12 +501,12 @@ func (o ops) health(context.Context, *noIn) (*meetHealth, error) {
 }
 
 // lobby is what the native client reads before it can name anything: who it would
-// be seated as, where the media plane is, and which workspaces it may open a room
+// be seated as, where the media plane is, and which spaces it may open a room
 // in.
 //
-// The workspace list is the POINT of this route. A room is bound to its tenant by
-// the leading segment of its name (see workspace), so a client that does not know
-// its own workspace cannot compose a room name that any lane would admit — and it
+// The space list is the POINT of this route. A room is bound to its tenant by
+// the leading segment of its name (see space), so a client that does not know
+// its own space cannot compose a room name that any lane would admit — and it
 // has no way to learn one, because a uuid is not something a person types. The
 // alternative was for the client to guess and be refused, which is a lobby that
 // only works for someone who was sent a link.
@@ -518,9 +518,9 @@ type lobby struct {
 	Name string `json:"name"`
 	// WS is the LiveKit address the browser dials, empty when unconfigured (wsEnv).
 	WS string `json:"ws"`
-	// Workspaces is every workspace this caller may open a room in — already
+	// Spaces is every space this caller may open a room in — already
 	// narrowed to the roles mint would admit, so the offer and the grant agree.
-	Workspaces []plane.Space `json:"workspaces"`
+	Spaces []plane.Space `json:"spaces"`
 }
 
 // session answers GET /v1/meet/session. It admits on the SAME two lanes as mint
@@ -532,8 +532,8 @@ type lobby struct {
 // the problem, not a 404 and a blank page. So a deploy whose key file is bad —
 // which drops the whole state, leaving only a reason — still answers a lobby read
 // while every mint is 503. The lobby never needed the signing key: it names
-// workspaces, and only the mint signs. That pair is honest rather than
-// contradictory: the workspaces someone belongs to do
+// spaces, and only the mint signs. That pair is honest rather than
+// contradictory: the spaces someone belongs to do
 // not stop being true because this binary cannot sign, and the refusal they get on
 // joining names the real fault instead of hiding it behind an empty list.
 func session(s *cloud.Service[state], c *zip.Ctx) error {
@@ -543,10 +543,10 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 		// answer says nothing about which lane failed or what exists.
 		return zip.Errorf(http.StatusUnauthorized, "not signed in")
 	}
-	out := lobby{Identity: sp.Account, Name: sp.Name, WS: s.State.ws, Workspaces: make([]plane.Space, 0, len(sp.Items))}
-	// A workspace is only OFFERED if the caller could actually be seated in it, and
+	out := lobby{Identity: sp.Account, Name: sp.Name, WS: s.State.ws, Spaces: make([]plane.Space, 0, len(sp.Items))}
+	// A space is only OFFERED if the caller could actually be seated in it, and
 	// a seat needs the identity LiveKit takes it under — which is the account on the
-	// row. Rows that name a workspace but no account would put a room in front of
+	// row. Rows that name a space but no account would put a room in front of
 	// someone that mint then refuses, which is the exact drift this route exists to
 	// prevent. An empty lobby is the honest render, and it is the same answer a
 	// caller with no rows at all gets, rather than a second kind of refusal.
@@ -554,17 +554,17 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 		sp.Items = nil
 	}
 	for _, w := range sp.Items {
-		// The SAME predicate mint admits on. Offering a workspace this caller holds
+		// The SAME predicate mint admits on. Offering a space this caller holds
 		// only a guest role in would put a room in front of them that getToken then
 		// refuses — the two answers have to come from one rule or they drift.
 		if privileged(w.Role) {
-			out.Workspaces = append(out.Workspaces, w)
+			out.Spaces = append(out.Spaces, w)
 		}
 	}
 	return c.JSON(http.StatusOK, out)
 }
 
-// spaces reports which workspaces the caller is in, on whichever lane it arrived —
+// spaces reports which spaces the caller is in, on whichever lane it arrived —
 // the same lane selection, in the same order and on the same attestation, as
 // admits. It is deliberately a sibling of that function rather than a layer under
 // it: admits answers "may this caller into THAT room" and this answers "what could
@@ -573,10 +573,10 @@ func session(s *cloud.Service[state], c *zip.Ctx) error {
 //
 // IAM LANE, selected on principal.Minted for the reason admits documents at
 // length: the org/user headers are the client's in a process where no boundary
-// ran, and here they would decide whose workspaces get listed.
+// ran, and here they would decide whose spaces get listed.
 func (s state) spaces(c *zip.Ctx) (plane.Spaces, bool) {
 	if p, ok := principal.Minted(c); ok && p.Subject != "" && p.Org != "" {
-		out, err := s.rows().workspaces(cloud.As(c, p.Org), p.Subject)
+		out, err := s.rows().spaces(cloud.As(c, p.Org), p.Subject)
 		if err != nil || out == nil {
 			// An unreachable authority is a refusal, never an assumption — the same
 			// posture admitsMember takes when team cannot answer.
@@ -597,7 +597,7 @@ type request struct {
 }
 
 // mint answers POST /v1/meet/getToken: verify the caller belongs to the room's
-// workspace, then hand back a join token for exactly that room.
+// space, then hand back a join token for exactly that room.
 //
 // The response is the RAW token as text/plain, not JSON. That is the caller's
 // contract — the office client reads it with res.text() — and it is also the honest
@@ -623,8 +623,8 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	// Say what was actually checked, and it is now one of two things. On the HS256
 	// arm meet performs no membership lookup: membership was decided upstream at
 	// the login that minted the session and is signed into the token as
-	// `workspace`, and all that happens here is a refusal to WIDEN it. On the IAM
-	// lane there is no such claim, so the workspace rows are asked directly — and
+	// `space`, and all that happens here is a refusal to WIDEN it. On the IAM
+	// lane there is no such claim, so the space rows are asked directly — and
 	// then "not a member" IS the determination being made. One message covers both
 	// because it names the fact, not the mechanism: this caller is not admitted to
 	// this room.
@@ -634,7 +634,7 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// THE IDENTITY IS THE TOKEN'S, NOT THE BODY'S. LiveKit uses `sub` as the
 	// participant identity and EJECTS an existing participant on a duplicate — so
-	// minting with a caller-supplied `_id` let any member of a workspace kick a
+	// minting with a caller-supplied `_id` let any member of a space kick a
 	// colleague out of a call by claiming their identity, and impersonate them to
 	// everyone else in the room. Upstream did this too; it is still wrong. The signed
 	// account is the one identity the caller cannot choose.
@@ -663,13 +663,13 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.String(http.StatusOK, tok)
 }
 
-// workspace is the workspace a room belongs to. Room names are minted client-side as
-// "<workspaceUuid>_<roomName>_<roomId>", so the workspace is the leading segment.
+// space is the space a room belongs to. Room names are minted client-side as
+// "<spaceUuid>_<roomName>_<roomId>", so the space is the leading segment.
 // This is the ONLY thing binding a room to a tenant, which is why admits compares it
-// against the SIGNED workspace claim and not against anything in the body.
+// against the SIGNED space claim and not against anything in the body.
 // It is the PARSING half of roomName (room.go), which composes the same shape from
 // a collaboration room's own address; sep is shared so the two cannot disagree.
-func workspace(room string) string {
+func space(room string) string {
 	ws, _, _ := strings.Cut(room, sep)
 	return ws
 }
@@ -706,7 +706,7 @@ type joiner struct{ account string }
 // identity the account lookup returned. A key principal carries no `sub`, so
 // requiring one refuses it structurally rather than by naming credential kinds.
 //
-// The verdict says nothing about a workspace, so the workspace ROWS decide: apps/team
+// The verdict says nothing about a space, so the space ROWS decide: apps/team
 // owns them and answers over the internal plane (plane.TeamMember) with the caller's
 // role and the account id it joined the subject to. A caller with no row, or one
 // whose role is not privileged, is refused, and so is a peer that cannot answer —
@@ -720,11 +720,11 @@ func (s state) admits(c *zip.Ctx, room string) (joiner, bool) {
 }
 
 // admitsMember is the IAM lane's authorization: ask the process that owns the
-// workspace rows. Both halves of the question come from the ATTESTED principal —
+// space rows. Both halves of the question come from the ATTESTED principal —
 // the org rides the caller (never an argument, so a caller cannot ask about another
-// tenant's workspace) and the subject is the attested `sub`.
+// tenant's space) and the subject is the attested `sub`.
 func (s state) admitsMember(c *zip.Ctx, room string, p principal.Principal) (joiner, bool) {
-	ws := workspace(room)
+	ws := space(room)
 	if ws == "" {
 		return joiner{}, false
 	}

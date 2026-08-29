@@ -148,6 +148,12 @@ var Apps = []App{
 	// and the one every client already speaks, and a package called one thing
 	// while its whole surface says another is the pair §7.3 closes by rename.
 	{Name: "s3", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
+	// space is where work lives: drives, folders and the files in them. It is the
+	// PRODUCT over the same backend s3 is the raw plane for — one bucket per
+	// (org, space), a drive as the first key segment inside it — so the two are
+	// siblings and not layers, and neither is reachable through the other's
+	// address. ONE prefix, because every route it serves is under it.
+	{Name: "space", Prefixes: []string{"/v1/space"}},
 	// provisioning allocates a store of one of seven kinds and hands back its
 	// connection: one act, one store, one address (HIP-1164 §2). The row carried
 	// three further roots — /v1/s3, /v1/search/query and /v1/vector — that no route

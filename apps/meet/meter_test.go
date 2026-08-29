@@ -20,13 +20,13 @@ import (
 )
 
 // billedUse is mountWith plus a ledger: the same real identity boundary and the
-// same workspace authority, with a meter that has money behind it.
+// same space authority, with a meter that has money behind it.
 func billedUse(t *testing.T, l *planetest.Ledger) *zip.App {
 	t.Helper()
 	iamIssuer(t)
 	t.Setenv(keyFileEnv, keyFileWith(t, keyBody("APIkey", "apisecret")))
 	st := load()
-	st.authority = holds(map[string]string{workspaceA: token.RoleMember})
+	st.authority = holds(map[string]string{spaceA: token.RoleMember})
 	sharedKey(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(cloud.IdentityMiddleware(&cloud.Config{IAMIssuer: iamtest.Issuer, JWKSURL: jwksURL}))
@@ -42,7 +42,7 @@ func TestMintBillsTheCaller(t *testing.T) {
 	l := planetest.Money(t, 100000)
 	app := billedUse(t, l)
 
-	code, tok := ask(t, app, roomIn(workspaceA), "person-42", access(t, ada))
+	code, tok := ask(t, app, roomIn(spaceA), "person-42", access(t, ada))
 	if code != http.StatusOK {
 		t.Fatalf("mint = %d, want 200", code)
 	}
@@ -67,7 +67,7 @@ func TestUnfundedCallerGetsNoSeat(t *testing.T) {
 	l := planetest.Money(t, 0)
 	app := billedUse(t, l)
 
-	code, tok := ask(t, app, roomIn(workspaceA), "person-42", access(t, ada))
+	code, tok := ask(t, app, roomIn(spaceA), "person-42", access(t, ada))
 	if code == http.StatusOK {
 		t.Fatalf("an unfunded caller was admitted with token %q; the gate must refuse first", tok)
 	}

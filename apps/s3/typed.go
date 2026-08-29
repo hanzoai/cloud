@@ -38,6 +38,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/fare"
+	"github.com/hanzoai/cloud/apps/s3admin"
 	s3 "github.com/hanzos3/go"
 	"github.com/zap-proto/zip"
 )
@@ -155,7 +157,7 @@ type bucketList struct {
 // unfunded org is refused with nothing done, and the debit lands only once the
 // work has succeeded.
 func (o ops) listBuckets(ctx context.Context, _ *noInput) (*bucketList, error) {
-	org, err := orgOf(ctx)
+	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +199,7 @@ type bucketIn struct {
 // unfunded org is refused with nothing created, and the debit lands only once the
 // bucket exists.
 func (o ops) createBucket(ctx context.Context, in *bucketIn) (*bucketItem, error) {
-	org, err := orgOf(ctx)
+	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +242,7 @@ type bucketRef struct {
 // unfunded org is refused with nothing deleted, and the debit lands only once the
 // bucket is gone.
 func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*struct{}, error) {
-	org, err := orgOf(ctx)
+	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -253,10 +255,10 @@ func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*struct{}, error)
 		return nil, err
 	}
 	if err := cli.RemoveBucket(ctx, physicalBucket(org, name)); err != nil {
-		if isNoSuchBucket(err) {
+		if s3admin.NoSuchBucket(err) {
 			return nil, zip.ErrNotFound("bucket not found")
 		}
-		if isBucketNotEmpty(err) {
+		if s3admin.BucketNotEmpty(err) {
 			return nil, zip.ErrConflict("bucket is not empty")
 		}
 		return nil, zip.Errorf(http.StatusBadGateway, "delete bucket: %v", err)
@@ -306,7 +308,7 @@ type objectList struct {
 // unfunded org is refused with nothing read, and the debit lands only once the
 // listing has succeeded.
 func (o ops) listObjects(ctx context.Context, in *listIn) (*objectList, error) {
-	org, err := orgOf(ctx)
+	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +325,7 @@ func (o ops) listObjects(ctx context.Context, in *listIn) (*objectList, error) {
 	opts := s3.ListObjectsOptions{Prefix: prefix, Recursive: in.Recursive == "true", MaxKeys: maxListKeys}
 	for obj := range cli.ListObjects(ctx, physicalBucket(org, bname), opts) {
 		if obj.Err != nil {
-			if isNoSuchBucket(obj.Err) {
+			if s3admin.NoSuchBucket(obj.Err) {
 				return nil, zip.ErrNotFound("bucket not found")
 			}
 			return nil, zip.Errorf(http.StatusBadGateway, "list objects: %v", obj.Err)
@@ -367,7 +369,7 @@ type uploadIn struct {
 // balance is checked BEFORE anything is touched, so an unfunded org is refused
 // with no URL issued.
 func (o ops) presignUpload(ctx context.Context, in *uploadIn) (*presignResponse, error) {
-	org, err := orgOf(ctx)
+	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +438,7 @@ type objectRef struct {
 // The balance is checked BEFORE anything is touched, so an unfunded org is refused
 // with no URL issued.
 func (o ops) presignDownload(ctx context.Context, in *objectRef) (*presignResponse, error) {
-	org, err := orgOf(ctx)
+	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +483,7 @@ func (o ops) presignDownload(ctx context.Context, in *objectRef) (*presignRespon
 // unfunded org is refused with nothing deleted, and the debit lands only once the
 // object is gone.
 func (o ops) deleteObject(ctx context.Context, in *objectRef) (*struct{}, error) {
-	org, err := orgOf(ctx)
+	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +504,7 @@ func (o ops) deleteObject(ctx context.Context, in *objectRef) (*struct{}, error)
 		return nil, err
 	}
 	if err := cli.RemoveObject(ctx, physicalBucket(org, bname), key, s3.RemoveObjectOptions{}); err != nil {
-		if isNoSuchBucket(err) {
+		if s3admin.NoSuchBucket(err) {
 			return nil, zip.ErrNotFound("bucket not found")
 		}
 		return nil, zip.Errorf(http.StatusBadGateway, "delete object: %v", err)

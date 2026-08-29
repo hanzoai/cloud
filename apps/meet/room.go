@@ -9,42 +9,42 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// sep separates the workspace from the rest of a room name. It is ONE constant
+// sep separates the space from the rest of a room name. It is ONE constant
 // because the parse and the compose below are two halves of one rule, and a rule
-// spelled twice is a rule that can disagree with itself: workspace() reads the
+// spelled twice is a rule that can disagree with itself: space() reads the
 // segment membership is checked against, and roomName writes it.
 const sep = "_"
 
 // roomName is the media room a collaboration room's call happens in.
 //
-// A room in the conversation sense (HIP-0523) is addressed by the pair (workspace
-// uuid, room id) — the id is unique within a workspace and not across an org — and
+// A room in the conversation sense (HIP-0523) is addressed by the pair (space
+// uuid, room id) — the id is unique within a space and not across an org — and
 // a room in the media sense is a single opaque string the media server keys on. This
 // is the one function that turns the first into the second, and it is a DERIVATION
 // rather than a stored binding: a room's call is a fact about the room's identity,
 // so writing it down somewhere would be a copy that can drift from the room it names
 // (HIP-0523 §2, a binding is a reference and never a copy).
 //
-// The composition is exactly what workspace() parses back, which is what makes the
+// The composition is exactly what space() parses back, which is what makes the
 // membership check on a derived name the same check as on a client-minted one: the
-// leading segment is the workspace, and it is the ONLY thing binding a room to a
+// leading segment is the space, and it is the ONLY thing binding a room to a
 // tenant. splits() is why that round trip is total rather than usually-true.
-func roomName(workspace, room string) string { return workspace + sep + room }
+func roomName(space, room string) string { return space + sep + room }
 
-// splits reports whether a workspace uuid survives the round trip — that is,
-// whether workspace(roomName(ws, id)) is ws again.
+// splits reports whether a space uuid survives the round trip — that is,
+// whether space(roomName(ws, id)) is ws again.
 //
-// It is a refusal and not a fold. A workspace carrying the separator would parse
-// back as a PREFIX of itself, so the membership check would run against a workspace
-// that is not the one asked about — a room in workspace "a_b" would be checked
-// against workspace "a", and a caller who is a member of "a" would be admitted to a
-// room in a workspace they are not in. Folding the character would silently map two
-// workspaces onto one name, which is the same defect wearing a repair.
-func splits(workspace string) bool {
-	return workspace != "" && !strings.Contains(workspace, sep)
+// It is a refusal and not a fold. A space carrying the separator would parse
+// back as a PREFIX of itself, so the membership check would run against a space
+// that is not the one asked about — a room in space "a_b" would be checked
+// against space "a", and a caller who is a member of "a" would be admitted to a
+// room in a space they are not in. Folding the character would silently map two
+// spaces onto one name, which is the same defect wearing a repair.
+func splits(space string) bool {
+	return space != "" && !strings.Contains(space, sep)
 }
 
-// callIn addresses a room by what a room IS — the (workspace, room) pair — and
+// callIn addresses a room by what a room IS — the (space, room) pair — and
 // never by the composed media name.
 //
 // Taking the pair is the whole point of the operation: the composition is the
@@ -52,12 +52,12 @@ func splits(workspace string) bool {
 // itself, and a second surface spelling it differently is how the two come to
 // disagree about which media room a channel's call is in.
 type callIn struct {
-	// Workspace is the workspace uuid holding the room, as GET /v1/team/rooms
+	// Space is the space uuid holding the room, as GET /v1/team/rooms
 	// reports it. It is the segment the caller's membership is checked against.
-	Workspace string `json:"workspace" validate:"required"`
-	// Room is the room's own id within that workspace, as GET /v1/team/rooms
+	Space string `json:"space" validate:"required"`
+	// Room is the room's own id within that space, as GET /v1/team/rooms
 	// reports it. It is opaque here: meet keeps no rooms and cannot say whether
-	// one exists, only whether this caller may be seated in the workspace holding
+	// one exists, only whether this caller may be seated in the space holding
 	// it.
 	Room string `json:"room" validate:"required"`
 }
@@ -99,7 +99,7 @@ type venue struct {
 // state.admits, the same function POST /v1/meet/getToken and all three recording
 // operations admit on, so a caller who is told where a call is, is a caller who
 // could have joined it. Answering the address to someone who cannot join would make
-// this a workspace-membership oracle for anyone who can guess a room id.
+// this a space-membership oracle for anyone who can guess a room id.
 //
 // It deliberately does NOT report whether a call is in progress. That is a fact the
 // media server holds and this binary would have to ask for it over the network,
@@ -115,13 +115,13 @@ func (o ops) resolve(ctx context.Context, in *callIn) (*venue, error) {
 		// attestation. A caller that cannot be attested is not in the room.
 		return nil, refuse
 	}
-	ws := strings.TrimSpace(in.Workspace)
+	ws := strings.TrimSpace(in.Space)
 	room := strings.TrimSpace(in.Room)
 	if ws == "" || room == "" {
-		return nil, zip.ErrBadRequest("workspace and room are required")
+		return nil, zip.ErrBadRequest("space and room are required")
 	}
 	if !splits(ws) {
-		return nil, zip.ErrBadRequest("workspace must not contain " + sep)
+		return nil, zip.ErrBadRequest("space must not contain " + sep)
 	}
 	name := roomName(ws, room)
 	if _, ok := o.s.State.admits(c, name); !ok {

@@ -20,7 +20,7 @@ var (
 // Identity is an in-memory IAM peer that REMEMBERS what it is granted.
 //
 // The stateless peers above answer a fixed question. This one is for a caller
-// that writes a grant and then reads it back — creating a workspace and finding
+// that writes a grant and then reads it back — creating a space and finding
 // its owner, inviting somebody and listing the roster — which a fixed answer
 // cannot express without deciding the outcome in advance.
 type Identity struct {
@@ -84,13 +84,13 @@ func ServeIdentity(t *testing.T) *Identity {
 			i.mu.Lock()
 			defer i.mu.Unlock()
 			for _, g := range i.grants[org] {
-				if g.User == in.User && g.Workspace == in.Workspace && g.Project == in.Project {
+				if g.User == in.User && g.Space == in.Space && g.Project == in.Project {
 					return &struct{}{}, nil // never downgrade, matching EnsureMembershipIn
 				}
 			}
 			i.grants[org] = append(i.grants[org], plane.Membership{
 				User: in.User, Role: in.Role, Name: in.User,
-				Workspace: in.Workspace, Project: in.Project,
+				Space: in.Space, Project: in.Project,
 			})
 			return &struct{}{}, nil
 		}, zip.WithOperationID(plane.IAMGrant))
@@ -108,7 +108,7 @@ func ServeIdentity(t *testing.T) *Identity {
 				if in != nil && in.User != "" && g.User != in.User {
 					continue
 				}
-				if in != nil && !in.Any && (g.Workspace != in.Workspace || g.Project != in.Project) {
+				if in != nil && !in.Any && (g.Space != in.Space || g.Project != in.Project) {
 					continue
 				}
 				if n := i.names[g.User]; n != "" {

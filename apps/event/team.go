@@ -79,7 +79,7 @@ type teamEvent struct {
 //	setUser     -> identify  binds properties to a person …
 //	setTag      -> identify  … so does a person property …
 //	setAlias    -> identify  … so does binding an anonymous id to that person.
-//	setGroup    -> group     binds the person to a workspace.
+//	setGroup    -> group     binds the person to a space.
 //	customEvent -> event     the open-ended surface; its name rides in properties.
 //
 // An enum member a NEWER SPA adds also folds to "event" rather than erroring, and
@@ -221,7 +221,7 @@ func teamSecret() string {
 	return s
 }
 
-// teamTenant resolves a Hanzo Team workspace token to the org it names AND the
+// teamTenant resolves a Hanzo Team space token to the org it names AND the
 // capability it carries. It is the fourth entry in eventTenant's trust order and
 // behaves like the other three: verified SERVER-SIDE, fail-closed, and the org comes
 // from the SIGNED claim — never the body, never the Host.
@@ -236,7 +236,7 @@ func teamSecret() string {
 // extra.readonly that were ported from upstream's hasWorkspaceAccess and were INERT
 // here — nothing in this repo has ever minted those claims, because upstream sets them
 // on guest-LINK tokens, a path this port does not have. The real reduced principal is
-// the workspace role, which selectWorkspace now signs. A guard that cannot fire is
+// the space role, which selectWorkspace now signs. A guard that cannot fire is
 // worse than no guard: it reads as protection while a guest holds an owner-shaped
 // token.
 func teamTenant(c *zip.Ctx) (admission, bool) {

@@ -345,6 +345,7 @@ var meteredApps = []string{
 	"sandbox",      // the lease, gated and debited around the pod (priced at zero), and the time it is HELD, at the agent-hour rate (apps/sandbox/meter.go).
 	"security",     // scan fee.
 	"share",        // one tunnel account provisioned on the fabric; reading it back is free.
+	"space",        // the drive and file plane over the same object store; one operation, one fee.
 	"seo",          // measurement resold at the vendor's own per-call price.
 	"tel",          // numbers, messages and calls, at the carrier's price.
 	"tools",        // per-tool dispatch.

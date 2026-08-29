@@ -15,20 +15,20 @@ func init() {
 			"cookieAck.result": "Result is true when the cookie was written or cleared.",
 		},
 	})
-	zip.Describe("DELETE /v1/team/files/:workspace/:filename", zip.Doc{
-		Description: "Removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
+	zip.Describe("DELETE /v1/team/files/:space/:filename", zip.Doc{
+		Description: "Removes one blob from a space's file store. The caller must\nhold a verified session AND be a member of the space; anything else — an\nunknown space, another tenant's space, a space the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
 		Fields: map[string]string{
-			"blobRef.file":      "File is the blob id, and wins over the path segment when both are present.",
-			"blobRef.filename":  "Filename is the last path segment, which the front sets to the blob id\nwhen it sends no explicit `file`.",
-			"blobRef.workspace": "Workspace is the workspace uuid the blob belongs to, from the path.",
+			"blobRef.file":     "File is the blob id, and wins over the path segment when both are present.",
+			"blobRef.filename": "Filename is the last path segment, which the front sets to the blob id\nwhen it sends no explicit `file`.",
+			"blobRef.space":    "Space is the space uuid the blob belongs to, from the path.",
 		},
-		Example: json.RawMessage(`{"workspace":"6579…","file":"0d4f…"}`),
+		Example: json.RawMessage(`{"space":"6579…","file":"0d4f…"}`),
 	})
 	zip.Describe("GET /v1/team/account/auth/:provider", zip.Doc{
 		Description: "Redirects the browser into IAM's authorize endpoint. team is a\nconfidential client (client_secret), so no PKCE — the code is exchanged\nserver-side in authCallback. state is a RANDOM nonce bound to a short-lived\ncookie (never the bare navigateUrl): the callback only proceeds when the two\nmatch, so a cross-site-initiated or replayed callback is refused.",
 	})
 	zip.Describe("GET /v1/team/account/auth/:provider/callback", zip.Doc{
-		Description: "Verifies the state nonce against the flow cookie, exchanges the\nIAM code for the user, ensures the account has a workspace, mints the account\ntoken, and bounces the browser back to the SPA with ?token= (which Auth reads\nvia getLoginInfoFromQuery).",
+		Description: "Verifies the state nonce against the flow cookie, exchanges the\nIAM code for the user, ensures the account has a space, mints the account\ntoken, and bounces the browser back to the SPA with ?token= (which Auth reads\nvia getLoginInfoFromQuery).",
 	})
 	zip.Describe("GET /v1/team/account/providers", zip.Doc{
 		Description: "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that provider accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
@@ -57,85 +57,85 @@ func init() {
 		Description: "Serves the embedded wallet page: the exact asset when it exists, else\nindex.html (the SPA shell). Session-gated — an anonymous caller gets 401,\nnever the page. Fingerprinted assets/ cache hard; the shell never caches.",
 	})
 	zip.Describe("GET /v1/team/bots", zip.Doc{
-		Description: "Returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
+		Description: "Returns the caller org's bot members — the org's agents projected as\nthe space Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
 		Fields: map[string]string{
-			"botMember.active":    "Active is whether the agent projects as a LIVE workspace member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
+			"botMember.active":    "Active is whether the agent projects as a LIVE space member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
 			"botMember.id":        "the agent id",
 			"botMember.name":      "display name",
 			"botMember.personRef": "the projected Person _id",
 			"botMember.userId":    "derived member account uuid (personUuid)",
-			"botRoster.bots":      "Bots is every agent of the caller's org, projected as a workspace member.",
+			"botRoster.bots":      "Bots is every agent of the caller's org, projected as a space member.",
 		},
 	})
-	zip.Describe("GET /v1/team/files/:workspace/:filename", zip.Doc{
+	zip.Describe("GET /v1/team/files/:space/:filename", zip.Doc{
 		Description: "Streams a blob by its client id (?file=). The served Content-Type is\nderived from the STORED BYTES via a strict image allow-list — NEVER from the\nclient :filename (Red F-B: a crafted .svg name would otherwise force\nimage/svg+xml → active XSS). Anything not a recognized raster image is served\ninert: application/octet-stream + attachment + nosniff.",
 	})
 	zip.Describe("GET /v1/team/rooms", zip.Doc{
-		Description: "Returns every room of the caller's org, across the workspaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
+		Description: "Returns every room of the caller's org, across the spaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
 		Fields: map[string]string{
-			"teamRoom.archived":  "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
-			"teamRoom.bindings":  "Bindings are what this room is ABOUT, each a \"<kind>:<ref>\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
-			"teamRoom.direct":    "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
-			"teamRoom.id":        "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a workspace, not across the org.",
-			"teamRoom.life":      "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
-			"teamRoom.members":   "Members are the account uuids in the room, agents included: an agent\nprojects as a workspace member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
-			"teamRoom.name":      "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
-			"teamRoom.private":   "Private reports that the room is restricted to its members.",
-			"teamRoom.topic":     "Topic is the room's own one-line subject, as the Team client sets it.",
-			"teamRoom.workspace": "Workspace is the workspace uuid holding this room. It is part of the\nroom's address: two workspaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
-			"teamRooms.rooms":    "Rooms is every room of every workspace the caller's org owns, each\nwith the work facet it carries.",
+			"teamRoom.archived": "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
+			"teamRoom.bindings": "Bindings are what this room is ABOUT, each a \"<kind>:<ref>\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
+			"teamRoom.direct":   "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
+			"teamRoom.id":       "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a space, not across the org.",
+			"teamRoom.life":     "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
+			"teamRoom.members":  "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.name":     "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
+			"teamRoom.private":  "Private reports that the room is restricted to its members.",
+			"teamRoom.space":    "Space is the space uuid holding this room. It is part of the\nroom's address: two spaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
+			"teamRoom.topic":    "Topic is the room's own one-line subject, as the Team client sets it.",
+			"teamRooms.rooms":   "Rooms is every room of every space the caller's org owns, each\nwith the work facet it carries.",
 		},
 		Example: json.RawMessage(`{"rooms":[{"id":"6543","name":"bugfix-1010","life":"bound","bindings":["repo:hanzoai/cloud"]}]}`),
 	})
 	zip.Describe("GET /v1/team/transactor/:token", zip.Doc{
-		Description: "AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a\nrefusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs\nthe frame loop. The org is the VERIFIED tenant — the key for every store path —\nnever a client header.\n\nThe path segment carries whichever lane the caller is on, and a UUID is not a\nJWT so the two can never be read as each other:\n\nTHE PATH SEGMENT IS THE CREDENTIAL — the workspace token selectWorkspace minted,\nwhose signed claims name both the account and the workspace. Nothing ambient\nauthorizes this socket; see admitWS for why it must stay that way and what the\nIAM lane here will look like.",
+		Description: "AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a\nrefusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs\nthe frame loop. The org is the VERIFIED tenant — the key for every store path —\nnever a client header.\n\nThe path segment carries whichever lane the caller is on, and a UUID is not a\nJWT so the two can never be read as each other:\n\nTHE PATH SEGMENT IS THE CREDENTIAL — the space token selectWorkspace minted,\nwhose signed claims name both the account and the space. Nothing ambient\nauthorizes this socket; see admitWS for why it must stay that way and what the\nIAM lane here will look like.",
 	})
 	zip.Describe("GET /v1/team/transactor/statistics", zip.Doc{
-		Description: "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
+		Description: "Statistics returns the transactor's live sessions for the space the caller's\ncredential names — the endpoint the front's space switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a space UUID names the space and is authorized against the\nmembership rows, an HS256 space token names it in its signed claims.\nactiveSessions carries ONLY that one space, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
 		Fields: map[string]string{
-			"statsIn.token":                "Token is the workspace token minted by selectWorkspace.",
+			"statsIn.token":                "Token is the space token minted by selectWorkspace.",
 			"statsOut.admin":               "Admin is the upstream service's server-panel flag, always false here.",
 			"statsOut.metrics":             "Metrics is the upstream transactor's metrics block. This server does not\npopulate it, so it is always the empty object — the front reads the key,\nnot its contents.",
 			"statsOut.statistics":          "Statistics carries the live sessions.",
-			"statsSessions.activeSessions": "ActiveSessions maps a workspace uuid to its connected sessions. It carries\nonly the token's OWN workspace, and is empty for a token that names none.",
+			"statsSessions.activeSessions": "ActiveSessions maps a space uuid to its connected sessions. It carries\nonly the token's OWN space, and is empty for a token that names none.",
 			"statsUser.userId":             "UserID is the account the session is authenticated as.",
 		},
 		Example: json.RawMessage(`{"token":"eyJhbGciOiJIUzI1NiJ9…"}`),
 	})
 	zip.Describe("POST /team/member", zip.Doc{
 		Fields: map[string]string{
-			"Member.account":     "Account is the team AccountUuid the subject resolved to — the identity the\nasking process attributes the person by, so it never derives one itself.",
-			"Member.member":      "Member reports whether the subject holds a row in that workspace.",
-			"Member.role":        "Role is the workspace role on that row (owner | admin | member | guest).",
-			"MemberIn.subject":   "Subject is the IAM subject, NOT a team account id. team owns the join from\none to the other — it is the join that created the rows — so a peer that\ncomputed its own would be a second derivation of the same address, which is\nhow two layers end up naming different accounts for one person.",
-			"MemberIn.workspace": "Workspace is the workspace uuid, scoped to the caller's org on the read.",
+			"Member.account":   "Account is the team AccountUuid the subject resolved to — the identity the\nasking process attributes the person by, so it never derives one itself.",
+			"Member.member":    "Member reports whether the subject holds a row in that space.",
+			"Member.role":      "Role is the space role on that row (owner | admin | member | guest).",
+			"MemberIn.space":   "Space is the space uuid, scoped to the caller's org on the read.",
+			"MemberIn.subject": "Subject is the IAM subject, NOT a team account id. team owns the join from\none to the other — it is the join that created the rows — so a peer that\ncomputed its own would be a second derivation of the same address, which is\nhow two layers end up naming different accounts for one person.",
 		},
 	})
-	zip.Describe("POST /team/workspaces", zip.Doc{
+	zip.Describe("POST /team/spaces", zip.Doc{
 		Fields: map[string]string{
-			"Space.name":           "Name is the human label for a picker.",
-			"Space.role":           "Role is the role on the caller's member row (owner | admin | member | guest).",
-			"Space.uuid":           "UUID is the workspace's stable id — and, in meet, the leading segment of\nevery room name bound to it.",
-			"Spaces.account":       "Account is the team AccountUuid the subject resolved to — the same identity\nMember.Account carries, from the same derivation.",
-			"Spaces.items":         "Items is every workspace the person is in, newest membership first. Empty is\na real answer, not an error.",
-			"Spaces.name":          "Name is the display name on the caller's member rows, empty when they have\nnot set one. A DISPLAY name only: meet passes it as the LiveKit participant\nlabel, which is decoration, never identity.",
-			"WorkspacesIn.subject": "Subject is the IAM subject, NOT a team account id — team owns the join from\none to the other, exactly as in MemberIn.",
+			"Space.name":       "Name is the human label for a picker.",
+			"Space.role":       "Role is the role on the caller's member row (owner | admin | member | guest).",
+			"Space.uuid":       "UUID is the space's stable id — and, in meet, the leading segment of\nevery room name bound to it.",
+			"Spaces.account":   "Account is the team AccountUuid the subject resolved to — the same identity\nMember.Account carries, from the same derivation.",
+			"Spaces.items":     "Items is every space the person is in, newest membership first. Empty is\na real answer, not an error.",
+			"Spaces.name":      "Name is the display name on the caller's member rows, empty when they have\nnot set one. A DISPLAY name only: meet passes it as the LiveKit participant\nlabel, which is decoration, never identity.",
+			"SpacesIn.subject": "Subject is the IAM subject, NOT a team account id — team owns the join from\none to the other, exactly as in MemberIn.",
 		},
 	})
 	zip.Describe("POST /v1/team/bots/sync", zip.Doc{
-		Description: "SyncBots re-projects the caller org's agents as workspace members into EVERY\nworkspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a workspace's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
+		Description: "SyncBots re-projects the caller org's agents as space members into EVERY\nspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a space's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
 		Fields: map[string]string{
 			"botSync.projected": "Projected is how many roster entries the reconcile touched.",
 			"botSync.synced":    "Synced is true when the reconcile ran.",
 		},
 	})
 	zip.Describe("POST /v1/team/collaborator/rpc/:documentId", zip.Doc{
-		Description: "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
+		Description: "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or space token: the\ndocumentId's space must be the token's space when the token names one,\nand the caller must be a member of it. An unknown space, another tenant's\nspace and a space the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
 		Fields: map[string]string{
 			"collabPayload.content":    "Content maps a document field to its ProseMirror markup JSON.",
 			"collabPayload.source":     "Source is the blob ref a getContent reads the snapshot from. Absent means\nthere is no snapshot to read, which answers empty content.",
 			"collabPayload.updates":    "Updates carries, per field, a base64 Y.js state update encoding the SAME\nmarkup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a\ncreateContent seeds the live-editing lane's update log, not just the\nsnapshot blob. Without it a dialog-created description is invisible in the\ncollaborative editor, which replays the ydoc log, never the snapshot.",
-			"collabRequest.documentId": "DocumentID addresses the document field, as\n\"<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
+			"collabRequest.documentId": "DocumentID addresses the document field, as\n\"<spaceUuid>|<objectClass>|<objectId>|<objectAttr>\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
 			"collabRequest.method":     "Method is the verb: createContent, updateContent or getContent.",
 			"collabRequest.payload":    "Payload is the verb's argument.",
 			"collabResult.content":     "Content maps each document field to its value for the verb: the new blob\nref after a createContent, the stored markup after a getContent.",
@@ -143,27 +143,27 @@ func init() {
 		},
 		Example: json.RawMessage(`{"documentId":"6579…|tracker:class:Issue|issue-1|description","method":"getContent","payload":{"source":"issue-1-description-1730000000000"}}`),
 	})
-	zip.Describe("POST /v1/team/files/:workspace", zip.Doc{
+	zip.Describe("POST /v1/team/files/:space", zip.Doc{
 		Description: "Stores the uploaded bytes under the CLIENT-supplied blob uuid (the\nmultipart file's filename). The server does NOT mint the id — the front owns it\n(front.ts: formData.append('file', file, uuid)). Response body is irrelevant\n(uploadFile discards it); we echo the id for curl/debug.",
 	})
 	zip.Describe("PUT /v1/team/rooms/:id", zip.Doc{
-		Description: "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open workspace\nrather than on the next reload.",
+		Description: "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open space\nrather than on the next reload.",
 		Fields: map[string]string{
-			"teamRoom.archived":      "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
-			"teamRoom.bindings":      "Bindings are what this room is ABOUT, each a \"<kind>:<ref>\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
-			"teamRoom.direct":        "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
-			"teamRoom.id":            "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a workspace, not across the org.",
-			"teamRoom.life":          "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
-			"teamRoom.members":       "Members are the account uuids in the room, agents included: an agent\nprojects as a workspace member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
-			"teamRoom.name":          "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
-			"teamRoom.private":       "Private reports that the room is restricted to its members.",
-			"teamRoom.topic":         "Topic is the room's own one-line subject, as the Team client sets it.",
-			"teamRoom.workspace":     "Workspace is the workspace uuid holding this room. It is part of the\nroom's address: two workspaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
-			"teamRoomBind.bindings":  "Bindings REPLACES what the room is about, wholly. It is a replace and\nnot a merge because a caller that cannot remove a binding would have no way\nto correct a wrong one, and an empty list sent explicitly is how a room\nis unbound. Absent (null) leaves the existing list alone.",
-			"teamRoomBind.id":        "ID is the room to bind, from the path. The URL is the authority; a body\ncarrying another id cannot redirect the write.",
-			"teamRoomBind.life":      "Life sets the lifecycle intent: \"standing\" or \"bound\". Any other\nvalue is refused rather than stored, so a reader never has to interpret a\nthird one. Empty leaves the current intent unchanged.",
-			"teamRoomBind.workspace": "Workspace names the workspace holding the room. It is required, because\na room id is unique only within one and searching every workspace for a\nmatching id would make the write's target depend on iteration order.",
+			"teamRoom.archived":     "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
+			"teamRoom.bindings":     "Bindings are what this room is ABOUT, each a \"<kind>:<ref>\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
+			"teamRoom.direct":       "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
+			"teamRoom.id":           "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a space, not across the org.",
+			"teamRoom.life":         "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
+			"teamRoom.members":      "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.name":         "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
+			"teamRoom.private":      "Private reports that the room is restricted to its members.",
+			"teamRoom.space":        "Space is the space uuid holding this room. It is part of the\nroom's address: two spaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
+			"teamRoom.topic":        "Topic is the room's own one-line subject, as the Team client sets it.",
+			"teamRoomBind.bindings": "Bindings REPLACES what the room is about, wholly. It is a replace and\nnot a merge because a caller that cannot remove a binding would have no way\nto correct a wrong one, and an empty list sent explicitly is how a room\nis unbound. Absent (null) leaves the existing list alone.",
+			"teamRoomBind.id":       "ID is the room to bind, from the path. The URL is the authority; a body\ncarrying another id cannot redirect the write.",
+			"teamRoomBind.life":     "Life sets the lifecycle intent: \"standing\" or \"bound\". Any other\nvalue is refused rather than stored, so a reader never has to interpret a\nthird one. Empty leaves the current intent unchanged.",
+			"teamRoomBind.space":    "Space names the space holding the room. It is required, because\na room id is unique only within one and searching every space for a\nmatching id would make the write's target depend on iteration order.",
 		},
-		Example: json.RawMessage(`{"workspace":"0e3c…","life":"bound","bindings":["repo:hanzoai/cloud","issue:1010"]}`),
+		Example: json.RawMessage(`{"space":"0e3c…","life":"bound","bindings":["repo:hanzoai/cloud","issue:1010"]}`),
 	})
 }

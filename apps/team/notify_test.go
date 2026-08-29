@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-// notifSession builds a standalone transactor session over a fresh per-workspace
+// notifSession builds a standalone transactor session over a fresh per-space
 // store + the real embedded model — the same shape projections_test.go uses, but
 // without the `live` singleton (these tests drive applyTx / findAll directly).
 func notifSession(t *testing.T, org, ws string) *session {
 	t.Helper()
 	dir := t.TempDir()
 	srv := &transServer{hub: newHub(), store: newStore(dir), hier: buildHierarchy(modelJSON)}
-	return &session{server: srv, store: srv.store, hier: srv.hier, org: org, workspace: ws, account: acctSystem}
+	return &session{server: srv, store: srv.store, hier: srv.hier, org: org, space: ws, account: acctSystem}
 }
 
 // applyRaw applies one tx map through the real write path (the same path the live

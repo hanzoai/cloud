@@ -141,16 +141,16 @@ func TestAuthStartRedirectURIFallsBackToHost(t *testing.T) {
 	}
 }
 
-// TestSelectWorkspaceHTTP is the end-to-end account-RPC proof: a bearer-authed
-// selectWorkspace resolves the caller's workspace, gates on membership, mints the
-// workspace token and returns the transactor endpoint NAMESPACED under
+// TestSelectSpaceHTTP is the end-to-end account-RPC proof: a bearer-authed
+// selectWorkspace resolves the caller's space, gates on membership, mints the
+// space token and returns the transactor endpoint NAMESPACED under
 // /v1/team/transactor (never bare /transactor).
-func TestSelectWorkspaceHTTP(t *testing.T) {
+func TestSelectSpaceHTTP(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(context.Background(), org, acct, "Ada")
 	if err != nil {
-		t.Fatalf("seed workspace: %v", err)
+		t.Fatalf("seed space: %v", err)
 	}
 	sess, err := token.Generate(acct, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), testSecret)
 	if err != nil {
@@ -158,30 +158,30 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 	}
 	auth := authAs(sess, org, acct)
 
-	// getUserWorkspaces returns the seeded workspace.
+	// getUserWorkspaces returns the seeded space.
 	code, body := call(t, app, http.MethodPost, "/v1/team/account", auth, rpcRequest{Method: "getUserWorkspaces"})
 	if code != http.StatusOK {
 		t.Fatalf("getUserWorkspaces status %d: %s", code, body)
 	}
 	var wl struct {
-		Result []WorkspaceInfo `json:"result"`
+		Result []SpaceInfo `json:"result"`
 	}
 	if err := json.Unmarshal(body, &wl); err != nil || len(wl.Result) != 1 || wl.Result[0].UUID != ws.UUID {
 		t.Fatalf("getUserWorkspaces = %s (err %v)", body, err)
 	}
 	if wl.Result[0].VersionMajor != 0 || wl.Result[0].VersionMinor != 6 || wl.Result[0].VersionPatch != 0 {
-		t.Fatalf("workspace version = %d.%d.%d, want 0.6.0", wl.Result[0].VersionMajor, wl.Result[0].VersionMinor, wl.Result[0].VersionPatch)
+		t.Fatalf("space version = %d.%d.%d, want 0.6.0", wl.Result[0].VersionMajor, wl.Result[0].VersionMinor, wl.Result[0].VersionPatch)
 	}
 
-	// selectWorkspace mints the workspace token + returns the transactor endpoint.
+	// selectWorkspace mints the space token + returns the transactor endpoint.
 	code, body = call(t, app, http.MethodPost, "/v1/team/account", auth,
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": ws.Slug}})
 	if code != http.StatusOK {
 		t.Fatalf("selectWorkspace status %d: %s", code, body)
 	}
 	var sw struct {
-		Result WorkspaceLoginInfo `json:"result"`
-		Error  *Status            `json:"error"`
+		Result SpaceLoginInfo `json:"result"`
+		Error  *Status        `json:"error"`
 	}
 	if err := json.Unmarshal(body, &sw); err != nil {
 		t.Fatalf("selectWorkspace decode: %v (%s)", err, body)
@@ -189,8 +189,8 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 	if sw.Error != nil {
 		t.Fatalf("selectWorkspace error: %+v", sw.Error)
 	}
-	if sw.Result.Workspace != ws.UUID {
-		t.Fatalf("workspace = %q, want %q", sw.Result.Workspace, ws.UUID)
+	if sw.Result.Space != ws.UUID {
+		t.Fatalf("space = %q, want %q", sw.Result.Space, ws.UUID)
 	}
 	if sw.Result.Role != "OWNER" {
 		t.Fatalf("role = %q, want OWNER", sw.Result.Role)
@@ -200,25 +200,25 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 		t.Fatalf("endpoint = %q, must end with %q (namespaced under /v1/team)", got, wantSuffix)
 	}
 
-	// The returned workspace token decodes back to (acct, ws.UUID, org) under the
+	// The returned space token decodes back to (acct, ws.UUID, org) under the
 	// SAME secret the transactor verifies with — the wire is closed end-to-end.
 	dec, err := token.Decode(sw.Result.Token, testSecret, true)
-	if err != nil || dec.Account != acct || dec.Workspace != ws.UUID || dec.Org() != org {
-		t.Fatalf("workspace token round-trip: %+v (err %v)", dec, err)
+	if err != nil || dec.Account != acct || dec.Space != ws.UUID || dec.Org() != org {
+		t.Fatalf("space token round-trip: %+v (err %v)", dec, err)
 	}
 	// The token must carry the caller's ROLE. Everything downstream that tells a
 	// member from a guest reads this claim and nothing else — clients/analytics for
 	// unprojected-write capability, clients/meet for a seat in a room — so a mint that
 	// drops it silently hands every guest an owner-shaped token.
 	if dec.Role() != token.RoleOwner {
-		t.Fatalf("workspace token role = %q, want %q", dec.Role(), token.RoleOwner)
+		t.Fatalf("space token role = %q, want %q", dec.Role(), token.RoleOwner)
 	}
 	if !dec.Privileged() {
-		t.Fatal("the workspace creator's token is not Privileged()")
+		t.Fatal("the space creator's token is not Privileged()")
 	}
 }
 
-// TestSelectWorkspaceSignsGuestRole is the F1 regression guard, at the MINT site.
+// TestSelectSpaceSignsGuestRole is the F1 regression guard, at the MINT site.
 //
 // Every test of the CONSUMERS (clients/analytics, clients/meet) mints its own tokens
 // with a role already set, so all of them pass whether or not selectWorkspace actually
@@ -226,14 +226,14 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 // property proven against a synthesized shape — moved up one layer, and it is why
 // deleting `"role": role` from the mint survived a whole mutation round. This test
 // drives the REAL RPC and asserts the token a guest is handed reports itself as a guest.
-func TestSelectWorkspaceSignsGuestRole(t *testing.T) {
+func TestSelectSpaceSignsGuestRole(t *testing.T) {
 	app := mountTeam(t)
 	const org, owner = "acme", "550e8400-e29b-41d4-a716-446655440000"
 	const guest = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 	ctx := context.Background()
-	ws, err := mounted.State.accounts.EnsureWorkspace(ctx, org, owner, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(ctx, org, owner, "Ada")
 	if err != nil {
-		t.Fatalf("seed workspace: %v", err)
+		t.Fatalf("seed space: %v", err)
 	}
 	if err := mounted.State.accounts.AddMember(ctx, org, ws.UUID, guest, token.RoleGuest); err != nil {
 		t.Fatalf("seed guest member: %v", err)
@@ -249,37 +249,37 @@ func TestSelectWorkspaceSignsGuestRole(t *testing.T) {
 		t.Fatalf("guest selectWorkspace status %d: %s", code, body)
 	}
 	var sw struct {
-		Result WorkspaceLoginInfo `json:"result"`
-		Error  *Status            `json:"error"`
+		Result SpaceLoginInfo `json:"result"`
+		Error  *Status        `json:"error"`
 	}
 	if err := json.Unmarshal(body, &sw); err != nil || sw.Error != nil {
 		t.Fatalf("guest selectWorkspace = %s (err %v)", body, err)
 	}
 	dec, err := token.Decode(sw.Result.Token, testSecret, true)
 	if err != nil {
-		t.Fatalf("decode guest workspace token: %v", err)
+		t.Fatalf("decode guest space token: %v", err)
 	}
 	if dec.Role() != token.RoleGuest {
 		t.Fatalf("guest token role = %q, want %q — the mint dropped or hardcoded the role", dec.Role(), token.RoleGuest)
 	}
 	if dec.Privileged() {
-		t.Fatal("a guest's workspace token reports Privileged() — it would get unprojected ingest and a room seat")
+		t.Fatal("a guest's space token reports Privileged() — it would get unprojected ingest and a room seat")
 	}
 	if dec.Org() != org {
 		t.Fatalf("guest token org = %q, want %q", dec.Org(), org)
 	}
 }
 
-// TestSelectWorkspaceCrossTenantBlocked proves a caller whose token org is org-b
-// cannot select org-a's workspace by its slug — the store scopes the slug lookup
-// by owner_org, so the RPC answers WorkspaceNotFound (no cross-tenant oracle).
-func TestSelectWorkspaceCrossTenantBlocked(t *testing.T) {
+// TestSelectSpaceCrossTenantBlocked proves a caller whose token org is org-b
+// cannot select org-a's space by its slug — the store scopes the slug lookup
+// by owner_org, so the RPC answers SpaceNotFound (no cross-tenant oracle).
+func TestSelectSpaceCrossTenantBlocked(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acctA = "aaaaaaaa-0000-4000-8000-00000000000a"
 	const acctB = "bbbbbbbb-0000-4000-8000-00000000000b"
-	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
-	if _, err := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob"); err != nil {
+	wsA, _ := mounted.State.accounts.EnsureSpace(ctx, "org-a", acctA, "Alice")
+	if _, err := mounted.State.accounts.EnsureSpace(ctx, "org-b", acctB, "Bob"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -292,15 +292,15 @@ func TestSelectWorkspaceCrossTenantBlocked(t *testing.T) {
 		t.Fatalf("status %d: %s", code, body)
 	}
 	var sw struct {
-		Result *WorkspaceLoginInfo `json:"result"`
-		Error  *Status             `json:"error"`
+		Result *SpaceLoginInfo `json:"result"`
+		Error  *Status         `json:"error"`
 	}
 	_ = json.Unmarshal(body, &sw)
-	if sw.Result != nil && sw.Result.Workspace != "" {
-		t.Fatalf("cross-tenant selectWorkspace leaked a workspace: %+v", sw.Result)
+	if sw.Result != nil && sw.Result.Space != "" {
+		t.Fatalf("cross-tenant selectWorkspace leaked a space: %+v", sw.Result)
 	}
 	if sw.Error == nil || sw.Error.Code != "account:status:WorkspaceNotFound" {
-		t.Fatalf("cross-tenant selectWorkspace = %s, want WorkspaceNotFound", body)
+		t.Fatalf("cross-tenant selectWorkspace = %s, want SpaceNotFound", body)
 	}
 }
 
@@ -582,12 +582,12 @@ func TestCallbackVerifiesOwner(t *testing.T) {
 	}
 }
 
-// TestTransactorStatistics: the workspace switcher's poll target answers the
+// TestTransactorStatistics: the space switcher's poll target answers the
 // front-compatible shape under a valid token and 401s otherwise.
 func TestTransactorStatistics(t *testing.T) {
 	app := mountTeam(t)
 	const acct, wsUUID = "550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-	wsTok, err := token.Generate(acct, wsUUID, map[string]any{"org": "acme"}, expUnix(workspaceTokenTTL), testSecret)
+	wsTok, err := token.Generate(acct, wsUUID, map[string]any{"org": "acme"}, expUnix(spaceTokenTTL), testSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -609,7 +609,7 @@ func TestTransactorStatistics(t *testing.T) {
 		t.Fatalf("missing keys: %s", body)
 	}
 	if _, ok := out.Statistics.ActiveSessions[wsUUID]; !ok {
-		t.Fatalf("activeSessions missing the token's workspace: %s", body)
+		t.Fatalf("activeSessions missing the token's space: %s", body)
 	}
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/transactor/statistics?token=not.a.token", nil, nil); code != http.StatusUnauthorized {
 		t.Fatalf("bad token statistics = %d, want 401", code)

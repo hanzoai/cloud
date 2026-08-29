@@ -25,28 +25,28 @@ func newAccountStore(t *testing.T) *accountStore {
 	return s
 }
 
-// TestEnsureWorkspaceIdempotent proves a second EnsureWorkspace for the same
-// (org, account) returns the SAME workspace (not a duplicate) — the workspace
+// TestEnsureSpaceIdempotent proves a second EnsureSpace for the same
+// (org, account) returns the SAME space (not a duplicate) — the space
 // picker is seeded exactly once.
-func TestEnsureWorkspaceIdempotent(t *testing.T) {
+func TestEnsureSpaceIdempotent(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
 
-	w1, err := s.EnsureWorkspace(ctx, org, acct, "Ada")
+	w1, err := s.EnsureSpace(ctx, org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
-	w2, err := s.EnsureWorkspace(ctx, org, acct, "Ada")
+	w2, err := s.EnsureSpace(ctx, org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if w1.UUID != w2.UUID || w1.ID != w2.ID {
 		t.Fatalf("ensure not idempotent: %s != %s", w1.UUID, w2.UUID)
 	}
-	wss, err := s.WorkspacesOf(ctx, org, acct)
+	wss, err := s.SpacesOf(ctx, org, acct)
 	if err != nil || len(wss) != 1 {
-		t.Fatalf("workspacesOf = %d (%v), want 1", len(wss), err)
+		t.Fatalf("spacesOf = %d (%v), want 1", len(wss), err)
 	}
 	// The owner member row exists with role owner.
 	role, ok := s.Membership(ctx, org, w1.UUID, acct)
@@ -55,12 +55,12 @@ func TestEnsureWorkspaceIdempotent(t *testing.T) {
 	}
 }
 
-// TestEnsureWorkspaceConcurrentSingleRow proves two (or more) concurrent logins for
-// the same (org, account) converge to exactly ONE personal workspace. The prior
-// check-then-insert (WorkspacesOf → INSERT) had no uniqueness on the personal-
-// workspace identity, so racing logins could each see "none" and mint a duplicate;
+// TestEnsureSpaceConcurrentSingleRow proves two (or more) concurrent logins for
+// the same (org, account) converge to exactly ONE personal space. The prior
+// check-then-insert (SpacesOf → INSERT) had no uniqueness on the personal-
+// space identity, so racing logins could each see "none" and mint a duplicate;
 // the (owner_org, owner) unique index + idempotent upsert closes it.
-func TestEnsureWorkspaceConcurrentSingleRow(t *testing.T) {
+func TestEnsureSpaceConcurrentSingleRow(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
@@ -68,14 +68,14 @@ func TestEnsureWorkspaceConcurrentSingleRow(t *testing.T) {
 	const n = 32
 	var wg sync.WaitGroup
 	start := make(chan struct{})
-	got := make([]workspace, n)
+	got := make([]space, n)
 	errs := make([]error, n)
 	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			<-start // release all at once to maximize the check-then-insert interleave
-			got[i], errs[i] = s.EnsureWorkspace(ctx, org, acct, "Ada")
+			got[i], errs[i] = s.EnsureSpace(ctx, org, acct, "Ada")
 		}(i)
 	}
 	close(start)
@@ -83,27 +83,27 @@ func TestEnsureWorkspaceConcurrentSingleRow(t *testing.T) {
 
 	for i, err := range errs {
 		if err != nil {
-			t.Fatalf("EnsureWorkspace #%d: %v", i, err)
+			t.Fatalf("EnsureSpace #%d: %v", i, err)
 		}
 	}
-	// Every concurrent caller must resolve the SAME workspace row.
+	// Every concurrent caller must resolve the SAME space row.
 	for i := 1; i < n; i++ {
 		if got[i].ID != got[0].ID {
-			t.Fatalf("concurrent logins minted different workspaces: %s vs %s", got[0].ID, got[i].ID)
+			t.Fatalf("concurrent logins minted different spaces: %s vs %s", got[0].ID, got[i].ID)
 		}
 	}
-	// And the store holds exactly one personal workspace for the account.
-	wss, err := s.WorkspacesOf(ctx, org, acct)
+	// And the store holds exactly one personal space for the account.
+	wss, err := s.SpacesOf(ctx, org, acct)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(wss) != 1 {
-		t.Fatalf("want exactly 1 personal workspace after %d concurrent logins, got %d", n, len(wss))
+		t.Fatalf("want exactly 1 personal space after %d concurrent logins, got %d", n, len(wss))
 	}
 }
 
 // Seats is IAM's count, forwarded. WHICH people count — machines out, a person in
-// three workspaces once — is IAM's rule and is tested in its store; what team owes
+// three spaces once — is IAM's rule and is tested in its store; what team owes
 // is that it asks and does not compute.
 func TestSeatsForwardsIAMsCount(t *testing.T) {
 	s := newAccountStore(t)
@@ -111,7 +111,7 @@ func TestSeatsForwardsIAMsCount(t *testing.T) {
 	const org = "acme"
 	const owner = "aaaaaaaa-0000-4000-8000-000000000001"
 
-	w, err := s.EnsureWorkspace(ctx, org, owner, "Owner")
+	w, err := s.EnsureSpace(ctx, org, owner, "Owner")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,61 +144,61 @@ func TestSeatsSurfacesReadError(t *testing.T) {
 func TestMembershipReadFromRow(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
-	w, _ := s.EnsureWorkspace(ctx, "acme", "aaaaaaaa-0000-4000-8000-000000000001", "Owner")
+	w, _ := s.EnsureSpace(ctx, "acme", "aaaaaaaa-0000-4000-8000-000000000001", "Owner")
 	if _, ok := s.Membership(ctx, "acme", w.UUID, "bbbbbbbb-0000-4000-8000-000000000002"); ok {
 		t.Fatal("non-member must not resolve a role")
 	}
 }
 
-// TestWorkspaceBySlugTenantScoped is the cross-tenant isolation bar: org B cannot
-// resolve org A's workspace by its slug — the slug lookup is scoped by owner_org,
-// so selectWorkspace can never select a foreign tenant's workspace.
-func TestWorkspaceBySlugTenantScoped(t *testing.T) {
+// TestSpaceBySlugTenantScoped is the cross-tenant isolation bar: org B cannot
+// resolve org A's space by its slug — the slug lookup is scoped by owner_org,
+// so selectWorkspace can never select a foreign tenant's space.
+func TestSpaceBySlugTenantScoped(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
-	wA, _ := s.EnsureWorkspace(ctx, "org-a", "aaaaaaaa-0000-4000-8000-00000000000a", "Alice")
+	wA, _ := s.EnsureSpace(ctx, "org-a", "aaaaaaaa-0000-4000-8000-00000000000a", "Alice")
 
-	// Same slug, resolved in org-a → found; in org-b → errNoWorkspace.
-	if _, err := s.WorkspaceBySlug(ctx, "org-a", wA.Slug); err != nil {
+	// Same slug, resolved in org-a → found; in org-b → errNoSpace.
+	if _, err := s.SpaceBySlug(ctx, "org-a", wA.Slug); err != nil {
 		t.Fatalf("org-a should resolve its own slug: %v", err)
 	}
-	if _, err := s.WorkspaceBySlug(ctx, "org-b", wA.Slug); !errors.Is(err, errNoWorkspace) {
-		t.Fatalf("org-b resolving org-a's slug = %v, want errNoWorkspace (cross-tenant leak)", err)
+	if _, err := s.SpaceBySlug(ctx, "org-b", wA.Slug); !errors.Is(err, errNoSpace) {
+		t.Fatalf("org-b resolving org-a's slug = %v, want errNoSpace (cross-tenant leak)", err)
 	}
 }
 
-// TestMembersForWorkspaceTenantScoped proves the roster source is org-scoped: a
+// TestMembersForSpaceTenantScoped proves the roster source is org-scoped: a
 // foreign tenant's uuid returns no members (never mis-files another org's roster).
-func TestMembersForWorkspaceTenantScoped(t *testing.T) {
+func TestMembersForSpaceTenantScoped(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
-	w, _ := s.EnsureWorkspace(ctx, "org-a", "aaaaaaaa-0000-4000-8000-00000000000a", "Alice")
+	w, _ := s.EnsureSpace(ctx, "org-a", "aaaaaaaa-0000-4000-8000-00000000000a", "Alice")
 
-	got, err := s.MembersForWorkspaceUUID(ctx, "org-a", w.UUID)
+	got, err := s.MembersForSpaceUUID(ctx, "org-a", w.UUID)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("org-a members = %d (%v), want 1 (the owner)", len(got), err)
 	}
 	if got[0].Role != "owner" || got[0].IsBot {
 		t.Fatalf("owner member row wrong: %+v", got[0])
 	}
-	foreign, err := s.MembersForWorkspaceUUID(ctx, "org-b", w.UUID)
+	foreign, err := s.MembersForSpaceUUID(ctx, "org-b", w.UUID)
 	if err != nil || len(foreign) != 0 {
-		t.Fatalf("org-b reading org-a's workspace uuid = %d members, want 0", len(foreign))
+		t.Fatalf("org-b reading org-a's space uuid = %d members, want 0", len(foreign))
 	}
 }
 
-// TestSelectWorkspaceCore exercises the selectWorkspace spine at the store+token
-// layer: resolve the workspace org-scoped, gate on the members row, mint a
-// workspace token carrying extra.org, and confirm it decodes back to the same
-// (account, workspace, org). This is the exact minting selectWorkspace does before
+// TestSelectSpaceCore exercises the selectWorkspace spine at the store+token
+// layer: resolve the space org-scoped, gate on the members row, mint a
+// space token carrying extra.org, and confirm it decodes back to the same
+// (account, space, org). This is the exact minting selectWorkspace does before
 // returning the transactor endpoint.
-func TestSelectWorkspaceCore(t *testing.T) {
+func TestSelectSpaceCore(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
 	const org, acct, secret = "acme", "550e8400-e29b-41d4-a716-446655440000", "server-secret"
-	w, _ := s.EnsureWorkspace(ctx, org, acct, "Ada")
+	w, _ := s.EnsureSpace(ctx, org, acct, "Ada")
 
-	ws, err := s.WorkspaceBySlug(ctx, org, w.Slug)
+	ws, err := s.SpaceBySlug(ctx, org, w.Slug)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -206,16 +206,16 @@ func TestSelectWorkspaceCore(t *testing.T) {
 	if !ok || role != "owner" {
 		t.Fatalf("membership gate: role=%q ok=%v", role, ok)
 	}
-	wsTok, err := token.Generate(acct, ws.UUID, map[string]any{"org": org}, expUnix(workspaceTokenTTL), secret)
+	wsTok, err := token.Generate(acct, ws.UUID, map[string]any{"org": org}, expUnix(spaceTokenTTL), secret)
 	if err != nil {
-		t.Fatalf("mint workspace token: %v", err)
+		t.Fatalf("mint space token: %v", err)
 	}
 	dec, err := token.Decode(wsTok, secret, true)
 	if err != nil {
-		t.Fatalf("decode workspace token: %v", err)
+		t.Fatalf("decode space token: %v", err)
 	}
-	if dec.Account != acct || dec.Workspace != ws.UUID || dec.Org() != org {
-		t.Fatalf("workspace token claims = %+v, want acct=%s ws=%s org=%s", dec, acct, ws.UUID, org)
+	if dec.Account != acct || dec.Space != ws.UUID || dec.Org() != org {
+		t.Fatalf("space token claims = %+v, want acct=%s ws=%s org=%s", dec, acct, ws.UUID, org)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestAddMemberNeverDowngrades(t *testing.T) {
 	const org = "acme"
 	const acct = "aaaaaaaa-0000-4000-8000-000000000001"
 
-	w, err := s.EnsureWorkspace(ctx, org, acct, "Owner")
+	w, err := s.EnsureSpace(ctx, org, acct, "Owner")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,16 +43,16 @@ const RoleContentEditor = "Content Editor"
 
 // The marketing DocType names. Single-word (no spaces) so a name is a clean URL path
 // segment under /v1/content/:doctype and a clean Link `options` target.
-const (
-	DocTypeCampaign   = "Campaign"
-	DocTypeSocialPost = "SocialPost"
-	DocTypeAsset      = "Asset"
+var (
+	DocTypeCampaign   = framework.ID{Module: Module, Name: "Campaign"}
+	DocTypeSocialPost = framework.ID{Module: Module, Name: "SocialPost"}
+	DocTypeAsset      = framework.ID{Module: Module, Name: "Asset"}
 )
 
 // publishableDocTypes are the marketing DocTypes governed by the lifecycle: the hook
 // enforces status edges on each (hooks.go) and the board aggregates over them
 // (content.go). The ONE list both read.
-var publishableDocTypes = []string{DocTypeCampaign, DocTypeSocialPost, DocTypeAsset}
+var publishableDocTypes = []framework.ID{DocTypeCampaign, DocTypeSocialPost, DocTypeAsset}
 
 // init registers the marketing content model with the framework engine. The lifecycle
 // hooks are wired here too (hooks.go) so both the fixtures and their behavior are
@@ -84,7 +84,7 @@ func DocTypes() []framework.DocType {
 // price/inventory, so a campaign references a product, it does not duplicate it.
 func campaign() framework.DocType {
 	return framework.DocType{
-		Name: DocTypeCampaign, Module: Module, TitleField: "title",
+		Name: DocTypeCampaign.Name, Module: DocTypeCampaign.Module, TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "slug", Fieldtype: framework.FieldData, Label: "Slug"},
@@ -108,15 +108,15 @@ func campaign() framework.DocType {
 // the distributor's returned post ids for reconciliation (queued → published).
 func socialPost() framework.DocType {
 	return framework.DocType{
-		Name: DocTypeSocialPost, Module: Module, TitleField: "title",
+		Name: DocTypeSocialPost.Name, Module: DocTypeSocialPost.Module, TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "caption", Fieldtype: framework.FieldText, Label: "Caption"},
 			{Fieldname: "excerpt", Fieldtype: framework.FieldSmall, Label: "Excerpt"},
 			{Fieldname: "channels", Fieldtype: framework.FieldData, Label: "Channels"}, // "x,instagram,tiktok"
 			{Fieldname: "media", Fieldtype: framework.FieldJSON, Label: "Media"},       // [{url,alt,mime}]
-			{Fieldname: "campaign", Fieldtype: framework.FieldLink, Label: "Campaign", Options: DocTypeCampaign},
-			{Fieldname: "asset", Fieldtype: framework.FieldLink, Label: "Asset", Options: DocTypeAsset},
+			{Fieldname: "campaign", Fieldtype: framework.FieldLink, Label: "Campaign", Options: DocTypeCampaign.String()},
+			{Fieldname: "asset", Fieldtype: framework.FieldLink, Label: "Asset", Options: DocTypeAsset.String()},
 			{Fieldname: "design", Fieldtype: framework.FieldData, Label: "Design"},
 			{Fieldname: "scheduled_at", Fieldtype: framework.FieldDatetime, Label: "Scheduled At"},
 			// published_at + external_ids are SERVER-MANAGED: written only by the trusted
@@ -137,7 +137,7 @@ func socialPost() framework.DocType {
 // render can be traced/re-run.
 func asset() framework.DocType {
 	return framework.DocType{
-		Name: DocTypeAsset, Module: Module, TitleField: "title",
+		Name: DocTypeAsset.Name, Module: DocTypeAsset.Module, TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "design", Fieldtype: framework.FieldData, Label: "Design", InListView: true},
@@ -153,7 +153,7 @@ func asset() framework.DocType {
 			{Fieldname: "render_params", Fieldtype: framework.FieldJSON, Label: "Render Params"},
 			{Fieldname: "source_prompt_id", Fieldtype: framework.FieldData, Label: "Source Prompt ID"},
 			{Fieldname: "caption", Fieldtype: framework.FieldSmall, Label: "Caption"},
-			{Fieldname: "campaign", Fieldtype: framework.FieldLink, Label: "Campaign", Options: DocTypeCampaign},
+			{Fieldname: "campaign", Fieldtype: framework.FieldLink, Label: "Campaign", Options: DocTypeCampaign.String()},
 			statusField(), projectField(), tagsField(),
 		},
 		Perms: contentPerms(),

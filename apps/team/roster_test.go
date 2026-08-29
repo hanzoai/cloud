@@ -9,9 +9,9 @@ import (
 )
 
 // rosterServer builds a transactor server whose two roster sources are wired: a
-// real accountStore (seeded with one workspace + its human owner) and an injected
+// real accountStore (seeded with one space + its human owner) and an injected
 // BotLister standing in for agents.ListForOrg. It returns the server, a query
-// session bound to the seeded workspace, and the workspace uuid.
+// session bound to the seeded space, and the space uuid.
 func rosterServer(t *testing.T, org, human, humanName string, bots []Bot) (*transServer, *session, string) {
 	t.Helper()
 	id := planetest.ServeIdentity(t)
@@ -24,14 +24,14 @@ func rosterServer(t *testing.T, org, human, humanName string, bots []Bot) (*tran
 
 	// IAM holds the person's name, so the roster reads it from there.
 	id.Named(human, humanName)
-	ws, err := accounts.EnsureWorkspace(context.Background(), org, human, humanName)
+	ws, err := accounts.EnsureSpace(context.Background(), org, human, humanName)
 	if err != nil {
-		t.Fatalf("ensure workspace: %v", err)
+		t.Fatalf("ensure space: %v", err)
 	}
 
 	srv := &transServer{
 		hub:      newHub(),
-		store:    newStore(filepath.Join(dir, "workspaces")),
+		store:    newStore(filepath.Join(dir, "spaces")),
 		hier:     buildHierarchy(modelJSON),
 		accounts: accounts,
 		bots: func(_ context.Context, gotOrg string) ([]Bot, error) {
@@ -43,12 +43,12 @@ func rosterServer(t *testing.T, org, human, humanName string, bots []Bot) (*tran
 	}
 	live = srv
 	t.Cleanup(func() { live = nil })
-	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, workspace: ws.UUID, account: acctSystem}
+	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, space: ws.UUID, account: acctSystem}
 	return srv, sess, ws.UUID
 }
 
 // TestReconcileRosterHumansAndBots is the cloud-native port of team-go's
-// backfill_roster_test: on connect the workspace docs store gets the human owner
+// backfill_roster_test: on connect the space docs store gets the human owner
 // as a Person AND each of the org's agents as an Employee — sourced IN-PROCESS
 // from the agents registry (here the injected BotLister), no Base collection and no
 // IAM-SA HTTP. The reconcile runs unconditionally (no sentinel), so it is the ONE
@@ -63,7 +63,7 @@ func TestReconcileRosterHumansAndBots(t *testing.T) {
 	_, sess, _ := rosterServer(t, org, human, "Dave Lorenzini", bots)
 
 	// A fresh connect reconciles the FULL roster: human + both bots as Employees.
-	sess.seedWorkspace()
+	sess.seedSpace()
 	sess.reconcileRoster()
 
 	emps := sess.queryDocs(mixinEmployee, nil)
@@ -107,7 +107,7 @@ func TestReconcileRosterIdempotent(t *testing.T) {
 	bots := []Bot{{ID: "agent_x", Name: "triage-bot", Active: true}}
 	_, sess, _ := rosterServer(t, org, human, "Ada Lovelace", bots)
 
-	sess.seedWorkspace()
+	sess.seedSpace()
 	sess.reconcileRoster()
 	sess.reconcileRoster() // reconnect
 
@@ -131,7 +131,7 @@ func TestReconcileRemovesDeletedBot(t *testing.T) {
 		{ID: "agent_b", Name: "bravo", Active: true},
 	}
 	_, sess, _ := rosterServer(t, org, human, "Grace Hopper", bots)
-	sess.seedWorkspace()
+	sess.seedSpace()
 	sess.reconcileRoster()
 	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 3 {
 		t.Fatalf("active employees (2 bots + human) = %d, want 3", n)
@@ -172,7 +172,7 @@ func TestReconcileTransientBotErrorKeepsBots(t *testing.T) {
 	const org = "acme"
 	const human = "55555555-5555-4555-8555-555555555555"
 	_, sess, _ := rosterServer(t, org, human, "Ada", []Bot{{ID: "agent_x", Name: "x", Active: true}})
-	sess.seedWorkspace()
+	sess.seedSpace()
 	sess.reconcileRoster()
 	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 2 {
 		t.Fatalf("active employees = %d, want 2", n)
@@ -197,7 +197,7 @@ func TestReconcileRosterBotDeactivation(t *testing.T) {
 
 	// First connect: the bot is active.
 	_, sess, _ := rosterServer(t, org, human, "Grace Hopper", []Bot{{ID: "agent_z", Name: "zen", Active: true}})
-	sess.seedWorkspace()
+	sess.seedSpace()
 	sess.reconcileRoster()
 	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 2 {
 		t.Fatalf("active employees (bot live) = %d, want 2", n)

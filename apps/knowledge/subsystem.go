@@ -167,7 +167,7 @@ func (o ops) search(ctx context.Context, in *searchIn) (*searchOut, error) {
 // doctypes through this field, and an empty/foreign list falls back to all indexed
 // knowledge doctypes.
 func sanitizeDocTypes(in []string) []string {
-	allowed := map[string]bool{DTPage: true, DTMemory: true, DTSource: true}
+	allowed := map[string]bool{DTPage.String(): true, DTMemory.String(): true, DTSource.String(): true}
 	out := make([]string, 0, len(in))
 	for _, d := range in {
 		if allowed[d] {

@@ -27,6 +27,18 @@ const RoleContentEditor = "Content Editor"
 // init registers the CMS content model with the framework. Installing the "cms"
 // module (POST /v1/framework/modules/cms/install) ensures these DocTypes exist in
 // the caller's org.
+
+// The DocType set, by address. One value per content type carries both halves of
+// its identity, so a Link target and an in-process call name the same thing.
+var (
+	dtAuthor     = framework.ID{Module: Module, Name: "Author"}
+	dtMedia      = framework.ID{Module: Module, Name: "Media"}
+	dtPage       = framework.ID{Module: Module, Name: "Page"}
+	dtPost       = framework.ID{Module: Module, Name: "Post"}
+	dtArticle    = framework.ID{Module: Module, Name: "Article"}
+	dtNavigation = framework.ID{Module: Module, Name: "Navigation"}
+)
+
 func init() { framework.RegisterModule(Module, DocTypes()) }
 
 // DocTypes returns the canonical CMS content model — the default collections an
@@ -44,7 +56,7 @@ func DocTypes() []framework.DocType {
 // name is the title.
 func author() framework.DocType {
 	return framework.DocType{
-		Name: "Author", Module: Module, TitleField: "name",
+		Name: dtAuthor.Name, Module: dtAuthor.Module, TitleField: "name",
 		Fields: []framework.DocField{
 			{Fieldname: "name", Fieldtype: framework.FieldData, Label: "Name", Reqd: true, InListView: true},
 			{Fieldname: "email", Fieldtype: framework.FieldData, Label: "Email", InListView: true},
@@ -59,7 +71,7 @@ func author() framework.DocType {
 // holds the object URL under the org's S3/SeaweedFS prefix). Hash-named.
 func media() framework.DocType {
 	return framework.DocType{
-		Name: "Media", Module: Module, TitleField: "title",
+		Name: dtMedia.Name, Module: dtMedia.Module, TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "file", Fieldtype: framework.FieldAttach, Label: "File", Reqd: true, InListView: true},
@@ -78,7 +90,7 @@ func media() framework.DocType {
 // IS the slug, so a page's stable URL key is unique per org.
 func page() framework.DocType {
 	return framework.DocType{
-		Name: "Page", Module: Module, Autoname: "field:slug", TitleField: "title",
+		Name: dtPage.Name, Module: dtPage.Module, Autoname: "field:slug", TitleField: "title",
 		Fields: append(baseContentFields(),
 			seoTitle(), seoDescription()),
 		Perms: contentPerms(),
@@ -89,7 +101,7 @@ func page() framework.DocType {
 // publish timestamp.
 func post() framework.DocType {
 	return framework.DocType{
-		Name: "Post", Module: Module, Autoname: "field:slug", TitleField: "title",
+		Name: dtPost.Name, Module: dtPost.Module, Autoname: "field:slug", TitleField: "title",
 		Fields: append(baseContentFields(),
 			category(),
 			framework.DocField{Fieldname: "published_at", Fieldtype: framework.FieldDatetime, Label: "Published At"}),
@@ -100,7 +112,7 @@ func post() framework.DocType {
 // article is a knowledge-base / docs article: the base content plus a category.
 func article() framework.DocType {
 	return framework.DocType{
-		Name: "Article", Module: Module, Autoname: "field:slug", TitleField: "title",
+		Name: dtArticle.Name, Module: dtArticle.Module, Autoname: "field:slug", TitleField: "title",
 		Fields: append(baseContentFields(), category()),
 		Perms:  contentPerms(),
 	}
@@ -110,7 +122,7 @@ func article() framework.DocType {
 // list of links held as JSON ([{label,url,children}]).
 func navigation() framework.DocType {
 	return framework.DocType{
-		Name: "Navigation", Module: Module, Autoname: "field:slug", TitleField: "title",
+		Name: dtNavigation.Name, Module: dtNavigation.Module, Autoname: "field:slug", TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "slug", Fieldtype: framework.FieldData, Label: "Slug", Reqd: true, InListView: true},
@@ -133,7 +145,7 @@ func baseContentFields() []framework.DocField {
 		{Fieldname: "body", Fieldtype: framework.FieldRichText, Label: "Body"},
 		{Fieldname: "excerpt", Fieldtype: framework.FieldSmall, Label: "Excerpt"},
 		{Fieldname: "status", Fieldtype: framework.FieldSelect, Label: "Status", Options: "Draft\nPublished", Default: "Draft", InListView: true},
-		{Fieldname: "author", Fieldtype: framework.FieldLink, Label: "Author", Options: "Author"},
+		{Fieldname: "author", Fieldtype: framework.FieldLink, Label: "Author", Options: dtAuthor.String()},
 		{Fieldname: "featured_image", Fieldtype: framework.FieldAttach, Label: "Featured Image"},
 		{Fieldname: "tags", Fieldtype: framework.FieldData, Label: "Tags"},
 		// Optional project scope: the console's org→project switcher filters content

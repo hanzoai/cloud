@@ -104,7 +104,7 @@ var (
 "status":{"type":"string","enum":` + statusEnum + `,"description":"Defaults to backlog."},
 "priority":{"type":"string","enum":` + priorityEnum + `},
 "assignee":{"type":"string","description":"Who holds it."},
-"room":{"type":"string","description":"The channel this work belongs to, as \"<workspace>_<room>\". Binds the item to that channel's todo list."},
+"room":{"type":"string","description":"The channel this work belongs to, as \"<space>_<room>\". Binds the item to that channel's todo list."},
 "labels":{"type":"string","description":"Comma-separated labels."}},
 "required":["title"],"additionalProperties":false}`)
 

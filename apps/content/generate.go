@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -45,7 +44,7 @@ import (
 // marketing type; the rest is generation context. It is the wire body of
 // POST /v1/content/generate and the input of the content_generate automation action.
 type GenerateInput struct {
-	DocType  string `json:"doctype" url:"-"`                // Campaign | SocialPost | Asset
+	DocType  string `json:"doctype" url:"-"`                // marketing.Campaign | marketing.SocialPost | marketing.Asset
 	Title    string `json:"title,omitempty" url:"-"`        // optional explicit title
 	Brief    string `json:"brief,omitempty" url:"-"`        // the brief/goal driving copy generation
 	Product  string `json:"product,omitempty" url:"-"`      // commerce product handle (copy context)
@@ -125,7 +124,7 @@ type aiStudioGenerator struct {
 // Draft dispatches on the target DocType: Asset → studio render, everything else → zen5
 // copy. The mode split is the ONE place the two generation planes diverge.
 func (g *aiStudioGenerator) Draft(ctx context.Context, org string, in GenerateInput) (map[string]any, error) {
-	if in.DocType == DocTypeAsset {
+	if in.DocType == DocTypeAsset.String() {
 		return g.draftAsset(ctx, org, in) // studio_render.go
 	}
 	return g.draftCopy(ctx, org, in)
@@ -139,7 +138,8 @@ func (g *aiStudioGenerator) draftCopy(ctx context.Context, org string, in Genera
 	if g.ai == nil {
 		return nil, fmt.Errorf("content: AI plane not configured: %w", errNotConfigured)
 	}
-	spec, ok := copySpecs[in.DocType]
+	id, _ := publishable(in.DocType)
+	spec, ok := copySpecs[id]
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", errUnknownDocType, in.DocType)
 	}
@@ -173,10 +173,11 @@ func Generate(ctx context.Context, org string, in GenerateInput) (GenerateResult
 	if s == nil {
 		return GenerateResult{}, errNotMounted
 	}
-	if !isPublishableDocType(in.DocType) {
+	id, ok := publishable(in.DocType)
+	if !ok {
 		return GenerateResult{}, fmt.Errorf("%w: %q", errUnknownDocType, in.DocType)
 	}
-	if !framework.Installed(ctx, org, in.DocType) {
+	if !framework.Installed(ctx, org, id) {
 		return GenerateResult{}, errModuleNotInstalled
 	}
 
@@ -191,16 +192,23 @@ func Generate(ctx context.Context, org string, in GenerateInput) (GenerateResult
 	// what a Generator might set. This is enforced again by the before_save hook.
 	data[StatusField] = StatusDraft
 
-	saved, err := framework.Ingest(ctx, org, in.DocType, data, "")
+	saved, err := framework.Ingest(ctx, org, id, data, "")
 	if err != nil {
 		return GenerateResult{}, err
 	}
-	return GenerateResult{DocType: saved.DocType, Name: saved.Name, Status: StatusDraft}, nil
+	return GenerateResult{DocType: saved.DocType.String(), Name: saved.Name, Status: StatusDraft}, nil
 }
 
-// isPublishableDocType reports whether name is one of the marketing lifecycle DocTypes.
-func isPublishableDocType(name string) bool {
-	return slices.Contains(publishableDocTypes, name)
+// publishable resolves a wire address to the marketing DocType it names. It is
+// the ONE place a client-supplied doctype becomes an identity, so nothing further
+// in this lane handles a doctype it has not already recognised.
+func publishable(addr string) (framework.ID, bool) {
+	for _, id := range publishableDocTypes {
+		if id.String() == addr {
+			return id, true
+		}
+	}
+	return framework.ID{}, false
 }
 
 // ---- copy generation: prompt engineering + per-DocType shaping ----
@@ -216,7 +224,7 @@ type copySpec struct {
 
 // copySpecs is the copy registry, keyed by DocType. Asset is deliberately absent — it is
 // a studio render, not a language-model copy draft (draftAsset handles it).
-var copySpecs = map[string]copySpec{
+var copySpecs = map[framework.ID]copySpec{
 	DocTypeCampaign: {
 		kind: "marketing campaign concept",
 		guidance: `Return ONLY a JSON object, no markdown fences, with EXACTLY these keys:
@@ -276,7 +284,7 @@ func copyUserPrompt(in GenerateInput, spec copySpec) string {
 	if d := strings.TrimSpace(in.Design); d != "" {
 		fmt.Fprintf(&b, "Design: %s\n", d)
 	}
-	if in.DocType == DocTypeSocialPost {
+	if in.DocType == DocTypeSocialPost.String() {
 		if ch := strings.TrimSpace(in.Channels); ch != "" {
 			fmt.Fprintf(&b, "Channels: %s\n", ch)
 		}
@@ -334,7 +342,7 @@ func addContext(data map[string]any, in GenerateInput) {
 	if d := strings.TrimSpace(in.Design); d != "" {
 		data["design"] = d
 	}
-	if in.DocType == DocTypeCampaign {
+	if in.DocType == DocTypeCampaign.String() {
 		if pr := strings.TrimSpace(in.Product); pr != "" {
 			data["product"] = pr
 		}

@@ -47,9 +47,9 @@ func (b *botsBridge) register(app cloud.Router) {
 
 // botRoster is the org's bot members. It is NOT visor's botList (the compute
 // fleet's bot MACHINES): one name may mean one thing across the fleet document,
-// and these are two different things — a workspace roster entry and a box.
+// and these are two different things — a space roster entry and a box.
 type botRoster struct {
-	// Bots is every agent of the caller's org, projected as a workspace member.
+	// Bots is every agent of the caller's org, projected as a space member.
 	Bots []botMember `json:"bots"`
 }
 
@@ -67,7 +67,7 @@ type botMember struct {
 	Name      string `json:"name"`      // display name
 	UserID    string `json:"userId"`    // derived member account uuid (personUuid)
 	PersonRef string `json:"personRef"` // the projected Person _id
-	// Active is whether the agent projects as a LIVE workspace member, derived
+	// Active is whether the agent projects as a LIVE space member, derived
 	// from its registry status: empty, "active" and "ready" are live, anything
 	// else (archived/retired) is not. An inactive bot drops out of the Team list
 	// while its past authorship survives.
@@ -75,7 +75,7 @@ type botMember struct {
 }
 
 // ListBots returns the caller org's bot members — the org's agents projected as
-// the workspace Employees they become, each with the member account uuid and
+// the space Employees they become, each with the member account uuid and
 // Person reference the roster addresses it by. An agents subsystem that is not
 // mounted answers an empty list, never an error.
 func (b *botsBridge) listBots(ctx context.Context, _ *none) (*botRoster, error) {
@@ -112,9 +112,9 @@ func (b *botsBridge) listBots(ctx context.Context, _ *none) (*botRoster, error) 
 	return &botRoster{Bots: out}, nil
 }
 
-// SyncBots re-projects the caller org's agents as workspace members into EVERY
-// workspace of the org, and removes the ones whose agent is gone. It is
-// idempotent, and admin only: mutating a workspace's roster requires the
+// SyncBots re-projects the caller org's agents as space members into EVERY
+// space of the org, and removes the ones whose agent is gone. It is
+// idempotent, and admin only: mutating a space's roster requires the
 // gateway-minted admin flag, which a client can never forge. It answers how many
 // roster entries the reconcile touched.
 func (b *botsBridge) syncBots(ctx context.Context, _ *none) (*botSync, error) {
@@ -126,7 +126,7 @@ func (b *botsBridge) syncBots(ctx context.Context, _ *none) (*botSync, error) {
 		return nil, err
 	}
 	if !admin(ctx) {
-		return nil, zip.ErrForbidden("workspace admin required")
+		return nil, zip.ErrForbidden("space admin required")
 	}
 	projected, err := b.syncOrg(ctx, org)
 	if err != nil {
@@ -136,21 +136,21 @@ func (b *botsBridge) syncBots(ctx context.Context, _ *none) (*botSync, error) {
 }
 
 // syncOrg re-runs the FULL roster reconcile (humans + bots add AND stale-bot
-// removal) for each of the org's workspaces, via the SAME session.reconcile path a
+// removal) for each of the org's spaces, via the SAME session.reconcile path a
 // live connect uses — one reconcile, one way. It broadcasts the applied txes so
 // connected clients refresh live. Returns the number of roster entries touched.
 func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 	if b.accounts == nil || b.trans == nil {
 		return 0, nil
 	}
-	wss, err := b.accounts.WorkspacesForOrg(ctx, org)
+	wss, err := b.accounts.SpacesForOrg(ctx, org)
 	if err != nil {
 		return 0, err
 	}
 	touched := 0
 	for _, ws := range wss {
-		sess := &session{server: b.trans, store: b.trans.store, hier: b.trans.hier, org: org, workspace: ws.UUID, account: acctSystem}
-		sess.seedWorkspace()
+		sess := &session{server: b.trans, store: b.trans.store, hier: b.trans.hier, org: org, space: ws.UUID, account: acctSystem}
+		sess.seedSpace()
 		touched += sess.reconcile(true) // broadcast: an admin re-sync updates live clients
 	}
 	return touched, nil
@@ -168,7 +168,7 @@ func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 // separate plugin binaries, so it answered ErrNoPeer in every real deployment.
 // The cost was not an outage but something quieter — listBots renders an error as
 // an EMPTY ROSTER, so `GET /v1/team/bots` answered `[]` for an org holding
-// agents, no bot was ever projected as a workspace member, and the mention
+// agents, no bot was ever projected as a space member, and the mention
 // responder found nobody to address and stayed silent while the boot log said it
 // was ENABLED. One global, three symptoms.
 //

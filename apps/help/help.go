@@ -50,16 +50,16 @@ const RoleHelpAgent = "Help Agent"
 
 // DocType names (slug, hd- prefixed). Exported names are referenced by subsystem.go
 // (the public plane) so the fixtures and the surface share ONE identifier set.
-const (
-	DTTicket        = "hd-ticket"
-	DTCommunication = "hd-communication"
-	DTArticle       = "hd-article"
-	DTCategory      = "hd-category"
+var (
+	DTTicket        = framework.ID{Module: Module, Name: "ticket"}
+	DTCommunication = framework.ID{Module: Module, Name: "communication"}
+	DTArticle       = framework.ID{Module: Module, Name: "article"}
+	DTCategory      = framework.ID{Module: Module, Name: "category"}
 
-	dtAgent          = "hd-agent"
-	dtTeam           = "hd-team"
-	dtCannedResponse = "hd-response"
-	dtSLA            = "hd-sla"
+	dtAgent          = framework.ID{Module: Module, Name: "agent"}
+	dtTeam           = framework.ID{Module: Module, Name: "team"}
+	dtCannedResponse = framework.ID{Module: Module, Name: "response"}
+	dtSLA            = framework.ID{Module: Module, Name: "sla"}
 )
 
 // init registers the Help model with the framework. Installing the "help" module
@@ -92,7 +92,7 @@ func DocTypes() []framework.DocType {
 // (the sequential name stays internal to the agent plane).
 func ticket() framework.DocType {
 	return framework.DocType{
-		Name: DTTicket, Module: Module, Autoname: "hd-tkt-.#####", TitleField: "subject",
+		Name: DTTicket.Name, Module: DTTicket.Module, Autoname: "hd-tkt-.#####", TitleField: "subject",
 		Fields: []framework.DocField{
 			{Fieldname: "subject", Fieldtype: framework.FieldData, Label: "Subject", Reqd: true, InListView: true},
 			{Fieldname: "description", Fieldtype: framework.FieldText, Label: "Description"},
@@ -101,9 +101,9 @@ func ticket() framework.DocType {
 			{Fieldname: "customer", Fieldtype: framework.FieldData, Label: "Customer", InListView: true},
 			{Fieldname: "source", Fieldtype: framework.FieldData, Label: "Source", Default: "portal", InListView: true},
 			{Fieldname: "public_ref", Fieldtype: framework.FieldData, Label: "Public Ref", Unique: true, ReadOnly: true},
-			{Fieldname: "assigned_agent", Fieldtype: framework.FieldLink, Label: "Assigned Agent", Options: dtAgent, InListView: true},
-			{Fieldname: "team", Fieldtype: framework.FieldLink, Label: "Team", Options: dtTeam},
-			{Fieldname: "sla", Fieldtype: framework.FieldLink, Label: "SLA", Options: dtSLA},
+			{Fieldname: "assigned_agent", Fieldtype: framework.FieldLink, Label: "Assigned Agent", Options: dtAgent.String(), InListView: true},
+			{Fieldname: "team", Fieldtype: framework.FieldLink, Label: "Team", Options: dtTeam.String()},
+			{Fieldname: "sla", Fieldtype: framework.FieldLink, Label: "SLA", Options: dtSLA.String()},
 			{Fieldname: "resolution", Fieldtype: framework.FieldText, Label: "Resolution"},
 		},
 		Perms: helpPerms(),
@@ -118,9 +118,9 @@ func ticket() framework.DocType {
 // the customer's opening message is written by the public intake (subsystem.go).
 func communication() framework.DocType {
 	return framework.DocType{
-		Name: DTCommunication, Module: Module, TitleField: "sender",
+		Name: DTCommunication.Name, Module: DTCommunication.Module, TitleField: "sender",
 		Fields: []framework.DocField{
-			{Fieldname: "ticket", Fieldtype: framework.FieldLink, Label: "Ticket", Options: DTTicket, Reqd: true, InListView: true},
+			{Fieldname: "ticket", Fieldtype: framework.FieldLink, Label: "Ticket", Options: DTTicket.String(), Reqd: true, InListView: true},
 			{Fieldname: "sender", Fieldtype: framework.FieldData, Label: "Sender", Reqd: true, InListView: true},
 			{Fieldname: "sender_type", Fieldtype: framework.FieldSelect, Label: "Sender Type", Options: "customer\nagent", Default: "customer", InListView: true},
 			{Fieldname: "body", Fieldtype: framework.FieldText, Label: "Message", Reqd: true},
@@ -134,7 +134,7 @@ func communication() framework.DocType {
 // (the console slugifies on write) so a category has a stable, unique key per org.
 func category() framework.DocType {
 	return framework.DocType{
-		Name: DTCategory, Module: Module, Autoname: "field:category_name", TitleField: "category_name",
+		Name: DTCategory.Name, Module: DTCategory.Module, Autoname: "field:category_name", TitleField: "category_name",
 		Fields: []framework.DocField{
 			{Fieldname: "category_name", Fieldtype: framework.FieldData, Label: "Category", Reqd: true, InListView: true},
 			{Fieldname: "description", Fieldtype: framework.FieldSmall, Label: "Description"},
@@ -150,11 +150,11 @@ func category() framework.DocType {
 // article never leaks. Agents author every article via the generic surface.
 func article() framework.DocType {
 	return framework.DocType{
-		Name: DTArticle, Module: Module, Autoname: "field:slug", TitleField: "title",
+		Name: DTArticle.Name, Module: DTArticle.Module, Autoname: "field:slug", TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "slug", Fieldtype: framework.FieldData, Label: "Slug", Reqd: true, InListView: true},
-			{Fieldname: "category", Fieldtype: framework.FieldLink, Label: "Category", Options: DTCategory, InListView: true},
+			{Fieldname: "category", Fieldtype: framework.FieldLink, Label: "Category", Options: DTCategory.String(), InListView: true},
 			{Fieldname: "body", Fieldtype: framework.FieldRichText, Label: "Body"},
 			{Fieldname: "excerpt", Fieldtype: framework.FieldSmall, Label: "Excerpt"},
 			{Fieldname: "status", Fieldtype: framework.FieldSelect, Label: "Status", Options: "Draft\nPublished", Default: "Draft", InListView: true},
@@ -167,11 +167,11 @@ func article() framework.DocType {
 // agent is a support agent. Named by agent_name (the console slugifies on write).
 func agent() framework.DocType {
 	return framework.DocType{
-		Name: dtAgent, Module: Module, Autoname: "field:agent_name", TitleField: "agent_name",
+		Name: dtAgent.Name, Module: dtAgent.Module, Autoname: "field:agent_name", TitleField: "agent_name",
 		Fields: []framework.DocField{
 			{Fieldname: "agent_name", Fieldtype: framework.FieldData, Label: "Agent Name", Reqd: true, InListView: true},
 			{Fieldname: "email", Fieldtype: framework.FieldData, Label: "Email", Reqd: true, InListView: true},
-			{Fieldname: "team", Fieldtype: framework.FieldLink, Label: "Team", Options: dtTeam, InListView: true},
+			{Fieldname: "team", Fieldtype: framework.FieldLink, Label: "Team", Options: dtTeam.String(), InListView: true},
 			{Fieldname: "is_active", Fieldtype: framework.FieldCheck, Label: "Active", Default: "1", InListView: true},
 		},
 		Perms: helpPerms(),
@@ -181,7 +181,7 @@ func agent() framework.DocType {
 // team is a support team (the assignment/queue grouping).
 func team() framework.DocType {
 	return framework.DocType{
-		Name: dtTeam, Module: Module, Autoname: "field:team_name", TitleField: "team_name",
+		Name: dtTeam.Name, Module: dtTeam.Module, Autoname: "field:team_name", TitleField: "team_name",
 		Fields: []framework.DocField{
 			{Fieldname: "team_name", Fieldtype: framework.FieldData, Label: "Team Name", Reqd: true, InListView: true},
 			{Fieldname: "description", Fieldtype: framework.FieldSmall, Label: "Description"},
@@ -193,7 +193,7 @@ func team() framework.DocType {
 // cannedResponse is a reusable reply template.
 func cannedResponse() framework.DocType {
 	return framework.DocType{
-		Name: dtCannedResponse, Module: Module, Autoname: "field:title", TitleField: "title",
+		Name: dtCannedResponse.Name, Module: dtCannedResponse.Module, Autoname: "field:title", TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "message", Fieldtype: framework.FieldText, Label: "Message", Reqd: true},
@@ -205,7 +205,7 @@ func cannedResponse() framework.DocType {
 // sla is a service-level target keyed by priority (response/resolution hours).
 func sla() framework.DocType {
 	return framework.DocType{
-		Name: dtSLA, Module: Module, Autoname: "field:sla_name", TitleField: "sla_name",
+		Name: dtSLA.Name, Module: dtSLA.Module, Autoname: "field:sla_name", TitleField: "sla_name",
 		Fields: []framework.DocField{
 			{Fieldname: "sla_name", Fieldtype: framework.FieldData, Label: "SLA Name", Reqd: true, InListView: true},
 			{Fieldname: "priority", Fieldtype: framework.FieldSelect, Label: "Priority", Options: "Low\nMedium\nHigh\nUrgent", InListView: true},

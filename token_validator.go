@@ -59,7 +59,7 @@ type VerifiedIdentity struct {
 	// may act in (the HOME org first, then explicit team memberships), each with
 	// its coarse role (owner | admin | member). It is the Slack-model tenancy set
 	// a caller enumerates cross-org surfaces against (hanzo.team unions a user's
-	// workspaces across it) with NO IAM round-trip. Empty on a token minted before
+	// spaces across it) with NO IAM round-trip. Empty on a token minted before
 	// the claim shipped (iam < 1.31.34); a reader then falls back to the single
 	// Owner org. Verified off the SAME signed token as Owner — never trusted raw.
 	Orgs []model.OrgRef

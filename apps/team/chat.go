@@ -1,7 +1,7 @@
 package team
 
 // chat.go is the Chunter agent-responder: it makes the org's agents (already
-// projected as workspace members by the roster reconcile) TALKABLE. When a human
+// projected as space members by the roster reconcile) TALKABLE. When a human
 // posts a Chunter ChatMessage addressed to a bot member — a direct message whose
 // participants include the bot, or a channel message that @-mentions it — the
 // transactor runs that agent through the canonical in-process run path
@@ -20,7 +20,7 @@ package team
 //   - Fresh-only — a message created before this process booted (a replay/backfill)
 //     is NEVER answered; only genuinely-live posts trigger a turn.
 //   - Single-flight per conversation+bot — at most one in-flight answer per
-//     (workspace, space, bot); duplicates are dropped, not queued.
+//     (space, space, bot); duplicates are dropped, not queued.
 //   - Hard-capped — a global semaphore bounds concurrent turns; over the cap, drop.
 //   - Circuit-broken — after repeated failures an agent is skipped for a cooldown
 //     (the backoff that turns a 403 storm into a quiet trickle). No retries, ever.
@@ -130,7 +130,7 @@ func parseChatMessage(raw json.RawMessage) (chatMsg, bool) {
 // immediately; the model call and the reply write happen in a recovered, capped
 // goroutine so the WS read loop is never blocked and a model/DB error can never
 // crash the session.
-func (srv *transServer) maybeAgentReply(org, workspace string, applied []json.RawMessage) {
+func (srv *transServer) maybeAgentReply(org, space string, applied []json.RawMessage) {
 	if srv.runAgent == nil || srv.bots == nil {
 		return // responder disabled (TEAM_AGENTS_ENABLED unset ⇒ no runner wired)
 	}
@@ -184,8 +184,8 @@ func (srv *transServer) maybeAgentReply(org, workspace string, applied []json.Ra
 		if _, isBot := byUID[m.authorUID]; isBot {
 			continue
 		}
-		for _, bot := range srv.replyTargets(org, workspace, m, byUID) {
-			go srv.replyAsBot(org, workspace, m, bot)
+		for _, bot := range srv.replyTargets(org, space, m, byUID) {
+			go srv.replyAsBot(org, space, m, bot)
 		}
 	}
 }
@@ -197,10 +197,10 @@ func (srv *transServer) maybeAgentReply(org, workspace string, applied []json.Ra
 //     does not answer every line in a shared channel).
 //
 // A bot is never double-targeted (DM + mention) — the seen set collapses them.
-func (srv *transServer) replyTargets(org, workspace string, m chatMsg, byUID map[string]Bot) []Bot {
+func (srv *transServer) replyTargets(org, space string, m chatMsg, byUID map[string]Bot) []Bot {
 	seen := map[string]bool{}
 	var out []Bot
-	if doc, _ := srv.store.get(org, workspace, m.space); doc != nil && str(doc["_class"]) == clDirectMessage {
+	if doc, _ := srv.store.get(org, space, m.space); doc != nil && str(doc["_class"]) == clDirectMessage {
 		for _, mem := range toStringSlice(doc["members"]) {
 			if b, ok := byUID[mem]; ok && !seen[mem] {
 				seen[mem] = true
@@ -220,10 +220,10 @@ func (srv *transServer) replyTargets(org, workspace string, m chatMsg, byUID map
 // replyAsBot runs one bounded agent turn and posts its answer as the bot, in the
 // SAME conversation (space + attach coordinates mirrored from the inbound message)
 // and through the SAME write path (applyTx + broadcast) the SPA uses. It is
-// single-flight per (workspace, space, bot), globally concurrency-capped, and
+// single-flight per (space, space, bot), globally concurrency-capped, and
 // circuit-broken per agent; recovered + timeout-bounded so a panicking model
 // adapter or a hung call can neither crash the transactor nor leak.
-func (srv *transServer) replyAsBot(org, workspace string, m chatMsg, bot Bot) {
+func (srv *transServer) replyAsBot(org, space string, m chatMsg, bot Bot) {
 	defer func() {
 		if r := recover(); r != nil && srv.log != nil {
 			srv.log.Error("team: agent reply panicked", "agent", bot.ID, "err", r)
@@ -232,7 +232,7 @@ func (srv *transServer) replyAsBot(org, workspace string, m chatMsg, bot Bot) {
 
 	// Single-flight: at most one in-flight answer per conversation+bot. A burst of
 	// messages to the same DM while a turn is running collapses to one.
-	flightKey := workspace + "|" + m.space + "|" + bot.ID
+	flightKey := space + "|" + m.space + "|" + bot.ID
 	if _, busy := srv.inflight.LoadOrStore(flightKey, struct{}{}); busy {
 		return
 	}
@@ -280,11 +280,11 @@ func (srv *transServer) replyAsBot(org, workspace string, m chatMsg, bot Bot) {
 	if err != nil {
 		return
 	}
-	// A detached system session bound to (org, workspace) — the same shape the
-	// /v1/team/bots/sync reconcile uses to write into a workspace off the WS loop.
-	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, workspace: workspace, account: botUID}
+	// A detached system session bound to (org, space) — the same shape the
+	// /v1/team/bots/sync reconcile uses to write into a space off the WS loop.
+	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, space: space, account: botUID}
 	if _, ap := sess.applyTx(raw); len(ap) > 0 {
-		srv.hub.broadcast(workspace, ap)
+		srv.hub.broadcast(space, ap)
 	}
 }
 
