@@ -342,6 +342,42 @@ func TestLinkedContractIsAbsent(t *testing.T) {
 	}
 }
 
+// The same for a workflow, which is the sharper shape: .hanzo/workflows/ is read
+// straight off the tree, so a repository holding ONE link and no file at all
+// would enqueue a build for whatever image the link's target spells. Nothing in
+// the tree carries that declaration, and nothing ever would.
+func TestLinkedWorkflowIsSkipped(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".hanzo", "workflows"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("images: [{name: pwn, repo: ghcr.io/attacker/x}]",
+		filepath.Join(dir, ".hanzo", "workflows", "build.yml")); err != nil {
+		t.Fatal(err)
+	}
+	// A real workflow beside it still merges, so this skips the link and not the
+	// directory.
+	writeFile(t, filepath.Join(dir, ".hanzo", "workflows"), "real.yml",
+		"images: [{name: api, repo: ghcr.io/hanzoai/api}]\n")
+	repo := committed(t, dir)
+
+	pl, from, err := readPipeline(context.Background(), repo, "")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if pl == nil {
+		t.Fatal("the real workflow was lost")
+	}
+	for _, img := range pl.Images {
+		if img.Name == "pwn" {
+			t.Errorf("a link's text became a build: %+v (from %q)", img, from)
+		}
+	}
+	if len(pl.Images) != 1 || pl.Images[0].Name != "api" {
+		t.Errorf("images %+v (from %q)", pl.Images, from)
+	}
+}
+
 // A link does not shadow the contract a repository actually wrote.
 func TestLinkBesideAContract(t *testing.T) {
 	dir := t.TempDir()
