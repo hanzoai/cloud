@@ -476,6 +476,11 @@
       "skill_count": 4
     },
     {
+      "name": "space",
+      "path": "_space/index.json",
+      "skill_count": 3
+    },
+    {
       "name": "sync",
       "path": "_sync/index.json",
       "skill_count": 1
@@ -581,7 +586,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 670,
+  "skill_count": 673,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -4803,6 +4808,27 @@
       "path": "social_summary/SKILL.md",
       "service": "social",
       "sha256": "978760e440e90f271b73669af904962cfdf716ddf1644d8bf20028ce261821c1"
+    },
+    {
+      "description": "Read space drives: Lists a space's drives., Lists one folder level of a drive., Mints a URL the caller downloads the file from DIRECTLY..",
+      "name": "space_drives",
+      "path": "space_drives/SKILL.md",
+      "service": "space",
+      "sha256": "1038a9f94302256fcc2ada1b89a60bacbe3053d75f5e603b2576b4da01aa741a"
+    },
+    {
+      "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
+      "name": "space_health",
+      "path": "space_health/SKILL.md",
+      "service": "space",
+      "sha256": "eb540633a25b9a54f4887f27d8d0ee0bccddfccb24ba5a2738b1752cd67f72e0"
+    },
+    {
+      "description": "Read space spaces: Lists the caller org's own spaces..",
+      "name": "space_spaces",
+      "path": "space_spaces/SKILL.md",
+      "service": "space",
+      "sha256": "b50c1a453149b9afcad4ce7bff6a2571cbf44d38739f8e2177c11fc450ebaf7a"
     },
     {
       "description": "Read sync sync: List returns every sync link the caller's org has, each with its two endpoints, its direction and trigger policy, and the time it last reconciled., Get returns one sync by id..",

@@ -1,0 +1,32 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "skill_count": 3,
+  "skills": [
+    {
+      "description": "Read space drives: Lists a space's drives., Lists one folder level of a drive., Mints a URL the caller downloads the file from DIRECTLY..",
+      "name": "space_drives",
+      "path": "space_drives/SKILL.md",
+      "service": "space",
+      "sha256": "aae4167c27ab43f6bd491526ca01a74cf1487820d70eb0ccee5838821468a634"
+    },
+    {
+      "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
+      "name": "space_health",
+      "path": "space_health/SKILL.md",
+      "service": "space",
+      "sha256": "d64830ffd108d1fd628a61f624f635d09b55ea0a411c73027bbcdae086aec793"
+    },
+    {
+      "description": "Read space spaces: Lists the caller org's own spaces..",
+      "name": "space_spaces",
+      "path": "space_spaces/SKILL.md",
+      "service": "space",
+      "sha256": "ab6da9d8baef8a8d7ba036d45f8426433d9e612606c8b502d76873b57aa7af52"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

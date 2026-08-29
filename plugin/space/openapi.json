@@ -1,0 +1,625 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package space is where work lives: drives, folders and the files in them.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "space"
+    }
+  ],
+  "paths": {
+    "/v1/space/health": {
+      "get": {
+        "operationId": "get_space_health",
+        "summary": "Health reports whether this deployment can serve spaces, drives and files.",
+        "description": "Health reports whether this deployment can serve spaces, drives and files.\n\nIt is a REAL probe rather than a constant: 200 when object-store credentials\nare present, so the store is reachable in principle, and 503 with the reason\nwhen they are not. It is deliberately NOT gated — liveness has to be probe-able\nwithout a token — so it is the one operation here that names no space and bills\nnothing.",
+        "tags": [
+          "space"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/spaceHealth"
+                }
+              }
+            },
+            "description": "ok"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/spaceHealth"
+                }
+              }
+            },
+            "description": "service unavailable"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/space/spaces": {
+      "get": {
+        "operationId": "get_space_spaces",
+        "summary": "Lists the caller org's own spaces.",
+        "description": "Lists the caller org's own spaces.\n\nOnly the caller's: every space is physically named under a per-org prefix and\nthe listing strips that prefix, so another org's spaces are not in the answer at\nall. Another org's space is not refused but INVISIBLE, so this cannot be used to\nlearn that a name is taken elsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
+        "tags": [
+          "space"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/spaceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_space_spaces",
+        "summary": "Makes a new space for the caller's org and answers 201 with it.",
+        "description": "Makes a new space for the caller's org and answers 201 with it.\n\nThe one bucket a space's files live in is derived from the caller's VALIDATED\norg, so an org can only ever create inside its own namespace and no request\nfield can redirect that. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nspace exists.",
+        "tags": [
+          "space"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/spaceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/spaceItem"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/space/{space}/drives": {
+      "get": {
+        "operationId": "get_space_by_space_drives",
+        "summary": "Lists a space's drives.",
+        "description": "Lists a space's drives.\n\nListing the drives IS listing the space's root folder, because a drive is the\nfirst segment of a key and nothing else — so the two can never disagree the way\na drives table and the keys under it would. A space the caller's org does not\nown is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
+        "tags": [
+          "space"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "description": "Space is the space's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/driveList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_space_by_space_drives",
+        "summary": "Makes a new drive in a space and answers 201 with it.",
+        "description": "Makes a new drive in a space and answers 201 with it.\n\nA drive is a PREFIX and not a bucket, so making one writes a zero-byte marker\nat \"\u003cname\u003e/\" — which is what makes an empty drive visible to a listing that has\nno other key to find. A name already taken in the space is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\ndrive exists.",
+        "tags": [
+          "space"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "description": "Space is the space to create the drive in, from the path. It carries NO\n`url:\"-\"`, unlike the field below it, and the difference is the whole reason\nboth tags are written out: zip's binder skips a field tagged \"-\" for EVERY\nURL source, path params included, so a path-borne value that carried it\nwould arrive empty and the create would refuse a perfectly good address.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/driveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/driveItem"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/space/{space}/drives/{drive}": {
+      "delete": {
+        "operationId": "delete_space_by_space_drives_by_drive",
+        "summary": "Removes an EMPTY drive and answers 204.",
+        "description": "Removes an EMPTY drive and answers 204.\n\nA drive holding files is 409 rather than a cascade: deleting an org's files\nbehind a single drive call is not a thing this surface will do silently. A\ndrive or space the caller's org does not own is the same 404 an unknown name\ngives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\ndrive is gone.",
+        "tags": [
+          "space"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "description": "Space is the space's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "drive",
+            "in": "path",
+            "required": true,
+            "description": "Drive is the drive's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/space/{space}/drives/{drive}/files": {
+      "get": {
+        "operationId": "get_space_by_space_drives_by_drive_files",
+        "summary": "Lists one folder level of a drive.",
+        "description": "Lists one folder level of a drive.\n\nFolder-style by default: sub-folders come back as folder entries, which is the\nfile-manager view. `?recursive=true` lists every file flat under the folder\ninstead. Names are RELATIVE to `?folder=`, and the listing is bounded so a huge\ndrive cannot exhaust memory — Total is what came back, not what the drive holds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
+        "tags": [
+          "space"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "description": "Space is the space to list in, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "drive",
+            "in": "path",
+            "required": true,
+            "description": "Drive is the drive to list, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/fileList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/space/{space}/drives/{drive}/files/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_space_by_space_drives_by_drive_files_by_wildcard1",
+        "summary": "Removes one file and answers 204.",
+        "description": "Removes one file and answers 204.\n\nIt removes ONE file and never a folder: a name that looks like a folder is\nrefused, because a folder is emergent from the names beneath it and deleting\none would have to mean deleting them. The name is path-cleaned first, so the\ndelete cannot reach outside the drive it names, and a space the caller's org\ndoes not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nfile is gone.",
+        "tags": [
+          "space"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "description": "Space is the space's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "drive",
+            "in": "path",
+            "required": true,
+            "description": "Drive is the drive's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "File is the file's name within the drive — everything after that drive's\n/files/. It MAY contain \"/\", because a folder is emergent from the name and\nthis segment is captured whole: \"2019/summer/a.jpg\" is one file in two\nfolders, not three names. It is path-cleaned before use, so \"../\" reaches\nnothing outside the drive, and a name that is empty, absolute or a bare\nfolder marker is refused 400.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        },
+        "x-tool": true
+      },
+      "get": {
+        "operationId": "get_space_by_space_drives_by_drive_files_by_wildcard1",
+        "summary": "Mints a URL the caller downloads the file from DIRECTLY.",
+        "description": "Mints a URL the caller downloads the file from DIRECTLY.\n\nThe bytes never pass through this binary and the store credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nspace, drive and file, and expires. It carries a content disposition of\nattachment naming the file, so a browser following it saves the file rather\nthan rendering it in place. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe download that follows comes straight from the store and is not seen here.\nThe balance is checked BEFORE anything is touched, so an unfunded org is\nrefused with no URL issued.",
+        "tags": [
+          "space"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "description": "Space is the space's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "drive",
+            "in": "path",
+            "required": true,
+            "description": "Drive is the drive's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "File is the file's name within the drive — everything after that drive's\n/files/. It MAY contain \"/\", because a folder is emergent from the name and\nthis segment is captured whole: \"2019/summer/a.jpg\" is one file in two\nfolders, not three names. It is path-cleaned before use, so \"../\" reaches\nnothing outside the drive, and a name that is empty, absolute or a bare\nfolder marker is refused 400.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/fileURL"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      },
+      "put": {
+        "operationId": "put_space_by_space_drives_by_drive_files_by_wildcard1",
+        "summary": "Mints a URL the caller uploads the file to DIRECTLY.",
+        "description": "Mints a URL the caller uploads the file to DIRECTLY.\n\nThe bytes never pass through this binary and the store credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nspace, drive and file, and expires. Writing into a folder that does not exist\nis fine and creates nothing — a folder is emergent from \"/\" in the name. A\ndeployment with no public endpoint configured cannot mint a URL and answers 503\nrather than one that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe upload that follows goes straight to the store and is not seen here. The\nbalance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
+        "tags": [
+          "space"
+        ],
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "required": true,
+            "description": "Space is the space's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "drive",
+            "in": "path",
+            "required": true,
+            "description": "Drive is the drive's name, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "description": "File is the file's name within the drive — everything after that drive's\n/files/. It MAY contain \"/\", because a folder is emergent from the name and\nthis segment is captured whole: \"2019/summer/a.jpg\" is one file in two\nfolders, not three names. It is path-cleaned before use, so \"../\" reaches\nnothing outside the drive, and a name that is empty, absolute or a bare\nfolder marker is refused 400.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/fileURL"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "driveIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the drive's name, matching the same shape a space name does. It\nbecomes the FIRST SEGMENT of every key the drive holds, which is why it may\ncarry no \"/\".",
+            "type": "string"
+          },
+          "space": {
+            "description": "Space is the space to create the drive in, from the path. It carries NO\n`url:\"-\"`, unlike the field below it, and the difference is the whole reason\nboth tags are written out: zip's binder skips a field tagged \"-\" for EVERY\nURL source, path params included, so a path-borne value that carried it\nwould arrive empty and the create would refuse a perfectly good address.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "driveItem": {
+        "properties": {
+          "name": {
+            "description": "Name is the drive's name — the first segment of every key it holds.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "driveList": {
+        "properties": {
+          "drives": {
+            "description": "Drives are the drives at the space's root.",
+            "items": {
+              "$ref": "#/components/schemas/driveItem"
+            },
+            "type": "array"
+          },
+          "space": {
+            "description": "Space is the space that was listed.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many drives came back. The listing is BOUNDED, so it is what\ncame back and not a count of what the space holds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "fileItem": {
+        "properties": {
+          "etag": {
+            "description": "ETag is the store's entity tag for the bytes currently at this name, with the\nquotes the store wraps it in stripped. It is an opaque VERSION and not a\nchecksum to verify against: a single-part upload's tag happens to be the MD5\nof the content and a multipart upload's is not, and nothing here says which\nthis was. Compare two reads of one file to learn whether it changed; absent\nfor a folder, and for a file the store reports none for.",
+            "type": "string"
+          },
+          "isFolder": {
+            "description": "Folder is true for a folder entry, which is emergent from \"/\" in the names\nbeneath it rather than a thing that was created.",
+            "type": "boolean"
+          },
+          "modifiedAt": {
+            "description": "ModifiedAt is when the file was last written, in unix seconds, and 0 for a\nfolder.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the entry's name RELATIVE to the folder that was listed.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the file's size in bytes, and 0 for a folder.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "fileList": {
+        "properties": {
+          "drive": {
+            "description": "Drive is the drive that was listed.",
+            "type": "string"
+          },
+          "files": {
+            "description": "Files are the entries at this level, names RELATIVE to Folder.",
+            "items": {
+              "$ref": "#/components/schemas/fileItem"
+            },
+            "type": "array"
+          },
+          "folder": {
+            "description": "Folder is the sub-folder the listing was scoped to, cleaned. Empty for the\ndrive's own root.",
+            "type": "string"
+          },
+          "space": {
+            "description": "Space is the space that was listed.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Total is how many entries came back. The listing is BOUNDED, so a drive with\nmore files than the cap answers the cap and this says so — it is not a count\nof what the drive holds.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "fileURL": {
+        "properties": {
+          "expiresIn": {
+            "description": "Expiry is how many seconds the URL stays valid. A presigned URL has no\nserver-side revocation, so this IS its revocation window.",
+            "type": "integer"
+          },
+          "file": {
+            "description": "File is the file name the URL was signed for, relative to the drive and\npath-cleaned — so it is what the store will actually read or write, which is\nnot always the string the caller sent. The signature covers this one space,\nthis one drive and this one file: a URL minted here reaches nothing else.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Method is the verb the URL is signed for — \"GET\" to read, \"PUT\" to write.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the presigned URL, signed against the PUBLIC host so a browser can\nfollow it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "spaceHealth": {
+        "properties": {
+          "error": {
+            "description": "Error is why the probe is degraded, in plain words. Absent when it is not.",
+            "type": "string"
+          },
+          "presign": {
+            "description": "Presign is whether upload and download URLs can be minted, which needs a\nPUBLIC endpoint on top of the credentials. False does not make the surface\ndegraded — listing spaces, drives and folders still works, only the bytes\ncannot be reached.",
+            "type": "boolean"
+          },
+          "ready": {
+            "description": "Ready is whether this deployment can serve drive and file operations at all:\ntrue only when object-store credentials are configured.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service names the subsystem this probe is for. Always \"space\".",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when the store is reachable in principle, \"degraded\" when it\nis not. It is the field to read; the HTTP status carries the same fact for a\ncaller that only looks at the code.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "spaceIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the space's name, matching ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$ — the\nshape a drive name takes too, so a caller learns one rule. It is validated AS\nGIVEN and never lower-cased for you: a client that creates \"Photos\" and then\nlists \"photos\" would be reading a space it did not make, so mixed case is a\nclean 400.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "spaceItem": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the space was made, in unix seconds.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the space's name, as the org created it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "spaceList": {
+        "properties": {
+          "spaces": {
+            "description": "Spaces are the caller org's spaces, oldest first as the store returns them.",
+            "items": {
+              "$ref": "#/components/schemas/spaceItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many spaces this org has. It equals len(spaces): the listing is\nnot paged, because one bucket per (org, space) keeps an org's count small by\nconstruction, which is the whole reason a drive is a prefix and not a bucket.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

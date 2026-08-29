@@ -6368,6 +6368,40 @@
    "doc": "Replaces the post's content, channel, status, scheduled time and media\nwith what the body carries, and answers with the stored row.\n\nA REPLACEMENT, not a merge: an omitted field is written as its default, so\nomitting media clears it and omitting the status resets the post to draft.\n`content` is required on every update. Unlike create, this never triggers a\npublish — moving a post's scheduled time into the past here leaves it for the\nscheduler; publish now is its own operation."
   }
  ],
+ "space": [
+  {
+   "id": "delete_space_by_space_drives_by_drive",
+   "doc": "Removes an EMPTY drive and answers 204.\n\nA drive holding files is 409 rather than a cascade: deleting an org's files\nbehind a single drive call is not a thing this surface will do silently. A\ndrive or space the caller's org does not own is the same 404 an unknown name\ngives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\ndrive is gone."
+  },
+  {
+   "id": "get_space_by_space_drives",
+   "doc": "Lists a space's drives.\n\nListing the drives IS listing the space's root folder, because a drive is the\nfirst segment of a key and nothing else — so the two can never disagree the way\na drives table and the keys under it would. A space the caller's org does not\nown is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
+   "read": true
+  },
+  {
+   "id": "get_space_by_space_drives_by_drive_files",
+   "doc": "Lists one folder level of a drive.\n\nFolder-style by default: sub-folders come back as folder entries, which is the\nfile-manager view. `?recursive=true` lists every file flat under the folder\ninstead. Names are RELATIVE to `?folder=`, and the listing is bounded so a huge\ndrive cannot exhaust memory — Total is what came back, not what the drive holds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
+   "read": true
+  },
+  {
+   "id": "get_space_health",
+   "doc": "Health reports whether this deployment can serve spaces, drives and files.\n\nIt is a REAL probe rather than a constant: 200 when object-store credentials\nare present, so the store is reachable in principle, and 503 with the reason\nwhen they are not. It is deliberately NOT gated — liveness has to be probe-able\nwithout a token — so it is the one operation here that names no space and bills\nnothing.",
+   "read": true
+  },
+  {
+   "id": "get_space_spaces",
+   "doc": "Lists the caller org's own spaces.\n\nOnly the caller's: every space is physically named under a per-org prefix and\nthe listing strips that prefix, so another org's spaces are not in the answer at\nall. Another org's space is not refused but INVISIBLE, so this cannot be used to\nlearn that a name is taken elsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
+   "read": true
+  },
+  {
+   "id": "post_space_by_space_drives",
+   "doc": "Makes a new drive in a space and answers 201 with it.\n\nA drive is a PREFIX and not a bucket, so making one writes a zero-byte marker\nat \"\u003cname\u003e/\" — which is what makes an empty drive visible to a listing that has\nno other key to find. A name already taken in the space is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\ndrive exists."
+  },
+  {
+   "id": "post_space_spaces",
+   "doc": "Makes a new space for the caller's org and answers 201 with it.\n\nThe one bucket a space's files live in is derived from the caller's VALIDATED\norg, so an org can only ever create inside its own namespace and no request\nfield can redirect that. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nspace exists."
+  }
+ ],
  "standing": [
   {
    "id": "post_standing_upkeep",
