@@ -37,7 +37,7 @@ const upgradeURL = "https://billing.hanzo.ai"
 
 // entitle returns nil to admit, or the 402 Status to refuse. See the file
 // header for the fail-open/fail-closed contract.
-func (g *api) entitle(ctx context.Context, org, role, workspaceID, account string) *Status {
+func (g *api) entitle(ctx context.Context, org, role, wsUUID, account string) *Status {
 	if g.commerce == nil {
 		return nil // commerce not wired — infra absence, never blocks login
 	}
@@ -62,7 +62,7 @@ func (g *api) entitle(ctx context.Context, org, role, workspaceID, account strin
 	if !capped {
 		return nil // no team.guests key — this plan's guests are uncapped
 	}
-	if rank := g.accounts.GuestRank(ctx, workspaceID, account); rank > limit {
+	if rank := g.accounts.GuestRank(ctx, org, wsUUID, account); rank > limit {
 		g.log.Warn("team: guest over plan cap, admitting (observe)", "org", org, "limit", limit, "rank", rank)
 		return nil
 	}

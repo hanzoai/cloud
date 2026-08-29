@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -41,6 +42,9 @@ func mountTeam(t *testing.T) *zip.App { return mountTeamVFS(t, newMemVFS()) }
 // clients.DisabledVFS() to prove the files plane fails closed).
 func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
 	t.Helper()
+	// Membership is IAM's, so a team that resolves one needs the peer that holds
+	// it — in production it is a process, here it is in memory.
+	planetest.ServeIdentity(t)
 	t.Setenv("SERVER_SECRET", testSecret)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
@@ -152,7 +156,7 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mint session token: %v", err)
 	}
-	auth := map[string]string{"Authorization": "Bearer " + sess}
+	auth := authAs(sess, org, acct)
 
 	// getUserWorkspaces returns the seeded workspace.
 	code, body := call(t, app, http.MethodPost, "/v1/team/account", auth, rpcRequest{Method: "getUserWorkspaces"})
@@ -231,7 +235,7 @@ func TestSelectWorkspaceSignsGuestRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
-	if err := mounted.State.accounts.AddMember(ctx, ws.ID, guest, token.RoleGuest, "Visitor"); err != nil {
+	if err := mounted.State.accounts.AddMember(ctx, org, ws.UUID, guest, token.RoleGuest); err != nil {
 		t.Fatalf("seed guest member: %v", err)
 	}
 	sess, err := token.Generate(guest, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), testSecret)
@@ -239,7 +243,7 @@ func TestSelectWorkspaceSignsGuestRole(t *testing.T) {
 		t.Fatalf("mint session token: %v", err)
 	}
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		authAs(sess, org, guest),
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": ws.Slug}})
 	if code != http.StatusOK {
 		t.Fatalf("guest selectWorkspace status %d: %s", code, body)
@@ -610,4 +614,12 @@ func TestTransactorStatistics(t *testing.T) {
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/transactor/statistics?token=not.a.token", nil, nil); code != http.StatusUnauthorized {
 		t.Fatalf("bad token statistics = %d, want 401", code)
 	}
+}
+
+// authAs is the header set the gateway puts on an admitted request: the session
+// bearer AND the tenant assertion. A plane call made while serving that request
+// inherits the assertion, so a harness that sent the bearer alone would reach the
+// peer with no tenant and read an empty answer as a real one.
+func authAs(sess, org, acct string) map[string]string {
+	return map[string]string{"Authorization": "Bearer " + sess, "X-Org-Id": org, "X-User-Id": acct}
 }

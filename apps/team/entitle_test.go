@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"sync"
 	"testing"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/orm/query"
 )
 
 type fakeCommerce struct {
@@ -51,6 +51,7 @@ func (f *fakeCommerce) checkCount() int {
 // entitle itself.
 func gateApp(t *testing.T, commerce types.CommerceClient, planEnt func(context.Context, string) (map[string]any, error)) (*zip.App, *accountStore) {
 	t.Helper()
+	planetest.ServeIdentity(t)
 	store, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openAccountStore: %v", err)
@@ -78,8 +79,11 @@ func selectWS(t *testing.T, app *zip.App, org, acct, slug string) (int, []byte) 
 	if err != nil {
 		t.Fatalf("mint session: %v", err)
 	}
+	// The tenant assertion the gateway makes on every admitted request. A plane
+	// call issued while serving one carries THAT assertion, so a harness that sent
+	// only the bearer would reach the peer with no tenant.
 	return call(t, app, http.MethodPost, "/v1/team/account",
-		map[string]string{"Authorization": "Bearer " + sess},
+		map[string]string{"Authorization": "Bearer " + sess, "X-Org-Id": org, "X-User-Id": acct},
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": slug}})
 }
 
@@ -139,10 +143,7 @@ func TestEntitleGuestCap(t *testing.T) {
 	ws, _ := store.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
 	guest := func(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", i) }
 	for i := 1; i <= 4; i++ {
-		if _, err := store.db.Insert("members", query.Params{
-			"workspace_id": ws.ID, "user_id": guest(i), "role": roleGuest,
-			"display_name": "g", "is_bot": 0, "active": 1, "joined_at": int64(i),
-		}).WithContext(ctx).Execute(); err != nil {
+		if err := store.AddMember(ctx, gateOrg, ws.UUID, guest(i), roleGuest); err != nil {
 			t.Fatalf("seed guest %d: %v", i, err)
 		}
 	}
@@ -166,10 +167,7 @@ func TestEntitleGuestCap(t *testing.T) {
 		return nil, fmt.Errorf("plans not mounted")
 	})
 	wsD, _ := storeDown.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
-	if _, err := storeDown.db.Insert("members", query.Params{
-		"workspace_id": wsD.ID, "user_id": guest(1), "role": roleGuest,
-		"display_name": "g", "is_bot": 0, "active": 1, "joined_at": 1,
-	}).WithContext(ctx).Execute(); err != nil {
+	if err := storeDown.AddMember(ctx, gateOrg, wsD.UUID, guest(1), roleGuest); err != nil {
 		t.Fatal(err)
 	}
 	if code, body := selectWS(t, appDown, gateOrg, guest(1), wsD.Slug); code != http.StatusOK {

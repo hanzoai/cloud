@@ -79,13 +79,13 @@ func workspacesOf(ctx context.Context, accounts *accountStore, in *plane.Workspa
 		// The role is READ per row rather than assumed from the join, because the
 		// join proves a row exists and the peer decides on what the row SAYS. A row
 		// that vanishes between the two reads is simply not offered.
-		role, ok := accounts.Membership(ctx, w.ID, account)
+		role, ok := accounts.Membership(ctx, org, w.UUID, account)
 		if !ok {
 			continue
 		}
 		out.Items = append(out.Items, plane.Space{UUID: w.UUID, Name: w.Name, Role: role})
 		if out.Name == "" {
-			out.Name = accounts.MemberName(ctx, w.ID, account)
+			out.Name = accounts.MemberName(ctx, org, w.UUID, account)
 		}
 	}
 	return out, nil
@@ -138,7 +138,7 @@ func memberOf(ctx context.Context, accounts *accountStore, in *plane.MemberIn) (
 		// so a probe learns nothing about what exists in another org.
 		return &plane.Member{}, nil
 	}
-	role, ok := accounts.Membership(ctx, w.ID, account)
+	role, ok := accounts.Membership(ctx, org, w.UUID, account)
 	if !ok {
 		return &plane.Member{}, nil
 	}

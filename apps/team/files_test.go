@@ -112,7 +112,11 @@ func bearerFor(t *testing.T, acct, org string) map[string]string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return map[string]string{"Authorization": "Bearer " + tok}
+	// The gateway asserts the tenant on every request it admits, and a plane call
+	// made while serving one carries THAT assertion — it wins over a caller the
+	// handler states. A harness that sent only the bearer would test a composition
+	// no deployment has, and the plane call would reach the peer with no tenant.
+	return map[string]string{"Authorization": "Bearer " + tok, "X-Org-Id": org, "X-User-Id": acct}
 }
 
 // pngBytes is a minimal blob whose magic bytes are the PNG signature — enough for

@@ -37,6 +37,7 @@ var Ops = []string{
 	plane.IAMMembers,
 	plane.IAMProjects,
 	plane.IAMRoles,
+	plane.IAMSeats,
 }
 
 // IAMApproval whether the caller is off the waitlist.
@@ -86,4 +87,11 @@ func IAMProjects(ctx context.Context) (*plane.Projects, error) {
 // Calls plane.IAMRoles on iam over the peer plane.
 func IAMRoles(ctx context.Context) (*plane.Roles, error) {
 	return plane.Ask[struct{}, plane.Roles](ctx, App, plane.IAMRoles, &struct{}{})
+}
+
+// IAMSeats the caller's org's billable people.
+//
+// Calls plane.IAMSeats on iam over the peer plane.
+func IAMSeats(ctx context.Context) (*plane.Seats, error) {
+	return plane.Ask[struct{}, plane.Seats](ctx, App, plane.IAMSeats, &struct{}{})
 }

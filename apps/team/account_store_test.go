@@ -3,11 +3,11 @@ package team
 import (
 	"context"
 	"errors"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/team/token"
-	"github.com/hanzoai/orm/query"
 
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
@@ -16,6 +16,7 @@ import (
 
 func newAccountStore(t *testing.T) *accountStore {
 	t.Helper()
+	planetest.ServeIdentity(t)
 	s, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("open account store: %v", err)
@@ -48,7 +49,7 @@ func TestEnsureWorkspaceIdempotent(t *testing.T) {
 		t.Fatalf("workspacesOf = %d (%v), want 1", len(wss), err)
 	}
 	// The owner member row exists with role owner.
-	role, ok := s.Membership(ctx, w1.ID, acct)
+	role, ok := s.Membership(ctx, org, w1.UUID, acct)
 	if !ok || role != "owner" {
 		t.Fatalf("owner membership = %q,%v, want owner", role, ok)
 	}
@@ -101,109 +102,36 @@ func TestEnsureWorkspaceConcurrentSingleRow(t *testing.T) {
 	}
 }
 
-// TestSeatsCountsActiveMember proves Seats counts the org's distinct active,
-// non-bot members — so a just-seeded owner yields at least one seat. (The wallet's
-// "0 members" symptom is a MISSING member row for the viewed org, never the count
-// logic; establishSession now seeds one per verified org.) A bot and a deactivated
-// row are excluded; a guest counts as both a seat and a guest; the count is
-// tenant-scoped.
-func TestSeatsCountsActiveMember(t *testing.T) {
+// Seats is IAM's count, forwarded. WHICH people count — machines out, a person in
+// three workspaces once — is IAM's rule and is tested in its store; what team owes
+// is that it asks and does not compute.
+func TestSeatsForwardsIAMsCount(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
 	const org = "acme"
-	owner := "aaaaaaaa-0000-4000-8000-000000000001"
+	const owner = "aaaaaaaa-0000-4000-8000-000000000001"
 
-	// A freshly ensured workspace seeds the owner member row → at least one seat.
-	w, err := s.EnsureWorkspace(ctx, org, owner, "Ada")
+	w, err := s.EnsureWorkspace(ctx, org, owner, "Owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seats, _, _ := s.Seats(ctx, org); seats < 1 {
-		t.Fatalf("seats after seeding one member = %d, want >= 1", seats)
+	if err := s.AddMember(ctx, org, w.UUID, "bbbbbbbb-0000-4000-8000-000000000002", roleGuest); err != nil {
+		t.Fatal(err)
 	}
-
-	seed := func(user, role string, bot, active int) {
-		t.Helper()
-		if _, err := s.db.Insert("members", query.Params{
-			"workspace_id": w.ID, "user_id": user, "role": role,
-			"display_name": "m", "is_bot": bot, "active": active, "joined_at": 1,
-		}).WithContext(ctx).Execute(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	seed("bbbbbbbb-0000-4000-8000-000000000002", "member", 1, 1)  // bot — never a seat
-	seed("cccccccc-0000-4000-8000-000000000003", "member", 0, 0)  // deactivated — excluded
-	seed("dddddddd-0000-4000-8000-000000000004", roleGuest, 0, 1) // guest — a seat AND a guest
-
 	seats, guests, err := s.Seats(ctx, org)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seats != 2 {
-		t.Fatalf("seats = %d, want 2 (owner + guest; bot and inactive excluded)", seats)
-	}
-	if guests != 1 {
-		t.Fatalf("guests = %d, want 1 (the guest)", guests)
-	}
-
-	// Tenant-scoped: another org sees none of acme's seats.
-	if seats, _, _ := s.Seats(ctx, "other"); seats != 0 {
-		t.Fatalf("other-org seats = %d, want 0", seats)
+	if seats != 2 || guests != 1 {
+		t.Fatalf("seats=%d guests=%d, want 2/1 (the owner and one guest)", seats, guests)
 	}
 }
 
-// TestEnsureWorkspaceHealsMigratedMember reproduces the live "Seats: 0 for
-// maxpower" shape: the caller (Dave) OWNS a workspace in the org, but a team-go
-// migration left his member row as is_bot=1 / active=0, so Seats excludes him even
-// though getUserWorkspaces still lists the workspace. Re-authenticating (which runs
-// EnsureWorkspace) must heal the caller's own row back to an active human seat.
-func TestEnsureWorkspaceHealsMigratedMember(t *testing.T) {
-	s := newAccountStore(t)
-	ctx := context.Background()
-	const org = "maxpower"
-	const acct = "113d4dd4-2486-40de-be2b-88d6e3e0b718" // Dave's real account uuid shape
-
-	w, err := s.EnsureWorkspace(ctx, org, acct, "Dave Lorenzini")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// A freshly created workspace already counts one seat.
-	if seats, _, _ := s.Seats(ctx, org); seats != 1 {
-		t.Fatalf("seats after create = %d, want 1", seats)
-	}
-
-	// Corrupt the owner's row exactly as the migration did: bot + inactive.
-	if _, err := s.db.Update("members",
-		query.Params{"is_bot": 1, "active": 0},
-		query.HashExp{"workspace_id": w.ID, "user_id": acct},
-	).WithContext(ctx).Execute(); err != nil {
-		t.Fatal(err)
-	}
-	if seats, _, _ := s.Seats(ctx, org); seats != 0 {
-		t.Fatalf("seats with migrated bot/inactive owner = %d, want 0 (the live defect)", seats)
-	}
-	// The workspace still lists for the user (getUserWorkspaces does not filter flags).
-	if ws, err := s.WorkspacesOf(ctx, org, acct); err != nil || len(ws) != 1 {
-		t.Fatalf("WorkspacesOf = %d (%v), want 1 (still listed)", len(ws), err)
-	}
-
-	// Re-login → EnsureWorkspace heals the caller's own row → the seat returns.
-	if _, err := s.EnsureWorkspace(ctx, org, acct, "Dave Lorenzini"); err != nil {
-		t.Fatal(err)
-	}
-	if seats, _, _ := s.Seats(ctx, org); seats != 1 {
-		t.Fatalf("seats after re-login heal = %d, want 1 (owner is an active human seat)", seats)
-	}
-}
-
-// TestSeatsSurfacesReadError proves a real seat-read failure is PROPAGATED, not
-// swallowed into a false "0 members": a broken store (closed handle) errors rather
-// than silently reporting 0 seats (which would masquerade as "no members" and
-// under-bill). An org with no members legitimately returns (0, 0, nil) — that path
-// is exercised by the tenant-scoped "other" org above; here the read itself fails.
+// A seat read that fails is PROPAGATED: a broken read reported as "0 members"
+// under-bills silently, where an error retries.
 func TestSeatsSurfacesReadError(t *testing.T) {
 	s := newAccountStore(t)
-	_ = s.db.Close() // simulate an unreadable store — the query must error, not report 0
+	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no identity peer answers here
 	seats, guests, err := s.Seats(context.Background(), "acme")
 	if err == nil {
 		t.Fatal("Seats must surface a read error, not a silent 0-seat count")
@@ -213,13 +141,11 @@ func TestSeatsSurfacesReadError(t *testing.T) {
 	}
 }
 
-// TestMembershipReadFromRow proves Membership is read from the members row (never
-// self-asserted): a non-member gets ("", false).
 func TestMembershipReadFromRow(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
 	w, _ := s.EnsureWorkspace(ctx, "acme", "aaaaaaaa-0000-4000-8000-000000000001", "Owner")
-	if _, ok := s.Membership(ctx, w.ID, "bbbbbbbb-0000-4000-8000-000000000002"); ok {
+	if _, ok := s.Membership(ctx, "acme", w.UUID, "bbbbbbbb-0000-4000-8000-000000000002"); ok {
 		t.Fatal("non-member must not resolve a role")
 	}
 }
@@ -276,7 +202,7 @@ func TestSelectWorkspaceCore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	role, ok := s.Membership(ctx, ws.ID, acct)
+	role, ok := s.Membership(ctx, org, ws.UUID, acct)
 	if !ok || role != "owner" {
 		t.Fatalf("membership gate: role=%q ok=%v", role, ok)
 	}
@@ -293,63 +219,23 @@ func TestSelectWorkspaceCore(t *testing.T) {
 	}
 }
 
-// TestAddMemberPreservesJoinOrderAndBotFlag pins the exact ON CONFLICT semantics that
-// keep AddMember on a verbatim statement. dbx's Upsert fans EVERY inserted column into
-// the DO UPDATE SET list, so expressing this through the builder would overwrite
-// joined_at and is_bot on a re-invite — and joined_at IS the order GuestRank ranks by
-// and the guest cap admits by, so an overwrite silently reshuffles who keeps access.
-// The four assertions below are the four columns the statement treats differently;
-// swapping in db.Upsert("members", …) turns the first two red.
-func TestAddMemberPreservesJoinOrderAndBotFlag(t *testing.T) {
+// AddMember never downgrades: re-adding somebody who is already an owner leaves
+// them one. The grant is IAM's, so this pins that team asks for the right thing.
+func TestAddMemberNeverDowngrades(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
-	const org, owner = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	const guest = "00000000-0000-4000-8000-000000000001"
+	const org = "acme"
+	const acct = "aaaaaaaa-0000-4000-8000-000000000001"
 
-	w, err := s.EnsureWorkspace(ctx, org, owner, "Ada")
+	w, err := s.EnsureWorkspace(ctx, org, acct, "Owner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A member who joined long ago, since deactivated, already carrying a name.
-	if _, err := s.db.Insert("members", query.Params{
-		"workspace_id": w.ID, "user_id": guest, "role": roleGuest,
-		"display_name": "Original", "is_bot": 1, "active": 0, "joined_at": 42,
-	}).WithContext(ctx).Execute(); err != nil {
+	if err := s.AddMember(ctx, org, w.UUID, acct, "member"); err != nil {
 		t.Fatal(err)
 	}
-	// Re-invite: a new role, a new display name.
-	if err := s.AddMember(ctx, w.ID, guest, "member", "Replacement"); err != nil {
-		t.Fatal(err)
-	}
-	ms, err := s.MembersForWorkspaceUUID(ctx, org, w.UUID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got member
-	for _, m := range ms {
-		if m.UserID == guest {
-			got = m
-		}
-	}
-	if got.UserID == "" {
-		t.Fatal("re-invited member missing from the roster")
-	}
-	// PRESERVED — the two an Upsert would clobber.
-	if got.JoinedAt != 42 {
-		t.Errorf("joined_at = %d, want 42 preserved (guest join-order must not reshuffle)", got.JoinedAt)
-	}
-	if !got.IsBot {
-		t.Errorf("is_bot = false, want the row's own flag untouched by a re-invite")
-	}
-	// UPDATED — what a re-invite is for.
-	if got.Role != "member" {
-		t.Errorf("role = %q, want member (the re-invite's role)", got.Role)
-	}
-	if !got.Active {
-		t.Errorf("active = false, want a re-invite to clear a prior deactivation")
-	}
-	// KEPT — the CASE WHEN only fills an EMPTY name.
-	if got.DisplayName != "Original" {
-		t.Errorf("display_name = %q, want Original kept (only an empty name is filled)", got.DisplayName)
+	role, ok := s.Membership(ctx, org, w.UUID, acct)
+	if !ok || role != "owner" {
+		t.Fatalf("role = %q,%v — re-adding an owner as a member stripped their authority", role, ok)
 	}
 }

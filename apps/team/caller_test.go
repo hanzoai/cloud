@@ -2,6 +2,7 @@ package team
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,6 +29,7 @@ const (
 // openTestStore opens an isolated account store for one test.
 func openTestStore(t *testing.T) *accountStore {
 	t.Helper()
+	planetest.ServeIdentity(t)
 	s, err := openAccountStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("openAccountStore: %v", err)

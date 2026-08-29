@@ -2,6 +2,7 @@ package team
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -63,6 +64,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	accounts, err := openAccountStore(root)
 	if err != nil {
 		return fmt.Errorf("team.Mount: open account store: %w", err)
+	}
+
+	// The rosters move to IAM. It runs here rather than in a job because it must
+	// finish before anything reads a membership, and it is a no-op on every boot
+	// after the first. A failure is LOGGED, not fatal: the table is still there,
+	// the next boot retries, and refusing to mount would take the whole subsystem
+	// down over rows that are not lost.
+	if err := backfill(context.Background(), accounts); err != nil {
+		luxlog.Default().New("subsystem", "team").
+			Warn("team: roster backfill deferred", "err", err)
 	}
 
 	cfg := loadConfig(deps)
