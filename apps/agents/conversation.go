@@ -18,20 +18,21 @@
 package agents
 
 import (
-	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptest"
-
-	fiber "github.com/zap-proto/fiber/v3"
+	"strings"
 
 	hz "github.com/hanzoai/agent"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/openapi"
+	"github.com/hanzoai/cloud/types"
 	openai "github.com/hanzoai/go-openai"
 	"github.com/zap-proto/zip"
 )
@@ -156,47 +157,183 @@ func mountConversation(app cloud.Router, deps cloud.Deps) error {
 			}
 			return hz.Principal{Org: p.Org, Project: p.Project, User: p.User, Cred: credential(c)}, true
 		},
-	}, aiCompleter{app: app}, orchestratorTools{})
+	}, aiCompleter{ai: deps.AI}, orchestratorTools{})
 	return err
 }
 
-// ── Completer: replay /v1/chat/completions in-process ─────────────────────────────
+// ── Completer: the AI subsystem, through the one client that reaches it ───────────
 
-type aiCompleter struct{ app cloud.Router }
+type aiCompleter struct{ ai types.AIClient }
 
-// Complete replays the request against the SAME app at /v1/chat/completions, so it
-// flows the whole middleware chain (per-org reserve/settle billing) and returns
-// tool_calls. Non-streaming. Mirrors the tool plane's in-process dispatch contract:
-// the caller's OWN credential headers are replayed; no minted authority header.
+// Complete asks the AI subsystem for one tool-calling completion.
+//
+// IT GOES THROUGH deps.AI, which is how every other app on this estate reaches a
+// completion — translate, projects, the lot. This used to replay the request
+// against its OWN router with fiber's Test hook, on the reasoning that
+// /v1/chat/completions is "the SAME app". It is the same app only where every
+// subsystem is linked into one binary. Where they are separate plugin processes
+// the ai routes are not in the agents process's router at all, so the replay
+// matched nothing and returned fiber's bare 404 — which the round then passed
+// through verbatim as a caller-facing "not found", after it had already
+// persisted the user's turn. Every conversation held a question and no answer.
+//
+// The billing scope travels as DATA rather than as a replayed Authorization
+// header: Org is whose data this is and BillingOrg is who pays, which is the
+// same split types.ChatRequest already documents and the same one a SuperAdmin
+// acting in another org depends on.
 func (a aiCompleter) Complete(ctx context.Context, cred map[string]string, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error) {
-	req.Stream = false
-	b, err := json.Marshal(req)
+	if a.ai == nil {
+		return openai.ChatCompletionResponse{}, fmt.Errorf("agent: no AI client")
+	}
+	org := strings.TrimSpace(cred[scopeOrg])
+	if org == "" {
+		// A caller that reached this point had an org — the round refuses one
+		// without. An empty value here means the scope did not travel, and a
+		// completion billed to nobody is worse than one that does not happen.
+		if acting, err := principal.Acting(ctx); err == nil {
+			org = strings.TrimSpace(acting)
+		}
+	}
+	if org == "" {
+		// The round refuses a caller without an org before it ever gets here, so
+		// an empty one means the identity did not survive into this context —
+		// which would bill the completion to nobody. Fail rather than guess.
+		return openai.ChatCompletionResponse{}, fmt.Errorf("agent: no org on the call")
+	}
+	in := &types.ChatRequest{
+		Model:      req.Model,
+		Org:        org,
+		BillingOrg: cmp.Or(strings.TrimSpace(cred[scopeOwner]), org),
+		Project:    cloud.Who(ctx).Project,
+		MaxTokens:  req.MaxTokens,
+		Messages:   inMessages(req.Messages),
+		Tools:      inTools(req.Tools),
+	}
+
+	out, err := a.ai.ChatCompletion(ctx, in)
 	if err != nil {
+		// A completion refused for the caller's OWN reason (402 insufficient_balance,
+		// 429, 403) is the caller's error and travels as itself; the client wraps
+		// the upstream error, so the status is still reachable through it.
+		if status, ok := upstreamStatus(err); ok && status >= 400 && status < 500 {
+			return openai.ChatCompletionResponse{}, &hz.UpstreamError{
+				Status: status,
+				Body:   []byte(fmt.Sprintf(`{"error":{"message":%q}}`, err.Error())),
+			}
+		}
 		return openai.ChatCompletionResponse{}, err
 	}
-	hreq := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(b)).WithContext(ctx)
-	hreq.Header.Set("Content-Type", "application/json")
-	for k, v := range cred {
-		hreq.Header.Set(k, v)
+
+	return openai.ChatCompletionResponse{
+		Model: req.Model,
+		Choices: []openai.ChatCompletionChoice{{
+			Message:      outMessage(out),
+			FinishReason: openai.FinishReason(out.FinishReason),
+		}},
+		Usage: openai.Usage{
+			PromptTokens:     out.PromptTokens,
+			CompletionTokens: out.CompletionTokens,
+			TotalTokens:      out.TotalTokens,
+		},
+	}, nil
+}
+
+// upstreamStatus recovers the status a refusal should reach the caller as,
+// through however many layers wrapped it.
+//
+// A REFUSAL IS THE CALLER'S, NOT A FAULT. An unfunded org asking for a
+// completion is answered 402 and told to add credit; wrapped as a 502 it reads
+// as "the gateway is broken", which sends somebody debugging the wrong thing.
+// The meter refuses before the request ever leaves, so its error carries no HTTP
+// status of its own and has to be named here.
+func upstreamStatus(err error) (int, bool) {
+	// A refusal that crossed a process boundary arrives as an *HTTPError carrying
+	// the number the callee chose — the crossing preserves the status precisely
+	// so it does not flatten. It does NOT preserve the sentinel's identity, so
+	// this is checked first: on this estate the meter runs in the subsystem being
+	// asked, and by the time its answer is back the error is a status and a
+	// sentence, not the value errors.Is could recognise.
+	var he *zip.HTTPError
+	if errors.As(err, &he) && he.Status >= 400 && he.Status < 500 {
+		return he.Status, true
 	}
-	resp, err := a.app.Fiber().Test(hreq, fiber.TestConfig{Timeout: 0})
-	if err != nil {
-		return openai.ChatCompletionResponse{}, err
+	// In-process, where the sentinel is still itself.
+	if errors.Is(err, metering.ErrInsufficientBalance) || errors.Is(err, metering.ErrSpendCapExceeded) {
+		return http.StatusPaymentRequired, true
 	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxCompletionResponse))
-	if resp.StatusCode/100 != 2 {
-		// Carry the completion's OWN status + body so the round can pass a
-		// caller-facing refusal (402 insufficient_balance, 429, 403) straight
-		// through instead of masking it as a gateway 502. hz.UpstreamError is the
-		// agent's typed client for exactly this.
-		return openai.ChatCompletionResponse{}, &hz.UpstreamError{Status: resp.StatusCode, Body: raw}
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) && apiErr.HTTPStatusCode > 0 {
+		return apiErr.HTTPStatusCode, true
 	}
-	var out openai.ChatCompletionResponse
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return openai.ChatCompletionResponse{}, fmt.Errorf("decode completion: %w", err)
+	var reqErr *openai.RequestError
+	if errors.As(err, &reqErr) && reqErr.HTTPStatusCode > 0 {
+		return reqErr.HTTPStatusCode, true
 	}
-	return out, nil
+	return 0, false
+}
+
+// inMessages carries the transcript across, tool calls included. The ID linking
+// a call to its result IS the loop — drop it and the model is guessing which
+// answer belongs to which question.
+func inMessages(in []openai.ChatCompletionMessage) []types.ChatMessage {
+	out := make([]types.ChatMessage, 0, len(in))
+	for _, m := range in {
+		msg := types.ChatMessage{
+			Role:       m.Role,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+			Name:       m.Name,
+		}
+		for _, tc := range m.ToolCalls {
+			if tc.Function.Name == "" {
+				continue
+			}
+			msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
+				ID:        tc.ID,
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			})
+		}
+		out = append(out, msg)
+	}
+	return out
+}
+
+// inTools carries what the model may call. A tool with no name is not a tool.
+func inTools(in []openai.Tool) []types.ToolDef {
+	out := make([]types.ToolDef, 0, len(in))
+	for _, t := range in {
+		if t.Function == nil || t.Function.Name == "" {
+			continue
+		}
+		schema, err := json.Marshal(t.Function.Parameters)
+		if err != nil {
+			continue
+		}
+		out = append(out, types.ToolDef{
+			Name:        t.Function.Name,
+			Description: t.Function.Description,
+			Schema:      schema,
+		})
+	}
+	return out
+}
+
+// outMessage is the assistant turn the round reads: its words, and the calls it
+// wants run before it can finish.
+func outMessage(out *types.ChatResponse) openai.ChatCompletionMessage {
+	msg := openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleAssistant,
+		Content: out.Content,
+	}
+	for _, tc := range out.ToolCalls {
+		msg.ToolCalls = append(msg.ToolCalls, openai.ToolCall{
+			ID:       tc.ID,
+			Type:     openai.ToolTypeFunction,
+			Function: openai.FunctionCall{Name: tc.Name, Arguments: tc.Arguments},
+		})
+	}
+	return msg
 }
 
 // ── ToolPlane: adapter over the unified registry ──────────────────────────────────
@@ -235,14 +372,35 @@ func (orchestratorTools) Dispatch(c *zip.Ctx, name string, args map[string]any) 
 
 // ── helpers ───────────────────────────────────────────────────────────────────────
 
+// scopeOrg and scopeOwner are where the caller's BILLING SCOPE rides to the
+// completer.
+//
+// The tool plane's Dispatch is handed the live *zip.Ctx and reads the principal
+// straight off it; Complete is handed a bare context and cannot, and the context
+// an HTTP request arrives on carries no org — so the completion had no idea who
+// to bill and refused itself. The map the interface DOES pass through is this
+// one, so the scope travels in it.
+//
+// The dot makes each key an illegal HTTP header name on purpose: this map is
+// otherwise a set of headers to replay, and a value that can never be mistaken
+// for one can never be sent as one.
+const (
+	scopeOrg   = "hanzo.org"
+	scopeOwner = "hanzo.owner"
+)
+
 // credential extracts the caller's replayable credential headers (the same set the
-// tool plane replays) so the in-process completion runs as the caller.
+// tool plane replays), and the billing scope the completer cannot otherwise see.
 func credential(c *zip.Ctx) map[string]string {
 	cred := map[string]string{}
 	for _, h := range []string{"Authorization", "X-Authorization", "Cookie", "Accept-Language", "X-Forwarded-For"} {
 		if v := c.Header(h); v != "" {
 			cred[h] = v
 		}
+	}
+	if p, ok := tools.PrincipalFrom(c); ok {
+		cred[scopeOrg] = p.Org
+		cred[scopeOwner] = cloud.Who(c.Context()).Owner
 	}
 	return cred
 }
