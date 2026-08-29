@@ -1418,3 +1418,89 @@ func sharedKey(t *testing.T) {
 	t.Helper()
 	t.Setenv(account.KeyEnv, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 }
+
+// Handing a card to somebody is the other half of claiming one. `claimIssue`
+// refuses to name anyone but the caller — "assign this to someone else is a
+// different act with different authority" — and until the PATCH carried an
+// assignee, that other act existed nowhere: a board could only be worked by
+// whoever clicked first, and an agent could never be given anything.
+func TestForgeWrites_ACardCanBeHandedToSomebody(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(7, "card", "open", "todo"))
+	app := mountForge(t, f)
+
+	code, raw := asUser(t, app, http.MethodPatch, "/v1/todo/projects/api/issues/7", "hanzo", "alice",
+		map[string]any{"assignee": "vi"})
+	if code != http.StatusOK {
+		t.Fatalf("assign = %d %s", code, raw)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var patch *write
+	for i := range f.writes {
+		if strings.HasSuffix(f.writes[i].path, "/issues/7") {
+			patch = &f.writes[i]
+		}
+	}
+	if patch == nil {
+		t.Fatalf("no issue patch reached the forge; writes = %+v", f.writes)
+	}
+	held, ok := patch.body["assignees"].([]any)
+	if !ok || len(held) != 1 || held[0] != "vi" {
+		t.Fatalf("the holder never reached the forge; body = %+v", patch.body)
+	}
+	if patch.actor != "alice" {
+		t.Fatalf("attributed to %q, want alice — who GAVE the work is part of the trail", patch.actor)
+	}
+}
+
+// "" is not "leave it alone" — it takes the work off whoever holds it. The two
+// have to be separable or a card can never be un-assigned.
+func TestForgeWrites_AnEmptyAssigneeClearsTheHolder(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(7, "card", "open", "todo"))
+	app := mountForge(t, f)
+
+	if code, raw := asUser(t, app, http.MethodPatch, "/v1/todo/projects/api/issues/7", "hanzo", "alice",
+		map[string]any{"assignee": ""}); code != http.StatusOK {
+		t.Fatalf("unassign = %d %s", code, raw)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.writes {
+		if strings.HasSuffix(f.writes[i].path, "/issues/7") {
+			held, ok := f.writes[i].body["assignees"].([]any)
+			if !ok || len(held) != 0 {
+				t.Fatalf("an empty assignee did not clear the set; body = %+v", f.writes[i].body)
+			}
+			return
+		}
+	}
+	t.Fatal("no issue patch reached the forge")
+}
+
+// A patch that names no assignee must not touch the holder — otherwise renaming
+// a card would silently take it off whoever was doing it.
+func TestForgeWrites_ATitleEditLeavesTheHolderAlone(t *testing.T) {
+	f := newForge(t)
+	f.visible["alice"] = []string{"hanzoai"}
+	f.repo("hanzoai", "api", issue(7, "card", "open", "todo"))
+	app := mountForge(t, f)
+
+	if code, raw := asUser(t, app, http.MethodPatch, "/v1/todo/projects/api/issues/7", "hanzo", "alice",
+		map[string]any{"title": "renamed"}); code != http.StatusOK {
+		t.Fatalf("rename = %d %s", code, raw)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.writes {
+		if _, sent := f.writes[i].body["assignees"]; sent && strings.HasSuffix(f.writes[i].path, "/issues/7") {
+			t.Fatalf("a rename sent the holder; body = %+v", f.writes[i].body)
+		}
+	}
+}
