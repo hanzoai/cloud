@@ -6,7 +6,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/principal"
@@ -30,41 +29,18 @@ const prefix = "/v1/framework"
 // wait bounds the entitlement read before the refusal fails closed.
 const wait = 3 * time.Second
 
-var (
-	once    sync.Once
-	modules map[string]string // DocType name -> owning module
-)
-
-// moduleOf resolves the module owning a DocType, or "" for one no module declares.
-//
-// The empty answer is why this needs no list of exceptions: a static segment
-// (doctypes, roles, modules, summary, health) can never be a DocType — the
-// doctype package reserves those names — and an org's own DocType belongs to no
-// registered module. Both are served.
-func moduleOf(name string) string {
-	once.Do(func() {
-		modules = map[string]string{}
-		for _, m := range doctype.RegisteredModules() {
-			for _, dt := range doctype.Fixtures(m) {
-				modules[dt.Name] = m
-			}
-		}
-	})
-	return modules[name]
-}
-
 // elective refuses a document op whose module the caller's org has not enabled.
 //
-// It reads the DocType from the PATH, not a bound parameter: it runs before the
+// It reads the module from the PATH, not a bound parameter: it runs before the
 // router has chosen a route, where a parameter is empty — the value that admits
 // everything.
+//
+// The module used to be looked up in a table built from every lane's fixtures,
+// because the path carried a name and a name did not say whose it was. The
+// address says so, so there is nothing to look up and nothing to keep in step.
 func elective(c *zip.Ctx) error {
-	name, ok := doctypeIn(c.Path())
+	module, ok := moduleIn(c.Path())
 	if !ok {
-		return c.Next()
-	}
-	module := moduleOf(name)
-	if module == "" {
 		return c.Next()
 	}
 	// 404, not 401: a product a stranger has not bought owes no confirmation that
@@ -80,7 +56,7 @@ func elective(c *zip.Ctx) error {
 		// Fail closed: admitting when entitlement cannot answer makes every module
 		// free for everyone. The reason goes to the log, never the wire.
 		c.Log().Warn("framework: refusing, entitlement did not answer",
-			"doctype", name, "module", module, "err", err)
+			"module", module, "err", err)
 		return missing()
 	}
 	if !held.On {
@@ -89,21 +65,32 @@ func elective(c *zip.Ctx) error {
 	return c.Next()
 }
 
-// doctypeIn returns the DocType a framework path addresses: the one segment after
-// the group in /v1/framework/<doctype>[/<name>[/submit|/cancel]].
-func doctypeIn(path string) (string, bool) {
+// moduleIn returns the module a framework path addresses: the half before the dot
+// in /v1/framework/<module>.<kind>[/<name>[/submit|/cancel]].
+//
+// The empty answer is why this needs no list of exceptions. A static segment
+// (doctypes, modules, summary) carries no dot and so addresses no DocType, and
+// neither does an org's own module that no lane registered — the entitlement
+// question is only ever asked about a product somebody sells.
+func moduleIn(path string) (string, bool) {
 	rest := strings.TrimPrefix(path, prefix)
 	if rest == path {
 		return "", false
 	}
 	rest = strings.TrimPrefix(rest, "/")
-	if rest == "" {
-		return "", false
-	}
 	if i := strings.IndexByte(rest, '/'); i >= 0 {
 		rest = rest[:i]
 	}
-	return rest, rest != ""
+	module, _, ok := strings.Cut(rest, ".")
+	if !ok || module == "" {
+		return "", false
+	}
+	for _, m := range doctype.RegisteredModules() {
+		if m == module {
+			return module, true
+		}
+	}
+	return "", false
 }
 
 // missing is the answer a path nobody registered gets. No header, no code, no

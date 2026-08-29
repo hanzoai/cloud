@@ -97,16 +97,16 @@ const gateAcct = "550e8400-e29b-41d4-a716-446655440000"
 // when it does, this test flips back to asserting the 402 + upgradeUrl body.
 func TestEntitleUnentitledAdmitsObserve(t *testing.T) {
 	app, store := gateApp(t, &fakeCommerce{ent: &types.LicenseEntitlement{ProductID: productTeam, Active: false}}, nil)
-	ws, _ := store.EnsureWorkspace(context.Background(), gateOrg, gateAcct, "Ada")
+	ws, _ := store.EnsureSpace(context.Background(), gateOrg, gateAcct, "Ada")
 	code, body := selectWS(t, app, gateOrg, gateAcct, ws.Slug)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 — unentitled must admit in observe mode (%s)", code, body)
 	}
 	var out struct {
-		Result *WorkspaceLoginInfo `json:"result"`
+		Result *SpaceLoginInfo `json:"result"`
 	}
-	if json.Unmarshal(body, &out) != nil || out.Result == nil || out.Result.Workspace != ws.UUID {
-		t.Fatalf("observe mode must return a workspace login: %s", body)
+	if json.Unmarshal(body, &out) != nil || out.Result == nil || out.Result.Space != ws.UUID {
+		t.Fatalf("observe mode must return a space login: %s", body)
 	}
 }
 
@@ -114,15 +114,15 @@ func TestEntitleUnentitledAdmitsObserve(t *testing.T) {
 // commerce (not a definitive no) admits — the gate cannot brick login.
 func TestEntitleInfraErrorAdmits(t *testing.T) {
 	app, store := gateApp(t, &fakeCommerce{err: fmt.Errorf("commerce not co-resident")}, nil)
-	ws, _ := store.EnsureWorkspace(context.Background(), gateOrg, gateAcct, "Ada")
+	ws, _ := store.EnsureSpace(context.Background(), gateOrg, gateAcct, "Ada")
 	code, body := selectWS(t, app, gateOrg, gateAcct, ws.Slug)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (%s)", code, body)
 	}
 	var out struct {
-		Result *WorkspaceLoginInfo `json:"result"`
+		Result *SpaceLoginInfo `json:"result"`
 	}
-	if json.Unmarshal(body, &out) != nil || out.Result == nil || out.Result.Workspace != ws.UUID {
+	if json.Unmarshal(body, &out) != nil || out.Result == nil || out.Result.Space != ws.UUID {
 		t.Fatalf("infra error must admit: %s", body)
 	}
 }
@@ -140,7 +140,7 @@ func TestEntitleGuestCap(t *testing.T) {
 	}
 	app, store := gateApp(t, entitled, planEnt)
 	ctx := context.Background()
-	ws, _ := store.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
+	ws, _ := store.EnsureSpace(ctx, gateOrg, gateAcct, "Ada")
 	guest := func(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", i) }
 	for i := 1; i <= 4; i++ {
 		if err := store.AddMember(ctx, gateOrg, ws.UUID, guest(i), roleGuest); err != nil {
@@ -166,7 +166,7 @@ func TestEntitleGuestCap(t *testing.T) {
 	appDown, storeDown := gateApp(t, entitled, func(context.Context, string) (map[string]any, error) {
 		return nil, fmt.Errorf("plans not mounted")
 	})
-	wsD, _ := storeDown.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
+	wsD, _ := storeDown.EnsureSpace(ctx, gateOrg, gateAcct, "Ada")
 	if err := storeDown.AddMember(ctx, gateOrg, wsD.UUID, guest(1), roleGuest); err != nil {
 		t.Fatal(err)
 	}

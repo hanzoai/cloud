@@ -19,7 +19,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// answers is a workspace authority that ANSWERS — the thing production has and no
+// answers is a space authority that ANSWERS — the thing production has and no
 // test did. Every IAM-lane test before this one stopped at an unanswerable ask, so
 // the rules PAST the ask (a machine credential holds no seat; a guest holds no
 // seat) were never reached and could be deleted without failing anything.
@@ -27,39 +27,39 @@ import (
 // It records what it was asked, which is the other half of the proof: a rule that
 // refuses BEFORE the ask must leave this untouched. "Refused" and "refused for the
 // right reason" are different results, and only the second one survives a mutation.
-// It answers per WORKSPACE, because the rows do: a member of A is not a member of
+// It answers per SPACE, because the rows do: a member of A is not a member of
 // B, and that difference IS the tenant boundary meet enforces. An authority that
-// said yes to any workspace would make the boundary untestable at the endpoint.
+// said yes to any space would make the boundary untestable at the endpoint.
 type answers struct {
 	// mu guards the counters below. The real authority is another PROCESS, so it is
 	// asked concurrently the moment two requests are in flight — which is exactly
 	// what the two-replica race in record_test.go models, and what made this the
 	// first fixture in the package to need a lock.
 	mu      sync.Mutex
-	row     func(workspace, subject string) plane.Member // what the rows say about one workspace
-	list    plane.Spaces                                 // what they say about all of them
-	err     error                                        // or why they cannot be read
-	asked   int                                          // how many times the authority was consulted
-	subject string                                       // the subject it was consulted about
-	saw     string                                       // the workspace it was consulted about
+	row     func(space, subject string) plane.Member // what the rows say about one space
+	list    plane.Spaces                             // what they say about all of them
+	err     error                                    // or why they cannot be read
+	asked   int                                      // how many times the authority was consulted
+	subject string                                   // the subject it was consulted about
+	saw     string                                   // the space it was consulted about
 }
 
-func (a *answers) member(_ context.Context, workspace, subject string) (*plane.Member, error) {
+func (a *answers) member(_ context.Context, space, subject string) (*plane.Member, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.asked++
-	a.subject, a.saw = subject, workspace
+	a.subject, a.saw = subject, space
 	if a.err != nil {
 		return nil, a.err
 	}
 	if a.row == nil {
 		return &plane.Member{}, nil
 	}
-	m := a.row(workspace, subject)
+	m := a.row(space, subject)
 	return &m, nil
 }
 
-func (a *answers) workspaces(_ context.Context, subject string) (*plane.Spaces, error) {
+func (a *answers) spaces(_ context.Context, subject string) (*plane.Spaces, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.asked++
@@ -72,12 +72,12 @@ func (a *answers) workspaces(_ context.Context, subject string) (*plane.Spaces, 
 }
 
 // holds is the authority for a person who holds exactly these roles, keyed by
-// workspace. BOTH answers come off the one map, so the lobby's offer and the
+// space. BOTH answers come off the one map, so the lobby's offer and the
 // mint's grant cannot be handed different rows and drift apart.
 func holds(roles map[string]string) *answers {
 	a := &answers{list: plane.Spaces{Account: account}}
-	a.row = func(workspace, _ string) plane.Member {
-		role, ok := roles[workspace]
+	a.row = func(space, _ string) plane.Member {
+		role, ok := roles[space]
 		return plane.Member{Member: ok, Role: role, Account: account}
 	}
 	for ws, role := range roles {
@@ -94,7 +94,7 @@ func anyone() *answers {
 		row: func(string, string) plane.Member {
 			return plane.Member{Member: true, Role: token.RoleOwner, Account: account}
 		},
-		list: plane.Spaces{Account: account, Items: []plane.Space{{UUID: workspaceA, Role: token.RoleOwner}}},
+		list: plane.Spaces{Account: account, Items: []plane.Space{{UUID: spaceA, Role: token.RoleOwner}}},
 	}
 }
 
@@ -137,7 +137,7 @@ func TestIAMLaneSeatsAHumanAndRefusesAMachine(t *testing.T) {
 		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 		var j joiner
 		var ok bool
-		onLane(t, human, func(c *zip.Ctx) { j, ok = st.admits(c, roomIn(workspaceA)) })
+		onLane(t, human, func(c *zip.Ctx) { j, ok = st.admits(c, roomIn(spaceA)) })
 		if !ok {
 			t.Fatal("the IAM lane refused a privileged member with an authority that admits them")
 		}
@@ -154,7 +154,7 @@ func TestIAMLaneSeatsAHumanAndRefusesAMachine(t *testing.T) {
 			a := anyone()
 			st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 			var ok bool
-			onLane(t, p, func(c *zip.Ctx) { _, ok = st.admits(c, roomIn(workspaceA)) })
+			onLane(t, p, func(c *zip.Ctx) { _, ok = st.admits(c, roomIn(spaceA)) })
 			if ok {
 				t.Fatalf("SECURITY: %+v was seated by an authority that answers", p)
 			}
@@ -167,17 +167,17 @@ func TestIAMLaneSeatsAHumanAndRefusesAMachine(t *testing.T) {
 
 // TestLobbyOffersToAHumanAndRefusesAMachine is the same proof on the READ, which
 // is where a gate quietly gets relaxed. Same shape, same mutation: neuter the
-// subject requirement and a machine reads a tenant's workspace list — which is the
+// subject requirement and a machine reads a tenant's space list — which is the
 // one string needed to name a room in it.
 func TestLobbyOffersToAHumanAndRefusesAMachine(t *testing.T) {
 	const seat = "550e8400-e29b-41d4-a716-446655440000"
 	rows := plane.Spaces{
 		Account: seat,
 		Name:    "Ada",
-		Items:   []plane.Space{{UUID: workspaceA, Name: "Acme", Role: token.RoleOwner}},
+		Items:   []plane.Space{{UUID: spaceA, Name: "Acme", Role: token.RoleOwner}},
 	}
 
-	t.Run("a human is offered their workspaces", func(t *testing.T) {
+	t.Run("a human is offered their spaces", func(t *testing.T) {
 		a := &answers{list: rows}
 		st := state{authority: a}
 		var sp plane.Spaces
@@ -186,7 +186,7 @@ func TestLobbyOffersToAHumanAndRefusesAMachine(t *testing.T) {
 		if !ok {
 			t.Fatal("the IAM lane refused a human with an authority that answers")
 		}
-		if sp.Account != seat || len(sp.Items) != 1 || sp.Items[0].UUID != workspaceA {
+		if sp.Account != seat || len(sp.Items) != 1 || sp.Items[0].UUID != spaceA {
 			t.Fatalf("spaces = %+v, want the authority's answer verbatim", sp)
 		}
 		if a.asked != 1 || a.subject != human.Subject {
@@ -201,7 +201,7 @@ func TestLobbyOffersToAHumanAndRefusesAMachine(t *testing.T) {
 			var ok bool
 			onLane(t, p, func(c *zip.Ctx) { _, ok = st.spaces(c) })
 			if ok {
-				t.Fatalf("SECURITY: %+v read a tenant's workspace list", p)
+				t.Fatalf("SECURITY: %+v read a tenant's space list", p)
 			}
 			if a.asked != 0 {
 				t.Errorf("SECURITY: the authority was consulted about %+v — the exclusion is not what refused it", p)
@@ -227,13 +227,13 @@ func TestTheAuthoritysRoleDecides(t *testing.T) {
 		{"", false, false},
 		{"auditor", false, false}, // a role invented tomorrow starts without a seat
 	} {
-		a := holds(map[string]string{workspaceA: tc.role})
+		a := holds(map[string]string{spaceA: tc.role})
 		st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 
 		var admitted, read bool
 		var sp plane.Spaces
 		onLane(t, human, func(c *zip.Ctx) {
-			_, admitted = st.admits(c, roomIn(workspaceA))
+			_, admitted = st.admits(c, roomIn(spaceA))
 			sp, read = st.spaces(c)
 		})
 		if admitted != tc.admits {
@@ -251,7 +251,7 @@ func TestTheAuthoritysRoleDecides(t *testing.T) {
 			}
 		}
 		if (offered == 1) != tc.offered {
-			t.Errorf("role %q: offered %d workspace(s), want offered=%v", tc.role, offered, tc.offered)
+			t.Errorf("role %q: offered %d space(s), want offered=%v", tc.role, offered, tc.offered)
 		}
 		if admitted != tc.offered {
 			t.Errorf("role %q: OFFER=%v but ADMIT=%v — the lobby and the mint disagree on the IAM lane",
@@ -267,7 +267,7 @@ func TestNotAMemberIsRefusedOnBothDoors(t *testing.T) {
 	a := &answers{}
 	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 	onLane(t, human, func(c *zip.Ctx) {
-		if _, ok := st.admits(c, roomIn(workspaceA)); ok {
+		if _, ok := st.admits(c, roomIn(spaceA)); ok {
 			t.Error("a caller with no member row was seated")
 		}
 		sp, ok := st.spaces(c)
@@ -282,13 +282,13 @@ func TestNotAMemberIsRefusedOnBothDoors(t *testing.T) {
 
 // TestAnUnreachableAuthorityIsARefusal. An authority that cannot answer is never
 // an assumption — on the mint because a seat would be granted on nothing, and on
-// the lobby because "you have no workspaces" is a LIE when the truth is "team is
+// the lobby because "you have no spaces" is a LIE when the truth is "team is
 // down", and it sends someone to ask for an invite they already have.
 func TestAnUnreachableAuthorityIsARefusal(t *testing.T) {
 	a := &answers{err: context.DeadlineExceeded}
 	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 	onLane(t, human, func(c *zip.Ctx) {
-		if _, ok := st.admits(c, roomIn(workspaceA)); ok {
+		if _, ok := st.admits(c, roomIn(spaceA)); ok {
 			t.Error("SECURITY: an unreachable authority admitted a caller")
 		}
 		if _, ok := st.spaces(c); ok {
@@ -298,30 +298,30 @@ func TestAnUnreachableAuthorityIsARefusal(t *testing.T) {
 }
 
 // TestTheIAMLaneNeverWidensTheRoom. The authority is asked about the room's OWN
-// workspace and nothing else, so a room naming another tenant cannot be answered
+// space and nothing else, so a room naming another tenant cannot be answered
 // with this caller's membership somewhere else. The QUESTION is what is pinned:
 // an authority that answers "yes" to everything must still not seat this caller,
-// because the workspace it was asked about is the room's.
+// because the space it was asked about is the room's.
 //
 // It also pins what a malformed room name actually does, which an authority that
 // could never answer had made unobservable — and which the suite described WRONGLY
 // until this test could see it. strings.Cut returns the WHOLE string when there is
 // no separator, so:
 //
-//   - "_standup"      -> workspace "" -> refused by the guard, nothing is asked;
-//   - "no-separator"  -> workspace "no-separator" -> ASKED, and refused because no
-//     tenant has a workspace by that name.
+//   - "_standup"      -> space "" -> refused by the guard, nothing is asked;
+//   - "no-separator"  -> space "no-separator" -> ASKED, and refused because no
+//     tenant has a space by that name.
 //
 // Both are refusals and both are fail-closed, but only the first is a refusal
 // meet makes on its own. Saying so is the difference between a test that documents
 // the program and one that flatters it.
 func TestTheIAMLaneNeverWidensTheRoom(t *testing.T) {
-	// A room in ANOTHER workspace asks about THAT workspace, never the caller's.
+	// A room in ANOTHER space asks about THAT space, never the caller's.
 	a := anyone()
 	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
-	onLane(t, human, func(c *zip.Ctx) { _, _ = st.admits(c, roomIn(workspaceB)) })
-	if a.saw != workspaceB {
-		t.Errorf("the authority was asked about %q for a room in %q", a.saw, workspaceB)
+	onLane(t, human, func(c *zip.Ctx) { _, _ = st.admits(c, roomIn(spaceB)) })
+	if a.saw != spaceB {
+		t.Errorf("the authority was asked about %q for a room in %q", a.saw, spaceB)
 	}
 
 	// An EMPTY leading segment is refused by meet itself.
@@ -330,19 +330,19 @@ func TestTheIAMLaneNeverWidensTheRoom(t *testing.T) {
 	var ok bool
 	onLane(t, human, func(c *zip.Ctx) { _, ok = st.admits(c, "_standup") })
 	if ok {
-		t.Error("SECURITY: a room with an empty workspace segment was admitted")
+		t.Error("SECURITY: a room with an empty space segment was admitted")
 	}
 	if a.asked != 0 {
-		t.Errorf("the authority was consulted about a room with no workspace segment (asked about %q)", a.saw)
+		t.Errorf("the authority was consulted about a room with no space segment (asked about %q)", a.saw)
 	}
 
 	// A name with no separator at all IS asked about — as itself — and no tenant
-	// holds a workspace by that name, so the rows refuse it.
-	a = holds(nil) // the honest answer for a workspace nobody has
+	// holds a space by that name, so the rows refuse it.
+	a = holds(nil) // the honest answer for a space nobody has
 	st.authority = a
 	onLane(t, human, func(c *zip.Ctx) { _, ok = st.admits(c, "no-separator") })
 	if ok {
-		t.Error("a room naming a workspace nobody has was admitted")
+		t.Error("a room naming a space nobody has was admitted")
 	}
 	if a.saw != "no-separator" {
 		t.Errorf("the authority was asked about %q, want the room name itself", a.saw)

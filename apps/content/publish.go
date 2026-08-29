@@ -191,7 +191,7 @@ func Publish(ctx context.Context, org string, in PublishInput) (PublishResult, e
 	if s == nil {
 		return PublishResult{}, errNotMounted
 	}
-	if !isPublishableDocType(in.DocType) {
+	if _, ok := publishable(in.DocType); !ok {
 		return PublishResult{}, errUnknownDocType
 	}
 
@@ -240,7 +240,11 @@ func publishHeld(ctx context.Context, org string, in PublishInput) (PublishResul
 		return PublishResult{}, errNotMounted
 	}
 
-	doc, err := framework.Get(ctx, org, in.DocType, in.Name)
+	id, ok := publishable(in.DocType)
+	if !ok {
+		return PublishResult{}, errUnknownDocType
+	}
+	doc, err := framework.Get(ctx, org, id, in.Name)
 	if err != nil {
 		return PublishResult{}, err
 	}
@@ -268,7 +272,7 @@ func publishHeld(ctx context.Context, org string, in PublishInput) (PublishResul
 	if len(merged) > len(existing) {
 		data := cloneData(doc.Data)
 		data["external_ids"] = merged
-		if err := framework.UpdateData(withTrustedWrite(ctx), org, in.DocType, in.Name, data); err != nil {
+		if err := framework.UpdateData(withTrustedWrite(ctx), org, id, in.Name, data); err != nil {
 			s.Log.Warn("record external ids failed (post already sent)",
 				"doctype", in.DocType, "name", in.Name, "err", err)
 		}

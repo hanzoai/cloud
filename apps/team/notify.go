@@ -54,10 +54,10 @@ func dncID(user, objectID string) string { return "dnc:" + user + ":" + objectID
 
 // personSpaceOf resolves a user's PersonSpace id (an InboxNotification /
 // DocNotifyContext lives in the recipient's personal space), falling back to the
-// common workspace space when the PersonSpace has not been materialized yet.
+// common space space when the PersonSpace has not been materialized yet.
 func (s *session) personSpaceOf(user string) string {
 	if user != "" {
-		if ps, _ := s.store.get(s.org, s.workspace, "person-space:person-"+user); ps != nil {
+		if ps, _ := s.store.get(s.org, s.space, "person-space:person-"+user); ps != nil {
 			return str(ps["_id"])
 		}
 	}
@@ -148,7 +148,7 @@ func (s *session) notifyChatMessage(msg map[string]any) {
 		now = time.Now().UnixMilli()
 	}
 
-	parent, _ := s.store.get(s.org, s.workspace, parentID)
+	parent, _ := s.store.get(s.org, s.space, parentID)
 
 	// Chat space (channel or DM): recipients are the mentioned members (channel) or
 	// every other participant (DM) — the "mentioned you" / "messaged you" cases.
@@ -235,7 +235,7 @@ func (s *session) notifyAssignee(t, doc map[string]any) {
 			"objectId": objID, "objectClass": objClass, "action": "update", "txId": str(t["_id"]),
 			"modifiedBy": acctSystem, "modifiedOn": now, "createdBy": acctSystem, "createdOn": now,
 		}
-		_ = s.store.put(s.org, s.workspace, upd)
+		_ = s.store.put(s.org, s.space, upd)
 		s.pushDerivedTx(clTxCreate, updID, clDocUpdateMessage, objSpace, map[string]any{"attributes": map[string]any{
 			"attachedTo": objID, "attachedToClass": objClass, "collection": "docUpdateMessages",
 			"objectId": objID, "objectClass": objClass, "action": "update", "txId": str(t["_id"]),
@@ -254,10 +254,10 @@ func (s *session) notifyAssignee(t, doc map[string]any) {
 func (s *session) ensureNotifyContext(user, objectID, objectClass, objectSpace string, touch int64) string {
 	id := dncID(user, objectID)
 	now := time.Now().UnixMilli()
-	if existing, _ := s.store.get(s.org, s.workspace, id); existing != nil {
+	if existing, _ := s.store.get(s.org, s.space, id); existing != nil {
 		existing["lastUpdateTimestamp"] = touch
 		existing["modifiedOn"] = now
-		_ = s.store.put(s.org, s.workspace, existing)
+		_ = s.store.put(s.org, s.space, existing)
 		s.pushDerivedTx(clTxUpdate, id, clDocNotifyContext, str(existing["space"]), map[string]any{
 			"operations": map[string]any{"lastUpdateTimestamp": touch},
 		})
@@ -270,7 +270,7 @@ func (s *session) ensureNotifyContext(user, objectID, objectClass, objectSpace s
 		"isPinned": false, "hidden": false, "lastUpdateTimestamp": touch,
 		"modifiedBy": acctSystem, "modifiedOn": now, "createdBy": acctSystem, "createdOn": now,
 	}
-	_ = s.store.put(s.org, s.workspace, ctx)
+	_ = s.store.put(s.org, s.space, ctx)
 	s.pushDerivedTx(clTxCreate, id, clDocNotifyContext, ctxSpace, map[string]any{"attributes": map[string]any{
 		"user": user, "objectId": objectID, "objectClass": objectClass, "objectSpace": objectSpace,
 		"isPinned": false, "hidden": false, "lastUpdateTimestamp": touch,
@@ -300,7 +300,7 @@ func (s *session) putActivityNotification(user, ctxID, objectID, objectClass, at
 		"attachedTo": attachedTo, "attachedToClass": attachedToClass,
 		"modifiedBy": acctSystem, "modifiedOn": createdOn, "createdBy": acctSystem, "createdOn": createdOn,
 	}
-	_ = s.store.put(s.org, s.workspace, notif)
+	_ = s.store.put(s.org, s.space, notif)
 	s.pushDerivedTx(clTxCreate, id, clActivityInboxNotif, space, map[string]any{"attributes": map[string]any{
 		"user": user, "isViewed": false, "archived": false,
 		"docNotifyContext": ctxID, "objectId": objectID, "objectClass": objectClass,

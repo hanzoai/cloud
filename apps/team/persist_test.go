@@ -5,22 +5,22 @@ import (
 	"testing"
 )
 
-// newTestSession wires a session onto a fresh per-workspace store + the real
+// newTestSession wires a session onto a fresh per-space store + the real
 // embedded model hierarchy. Ported from team-go (server → transServer).
 func newTestSession(t *testing.T) *session {
 	t.Helper()
 	return &session{
-		server:    &transServer{hub: newHub()},
-		store:     newStore(t.TempDir()),
-		hier:      buildHierarchy(modelJSON),
-		org:       "test-org",
-		workspace: "ws-test",
-		account:   "acc-test",
+		server:  &transServer{hub: newHub()},
+		store:   newStore(t.TempDir()),
+		hier:    buildHierarchy(modelJSON),
+		org:     "test-org",
+		space:   "ws-test",
+		account: "acc-test",
 	}
 }
 
 func TestPersistenceCRUD(t *testing.T) {
-	requireSharedStore(t) // reopens the workspace store on a fresh handle mid-test
+	requireSharedStore(t) // reopens the space store on a fresh handle mid-test
 	s := newTestSession(t)
 
 	// create a todo Project
@@ -64,7 +64,7 @@ func TestPersistenceCRUD(t *testing.T) {
 	}
 
 	// persistence across a fresh store handle (simulates reconnect/reload)
-	s2 := &session{server: s.server, store: newStore(s.store.dir), hier: s.hier, org: s.org, workspace: s.workspace, account: s.account}
+	s2 := &session{server: s.server, store: newStore(s.store.dir), hier: s.hier, org: s.org, space: s.space, account: s.account}
 	if docs := s2.queryDocs("tracker:class:Project", nil); len(docs) != 1 {
 		t.Fatalf("reload: want 1 persisted project, got %d", len(docs))
 	}
@@ -107,24 +107,24 @@ func TestMixinAndTrigger(t *testing.T) {
 
 func TestSeedSpaces(t *testing.T) {
 	s := newTestSession(t)
-	s.seedWorkspace()
+	s.seedSpace()
 	if sp := s.queryDocs("core:class:Space", map[string]any{"_id": "contact:space:Contacts"}); len(sp) != 1 {
 		t.Fatalf("seed: Contacts space not found")
 	}
 	// idempotent
-	s.seedWorkspace()
-	if n, _ := s.store.count(s.org, s.workspace); n != len(systemSpaces()) {
+	s.seedSpace()
+	if n, _ := s.store.count(s.org, s.space); n != len(systemSpaces()) {
 		t.Fatalf("seed not idempotent: count=%d", n)
 	}
 }
 
-// TestTenantIsolation proves two orgs sharing a workspace id never see each
-// other's data — the whole point of per-(org,workspace) SQLite files.
+// TestTenantIsolation proves two orgs sharing a space id never see each
+// other's data — the whole point of per-(org,space) SQLite files.
 func TestTenantIsolation(t *testing.T) {
 	st := newStore(t.TempDir())
 	hier := buildHierarchy(modelJSON)
 	mk := func(org string) *session {
-		return &session{server: &transServer{hub: newHub()}, store: st, hier: hier, org: org, workspace: "shared-ws", account: "u"}
+		return &session{server: &transServer{hub: newHub()}, store: st, hier: hier, org: org, space: "shared-ws", account: "u"}
 	}
 	a := mk("org-a")
 	b := mk("org-b")

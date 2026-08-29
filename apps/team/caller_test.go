@@ -73,7 +73,7 @@ func homeIn(org, sub string) iamtest.Claims {
 // when a login already made one — so a test about resolution has to enrol first.
 func enrolled(t *testing.T, store *accountStore, org, subject, name string) string {
 	t.Helper()
-	if _, err := store.EnsureWorkspace(context.Background(), org, accountID(subject), name); err != nil {
+	if _, err := store.EnsureSpace(context.Background(), org, accountID(subject), name); err != nil {
 		t.Fatalf("enrol %s in %s: %v", subject, org, err)
 	}
 	return accountID(subject)
@@ -117,9 +117,9 @@ func whoOn(t *testing.T, id *identity, bearerTok, iamCookie, acctCookie string) 
 }
 
 // hsToken mints an HS256 token exactly as this service does.
-func hsToken(t *testing.T, account, workspace, org string) string {
+func hsToken(t *testing.T, account, space, org string) string {
 	t.Helper()
-	tok, err := token.Generate(account, workspace, map[string]any{"org": org}, expUnix(sessionTokenTTL), testSecret)
+	tok, err := token.Generate(account, space, map[string]any{"org": org}, expUnix(sessionTokenTTL), testSecret)
 	if err != nil {
 		t.Fatalf("token.Generate: %v", err)
 	}
@@ -159,10 +159,10 @@ func TestIAMLaneResolvesTheAccount(t *testing.T) {
 		if cl.user != "acme/ada" {
 			t.Fatalf("%s: user = %q, want <owner>/<name>", name, cl.user)
 		}
-		// The IAM lane pins NO workspace: what it may touch is decided per request
+		// The IAM lane pins NO space: what it may touch is decided per request
 		// against the rows, never by a claim it carries.
-		if cl.workspace != "" {
-			t.Fatalf("%s: workspace = %q, want the IAM lane to pin none", name, cl.workspace)
+		if cl.space != "" {
+			t.Fatalf("%s: space = %q, want the IAM lane to pin none", name, cl.space)
 		}
 		// Home-safe: the verified membership set plus the home tenant.
 		if len(cl.orgs) != 2 || cl.orgs[0].Org != "acme" || cl.orgs[1].Org != "beta" {
@@ -182,7 +182,7 @@ func TestIAMLaneResolvesTheAccount(t *testing.T) {
 // VerifiedIdentity.User falls back sub → preferred_username → name, and accountID
 // returns a UUID-shaped input VERBATIM. So a token with NO `sub` whose
 // preferred_username is a colleague's account uuid used to resolve to that
-// colleague — and admit() then granted every workspace the two share. Nothing
+// colleague — and admit() then granted every space the two share. Nothing
 // about that token is forged: IAM signs it, the issuer is trusted, the signature
 // verifies. Only the claim the lane READS decides who it is.
 //
@@ -293,28 +293,28 @@ func TestIAMLaneRefusesWhatDoesNotVerify(t *testing.T) {
 	}
 }
 
-// TestIAMLaneWorkspaceIsMembership proves the IAM lane grants a workspace ONLY
+// TestIAMLaneSpaceIsMembership proves the IAM lane grants a space ONLY
 // from the rows: a member is admitted, a non-member and a foreign tenant's
-// workspace are refused, and the two refusals are indistinguishable.
-func TestIAMLaneWorkspaceIsMembership(t *testing.T) {
+// space are refused, and the two refusals are indistinguishable.
+func TestIAMLaneSpaceIsMembership(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
 	member := accountID(iamSub)
 	stranger := accountID(iamOtherSub)
-	ws, err := store.EnsureWorkspace(ctx, "acme", member, "Ada")
+	ws, err := store.EnsureSpace(ctx, "acme", member, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A workspace in ANOTHER tenant, which the caller is a member of THERE.
-	other, err := store.EnsureWorkspace(ctx, "rival", member, "Ada")
+	// A space in ANOTHER tenant, which the caller is a member of THERE.
+	other, err := store.EnsureSpace(ctx, "rival", member, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	id, iam := identFor(t, store)
 	// The stranger holds an account in the SAME org (they logged in) but no row in
-	// this workspace — the case membership has to answer, not existence.
-	if _, err := store.EnsureWorkspace(ctx, "acme", stranger, "Bob"); err != nil {
+	// this space — the case membership has to answer, not existence.
+	if _, err := store.EnsureSpace(ctx, "acme", stranger, "Bob"); err != nil {
 		t.Fatal(err)
 	}
 	memberCl, err := id.iam(ctx, iam.Sign(t, homeIn("acme", iamSub)))
@@ -327,19 +327,19 @@ func TestIAMLaneWorkspaceIsMembership(t *testing.T) {
 	}
 
 	if _, err := id.admit(ctx, memberCl, ws.UUID); err != nil {
-		t.Fatalf("admit(member, own workspace): %v", err)
+		t.Fatalf("admit(member, own space): %v", err)
 	}
 	if _, err := id.admit(ctx, strangerCl, ws.UUID); err == nil {
 		t.Fatalf("admit(non-member) was granted — membership is the authorization")
 	}
-	// Same person, same account row, a workspace they ARE a member of — but their
-	// token names tenant acme, so the rival-owned workspace is not theirs to open
+	// Same person, same account row, a space they ARE a member of — but their
+	// token names tenant acme, so the rival-owned space is not theirs to open
 	// on this credential.
 	if _, err := id.admit(ctx, memberCl, other.UUID); err == nil {
-		t.Fatalf("admit crossed the tenant boundary into a foreign org's workspace")
+		t.Fatalf("admit crossed the tenant boundary into a foreign org's space")
 	}
 	if _, err := id.admit(ctx, memberCl, uuid.NewString()); err == nil {
-		t.Fatalf("admit granted a workspace that does not exist")
+		t.Fatalf("admit granted a space that does not exist")
 	}
 	// A caller with no tenant names nothing to be a member of.
 	if _, err := id.admit(ctx, caller{account: member}, ws.UUID); err == nil {
@@ -356,38 +356,38 @@ func TestIAMLaneWorkspaceIsMembership(t *testing.T) {
 // TestHS256ArmIsUnchanged proves the fallback arm answers exactly what the
 // pre-cutover decode answered, for the same fixtures, on both carriers and in the
 // same precedence: bearer before cookie, an account claim required, expiry
-// enforced, and the tenant + workspace read from the SIGNED claims.
+// enforced, and the tenant + space read from the SIGNED claims.
 func TestHS256ArmIsUnchanged(t *testing.T) {
 	const acct = "550e8400-e29b-41d4-a716-446655440000"
 	wsUUID := uuid.NewString()
 	session := hsToken(t, acct, "", "acme")
-	workspace := hsToken(t, acct, wsUUID, "acme")
+	space := hsToken(t, acct, wsUUID, "acme")
 	id := testIdent(nil)
 
 	// Bearer.
-	cl, err := whoOn(t, id, workspace, "", "")
+	cl, err := whoOn(t, id, space, "", "")
 	if err != nil {
 		t.Fatalf("who(hs256 bearer): %v", err)
 	}
 	if cl.iam {
 		t.Fatal("an HS256 token resolved on the IAM lane")
 	}
-	if cl.account != acct || cl.org != "acme" || cl.workspace != wsUUID || cl.raw != workspace {
+	if cl.account != acct || cl.org != "acme" || cl.space != wsUUID || cl.raw != space {
 		t.Fatalf("hs256 bearer = %+v", cl)
 	}
 	// Cookie, and the bearer still wins over it — the pre-cutover precedence.
-	cl, err = whoOn(t, id, workspace, "", session)
+	cl, err = whoOn(t, id, space, "", session)
 	if err != nil {
 		t.Fatalf("who(bearer + account cookie): %v", err)
 	}
-	if cl.workspace != wsUUID {
+	if cl.space != wsUUID {
 		t.Fatal("the account cookie displaced the bearer")
 	}
 	cl, err = whoOn(t, id, "", "", session)
 	if err != nil {
 		t.Fatalf("who(account cookie): %v", err)
 	}
-	if cl.account != acct || cl.workspace != "" {
+	if cl.account != acct || cl.space != "" {
 		t.Fatalf("hs256 cookie = %+v", cl)
 	}
 	// No credential, a forged one, and one carrying no account are all refused.
@@ -410,11 +410,11 @@ func TestHS256ArmIsUnchanged(t *testing.T) {
 // CREDENTIAL IS ANSWERED FIRST, on both carriers, so this phase changes nothing
 // for a client that has one.
 //
-// The two credentials are NOT interchangeable — an HS256 workspace token pins a
-// workspace and an IAM token cannot — so preferring the IAM cookie did not merely
+// The two credentials are NOT interchangeable — an HS256 space token pins a
+// space and an IAM token cannot — so preferring the IAM cookie did not merely
 // pick a different lane, it silently WIDENED the collaborator planes from "the
-// workspace this token names" to "any workspace you are a member of", and made
-// getWorkspaceInfo answer WorkspaceNotFound where the pin used to answer. A phase
+// space this token names" to "any space you are a member of", and made
+// getWorkspaceInfo answer SpaceNotFound where the pin used to answer. A phase
 // that is supposed to be inert cannot do that, so the order is: bearer alone if
 // there is a bearer; then account-token; then hanzo_iam_token for the browser that
 // holds nothing else, which is exactly the post-cutover client.
@@ -428,7 +428,7 @@ func TestLanePrecedence(t *testing.T) {
 	iamTok := iam.Sign(t, homeIn("iam-org", iamSub))
 
 	// BOTH cookies — the state every signed-in browser is in today. The HS256 one
-	// wins, and it keeps its workspace pin.
+	// wins, and it keeps its space pin.
 	cl, err := whoOn(t, id, "", iamTok, hs)
 	if err != nil {
 		t.Fatalf("who(both cookies): %v", err)
@@ -436,15 +436,15 @@ func TestLanePrecedence(t *testing.T) {
 	if cl.iam {
 		t.Fatal("the IAM cookie displaced a live account-token cookie — the phase is not inert")
 	}
-	if cl.org != "acme" || cl.workspace != wsUUID {
-		t.Fatalf("both cookies resolved %+v, want the HS256 caller with its workspace pin", cl)
+	if cl.org != "acme" || cl.space != wsUUID {
+		t.Fatalf("both cookies resolved %+v, want the HS256 caller with its space pin", cl)
 	}
 	// A live HS256 bearer beside an IAM cookie stays on the HS256 arm too.
 	cl, err = whoOn(t, id, hs, iamTok, "")
 	if err != nil {
 		t.Fatalf("who(hs256 bearer + iam cookie): %v", err)
 	}
-	if cl.iam || cl.org != "acme" || cl.workspace != wsUUID {
+	if cl.iam || cl.org != "acme" || cl.space != wsUUID {
 		t.Fatalf("hs256 bearer resolved %+v", cl)
 	}
 	// The IAM cookie alone — the post-cutover browser — resolves on the IAM lane.
@@ -530,7 +530,7 @@ func TestIAMCredentialNeverReachesTheWire(t *testing.T) {
 // caller authenticated through — the identity boundary refuses to derive a tenant
 // from it for exactly that reason (idClaims.homeOrg). A lane that reads it scopes
 // every store query to an org the caller SELECTED: sign in through an app owned by
-// "lux" and team files your workspaces, blobs and billing under lux.
+// "lux" and team files your spaces, blobs and billing under lux.
 func TestIAMLaneTenantIsTheHomeOrgNotOwner(t *testing.T) {
 	store := openTestStore(t)
 	id, iam := identFor(t, store)
@@ -600,39 +600,39 @@ func TestIAMLaneRefusesAForeignAudience(t *testing.T) {
 // has NO IAM lane in this phase.
 //
 // A WebSocket is exempt from CORS, so a cookie-borne credential would make the
-// Origin header the only access control on the entire workspace data plane — one
+// Origin header the only access control on the entire space data plane — one
 // permissive entry in that allowlist, or one first-party page running attacker
 // script, and the stream is readable and writable. The credential therefore stays
-// the path-borne workspace token, which a foreign page cannot produce, until the
+// the path-borne space token, which a foreign page cannot produce, until the
 // client can send it in-band the way collabws.go already does.
 func TestTransactorTakesNothingAmbient(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
 	member := accountID(iamSub)
-	ws, err := store.EnsureWorkspace(ctx, "acme", member, "Ada")
+	ws, err := store.EnsureSpace(ctx, "acme", member, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
 	id, iam := identFor(t, store)
 	srv := &transServer{ident: id}
 
-	// The workspace token is the credential, as it has always been.
+	// The space token is the credential, as it has always been.
 	wsTok := hsToken(t, member, ws.UUID, "acme")
 	cl, got, err := srv.admitWS(wsTok)
 	if err != nil || got != ws.UUID || cl.iam {
-		t.Fatalf("admitWS(workspace token) = (%+v, %q, %v)", cl, got, err)
+		t.Fatalf("admitWS(space token) = (%+v, %q, %v)", cl, got, err)
 	}
-	// A bare workspace UUID authorizes NOTHING, whatever the caller holds elsewhere:
+	// A bare space UUID authorizes NOTHING, whatever the caller holds elsewhere:
 	// it is not a credential, and there is no ambient lane to pair it with.
 	if _, _, err := srv.admitWS(ws.UUID); err == nil {
-		t.Fatal("SECURITY: a bare workspace uuid opened a socket")
+		t.Fatal("SECURITY: a bare space uuid opened a socket")
 	}
 	// Nor does a valid IAM access token in that position — an estate-wide bearer
-	// does not belong in a URL, so it is simply not a workspace token.
+	// does not belong in a URL, so it is simply not a space token.
 	if _, _, err := srv.admitWS(iam.Sign(t, homeIn("acme", iamSub))); err == nil {
-		t.Fatal("SECURITY: an IAM access token was accepted as a workspace token")
+		t.Fatal("SECURITY: an IAM access token was accepted as a space token")
 	}
-	// A session token (no workspace claim) resolves but names no workspace, which is
+	// A session token (no space claim) resolves but names no space, which is
 	// what lets the statistics read answer it with an empty session map while
 	// serveWS refuses it.
 	if _, got, err := srv.admitWS(hsToken(t, member, "", "acme")); err != nil || got != "" {
@@ -644,7 +644,7 @@ func TestTransactorTakesNothingAmbient(t *testing.T) {
 //
 // It used to admit any *.hanzo.ai host. Because a WebSocket is exempt from CORS,
 // that check is the access control rather than a hint about it, so a wildcard over
-// the registrable domain put every first-party host inside the workspace data
+// the registrable domain put every first-party host inside the space data
 // plane's trust boundary.
 func TestOriginAllowlistHasNoWildcard(t *testing.T) {
 	const host = "api.hanzo.ai"
@@ -653,7 +653,7 @@ func TestOriginAllowlistHasNoWildcard(t *testing.T) {
 		"https://evil.com", "https://hanzo.ai.evil.com", "https://team.hanzo.ai.evil.com",
 	} {
 		if originAllowed(origin, host) {
-			t.Errorf("SECURITY: origin %q was admitted to the workspace socket", origin)
+			t.Errorf("SECURITY: origin %q was admitted to the space socket", origin)
 		}
 	}
 	// The named team surfaces, the request's own host, and a non-browser client
@@ -670,19 +670,19 @@ func TestOriginAllowlistHasNoWildcard(t *testing.T) {
 
 // TestMemberPlaneOpScopesToTheCaller proves the membership answer a PEER process
 // gets is scoped to the org on the CALL and to nothing the caller wrote: the same
-// (workspace, subject) pair answers "member" for the owning tenant and "not a
-// member" for any other, so a peer cannot probe a foreign roster one workspace at
+// (space, subject) pair answers "member" for the owning tenant and "not a
+// member" for any other, so a peer cannot probe a foreign roster one space at
 // a time. It also proves the IAM subject → account join stays here, where the rows
 // were created: the peer sends a subject and is told the account.
 func TestMemberPlaneOpScopesToTheCaller(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
-	ws, err := store.EnsureWorkspace(ctx, "acme", accountID(iamSub), "Ada")
+	ws, err := store.EnsureSpace(ctx, "acme", accountID(iamSub), "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	in := &plane.MemberIn{Workspace: ws.UUID, Subject: iamSub}
+	in := &plane.MemberIn{Space: ws.UUID, Subject: iamSub}
 	got, err := memberOf(cloud.For(ctx, "acme"), store, in)
 	if err != nil {
 		t.Fatalf("memberOf(own org): %v", err)
@@ -694,7 +694,7 @@ func TestMemberPlaneOpScopesToTheCaller(t *testing.T) {
 		t.Fatalf("account = %q, want accountID(subject) = %q", got.Account, accountID(iamSub))
 	}
 
-	// Another tenant asking about the SAME workspace uuid learns nothing.
+	// Another tenant asking about the SAME space uuid learns nothing.
 	got, err = memberOf(cloud.For(ctx, "rival"), store, in)
 	if err != nil {
 		t.Fatalf("memberOf(foreign org): %v", err)
@@ -704,7 +704,7 @@ func TestMemberPlaneOpScopesToTheCaller(t *testing.T) {
 	}
 
 	// A stranger in the owning org is not a member either.
-	got, err = memberOf(cloud.For(ctx, "acme"), store, &plane.MemberIn{Workspace: ws.UUID, Subject: iamOtherSub})
+	got, err = memberOf(cloud.For(ctx, "acme"), store, &plane.MemberIn{Space: ws.UUID, Subject: iamOtherSub})
 	if err != nil {
 		t.Fatalf("memberOf(stranger): %v", err)
 	}

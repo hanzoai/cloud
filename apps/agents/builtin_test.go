@@ -8,7 +8,7 @@ import (
 
 // An org that connected Slack and did nothing else has NO agent rows, and the
 // bridges ask for the conventional ref — so without a built-in default @hanzo
-// answers "the agent hit an error handling that" in every fresh workspace.
+// answers "the agent hit an error handling that" in every fresh space.
 func TestBuiltinResolvesTheConventionalRef(t *testing.T) {
 	a, ok := builtinAgent("acme", "hanzo", "zen-70b")
 	if !ok {

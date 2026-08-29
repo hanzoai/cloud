@@ -25,21 +25,21 @@ import (
 	_ "github.com/hanzoai/sqlite"
 )
 
-// errNoWorkspace is returned when a slug/account resolves to no workspace in the
-// caller's org. Handlers map it to the platform WorkspaceNotFound status.
-var errNoWorkspace = errors.New("team: workspace not found")
+// errNoSpace is returned when a slug/account resolves to no space in the
+// caller's org. Handlers map it to the platform SpaceNotFound status.
+var errNoSpace = errors.New("team: space not found")
 
-// accountStore is the login/membership control plane — the workspaces + members
+// accountStore is the login/membership control plane — the spaces + members
 // tables behind team's picker, its seat count and its roster. ONE SQLite file — the
 // deployment's own "account" subsystem — holds every org's rows; tenant isolation is
-// the owner_org column, enforced on EVERY query (a workspace and its members are only
+// the owner_org column, enforced on EVERY query (a space and its members are only
 // ever read/selected scoped to the caller's VERIFIED org). MaxOpenConns(1) serializes
 // writes against the single-writer file.
 //
 // The data path is hanzoai/orm's RELATIONAL plane: orm.Select/orm.Typed for the reads,
 // the dbx builder (orm/query) for the writes. Not orm.Model — that is the document
 // plane over the JSON `_entities` table, and these tables are typed and indexed, with
-// composite uniqueness ((owner_org, slug), (workspace_id, user_id)) that a
+// composite uniqueness ((owner_org, slug), (space_id, user_id)) that a
 // json_extract store cannot hold. Three statements resist the builder and say so where
 // they stand; they run through orm's own NewQuery, so this file has ONE data path and
 // no database/sql handle of its own.
@@ -47,19 +47,19 @@ var errNoWorkspace = errors.New("team: workspace not found")
 // The handle comes from cek — an ENCRYPTED SQLite file, keyed per (namespace,
 // subsystem) — and orm is adapted onto it rather than opening its own. orm's
 // SQLiteDBConfig carries no master key, so orm.OpenSQLite would write this store —
-// every workspace, membership and display name — as a plaintext `SQLite format 3`
+// every space, membership and display name — as a plaintext `SQLite format 3`
 // file. Adapting a handle the caller opened is what keeps encryption at rest.
 type accountStore struct {
 	db *query.DB
 }
 
-// workspace is one team workspace. uuid is the transactor store key + token claim;
+// space is one team space. uuid is the transactor store key + token claim;
 // slug is the human URL handle; ownerOrg is the tenant.
 //
 // The `db` tags are the mapping dbx scans by, which is why the hand-written positional
 // Scan is gone: a column added to wsCols without a matching field is now a mapping
 // that does not resolve, rather than a silent shift of every value one position left.
-type workspace struct {
+type space struct {
 	ID        string `db:"id"`
 	Slug      string `db:"slug"`
 	Name      string `db:"name"`
@@ -71,9 +71,9 @@ type workspace struct {
 	CreatedAt int64  `db:"created_at"`
 }
 
-// member is one workspace membership row (human or bot).
+// member is one space membership row (human or bot).
 type member struct {
-	WorkspaceID string `db:"workspace_id"`
+	SpaceID     string `db:"space_id"`
 	UserID      string `db:"user_id"`
 	Role        string `db:"role"`
 	DisplayName string `db:"display_name"`
@@ -99,7 +99,7 @@ func openAccountStore(dir string) (*accountStore, error) {
 	return s, nil
 }
 
-// migrate creates the workspaces + members tables. Every uniqueness/lookup index
+// migrate creates the spaces + members tables. Every uniqueness/lookup index
 // leads with owner_org so tenant isolation is a physical property. Idempotent.
 //
 // RAW, and it has to be: the builder's CreateUniqueIndex emits neither IF NOT EXISTS
@@ -107,8 +107,11 @@ func openAccountStore(dir string) (*accountStore, error) {
 // index below, and dbx.Sync writes no indexes at all. It runs through orm's NewQuery,
 // so the escape hatch stays inside the one data path.
 func (s *accountStore) migrate() error {
+	if err := s.converge(); err != nil {
+		return err
+	}
 	const ddl = `
-CREATE TABLE IF NOT EXISTS workspaces (
+CREATE TABLE IF NOT EXISTS spaces (
   id          TEXT PRIMARY KEY,
   slug        TEXT NOT NULL,
   name        TEXT NOT NULL DEFAULT '',
@@ -119,28 +122,28 @@ CREATE TABLE IF NOT EXISTS workspaces (
   region      TEXT NOT NULL DEFAULT '',
   created_at  INTEGER NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_workspaces_uuid      ON workspaces(uuid);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_workspaces_org_slug  ON workspaces(owner_org, slug);
-CREATE INDEX        IF NOT EXISTS ix_workspaces_org       ON workspaces(owner_org);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_spaces_uuid      ON spaces(uuid);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_spaces_org_slug  ON spaces(owner_org, slug);
+CREATE INDEX        IF NOT EXISTS ix_spaces_org       ON spaces(owner_org);
 
--- Personal-workspace uniqueness. EnsureWorkspace is the SOLE creator of workspaces
+-- Personal-space uniqueness. EnsureSpace is the SOLE creator of spaces
 -- and always writes owner=account, so (owner_org, owner) identifies an account's ONE
--- personal workspace. A pre-fix login race could mint duplicates (two concurrent
+-- personal space. A pre-fix login race could mint duplicates (two concurrent
 -- logins both saw "none"); converge any such duplicates to the EARLIEST row before
 -- enforcing the invariant going forward. The extras' grants need no sweep: the
--- backfill joins members to workspaces, so a grant whose workspace is gone is
+-- backfill joins members to spaces, so a grant whose space is gone is
 -- never carried into IAM.
 -- The index is PARTIAL (owner <> '') so any owner-less row — none created here — stays
 -- unconstrained rather than colliding. Idempotent: no-op once converged.
-DELETE FROM workspaces WHERE owner <> '' AND id IN (
-  SELECT w.id FROM workspaces w
+DELETE FROM spaces WHERE owner <> '' AND id IN (
+  SELECT w.id FROM spaces w
   WHERE EXISTS (
-    SELECT 1 FROM workspaces e
+    SELECT 1 FROM spaces e
     WHERE e.owner_org = w.owner_org AND e.owner = w.owner AND e.id <> w.id
       AND (e.created_at < w.created_at OR (e.created_at = w.created_at AND e.id < w.id))
   )
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_workspaces_org_owner ON workspaces(owner_org, owner) WHERE owner <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_spaces_org_owner ON spaces(owner_org, owner) WHERE owner <> '';
 `
 	if _, err := s.db.NewQuery(ddl).Execute(); err != nil {
 		return fmt.Errorf("account migrate: %w", err)
@@ -148,42 +151,84 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_workspaces_org_owner ON workspaces(owner_or
 	return nil
 }
 
+// converge carries a deployment written before the table was called `spaces`.
+//
+// SQLite's ALTER … RENAME TO moves the indexes across with the table but LEAVES
+// THEIR NAMES, so a converged file would carry ux_workspaces_uuid sitting on
+// spaces — a name that describes nothing and that migrate's CREATE … IF NOT
+// EXISTS would never replace, because the index it wants is absent under the
+// name it looks for while the uniqueness is already enforced under another. They
+// are dropped here and remade by the DDL above, so the file ends identical to
+// one created fresh: same table, same four index names, no archaeology.
+//
+// Guarded on both ends. A fresh deployment has no old table and does nothing; a
+// converged one has the new table and does nothing. Between them there is
+// exactly one boot that renames, and it is the same boot either way because the
+// whole thing runs inside openAccountStore before a single read.
+func (s *accountStore) converge() error {
+	if !s.hasTable("workspaces") || s.hasTable("spaces") {
+		return nil
+	}
+	const ddl = `
+ALTER TABLE workspaces RENAME TO spaces;
+DROP INDEX IF EXISTS ux_workspaces_uuid;
+DROP INDEX IF EXISTS ux_workspaces_org_slug;
+DROP INDEX IF EXISTS ix_workspaces_org;
+DROP INDEX IF EXISTS ux_workspaces_org_owner;
+`
+	if _, err := s.db.NewQuery(ddl).Execute(); err != nil {
+		return fmt.Errorf("account converge: %w", err)
+	}
+	return nil
+}
+
+// hasTable reports whether one table is present. Asked rather than inferred from
+// a failed read: "absent" and "the read broke" are the same error string and
+// opposite situations, and only one of them may be converged over.
+func (s *accountStore) hasTable(name string) bool {
+	var n int
+	err := s.db.NewQuery(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name={:name}`).
+		Bind(query.Params{"name": name}).Row(&n)
+	return err == nil && n > 0
+}
+
 // Close closes the underlying database. dbx.DB.Close closes the *sql.DB cek handed
 // us, so the handle is owned in exactly one place.
 func (s *accountStore) Close() error { return s.db.Close() }
 
-// wsCols is the workspace projection — the columns every workspace read selects and
-// the order EnsureWorkspace inserts by.
+// wsCols is the space projection — the columns every space read selects and
+// the order EnsureSpace inserts by.
 var wsCols = []string{"id", "slug", "name", "uuid", "owner", "owner_org", "data_id", "region", "created_at"}
 
-// workspacesIn starts a workspace read over a table expression. ONE spelling of
-// "select a workspace", so a projection can never disagree with the struct.
-func (s *accountStore) workspacesIn(table string, cols ...string) *orm.Typed[workspace] {
+// spacesIn starts a space read over a table expression. ONE spelling of
+// "select a space", so a projection can never disagree with the struct.
+func (s *accountStore) spacesIn(table string, cols ...string) *orm.Typed[space] {
 	if len(cols) == 0 {
 		cols = wsCols
 	}
-	return orm.Select[workspace](s.db, table, cols...)
+	return orm.Select[space](s.db, table, cols...)
 }
 
-// EnsureWorkspace gives an account a personal workspace in org if it has none, so
-// the workspace picker is never empty. owner_org is the canonical tenant field
+// EnsureSpace gives an account a personal space in org if it has none, so
+// the space picker is never empty. owner_org is the canonical tenant field
 // every downstream surface (transactor path, roster reconcile) reads; `owner`
 // keeps the creating account uuid for provenance only. Returns the account's
-// (possibly pre-existing) first workspace in the org.
-func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name string) (workspace, error) {
+// (possibly pre-existing) first space in the org.
+func (s *accountStore) EnsureSpace(ctx context.Context, org, account, name string) (space, error) {
 	if org == "" || account == "" {
-		return workspace{}, fmt.Errorf("team: ensure workspace: empty org/account")
+		return space{}, fmt.Errorf("team: ensure space: empty org/account")
 	}
-	// Fast path: the account already has a workspace → heal own membership, return it.
+	// Fast path: the account already has a space → heal own membership, return it.
 	if w, ok, err := s.adoptExisting(ctx, org, account); err != nil {
-		return workspace{}, err
+		return space{}, err
 	} else if ok {
 		return w, nil
 	}
 	if name == "" {
-		name = "Workspace"
+		name = "Space"
 	}
-	w := workspace{
+	w := space{
 		ID:        uuid.NewString(),
 		Slug:      slugify(name) + "-" + shortID(),
 		Name:      name,
@@ -194,20 +239,20 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return workspace{}, fmt.Errorf("begin: %w", err)
+		return space{}, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	// Idempotent create: the (owner_org, owner) partial-unique index makes a racing
 	// second login's INSERT a no-op (RowsAffected 0). The winner also writes the owner
 	// member row and commits; a loser rolls back its unused ids and ADOPTS the winner,
-	// so concurrent logins converge to exactly ONE personal workspace.
+	// so concurrent logins converge to exactly ONE personal space.
 	//
 	// RAW, on two counts the builder has no client for: DO NOTHING (dbx's Upsert only
 	// ever emits DO UPDATE SET) and a conflict target carrying the partial index's
 	// WHERE. Written as a DO UPDATE it would invert the meaning — the loser would
 	// overwrite the winner's row instead of yielding to it.
 	res, err := tx.NewQuery(
-		`INSERT INTO workspaces (` + strings.Join(wsCols, ",") + `)
+		`INSERT INTO spaces (` + strings.Join(wsCols, ",") + `)
 		 VALUES ({:id},{:slug},{:name},{:uuid},{:owner},{:owner_org},{:data_id},{:region},{:created_at})
 		 ON CONFLICT(owner_org, owner) WHERE owner <> '' DO NOTHING`).
 		Bind(query.Params{
@@ -216,109 +261,109 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 			"region": w.Region, "created_at": w.CreatedAt,
 		}).WithContext(ctx).Execute()
 	if err != nil {
-		return workspace{}, fmt.Errorf("insert workspace: %w", err)
+		return space{}, fmt.Errorf("insert space: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		_ = tx.Rollback()
 		if w, ok, err := s.adoptExisting(ctx, org, account); err != nil {
-			return workspace{}, err
+			return space{}, err
 		} else if ok {
 			return w, nil
 		}
-		return workspace{}, fmt.Errorf("team: ensure workspace: create conflicted but no personal workspace resolved")
+		return space{}, fmt.Errorf("team: ensure space: create conflicted but no personal space resolved")
 	}
 	if err := tx.Commit(); err != nil {
-		return workspace{}, fmt.Errorf("commit: %w", err)
+		return space{}, fmt.Errorf("commit: %w", err)
 	}
 	// The creator owns it, recorded where every other grant lives. AFTER the
-	// commit, because the workspace has to exist before a grant can name it: the
-	// grant is idempotent, so a failure here leaves a workspace its creator
+	// commit, because the space has to exist before a grant can name it: the
+	// grant is idempotent, so a failure here leaves a space its creator
 	// re-owns on the next call rather than a row pointing at nothing.
 	if err := s.AddMember(ctx, org, w.UUID, account, "owner"); err != nil {
-		return workspace{}, fmt.Errorf("grant owner: %w", err)
+		return space{}, fmt.Errorf("grant owner: %w", err)
 	}
 	return w, nil
 }
 
-// adoptExisting returns the account's first workspace in the org, if any.
+// adoptExisting returns the account's first space in the org, if any.
 //
-// It heals nothing: the grant it used to repair is IAM's row now, and a workspace
+// It heals nothing: the grant it used to repair is IAM's row now, and a space
 // this account can be found through is one IAM already says they may act in.
-func (s *accountStore) adoptExisting(ctx context.Context, org, account string) (workspace, bool, error) {
-	existing, err := s.WorkspacesOf(ctx, org, account)
+func (s *accountStore) adoptExisting(ctx context.Context, org, account string) (space, bool, error) {
+	existing, err := s.SpacesOf(ctx, org, account)
 	if err != nil {
-		return workspace{}, false, err
+		return space{}, false, err
 	}
 	if len(existing) == 0 {
-		return workspace{}, false, nil
+		return space{}, false, nil
 	}
 	return existing[0], true, nil
 }
 
-// WorkspacesOf returns the org's workspaces the account may act in, newest first.
+// SpacesOf returns the org's spaces the account may act in, newest first.
 //
-// Where a person may act is IAM's answer; which workspace carries which name is
+// Where a person may act is IAM's answer; which space carries which name is
 // team's. So this asks IAM for the scopes and reads the rows for them, rather
 // than joining a roster it no longer keeps.
-func (s *accountStore) WorkspacesOf(ctx context.Context, org, account string) ([]workspace, error) {
+func (s *accountStore) SpacesOf(ctx context.Context, org, account string) ([]space, error) {
 	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{User: account, Any: true})
 	if err != nil {
-		return nil, fmt.Errorf("workspaces of: %w", err)
+		return nil, fmt.Errorf("spaces of: %w", err)
 	}
 	uuids := make([]any, 0, len(got.Memberships))
 	for _, m := range got.Memberships {
-		if m.Workspace != "" {
-			uuids = append(uuids, m.Workspace)
+		if m.Space != "" {
+			uuids = append(uuids, m.Space)
 		}
 	}
 	if len(uuids) == 0 {
 		return nil, nil
 	}
-	out, err := s.workspacesIn("workspaces w", prefixed("w", wsCols)...).
+	out, err := s.spacesIn("spaces w", prefixed("w", wsCols)...).
 		Where(query.HashExp{"w.owner_org": org, "w.uuid": uuids}).
 		OrderBy("w.created_at DESC").
 		All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("workspaces of: %w", err)
+		return nil, fmt.Errorf("spaces of: %w", err)
 	}
 	return out, nil
 }
 
-// WorkspaceBySlug resolves a workspace by (org, slug) — the org scope is what stops
-// a caller in org A from selecting org B's workspace by passing its slug. Returns
-// errNoWorkspace when absent in the org.
-func (s *accountStore) WorkspaceBySlug(ctx context.Context, org, slug string) (workspace, error) {
-	w, ok, err := s.workspacesIn("workspaces").
+// SpaceBySlug resolves a space by (org, slug) — the org scope is what stops
+// a caller in org A from selecting org B's space by passing its slug. Returns
+// errNoSpace when absent in the org.
+func (s *accountStore) SpaceBySlug(ctx context.Context, org, slug string) (space, error) {
+	w, ok, err := s.spacesIn("spaces").
 		Where(query.HashExp{"owner_org": org, "slug": slug}).First(ctx)
 	if err != nil {
-		return workspace{}, fmt.Errorf("workspace by slug: %w", err)
+		return space{}, fmt.Errorf("space by slug: %w", err)
 	}
 	if !ok {
-		return workspace{}, errNoWorkspace
+		return space{}, errNoSpace
 	}
 	return w, nil
 }
 
-// WorkspaceByUUID resolves a workspace by (org, uuid) — the org scope is the
+// SpaceByUUID resolves a space by (org, uuid) — the org scope is the
 // tenant boundary the files plane relies on: a blob request naming another org's
-// workspace uuid resolves to errNoWorkspace, so it can never reach that org's
-// blobs. Returns errNoWorkspace when absent in the org.
-func (s *accountStore) WorkspaceByUUID(ctx context.Context, org, id string) (workspace, error) {
-	w, ok, err := s.workspacesIn("workspaces").
+// space uuid resolves to errNoSpace, so it can never reach that org's
+// blobs. Returns errNoSpace when absent in the org.
+func (s *accountStore) SpaceByUUID(ctx context.Context, org, id string) (space, error) {
+	w, ok, err := s.spacesIn("spaces").
 		Where(query.HashExp{"owner_org": org, "uuid": id}).First(ctx)
 	if err != nil {
-		return workspace{}, fmt.Errorf("workspace by uuid: %w", err)
+		return space{}, fmt.Errorf("space by uuid: %w", err)
 	}
 	if !ok {
-		return workspace{}, errNoWorkspace
+		return space{}, errNoSpace
 	}
 	return w, nil
 }
 
-// Membership is the role a person holds in a workspace, from IAM.
+// Membership is the role a person holds in a space, from IAM.
 //
 // Team keeps no roster: identity, membership and roles are IAM's. The scope is
-// the workspace UUID — team's stable external name for it, which is what the
+// the space UUID — team's stable external name for it, which is what the
 // grant is filed against.
 func (s *accountStore) Membership(ctx context.Context, org, wsUUID, account string) (string, bool) {
 	for _, m := range s.roster(ctx, org, wsUUID) {
@@ -329,7 +374,7 @@ func (s *accountStore) Membership(ctx context.Context, org, wsUUID, account stri
 	return "", false
 }
 
-// MemberName is the name IAM holds for a member of a workspace.
+// MemberName is the name IAM holds for a member of a space.
 func (s *accountStore) MemberName(ctx context.Context, org, wsUUID, account string) string {
 	for _, m := range s.roster(ctx, org, wsUUID) {
 		if m.User == account {
@@ -357,30 +402,30 @@ func (s *accountStore) AccountForSubject(ctx context.Context, org, subject strin
 	return account, true
 }
 
-// MembersForWorkspaceUUID is the workspace's roster, from IAM.
-func (s *accountStore) MembersForWorkspaceUUID(ctx context.Context, org, wsUUID string) ([]member, error) {
+// MembersForSpaceUUID is the space's roster, from IAM.
+func (s *accountStore) MembersForSpaceUUID(ctx context.Context, org, wsUUID string) ([]member, error) {
 	rows := s.roster(ctx, org, wsUUID)
 	out := make([]member, 0, len(rows))
 	for _, m := range rows {
 		out = append(out, member{
-			WorkspaceID: wsUUID, UserID: m.User, Role: m.Role,
+			SpaceID: wsUUID, UserID: m.User, Role: m.Role,
 			DisplayName: m.Name, Active: true,
 		})
 	}
 	return out, nil
 }
 
-// roster reads one workspace's memberships. It answers empty on a failure: every
+// roster reads one space's memberships. It answers empty on a failure: every
 // caller is deciding whether ONE person may act, and an empty roster denies.
 func (s *accountStore) roster(ctx context.Context, org, wsUUID string) []plane.Membership {
-	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{Workspace: wsUUID})
+	got, err := iam.IAMMembers(cloud.For(ctx, org), &plane.Scope{Space: wsUUID})
 	if err != nil {
 		return nil
 	}
 	return got.Memberships
 }
 
-// GuestRank is a guest's position among the workspace's guests, oldest first.
+// GuestRank is a guest's position among the space's guests, oldest first.
 // IAM returns the roster in a stable order, so the rank is the index.
 func (s *accountStore) GuestRank(ctx context.Context, org, wsUUID, account string) int {
 	rank := 0
@@ -410,28 +455,28 @@ func (s *accountStore) Seats(ctx context.Context, org string) (seats, guests int
 
 // EnsureMemberName is gone: a person's name is IAM's, read with the roster.
 
-// AddMember records in IAM that account may act in the workspace.
+// AddMember records in IAM that account may act in the space.
 func (s *accountStore) AddMember(ctx context.Context, org, wsUUID, account, role string) error {
 	if wsUUID == "" || account == "" {
-		return fmt.Errorf("team: add member: empty workspace/account")
+		return fmt.Errorf("team: add member: empty space/account")
 	}
 	if role == "" {
 		role = "member"
 	}
 	_, err := iam.IAMGrant(cloud.For(ctx, org), &plane.GrantIn{
-		User: account, Workspace: wsUUID, Role: role,
+		User: account, Space: wsUUID, Role: role,
 	})
 	return err
 }
 
-// WorkspacesForOrg returns every workspace of an org — used by /v1/team/bots/sync
-// to re-project the org's agents into each of its workspaces. Org-scoped.
-func (s *accountStore) WorkspacesForOrg(ctx context.Context, org string) ([]workspace, error) {
-	out, err := s.workspacesIn("workspaces").
+// SpacesForOrg returns every space of an org — used by /v1/team/bots/sync
+// to re-project the org's agents into each of its spaces. Org-scoped.
+func (s *accountStore) SpacesForOrg(ctx context.Context, org string) ([]space, error) {
+	out, err := s.spacesIn("spaces").
 		Where(query.HashExp{"owner_org": org}).
 		OrderBy("created_at DESC").All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("workspaces for org: %w", err)
+		return nil, fmt.Errorf("spaces for org: %w", err)
 	}
 	return out, nil
 }

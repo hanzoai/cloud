@@ -1,6 +1,6 @@
 package team
 
-// This file is the workspace data plane the SPA connects to after
+// This file is the space data plane the SPA connects to after
 // selectWorkspace — the transactor. The RPC dispatch + query semantics are ported
 // VERBATIM from github.com/hanzoai/team/pkg/transactor/transactor.go; the
 // TRANSPORT is rewritten from golang.org/x/net/websocket + core.RequestEvent to
@@ -51,7 +51,7 @@ type Bot struct {
 type BotLister func(ctx context.Context, org string) ([]Bot, error)
 
 // transServer holds the transactor's shared, process-lifetime state: the per-
-// workspace SQLite docs store (the structured data plane — no KV, no Postgres),
+// space SQLite docs store (the structured data plane — no KV, no Postgres),
 // the class hierarchy parsed from the embedded model, the live-broadcast hub, the
 // identity client, and the two roster sources (the account store's members +
 // the in-process agents lister).
@@ -60,7 +60,7 @@ type transServer struct {
 	hier     *hierarchy
 	hub      *hub
 	ident    *identity     // who is calling, and what may they touch (account.go)
-	accounts *accountStore // human members (this deployment's workspaces)
+	accounts *accountStore // human members (this deployment's spaces)
 	bots     BotLister     // bot members (the org's in-process agents)
 	runAgent AgentRunner   // the Chunter responder's LLM client (agents.RunOnBehalf); nil = responder OFF
 	log      luxlog.Logger // best-effort responder logging; nil-safe (tests leave it unset)
@@ -69,7 +69,7 @@ type transServer struct {
 	// transServer literal (tests, the sync path) is inert-but-correct.
 	startedAt int64         // process boot (unix millis); messages older than this are backfill → never answered (0 = no filter, tests)
 	sem       chan struct{} // hard concurrency cap on in-flight agent turns (nil = uncapped, tests)
-	inflight  sync.Map      // single-flight: (workspace|space|bot) currently answering → drop duplicates
+	inflight  sync.Map      // single-flight: (space|space|bot) currently answering → drop duplicates
 	breaker   sync.Map      // per-agent circuit breaker: agentID → *agentBreaker (backoff on repeated failure)
 
 	// degraded is the fail-closed posture Mount resolved (no HS256 secret). The
@@ -81,7 +81,7 @@ type transServer struct {
 
 // live is the process-singleton transactor server, published in Mount so the
 // in-process projection path (Apply / ingest) and the /v1/team/bots/sync handler
-// can write into the per-workspace store the SPA reads WITHOUT holding a client
+// can write into the per-space store the SPA reads WITHOUT holding a client
 // WebSocket. One server, one store.
 var live *transServer
 
@@ -93,29 +93,29 @@ var live *transServer
 // The path key is the FIBER pattern exactly as registered in Mount.
 func init() {
 	openapi.Describe("/v1/team/transactor/:token", http.MethodGet,
-		"Open the workspace data-plane socket",
-		"Upgrades to the WebSocket the Team client runs an entire workspace over: every frame "+
+		"Open the space data-plane socket",
+		"Upgrades to the WebSocket the Team client runs an entire space over: every frame "+
 			"is a ZAP envelope wrapping one JSON-RPC message — findAll/findOne reads against the "+
-			"workspace's documents, tx writes that broadcast to the other live sessions, hello "+
+			"space's documents, tx writes that broadcast to the other live sessions, hello "+
 			"negotiating JSON rather than msgpack. The response is a protocol upgrade, so there "+
 			"is no body to read.\n\n"+
-			"THE PATH SEGMENT IS THE CREDENTIAL. It is the workspace token selectWorkspace "+
+			"THE PATH SEGMENT IS THE CREDENTIAL. It is the space token selectWorkspace "+
 			"minted — bearer-equivalent, and sitting in a URL that proxies and access logs "+
 			"record, which is exactly why it expires in twelve hours and is re-minted on demand "+
 			"rather than being long-lived like the session token. It is decoded and verified "+
 			"(signature and expiry) BEFORE the upgrade, so a bad one is a 401 and never a socket "+
 			"that is accepted and then dropped, and it must carry both an account and a "+
-			"workspace claim. Nothing ambient authorizes this socket: a WebSocket is exempt from "+
+			"space claim. Nothing ambient authorizes this socket: a WebSocket is exempt from "+
 			"CORS, so a cookie-borne credential would make the Origin check the only access "+
 			"control on the whole data plane.\n\n"+
 			"The tenant is the token's SIGNED org claim and it keys every store path, so no "+
-			"header can name another workspace's data. The upgrade ALSO refuses a browser Origin "+
+			"header can name another space's data. The upgrade ALSO refuses a browser Origin "+
 			"outside the team surfaces with 403 — otherwise any page could open an authenticated "+
 			"socket with a token it lured out of a logged-in browser — while a request with no "+
 			"Origin at all is admitted, because that is what a non-browser client sends.\n\n"+
-			"On connect the workspace's system spaces are seeded once and the roster is "+
+			"On connect the space's system spaces are seeded once and the roster is "+
 			"reconciled every time, so the org's human members and its bots are present as "+
-			"workspace people without a separate sync call.")
+			"space people without a separate sync call.")
 }
 
 // serveWS AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a
@@ -126,14 +126,14 @@ func init() {
 // The path segment carries whichever lane the caller is on, and a UUID is not a
 // JWT so the two can never be read as each other:
 //
-// THE PATH SEGMENT IS THE CREDENTIAL — the workspace token selectWorkspace minted,
-// whose signed claims name both the account and the workspace. Nothing ambient
+// THE PATH SEGMENT IS THE CREDENTIAL — the space token selectWorkspace minted,
+// whose signed claims name both the account and the space. Nothing ambient
 // authorizes this socket; see admitWS for why it must stay that way and what the
 // IAM lane here will look like.
 func (srv *transServer) serveWS(c *zip.Ctx) error {
 	cl, ws, err := srv.admitWS(c.Param("token"))
 	if err != nil || ws == "" {
-		return zip.ErrUnauthorized("invalid workspace token")
+		return zip.ErrUnauthorized("invalid space token")
 	}
 	sess := &session{
 		server:    srv,
@@ -141,12 +141,12 @@ func (srv *transServer) serveWS(c *zip.Ctx) error {
 		hier:      srv.hier,
 		account:   cl.account,
 		org:       cl.org,
-		workspace: ws,
+		space:     ws,
 		sessionID: c.Query("sessionId"),
 	}
 	return wsx.Upgrade(func(conn *wsx.Conn) error {
 		sess.conn = conn
-		sess.seedWorkspace()   // system spaces (once per workspace)
+		sess.seedSpace()       // system spaces (once per space)
 		sess.reconcileRoster() // humans + bots as Person/Employee (every connect)
 		srv.hub.add(sess)
 		defer srv.hub.remove(sess)
@@ -155,18 +155,18 @@ func (srv *transServer) serveWS(c *zip.Ctx) error {
 	}, wsx.Config{CheckOrigin: wsOriginOK})(c)
 }
 
-// admitWS resolves the socket's caller and the workspace it may open, from the
+// admitWS resolves the socket's caller and the space it may open, from the
 // CREDENTIAL IN THE PATH SEGMENT and nothing ambient.
 //
 // THE TRANSACTOR HAS NO IAM LANE, and that is a decision rather than an omission.
 // A browser can put a credential on a WebSocket in exactly two places: the URL, or
-// a cookie. The URL is where the HS256 workspace token already sits, which is
-// survivable only because that token is scoped to one workspace for twelve hours —
+// a cookie. The URL is where the HS256 space token already sits, which is
+// survivable only because that token is scoped to one space for twelve hours —
 // an estate-wide IAM bearer in a path that proxies and access logs record is not.
 // And the cookie is worse here than anywhere else in this file: a WebSocket is
 // EXEMPT FROM CORS, so a foreign page may open one and read every frame, and
 // SameSite=Lax is scoped to the registrable domain — so any first-party page that
-// can be made to run script opens an authenticated workspace socket with the
+// can be made to run script opens an authenticated space socket with the
 // victim's ambient cookie and reads and writes the whole stream. An Origin check is
 // then the only access control, which makes one wildcard in an allowlist a total
 // compromise of the data plane.
@@ -182,10 +182,10 @@ func (srv *transServer) admitWS(seg string) (caller, string, error) {
 	if err != nil {
 		return caller{}, "", err
 	}
-	// An HS256 SESSION token names no workspace, and that is not an error here: the
+	// An HS256 SESSION token names no space, and that is not an error here: the
 	// statistics read answers it with an empty session map. serveWS, which cannot
 	// open a socket onto nothing, imposes its own requirement.
-	return cl, cl.workspace, nil
+	return cl, cl.space, nil
 }
 
 // wsOriginOK is the browser-Origin gate on the transactor upgrade: without it
@@ -204,8 +204,8 @@ func wsOriginOK(ctx *fasthttp.RequestCtx) bool {
 // access control for the socket, not a hint about it. A wildcard over a registrable
 // domain therefore means every first-party host is part of the team data plane's
 // TCB: one marketing subdomain, one preview host, one page that renders
-// user-supplied markdown, and a script there opens an authenticated workspace
-// socket. The blast radius of a wildcard here is the whole workspace, so the set is
+// user-supplied markdown, and a script there opens an authenticated space
+// socket. The blast radius of a wildcard here is the whole space, so the set is
 // enumerated and grows only on purpose.
 var teamOrigins = map[string]bool{
 	"hanzo.team": true, "team.hanzo.ai": true, "api.hanzo.team": true,
@@ -230,20 +230,20 @@ func originAllowed(origin, host string) bool {
 	return teamOrigins[strings.ToLower(u.Hostname())]
 }
 
-// statsIn is the statistics read's whole input: the workspace token, which the
+// statsIn is the statistics read's whole input: the space token, which the
 // front carries as a query param on the transactor base. It is a CREDENTIAL,
-// not a tenant assertion — the workspace it names is the one its HS256 signature
-// proves, verified below, so a caller cannot name a workspace it does not hold a
+// not a tenant assertion — the space it names is the one its HS256 signature
+// proves, verified below, so a caller cannot name a space it does not hold a
 // token for.
 type statsIn struct {
-	// Token is the workspace token minted by selectWorkspace.
+	// Token is the space token minted by selectWorkspace.
 	Token string `json:"token"`
 }
 
 // statsSessions is the live-session block of the statistics body.
 type statsSessions struct {
-	// ActiveSessions maps a workspace uuid to its connected sessions. It carries
-	// only the token's OWN workspace, and is empty for a token that names none.
+	// ActiveSessions maps a space uuid to its connected sessions. It carries
+	// only the token's OWN space, and is empty for a token that names none.
 	ActiveSessions map[string][]statsUser `json:"activeSessions"`
 }
 
@@ -287,12 +287,12 @@ type statsOut struct {
 	Admin bool `json:"admin"`
 }
 
-// Statistics returns the transactor's live sessions for the workspace the caller's
-// credential names — the endpoint the front's workspace switcher and server panel
+// Statistics returns the transactor's live sessions for the space the caller's
+// credential names — the endpoint the front's space switcher and server panel
 // poll on the transactor base. `token` carries the same two lanes the socket's path
-// segment does: a workspace UUID names the workspace and is authorized against the
-// membership rows, an HS256 workspace token names it in its signed claims.
-// activeSessions carries ONLY that one workspace, never another tenant's sessions.
+// segment does: a space UUID names the space and is authorized against the
+// membership rows, an HS256 space token names it in its signed claims.
+// activeSessions carries ONLY that one space, never another tenant's sessions.
 // An unverifiable credential, or one the caller is no member under, is 401.
 //
 // Example: {"token": "eyJhbGciOiJIUzI1NiJ9…"}
@@ -313,7 +313,7 @@ func (srv *transServer) statistics(ctx context.Context, in *statsIn) (*statsOut,
 	return &statsOut{Statistics: statsSessions{ActiveSessions: active}}, nil
 }
 
-// session is one live transactor connection, scoped to a (workspace, account).
+// session is one live transactor connection, scoped to a (space, account).
 type session struct {
 	server    *transServer
 	store     *docStore
@@ -322,7 +322,7 @@ type session struct {
 	wmu       sync.Mutex // serializes writes (loop replies + hub broadcasts)
 	account   string
 	org       string // IAM tenant (token extra.org); scopes the data path
-	workspace string
+	space     string
 	sessionID string
 	// derived accumulates synthetic txes the trigger projection mints (e.g. the
 	// DocNotifyContext docs a channel create fans out). tx() drains + broadcasts
@@ -406,7 +406,7 @@ func (s *session) handle(payload []byte) []byte {
 }
 
 // findAll resolves the queried class to its concrete descendants, scans the
-// workspace store, filters by query (+ mixin), sorts, limits, and returns a
+// space store, filters by query (+ mixin), sorts, limits, and returns a
 // TotalArray — the wire shape the client's rpc reviver expects.
 func (s *session) findAll(id int64, params []json.RawMessage) []byte {
 	var class string
@@ -455,7 +455,7 @@ func (s *session) findOne(id int64, params []json.RawMessage) []byte {
 // mixin + query filtering.
 func (s *session) queryDocs(class string, query map[string]any) []map[string]any {
 	candidates := s.hier.candidates(class)
-	docs, err := s.store.byClasses(s.org, s.workspace, candidates)
+	docs, err := s.store.byClasses(s.org, s.space, candidates)
 	if err != nil {
 		return nil
 	}
@@ -480,7 +480,7 @@ func (s *session) queryDocs(class string, query map[string]any) []map[string]any
 	return matched
 }
 
-// tx applies the transaction to the workspace store and broadcasts the applied
+// tx applies the transaction to the space store and broadcasts the applied
 // tx(es) so every session's live queries refresh.
 func (s *session) tx(id int64, params []json.RawMessage) []byte {
 	if len(params) == 0 {
@@ -492,11 +492,11 @@ func (s *session) tx(id int64, params []json.RawMessage) []byte {
 		s.derived = nil
 	}
 	if len(applied) > 0 {
-		s.server.hub.broadcast(s.workspace, applied)
+		s.server.hub.broadcast(s.space, applied)
 		// Fire agent replies for any bot-addressed Chunter message. Async + guarded
 		// inside; only the client WS write path reaches here (the roster/sync path
 		// calls applyTx directly), so a projection can never trigger a reply.
-		s.server.maybeAgentReply(s.org, s.workspace, applied)
+		s.server.maybeAgentReply(s.org, s.space, applied)
 	}
 	return s.result(id, res)
 }
@@ -607,7 +607,7 @@ func mustJSON(v any) []byte {
 // client reads the populated store on its first findAll).
 func (s *session) reconcileRoster() { s.reconcile(false) }
 
-// reconcile projects the workspace roster into the docs store on EVERY connect
+// reconcile projects the space roster into the docs store on EVERY connect
 // (idempotent, no sentinel): every human member (from the account store) AND every
 // one of the org's agents (from the in-process agents lister) becomes a
 // contact:class:Person + contact:mixin:Employee (+ a hanzo social identity) so they
@@ -621,12 +621,12 @@ func (s *session) reconcileRoster() { s.reconcile(false) }
 // the bot list is authoritative (lister present AND no error), so a transient
 // lister failure is never misread as "all agents gone".
 //
-// When broadcast is true the applied txes are fanned to the workspace's open
+// When broadcast is true the applied txes are fanned to the space's open
 // sessions (the admin re-sync path). Returns the number of live roster entries
 // (humans + live bots) processed.
 //
 // ISOLATION: s.org is the VERIFIED token tenant; both sources are queried
-// org-scoped, so a workspace only ever receives its OWN org's humans and agents.
+// org-scoped, so a space only ever receives its OWN org's humans and agents.
 func (s *session) reconcile(broadcast bool) int {
 	ctx := context.Background()
 	var applied []json.RawMessage
@@ -642,9 +642,9 @@ func (s *session) reconcile(broadcast bool) int {
 	}
 
 	count := 0
-	// Humans — the account store's member rows for this workspace, org-scoped.
+	// Humans — the account store's member rows for this space, org-scoped.
 	if s.server.accounts != nil {
-		members, err := s.server.accounts.MembersForWorkspaceUUID(ctx, s.org, s.workspace)
+		members, err := s.server.accounts.MembersForSpaceUUID(ctx, s.org, s.space)
 		if err == nil {
 			for _, m := range members {
 				apply(MemberTxes(Member{
@@ -700,7 +700,7 @@ func (s *session) reconcile(broadcast bool) int {
 	}
 
 	if broadcast && len(applied) > 0 {
-		s.server.hub.broadcast(s.workspace, applied)
+		s.server.hub.broadcast(s.space, applied)
 	}
 	return count
 }
@@ -712,19 +712,19 @@ func (s *session) reconcile(broadcast bool) int {
 // team-go-era Person id, so hanzo:<account> pointed at the WRONG person and the
 // workbench refused the transactor connect ("Confirmed social identity is attached
 // to the wrong person"). MemberTxes only (re)creates the social identity on FIRST
-// projection (exists==false), so on a migrated workspace where person-<account>
+// projection (exists==false), so on a migrated space where person-<account>
 // already exists it never corrects a mis-attached row — this does.
 //
 // It re-points every SocialIdentity keyed hanzo:<uid> (the id the workbench
 // resolves the account by) whose attachedTo is not person-<uid> back onto
-// person-<uid>, reconstituting exactly the shape a FRESH workspace has from the
+// person-<uid>, reconstituting exactly the shape a FRESH space has from the
 // start. Properties, by construction:
 //   - migrated-only: a fresh (or already-remapped) row is attachedTo==pid, so it is
-//     skipped — fresh workspaces are never touched.
+//     skipped — fresh spaces are never touched.
 //   - idempotent: after one pass every keyed row is canonical, so every later
 //     connect is a no-op.
 //   - non-destructive: it only UPDATES attachedTo; no row is deleted, so the
-//     migrated person doc and all workspace data survive.
+//     migrated person doc and all space data survive.
 //
 // Returns the re-pointed txes so the caller folds them into the reconcile apply/
 // broadcast path (admin re-sync fans them to open sessions).
@@ -739,7 +739,7 @@ func (s *session) remapMigratedSocialIds(uid string) []map[string]any {
 	// _id==hanzo:<uid> row directly (belt-and-suspenders, in case a migrated row lost
 	// its key field). De-duped by _id.
 	candidates := s.queryDocs(clSocialIdentity, map[string]any{"key": socialKey})
-	if d, _ := s.store.get(s.org, s.workspace, socialKey); d != nil && str(d["_class"]) == clSocialIdentity {
+	if d, _ := s.store.get(s.org, s.space, socialKey); d != nil && str(d["_class"]) == clSocialIdentity {
 		candidates = append(candidates, d)
 	}
 
@@ -763,28 +763,28 @@ func (s *session) remapMigratedSocialIds(uid string) []map[string]any {
 	return txes
 }
 
-// exists reports whether a doc id is already in this session's workspace store.
+// exists reports whether a doc id is already in this session's space store.
 func (s *session) exists(id string) bool {
-	d, _ := s.store.get(s.org, s.workspace, id)
+	d, _ := s.store.get(s.org, s.space, id)
 	return d != nil
 }
 
 // ── in-process projection bridge (Apply / ingest) ─────────────────────────────
 
-// Apply ingests platform CUD txes into a workspace's store exactly as a live
+// Apply ingests platform CUD txes into a space's store exactly as a live
 // client would (same applyTx path, same triggers) and broadcasts the applied
-// txes to every open session of that workspace (realtime). account is the
+// txes to every open session of that space (realtime). account is the
 // attribution used for triggers/PersonSpace ownership. No-op until Mount runs.
-func Apply(org, workspace, account string, txes ...map[string]any) {
-	if live == nil || org == "" || workspace == "" || len(txes) == 0 {
+func Apply(org, space, account string, txes ...map[string]any) {
+	if live == nil || org == "" || space == "" || len(txes) == 0 {
 		return
 	}
-	live.ingest(org, workspace, account, txes...)
+	live.ingest(org, space, account, txes...)
 }
 
-func (srv *transServer) ingest(org, workspace, account string, txes ...map[string]any) {
-	s := &session{server: srv, store: srv.store, hier: srv.hier, org: org, workspace: workspace, account: account}
-	s.seedWorkspace() // system spaces must exist so space-scoped queries resolve
+func (srv *transServer) ingest(org, space, account string, txes ...map[string]any) {
+	s := &session{server: srv, store: srv.store, hier: srv.hier, org: org, space: space, account: account}
+	s.seedSpace() // system spaces must exist so space-scoped queries resolve
 	var applied []json.RawMessage
 	for _, t := range txes {
 		raw, err := json.Marshal(t)
@@ -795,13 +795,13 @@ func (srv *transServer) ingest(org, workspace, account string, txes ...map[strin
 		applied = append(applied, a...)
 	}
 	if len(applied) > 0 {
-		srv.hub.broadcast(workspace, applied)
+		srv.hub.broadcast(space, applied)
 	}
 }
 
 // ── live broadcast hub ────────────────────────────────────────────────────────
 
-// hub fans applied txes to every open session of a workspace so live queries
+// hub fans applied txes to every open session of a space so live queries
 // refresh in real time (and across a user's tabs).
 type hub struct {
 	mu sync.Mutex
@@ -813,10 +813,10 @@ func newHub() *hub { return &hub{ws: map[string]map[*session]bool{}} }
 func (h *hub) add(s *session) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	set := h.ws[s.workspace]
+	set := h.ws[s.space]
 	if set == nil {
 		set = map[*session]bool{}
-		h.ws[s.workspace] = set
+		h.ws[s.space] = set
 	}
 	set[s] = true
 }
@@ -824,29 +824,29 @@ func (h *hub) add(s *session) {
 func (h *hub) remove(s *session) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if set := h.ws[s.workspace]; set != nil {
+	if set := h.ws[s.space]; set != nil {
 		delete(set, s)
 		if len(set) == 0 {
-			delete(h.ws, s.workspace)
+			delete(h.ws, s.space)
 		}
 	}
 }
 
-// users lists a workspace's live sessions in the front's statistics shape.
-func (h *hub) users(workspace string) []statsUser {
+// users lists a space's live sessions in the front's statistics shape.
+func (h *hub) users(space string) []statsUser {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	out := []statsUser{}
-	for s := range h.ws[workspace] {
+	for s := range h.ws[space] {
 		out = append(out, statsUser{UserID: s.account})
 	}
 	return out
 }
 
-func (h *hub) broadcast(workspace string, txes []json.RawMessage) {
+func (h *hub) broadcast(space string, txes []json.RawMessage) {
 	h.mu.Lock()
 	var targets []*session
-	for s := range h.ws[workspace] {
+	for s := range h.ws[space] {
 		targets = append(targets, s)
 	}
 	h.mu.Unlock()

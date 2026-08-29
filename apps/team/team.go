@@ -44,7 +44,7 @@ var mounted *cloud.Service[state]
 // Mount wires the /v1/team/* surface onto app per HIP-0106. It opens the two
 // SQLite stores under {DataDir}/team, wires the account API, the transactor
 // WebSocket and the bots read routes, and publishes the transactor singleton so
-// the in-process projection path can write into the workspace store.
+// the in-process projection path can write into the space store.
 //
 // The uniform /v1/team/health liveness route is provided by the compose root
 // (serve.go registers GET /v1/<name>/health for every enabled subsystem BEFORE
@@ -102,7 +102,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// shared by every team surface. The IAM validator is the SAME RS256/JWKS trust
 	// anchor the identity boundary and the OAuth callback use; the HS256 secret is
 	// the fallback arm; the account store is the membership authority the IAM lane
-	// authorizes a named workspace against.
+	// authorizes a named space against.
 	ident := &identity{
 		verify:   cloud.NewTokenValidator(cfg.iamEndpoint).Validate,
 		secret:   cfg.serverSecret,
@@ -111,7 +111,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	trans := &transServer{
-		store:     newStore(filepath.Join(root, "workspaces")),
+		store:     newStore(filepath.Join(root, "spaces")),
 		hier:      buildHierarchy(modelJSON),
 		hub:       newHub(),
 		ident:     ident,
@@ -135,7 +135,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		log.Info("team: Chunter agent responder OFF (set TEAM_AGENTS_ENABLED=1 to enable)")
 	}
 	// Publish the singleton so the in-process projection path (Apply / ingest) and
-	// the /v1/team/bots/sync handler can write into the per-workspace store.
+	// the /v1/team/bots/sync handler can write into the per-space store.
 	live = trans
 
 	acct := &api{
@@ -178,13 +178,13 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	tg := app.Group(teamPrefix)
 	acct.register(app, guard)
 
-	// The front's workspace switcher polls this on the transactor base
+	// The front's space switcher polls this on the transactor base
 	// (LoginEndpoint, ws→http). Static route — never captured by the :token
 	// segment below.
 	//
 	// ONE ADDRESS. It carried a second registration at `/transactor/api/v1/
 	// statistics` for the same handler, waiting on the front to repoint. The front
-	// repointed (SelectWorkspaceMenu.svelte), so the alias is gone with it.
+	// repointed (SelectSpaceMenu.svelte), so the alias is gone with it.
 	//
 	// It was never merely untidy: both were TYPED, so each was its own registry
 	// entry and its own operation in the published document — two operations, two
@@ -213,7 +213,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	channels := &roomBridge{trans: trans, accounts: accounts, degraded: degraded}
 	channels.register(app)
 
-	// Files plane: the workspace blob store the Team front's UPLOAD_URL/FILES_URL
+	// Files plane: the space blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS client (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
 	files := &filesService{vfs: deps.VFS, ident: ident, degraded: degraded}
@@ -242,7 +242,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// Shutdown releases the team stores (account DB + every cached per-workspace docs
+// Shutdown releases the team stores (account DB + every cached per-space docs
 // handle). Idempotent — safe to call when nothing is mounted.
 func Shutdown() error {
 	if mounted == nil {
@@ -319,7 +319,7 @@ func teamAgentsMaxConcurrency() int {
 // resolveSecret decides the HS256 signing posture from the RAW SERVER_SECRET env.
 // It returns degraded=true (fail-closed, health-only) when the secret is unset or
 // the upstream public "secret" literal — so no path EVER signs/verifies a team
-// token with a known key (which would let a forged {extra.org, workspace} token
+// token with a known key (which would let a forged {extra.org, space} token
 // read+write ANY tenant's docs). There is no escape hatch: dev sets a real
 // SERVER_SECRET like every other deployment (one way).
 func resolveSecret(cfg *config, log luxlog.Logger) (degraded bool) {

@@ -45,7 +45,7 @@ func reqOrgs(t *testing.T, app *zip.App, path, user, orgs string) (int, []byte) 
 
 // The defect this whole file exists for: the listing has to WIN the address
 // against /v1/base/*, or it reaches one org's engine, which has no route for it
-// and answers not-found — which the workspace showed as an account with no Bases.
+// and answers not-found — which the space showed as an account with no Bases.
 func TestListingBeatsTheWildcard(t *testing.T) {
 	app, _ := mountApp(t)
 	code, body := reqOrgs(t, app, "/v1/base/bases", "u_hanzo", "hanzo,lux")
@@ -62,7 +62,7 @@ func TestListingBeatsTheWildcard(t *testing.T) {
 }
 
 // The wire is a BARE ARRAY. An envelope is the shape a typed op reaches for by
-// reflex and would break the workspace, which decodes Base[].
+// reflex and would break the space, which decodes Base[].
 func TestListingIsABareArray(t *testing.T) {
 	app, _ := mountApp(t)
 	_, body := reqOrgs(t, app, "/v1/base/bases", "u_hanzo", "hanzo")

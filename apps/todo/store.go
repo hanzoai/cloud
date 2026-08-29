@@ -71,7 +71,7 @@ type Issue struct {
 	Source    string // team | git | crm | helpdesk | cms | agent (default "team")
 	Repo      string // git repo binding; "" = not repo-bound
 	// Room binding — the collaboration room this item belongs to (HIP-0523),
-	// spelled "<workspace>_<room>"; "" = not room-bound.
+	// spelled "<space>_<room>"; "" = not room-bound.
 	//
 	// It sits BESIDE Repo rather than inside ExtRef or Labels, and both of those
 	// were tried on paper first. ExtRef is single-valued and is the mirror's

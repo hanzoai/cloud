@@ -1,6 +1,6 @@
 package team
 
-// This file seeds a brand-new workspace's system spaces and runs the server-side
+// This file seeds a brand-new space's system spaces and runs the server-side
 // triggers (PersonSpace materialization) — ported VERBATIM from
 // github.com/hanzoai/team/pkg/transactor/seed.go.
 
@@ -15,7 +15,7 @@ const acctSystem = "core:account:System"
 
 // systemSpaces are the space ids the real platform bootstrap creates via
 // migration (NOT in the model). They must exist so findOne(core.class.Space,
-// {_id}) and space-scoped queries resolve. Seeded once per workspace on first
+// {_id}) and space-scoped queries resolve. Seeded once per space on first
 // connect.
 func systemSpaces() []map[string]any {
 	now := time.Now().UnixMilli()
@@ -41,15 +41,15 @@ func systemSpaces() []map[string]any {
 	}
 }
 
-// seedWorkspace writes the system spaces into a brand-new workspace exactly once
+// seedSpace writes the system spaces into a brand-new space exactly once
 // (count==0). Idempotent: put is an upsert keyed by _id.
-func (s *session) seedWorkspace() {
-	n, err := s.store.count(s.org, s.workspace)
+func (s *session) seedSpace() {
+	n, err := s.store.count(s.org, s.space)
 	if err != nil || n > 0 {
 		return
 	}
 	for _, sp := range systemSpaces() {
-		_ = s.store.put(s.org, s.workspace, sp)
+		_ = s.store.put(s.org, s.space, sp)
 	}
 }
 
@@ -73,7 +73,7 @@ func (s *session) trigger(doc map[string]any) {
 	case clChatMessage:
 		// A message bumps its channel's contexts (ordering + badges) and heals
 		// contexts for channels created before this projection existed.
-		if ch, _ := s.store.get(s.org, s.workspace, str(doc["attachedTo"])); ch != nil {
+		if ch, _ := s.store.get(s.org, s.space, str(doc["attachedTo"])); ch != nil {
 			if cls := str(ch["_class"]); cls == clChannel || cls == clDirectMessage {
 				s.projectNotifyContexts(ch, time.Now().UnixMilli())
 			}
@@ -118,7 +118,7 @@ func (s *session) projectNotifyContexts(space map[string]any, touch int64) {
 				for _, ctx := range ctxs {
 					ctx["lastUpdateTimestamp"] = touch
 					ctx["modifiedOn"] = now
-					_ = s.store.put(s.org, s.workspace, ctx)
+					_ = s.store.put(s.org, s.space, ctx)
 					s.pushDerivedTx(clTxUpdate, str(ctx["_id"]), clDocNotifyContext, str(ctx["space"]), map[string]any{
 						"operations": map[string]any{"lastUpdateTimestamp": touch},
 					})
@@ -133,7 +133,7 @@ func (s *session) projectNotifyContexts(space map[string]any, touch int64) {
 			"isPinned": false, "hidden": false, "lastUpdateTimestamp": now,
 			"modifiedBy": acctSystem, "modifiedOn": now, "createdBy": acctSystem, "createdOn": now,
 		}
-		_ = s.store.put(s.org, s.workspace, ctx)
+		_ = s.store.put(s.org, s.space, ctx)
 		attrs := map[string]any{}
 		for k, v := range ctx {
 			if k != "_id" && k != "_class" && k != "space" && k != "modifiedBy" && k != "modifiedOn" {
@@ -147,7 +147,7 @@ func (s *session) projectNotifyContexts(space map[string]any, touch int64) {
 			continue
 		}
 		for _, ctx := range ctxs {
-			_ = s.store.del(s.org, s.workspace, str(ctx["_id"]))
+			_ = s.store.del(s.org, s.space, str(ctx["_id"]))
 			s.pushDerivedTx(clTxRemove, str(ctx["_id"]), clDocNotifyContext, str(ctx["space"]), nil)
 		}
 	}
@@ -178,11 +178,11 @@ func (s *session) ensurePersonSpace(person string) {
 		return
 	}
 	id := "person-space:" + person
-	if existing, _ := s.store.get(s.org, s.workspace, id); existing != nil {
+	if existing, _ := s.store.get(s.org, s.space, id); existing != nil {
 		return
 	}
 	now := time.Now().UnixMilli()
-	_ = s.store.put(s.org, s.workspace, map[string]any{
+	_ = s.store.put(s.org, s.space, map[string]any{
 		"_id": id, "_class": "contact:class:PersonSpace", "space": "core:space:Space",
 		"name": "Personal space", "description": "", "private": true, "archived": false,
 		"person": person, "members": []any{s.account},

@@ -16,7 +16,7 @@ import (
 
 // The membership set has to CROSS the boundary, or a surface that offers a
 // choice of org has to re-validate the JWT itself or ask IAM again for
-// something already in hand. Hanzo Base's workspace could list no Bases for
+// something already in hand. Hanzo Base's space could list no Bases for
 // exactly that reason.
 //
 // It is minted from the validated claims and from nothing else, so the table

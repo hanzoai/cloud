@@ -189,7 +189,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// reason /health is, and at a literal path so it wins the address against the
 	// /v1/base/* wildcard below (most-specific-first). Behind that wildcard this
 	// address reaches ONE org's engine, which has no route for it and answers
-	// not-found; the workspace read that as an account with no Bases in it.
+	// not-found; the space read that as an account with no Bases in it.
 	//
 	// Registering it here also keeps it in the DOCUMENT: describe projects the
 	// live router, so a route behind a feature gate is absent from the SDKs, the

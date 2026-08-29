@@ -22,7 +22,7 @@ func TestSpaceNamedDocTypeAndDocumentRoundTrip(t *testing.T) {
 	// A DocType whose NAME contains a space, client-named documents (prompt), and
 	// submittable so the submit/cancel-by-name paths are covered too.
 	dt := map[string]any{
-		"name": "Test Space", "autoname": "prompt", "isSubmittable": true,
+		"name": "Test Space", "module": "custom", "autoname": "prompt", "isSubmittable": true,
 		"fields": []map[string]any{{"fieldname": "body", "fieldtype": "Data", "reqd": true}},
 	}
 	if code, b := do(t, app, http.MethodPost, "/v1/framework/doctypes", org, dt); code != http.StatusCreated {
@@ -30,7 +30,7 @@ func TestSpaceNamedDocTypeAndDocumentRoundTrip(t *testing.T) {
 	}
 
 	// GET the DocType by its space name (encoded). Pre-fix: 404. (getDocType :name)
-	code, body := do(t, app, http.MethodGet, "/v1/framework/doctypes/Test%20Space", org, nil)
+	code, body := do(t, app, http.MethodGet, "/v1/framework/doctypes/custom.Test%20Space", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("GET doctype by space name want 200, got %d (%s)", code, body)
 	}
@@ -42,7 +42,7 @@ func TestSpaceNamedDocTypeAndDocumentRoundTrip(t *testing.T) {
 
 	// Create a document whose NAME contains a space, under the space-named DocType.
 	// The doctype segment is encoded too, so this also covers access(:doctype).
-	code, body = do(t, app, http.MethodPost, "/v1/framework/Test%20Space", org,
+	code, body = do(t, app, http.MethodPost, "/v1/framework/custom.Test%20Space", org,
 		map[string]any{"name": "Alpha Beta", "body": "one"})
 	if code != http.StatusCreated {
 		t.Fatalf("create space-named doc want 201, got %d (%s)", code, body)
@@ -53,7 +53,7 @@ func TestSpaceNamedDocTypeAndDocumentRoundTrip(t *testing.T) {
 		t.Fatalf("doc name want %q, got %v", "Alpha Beta", doc["name"])
 	}
 
-	docPath := "/v1/framework/Test%20Space/Alpha%20Beta"
+	docPath := "/v1/framework/custom.Test%20Space/Alpha%20Beta"
 
 	// GET the document by name. Pre-fix: 404. (getDocument: access + docName)
 	code, body = do(t, app, http.MethodGet, docPath, org, nil)
@@ -99,16 +99,16 @@ func TestSpaceNamedDocTypeAndDocumentRoundTrip(t *testing.T) {
 
 	// Replace then delete the DocType by its space name → 200 / 204.
 	replace := map[string]any{
-		"name": "Test Space", "autoname": "prompt",
+		"name": "Test Space", "module": "custom", "autoname": "prompt",
 		"fields": []map[string]any{{"fieldname": "body", "fieldtype": "Data"}},
 	}
-	if code, b := do(t, app, http.MethodPut, "/v1/framework/doctypes/Test%20Space", org, replace); code != http.StatusOK {
+	if code, b := do(t, app, http.MethodPut, "/v1/framework/doctypes/custom.Test%20Space", org, replace); code != http.StatusOK {
 		t.Fatalf("PUT (replace) doctype by space name want 200, got %d (%s)", code, b)
 	}
-	if code, b := do(t, app, http.MethodDelete, "/v1/framework/doctypes/Test%20Space", org, nil); code != http.StatusNoContent {
+	if code, b := do(t, app, http.MethodDelete, "/v1/framework/doctypes/custom.Test%20Space", org, nil); code != http.StatusNoContent {
 		t.Fatalf("DELETE doctype by space name want 204, got %d (%s)", code, b)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/framework/doctypes/Test%20Space", org, nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/framework/doctypes/custom.Test%20Space", org, nil); code != http.StatusNotFound {
 		t.Fatalf("GET deleted doctype want 404, got %d", code)
 	}
 }

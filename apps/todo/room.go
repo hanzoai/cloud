@@ -19,7 +19,7 @@ func settled(status string) bool { return status == "done" || status == "cancele
 
 // roomRef addresses one collaboration room's work.
 type roomRef struct {
-	// Room is the room, spelled "<workspace>_<room>" — the same value
+	// Room is the room, spelled "<space>_<room>" — the same value
 	// GET /v1/meet/call answers with, so a channel's call and its work name the
 	// room identically. From the path.
 	Room string `json:"room"`

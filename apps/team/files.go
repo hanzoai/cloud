@@ -1,6 +1,6 @@
 package team
 
-// This file is the workspace FILES plane (Phase 2A) — the blob store the Team SPA
+// This file is the space FILES plane (Phase 2A) — the blob store the Team SPA
 // hits via its FrontStorage client (foundations/core/packages/storage-client/src/
 // client/front.ts). team-go's pkg/files was only a 307 alias to Base's file API
 // (no store), so this is a fresh implementation of the SAME FrontStorage contract
@@ -8,18 +8,18 @@ package team
 // way).
 //
 // CONTRACT (front.ts, authoritative):
-//   - upload:   POST {UPLOAD_URL}/{workspace}, multipart field "file" whose
+//   - upload:   POST {UPLOAD_URL}/{space}, multipart field "file" whose
 //               FILENAME is the CLIENT-generated blob uuid (formData.append(
 //               'file', file, uuid)); Authorization: Bearer <token>; response
 //               body is DISCARDED (uploadFile returns void).
-//   - download: GET /{workspace}/{filename}?file={blobId}&workspace={workspace}.
+//   - download: GET /{space}/{filename}?file={blobId}&space={space}.
 //
 // TENANT ISOLATION (same invariant as the docs store, defense in depth):
-//   - org is the VERIFIED session/workspace-token extra.org claim (never a header);
-//   - the caller is asserted to be a MEMBER of :workspace (account store members
+//   - org is the VERIFIED session/space-token extra.org claim (never a header);
+//   - the caller is asserted to be a MEMBER of :space (account store members
 //     table) — not merely same-org — before any store/serve;
-//   - the physical key embeds org+workspace+blobId (team/blobs/<org>/<ws>/<blobId>),
-//     so a cross-org/-workspace blobId simply does not resolve (404). Multiple
+//   - the physical key embeds org+space+blobId (team/blobs/<org>/<ws>/<blobId>),
+//     so a cross-org/-space blobId simply does not resolve (404). Multiple
 //     independent layers; every denial is a 404 (no member/existence oracle).
 
 import (
@@ -58,27 +58,27 @@ func init() {
 	// implied. The download's is genuinely opaque: the type is derived from the
 	// bytes, and octet-stream is both the honest "varies" and the literal fallback
 	// that route serves for everything it will not render inline.
-	openapi.Register("/v1/team/files/:workspace", http.MethodPost, openapi.Binary{},
+	openapi.Register("/v1/team/files/:space", http.MethodPost, openapi.Binary{},
 		openapi.Bytes{Type: "text/plain; charset=utf-8"})
-	openapi.Register("/v1/team/files/:workspace/:filename", http.MethodGet, nil, openapi.Bytes{})
-	openapi.Describe("/v1/team/files/:workspace", http.MethodPost,
-		"Upload a file into a workspace",
-		"Stores one file in a workspace's blob store and answers the blob id it is "+
+	openapi.Register("/v1/team/files/:space/:filename", http.MethodGet, nil, openapi.Bytes{})
+	openapi.Describe("/v1/team/files/:space", http.MethodPost,
+		"Upload a file into a space",
+		"Stores one file in a space's blob store and answers the blob id it is "+
 			"addressable by, as plain text — the front discards that body, it is there for a "+
 			"caller driving this by hand.\n\n"+
 			"The body is a multipart form with a `file` part, and THAT PART'S FILENAME IS THE "+
 			"BLOB ID: the client mints it (a uuid v4) and the server stores under it, so a part "+
 			"whose filename is not a uuid is refused rather than assigned one. A file over 100 "+
 			"MiB is 413 and an empty one is 400.\n\n"+
-			"The caller must hold a verified session or workspace token AND be a member of the "+
-			"workspace; an unknown workspace, another tenant's workspace and a workspace the "+
+			"The caller must hold a verified session or space token AND be a member of the "+
+			"space; an unknown space, another tenant's space and a space the "+
 			"caller is not in all answer the same 404, so a probe learns nothing about what "+
-			"exists. The stored key embeds the verified org and the workspace, so an upload "+
+			"exists. The stored key embeds the verified org and the space, so an upload "+
 			"cannot land in another tenant's box whatever id it names. A storage backend that "+
 			"is unavailable fails closed with 502 rather than reporting a write it never made.")
-	openapi.Describe("/v1/team/files/:workspace/:filename", http.MethodGet,
-		"Download a workspace file",
-		"Streams one blob's raw BYTES back — this is the read side of the workspace file "+
+	openapi.Describe("/v1/team/files/:space/:filename", http.MethodGet,
+		"Download a space file",
+		"Streams one blob's raw BYTES back — this is the read side of the space file "+
 			"store, not a JSON envelope around it.\n\n"+
 			"THE BLOB IS NAMED BY THE `file` QUERY PARAMETER, NOT BY :filename. The path segment "+
 			"is only the name a browser saves the download under; a request without ?file= is a "+
@@ -89,10 +89,10 @@ func init() {
 			"attachment disposition. Every response carries nosniff, so a file uploaded under an "+
 			".svg or .html name cannot be talked into executing in a viewer's origin. Blobs are "+
 			"immutable, so a hit caches privately for a year.\n\n"+
-			"Same gate as the upload: verified token, membership of the workspace. A genuine "+
-			"miss, another tenant's workspace, a workspace the caller is not in, and a blob id "+
-			"belonging to a different workspace are ONE answer — 404 — because the physical key "+
-			"is org- and workspace-scoped and a foreign id is simply a key that does not exist. "+
+			"Same gate as the upload: verified token, membership of the space. A genuine "+
+			"miss, another tenant's space, a space the caller is not in, and a blob id "+
+			"belonging to a different space are ONE answer — 404 — because the physical key "+
+			"is org- and space-scoped and a foreign id is simply a key that does not exist. "+
 			"An unavailable backend is a 502, never an empty 200.")
 }
 
@@ -100,8 +100,8 @@ func init() {
 // backend or memory. 100 MiB matches the attachment ceiling.
 const maxBlobSize = 100 << 20
 
-// filesService serves the workspace blob plane. vfs is cloud's blob client (deps.VFS);
-// accounts asserts workspace membership; secret verifies the session token.
+// filesService serves the space blob plane. vfs is cloud's blob client (deps.VFS);
+// accounts asserts space membership; secret verifies the session token.
 // degraded is the fail-closed posture Mount resolved (no HS256 secret): a typed
 // op cannot be wrapped by Mount's guard, so it asks for itself — see typed.go.
 type filesService struct {
@@ -114,36 +114,36 @@ func (s *filesService) register(app cloud.Router, guard guardFn) {
 	// The group is built HERE so cmd/zipdoc can resolve the typed op's prefix from
 	// this file — see bots.go for why.
 	g := app.Group(teamPrefix)
-	// Workspace is in the PATH (front.ts POSTs to {UPLOAD_URL}/{workspace}).
+	// Space is in the PATH (front.ts POSTs to {UPLOAD_URL}/{space}).
 	//
 	// upload and download stay UNTYPED and cannot be otherwise — upload takes a
 	// MULTIPART body and answers text/plain, download answers the blob's raw BYTES.
 	// untypedByDesign cites each; both DECLARE their bodies below.
-	g.Post("/files/:workspace", guard(s.upload))
-	g.Get("/files/:workspace/:filename", guard(s.download))
-	// deleteFile: DELETE getFileUrl(ws, file) = /{workspace}/{file}?file={file}
+	g.Post("/files/:space", guard(s.upload))
+	g.Get("/files/:space/:filename", guard(s.download))
+	// deleteFile: DELETE getFileUrl(ws, file) = /{space}/{file}?file={file}
 	// (front.ts) — the download route shape, DELETE method. TYPED: a DELETE
 	// addresses what it deletes with its URL, which is exactly what this one
 	// already did, and it answers 204 with no body — declared, so the document
 	// says 204 too.
-	zip.Delete(g, "/files/:workspace/:filename", s.deleteBlob, zip.WithStatus(http.StatusNoContent))
+	zip.Delete(g, "/files/:space/:filename", s.deleteBlob, zip.WithStatus(http.StatusNoContent))
 }
 
-// authorize asserts :workspace belongs to the caller's org AND the caller is a
-// MEMBER of it (Red F-C: bind files to workspace membership, not just same-org) —
+// authorize asserts :space belongs to the caller's org AND the caller is a
+// MEMBER of it (Red F-C: bind files to space membership, not just same-org) —
 // identity.admit, the one membership gate. Any failure is a 404: no oracle
-// distinguishing "no such workspace", "not your org", or "not a member". It takes
+// distinguishing "no such space", "not your org", or "not a member". It takes
 // the CONTEXT rather than the request because it needs nothing else off the wire,
 // which is what lets the typed delete and the untyped upload/download share it.
 func (s *filesService) authorize(ctx context.Context, cl caller, wsUUID string) error {
 	if strings.TrimSpace(wsUUID) == "" {
-		return zip.ErrBadRequest("workspace required")
+		return zip.ErrBadRequest("space required")
 	}
 	if s.ident == nil || s.ident.accounts == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "team: file storage unavailable")
 	}
 	if _, err := s.ident.admit(ctx, cl, wsUUID); err != nil {
-		return zip.ErrNotFound("workspace not found")
+		return zip.ErrNotFound("space not found")
 	}
 	return nil
 }
@@ -157,7 +157,7 @@ func (s *filesService) upload(c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
-	ws := c.Param("workspace")
+	ws := c.Param("space")
 	if err := s.authorize(c.Context(), cl, ws); err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func (s *filesService) download(c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
-	ws := c.Param("workspace")
+	ws := c.Param("space")
 	if err := s.authorize(c.Context(), cl, ws); err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (s *filesService) download(c *zip.Ctx) error {
 	data, err := s.vfs.Get(c.Context(), blobKey(cl.org, ws, blobID))
 	switch {
 	case errors.Is(err, types.ErrBlobNotFound), err == nil && data == nil:
-		// Genuine miss (working backend). A cross-org/-workspace blobId is a DIFFERENT
+		// Genuine miss (working backend). A cross-org/-space blobId is a DIFFERENT
 		// key that also does not exist → the SAME 404 (no existence oracle).
 		return zip.ErrNotFound("blob not found")
 	case err != nil:
@@ -244,12 +244,12 @@ func (s *filesService) download(c *zip.Ctx) error {
 	return c.Bytes(http.StatusOK, data)
 }
 
-// blobRef addresses one workspace blob from the URL, which is the whole input a
-// DELETE has: the workspace and the blob id are path segments, and `file` is the
+// blobRef addresses one space blob from the URL, which is the whole input a
+// DELETE has: the space and the blob id are path segments, and `file` is the
 // query the front actually carries the id in.
 type blobRef struct {
-	// Workspace is the workspace uuid the blob belongs to, from the path.
-	Workspace string `json:"workspace"`
+	// Space is the space uuid the blob belongs to, from the path.
+	Space string `json:"space"`
 	// Filename is the last path segment, which the front sets to the blob id
 	// when it sends no explicit `file`.
 	Filename string `json:"filename"`
@@ -257,9 +257,9 @@ type blobRef struct {
 	File string `json:"file"`
 }
 
-// DeleteBlob removes one blob from a workspace's file store. The caller must
-// hold a verified session AND be a member of the workspace; anything else — an
-// unknown workspace, another tenant's workspace, a workspace the caller is not
+// DeleteBlob removes one blob from a space's file store. The caller must
+// hold a verified session AND be a member of the space; anything else — an
+// unknown space, another tenant's space, a space the caller is not
 // in — answers the same 404, so a probe learns nothing about what exists.
 //
 // It is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a
@@ -268,7 +268,7 @@ type blobRef struct {
 // storage backend that is unavailable fails closed with 502 rather than lying
 // about success.
 //
-// Example: {"workspace": "6579…", "file": "0d4f…"}
+// Example: {"space": "6579…", "file": "0d4f…"}
 func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, error) {
 	if s.degraded {
 		return nil, unavailable()
@@ -277,7 +277,7 @@ func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, erro
 	if err != nil {
 		return nil, zip.ErrUnauthorized("invalid session token")
 	}
-	ws := in.Workspace
+	ws := in.Space
 	if err := s.authorize(ctx, cl, ws); err != nil {
 		return nil, err
 	}
@@ -301,8 +301,8 @@ func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, erro
 // blobKey is the physical, tenant-scoped VFS key. seg() sanitizes every component
 // (org is the verified claim; ws is asserted in-org + member; blobId is a validated
 // uuid — seg() is the last-line traversal guard on it).
-func blobKey(org, workspace, blobID string) string {
-	return "team/blobs/" + seg(org) + "/" + seg(workspace) + "/" + seg(blobID)
+func blobKey(org, space, blobID string) string {
+	return "team/blobs/" + seg(org) + "/" + seg(space) + "/" + seg(blobID)
 }
 
 // safeFilename reduces a client filename to a header-safe download name: only

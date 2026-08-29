@@ -19,7 +19,7 @@ func ingestServer(t *testing.T, org, ws string) (*transServer, *session) {
 	srv := &transServer{hub: newHub(), store: newStore(dir), hier: buildHierarchy(modelJSON)}
 	live = srv
 	t.Cleanup(func() { live = nil })
-	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, workspace: ws, account: acctSystem}
+	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, space: ws, account: acctSystem}
 	return srv, sess
 }
 

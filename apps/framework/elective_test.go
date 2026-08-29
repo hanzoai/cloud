@@ -17,11 +17,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// A module for this package's tests, registered in init so it is present before
-// moduleOf builds its map on first use.
+// A module for this package's tests. It has to be REGISTERED, because that is
+// how the refusal tells a product somebody sells from an org's own namespace.
 func init() {
 	doctype.RegisterModule("lane", []doctype.DocType{
-		{Name: "lane-thing", Module: "lane", Fields: []doctype.DocField{
+		{Name: "thing", Module: "lane", Fields: []doctype.DocField{
 			{Fieldname: "title", Fieldtype: doctype.FieldData, Label: "Title"},
 		}},
 	})
@@ -33,9 +33,9 @@ func gated() *zip.App {
 	g := app.Group(prefix)
 	g.Use(zip.H(elective))
 	served := func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"served": c.Path()}) }
-	g.Get("/modules", served)  // static: never a DocType
-	g.Get("/:doctype", served) // documents
-	g.Get("/:doctype/:name", served)
+	g.Get("/modules", served) // static: carries no dot, so it addresses no DocType
+	g.Get("/:module.:kind", served)
+	g.Get("/:module.:kind/:name", served)
 	return app
 }
 
@@ -65,13 +65,13 @@ func TestModuleNotEnabledIsNotThere(t *testing.T) {
 	planetest.Entitled(t, func(_, p string) bool { return p == "erp" }) // a DIFFERENT module
 	app := gated()
 
-	code, body := fetch(t, app, prefix+"/lane-thing", member)
+	code, body := fetch(t, app, prefix+"/lane.thing", member)
 	if code != http.StatusNotFound {
-		t.Fatalf("GET lane-thing = %d %s, want 404 — a module answered an org that never enabled it", code, body)
+		t.Fatalf("GET lane.thing = %d %s, want 404 — a module answered an org that never enabled it", code, body)
 	}
 	// And on the document route too, not only the list.
-	if code, _ := fetch(t, app, prefix+"/lane-thing/abc", member); code != http.StatusNotFound {
-		t.Errorf("GET lane-thing/abc = %d, want 404 — the refusal covers the list and not the document", code)
+	if code, _ := fetch(t, app, prefix+"/lane.thing/abc", member); code != http.StatusNotFound {
+		t.Errorf("GET lane.thing/abc = %d, want 404 — the refusal covers the list and not the document", code)
 	}
 }
 
@@ -80,22 +80,22 @@ func TestEnablingTheModuleLetsTheOrgIn(t *testing.T) {
 	planetest.Entitled(t, func(org, p string) bool { return org == "acme" && p == "lane" })
 	app := gated()
 
-	if code, body := fetch(t, app, prefix+"/lane-thing", member); code != http.StatusOK {
-		t.Fatalf("GET lane-thing = %d %s, want 200 — acme enabled the module and was refused", code, body)
+	if code, body := fetch(t, app, prefix+"/lane.thing", member); code != http.StatusOK {
+		t.Fatalf("GET lane.thing = %d %s, want 200 — acme enabled the module and was refused", code, body)
 	}
 	other := map[string]string{"X-User-Id": "initech/ceo@initech.test", "X-Org-Id": "initech"}
-	if code, _ := fetch(t, app, prefix+"/lane-thing", other); code != http.StatusNotFound {
-		t.Errorf("GET lane-thing as initech = %d, want 404 — one org's enablement admitted another", code)
+	if code, _ := fetch(t, app, prefix+"/lane.thing", other); code != http.StatusNotFound {
+		t.Errorf("GET lane.thing as initech = %d, want 404 — one org's enablement admitted another", code)
 	}
 }
 
-// What no module owns is not gated: a static segment, and an org's own DocType.
-// Both fall out of the same empty answer from moduleOf.
+// What no module owns is not gated: a static segment, and an org's own DocType
+// in a namespace no lane registered. Both fall out of the same empty answer.
 func TestWhatNoModuleOwnsIsServed(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // no peer: proves neither asks
 	app := gated()
 
-	for _, path := range []string{prefix + "/modules", prefix + "/own-doctype"} {
+	for _, path := range []string{prefix + "/modules", prefix + "/mine.own-doctype"} {
 		if code, body := fetch(t, app, path, member); code != http.StatusOK {
 			t.Errorf("GET %s = %d %s, want 200 — a path no module owns was made to depend on entitlement", path, code, body)
 		}
@@ -107,8 +107,8 @@ func TestEntitlementUnreachableRefusesTheModule(t *testing.T) {
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t)) // nothing is listening in it
 	app := gated()
 
-	if code, body := fetch(t, app, prefix+"/lane-thing", member); code != http.StatusNotFound {
-		t.Fatalf("GET lane-thing with no entitlement peer = %d %s, want 404", code, body)
+	if code, body := fetch(t, app, prefix+"/lane.thing", member); code != http.StatusNotFound {
+		t.Fatalf("GET lane.thing with no entitlement peer = %d %s, want 404", code, body)
 	}
 }
 
@@ -119,34 +119,41 @@ func TestNoPrincipalIsNotThereEither(t *testing.T) {
 
 	// The org header alone, with nothing that validated it — the shape a forged
 	// client header arrives in.
-	if code, _ := fetch(t, app, prefix+"/lane-thing", map[string]string{"X-Org-Id": "acme"}); code != http.StatusNotFound {
-		t.Errorf("GET lane-thing unvalidated = %d, want 404", code)
+	if code, _ := fetch(t, app, prefix+"/lane.thing", map[string]string{"X-Org-Id": "acme"}); code != http.StatusNotFound {
+		t.Errorf("GET lane.thing unvalidated = %d, want 404", code)
 	}
 }
 
-// doctypeIn runs before the router binds a parameter, so getting it wrong admits
-// everything.
-func TestDoctypeInReadsTheSegment(t *testing.T) {
+// moduleIn runs before the router binds a parameter, so getting it wrong admits
+// everything. It answers only for a module a lane REGISTERED, which is what lets
+// the static segments and an org's own namespace through one empty answer — the
+// table of every lane's doctype names that used to be needed is gone with them.
+func TestModuleInReadsTheSegment(t *testing.T) {
 	for _, c := range []struct {
 		path string
 		want string
 	}{
-		{prefix + "/lane-thing", "lane-thing"},
-		{prefix + "/lane-thing/abc", "lane-thing"},
-		{prefix + "/lane-thing/abc/submit", "lane-thing"},
+		{prefix + "/lane.thing", "lane"},
+		{prefix + "/lane.thing/abc", "lane"},
+		{prefix + "/lane.thing/abc/submit", "lane"},
+		{prefix + "/lane.thing/a.b/submit", "lane"}, // a dot in the DOCUMENT name is not a second address
 		{prefix, ""},
 		{prefix + "/", ""},
-		{"/v1/other/lane-thing", ""},
+		{prefix + "/doctypes", ""},            // static: no dot
+		{prefix + "/doctypes/lane.thing", ""}, // the registry, not a document
+		{prefix + "/summary", ""},
+		{prefix + "/mine.own", ""}, // a module no lane registered sells nothing
+		{"/v1/other/lane.thing", ""},
 	} {
-		got, ok := doctypeIn(c.path)
+		got, ok := moduleIn(c.path)
 		if c.want == "" {
 			if ok {
-				t.Errorf("doctypeIn(%q) = %q, want none", c.path, got)
+				t.Errorf("moduleIn(%q) = %q, want none", c.path, got)
 			}
 			continue
 		}
 		if !ok || got != c.want {
-			t.Errorf("doctypeIn(%q) = %q,%v want %q", c.path, got, ok, c.want)
+			t.Errorf("moduleIn(%q) = %q,%v want %q", c.path, got, ok, c.want)
 		}
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 )
 
-// roomFixture builds a transactor bound to one seeded workspace and creates
+// roomFixture builds a transactor bound to one seeded space and creates
 // `n` named channels in it through the REAL write path (applyTx), so the tests
 // below read exactly the documents a Team client would have produced.
 func roomFixture(t *testing.T, org string, names ...string) (*roomBridge, *session, string) {
@@ -41,7 +41,7 @@ func roomFixture(t *testing.T, org string, names ...string) (*roomBridge, *sessi
 // TestListRoomsReadsTheTransactorsOwnDocuments is the property the whole
 // surface rests on: these ops are a second DOOR, never a second store. A channel
 // created through the transactor write path appears in the REST listing with no
-// sync step, because both read the same per-workspace docs table.
+// sync step, because both read the same per-space docs table.
 func TestListRoomsReadsTheTransactorsOwnDocuments(t *testing.T) {
 	b, _, ws := roomFixture(t, "acme", "bugfix-1010", "general")
 	ctx := orgCtx(t, "acme")
@@ -58,8 +58,8 @@ func TestListRoomsReadsTheTransactorsOwnDocuments(t *testing.T) {
 		t.Fatalf("order = %q,%q, want bugfix-1010,general", got.Rooms[0].Name, got.Rooms[1].Name)
 	}
 	c := got.Rooms[0]
-	if c.Workspace != ws {
-		t.Errorf("workspace = %q, want %q", c.Workspace, ws)
+	if c.Space != ws {
+		t.Errorf("space = %q, want %q", c.Space, ws)
 	}
 	// An unclassified channel reads as persistent with no bindings — never as a
 	// hole. Every channel that predates the facet takes this path.
@@ -82,7 +82,7 @@ func TestBindRoomRoundTrips(t *testing.T) {
 	ctx := orgCtx(t, "acme")
 
 	out, err := b.bindRoom(ctx, &teamRoomBind{
-		ID: "ch-bugfix-1010", Workspace: ws, Life: lifeBound,
+		ID: "ch-bugfix-1010", Space: ws, Life: lifeBound,
 		Bindings: []string{"repo:hanzoai/cloud", "issue:1010"},
 	})
 	if err != nil {
@@ -115,7 +115,7 @@ func TestBindRoomSurvivesASubsequentClientWrite(t *testing.T) {
 	ctx := orgCtx(t, "acme")
 
 	if _, err := b.bindRoom(ctx, &teamRoomBind{
-		ID: "ch-bugfix-1010", Workspace: ws, Life: lifeBound, Bindings: []string{"issue:1010"},
+		ID: "ch-bugfix-1010", Space: ws, Life: lifeBound, Bindings: []string{"issue:1010"},
 	}); err != nil {
 		t.Fatalf("bindRoom: %v", err)
 	}
@@ -151,32 +151,32 @@ func TestBindRoomSurvivesASubsequentClientWrite(t *testing.T) {
 	}
 }
 
-// TestBindRoomRefusesAnotherOrgsWorkspace is the tenancy gate, and the FIRST
+// TestBindRoomRefusesAnotherOrgsSpace is the tenancy gate, and the FIRST
 // version of this test passed with the gate deleted — worth recording, because
 // the reason is the same one that makes the gate worth having.
 //
 // Cross-tenant ACCESS is already impossible without any check here: the store
-// keys every file on cloud.OrgNamespace(org, workspace) and the org comes from
-// the validated principal, so a caller naming another org's workspace uuid opens
+// keys every file on cloud.OrgNamespace(org, space) and the org comes from
+// the validated principal, so a caller naming another org's space uuid opens
 // a DIFFERENT file — an empty one — and gets a 404 either way. Asserting only the
 // 404 therefore measures the store's physical isolation, not this gate.
 //
 // What the gate uniquely buys is that the empty file is never CREATED. cek.Open
 // materialises on first use, so without it any caller could name arbitrary
-// workspace uuids and mint one encrypted database per guess, on a shared volume,
+// space uuids and mint one encrypted database per guess, on a shared volume,
 // unbounded. So the assertion is on the open-handle cache: a refused pair must
 // leave no store behind.
-func TestBindRoomRefusesAnotherOrgsWorkspace(t *testing.T) {
+func TestBindRoomRefusesAnotherOrgsSpace(t *testing.T) {
 	b, _, ws := roomFixture(t, "acme", "bugfix-1010")
 
-	// A caller validated as a DIFFERENT org names acme's workspace verbatim.
+	// A caller validated as a DIFFERENT org names acme's space verbatim.
 	_, err := b.bindRoom(orgCtx(t, "evil"), &teamRoomBind{
-		ID: "ch-bugfix-1010", Workspace: ws, Life: lifeBound,
+		ID: "ch-bugfix-1010", Space: ws, Life: lifeBound,
 	})
 	if err == nil {
 		t.Fatal("bindRoom admitted a caller from another org")
 	}
-	// 404 and not 403: a caller who may not touch this workspace must not learn
+	// 404 and not 403: a caller who may not touch this space must not learn
 	// from the status that it exists.
 	if got := zipStatus(err); got != 404 {
 		t.Errorf("status = %d, want 404 (a refusal must not be an existence oracle)", got)
@@ -190,7 +190,7 @@ func TestBindRoomRefusesAnotherOrgsWorkspace(t *testing.T) {
 	_, opened := b.trans.store.dbs[evil]
 	b.trans.store.mu.Unlock()
 	if opened {
-		t.Error("a refused workspace was opened as a store — an unbounded file-creation path")
+		t.Error("a refused space was opened as a store — an unbounded file-creation path")
 	}
 	// And acme's document is untouched.
 	got, err := b.listRooms(orgCtx(t, "acme"), nil)
@@ -208,7 +208,7 @@ func TestBindRoomRefusesAnotherOrgsWorkspace(t *testing.T) {
 func TestBindRoomRefusesAnUnreadableLife(t *testing.T) {
 	b, _, ws := roomFixture(t, "acme", "bugfix-1010")
 	if _, err := b.bindRoom(orgCtx(t, "acme"), &teamRoomBind{
-		ID: "ch-bugfix-1010", Workspace: ws, Life: "ephemeral",
+		ID: "ch-bugfix-1010", Space: ws, Life: "ephemeral",
 	}); err == nil {
 		t.Fatal("bindRoom stored an unknown life")
 	}
@@ -224,7 +224,7 @@ func TestBindingsAreShapeCheckedAndNotResolved(t *testing.T) {
 
 	for _, bad := range []string{"norefhere", "repo:", ":hanzoai/cloud"} {
 		if _, err := b.bindRoom(ctx, &teamRoomBind{
-			ID: "ch-bugfix-1010", Workspace: ws, Bindings: []string{bad},
+			ID: "ch-bugfix-1010", Space: ws, Bindings: []string{bad},
 		}); err == nil {
 			t.Errorf("binding %q was accepted, want a refusal", bad)
 		}
@@ -233,7 +233,7 @@ func TestBindingsAreShapeCheckedAndNotResolved(t *testing.T) {
 	// it, and refusing here would put this app in the business of knowing every
 	// other plane's nouns.
 	if _, err := b.bindRoom(ctx, &teamRoomBind{
-		ID: "ch-bugfix-1010", Workspace: ws, Bindings: []string{"project:no-such-project"},
+		ID: "ch-bugfix-1010", Space: ws, Bindings: []string{"project:no-such-project"},
 	}); err != nil {
 		t.Errorf("an unresolvable ref was refused: %v — shape is checked, existence is not", err)
 	}
@@ -248,7 +248,7 @@ func TestBindingsReplaceRatherThanMerge(t *testing.T) {
 	ctx := orgCtx(t, "acme")
 	bind := func(in *teamRoomBind) *teamRoom {
 		t.Helper()
-		in.ID, in.Workspace = "ch-bugfix-1010", ws
+		in.ID, in.Space = "ch-bugfix-1010", ws
 		out, err := b.bindRoom(ctx, in)
 		if err != nil {
 			t.Fatalf("bindRoom: %v", err)
@@ -317,7 +317,7 @@ func TestDirectMessagesAreRooms(t *testing.T) {
 		t.Errorf("dm = %+v, want direct+private with both members", *dm)
 	}
 	// And it binds like any other channel.
-	if _, err := b.bindRoom(ctx, &teamRoomBind{ID: "dm-1", Workspace: ws, Life: lifeBound}); err != nil {
+	if _, err := b.bindRoom(ctx, &teamRoomBind{ID: "dm-1", Space: ws, Life: lifeBound}); err != nil {
 		t.Errorf("a direct message refused a bind: %v", err)
 	}
 }

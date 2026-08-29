@@ -13,7 +13,7 @@ import (
 
 // The defect these tests hold a line under, stated once.
 //
-// team projects the org's agents as workspace members, and it used to read them
+// team projects the org's agents as space members, and it used to read them
 // with agents.ListForOrg — an in-process call gated on that package's `mounted`
 // global. A package global is per-PROCESS, and team and agents are separate
 // plugin binaries in every real deployment, so the call answered ErrNoPeer every

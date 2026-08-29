@@ -61,7 +61,7 @@ func read(t *testing.T, app *zip.App, bearer string) (int, lobby, string) {
 }
 
 // TestSessionRefusesACallerWithNothing pins the endpoint. The lobby names the caller's
-// own workspaces, so an unauthenticated read of it would be a tenant enumeration
+// own spaces, so an unauthenticated read of it would be a tenant enumeration
 // with no credential at all.
 func TestSessionRefusesACallerWithNothing(t *testing.T) {
 	app := mount(t, apiKey, apiSecret)
@@ -72,10 +72,10 @@ func TestSessionRefusesACallerWithNothing(t *testing.T) {
 	}
 }
 
-// TestSessionAnswersFromTheRows: the lobby names the workspaces the MEMBERSHIP
+// TestSessionAnswersFromTheRows: the lobby names the spaces the MEMBERSHIP
 // ROWS put this caller in, and the account those rows seat them under. Nothing in
 // the answer is read off the caller's token beyond the subject it attests, because
-// a token that could name its own workspace would be naming a tenant.
+// a token that could name its own space would be naming a tenant.
 func TestSessionAnswersFromTheRows(t *testing.T) {
 	t.Setenv(wsEnv, "wss://live.hanzo.bot")
 	app := mount(t, apiKey, apiSecret)
@@ -91,13 +91,13 @@ func TestSessionAnswersFromTheRows(t *testing.T) {
 	if out.WS != "wss://live.hanzo.bot" {
 		t.Errorf("ws = %q, want the configured media address", out.WS)
 	}
-	if len(out.Workspaces) != 1 || out.Workspaces[0].UUID != workspaceA {
-		t.Fatalf("workspaces = %+v, want exactly the workspace the rows name (%s)", out.Workspaces, workspaceA)
+	if len(out.Spaces) != 1 || out.Spaces[0].UUID != spaceA {
+		t.Fatalf("spaces = %+v, want exactly the space the rows name (%s)", out.Spaces, spaceA)
 	}
 }
 
 // TestTheOfferAndTheGrantAgree is the property this route exists to hold: every
-// workspace the lobby OFFERS is one getToken would actually mint for, and every
+// space the lobby OFFERS is one getToken would actually mint for, and every
 // one it withholds is one getToken would refuse. Without it a person is shown a
 // room, types a name, and is told no — and the two answers drift the first time
 // one of the role rules is edited alone.
@@ -113,18 +113,18 @@ func TestTheOfferAndTheGrantAgree(t *testing.T) {
 		{"", false}, // a row that names no role
 	} {
 		app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)),
-			holds(map[string]string{workspaceA: tc.role}))
+			holds(map[string]string{spaceA: tc.role}))
 		tok := access(t, ada)
 
 		code, out, body := read(t, app, tok)
 		if code != http.StatusOK {
 			t.Fatalf("role %q: session = %d, want 200\n%s", tc.role, code, body)
 		}
-		if offered := len(out.Workspaces) == 1; offered != tc.offered {
-			t.Errorf("role %q: offered=%v, want %v (%+v)", tc.role, offered, tc.offered, out.Workspaces)
+		if offered := len(out.Spaces) == 1; offered != tc.offered {
+			t.Errorf("role %q: offered=%v, want %v (%+v)", tc.role, offered, tc.offered, out.Spaces)
 		}
 		// The same caller, the same room, at the mint.
-		mintCode, _ := ask(t, app, roomIn(workspaceA), "", tok)
+		mintCode, _ := ask(t, app, roomIn(spaceA), "", tok)
 		if granted := mintCode == http.StatusOK; granted != tc.offered {
 			t.Errorf("role %q: OFFER=%v but GRANT=%v — the lobby and the mint disagree",
 				tc.role, tc.offered, granted)
@@ -132,25 +132,25 @@ func TestTheOfferAndTheGrantAgree(t *testing.T) {
 	}
 }
 
-// TestSessionOffersOnlyWhatTheCallerProved: a token bound to workspace A never
-// yields workspace B. The room prefix is the whole tenant boundary, so a lobby
-// that handed back a workspace the caller did not prove would be handing back the
+// TestSessionOffersOnlyWhatTheCallerProved: a token bound to space A never
+// yields space B. The room prefix is the whole tenant boundary, so a lobby
+// that handed back a space the caller did not prove would be handing back the
 // one string needed to name a room in it.
 func TestSessionOffersOnlyWhatTheCallerProved(t *testing.T) {
 	app := mount(t, apiKey, apiSecret)
 	tok := access(t, ada)
 	_, out, _ := read(t, app, tok)
-	for _, w := range out.Workspaces {
-		if w.UUID == workspaceB {
-			t.Fatalf("SECURITY: the lobby named a workspace the caller never proved: %+v", out.Workspaces)
+	for _, w := range out.Spaces {
+		if w.UUID == spaceB {
+			t.Fatalf("SECURITY: the lobby named a space the caller never proved: %+v", out.Spaces)
 		}
 	}
 }
 
 // TestSessionIAMLaneFailsClosedWithNoAuthority mirrors the mint's posture: on the
-// IAM lane the workspace rows live in another process, and a peer that cannot
+// IAM lane the space rows live in another process, and a peer that cannot
 // answer is a REFUSAL, never an empty list. The difference matters — an empty list
-// renders "you have no workspaces", which is a lie when the truth is "team is
+// renders "you have no spaces", which is a lie when the truth is "team is
 // down" and would send a person to ask for an invite they already have.
 func TestSessionIAMLaneFailsClosedWithNoAuthority(t *testing.T) {
 	// No authority: rows() falls back to the real peer, and this process has none.
@@ -184,7 +184,7 @@ func TestUnsetMediaAddressIsSaidPlainly(t *testing.T) {
 		t.Errorf("ws = %q, want empty", out.WS)
 	}
 	// And the mint still works, because it never needed the address.
-	if mintCode, _ := ask(t, app, roomIn(workspaceA), "", tok); mintCode != http.StatusOK {
+	if mintCode, _ := ask(t, app, roomIn(spaceA), "", tok); mintCode != http.StatusOK {
 		t.Errorf("getToken = %d with LIVEKIT_WS unset, want 200", mintCode)
 	}
 }
@@ -223,11 +223,11 @@ func TestSpacesIsRefusedForAMachine(t *testing.T) {
 // and nothing else — /meet and every deep link under it reach no route here.
 //
 // It replaces the pair that measured the opposite (the bundle answered 200 on
-// /meet, /meet/ and /meet/<workspace>/<room>), because a deletion that nothing
+// /meet, /meet/ and /meet/<space>/<room>), because a deletion that nothing
 // measures is a deletion that comes back.
 func TestTheClientIsNotOnThisOrigin(t *testing.T) {
 	app := mount(t, apiKey, apiSecret)
-	for _, path := range []string{"/meet", "/meet/", "/meet/" + workspaceA + "/standup"} {
+	for _, path := range []string{"/meet", "/meet/", "/meet/" + spaceA + "/standup"} {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
@@ -244,17 +244,17 @@ func TestTheClientIsNotOnThisOrigin(t *testing.T) {
 	}
 }
 
-// TestLobbyShapeIsTheOneThePlaneStates. The wire's workspace entries ARE
+// TestLobbyShapeIsTheOneThePlaneStates. The wire's space entries ARE
 // plane.Space, so the client and the process that owns the rows describe a
-// workspace with one set of names. A second local struct here would be the drift.
+// space with one set of names. A second local struct here would be the drift.
 func TestLobbyShapeIsTheOneThePlaneStates(t *testing.T) {
 	var l lobby
-	l.Workspaces = []plane.Space{{UUID: "u", Name: "n", Role: "owner"}}
+	l.Spaces = []plane.Space{{UUID: "u", Name: "n", Role: "owner"}}
 	b, err := json.Marshal(l)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{`"identity"`, `"name"`, `"ws"`, `"workspaces"`, `"uuid"`, `"role"`} {
+	for _, key := range []string{`"identity"`, `"name"`, `"ws"`, `"spaces"`, `"uuid"`, `"role"`} {
 		if !strings.Contains(string(b), key) {
 			t.Errorf("the lobby wire is missing %s: %s", key, b)
 		}
@@ -270,17 +270,17 @@ func truncate(s string) string {
 
 // TestNoAccountIsNoOffer closes the last way the lobby and the mint could
 // disagree. A seat is taken under the account on the membership row, and mint
-// refuses a row that names none — so a lobby that offered a workspace off such a
+// refuses a row that names none — so a lobby that offered a space off such a
 // row would show a room, take the choice, and then decline it.
 //
 // The rows are the only place this shape can come from now, which is why the
-// authority states it directly: a workspace with a role and no account.
+// authority states it directly: a space with a role and no account.
 func TestNoAccountIsNoOffer(t *testing.T) {
 	unseated := &answers{
 		row: func(string, string) plane.Member {
 			return plane.Member{Member: true, Role: token.RoleOwner} // no account
 		},
-		list: plane.Spaces{Items: []plane.Space{{UUID: workspaceA, Role: token.RoleOwner}}},
+		list: plane.Spaces{Items: []plane.Space{{UUID: spaceA, Role: token.RoleOwner}}},
 	}
 	app := mountWith(t, keyFileWith(t, keyBody(apiKey, apiSecret)), unseated)
 	tok := access(t, ada)
@@ -289,11 +289,11 @@ func TestNoAccountIsNoOffer(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("session = %d, want 200 — no account is an empty lobby, not a fault\n%s", code, body)
 	}
-	if len(out.Workspaces) != 0 {
-		t.Errorf("the lobby offered %+v off a row with no account — the mint refuses it", out.Workspaces)
+	if len(out.Spaces) != 0 {
+		t.Errorf("the lobby offered %+v off a row with no account — the mint refuses it", out.Spaces)
 	}
 	// And the mint does refuse it, which is the agreement being pinned.
-	if mintCode, mintBody := ask(t, app, roomIn(workspaceA), "", tok); mintCode != http.StatusUnauthorized {
+	if mintCode, mintBody := ask(t, app, roomIn(spaceA), "", tok); mintCode != http.StatusUnauthorized {
 		t.Errorf("getToken on a row with no account = %d %q, want 401", mintCode, mintBody)
 	}
 }

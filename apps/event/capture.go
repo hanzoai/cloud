@@ -118,7 +118,7 @@ type CaptureEvent struct {
 	RefCode     string `json:"refCode"`
 	Channel     string `json:"channel"`
 	GroupID     string `json:"groupId"`
-	// GroupType names WHICH grouping the id belongs to (organization, workspace,
+	// GroupType names WHICH grouping the id belongs to (organization, space,
 	// account). It is a map key rather than a column so the second grouping is a data
 	// change: the plane stores `groups[type] = id`, never group0..group4, because a
 	// fifth positional slot is a sixth one waiting to become a version suffix.

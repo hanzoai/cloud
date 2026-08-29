@@ -183,31 +183,31 @@ const (
 	// present. The narrowest possible grant is the one you never have to issue.
 	IAMProjects = "iam_projects"
 
-	// TeamMember answers "what is this person's role in that workspace?" for a
-	// caller that holds an IAM identity and no workspace claim.
+	// TeamMember answers "what is this person's role in that space?" for a
+	// caller that holds an IAM identity and no space claim.
 	//
 	// It is on the plane because the process that DECIDES a room join (meet) and
-	// the process that owns the workspace membership rows (team) are different
-	// ones. Before it, meet could only read a role a workspace token had signed —
+	// the process that owns the space membership rows (team) are different
+	// ones. Before it, meet could only read a role a space token had signed —
 	// which is the second bearer authority the estate is retiring, so the decision
 	// had nowhere else to come from.
 	TeamMember = "team_member"
 
-	// TeamWorkspaces answers "which workspaces is this person in?" — the same
+	// TeamSpaces answers "which spaces is this person in?" — the same
 	// rows TeamMember reads, asked without already knowing the answer.
 	//
 	// A caller that must DECIDE a join asks TeamMember, because it already holds
-	// the workspace the room named. A caller that must OFFER a join has nothing
-	// to name yet: the meet lobby has to show a person the workspaces they can
+	// the space the room named. A caller that must OFFER a join has nothing
+	// to name yet: the meet lobby has to show a person the spaces they can
 	// open a room in, and a room is bound to its tenant by its name's leading
-	// workspace segment, so without this the native client could only ask the
+	// space segment, so without this the native client could only ask the
 	// user to type a uuid it has no way to know.
 	//
-	// It is a person's OWN memberships and never a workspace's roster: the
+	// It is a person's OWN memberships and never a space's roster: the
 	// subject is the caller's, the org rides the call, and the answer is the
 	// list of rows that person holds. Nothing here tells one member about
 	// another.
-	TeamWorkspaces = "team_workspaces"
+	TeamSpaces = "team_spaces"
 
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
@@ -1082,28 +1082,28 @@ type Roles struct {
 // ---- iam.members / iam.grant ------------------------------------------------
 
 // Scope narrows a membership question inside the caller's org. Every field is a
-// filter and all are optional: give a Workspace for its roster, a User for
+// filter and all are optional: give a Space for its roster, a User for
 // everywhere that person may act, both for one grant. The ORG is the caller's and
 // is not a field, so a question can never reach another tenant.
 //
-// A Workspace filter that is empty means the org level, not "any workspace" —
+// A Space filter that is empty means the org level, not "any space" —
 // the org's own grants are a real answer, and conflating them with every
-// workspace's would make a roster read return the whole tenant.
+// space's would make a roster read return the whole tenant.
 type Scope struct {
-	Workspace string `json:"workspace,omitempty"`
-	Project   string `json:"project,omitempty"`
-	User      string `json:"user,omitempty"`
+	Space   string `json:"space,omitempty"`
+	Project string `json:"project,omitempty"`
+	User    string `json:"user,omitempty"`
 	// Any drops the scope filters, for the caller asking where one person acts.
 	Any bool `json:"any,omitempty"`
 }
 
 // Membership is one grant: who, where, and as what.
 type Membership struct {
-	User      string `json:"user"`
-	Role      string `json:"role"`
-	Name      string `json:"name"`
-	Workspace string `json:"workspace,omitempty"`
-	Project   string `json:"project,omitempty"`
+	User    string `json:"user"`
+	Role    string `json:"role"`
+	Name    string `json:"name"`
+	Space   string `json:"space,omitempty"`
+	Project string `json:"project,omitempty"`
 }
 
 // Memberships is every grant in one scope.
@@ -1120,10 +1120,10 @@ type Seats struct {
 // GrantIn records one membership. The org is the caller's and is never an
 // argument.
 type GrantIn struct {
-	User      string `json:"user"`
-	Workspace string `json:"workspace,omitempty"`
-	Project   string `json:"project,omitempty"`
-	Role      string `json:"role"`
+	User    string `json:"user"`
+	Space   string `json:"space,omitempty"`
+	Project string `json:"project,omitempty"`
+	Role    string `json:"role"`
 }
 
 // Product names the product whose platform configuration is wanted.
@@ -1189,7 +1189,7 @@ type Approval struct {
 // the (org, name) key that scopes an app, the display name and description a
 // console renders, and when it was made.
 //
-// The identity record's other columns — workspace, tags, metadata, the default
+// The identity record's other columns — space, tags, metadata, the default
 // flag — stay in IAM. A peer that needed one of them would be reaching past the
 // question it asked, and every field added here is a field the wire's positional
 // layout pins forever (see zapenc: a field IS its offset).
@@ -1212,12 +1212,12 @@ type Projects struct {
 
 // ---- team ------------------------------------------------------------------
 
-// MemberIn names the workspace and the person a membership question is about.
-// The ORG is not here and cannot be: it is the tenancy key of every workspace
+// MemberIn names the space and the person a membership question is about.
+// The ORG is not here and cannot be: it is the tenancy key of every space
 // row, so a caller able to pass it could read another tenant's roster.
 type MemberIn struct {
-	// Workspace is the workspace uuid, scoped to the caller's org on the read.
-	Workspace string `json:"workspace"`
+	// Space is the space uuid, scoped to the caller's org on the read.
+	Space string `json:"space"`
 	// Subject is the IAM subject, NOT a team account id. team owns the join from
 	// one to the other — it is the join that created the rows — so a peer that
 	// computed its own would be a second derivation of the same address, which is
@@ -1228,32 +1228,32 @@ type MemberIn struct {
 // Member is what the rows say. Role and Account are empty exactly when Member is
 // false, so a caller cannot mistake "no row" for a role or an identity.
 type Member struct {
-	// Member reports whether the subject holds a row in that workspace.
+	// Member reports whether the subject holds a row in that space.
 	Member bool `json:"member"`
-	// Role is the workspace role on that row (owner | admin | member | guest).
+	// Role is the space role on that row (owner | admin | member | guest).
 	Role string `json:"role"`
 	// Account is the team AccountUuid the subject resolved to — the identity the
 	// asking process attributes the person by, so it never derives one itself.
 	Account string `json:"account"`
 }
 
-// WorkspacesIn names the person a workspace list is about. The ORG is absent for
+// SpacesIn names the person a space list is about. The ORG is absent for
 // the same reason it is absent from MemberIn: it is the tenancy key of every
-// workspace row, so a caller able to pass it could enumerate another tenant's.
-type WorkspacesIn struct {
+// space row, so a caller able to pass it could enumerate another tenant's.
+type SpacesIn struct {
 	// Subject is the IAM subject, NOT a team account id — team owns the join from
 	// one to the other, exactly as in MemberIn.
 	Subject string `json:"subject"`
 }
 
-// Space is one workspace a person holds a member row in.
+// Space is one space a person holds a member row in.
 //
 // The ROLE is on it because the asking process decides with it: meet admits a
 // privileged member and refuses a guest, and it applies that rule to the list it
 // offers as well as to the join it grants, so a person is never shown a room
 // they would then be refused.
 type Space struct {
-	// UUID is the workspace's stable id — and, in meet, the leading segment of
+	// UUID is the space's stable id — and, in meet, the leading segment of
 	// every room name bound to it.
 	UUID string `json:"uuid"`
 	// Name is the human label for a picker.
@@ -1263,16 +1263,16 @@ type Space struct {
 }
 
 // Spaces is what the rows say about one person: the account they resolved to and
-// the workspaces they are in.
+// the spaces they are in.
 //
 // The invariant is ONE-WAY: a non-empty Items implies a non-empty Account, so
-// every workspace offered has an identity to seat the person under. The converse
+// every space offered has an identity to seat the person under. The converse
 // does NOT hold and must not be assumed — a subject that resolves to an account
 // while holding no current membership row answers with the account and an empty
 // list, which is the honest "we know who you are, and you are in nothing".
 //
 // (This doc used to claim the biconditional — "Account is empty exactly when
-// there are no workspaces" — which the implementation never satisfied, because it
+// there are no spaces" — which the implementation never satisfied, because it
 // resolves the account BEFORE walking the rows. A doc that overstates an
 // invariant is worse than none: it is the one a caller writes an `if` against.)
 type Spaces struct {
@@ -1283,7 +1283,7 @@ type Spaces struct {
 	// not set one. A DISPLAY name only: meet passes it as the LiveKit participant
 	// label, which is decoration, never identity.
 	Name string `json:"name"`
-	// Items is every workspace the person is in, newest membership first. Empty is
+	// Items is every space the person is in, newest membership first. Empty is
 	// a real answer, not an error.
 	Items []Space `json:"items"`
 }

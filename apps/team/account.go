@@ -4,7 +4,7 @@ package team
 // /v1/team/account — JSON-RPC over a single POST, plus the /providers,
 // /auth/{provider} and /cookie REST siblings. It is the FULL REWRITE of
 // github.com/hanzoai/team/pkg/account (account.go + types.go): the Base-DAO
-// `workspaces`/`members` collections become the raw-SQLite accountStore, and the
+// `spaces`/`members` collections become the raw-SQLite accountStore, and the
 // core.RequestEvent handlers become *zip.Ctx handlers. The IAM OAuth bridge
 // (authStart/authCallback/exchangeCode/userinfo/oauthBase) is kept as-is over
 // net/http — it is an external hop to hanzo.id.
@@ -58,11 +58,11 @@ const stateTTL = 10 * time.Minute
 
 // Token lifetimes. Every minted token now carries an `exp` (Decode enforces it),
 // bounding the replay window on a captured token. The session token matches the
-// 30-day cookie; the workspace token — which rides in the transactor URL path and
+// 30-day cookie; the space token — which rides in the transactor URL path and
 // is thus log-prone — is short (12h) and re-minted by selectWorkspace on demand.
 const (
-	sessionTokenTTL   = 30 * 24 * time.Hour
-	workspaceTokenTTL = 12 * time.Hour
+	sessionTokenTTL = 30 * 24 * time.Hour
+	spaceTokenTTL   = 12 * time.Hour
 )
 
 // expUnix returns the unix-second expiry `d` from now — the `exp` claim value.
@@ -97,7 +97,7 @@ type api struct {
 	// derives its tenant from that validator's verdict, never from unverified
 	// claims — one validator, not a second copy beside the client holding it.
 	ident *identity
-	// commerce answers CheckEntitlement(org, "team") at workspace select — nil
+	// commerce answers CheckEntitlement(org, "team") at space select — nil
 	// (not co-resident) is an infra absence and never blocks login.
 	commerce types.CommerceClient
 	// planEnt resolves a plan id to its entitlement block (plan.Entitlements) —
@@ -112,7 +112,7 @@ type api struct {
 // ── types (ported from team-go/pkg/account/types.go) ──────────────────────────
 
 // Role is the platform AccountRole. Stored on members.role (lowercased) and
-// surfaced uppercased in WorkspaceLoginInfo.role.
+// surfaced uppercased in SpaceLoginInfo.role.
 type Role = string
 
 type rpcRequest struct {
@@ -128,28 +128,33 @@ type LoginInfo struct {
 	Token    string `json:"token,omitempty"`
 }
 
-// WorkspaceLoginInfo extends LoginInfo — returned by selectWorkspace. token is the
-// per-workspace JWT; endpoint is the transactor wss:// base the client connects to.
-type WorkspaceLoginInfo struct {
+// SpaceLoginInfo extends LoginInfo — returned by selectWorkspace. token is the
+// per-space JWT; endpoint is the transactor wss:// base the client connects to.
+//
+// The three keys still spelled `workspace…` are the SPA's, like the verb that
+// answers with them: the account RPC is one contract, and renaming half of it
+// would break a client the other half still fits. The Go names are the estate's
+// word, so only the wire waits for the SPA to ship the rename.
+type SpaceLoginInfo struct {
 	LoginInfo
-	Workspace        string `json:"workspace"`
-	WorkspaceDataID  string `json:"workspaceDataId,omitempty"`
-	WorkspaceURL     string `json:"workspaceUrl"`
+	Space            string `json:"workspace"`
+	SpaceDataID      string `json:"workspaceDataId,omitempty"`
+	SpaceURL         string `json:"workspaceUrl"`
 	Endpoint         string `json:"endpoint"`
 	Role             Role   `json:"role"`
 	AllowGuestSignUp bool   `json:"allowGuestSignUp,omitempty"`
 }
 
-// WorkspaceInfo is one entry of getUserWorkspaces. The version triple is the Team
+// SpaceInfo is one entry of getUserWorkspaces. The version triple is the Team
 // MODEL version (the SAME source the transactor reports as serverVersion).
-type WorkspaceInfo struct {
+type SpaceInfo struct {
 	UUID   string `json:"uuid"`
 	Name   string `json:"name"`
 	URL    string `json:"url"`
 	DataID string `json:"dataId,omitempty"`
-	// Org is the workspace's owning IAM tenant. getUserWorkspaces unions a user's
-	// workspaces across every org they belong to, so the client switcher groups by
-	// this field (a user in two orgs sees both orgs' workspaces, each tagged).
+	// Org is the space's owning IAM tenant. getUserWorkspaces unions a user's
+	// spaces across every org they belong to, so the client switcher groups by
+	// this field (a user in two orgs sees both orgs' spaces, each tagged).
 	Org          string `json:"org,omitempty"`
 	Region       string `json:"region"`
 	Mode         string `json:"mode"`
@@ -220,8 +225,8 @@ func trunc(s string, n int) string {
 func statusError(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:InternalServerError", Params: map[string]any{"message": msg}}
 }
-func statusWorkspaceNotFound(url string) Status {
-	return Status{Severity: "ERROR", Code: "account:status:WorkspaceNotFound", Params: map[string]any{"workspace": url}}
+func statusSpaceNotFound(url string) Status {
+	return Status{Severity: "ERROR", Code: "account:status:WorkspaceNotFound", Params: map[string]any{"space": url}}
 }
 
 // statusBadRequest is the clean 400-shaped refusal for a missing required RPC
@@ -232,11 +237,11 @@ func statusBadRequest(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:BadRequest", Params: map[string]any{"message": msg}}
 }
 
-// statusAmbiguous is the refusal when an explicit workspace slug resolves in more
+// statusAmbiguous is the refusal when an explicit space slug resolves in more
 // than one of the caller's orgs: the caller must disambiguate, so the server
 // returns a clean error rather than picking one.
 func statusAmbiguous(url string) Status {
-	return Status{Severity: "ERROR", Code: "account:status:WorkspaceAmbiguous", Params: map[string]any{"workspace": url}}
+	return Status{Severity: "ERROR", Code: "account:status:WorkspaceAmbiguous", Params: map[string]any{"space": url}}
 }
 
 // ── route registration ────────────────────────────────────────────────────────
@@ -251,12 +256,12 @@ func statusAmbiguous(url string) Status {
 // The path keys are the FIBER patterns exactly as registered below.
 func init() {
 	openapi.Describe("/v1/team/account", http.MethodPost,
-		"Read the caller's account and switch workspace",
+		"Read the caller's account and switch space",
 		"The account control plane the Team client speaks: one POST carries a `method` verb "+
 			"and its `params`, and answers {\"result\": …}. The verbs are the session's own reads "+
-			"and the workspace switch — getLoginInfoByToken, getUserWorkspaces, selectWorkspace, "+
+			"and the space switch — getLoginInfoByToken, getUserWorkspaces, selectWorkspace, "+
 			"getWorkspaceInfo, getMemberships, getPerson, getSocialIds, getRegionInfo, "+
-			"isReadOnlyGuest — plus sendInvite, which adds a member to a workspace and is "+
+			"isReadOnlyGuest — plus sendInvite, which adds a member to a space and is "+
 			"refused for a caller who is not its owner or admin.\n\n"+
 			"A REFUSAL IS HTTP 200 carrying {\"error\": {severity, code, params}} — the platform "+
 			"Status the client translates — not a 4xx. An unreadable body, an unauthorized "+
@@ -270,7 +275,7 @@ func init() {
 			"account-token cookie. The tenant is that token's SIGNED org claim, never a header, "+
 			"and selectWorkspace resolves only among the orgs the token proves membership of. "+
 			"It also demands an explicit workspaceUrl — it never falls back to a first "+
-			"workspace, and a slug that resolves in two of the caller's orgs answers Ambiguous "+
+			"space, and a slug that resolves in two of the caller's orgs answers Ambiguous "+
 			"rather than picking one.")
 	openapi.Describe("/v1/team/account/auth/:provider", http.MethodGet,
 		"Start a sign-in at hanzo.id",
@@ -302,7 +307,7 @@ func init() {
 			"The tenant is derived from the IAM access token VERIFIED RS256 against the JWKS, "+
 			"the same trust anchor the identity boundary uses; a token whose owner claim is "+
 			"empty fails closed with no login at all. Every org that token proves gets a "+
-			"workspace ensured, so a member of two orgs is a counted seat in both. The IAM "+
+			"space ensured, so a member of two orgs is a counted seat in both. The IAM "+
 			"access token is also parked in an HttpOnly cookie for the same-origin agents "+
 			"proxy — page JS never reads it.\n\n"+
 			"EVERY failure is a redirect, not a status: a denied consent, a missing code, a "+
@@ -452,7 +457,7 @@ func providerHint(provider, explicit string) string {
 }
 
 // authCallback verifies the state nonce against the flow cookie, exchanges the
-// IAM code for the user, ensures the account has a workspace, mints the account
+// IAM code for the user, ensures the account has a space, mints the account
 // token, and bounces the browser back to the SPA with ?token= (which Auth reads
 // via getLoginInfoFromQuery).
 func (g *api) authCallback(c *zip.Ctx) error {
@@ -496,7 +501,7 @@ func (g *api) authCallback(c *zip.Ctx) error {
 // password login. userinfo → canonical account id; tenant = the IAM org — the
 // access token's `owner` claim, accepted ONLY off a VERIFIED token (RS256
 // against the IAM JWKS, same trust anchor as the identity boundary). It scopes
-// every workspace + data file — full multitenancy — so a verification failure
+// every space + data file — full multitenancy — so a verification failure
 // fails CLOSED: no fallback org, no login. failCode is the OAuth bounce error
 // code for the failing step.
 func (g *api) establishSession(ctx context.Context, access string) (account, tok, failCode string, err error) {
@@ -516,8 +521,8 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 	org := id.Owner
 	displayName := cmp.Or(name, localPart(email))
 	// The VERIFIED membership set (home ∪ every org the token proves) is the ONE
-	// source that drives BOTH the workspace union (getUserWorkspaces) AND the seat
-	// projection (Seats). Ensuring a workspace — hence a counted member row — in
+	// source that drives BOTH the space union (getUserWorkspaces) AND the seat
+	// projection (Seats). Ensuring a space — hence a counted member row — in
 	// EVERY org the user belongs to, not just the home org, is what makes a
 	// non-home org's wallet report the caller as a seat instead of "0 members".
 	// A legacy token (iam < 1.31.34, empty claim) folds to the single home org.
@@ -527,14 +532,14 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 		if oorg == "" {
 			continue
 		}
-		if _, err := g.accounts.EnsureWorkspace(ctx, oorg, account, displayName); err != nil {
-			g.log.Error("account: ensure workspace", "org", oorg, "err", err)
+		if _, err := g.accounts.EnsureSpace(ctx, oorg, account, displayName); err != nil {
+			g.log.Error("account: ensure space", "org", oorg, "err", err)
 		}
 		// A new org gets its default office AND its default crew together: the
 		// built-in @dev/@des/@vi personas, seeded once into the ONE agents registry
 		// (idempotent, no-op without a model). Best-effort — a seed hiccup NEVER
 		// blocks login; the crew simply appears on the next touch. They project into
-		// the workspace roster as bot members (bots.go) and answer @-mentions through
+		// the space roster as bot members (bots.go) and answer @-mentions through
 		// the Chunter responder (chat.go), same as any org agent.
 		if n, err := agents.SeedPersonalities(ctx, oorg); err != nil {
 			g.log.Warn("account: seed personalities", "org", oorg, "err", err)
@@ -544,9 +549,9 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 	}
 
 	// Carry the FULL membership set into the session token so getUserWorkspaces
-	// can union a user's workspaces across every org they belong to (the Slack
+	// can union a user's spaces across every org they belong to (the Slack
 	// model) with no IAM round-trip per poll — the SAME set just ensured above, so
-	// the token, the workspace union, and the seat count never disagree. `org`
+	// the token, the space union, and the seat count never disagree. `org`
 	// (home) is retained as the primary tenant every existing account-store
 	// surface (files/collab/billing) already scopes to.
 	extra := map[string]any{"org": org, "orgs": orgs}
@@ -564,12 +569,12 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 
 // orgsClaim builds the session token's extra.orgs value from the VERIFIED IAM
 // `orgs` claim. The home tenant is ALWAYS present: it is extra.org — the org the
-// wallet, Seats, and every account-store surface scope to — so its workspace has
+// wallet, Seats, and every account-store surface scope to — so its space has
 // to be ensured (and count a seat) at login. The IAM orgs claim does not reliably
 // list a user's OWN home org (it may carry only explicit team memberships), so
 // home is appended when absent rather than only when the claim is empty; without
 // this a user whose claim names other orgs but not home lands on a home org with
-// no ensured workspace and a wallet that reports 0 seats. Each entry is a plain
+// no ensured space and a wallet that reports 0 seats. Each entry is a plain
 // map so token.Generate's JSON marshal is stable and the decode side
 // (orgsFromExtra) reads it back with no SDK dependency in the token layer.
 func orgsClaim(orgs []model.OrgRef, home string) []map[string]any {
@@ -715,15 +720,15 @@ func (g *api) rpc(c *zip.Ctx) error {
 	case "getLoginInfoByToken", "getLoginWithWorkspaceInfo":
 		return g.getLoginInfoByToken(c)
 	case "getUserWorkspaces":
-		return g.getUserWorkspaces(c)
+		return g.getUserSpaces(c)
 	case "selectWorkspace":
-		return g.selectWorkspace(c, req.Params)
+		return g.selectSpace(c, req.Params)
 	case "sendInvite":
 		return g.sendInvite(c, req.Params)
 	case "getMemberships":
 		return g.getMemberships(c)
 	case "getWorkspaceInfo":
-		return g.getWorkspaceInfo(c)
+		return g.getSpaceInfo(c)
 	case "getRegionInfo":
 		return g.ok(c, []RegionInfo{{Region: "", Name: "Default"}})
 	case "getSocialIds":
@@ -760,21 +765,21 @@ func (g *api) getLoginInfoByToken(c *zip.Ctx) error {
 	return g.ok(c, LoginInfo{Account: account, Token: tok})
 }
 
-// getUserWorkspaces returns the UNION of the caller's workspaces across EVERY org
+// getUserWorkspaces returns the UNION of the caller's spaces across EVERY org
 // in the session's membership set — the Slack model: a user who belongs to their
-// home org plus one or more team orgs sees all of their workspaces in one list,
+// home org plus one or more team orgs sees all of their spaces in one list,
 // each tagged with its owning org so the client switcher groups by org. Each
-// WorkspacesOf join is still owner_org-scoped, so a user only ever sees workspaces
+// SpacesOf join is still owner_org-scoped, so a user only ever sees spaces
 // they are a member of, and never a foreign tenant's.
-func (g *api) getUserWorkspaces(c *zip.Ctx) error {
+func (g *api) getUserSpaces(c *zip.Ctx) error {
 	account, orgs, _, err := g.accountOrgs(c)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
 	}
-	out := []WorkspaceInfo{}
-	seen := map[string]bool{} // dedupe by workspace uuid (a ws belongs to one org)
+	out := []SpaceInfo{}
+	seen := map[string]bool{} // dedupe by space uuid (a ws belongs to one org)
 	for _, o := range orgs {
-		wss, err := g.accounts.WorkspacesOf(c.Context(), o.Org, account)
+		wss, err := g.accounts.SpacesOf(c.Context(), o.Org, account)
 		if err != nil {
 			return g.fail(c, statusError(err.Error()))
 		}
@@ -783,25 +788,25 @@ func (g *api) getUserWorkspaces(c *zip.Ctx) error {
 				continue
 			}
 			seen[ws.UUID] = true
-			out = append(out, toWorkspaceInfo(ws))
+			out = append(out, toSpaceInfo(ws))
 		}
 	}
 	return g.ok(c, out)
 }
 
-// selectWorkspace resolves the workspace the caller EXPLICITLY named (workspaceUrl)
+// selectWorkspace resolves the space the caller EXPLICITLY named (workspaceUrl)
 // among EVERY org in the session's membership set, checks membership, then mints
-// the workspace token carrying extra.org and returns the transactor wss endpoint.
+// the space token carrying extra.org and returns the transactor wss endpoint.
 //
-// It NEVER defaults to a "first" workspace: an absent workspaceUrl is a clean
+// It NEVER defaults to a "first" space: an absent workspaceUrl is a clean
 // BadRequest and a slug that resolves in two of the caller's orgs is a clean
 // Ambiguous — the client must pass the explicit choice the /login/selectWorkspace
-// selector already collects. The single-workspace fast path is the degenerate
-// explicit case: when getUserWorkspaces returns exactly one workspace the front
+// selector already collects. The single-space fast path is the degenerate
+// explicit case: when getUserWorkspaces returns exactly one space the front
 // auto-selects it BY URL, so this path still receives an explicit workspaceUrl and
 // the UX is unchanged. Cross-tenant isolation is preserved because each candidate
 // lookup is owner_org-scoped to an org the session already proves membership in.
-func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
+func (g *api) selectSpace(c *zip.Ctx, params map[string]any) error {
 	account, orgs, _, err := g.accountOrgs(c)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
@@ -811,12 +816,12 @@ func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
 	if wsURL == "" {
 		return g.fail(c, statusBadRequest("workspaceUrl is required"))
 	}
-	ws, role, err := g.resolveWorkspace(c.Context(), orgs, account, wsURL)
+	ws, role, err := g.resolveSpace(c.Context(), orgs, account, wsURL)
 	if err != nil {
-		if err == errAmbiguousWorkspace {
+		if err == errAmbiguousSpace {
 			return g.fail(c, statusAmbiguous(wsURL))
 		}
-		return g.fail(c, statusWorkspaceNotFound(wsURL))
+		return g.fail(c, statusSpaceNotFound(wsURL))
 	}
 	org := ws.OwnerOrg
 	// The billing gate: the org's plan must license the team product. 402 carries
@@ -824,45 +829,45 @@ func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
 	if st := g.entitle(c.Context(), org, role, ws.UUID, account); st != nil {
 		return c.JSON(http.StatusPaymentRequired, map[string]any{"error": *st, "upgradeUrl": upgradeURL})
 	}
-	// Carry the tenant AND the caller's role into the workspace token so the
-	// transactor routes to orgs/<org>/ws/<workspace>.db and every downstream holder
-	// can tell a member from a guest. Short-lived (workspaceTokenTTL) — it rides in
+	// Carry the tenant AND the caller's role into the space token so the
+	// transactor routes to orgs/<org>/ws/<space>.db and every downstream holder
+	// can tell a member from a guest. Short-lived (spaceTokenTTL) — it rides in
 	// the transactor URL path, so a bounded lifetime caps replay on capture.
 	//
 	// extra.role is the ONLY place a reduced principal is expressible on the wire.
-	// resolveWorkspace already returned it and this mint used to DROP it, so every
-	// consumer of a workspace token saw an owner and a guest as identical — and
+	// resolveSpace already returned it and this mint used to DROP it, so every
+	// consumer of a space token saw an owner and a guest as identical — and
 	// entitle() cannot help, being a billing gate that returns nil on every branch by
 	// design (observe mode). Signing it means clients/analytics and clients/meet
 	// decide capability from a verified claim, with no DB hop and no reach into this
 	// package's store. token.Privileged() is the one predicate that reads it.
-	wsTok, err := token.Generate(account, ws.UUID, map[string]any{"org": org, "role": role}, expUnix(workspaceTokenTTL), g.cfg.serverSecret)
+	wsTok, err := token.Generate(account, ws.UUID, map[string]any{"org": org, "role": role}, expUnix(spaceTokenTTL), g.cfg.serverSecret)
 	if err != nil {
-		return g.fail(c, statusError("mint workspace token: "+err.Error()))
+		return g.fail(c, statusError("mint space token: "+err.Error()))
 	}
-	return g.ok(c, WorkspaceLoginInfo{
-		LoginInfo:       LoginInfo{Account: account, Token: wsTok},
-		Workspace:       ws.UUID,
-		WorkspaceURL:    ws.Slug,
-		WorkspaceDataID: ws.DataID,
-		Endpoint:        g.endpoint(c),
-		Role:            strings.ToUpper(role),
+	return g.ok(c, SpaceLoginInfo{
+		LoginInfo:   LoginInfo{Account: account, Token: wsTok},
+		Space:       ws.UUID,
+		SpaceURL:    ws.Slug,
+		SpaceDataID: ws.DataID,
+		Endpoint:    g.endpoint(c),
+		Role:        strings.ToUpper(role),
 	})
 }
 
-// errAmbiguousWorkspace is returned by resolveWorkspace when a slug the caller is
+// errAmbiguousSpace is returned by resolveSpace when a slug the caller is
 // a member of exists in MORE THAN ONE of the session orgs — the caller must
 // disambiguate rather than have the server silently pick one.
-var errAmbiguousWorkspace = fmt.Errorf("team: workspace slug ambiguous across orgs")
+var errAmbiguousSpace = fmt.Errorf("team: space slug ambiguous across orgs")
 
-// resolveWorkspace maps an EXPLICIT (slug) to the single workspace the caller is a
+// resolveSpace maps an EXPLICIT (slug) to the single space the caller is a
 // member of across the session's org set. It is the one place the cross-org lookup
 // lives: iterate the caller's orgs, resolve the slug owner_org-scoped in each, keep
 // only those the caller is a member of, and require EXACTLY one — 0 ⇒ not found,
-// >1 ⇒ ambiguous. Never a silent default. Returns the workspace and the caller's
+// >1 ⇒ ambiguous. Never a silent default. Returns the space and the caller's
 // role in it.
-func (g *api) resolveWorkspace(ctx context.Context, orgs []model.OrgRef, account, slug string) (workspace, Role, error) {
-	var found workspace
+func (g *api) resolveSpace(ctx context.Context, orgs []model.OrgRef, account, slug string) (space, Role, error) {
+	var found space
 	var role Role
 	n := 0
 	seen := map[string]bool{}
@@ -871,7 +876,7 @@ func (g *api) resolveWorkspace(ctx context.Context, orgs []model.OrgRef, account
 			continue
 		}
 		seen[o.Org] = true
-		ws, err := g.accounts.WorkspaceBySlug(ctx, o.Org, slug)
+		ws, err := g.accounts.SpaceBySlug(ctx, o.Org, slug)
 		if err != nil {
 			continue // absent in this org (or a real store error) — not a candidate
 		}
@@ -884,35 +889,35 @@ func (g *api) resolveWorkspace(ctx context.Context, orgs []model.OrgRef, account
 	}
 	switch {
 	case n == 0:
-		return workspace{}, "", errNoWorkspace
+		return space{}, "", errNoSpace
 	case n > 1:
-		return workspace{}, "", errAmbiguousWorkspace
+		return space{}, "", errAmbiguousSpace
 	default:
 		return found, role, nil
 	}
 }
 
-// getWorkspaceInfo returns info for THE workspace the caller's CREDENTIAL is
-// scoped to — the one selectWorkspace already minted into the workspace token's
-// `workspace` claim, resolved owner_org-scoped by (org, uuid). It NEVER falls back
-// to the caller's first workspace: a credential that pins no workspace (an
+// getWorkspaceInfo returns info for THE space the caller's CREDENTIAL is
+// scoped to — the one selectWorkspace already minted into the space token's
+// `space` claim, resolved owner_org-scoped by (org, uuid). It NEVER falls back
+// to the caller's first space: a credential that pins no space (an
 // account/login token that has not selected one, and every IAM caller, which pins
-// nothing by construction) is a clean WorkspaceNotFound, so the client is forced
+// nothing by construction) is a clean SpaceNotFound, so the client is forced
 // through the explicit selectWorkspace step rather than being silently handed an
 // arbitrary one.
-func (g *api) getWorkspaceInfo(c *zip.Ctx) error {
+func (g *api) getSpaceInfo(c *zip.Ctx) error {
 	cl, err := g.ident.who(c)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
 	}
-	if cl.workspace == "" {
-		return g.fail(c, statusWorkspaceNotFound(""))
+	if cl.space == "" {
+		return g.fail(c, statusSpaceNotFound(""))
 	}
-	ws, err := g.accounts.WorkspaceByUUID(c.Context(), cl.org, cl.workspace)
+	ws, err := g.accounts.SpaceByUUID(c.Context(), cl.org, cl.space)
 	if err != nil {
-		return g.fail(c, statusWorkspaceNotFound(cl.workspace))
+		return g.fail(c, statusSpaceNotFound(cl.space))
 	}
-	return g.ok(c, toWorkspaceInfo(ws))
+	return g.ok(c, toSpaceInfo(ws))
 }
 
 func (g *api) getPerson(c *zip.Ctx) error {
@@ -942,7 +947,7 @@ func (g *api) getSocialIds(c *zip.Ctx) error {
 // the ONE place a credential's algorithm is routed on. It composes three answers
 // and braids none of them: VERIFICATION (an IAM access token against the IAM JWKS,
 // or the HS256 signature), ACCOUNT RESOLUTION (accountID over the IAM subject —
-// the join establishSession stores the account's rows under), and WORKSPACE
+// the join establishSession stores the account's rows under), and SPACE
 // AUTHORIZATION (the membership rows, admit).
 type identity struct {
 	// verify is cloud's RS256/JWKS IAM validator (cloud.NewTokenValidator) — the
@@ -952,7 +957,7 @@ type identity struct {
 	// secret is SERVER_SECRET, the key of the HS256 arm.
 	secret string
 	// accounts is the membership authority. On the IAM lane nothing about a
-	// workspace is signed, so these rows ARE the authorization.
+	// space is signed, so these rows ARE the authorization.
 	accounts *accountStore
 	// audience is the set of IAM apps whose access tokens this deployment accepts
 	// as a TEAM SESSION. See identity.iam for why team gates on it when the
@@ -973,10 +978,10 @@ type caller struct {
 	// user is the IAM `<owner>/<name>` id, the key IAM's get-user takes for a
 	// mid-session membership refresh. Empty when the credential names no username.
 	user string
-	// workspace is the workspace the CREDENTIAL pinned itself to. Empty on the IAM
+	// space is the space the CREDENTIAL pinned itself to. Empty on the IAM
 	// lane, which pins nothing: what an IAM caller may touch is decided per request
 	// by admit against the rows, never by a claim the caller carries.
-	workspace string
+	space string
 	// raw is the HS256 credential exactly as presented, and it is EMPTY ON THE IAM
 	// LANE — deliberately, structurally, and not as a rule each caller remembers.
 	//
@@ -990,7 +995,7 @@ type caller struct {
 	// and a future echo site cannot reintroduce the leak by forgetting.
 	raw string
 	// iam reports which lane resolved this caller. It exists so a surface can grant
-	// on rows instead of on a signed workspace claim, not so it can re-derive trust.
+	// on rows instead of on a signed space claim, not so it can re-derive trust.
 	iam bool
 }
 
@@ -1006,10 +1011,10 @@ type caller struct {
 // deleted when login mints IAM-only and front/love/analytics-collector verify IAM.
 //
 // ONE SURFACE IS NOT DUAL-READ YET, and it blocks that deletion: getWorkspaceInfo
-// answers for the workspace the CREDENTIAL pins, and the IAM lane pins none by
-// construction — only selectWorkspace's HS256 mint does. So the workspace a client
+// answers for the space the CREDENTIAL pins, and the IAM lane pins none by
+// construction — only selectWorkspace's HS256 mint does. So the space a client
 // is "in" still has to travel as a claim. Deleting the arm means the front NAMING
-// the workspace on that call (as it already does for selectWorkspace) and this
+// the space on that call (as it already does for selectWorkspace) and this
 // authorizing it through admit, the same way the transactor and files planes
 // already do. That is a client change, which is why it is a later phase and not
 // this one.
@@ -1024,10 +1029,10 @@ type caller struct {
 //   - with no bearer, account-token is read BEFORE hanzo_iam_token, and an
 //     account-token that is PRESENT answers alone — a stale one is refused rather
 //     than falling through. The two cookies coexist for the whole overlap and are
-//     not interchangeable: the HS256 one can PIN A WORKSPACE and the IAM one
+//     not interchangeable: the HS256 one can PIN A SPACE and the IAM one
 //     cannot, so preferring the IAM cookie silently widened the collaborator planes
-//     from "the workspace this token names" to "any workspace you are a member of",
-//     and made getWorkspaceInfo answer WorkspaceNotFound where the pin used to
+//     from "the space this token names" to "any space you are a member of",
+//     and made getWorkspaceInfo answer SpaceNotFound where the pin used to
 //     answer. Falling through on expiry would be the same widening on a timer: a
 //     session that used to end in a 401 would quietly continue with a different
 //     reach.
@@ -1072,7 +1077,7 @@ func (id *identity) verified(ctx context.Context, raw string) (caller, error) {
 // preferred_username → name, so a token carrying no sub presents its USERNAME
 // there — and accountID returns a UUID-shaped input verbatim, so a username set to
 // a colleague's account uuid resolved to the colleague, and admit() then granted
-// every workspace the two share. Subject-only closes it; the account itself comes
+// every space the two share. Subject-only closes it; the account itself comes
 // from the store (AccountForSubject), which confirms the row a login created
 // rather than asserting an id no row has to match.
 //
@@ -1226,8 +1231,8 @@ func isAccessToken(t string) bool {
 	}
 }
 
-// hs256 decodes AND verifies (signature + expiry) the HS256 session or workspace
-// token this service minted. The tenant, the membership set and the workspace all
+// hs256 decodes AND verifies (signature + expiry) the HS256 session or space
+// token this service minted. The tenant, the membership set and the space all
 // come from its SIGNED claims.
 func (id *identity) hs256(raw string) (caller, error) {
 	if id == nil {
@@ -1245,36 +1250,36 @@ func (id *identity) hs256(raw string) (caller, error) {
 	}
 	user, _ := t.Extra["user"].(string)
 	return caller{
-		account:   t.Account,
-		org:       t.Org(),
-		orgs:      orgsFromExtra(t.Extra),
-		user:      user,
-		workspace: t.Workspace,
-		raw:       raw,
+		account: t.Account,
+		org:     t.Org(),
+		orgs:    orgsFromExtra(t.Extra),
+		user:    user,
+		space:   t.Space,
+		raw:     raw,
 	}, nil
 }
 
-// admit authorizes cl for the workspace the REQUEST named and returns its row.
+// admit authorizes cl for the space the REQUEST named and returns its row.
 // Membership IS the authorization — the server reads the rows, the caller signs
 // nothing — which is why it is the one gate both lanes pass through wherever a
-// workspace is named. Every failure answers the same errNoWorkspace, so an unknown
-// workspace, another tenant's, and one the caller is not in are indistinguishable.
-func (id *identity) admit(ctx context.Context, cl caller, wsUUID string) (workspace, error) {
+// space is named. Every failure answers the same errNoSpace, so an unknown
+// space, another tenant's, and one the caller is not in are indistinguishable.
+func (id *identity) admit(ctx context.Context, cl caller, wsUUID string) (space, error) {
 	if id == nil || id.accounts == nil {
-		return workspace{}, errNoWorkspace
+		return space{}, errNoSpace
 	}
 	// A caller with no tenant, or none with an account, names nothing to be a member
 	// of — and an empty org is a value the owner_org scoping would happily match a
 	// row against. Refused here, once, so every surface inherits the same floor.
 	if cl.org == "" || cl.account == "" {
-		return workspace{}, errNoWorkspace
+		return space{}, errNoSpace
 	}
-	w, err := id.accounts.WorkspaceByUUID(ctx, cl.org, strings.TrimSpace(wsUUID))
+	w, err := id.accounts.SpaceByUUID(ctx, cl.org, strings.TrimSpace(wsUUID))
 	if err != nil {
-		return workspace{}, errNoWorkspace
+		return space{}, errNoSpace
 	}
 	if _, ok := id.accounts.Membership(ctx, cl.org, w.UUID, cl.account); !ok {
-		return workspace{}, errNoWorkspace
+		return space{}, errNoSpace
 	}
 	return w, nil
 }
@@ -1535,11 +1540,11 @@ func providerParam(c *zip.Ctx) string {
 	return p
 }
 
-// toWorkspaceInfo flattens a workspace for getUserWorkspaces. The version triple
+// toSpaceInfo flattens a space for getUserWorkspaces. The version triple
 // is the MODEL version (the SAME source the transactor reports as
-// serverVersion) so the workspace-model version and the server version never drift.
-func toWorkspaceInfo(ws workspace) WorkspaceInfo {
-	return WorkspaceInfo{
+// serverVersion) so the space-model version and the server version never drift.
+func toSpaceInfo(ws space) SpaceInfo {
+	return SpaceInfo{
 		UUID: ws.UUID, Name: ws.Name, URL: ws.Slug, DataID: ws.DataID, Org: ws.OwnerOrg, Region: ws.Region,
 		Mode:         "active",
 		VersionMajor: modelMajor(), VersionMinor: modelMinor(), VersionPatch: modelPatch(),

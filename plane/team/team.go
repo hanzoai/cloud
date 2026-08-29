@@ -31,19 +31,19 @@ const App = "team"
 // plane_registry_test.go.
 var Ops = []string{
 	plane.TeamMember,
-	plane.TeamWorkspaces,
+	plane.TeamSpaces,
 }
 
-// TeamMember this person's role in that workspace.
+// TeamMember this person's role in that space.
 //
 // Calls plane.TeamMember on team over the peer plane.
 func TeamMember(ctx context.Context, in *plane.MemberIn) (*plane.Member, error) {
 	return plane.Ask[plane.MemberIn, plane.Member](ctx, App, plane.TeamMember, in)
 }
 
-// TeamWorkspaces the workspaces this person is in.
+// TeamSpaces the spaces this person is in.
 //
-// Calls plane.TeamWorkspaces on team over the peer plane.
-func TeamWorkspaces(ctx context.Context, in *plane.WorkspacesIn) (*plane.Spaces, error) {
-	return plane.Ask[plane.WorkspacesIn, plane.Spaces](ctx, App, plane.TeamWorkspaces, in)
+// Calls plane.TeamSpaces on team over the peer plane.
+func TeamSpaces(ctx context.Context, in *plane.SpacesIn) (*plane.Spaces, error) {
+	return plane.Ask[plane.SpacesIn, plane.Spaces](ctx, App, plane.TeamSpaces, in)
 }

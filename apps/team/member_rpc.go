@@ -1,17 +1,17 @@
 package team
 
-// The workspace membership read, published on the internal plane.
+// The space membership read, published on the internal plane.
 //
-// The workspaces/members tables have one writer and it is this process. A peer
-// that must decide something about a workspace — meet, deciding whether a caller
-// may join a room — used to read that decision off a signed workspace claim,
+// The spaces/members tables have one writer and it is this process. A peer
+// that must decide something about a space — meet, deciding whether a caller
+// may join a room — used to read that decision off a signed space claim,
 // which is the second bearer authority the estate is retiring. Once the caller
-// arrives with an IAM identity and no workspace claim, the rows are the only
+// arrives with an IAM identity and no space claim, the rows are the only
 // place the answer exists, and they live here.
 //
 // The projection is deliberately narrow: whether there is a row, and the role on
 // it. A peer deciding a join needs exactly that; handing over the member record
-// would put a workspace's roster on the wire for one boolean.
+// would put a space's roster on the wire for one boolean.
 
 import (
 	"context"
@@ -29,17 +29,17 @@ func exposeMember(accounts *accountStore) {
 			return memberOf(ctx, accounts, in)
 		},
 		zip.WithOperationID(plane.TeamMember),
-		zip.WithSummary("This person's role in that workspace"))
+		zip.WithSummary("This person's role in that space"))
 
-	zip.Post[plane.WorkspacesIn, plane.Spaces](cloud.Plane(), "/team/workspaces",
-		func(ctx context.Context, in *plane.WorkspacesIn) (*plane.Spaces, error) {
-			return workspacesOf(ctx, accounts, in)
+	zip.Post[plane.SpacesIn, plane.Spaces](cloud.Plane(), "/team/spaces",
+		func(ctx context.Context, in *plane.SpacesIn) (*plane.Spaces, error) {
+			return spacesOf(ctx, accounts, in)
 		},
-		zip.WithOperationID(plane.TeamWorkspaces),
-		zip.WithSummary("The workspaces this person is in"))
+		zip.WithOperationID(plane.TeamSpaces),
+		zip.WithSummary("The spaces this person is in"))
 }
 
-// workspacesOf answers which workspaces the caller holds a member row in, within
+// spacesOf answers which spaces the caller holds a member row in, within
 // the CALLER'S OWN org, and with what role on each.
 //
 // It is memberOf asked the other way round, over exactly the same rows and the
@@ -53,9 +53,9 @@ func exposeMember(accounts *accountStore) {
 // is an empty list — the honest "no rows", not an error a lobby would have to
 // render as a fault.
 //
-// WorkspacesOf is already owner_org-scoped on its join, so a subject known in
-// another tenant returns nothing here rather than that tenant's workspaces.
-func workspacesOf(ctx context.Context, accounts *accountStore, in *plane.WorkspacesIn) (*plane.Spaces, error) {
+// SpacesOf is already owner_org-scoped on its join, so a subject known in
+// another tenant returns nothing here rather than that tenant's spaces.
+func spacesOf(ctx context.Context, accounts *accountStore, in *plane.SpacesIn) (*plane.Spaces, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("team: no org on the call")
@@ -70,9 +70,9 @@ func workspacesOf(ctx context.Context, accounts *accountStore, in *plane.Workspa
 	if !ok {
 		return &plane.Spaces{}, nil
 	}
-	spaces, err := accounts.WorkspacesOf(ctx, org, account)
+	spaces, err := accounts.SpacesOf(ctx, org, account)
 	if err != nil {
-		return nil, zip.Errorf(500, "team: workspaces of: %v", err)
+		return nil, zip.Errorf(500, "team: spaces of: %v", err)
 	}
 	out := &plane.Spaces{Account: account, Items: make([]plane.Space, 0, len(spaces))}
 	for _, w := range spaces {
@@ -92,7 +92,7 @@ func workspacesOf(ctx context.Context, accounts *accountStore, in *plane.Workspa
 }
 
 // memberOf answers whether the named account holds a member row in the named
-// workspace of the CALLER'S OWN org, and with what role.
+// space of the CALLER'S OWN org, and with what role.
 //
 // The org is taken from the CALL rather than from the argument. That is not a
 // guarantee about the peer — a peer states its own caller (cloud.For / cloud.As),
@@ -102,7 +102,7 @@ func workspacesOf(ctx context.Context, accounts *accountStore, in *plane.Workspa
 // not also get by asking for the org it wanted. What taking it off the call DOES
 // buy is that the org travels with the identity the asking process authenticated,
 // so a peer cannot answer one caller's question with another caller's tenant by
-// mistake — the failure mode that a workspace-plus-org argument invites.
+// mistake — the failure mode that a space-plus-org argument invites.
 //
 // A call carrying no org is refused, not answered with "not a member": a refusal is
 // a fault the operator can see, while a false negative is a join that silently
@@ -110,7 +110,7 @@ func workspacesOf(ctx context.Context, accounts *accountStore, in *plane.Workspa
 //
 // It fails closed on a store that is not open: this process owns the store, so a
 // nil handle is a boot-order fault, and "not a member" would read as a real
-// answer about a workspace nobody could check.
+// answer about a space nobody could check.
 func memberOf(ctx context.Context, accounts *accountStore, in *plane.MemberIn) (*plane.Member, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
@@ -119,8 +119,8 @@ func memberOf(ctx context.Context, accounts *accountStore, in *plane.MemberIn) (
 	if accounts == nil {
 		return nil, zip.Errorf(503, "team: account store not open in the process that owns it")
 	}
-	if in.Workspace == "" || in.Subject == "" {
-		return nil, zip.ErrBadRequest("team: workspace and subject are required")
+	if in.Space == "" || in.Subject == "" {
+		return nil, zip.ErrBadRequest("team: space and subject are required")
 	}
 	// The subject → account resolution is THIS package's, and it is the STORE's:
 	// AccountForSubject is the same function the request lane uses, so a peer and a
@@ -132,9 +132,9 @@ func memberOf(ctx context.Context, accounts *accountStore, in *plane.MemberIn) (
 	if !ok {
 		return &plane.Member{}, nil
 	}
-	w, err := accounts.WorkspaceByUUID(ctx, org, in.Workspace)
+	w, err := accounts.SpaceByUUID(ctx, org, in.Space)
 	if err != nil {
-		// Not this tenant's workspace, or none at all — the same answer either way,
+		// Not this tenant's space, or none at all — the same answer either way,
 		// so a probe learns nothing about what exists in another org.
 		return &plane.Member{}, nil
 	}

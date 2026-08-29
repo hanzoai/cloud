@@ -7,7 +7,7 @@ package team
 //     never renders for an anonymous caller.
 //   - GET /v1/team/billing/plan  answers plan + seats for the caller's OWN org,
 //     resolved from the VERIFIED session token (never a client header), through
-//     the SAME commerce/plan clients the workspace-login gate uses (entitle.go).
+//     the SAME commerce/plan clients the space-login gate uses (entitle.go).
 //
 // Money reads are deliberately NOT re-proxied here (one way): the page calls
 // cloud's own /v1/billing/balance and /v1/usage/summary same-origin, where the

@@ -28,7 +28,7 @@ const (
 
 type graphNode struct {
 	ID    string `json:"id"`             // "<doctype>:<name>" — globally unique, click-to-open key
-	Type  string `json:"type"`           // kb-page | kb-memory | kb-source | kb-connector | unresolved
+	Type  string `json:"type"`           // kb.page | kb.memory | kb.source | kb.connector | unresolved
 	Title string `json:"title"`          // display label
 	Name  string `json:"name,omitempty"` // the document name (empty for synthetic nodes)
 	// Project is the project scope the underlying document was saved under. Absent
@@ -143,19 +143,19 @@ func buildGraph(pages, memories, sources, connectors, links []framework.Document
 		id := nodeID(DTPage, p.Name)
 		pageByName[p.Name] = true
 		title := docTitle(p)
-		addNode(graphNode{ID: id, Type: DTPage, Title: title, Name: p.Name, Project: str(p.Data["project"])})
+		addNode(graphNode{ID: id, Type: DTPage.String(), Title: title, Name: p.Name, Project: str(p.Data["project"])})
 		indexPut(titleIndex, strings.ToLower(p.Name), id)
 		if t := strings.ToLower(title); t != "" {
 			indexPut(titleIndex, t, id)
 		}
 	}
 	for _, m := range memories {
-		addNode(graphNode{ID: nodeID(DTMemory, m.Name), Type: DTMemory, Title: docTitle(m), Name: m.Name, Project: str(m.Data["project"])})
+		addNode(graphNode{ID: nodeID(DTMemory, m.Name), Type: DTMemory.String(), Title: docTitle(m), Name: m.Name, Project: str(m.Data["project"])})
 	}
 	sourceProvider := map[string]string{} // source node id → provider
 	for _, sc := range sources {
 		id := nodeID(DTSource, sc.Name)
-		addNode(graphNode{ID: id, Type: DTSource, Title: docTitle(sc), Name: sc.Name, Project: str(sc.Data["project"])})
+		addNode(graphNode{ID: id, Type: DTSource.String(), Title: docTitle(sc), Name: sc.Name, Project: str(sc.Data["project"])})
 		if pr := str(sc.Data["provider"]); pr != "" {
 			sourceProvider[id] = pr
 		}
@@ -211,7 +211,7 @@ func buildGraph(pages, memories, sources, connectors, links []framework.Document
 			continue
 		}
 		cid := nodeID(DTConnector, cn.Name)
-		addNode(graphNode{ID: cid, Type: DTConnector, Title: provider, Name: cn.Name})
+		addNode(graphNode{ID: cid, Type: DTConnector.String(), Title: provider, Name: cn.Name})
 		addEdge(graphEdge{From: id, To: cid, Kind: "provenance"})
 	}
 
@@ -221,7 +221,7 @@ func buildGraph(pages, memories, sources, connectors, links []framework.Document
 // nodeID is the globally-unique node identifier: "<doctype>:<name>". A page and a
 // memory that share a name never collide, and the console splits on the first ":"
 // to open the underlying document.
-func nodeID(doctype, name string) string { return doctype + ":" + name }
+func nodeID(dt framework.ID, name string) string { return dt.String() + ":" + name }
 
 // indexPut records the first mapping for a key (title collisions resolve to the
 // earliest page, deterministically).

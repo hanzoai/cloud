@@ -17,11 +17,11 @@ const RoleCrmUser = "CRM User"
 
 // DocType names are slug-style with a "crm-" prefix: no collision with the cms or
 // erp lanes, and no space for the console's path filter to reject.
-const (
-	dtCompany     = "crm-company"
-	dtContact     = "crm-contact"
-	dtOpportunity = "crm-opportunity"
-	dtApplication = "crm-application"
+var (
+	dtCompany     = framework.ID{Module: Module, Name: "company"}
+	dtContact     = framework.ID{Module: Module, Name: "contact"}
+	dtOpportunity = framework.ID{Module: Module, Name: "opportunity"}
+	dtApplication = framework.ID{Module: Module, Name: "application"}
 )
 
 // init registers the CRM content model with the framework. Installing the module
@@ -55,7 +55,7 @@ func social() []framework.DocField {
 
 func company() framework.DocType {
 	return framework.DocType{
-		Name: dtCompany, Module: Module, Autoname: "field:company_name", TitleField: "company_name",
+		Name: dtCompany.Name, Module: dtCompany.Module, Autoname: "field:company_name", TitleField: "company_name",
 		Fields: append([]framework.DocField{
 			{Fieldname: "company_name", Fieldtype: framework.FieldData, Label: "Name", Reqd: true, InListView: true},
 			{Fieldname: "domain_name", Fieldtype: framework.FieldData, Label: "Domain", InListView: true},
@@ -72,7 +72,7 @@ func company() framework.DocType {
 
 func contact() framework.DocType {
 	return framework.DocType{
-		Name: dtContact, Module: Module, Autoname: "field:email", TitleField: "email",
+		Name: dtContact.Name, Module: dtContact.Module, Autoname: "field:email", TitleField: "email",
 		Fields: append([]framework.DocField{
 			{Fieldname: "first_name", Fieldtype: framework.FieldData, Label: "First Name", InListView: true},
 			{Fieldname: "last_name", Fieldtype: framework.FieldData, Label: "Last Name", InListView: true},
@@ -80,7 +80,7 @@ func contact() framework.DocType {
 			{Fieldname: "phone", Fieldtype: framework.FieldData, Label: "Phone"},
 			{Fieldname: "job_title", Fieldtype: framework.FieldData, Label: "Job Title"},
 			{Fieldname: "city", Fieldtype: framework.FieldData, Label: "City"},
-			{Fieldname: "company", Fieldtype: framework.FieldLink, Label: "Company", Options: dtCompany, InListView: true},
+			{Fieldname: "company", Fieldtype: framework.FieldLink, Label: "Company", Options: dtCompany.String(), InListView: true},
 		}, social()...),
 		Perms: crmPerms(),
 	}
@@ -88,7 +88,7 @@ func contact() framework.DocType {
 
 func opportunity() framework.DocType {
 	return framework.DocType{
-		Name: dtOpportunity, Module: Module, Autoname: "crm-opp-.#####", TitleField: "opportunity_name",
+		Name: dtOpportunity.Name, Module: dtOpportunity.Module, Autoname: "crm-opp-.#####", TitleField: "opportunity_name",
 		Fields: []framework.DocField{
 			{Fieldname: "opportunity_name", Fieldtype: framework.FieldData, Label: "Name", Reqd: true, InListView: true},
 			{Fieldname: "amount", Fieldtype: framework.FieldCurrency, Label: "Amount", InListView: true},
@@ -96,8 +96,8 @@ func opportunity() framework.DocType {
 			{Fieldname: "stage", Fieldtype: framework.FieldSelect, Label: "Stage",
 				Options: "NEW\nSCREENING\nMEETING\nPROPOSAL\nCUSTOMER", InListView: true},
 			{Fieldname: "close_date", Fieldtype: framework.FieldDate, Label: "Close Date", InListView: true},
-			{Fieldname: "company", Fieldtype: framework.FieldLink, Label: "Company", Options: dtCompany, InListView: true},
-			{Fieldname: "point_of_contact", Fieldtype: framework.FieldLink, Label: "Point of Contact", Options: dtContact},
+			{Fieldname: "company", Fieldtype: framework.FieldLink, Label: "Company", Options: dtCompany.String(), InListView: true},
+			{Fieldname: "point_of_contact", Fieldtype: framework.FieldLink, Label: "Point of Contact", Options: dtContact.String()},
 		},
 		Perms: crmPerms(),
 	}
@@ -107,7 +107,7 @@ func opportunity() framework.DocType {
 // into a company and a contact.
 func application() framework.DocType {
 	return framework.DocType{
-		Name: dtApplication, Module: Module, Autoname: "crm-app-.#####", TitleField: "company",
+		Name: dtApplication.Name, Module: dtApplication.Module, Autoname: "crm-app-.#####", TitleField: "company",
 		Fields: []framework.DocField{
 			{Fieldname: "company", Fieldtype: framework.FieldData, Label: "Company", Reqd: true, InListView: true},
 			{Fieldname: "website", Fieldtype: framework.FieldData, Label: "Website"},
@@ -122,8 +122,8 @@ func application() framework.DocType {
 			{Fieldname: "screen", Fieldtype: framework.FieldJSON, Label: "Screen"},
 			{Fieldname: "events", Fieldtype: framework.FieldJSON, Label: "Events"},
 			// Set when an application is promoted.
-			{Fieldname: "promoted_company", Fieldtype: framework.FieldLink, Label: "Company Record", Options: dtCompany},
-			{Fieldname: "promoted_contact", Fieldtype: framework.FieldLink, Label: "Contact Record", Options: dtContact},
+			{Fieldname: "promoted_company", Fieldtype: framework.FieldLink, Label: "Company Record", Options: dtCompany.String()},
+			{Fieldname: "promoted_contact", Fieldtype: framework.FieldLink, Label: "Contact Record", Options: dtContact.String()},
 		},
 		Perms: crmPerms(),
 	}

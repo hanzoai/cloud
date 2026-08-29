@@ -33,7 +33,7 @@ import (
 func TestCollabRPCShapesAreExact(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(t.Context(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(t.Context(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestCollabRPCBridgedUnderABareApp(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown() })
 
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(t.Context(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(t.Context(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,12 +204,12 @@ var untypedByDesign = map[string]string{
 
 	"POST /v1/team/account": "RAW-BODY TOLERANCE, and two more: (1) ORDER — an unparseable body " +
 		"answers HTTP 200 carrying a Status, `g.fail(c, statusError(\"bad request\"))` " +
-		"(account.go:712), where op.invoke decodes into In BEFORE the handler is entered and " +
+		"(account.go:717), where op.invoke decodes into In BEFORE the handler is entered and " +
 		"answers ErrBadRequest (zip typed.go:485-491), so error precedence would move; (2) SHAPE — " +
-		"`result` is a different type per verb (LoginInfo, a workspace list, a bool, RegionInfo), " +
+		"`result` is a different type per verb (LoginInfo, a space list, a bool, RegionInfo), " +
 		"so one Out could only say `any`; (3) A SECOND KEY — the entitlement arm answers 402 with " +
-		"`\"upgradeUrl\": upgradeURL` (account.go:825) beside its error.",
-	"PUT /v1/team/account/cookie": "RAW-BODY TOLERANCE: `_ = c.Bind(&body)` (account.go:657) " +
+		"`\"upgradeUrl\": upgradeURL` (account.go:830) beside its error.",
+	"PUT /v1/team/account/cookie": "RAW-BODY TOLERANCE: `_ = c.Bind(&body)` (account.go:662) " +
 		"DISCARDS the decode error and the token falls back to the Authorization bearer, so an " +
 		"unparseable body SUCCEEDS — where op.invoke answers ErrBadRequest before the handler runs " +
 		"(zip typed.go:485-491).",
@@ -220,16 +220,16 @@ var untypedByDesign = map[string]string{
 		"a non-nil Out reaches c.JSON(out) at zip typed.go:567, putting a JSON body and a " +
 		"Content-Type on a redirect that carries neither (fiber redirect.go:328-335 writes exactly " +
 		"Location and the status). Its no-nonce arm also answers text/plain, " +
-		"`c.String(http.StatusInternalServerError, \"state\")` (account.go:407).",
+		"`c.String(http.StatusInternalServerError, \"state\")` (account.go:412).",
 	"GET /v1/team/account/auth/{provider}/callback": "TWO Set-Cookie HEADERS, which is a harder and " +
 		"WHOLLY DIFFERENT blocker from its sibling's: the success path clears the flow cookie, " +
-		"`g.setSessionCookie(c, stateCookie, \"\", -1)` (account.go:464), and sets the IAM token " +
-		"cookie, `g.setIAMTokenCookie(c, access)` (account.go:490). zip's HeaderCoder is " +
+		"`g.setSessionCookie(c, stateCookie, \"\", -1)` (account.go:469), and sets the IAM token " +
+		"cookie, `g.setIAMTokenCookie(c, access)` (account.go:495). zip's HeaderCoder is " +
 		"map[string]string (zip typed.go:258) written with a REPLACING c.Set (zip " +
 		"typed.go:557-558), so one key carries one value, and RFC 6265 §3 forbids folding two " +
 		"cookies into one header. This needs a header MULTIMAP, not a body capability. Its bounce " +
 		"also has a text/plain 500 arm, " +
-		"`c.String(http.StatusInternalServerError, \"bad front url\")` (account.go:1345).",
+		"`c.String(http.StatusInternalServerError, \"bad front url\")` (account.go:1350).",
 
 	"GET /v1/team/billing/ui": "BYTE REPLY: the embedded wallet page's bytes under a per-asset " +
 		"Content-Type, `c.Bytes(http.StatusOK, body)` (billing.go:204), while a typed op's only " +
@@ -242,12 +242,12 @@ var untypedByDesign = map[string]string{
 		"`c.Param(\"*\")` (billing.go:185) and falls back to index.html, which is what makes a deep " +
 		"link survive a hard refresh.",
 
-	"POST /v1/team/files/{workspace}": "MULTIPART BODY, and a text/plain reply. The form is read " +
+	"POST /v1/team/files/{space}": "MULTIPART BODY, and a text/plain reply. The form is read " +
 		"straight off fiber, `c.Fiber().FormFile(\"file\")` (files.go:164) — its part filename IS " +
 		"the blob id — against an op.invoke that json-decodes every non-empty body before the " +
 		"handler is entered (zip typed.go:485-491); and the success body is a bare uuid, " +
 		"`c.String(http.StatusOK, blobID)` (files.go:198), not JSON.",
-	"GET /v1/team/files/{workspace}/{filename}": "BYTE REPLY: the blob's raw bytes under a " +
+	"GET /v1/team/files/{space}/{filename}": "BYTE REPLY: the blob's raw bytes under a " +
 		"Content-Type derived from those bytes, `c.Bytes(http.StatusOK, data)` (files.go:244), " +
 		"while a typed op's only response path is c.JSON(out) (zip typed.go:567).",
 }
@@ -296,7 +296,7 @@ func TestDeclaredMediaTypesAreTheServedOnes(t *testing.T) {
 
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
 	auth := bearerFor(t, acct, org)
-	ws, err := mounted.State.accounts.EnsureWorkspace(t.Context(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(t.Context(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ func TestDeclaredMediaTypesAreTheServedOnes(t *testing.T) {
 	if receipt.StatusCode != http.StatusOK {
 		t.Fatalf("upload = %d, want 200", receipt.StatusCode)
 	}
-	if got, want := receipt.Header.Get("Content-Type"), declared(t, http.MethodPost, "/v1/team/files/{workspace}"); got != want {
+	if got, want := receipt.Header.Get("Content-Type"), declared(t, http.MethodPost, "/v1/team/files/{space}"); got != want {
 		t.Errorf("the upload receipt serves %q and the document declares %q", got, want)
 	}
 }

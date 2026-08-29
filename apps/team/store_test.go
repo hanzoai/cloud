@@ -4,7 +4,7 @@ import "testing"
 
 // TestSegTraversalGuard is the fix for Red's LOW #3: seg() must neutralize the
 // dot-only path components "." and ".." (which are inside the allowed
-// [A-Za-z0-9_.-] class and would otherwise pass through) so a tenant/workspace/
+// [A-Za-z0-9_.-] class and would otherwise pass through) so a tenant/space/
 // blobId segment can never be current/parent-dir traversal. '/' is already killed
 // by the class, so a slash-bearing value collapses to underscores in place and
 // cannot escape its box.

@@ -29,20 +29,20 @@ import (
 // leaving this list is a projection regression; one joining it is the migration
 // working, and the list is the place to say so.
 var typedOps = []string{
-	"DELETE /v1/framework/:doctype/:name",
-	"DELETE /v1/framework/doctypes/:name",
-	"GET /v1/framework/:doctype",
-	"GET /v1/framework/:doctype/:name",
+	"DELETE /v1/framework/:module.:kind/:name",
+	"DELETE /v1/framework/doctypes/:module.:name",
+	"GET /v1/framework/:module.:kind",
+	"GET /v1/framework/:module.:kind/:name",
 	"GET /v1/framework/doctypes",
-	"GET /v1/framework/doctypes/:name",
+	"GET /v1/framework/doctypes/:module.:name",
 	"GET /v1/framework/modules",
 	"GET /v1/framework/modules/:module",
 	"GET /v1/framework/summary",
-	"POST /v1/framework/:doctype/:name/cancel",
-	"POST /v1/framework/:doctype/:name/submit",
+	"POST /v1/framework/:module.:kind/:name/cancel",
+	"POST /v1/framework/:module.:kind/:name/submit",
 	"POST /v1/framework/doctypes",
 	"POST /v1/framework/modules/:module/install",
-	"PUT /v1/framework/doctypes/:name",
+	"PUT /v1/framework/doctypes/:module.:name",
 }
 
 // rawRoutes is every route that stays a raw handler, with the reason. Registered
@@ -86,8 +86,8 @@ var typedOps = []string{
 // `case reflect.Interface` in zip's schemaOf returning `{}` (JSON Schema "any");
 // it needs a zip release, so it is not made here.
 var rawRoutes = map[string]string{
-	"POST /v1/framework/:doctype":      "free-form document body: shape is metadata, not a Go type",
-	"PUT /v1/framework/:doctype/:name": "free-form document body: shape is metadata, not a Go type",
+	"POST /v1/framework/:module.:kind":      "free-form document body: shape is metadata, not a Go type",
+	"PUT /v1/framework/:module.:kind/:name": "free-form document body: shape is metadata, not a Go type",
 }
 
 // TestOpenObjectRefusalStillHolds makes the refusal above EXPIRE on its own. The
@@ -97,7 +97,7 @@ var rawRoutes = map[string]string{
 //
 // It pins shapes and facts that are INCONVENIENT on purpose. Each assertion
 // failing is the GOOD news: a leg of the refusal has expired, and once all three
-// have, POST /v1/framework/:doctype and PUT /v1/framework/:doctype/:name can
+// have, POST /v1/framework/:module.:kind and PUT /v1/framework/:module.:kind/:name can
 // finally become typed ops. Do not "correct" the expectations to keep it green —
 // convert the two routes and delete it.
 func TestOpenObjectRefusalStillHolds(t *testing.T) {
@@ -124,7 +124,7 @@ func TestOpenObjectRefusalStillHolds(t *testing.T) {
 	if err := json.Unmarshal(spec, &doc); err != nil {
 		t.Fatalf("unmarshal spec: %v", err)
 	}
-	got := doc.Paths["/v1/framework/{doctype}/{name}"]["get"].Responses["200"].Content["application/json"].Schema
+	got := doc.Paths["/v1/framework/{module}.{kind}/{name}"]["get"].Responses["200"].Content["application/json"].Schema
 	want := map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "object"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GET one document publishes response schema %v, pinned as %v — if the value type is no longer\n"+
@@ -148,8 +148,8 @@ func TestOpenObjectRefusalStillHolds(t *testing.T) {
 	if bound["subject"] != "x" {
 		t.Fatalf("probe never reached the handler (%v) — the probe is broken, not zip", bound)
 	}
-	if v, ok := bound["doctype"]; ok {
-		t.Errorf("zip bound :doctype=%v onto an open-object In — it can now carry the URL:\n"+
+	if v, ok := bound["kind"]; ok {
+		t.Errorf("zip bound :kind=%v onto an open-object In — it can now carry the URL:\n"+
 			"convert the two document writes (and check the params ride outside the body namespace)", v)
 	}
 
@@ -166,10 +166,10 @@ func TestOpenObjectRefusalStillHolds(t *testing.T) {
 	// stops naming a document from its body, THIS leg of the refusal has expired
 	// too, and it should go red saying so.
 	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", map[string]any{
-		"name": "Ticket", "autoname": "prompt",
+		"name": "Ticket", "module": "Projects", "autoname": "prompt",
 		"fields": []map[string]any{{"fieldname": "subject", "fieldtype": "Data"}},
 	})
-	code, created := do(t, app, http.MethodPost, "/v1/framework/Ticket", "acme",
+	code, created := do(t, app, http.MethodPost, "/v1/framework/Projects.Ticket", "acme",
 		map[string]any{"name": "chosen-name", "subject": "x"})
 	var made struct {
 		Name string `json:"name"`
@@ -288,7 +288,7 @@ func TestEmptyCollectionsAreArrays(t *testing.T) {
 	}
 	// The document list too, once its DocType exists but has no rows.
 	do(t, app, http.MethodPost, "/v1/framework/doctypes", "fresh", taskDocType())
-	code, body := do(t, app, http.MethodGet, "/v1/framework/Task", "fresh", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/framework/Projects.Task", "fresh", nil)
 	if code != http.StatusOK || string(body) != `{"data":[]}` {
 		t.Errorf("GET empty document list = %d %s, want 200 {\"data\":[]}", code, body)
 	}
@@ -300,7 +300,7 @@ func TestEmptyCollectionsAreArrays(t *testing.T) {
 func TestSummaryWire(t *testing.T) {
 	app := mountApp(t)
 	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", taskDocType())
-	do(t, app, http.MethodPost, "/v1/framework/Task", "acme", map[string]any{"subject": "x"})
+	do(t, app, http.MethodPost, "/v1/framework/Projects.Task", "acme", map[string]any{"subject": "x"})
 	code, body := do(t, app, http.MethodGet, "/v1/framework/summary", "acme", nil)
 	if code != http.StatusOK || string(body) != `{"doctypes":1,"documents":1}` {
 		t.Errorf("GET /v1/framework/summary = %d %s, want 200 {\"doctypes\":1,\"documents\":1}", code, body)

@@ -14,7 +14,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// theRoom is a room addressed the way meet spells one: the workspace uuid, the
+// theRoom is a room addressed the way meet spells one: the space uuid, the
 // separator, then the room's own id. This package never parses it — it is an
 // opaque key here — and the test uses the real shape so a reader can see that the
 // value crossing between the two surfaces is one value.
@@ -119,7 +119,7 @@ func TestRoomFilterSelectsOneChannelsWork(t *testing.T) {
 
 // TestRoomFilterIsScopedToTheOrg: the binding must not become a way to read
 // another tenant's channel. Two orgs naming the same room string is the case,
-// because a room id is unique within a workspace and nothing stops two tenants
+// because a room id is unique within a space and nothing stops two tenants
 // from spelling one the same way.
 func TestRoomFilterIsScopedToTheOrg(t *testing.T) {
 	ctx := context.Background()

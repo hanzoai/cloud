@@ -16,7 +16,7 @@ func TestDefaultIsFrontVersion(t *testing.T) {
 	}
 }
 
-// TestParseDefault proves the numeric triple the workspace handshake needs matches
+// TestParseDefault proves the numeric triple the space handshake needs matches
 // the default string — 0.6.0 → 0/6/0.
 func TestParseDefault(t *testing.T) {
 	if modelMajor() != 0 || modelMinor() != 6 || modelPatch() != 0 {
@@ -37,7 +37,7 @@ func TestEnvOverride(t *testing.T) {
 }
 
 // TestNoDrift is the core invariant: the parsed triple always re-serializes to
-// modelVersion() — the workspace-model version and the string server version are
+// modelVersion() — the space-model version and the string server version are
 // the SAME number, never drifting.
 func TestNoDrift(t *testing.T) {
 	for _, v := range []string{"0.6.0", "0.7.0", "1.10.5"} {

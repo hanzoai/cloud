@@ -6,8 +6,8 @@ package team
 // COLLABORATOR_URL (wss://<host>/v1/team/collaborator) and speaks the hocuspocus wire:
 // every binary frame is varString(documentName) + varUint(messageType) + payload,
 // with the documentName the SAME encodeDocumentId shape the RPC lane decodes
-// ("<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>") and the token the
-// SAME HS256 session/workspace token every other team route verifies — carried
+// ("<spaceUuid>|<objectClass>|<objectId>|<objectAttr>") and the token the
+// SAME HS256 session/space token every other team route verifies — carried
 // IN-BAND in the Auth message (the browser WS API cannot set headers).
 //
 // The server is a relay + update log, NOT a CRDT engine. Y.js updates are
@@ -30,9 +30,9 @@ package team
 // (the client renews awareness every ~15s).
 //
 // TENANT ISOLATION: identical to collab.go's RPC lane — org is the VERIFIED
-// token claim, the documentId's workspace must be the token's workspace (when
-// pinned) AND the caller must be a member; rooms are keyed org+workspace-first
-// and the persisted blob key embeds org+workspace, so a foreign documentId can
+// token claim, the documentId's space must be the token's space (when
+// pinned) AND the caller must be a member; rooms are keyed org+space-first
+// and the persisted blob key embeds org+space, so a foreign documentId can
 // neither join a room nor resolve a blob.
 
 import (
@@ -321,15 +321,15 @@ func newCollabHub(vfs types.VFSClient) *collabHub {
 	return &collabHub{vfs: vfs, rooms: map[string]*collabRoom{}}
 }
 
-// join attaches peer to the (org, workspace, doc) room, lazily loading the
+// join attaches peer to the (org, space, doc) room, lazily loading the
 // persisted log on first join, and returns a snapshot of the log to replay.
-func (h *collabHub) join(ctx context.Context, org, workspace, docName string, d collabDoc, peer *collabPeer) (*collabRoom, [][]byte, error) {
-	key := org + "\x00" + workspace + "\x00" + docName
+func (h *collabHub) join(ctx context.Context, org, space, docName string, d collabDoc, peer *collabPeer) (*collabRoom, [][]byte, error) {
+	key := org + "\x00" + space + "\x00" + docName
 	h.mu.Lock()
 	rm, ok := h.rooms[key]
 	if !ok {
 		rm = &collabRoom{
-			blobKey: blobKey(org, workspace, yLogBlobID(d)),
+			blobKey: blobKey(org, space, yLogBlobID(d)),
 			stop:    make(chan struct{}),
 			peers:   map[*collabPeer]struct{}{},
 		}
@@ -352,7 +352,7 @@ func (h *collabHub) join(ctx context.Context, org, workspace, docName string, d 
 			// room+flusher: drop rm.mu, then leave() removes the peer and GCs the room
 			// if it is now empty (flush is a no-op here — nothing was appended).
 			rm.mu.Unlock()
-			h.leave(ctx, org, workspace, docName, rm, peer)
+			h.leave(ctx, org, space, docName, rm, peer)
 			return nil, nil, fmt.Errorf("collab: load %s: %w", rm.blobKey, err)
 		}
 		rm.log = unmarshalYLog(data)
@@ -380,13 +380,13 @@ func (nopSink) write([]byte) error { return nil }
 // get-then-put in collab.go, whose gap between the Get(miss) and the Put let a racing
 // live edit be overwritten. Joins with a discard sink, seeds when empty, persists via
 // the room's own flush, then leaves (last-leaver GC unchanged).
-func (h *collabHub) seedIfAbsent(ctx context.Context, org, workspace, docName string, d collabDoc, update []byte) error {
+func (h *collabHub) seedIfAbsent(ctx context.Context, org, space, docName string, d collabDoc, update []byte) error {
 	peer := &collabPeer{sink: nopSink{}}
-	rm, _, err := h.join(ctx, org, workspace, docName, d, peer)
+	rm, _, err := h.join(ctx, org, space, docName, d, peer)
 	if err != nil {
 		return err
 	}
-	defer h.leave(ctx, org, workspace, docName, rm, peer)
+	defer h.leave(ctx, org, space, docName, rm, peer)
 	rm.mu.Lock()
 	if len(rm.log) != 0 {
 		rm.mu.Unlock()
@@ -402,8 +402,8 @@ func (h *collabHub) seedIfAbsent(ctx context.Context, org, workspace, docName st
 }
 
 // leave detaches peer; the last leaver flushes and GCs the room.
-func (h *collabHub) leave(ctx context.Context, org, workspace, docName string, rm *collabRoom, peer *collabPeer) {
-	key := org + "\x00" + workspace + "\x00" + docName
+func (h *collabHub) leave(ctx context.Context, org, space, docName string, rm *collabRoom, peer *collabPeer) {
+	key := org + "\x00" + space + "\x00" + docName
 	h.mu.Lock()
 	rm.mu.Lock()
 	delete(rm.peers, peer)
@@ -486,11 +486,11 @@ func (rm *collabRoom) broadcast(frame []byte, skip *collabPeer) {
 
 // collabDocSession is one authenticated document on one connection.
 type collabDocSession struct {
-	name      string // raw documentName (the provider's routing key)
-	org       string
-	workspace string
-	room      *collabRoom
-	peer      *collabPeer
+	name  string // raw documentName (the provider's routing key)
+	org   string
+	space string
+	room  *collabRoom
+	peer  *collabPeer
 }
 
 // collabConn is the per-WS state: the serialized writer and the authenticated
@@ -509,7 +509,7 @@ func newCollabConn(svc *collabService, sink frameSink) *collabConn {
 // close detaches every document session (socket gone).
 func (cc *collabConn) close(ctx context.Context) {
 	for name, ds := range cc.sessions {
-		cc.svc.hub.leave(ctx, ds.org, ds.workspace, ds.name, ds.room, ds.peer)
+		cc.svc.hub.leave(ctx, ds.org, ds.space, ds.name, ds.room, ds.peer)
 		delete(cc.sessions, name)
 	}
 }
@@ -555,7 +555,7 @@ func (cc *collabConn) frame(ctx context.Context, data []byte) {
 		// server broadcasts back (presence without server-side awareness state).
 		ds.room.broadcast(data, ds.peer)
 	case hpClose:
-		cc.svc.hub.leave(ctx, ds.org, ds.workspace, ds.name, ds.room, ds.peer)
+		cc.svc.hub.leave(ctx, ds.org, ds.space, ds.name, ds.room, ds.peer)
 		delete(cc.sessions, docName)
 	case hpStateless, hpSyncStatus:
 		// Not part of this lane's contract; ignore.
@@ -563,7 +563,7 @@ func (cc *collabConn) frame(ctx context.Context, data []byte) {
 }
 
 // auth verifies the in-band credential exactly like the RPC lane (same client, same
-// workspace pin, same membership gate) and on success joins the room. The frame
+// space pin, same membership gate) and on success joins the room. The frame
 // carries the credential itself, so it resolves through identity.verified rather
 // than off the request's carriers — an IAM access token or team's HS256 token, the
 // same two lanes in the same order.
@@ -600,7 +600,7 @@ func (cc *collabConn) auth(ctx context.Context, docName string, r *lreader) {
 		deny("malformed documentId")
 		return
 	}
-	if cl.workspace != "" && cl.workspace != doc.workspace {
+	if cl.space != "" && cl.space != doc.space {
 		deny("document not found")
 		return
 	}
@@ -608,19 +608,19 @@ func (cc *collabConn) auth(ctx context.Context, docName string, r *lreader) {
 		deny("collaborator unavailable")
 		return
 	}
-	if _, err := cc.svc.ident.admit(ctx, cl, doc.workspace); err != nil {
+	if _, err := cc.svc.ident.admit(ctx, cl, doc.space); err != nil {
 		deny("document not found")
 		return
 	}
 
 	peer := &collabPeer{sink: cc.sink}
-	room, _, err := cc.svc.hub.join(ctx, org, doc.workspace, docName, doc, peer)
+	room, _, err := cc.svc.hub.join(ctx, org, doc.space, docName, doc, peer)
 	if err != nil {
 		deny("storage unavailable")
 		return
 	}
 	cc.sessions[docName] = &collabDocSession{
-		name: docName, org: org, workspace: doc.workspace, room: room, peer: peer,
+		name: docName, org: org, space: doc.space, room: room, peer: peer,
 	}
 	delete(cc.denied, docName)
 	_ = cc.sink.write(hpAuthOKFrame(docName))
@@ -682,14 +682,14 @@ func init() {
 			"AUTH IS IN-BAND, PER DOCUMENT, NOT ON THE UPGRADE. The handshake gates only on "+
 			"browser Origin (403 outside the team surfaces; no Origin at all is admitted, which "+
 			"is what a non-browser sends), and then the first frame for a document must be an "+
-			"Auth message carrying the same session or workspace token every other team route "+
+			"Auth message carrying the same session or space token every other team route "+
 			"verifies — a browser WebSocket cannot set an Authorization header, which is why the "+
 			"token rides inside the protocol. Anything else on an unauthenticated document is "+
 			"answered with one permission denial and nothing further.\n\n"+
-			"Every document is authorized on its own: the document's workspace must be the "+
-			"token's workspace when the token pins one, and the caller must be a member of it. A "+
-			"mismatch, an unknown workspace and a non-member deny alike with \"document not "+
-			"found\". Rooms are keyed by org and workspace and the persisted log's key embeds "+
+			"Every document is authorized on its own: the document's space must be the "+
+			"token's space when the token pins one, and the caller must be a member of it. A "+
+			"mismatch, an unknown space and a non-member deny alike with \"document not "+
+			"found\". Rooms are keyed by org and space and the persisted log's key embeds "+
 			"both, so a foreign document id can neither join a room nor read a blob.\n\n"+
 			"The server pings every twenty seconds and drops a socket silent for sixty, so a "+
 			"backgrounded tab — whose JS timers are throttled but whose network stack still "+

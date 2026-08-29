@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/apps/framework"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/namespace"
@@ -124,13 +126,13 @@ func pointID(org, doctype, name string) string {
 // doctype-aware (title + the body/content field) and strips a Lexical RichText body
 // to its text runs so the embedding is over prose, not editor JSON. Empty text ⇒
 // nothing to index (the caller skips the upsert).
-func docText(doctype, title string, data map[string]any) string {
+func docText(dt framework.ID, title string, data map[string]any) string {
 	var b strings.Builder
 	if title != "" {
 		b.WriteString(title)
 		b.WriteString("\n\n")
 	}
-	switch doctype {
+	switch dt {
 	case DTPage:
 		b.WriteString(lexicalText(str(data["body"])))
 	case DTMemory:
@@ -169,15 +171,15 @@ func docMeta(org, doctype, name, title string, data map[string]any) map[string]a
 // FAIL-OPEN by contract: it is called from the after_save hook, so a returned error
 // is logged but the document is already persisted — the knowledge write is never
 // blocked by an index outage. Empty text (an untitled, empty page) is a no-op.
-func (x *indexer) indexDoc(ctx context.Context, org, doctype, name, title string, data map[string]any) error {
+func (x *indexer) indexDoc(ctx context.Context, org string, dt framework.ID, name, title string, data map[string]any) error {
 	if !x.enabled() {
 		return nil
 	}
-	text := docText(doctype, title, data)
+	text := docText(dt, title, data)
 	if text == "" {
 		// Nothing to embed, but a PRIOR version may have text — remove any stale point
 		// so an emptied doc stops being retrievable.
-		return x.deindexDoc(ctx, org, doctype, name)
+		return x.deindexDoc(ctx, org, dt, name)
 	}
 	vec, err := x.embed(ctx, org, "", text)
 	if err != nil {
@@ -188,9 +190,9 @@ func (x *indexer) indexDoc(ctx context.Context, org, doctype, name, title string
 	}
 	body := map[string]any{
 		"points": []map[string]any{{
-			"id":      pointID(org, doctype, name),
+			"id":      pointID(org, dt.String(), name),
 			"vector":  vec,
-			"payload": docMeta(org, doctype, name, title, data),
+			"payload": docMeta(org, dt.String(), name, title, data),
 		}},
 	}
 	// wait=true so a create-then-immediately-search (the RAG proof) is consistent.
@@ -200,11 +202,11 @@ func (x *indexer) indexDoc(ctx context.Context, org, doctype, name, title string
 // deindexDoc removes a document's point from the org's collection. Best-effort:
 // callers (the trash hook) swallow its error so a vector outage never blocks a
 // delete. Deletes by explicit point id AND is scoped to the org's own collection.
-func (x *indexer) deindexDoc(ctx context.Context, org, doctype, name string) error {
+func (x *indexer) deindexDoc(ctx context.Context, org string, dt framework.ID, name string) error {
 	if !x.enabled() {
 		return nil
 	}
-	body := map[string]any{"points": []string{pointID(org, doctype, name)}}
+	body := map[string]any{"points": []string{pointID(org, dt.String(), name)}}
 	return x.qdrant(ctx, http.MethodPost, "/collections/"+x.collection(org)+"/points/delete?wait=true", body, nil)
 }
 
@@ -228,8 +230,9 @@ func (x *indexer) deindexProvider(ctx context.Context, org, provider string) err
 // hit is one semantic-search result: enough to cite and open the source, never a
 // full copy of the document body.
 type hit struct {
-	// DocType is which kind of knowledge matched: kb-page (a wiki page), kb-memory
-	// (a unit of agent memory) or kb-source (a document a connector ingested).
+	// DocType is which kind of knowledge matched, by address: kb.page (a wiki
+	// page), kb.memory (a unit of agent memory) or kb.source (a document a
+	// connector ingested).
 	// Those three are the whole indexed set, and searchIn.DocTypes filters on them.
 	DocType string `json:"doctype"`
 	// Name is the document's name in the framework store — the id to read or open

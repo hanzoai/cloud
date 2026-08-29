@@ -22,7 +22,7 @@ import (
 // slug-clean (reachable through the console's `/cloud` path filter).
 func TestFixturesValid(t *testing.T) {
 	dts := DocTypes()
-	names := map[string]framework.DocType{}
+	addrs := map[string]framework.DocType{}
 	for _, dt := range dts {
 		if err := dt.Validate(); err != nil {
 			t.Fatalf("fixture %q invalid: %v", dt.Name, err)
@@ -30,13 +30,13 @@ func TestFixturesValid(t *testing.T) {
 		if !slugClean(dt.Name) {
 			t.Fatalf("DocType name %q is not slug-clean (unreachable via the generic renderer)", dt.Name)
 		}
-		names[dt.Name] = dt
+		addrs[dt.ID().String()] = dt
 	}
 	for _, dt := range dts {
 		for _, f := range dt.Fields {
 			switch f.Fieldtype {
 			case framework.FieldLink, framework.FieldTable:
-				if _, ok := names[f.Options]; !ok {
+				if _, ok := addrs[f.Options]; !ok {
 					t.Fatalf("%s.%s references %q which is not an ERP DocType", dt.Name, f.Fieldname, f.Options)
 				}
 			}
@@ -47,17 +47,17 @@ func TestFixturesValid(t *testing.T) {
 // TestModelSpec locks the contract the console + hooks rely on: the submittable
 // transactions, their series naming, their child Table, and the read-only ledgers.
 func TestModelSpec(t *testing.T) {
-	byName := map[string]framework.DocType{}
+	byID := map[framework.ID]framework.DocType{}
 	for _, dt := range DocTypes() {
 		if dt.Module != Module {
 			t.Fatalf("%s: module want %q, got %q", dt.Name, Module, dt.Module)
 		}
-		byName[dt.Name] = dt
+		byID[dt.ID()] = dt
 	}
 	// The six submittable transactions, each series-named with a child Table (except
 	// payment-entry which has no lines).
-	for _, name := range []string{dtSalesOrder, dtSalesInvoice, dtPurchaseOrder, dtStockEntry, dtJournalEntry, dtPaymentEntry} {
-		dt := byName[name]
+	for _, name := range []framework.ID{dtSalesOrder, dtSalesInvoice, dtPurchaseOrder, dtStockEntry, dtJournalEntry, dtPaymentEntry} {
+		dt := byID[name]
 		if !dt.IsSubmittable {
 			t.Fatalf("%s must be submittable", name)
 		}
@@ -65,12 +65,12 @@ func TestModelSpec(t *testing.T) {
 			t.Fatalf("%s must use a series autoname, got %q", name, dt.Autoname)
 		}
 	}
-	if f, ok := fieldOf(byName[dtSalesOrder], "items"); !ok || f.Fieldtype != framework.FieldTable || f.Options != dtSalesOrderItem {
+	if f, ok := fieldOf(byID[dtSalesOrder], "items"); !ok || f.Fieldtype != framework.FieldTable || f.Options != dtSalesOrderItem.String() {
 		t.Fatalf("sales-order.items must be a Table of %s, got %+v", dtSalesOrderItem, f)
 	}
 	// Ledgers are read-only: a single System-Manager read grant, no create/write.
-	for _, name := range []string{dtGLEntry, dtStockLedger} {
-		dt := byName[name]
+	for _, name := range []framework.ID{dtGLEntry, dtStockLedger} {
+		dt := byID[name]
 		if dt.IsSubmittable {
 			t.Fatalf("%s must not be submittable", name)
 		}
@@ -122,7 +122,7 @@ func TestInstallTransactRoundTrip(t *testing.T) {
 	})
 	steName, _ := ste["name"].(string)
 	mustSubmit(t, app, org, dtStockEntry, steName)
-	sle := listDocs(t, app, org, `/v1/framework/`+dtStockLedger+`?filters={"voucher_no":"`+steName+`"}`)
+	sle := listDocs(t, app, org, `/v1/framework/`+dtStockLedger.String()+`?filters={"voucher_no":"`+steName+`"}`)
 	if len(sle) != 1 {
 		t.Fatalf("stock-entry submit want 1 ledger entry, got %d", len(sle))
 	}
@@ -140,7 +140,7 @@ func TestInstallTransactRoundTrip(t *testing.T) {
 	}
 	invName, _ := inv["name"].(string)
 	mustSubmit(t, app, org, dtSalesInvoice, invName)
-	gl := listDocs(t, app, org, `/v1/framework/`+dtGLEntry+`?filters={"voucher_no":"`+invName+`"}`)
+	gl := listDocs(t, app, org, `/v1/framework/`+dtGLEntry.String()+`?filters={"voucher_no":"`+invName+`"}`)
 	if len(gl) != 2 {
 		t.Fatalf("invoice submit want 2 GL entries, got %d", len(gl))
 	}
@@ -167,7 +167,7 @@ func TestSubmitGatesAndIntegrity(t *testing.T) {
 
 	// Empty order → create ok, submit refused (422 gate).
 	empty := mustCreate(t, app, org, dtSalesOrder, map[string]any{"customer": "c1"})
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesOrder+"/"+str(empty["name"])+"/submit", org, nil); code != http.StatusUnprocessableEntity {
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesOrder.String()+"/"+str(empty["name"])+"/submit", org, nil); code != http.StatusUnprocessableEntity {
 		t.Fatalf("empty-order submit want 422, got %d", code)
 	}
 
@@ -183,7 +183,7 @@ func TestSubmitGatesAndIntegrity(t *testing.T) {
 		t.Fatalf("journal totals want 50/50, got %v/%v", je["total_debit"], je["total_credit"])
 	}
 	mustSubmit(t, app, org, dtJournalEntry, str(je["name"]))
-	if n := len(listDocs(t, app, org, `/v1/framework/`+dtGLEntry+`?filters={"voucher_no":"`+str(je["name"])+`"}`)); n != 2 {
+	if n := len(listDocs(t, app, org, `/v1/framework/`+dtGLEntry.String()+`?filters={"voucher_no":"`+str(je["name"])+`"}`)); n != 2 {
 		t.Fatalf("balanced journal want 2 GL entries, got %d", n)
 	}
 
@@ -195,12 +195,12 @@ func TestSubmitGatesAndIntegrity(t *testing.T) {
 			{"account": "sales-income", "debit": 0, "credit": 30},
 		},
 	})
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtJournalEntry+"/"+str(bad["name"])+"/submit", org, nil); code != http.StatusUnprocessableEntity {
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtJournalEntry.String()+"/"+str(bad["name"])+"/submit", org, nil); code != http.StatusUnprocessableEntity {
 		t.Fatalf("unbalanced-journal submit want 422, got %d", code)
 	}
 
 	// A sales-order line referencing a non-existent item is refused (422 errBadRef).
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesOrder, org, map[string]any{
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesOrder.String(), org, map[string]any{
 		"customer": "c1", "items": []map[string]any{{"item": "ghost-item", "qty": 1, "rate": 5}},
 	}); code != http.StatusUnprocessableEntity {
 		t.Fatalf("dangling item link want 422, got %d", code)
@@ -225,7 +225,7 @@ func TestTenantIsolation(t *testing.T) {
 	if n := len(listDocs(t, app, "orgB", "/v1/framework/doctypes")); n != 0 {
 		t.Fatalf("orgB must have zero doctypes, got %d", n)
 	}
-	if code, _ := call(t, app, http.MethodGet, "/v1/framework/"+dtStockLedger, "orgB", nil); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/"+dtStockLedger.String(), "orgB", nil); code != http.StatusNotFound {
 		t.Fatalf("orgB stock-ledger read want 404 (not installed), got %d", code)
 	}
 }
@@ -252,15 +252,15 @@ func TestLedgerReadOnlyToRoles(t *testing.T) {
 		t.Fatal("owner install failed")
 	}
 	// The Erp User may read a master (has the grant)…
-	if code, _ := reqAs(t, app, http.MethodGet, "/v1/framework/"+dtItem, org, "u_agent", nil); code != http.StatusOK {
+	if code, _ := reqAs(t, app, http.MethodGet, "/v1/framework/"+dtItem.String(), org, "u_agent", nil); code != http.StatusOK {
 		t.Fatalf("Erp User item read want 200, got %d", code)
 	}
 	// …but may NOT read the GL ledger (no grant on it)…
-	if code, _ := reqAs(t, app, http.MethodGet, "/v1/framework/"+dtGLEntry, org, "u_agent", nil); code != http.StatusForbidden {
+	if code, _ := reqAs(t, app, http.MethodGet, "/v1/framework/"+dtGLEntry.String(), org, "u_agent", nil); code != http.StatusForbidden {
 		t.Fatalf("Erp User GL read want 403, got %d", code)
 	}
 	// …nor create one (the ledger is written only by the posting hooks, via the store).
-	if code, _ := reqAs(t, app, http.MethodPost, "/v1/framework/"+dtGLEntry, org, "u_agent",
+	if code, _ := reqAs(t, app, http.MethodPost, "/v1/framework/"+dtGLEntry.String(), org, "u_agent",
 		map[string]any{"account": "x", "debit": 1}); code != http.StatusForbidden {
 		t.Fatalf("Erp User GL create want 403, got %d", code)
 	}
@@ -302,7 +302,7 @@ func TestConcurrentSubmitPostsExactlyOnce(t *testing.T) {
 	if won != 1 {
 		t.Fatalf("exactly one concurrent submit must win the flip, got %d (codes %v)", won, codes)
 	}
-	if n := len(listDocs(t, app, org, `/v1/framework/`+dtGLEntry+`?filters={"voucher_no":"`+name+`"}`)); n != 2 {
+	if n := len(listDocs(t, app, org, `/v1/framework/`+dtGLEntry.String()+`?filters={"voucher_no":"`+name+`"}`)); n != 2 {
 		t.Fatalf("concurrent submit must post the GL exactly once (2 legs), got %d entries", n)
 	}
 }
@@ -323,10 +323,10 @@ func TestCancelReversesPostings(t *testing.T) {
 		"customer": "c1", "items": []map[string]any{{"item": "w1", "qty": 1, "rate": 100}},
 	})
 	mustSubmit(t, app, org, dtSalesInvoice, str(inv["name"]))
-	if code, body := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesInvoice+"/"+str(inv["name"])+"/cancel", org, nil); code != http.StatusOK {
+	if code, body := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesInvoice.String()+"/"+str(inv["name"])+"/cancel", org, nil); code != http.StatusOK {
 		t.Fatalf("cancel invoice want 200, got %d (%s)", code, body)
 	}
-	gl := listDocs(t, app, org, `/v1/framework/`+dtGLEntry+`?filters={"voucher_no":"`+str(inv["name"])+`"}`)
+	gl := listDocs(t, app, org, `/v1/framework/`+dtGLEntry.String()+`?filters={"voucher_no":"`+str(inv["name"])+`"}`)
 	if len(gl) != 4 { // 2 forward + 2 reversal
 		t.Fatalf("cancelled invoice want 4 GL rows (2 fwd + 2 rev), got %d", len(gl))
 	}
@@ -344,11 +344,11 @@ func TestCancelReversesPostings(t *testing.T) {
 		"stock_entry_type": "Receipt", "items": []map[string]any{{"item": "w1", "qty": 5, "target_warehouse": "wh"}},
 	})
 	mustSubmit(t, app, org, dtStockEntry, str(ste["name"]))
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtStockEntry+"/"+str(ste["name"])+"/cancel", org, nil); code != http.StatusOK {
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtStockEntry.String()+"/"+str(ste["name"])+"/cancel", org, nil); code != http.StatusOK {
 		t.Fatalf("cancel stock entry want 200, got %d", code)
 	}
 	var netQty float64
-	for _, e := range listDocs(t, app, org, `/v1/framework/`+dtStockLedger+`?filters={"voucher_no":"`+str(ste["name"])+`"}`) {
+	for _, e := range listDocs(t, app, org, `/v1/framework/`+dtStockLedger.String()+`?filters={"voucher_no":"`+str(ste["name"])+`"}`) {
 		netQty += num(e["qty"])
 	}
 	if netQty != 0 {
@@ -364,7 +364,7 @@ func TestNonFiniteTotalRejected(t *testing.T) {
 	call(t, app, http.MethodPost, "/v1/framework/modules/erp/install", org, nil)
 	mustCreate(t, app, org, dtItem, map[string]any{"item_code": "w1", "item_name": "W1"})
 	mustCreate(t, app, org, dtCustomer, map[string]any{"customer_name": "c1"})
-	code, body := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesOrder, org, map[string]any{
+	code, body := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesOrder.String(), org, map[string]any{
 		"customer": "c1", "items": []map[string]any{{"item": "w1", "qty": 1e200, "rate": 1e200}},
 	})
 	if code != http.StatusUnprocessableEntity {
@@ -376,8 +376,8 @@ func TestNonFiniteTotalRejected(t *testing.T) {
 
 // submitStatus fires /submit and returns the status code (−1 on transport error);
 // goroutine-safe (no t.Fatalf) for the concurrency test.
-func submitStatus(app *zip.App, org, doctype, name string) int {
-	req := httptest.NewRequest(http.MethodPost, "/v1/framework/"+doctype+"/"+name+"/submit", nil)
+func submitStatus(app *zip.App, org string, id framework.ID, name string) int {
+	req := httptest.NewRequest(http.MethodPost, "/v1/framework/"+id.String()+"/"+name+"/submit", nil)
 	req.Header.Set("X-Org-Id", org)
 	req.Header.Set("X-User-Id", "u_"+org)
 	resp, err := app.Test(req)
@@ -411,11 +411,11 @@ func mountAs(t *testing.T, roles func(org, user string) []string) *zip.App {
 }
 
 // mustCreate POSTs a document and returns the created body; fails on non-201.
-func mustCreate(t *testing.T, app *zip.App, org, doctype string, body map[string]any) map[string]any {
+func mustCreate(t *testing.T, app *zip.App, org string, id framework.ID, body map[string]any) map[string]any {
 	t.Helper()
-	code, raw := call(t, app, http.MethodPost, "/v1/framework/"+doctype, org, body)
+	code, raw := call(t, app, http.MethodPost, "/v1/framework/"+id.String(), org, body)
 	if code != http.StatusCreated {
-		t.Fatalf("create %s want 201, got %d (%s)", doctype, code, raw)
+		t.Fatalf("create %s want 201, got %d (%s)", id, code, raw)
 	}
 	var m map[string]any
 	_ = json.Unmarshal(raw, &m)
@@ -423,11 +423,11 @@ func mustCreate(t *testing.T, app *zip.App, org, doctype string, body map[string
 }
 
 // mustSubmit POSTs /submit and returns the body; fails on non-200.
-func mustSubmit(t *testing.T, app *zip.App, org, doctype, name string) map[string]any {
+func mustSubmit(t *testing.T, app *zip.App, org string, id framework.ID, name string) map[string]any {
 	t.Helper()
-	code, raw := call(t, app, http.MethodPost, "/v1/framework/"+doctype+"/"+name+"/submit", org, nil)
+	code, raw := call(t, app, http.MethodPost, "/v1/framework/"+id.String()+"/"+name+"/submit", org, nil)
 	if code != http.StatusOK {
-		t.Fatalf("submit %s/%s want 200, got %d (%s)", doctype, name, code, raw)
+		t.Fatalf("submit %s/%s want 200, got %d (%s)", id, name, code, raw)
 	}
 	var m map[string]any
 	_ = json.Unmarshal(raw, &m)

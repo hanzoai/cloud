@@ -25,6 +25,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
+	"github.com/hanzoai/cloud/apps/fare"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/internal/planetest"
@@ -83,9 +84,9 @@ func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 func callPaid(t *testing.T, s *cloud.Service[state], org string, hErr error) (status int, ran *int32) {
 	t.Helper()
 	var calls int32
-	h := paid(s, func(ctx context.Context, _ *noInput) (*struct{}, error) {
+	h := fare.Paid(s, func(ctx context.Context, _ *noInput) (*struct{}, error) {
 		atomic.AddInt32(&calls, 1)
-		if _, err := orgOf(ctx); err != nil {
+		if _, err := fare.Org(ctx); err != nil {
 			t.Error("an operation ran with no org — admission hands the tenant down")
 		}
 		if hErr != nil {

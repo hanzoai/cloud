@@ -221,10 +221,11 @@ func (o contentOps) getBoard(ctx context.Context, in *boardQuery) (*boardPage, e
 
 	types := publishableDocTypes
 	if only := strings.TrimSpace(in.DocType); only != "" {
-		if !isPublishableDocType(only) {
+		id, ok := publishable(only)
+		if !ok {
 			return nil, zip.ErrNotFound("unknown content type: " + only)
 		}
-		types = []string{only}
+		types = []framework.ID{id}
 	}
 
 	items := make([]boardItem, 0, limit)
@@ -325,7 +326,7 @@ func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*Tran
 		return nil, err
 	}
 	doctype, name := decodeSeg(in.DocType), decodeSeg(in.Name)
-	if !isPublishableDocType(doctype) {
+	if _, ok := publishable(doctype); !ok {
 		return nil, zip.ErrNotFound("unknown content type: " + doctype)
 	}
 	to := strings.TrimSpace(in.To)
@@ -444,7 +445,8 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 	if s == nil {
 		return TransitionResult{}, errNotMounted
 	}
-	if !isPublishableDocType(doctype) {
+	id, ok := publishable(doctype)
+	if !ok {
 		return TransitionResult{}, errUnknownDocType
 	}
 	if !IsStatus(to) {
@@ -485,7 +487,7 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 		defer func() { _ = lease.Release(ctx) }()
 	}
 
-	doc, err := framework.Get(ctx, org, doctype, name)
+	doc, err := framework.Get(ctx, org, id, name)
 	if err != nil {
 		return TransitionResult{}, err
 	}
@@ -504,7 +506,7 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 	// published_at (and preserves external_ids), so it wraps the context to pass the
 	// enforceServerOwned gate. The enforceLifecycle gate still runs — the trusted marker
 	// exempts ONLY the server-owned-field check, never edge legality (defence in depth).
-	if err := framework.UpdateData(withTrustedWrite(ctx), org, doctype, name, data); err != nil {
+	if err := framework.UpdateData(withTrustedWrite(ctx), org, id, name, data); err != nil {
 		return TransitionResult{}, err
 	}
 
@@ -554,9 +556,9 @@ type boardItem struct {
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
-func boardItemFrom(dt string, d framework.Document) boardItem {
+func boardItemFrom(dt framework.ID, d framework.Document) boardItem {
 	return boardItem{
-		DocType:   dt,
+		DocType:   dt.String(),
 		Name:      d.Name,
 		Title:     dataString(d.Data, "title"),
 		Status:    dataString(d.Data, StatusField),

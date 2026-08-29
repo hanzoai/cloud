@@ -19,8 +19,15 @@ import (
 // internal plane.
 //
 // A subsystem showing a roster asks this instead of keeping one. The scope is an
-// org, a workspace inside it, or a project inside that; the ORG is always the
+// org, a space inside it, or a project inside that; the ORG is always the
 // caller's and is never an argument.
+//
+// IAM spells the middle level `Workspace` — it is that schema's column and that
+// service's route — and the estate spells it Space. The two meet HERE and only
+// here: every field named Workspace below is hanzoai/iam's, every field named
+// Space is ours, and the assignments between them are the whole translation. It
+// collapses to one word when iam releases the rename; until then a second
+// spelling inside cloud would be the drift, not the fix.
 
 // exposeMembers publishes the roster read and the grant write. Mount calls it.
 func exposeMembers() {
@@ -55,9 +62,9 @@ func members(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
 			q = q.Filter("User=", in.User)
 		}
 		// Any is what separates "the org's own grants" from "every scope": an empty
-		// Workspace is a real scope, so it cannot also mean unfiltered.
+		// Space is a real scope, so it cannot also mean unfiltered.
 		if !in.Any {
-			q = q.Filter("Workspace=", in.Workspace).Filter("Project=", in.Project)
+			q = q.Filter("Workspace=", in.Space).Filter("Project=", in.Project)
 		}
 	}
 	rows, err := q.GetAll(ctx)
@@ -71,7 +78,7 @@ func members(ctx context.Context, in *plane.Scope) (*plane.Memberships, error) {
 		}
 		out = append(out, plane.Membership{
 			User: m.User, Role: m.Role, Name: displayName(db, m.User),
-			Workspace: m.Workspace, Project: m.Project,
+			Space: m.Workspace, Project: m.Project,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].User < out[j].User })
@@ -105,7 +112,7 @@ func grant(ctx context.Context, in *plane.GrantIn) (*struct{}, error) {
 	if role == "" {
 		role = "member"
 	}
-	if _, err := iamstore.EnsureMembershipIn(ctx, db, in.User, org, in.Workspace, in.Project, role); err != nil {
+	if _, err := iamstore.EnsureMembershipIn(ctx, db, in.User, org, in.Space, in.Project, role); err != nil {
 		return nil, fmt.Errorf("grant: %w", err)
 	}
 	return &struct{}{}, nil

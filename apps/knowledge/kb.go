@@ -49,19 +49,19 @@ const RoleKBEditor = "KB Editor"
 // DocType names (slug, kb- prefixed). Exported so the hooks (hooks.go) and the
 // retrieval subsystem (subsystem.go) reference the SAME identifiers as the
 // fixtures — one source of truth for the doctype set.
-const (
-	DTPage      = "kb-page"      // a Notion-like wiki page (nested via `parent`)
-	DTMemory    = "kb-memory"    // a unit of agent/AI memory (note/fact/observation)
-	DTSource    = "kb-source"    // a document ingested from an app connector or upload
-	DTConnector = "kb-connector" // an app-connector connection (metadata only; token in KMS)
-	DTLink      = "kb-link"      // a wikilink edge extracted from a kb-page body
+var (
+	DTPage      = framework.ID{Module: Module, Name: "page"}      // a Notion-like wiki page (nested via `parent`)
+	DTMemory    = framework.ID{Module: Module, Name: "memory"}    // a unit of agent/AI memory (note/fact/observation)
+	DTSource    = framework.ID{Module: Module, Name: "source"}    // a document ingested from an app connector or upload
+	DTConnector = framework.ID{Module: Module, Name: "connector"} // an app-connector connection (metadata only; token in KMS)
+	DTLink      = framework.ID{Module: Module, Name: "link"}      // a wikilink edge extracted from a kb-page body
 )
 
 // indexedDocTypes is the set whose saves/trashes flow to the vector store — the
 // org's retrievable KNOWLEDGE. kb-connector is metadata (connection state) and is
 // NOT indexed; it never carries knowledge text. hooks.go registers the indexing
 // hooks over exactly this set, and subsystem.go's search defaults to it.
-var indexedDocTypes = []string{DTPage, DTMemory, DTSource}
+var indexedDocTypes = []framework.ID{DTPage, DTMemory, DTSource}
 
 // init registers the KB content model and its indexing hooks with the framework.
 // Installing the "kb" module (POST /v1/framework/modules/kb/install) ensures these
@@ -89,12 +89,12 @@ func DocTypes() []framework.DocType {
 // filters the same one engine. Backlinks are ordinary Link/Data references.
 func page() framework.DocType {
 	return framework.DocType{
-		Name: DTPage, Module: Module, Autoname: "field:slug", TitleField: "title",
+		Name: DTPage.Name, Module: DTPage.Module, Autoname: "field:slug", TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "slug", Fieldtype: framework.FieldData, Label: "Slug", Reqd: true, InListView: true},
 			{Fieldname: "body", Fieldtype: framework.FieldRichText, Label: "Body"},
-			{Fieldname: "parent", Fieldtype: framework.FieldLink, Label: "Parent", Options: DTPage, InListView: true},
+			{Fieldname: "parent", Fieldtype: framework.FieldLink, Label: "Parent", Options: DTPage.String(), InListView: true},
 			{Fieldname: "status", Fieldtype: framework.FieldSelect, Label: "Status", Options: "Draft\nPublished", Default: "Draft", InListView: true},
 			{Fieldname: "tags", Fieldtype: framework.FieldData, Label: "Tags"},
 			{Fieldname: "project", Fieldtype: framework.FieldData, Label: "Project", InListView: true},
@@ -111,7 +111,7 @@ func page() framework.DocType {
 // needs no slug); the title is a short label for the console list.
 func memory() framework.DocType {
 	return framework.DocType{
-		Name: DTMemory, Module: Module, TitleField: "title",
+		Name: DTMemory.Name, Module: DTMemory.Module, TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", InListView: true},
 			{Fieldname: "content", Fieldtype: framework.FieldLong, Label: "Content", Reqd: true},
@@ -133,7 +133,7 @@ func memory() framework.DocType {
 // writes these and the after_save hook indexes them — one ingestion path.
 func source() framework.DocType {
 	return framework.DocType{
-		Name: DTSource, Module: Module, TitleField: "title",
+		Name: DTSource.Name, Module: DTSource.Module, TitleField: "title",
 		Fields: []framework.DocField{
 			{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 			{Fieldname: "body", Fieldtype: framework.FieldLong, Label: "Body"},
@@ -158,7 +158,7 @@ func source() framework.DocType {
 // connection per provider per org) so re-connecting is idempotent.
 func connector() framework.DocType {
 	return framework.DocType{
-		Name: DTConnector, Module: Module, Autoname: "field:provider", TitleField: "provider",
+		Name: DTConnector.Name, Module: DTConnector.Module, Autoname: "field:provider", TitleField: "provider",
 		Fields: []framework.DocField{
 			{Fieldname: "provider", Fieldtype: framework.FieldSelect, Label: "Provider", Options: "github\nslack\ngoogle", Reqd: true, InListView: true},
 			{Fieldname: "status", Fieldtype: framework.FieldSelect, Label: "Status", Options: "disconnected\nconnected\nsyncing\nerror", Default: "disconnected", InListView: true},
@@ -188,9 +188,9 @@ func connector() framework.DocType {
 // the vector store. Hash-named: an edge needs no stable slug.
 func link() framework.DocType {
 	return framework.DocType{
-		Name: DTLink, Module: Module,
+		Name: DTLink.Name, Module: DTLink.Module,
 		Fields: []framework.DocField{
-			{Fieldname: "source", Fieldtype: framework.FieldLink, Label: "Source", Options: DTPage, Reqd: true, InListView: true},
+			{Fieldname: "source", Fieldtype: framework.FieldLink, Label: "Source", Options: DTPage.String(), Reqd: true, InListView: true},
 			{Fieldname: "target_title", Fieldtype: framework.FieldData, Label: "Target", Reqd: true, InListView: true},
 		},
 		Perms: kbPerms(),

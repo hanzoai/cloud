@@ -1,7 +1,7 @@
 package team
 
-// The billing gate for workspace login, in ONE place. selectWorkspace — the one
-// chokepoint every client passes on its way to a workspace token — asks entitle
+// The billing gate for space login, in ONE place. selectWorkspace — the one
+// chokepoint every client passes on its way to a space token — asks entitle
 // whether the org's plan licenses the team product, mirroring how
 // clients/entitlements separates the two kinds of "no":
 //
@@ -18,7 +18,7 @@ package team
 //
 // Personal AI plans license 'team' with an invited-guest cap (the plan
 // entitlement key `team.guests` in @hanzo/plans subscription.json); org team
-// plans carry no cap. The cap is enforced by join order: the workspace's first
+// plans carry no cap. The cap is enforced by join order: the space's first
 // `cap` guests keep access, later ones are refused until the org upgrades.
 
 import "context"

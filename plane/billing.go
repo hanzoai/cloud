@@ -313,7 +313,7 @@ type Accounts struct {
 }
 
 // Holder is one person on a billing account. It is not [Member], which answers
-// whether a subject holds a workspace row at all — a verdict rather than a
+// whether a subject holds a space row at all — a verdict rather than a
 // person — and the two would be one word for two questions.
 type Holder struct {
 	ID      string `json:"id"`

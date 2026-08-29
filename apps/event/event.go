@@ -121,7 +121,7 @@ func (e Event) toCapture() CaptureEvent {
 // endpoint — an endpoint still cannot ask for anything. Two levels, because the
 // platform mints two kinds of principal:
 //
-//	full  ⇒ the unprojected write into org. Every API credential, and a workspace
+//	full  ⇒ the unprojected write into org. Every API credential, and a space
 //	        member's session.
 //	!full ⇒ the PROJECTED write into org (publicIngest with org as the tenant — the
 //	        same lane the site-host carve uses). A reduced principal: it has proven
@@ -157,7 +157,7 @@ type admission struct {
 //  2. else a presented key on either carrier resolves through keyAdmission — the
 //     project that minted it (org AND site), else the org IAM issued it to — at FULL
 //     capability;
-//  3. else a verified Hanzo Team workspace token — at FULL capability for a member,
+//  3. else a verified Hanzo Team space token — at FULL capability for a member,
 //     and at REDUCED capability for a guest (teamTenant, team.go).
 //
 // None matches ⇒ (admission{}, false), which handle answers by refusing a presented-
@@ -187,7 +187,7 @@ func eventTenant(c *zip.Ctx) (admission, bool) {
 			return a, true
 		}
 	}
-	// A Hanzo Team workspace token (HS256 over SERVER_SECRET, org and role in the
+	// A Hanzo Team space token (HS256 over SERVER_SECRET, org and role in the
 	// signed extra) — the credential the team SPA already holds. It is a PLATFORM
 	// credential, so it belongs in the trust order rather than on the endpoint that
 	// happens to need it, and it therefore works on every endpoint (team.go). It is
@@ -396,7 +396,7 @@ type refusal struct {
 //
 //	unsigned ⇒ 401. Nobody vouched for this request. These same events land with a key,
 //	           so the missing key is the whole of it.
-//	signed   ⇒ 403. A guest's workspace token RESOLVED — it has a credential and it is
+//	signed   ⇒ 403. A guest's space token RESOLVED — it has a credential and it is
 //	           not the problem. What it lacks is capability into an org it was invited
 //	           into for one channel. Telling it "key required" would send it to mint a
 //	           second key and hit the identical wall.
@@ -846,7 +846,7 @@ var doors = []door{
 			"belongs to and nothing more. A pk- never authenticates and can READ NOTHING — not this " +
 			"org's errors, not a lens, not any other route on this API — so a leaked one lets a " +
 			"stranger write into your stream, and never lets one read out of it. Reading these rows " +
-			"back always takes a real bearer. A Hanzo Team workspace token resolves its org at " +
+			"back always takes a real bearer. A Hanzo Team space token resolves its org at " +
 			"REDUCED capability: the signed " +
 			"account names the person, so a `distinctId` in the body cannot pin events on a colleague.\n\n" +
 			"NO CREDENTIAL IS REFUSED: a write the server cannot attribute to a project is 401 " +
@@ -854,7 +854,7 @@ var doors = []door{
 			"403 `ingest_key_unknown`. Nothing is filed under a shared tenant — events nobody can " +
 			"read are worse than events nobody sent, because the caller is told it succeeded. A " +
 			"browser bundle therefore always ships a pk-, which is what /v1/event/tag.js takes.\n\n" +
-			"A REDUCED principal — a Hanzo Team workspace token — writes through the PROJECTION into " +
+			"A REDUCED principal — a Hanzo Team space token — writes through the PROJECTION into " +
 			"its own org: narrowed to what the SERVER can name (pageviews and errors, plus the closed " +
 			"autocapture vocabulary $click, $input, $change, $submit, $view), where every one of those " +
 			"names is resolved through a server-owned table and stored as that table's value, so the " +
@@ -958,7 +958,7 @@ func init() {
 			"Authorization: Bearer, x-hanzo-ingest-key or ?ingest_key= — so a browser bundle already "+
 			"holding a pk- for events needs nothing new to record. A caller that presents nothing is "+
 			"401 `ingest_key_required`; one whose key resolves to no project is 403 "+
-			"`ingest_key_unknown`; a reduced principal (a Hanzo Team workspace token) is 403 "+
+			"`ingest_key_unknown`; a reduced principal (a Hanzo Team space token) is 403 "+
 			"`insufficient_capability`, because a full-fidelity screen recording has no projected form "+
 			"that is safe for a guest to write into a host org.\n\n"+
 			"BOUNDS: 413 over 512 KiB of body, and that is the only bound on one batch — a recorder is "+

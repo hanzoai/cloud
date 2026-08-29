@@ -45,7 +45,7 @@ func seedArticle(t *testing.T, app *zip.App, org, slug, title, status string, pu
 	t.Helper()
 	call(t, app, http.MethodPost, "/v1/framework/modules/help/install", org, nil)
 	body := map[string]any{"title": title, "slug": slug, "status": status, "is_public": public, "body": "BODY:" + slug}
-	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTArticle, org, body); code != http.StatusCreated {
+	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTArticle.String(), org, body); code != http.StatusCreated {
 		t.Fatalf("seed article %q want 201, got %d (%s)", slug, code, raw)
 	}
 }
@@ -204,7 +204,7 @@ func TestPublicIntake_CreatesTicketAndThread(t *testing.T) {
 	// Resolve the ticket on the agent surface by its public_ref: it is Open,
 	// portal-sourced, carries the customer email, and its INTERNAL name is the hidden
 	// monotonic id (never handed to the customer).
-	_, traw := call(t, app, http.MethodGet, `/v1/framework/`+DTTicket+`?filters={"public_ref":"`+res.Ticket+`"}`, org, nil)
+	_, traw := call(t, app, http.MethodGet, `/v1/framework/`+DTTicket.String()+`?filters={"public_ref":"`+res.Ticket+`"}`, org, nil)
 	tickets := dataArray(t, traw)
 	if len(tickets) != 1 {
 		t.Fatalf("exactly one ticket must carry the public_ref, got %+v", tickets)
@@ -220,7 +220,7 @@ func TestPublicIntake_CreatesTicketAndThread(t *testing.T) {
 
 	// And an opening conversation message linked to that ticket (by INTERNAL name),
 	// from the customer.
-	_, craw := call(t, app, http.MethodGet, `/v1/framework/`+DTCommunication+`?filters={"ticket":"`+name+`"}`, org, nil)
+	_, craw := call(t, app, http.MethodGet, `/v1/framework/`+DTCommunication.String()+`?filters={"ticket":"`+name+`"}`, org, nil)
 	comms := dataArray(t, craw)
 	if len(comms) != 1 || comms[0]["sender_type"] != "customer" || comms[0]["sender"] != "bob@example.com" {
 		t.Fatalf("intake must record ONE opening customer message, got %+v", comms)
@@ -353,7 +353,7 @@ func TestPublicIntake_RejectsOversizedBody(t *testing.T) {
 func mkCategory(t *testing.T, app *zip.App, org, name, desc string) {
 	t.Helper()
 	body := map[string]any{"category_name": name, "description": desc}
-	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTCategory, org, body); code != http.StatusCreated {
+	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTCategory.String(), org, body); code != http.StatusCreated {
 		t.Fatalf("seed category %q want 201, got %d (%s)", name, code, raw)
 	}
 }
@@ -362,7 +362,7 @@ func mkCategory(t *testing.T, app *zip.App, org, name, desc string) {
 func seedArticleIn(t *testing.T, app *zip.App, org, slug, title, status string, public bool, category string) {
 	t.Helper()
 	body := map[string]any{"title": title, "slug": slug, "status": status, "is_public": public, "body": "BODY:" + slug, "category": category}
-	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTArticle, org, body); code != http.StatusCreated {
+	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTArticle.String(), org, body); code != http.StatusCreated {
 		t.Fatalf("seed article %q want 201, got %d (%s)", slug, code, raw)
 	}
 }

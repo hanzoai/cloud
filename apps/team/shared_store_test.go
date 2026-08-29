@@ -6,7 +6,7 @@ import (
 	"github.com/hanzoai/cloud/internal/codec"
 )
 
-// requireSharedStore skips a test that opens a SECOND handle on a workspace store
+// requireSharedStore skips a test that opens a SECOND handle on a space store
 // and expects to see writes the first handle committed.
 //
 // Without the live libsqlcipher codec, cek falls back to the pure-Go envelope: each

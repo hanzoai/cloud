@@ -112,7 +112,7 @@ const HeaderUserIsApp = "X-User-IsApp"
 // the different question an org switcher asks — and the only place that fact
 // exists is the token, so without it a surface listing "your orgs" has to either
 // re-validate the JWT itself (a second auth path) or ask IAM again (a hop for
-// something already in hand). Hanzo Base's workspace could not list one Base per
+// something already in hand). Hanzo Base's space could not list one Base per
 // org for exactly that reason.
 //
 // It authorizes NOTHING on its own. Acting in an org still goes through the

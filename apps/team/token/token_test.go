@@ -21,21 +21,21 @@ const (
 // interchangeable with an upstream one.
 func TestWireFormat(t *testing.T) {
 	cases := []struct {
-		name      string
-		account   string
-		workspace string
-		extra     map[string]any
-		payload   string // exact decoded payload bytes JSON.stringify would emit
+		name    string
+		account string
+		space   string
+		extra   map[string]any
+		payload string // exact decoded payload bytes JSON.stringify would emit
 	}{
 		{"account only", acc, "", nil, `{"account":"` + acc + `"}`},
-		{"account+workspace", acc, ws, nil, `{"account":"` + acc + `","workspace":"` + ws + `"}`},
+		{"account+space", acc, ws, nil, `{"account":"` + acc + `","workspace":"` + ws + `"}`},
 		{"with extra", acc, ws, map[string]any{"org": "acme"},
 			`{"extra":{"org":"acme"},"account":"` + acc + `","workspace":"` + ws + `"}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			// exp=0 → no `exp` claim, so the payload bytes stay jwt-simple-identical.
-			tok, err := Generate(c.account, c.workspace, c.extra, 0, secret)
+			tok, err := Generate(c.account, c.space, c.extra, 0, secret)
 			if err != nil {
 				t.Fatalf("Generate: %v", err)
 			}
@@ -77,8 +77,8 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if got.Account != acc || got.Workspace != ws {
-		t.Fatalf("got account=%s workspace=%s", got.Account, got.Workspace)
+	if got.Account != acc || got.Space != ws {
+		t.Fatalf("got account=%s space=%s", got.Account, got.Space)
 	}
 	if got.Extra["org"] != "acme" {
 		t.Fatalf("extra not preserved: %v", got.Extra)
@@ -107,7 +107,7 @@ func TestRejectsNonUUID(t *testing.T) {
 		t.Fatal("want error for non-uuid account")
 	}
 	if _, err := Generate(acc, "bad-ws", nil, 0, secret); err == nil {
-		t.Fatal("want error for non-uuid workspace")
+		t.Fatal("want error for non-uuid space")
 	}
 }
 
@@ -116,7 +116,7 @@ func TestRejectsNonUUID(t *testing.T) {
 // verify=false never enforces temporal claims.
 func TestExpEnforced(t *testing.T) {
 	mint := func(exp, nbf int64) string {
-		payload, err := marshalCompact(Token{Account: acc, Workspace: ws, Exp: exp, Nbf: nbf})
+		payload, err := marshalCompact(Token{Account: acc, Space: ws, Exp: exp, Nbf: nbf})
 		if err != nil {
 			t.Fatal(err)
 		}

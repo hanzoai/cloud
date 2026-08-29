@@ -29,7 +29,7 @@ func seedLegacy(t *testing.T, s *accountStore, wsID, user, role string) {
 }
 
 // Every roster row reaches IAM, and the table goes with it. Without this an
-// upgrade silently empties every workspace: the rows are still on disk and
+// upgrade silently empties every space: the rows are still on disk and
 // nothing reads them.
 func TestBackfillMovesTheRosterAndDropsTheTable(t *testing.T) {
 	id := planetest.ServeIdentity(t)
@@ -37,7 +37,7 @@ func TestBackfillMovesTheRosterAndDropsTheTable(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme"
 
-	w, err := s.EnsureWorkspace(ctx, org, "aaaaaaaa-0000-4000-8000-000000000001", "Ada")
+	w, err := s.EnsureSpace(ctx, org, "aaaaaaaa-0000-4000-8000-000000000001", "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestBackfillMovesTheRosterAndDropsTheTable(t *testing.T) {
 func TestBackfillKeepsTheTableWhenIAMRefuses(t *testing.T) {
 	s := newAccountStore(t)
 	ctx := context.Background()
-	w, err := s.EnsureWorkspace(ctx, "acme", "aaaaaaaa-0000-4000-8000-000000000001", "Ada")
+	w, err := s.EnsureSpace(ctx, "acme", "aaaaaaaa-0000-4000-8000-000000000001", "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}

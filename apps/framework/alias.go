@@ -19,6 +19,9 @@ import (
 
 // The schema and document types.
 type (
+	// ID addresses one DocType: the module that declares it and its name within
+	// that module, rendered "module.name".
+	ID = doctype.ID
 	// DocType is a metadata definition.
 	DocType = doctype.DocType
 	// DocField is one field in a DocType.

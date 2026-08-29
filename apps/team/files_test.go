@@ -54,7 +54,7 @@ func (v *memVFS) Delete(_ context.Context, key string) error {
 }
 
 // uploadFile drives the REAL FrontStorage upload shape: POST
-// /v1/team/files/{workspace}, multipart field "file" whose FILENAME is the
+// /v1/team/files/{space}, multipart field "file" whose FILENAME is the
 // client-generated blob uuid (formData.append('file', file, uuid)).
 func uploadFile(t *testing.T, app *zip.App, ws, blobID string, headers map[string]string, data []byte) (int, []byte) {
 	t.Helper()
@@ -126,13 +126,13 @@ func pngBytes(tail string) []byte {
 }
 
 // TestFilesFrontStorageRoundTrip proves the REAL FrontStorage contract: POST
-// /v1/team/files/:workspace with the client uuid as the multipart filename stores
-// the bytes under THAT id; GET /:workspace/:filename?file=<uuid> returns them. The
+// /v1/team/files/:space with the client uuid as the multipart filename stores
+// the bytes under THAT id; GET /:space/:filename?file=<uuid> returns them. The
 // server never mints an id.
 func TestFilesFrontStorageRoundTrip(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(context.Background(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,9 +144,9 @@ func TestFilesFrontStorageRoundTrip(t *testing.T) {
 		t.Fatalf("upload = %d (%s)", code, body)
 	}
 
-	// getFileUrl shape: /{workspace}/{filename}?file={blobId}&workspace={workspace}
+	// getFileUrl shape: /{space}/{filename}?file={blobId}&space={space}
 	code, got := call(t, app, http.MethodGet,
-		"/v1/team/files/"+ws.UUID+"/attachment.bin?file="+blobID+"&workspace="+ws.UUID, auth, nil)
+		"/v1/team/files/"+ws.UUID+"/attachment.bin?file="+blobID+"&space="+ws.UUID, auth, nil)
 	if code != http.StatusOK {
 		t.Fatalf("download = %d (%s)", code, got)
 	}
@@ -165,15 +165,15 @@ func TestFilesFrontStorageRoundTrip(t *testing.T) {
 }
 
 // TestFilesCrossOrgDenied is the FILES red bar: a caller in org B can never read
-// org A's blob — neither by naming org A's workspace (not a member / not its org →
-// 404) nor by pointing its OWN workspace at org A's blobId (physical key embeds the
-// caller's org+workspace → miss → 404). Every denial is 404 (no oracle).
+// org A's blob — neither by naming org A's space (not a member / not its org →
+// 404) nor by pointing its OWN space at org A's blobId (physical key embeds the
+// caller's org+space → miss → 404). Every denial is 404 (no oracle).
 func TestFilesCrossOrgDenied(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acctA, acctB = "aaaaaaaa-0000-4000-8000-00000000000a", "bbbbbbbb-0000-4000-8000-00000000000b"
-	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
-	wsB, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
+	wsA, _ := mounted.State.accounts.EnsureSpace(ctx, "org-a", acctA, "Alice")
+	wsB, _ := mounted.State.accounts.EnsureSpace(ctx, "org-b", acctB, "Bob")
 	authA := bearerFor(t, acctA, "org-a")
 	authB := bearerFor(t, acctB, "org-b")
 
@@ -184,34 +184,34 @@ func TestFilesCrossOrgDenied(t *testing.T) {
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authA, nil); code != http.StatusOK {
 		t.Fatalf("org-a read own blob = %d, want 200", code)
 	}
-	// (a) org-b naming org-a's workspace → 404.
+	// (a) org-b naming org-a's space → 404.
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authB, nil); code != http.StatusNotFound {
-		t.Fatalf("org-b via org-a's workspace = %d, want 404", code)
+		t.Fatalf("org-b via org-a's space = %d, want 404", code)
 	}
-	// (b) org-b pointing its OWN workspace at org-a's blobId → 404 (key isolation).
+	// (b) org-b pointing its OWN space at org-a's blobId → 404 (key isolation).
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsB.UUID+"/x?file="+blobA, authB, nil); code != http.StatusNotFound {
-		t.Fatalf("org-b via own workspace + org-a's blobId = %d, want 404", code)
+		t.Fatalf("org-b via own space + org-a's blobId = %d, want 404", code)
 	}
 	// Unauthenticated → 401.
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, nil, nil); code != http.StatusUnauthorized {
 		t.Fatalf("unauth download = %d, want 401", code)
 	}
-	// org-b cannot even UPLOAD into org-a's workspace.
+	// org-b cannot even UPLOAD into org-a's space.
 	if code, _ := uploadFile(t, app, wsA.UUID, uuid.NewString(), authB, []byte("x")); code != http.StatusNotFound {
-		t.Fatalf("org-b upload into org-a's workspace = %d, want 404", code)
+		t.Fatalf("org-b upload into org-a's space = %d, want 404", code)
 	}
 }
 
 // TestFilesMembershipRequired is Red F-C: same-org is NOT enough — the caller must
-// be a MEMBER of the target workspace. Two members of the SAME org, each with their
-// own workspace: neither can touch the other's workspace blobs.
+// be a MEMBER of the target space. Two members of the SAME org, each with their
+// own space: neither can touch the other's space blobs.
 func TestFilesMembershipRequired(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const org = "acme"
 	const acctA, acctB = "aaaaaaaa-1111-4111-8111-00000000000a", "bbbbbbbb-1111-4111-8111-00000000000b"
-	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, org, acctA, "Alice")
-	wsB, _ := mounted.State.accounts.EnsureWorkspace(ctx, org, acctB, "Bob")
+	wsA, _ := mounted.State.accounts.EnsureSpace(ctx, org, acctA, "Alice")
+	wsB, _ := mounted.State.accounts.EnsureSpace(ctx, org, acctB, "Bob")
 	authA := bearerFor(t, acctA, org)
 	authB := bearerFor(t, acctB, org)
 
@@ -219,7 +219,7 @@ func TestFilesMembershipRequired(t *testing.T) {
 	if code, _ := uploadFile(t, app, wsA.UUID, blobA, authA, []byte("alice private")); code != http.StatusOK {
 		t.Fatal("alice upload failed")
 	}
-	// Bob is same org but NOT a member of Alice's workspace → download 404.
+	// Bob is same org but NOT a member of Alice's space → download 404.
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authB, nil); code != http.StatusNotFound {
 		t.Fatalf("same-org non-member download = %d, want 404", code)
 	}
@@ -235,20 +235,20 @@ func TestFilesMembershipRequired(t *testing.T) {
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authA, nil); code != http.StatusOK {
 		t.Fatalf("alice's blob destroyed by a non-member delete")
 	}
-	// Sanity: Bob CAN use his own workspace.
+	// Sanity: Bob CAN use his own space.
 	blobB := uuid.NewString()
 	if code, _ := uploadFile(t, app, wsB.UUID, blobB, authB, []byte("bob")); code != http.StatusOK {
-		t.Fatalf("member upload to own workspace failed")
+		t.Fatalf("member upload to own space failed")
 	}
 }
 
 // TestFilesDelete proves the FrontStorage deleteFile contract: DELETE
-// /:workspace/:filename?file=:blobId removes the blob (subsequent GET → 404), and
+// /:space/:filename?file=:blobId removes the blob (subsequent GET → 404), and
 // is idempotent + no-oracle (a second delete of the now-missing blob still 204s).
 func TestFilesDelete(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, _ := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, _ := mounted.State.accounts.EnsureSpace(context.Background(), org, acct, "Ada")
 	auth := bearerFor(t, acct, org)
 
 	blobID := uuid.NewString()
@@ -258,8 +258,8 @@ func TestFilesDelete(t *testing.T) {
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+ws.UUID+"/x?file="+blobID, auth, nil); code != http.StatusOK {
 		t.Fatalf("pre-delete GET = %d, want 200", code)
 	}
-	// DELETE (front.ts shape: /:workspace/:file?file=:file) → 204.
-	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+ws.UUID+"/"+blobID+"?file="+blobID+"&workspace="+ws.UUID, auth, nil); code != http.StatusNoContent {
+	// DELETE (front.ts shape: /:space/:file?file=:file) → 204.
+	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+ws.UUID+"/"+blobID+"?file="+blobID+"&space="+ws.UUID, auth, nil); code != http.StatusNoContent {
 		t.Fatalf("delete = %d, want 204", code)
 	}
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+ws.UUID+"/x?file="+blobID, auth, nil); code != http.StatusNotFound {
@@ -272,15 +272,15 @@ func TestFilesDelete(t *testing.T) {
 }
 
 // TestFilesDeleteCrossTenantDenied proves DELETE is tenant-isolated with no
-// existence oracle: org-b cannot destroy org-a's blob — via org-a's workspace it is
-// refused (404, not a member), and via its OWN workspace with org-a's blobId it is
+// existence oracle: org-b cannot destroy org-a's blob — via org-a's space it is
+// refused (404, not a member), and via its OWN space with org-a's blobId it is
 // a harmless no-op (204, different physical key). org-a's blob survives both.
 func TestFilesDeleteCrossTenantDenied(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acctA, acctB = "aaaaaaaa-2222-4222-8222-00000000000a", "bbbbbbbb-2222-4222-8222-00000000000b"
-	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
-	wsB, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
+	wsA, _ := mounted.State.accounts.EnsureSpace(ctx, "org-a", acctA, "Alice")
+	wsB, _ := mounted.State.accounts.EnsureSpace(ctx, "org-b", acctB, "Bob")
 	authA := bearerFor(t, acctA, "org-a")
 	authB := bearerFor(t, acctB, "org-b")
 
@@ -288,14 +288,14 @@ func TestFilesDeleteCrossTenantDenied(t *testing.T) {
 	if code, _ := uploadFile(t, app, wsA.UUID, blobA, authA, []byte("org-a secret")); code != http.StatusOK {
 		t.Fatal("org-a upload failed")
 	}
-	// (a) org-b via org-a's workspace → 404 (not a member).
+	// (a) org-b via org-a's space → 404 (not a member).
 	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+wsA.UUID+"/"+blobA+"?file="+blobA, authB, nil); code != http.StatusNotFound {
 		t.Fatalf("cross-org delete via org-a ws = %d, want 404", code)
 	}
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authA, nil); code != http.StatusOK {
 		t.Fatalf("org-a blob destroyed by cross-org delete (via org-a ws)")
 	}
-	// (b) org-b via its OWN workspace + org-a's blobId → 204 no-op (different key).
+	// (b) org-b via its OWN space + org-a's blobId → 204 no-op (different key).
 	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+wsB.UUID+"/"+blobA+"?file="+blobA, authB, nil); code != http.StatusNoContent {
 		t.Fatalf("org-b delete in own ws = %d, want 204 (no-op)", code)
 	}
@@ -308,12 +308,12 @@ func TestFilesDeleteCrossTenantDenied(t *testing.T) {
 // clients.DisabledVFS() backend (the default deps.VFS in a binary with no VFS
 // endpoint wired — never nil after the pickVFSClient fix), files upload/download/
 // DELETE FAIL CLOSED with 502, NOT a nil-deref 500/panic and NOT a silent
-// success. Authorize() still runs first (real workspace + membership), so this
+// success. Authorize() still runs first (real space + membership), so this
 // exercises the actual vfs call path.
 func TestFilesFailClosedWhenVFSDisabled(t *testing.T) {
 	app := mountTeamVFS(t, clients.DisabledVFS())
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(context.Background(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestFilesFailClosedWhenVFSDisabled(t *testing.T) {
 }
 
 // bearerForOtherOrg mints a valid session token for a DIFFERENT org (a real
-// principal that is simply not a member of the target workspace).
+// principal that is simply not a member of the target space).
 func bearerForOtherOrg(t *testing.T) (map[string]string, string) {
 	t.Helper()
 	const acct = "cccccccc-9999-4999-8999-00000000000c"
@@ -353,7 +353,7 @@ func bearerForOtherOrg(t *testing.T) (map[string]string, string) {
 func TestFilesContentTypeAllowList(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, _ := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, _ := mounted.State.accounts.EnsureSpace(context.Background(), org, acct, "Ada")
 	auth := bearerFor(t, acct, org)
 
 	// A real PNG → inline image/png (byte-derived), nosniff, NO attachment.

@@ -110,13 +110,13 @@ func TestBillingPlanOrgScoped(t *testing.T) {
 	// Org A: the owner + one member + one guest (3 seats, 1 guest) + a bot
 	// (never a seat). Org B: a different tenant with its own members.
 	uid := func(i int) string { return fmt.Sprintf("00000000-0000-4000-8000-0000000000%02d", i) }
-	wsA, err := store.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
+	wsA, err := store.EnsureSpace(ctx, gateOrg, gateAcct, "Ada")
 	if err != nil {
 		t.Fatalf("ensure wsA: %v", err)
 	}
 	// Grants go to IAM, which is where a seat is counted. A bot is not seeded at
 	// all: the peer counts people, and machine-ness is IAM's fact about the user.
-	seed := func(ws workspace, user, role string) {
+	seed := func(ws space, user, role string) {
 		t.Helper()
 		if err := store.AddMember(ctx, ws.OwnerOrg, ws.UUID, user, role); err != nil {
 			t.Fatal(err)
@@ -124,7 +124,7 @@ func TestBillingPlanOrgScoped(t *testing.T) {
 	}
 	seed(wsA, uid(1), "member")
 	seed(wsA, uid(2), roleGuest)
-	wsB, _ := store.EnsureWorkspace(ctx, "other", uid(9), "Bob")
+	wsB, _ := store.EnsureSpace(ctx, "other", uid(9), "Bob")
 	seed(wsB, uid(4), "member")
 
 	code, body := call(t, app, http.MethodGet, "/v1/team/billing/plan", bearerFor(t, gateAcct, gateOrg), nil)

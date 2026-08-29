@@ -86,7 +86,7 @@ func TestRosterInNamesNoTenant(t *testing.T) {
 // TestRosterCarriesStatusVerBATIM pins the split of responsibility: the wire
 // carries the registry status as-is and the CALLER decides what counts as live.
 // Folding that into a bool here would move a policy — which statuses project as a
-// workspace member — to the wrong side of the boundary.
+// space member — to the wrong side of the boundary.
 func TestRosterCarriesStatusVerbatim(t *testing.T) {
 	st := mountedForTest(t)
 	seedAgentStatus(t, st, "acme", "a-archived", "old", "archived")

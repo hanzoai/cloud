@@ -22,7 +22,7 @@ import (
 // be lost, and it is a cross-tenant leak if it is.
 func TestTypedPlanIsUncacheable(t *testing.T) {
 	app, store := billingApp(t, nil, nil)
-	if _, err := store.EnsureWorkspace(context.Background(), gateOrg, gateAcct, "Ada"); err != nil {
+	if _, err := store.EnsureSpace(context.Background(), gateOrg, gateAcct, "Ada"); err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(http.MethodGet, "/v1/team/billing/plan", nil)
@@ -48,7 +48,7 @@ func TestTypedPlanIsUncacheable(t *testing.T) {
 func TestTypedDeleteBlobIsEmpty204(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
-	ws, err := mounted.State.accounts.EnsureWorkspace(ctx, gateOrg, gateAcct, "Ada")
+	ws, err := mounted.State.accounts.EnsureSpace(ctx, gateOrg, gateAcct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestTypedDeleteBlobIsEmpty204(t *testing.T) {
 func TestTypedStatisticsServesBothPaths(t *testing.T) {
 	app := mountTeam(t)
 	const acct, ws = "550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-	tok, err := token.Generate(acct, ws, map[string]any{"org": gateOrg}, expUnix(workspaceTokenTTL), testSecret)
+	tok, err := token.Generate(acct, ws, map[string]any{"org": gateOrg}, expUnix(spaceTokenTTL), testSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
