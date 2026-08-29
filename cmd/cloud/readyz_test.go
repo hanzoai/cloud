@@ -285,3 +285,47 @@ func TestProbesAreTypedOps(t *testing.T) {
 		}
 	}
 }
+
+// TestALazySubsystemThatDiesOnItsFirstRequestIsReported closes the gap that let a
+// nine-surface outage read as a healthy host.
+//
+// mount_test.go pins that a dead subsystem must not take the host down, and this
+// file's own opening line says it must not be HIDDEN either. Both were true only
+// for EAGER subsystems: their failure happens in the mount loop, in front of the
+// caller, and lands in the boot-time set. A LAZY one mounts with no process behind
+// it — by design — and dies on its first request, in the child, where boot's set
+// cannot reach it.
+//
+// So /healthz answered {"status":"ok"} while /v1/billing, /v1/s3, /v1/todo and six
+// more answered 503 "no instance running" to every caller.
+func TestALazySubsystemThatDiesOnItsFirstRequestIsReported(t *testing.T) {
+	app := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true})
+
+	// Nothing failed at boot — exactly the state the old code could not see past.
+	if err := mount(app, lazyDead(t, "billing", "/v1/billing"), false, map[string]string{}); err != nil {
+		t.Fatalf("a lazy subsystem refused to MOUNT: %v — lazy means the mount stands", err)
+	}
+	health(app, map[string]string{})
+
+	// COLD IS NOT BROKEN. Before anything asks, the plugin is legitimately not
+	// running and there is nothing to report. A host that cried wolf here would do
+	// it on every deployment that had not been used yet.
+	_, _, body := do(t, app, "/healthz")
+	if strings.Contains(body, "billing") {
+		t.Errorf("GET /healthz = %q before any request — a lazy subsystem nobody has "+
+			"asked for is cold, not absent", body)
+	}
+
+	// The request that starts it, and fails.
+	if code, _, _ := do(t, app, "/v1/billing/plans"); code != 503 {
+		t.Fatalf("a subsystem that cannot start answered %d, want 503", code)
+	}
+
+	// AND NOW THE HOST SAYS SO. This is the whole fix: the 503 repeats for every
+	// later caller, so the reason has to be readable after the log line scrolled.
+	_, _, body = do(t, app, "/healthz")
+	if !strings.Contains(body, "billing") {
+		t.Errorf("GET /healthz = %q after a lazy subsystem failed to start — "+
+			"this is the outage reading as a healthy host", body)
+	}
+}

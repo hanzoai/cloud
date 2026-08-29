@@ -892,20 +892,36 @@ func subsets(composed []string) func() ([]openapi.Part, error) {
 // the NORMAL state for ~110 of 112 and deriving absence from it would report the
 // whole fleet as broken.
 func stillAbsent(app *zip.App, absent map[string]string) map[string]string {
-	if len(absent) == 0 {
-		return nil
-	}
+	out := map[string]string{}
 	up := map[string]bool{}
+
+	// A plugin that failed to START, whenever that happened. This is the half the
+	// boot-time set cannot hold: an EAGER child that will not boot is caught by the
+	// mount loop and recorded there, but a LAZY one mounts fine with no process
+	// behind it and dies on its first request, in the child, long after boot. Its
+	// route then answers 503 for that request and every later one while this
+	// function — reading only what boot knew — reported nothing.
+	//
+	// That is not hypothetical: nine api.hanzo.ai surfaces sat 503 while /healthz
+	// answered {"status":"ok"}. zip.Status.Error is the fact that was missing, and
+	// it is empty for a plugin nobody has asked for yet, so cold does not read as
+	// broken.
 	for _, s := range app.Plugins() {
 		if s.Running {
 			up[s.Name] = true
+			continue
+		}
+		if s.Error != "" {
+			out[s.Name] = s.Error
 		}
 	}
-	out := make(map[string]string, len(absent))
 	for name, why := range absent {
 		if !up[name] {
-			out[name] = why
+			out[name] = why // boot's reason wins: it is the first and most specific
 		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
