@@ -3556,7 +3556,7 @@
   },
   {
    "id": "meetCall",
-   "doc": "Answers where a room's call happens, for a caller who may join it.\n\nIt is the \"resolved at render\" half of HIP-0523 §12: a surface showing a channel\nasks for the room's call at the moment it draws one, rather than reading a media\nroom name someone stored on the room. Nothing here is persisted and nothing is\ncreated — a media room begins existing when the first participant connects and\nstops when the last leaves, so there is no call to create and none to clean up.\n\nAUTHORIZATION IS THE JOIN DECISION, unchanged and shared. It delegates to\nstate.admits, the same function POST /v1/meet/getToken and all three recording\noperations admit on, so a caller who is told where a call is, is a caller who\ncould have joined it. Answering the address to someone who cannot join would make\nthis a workspace-membership oracle for anyone who can guess a room id.\n\nIt deliberately does NOT report whether a call is in progress. That is a fact the\nmedia server holds and this binary would have to ask for it over the network,\nwhich is a different decision with a different failure mode — and reporting\n\"nobody is in this call\" when the question could not be asked would be exactly the\nunknown-rendered-as-zero this surface refuses elsewhere.",
+   "doc": "Answers where a room's call happens, for a caller who may join it.\n\nIt is the \"resolved at render\" half of HIP-0523 §12: a surface showing a channel\nasks for the room's call at the moment it draws one, rather than reading a media\nroom name someone stored on the room. Nothing here is persisted and nothing is\ncreated — a media room begins existing when the first participant connects and\nstops when the last leaves, so there is no call to create and none to clean up.\n\nAUTHORIZATION IS THE JOIN DECISION, unchanged and shared. It delegates to\nstate.admits, the same function POST /v1/meet/getToken and all three recording\noperations admit on, so a caller who is told where a call is, is a caller who\ncould have joined it. Answering the address to someone who cannot join would make\nthis a space-membership oracle for anyone who can guess a room id.\n\nIt deliberately does NOT report whether a call is in progress. That is a fact the\nmedia server holds and this binary would have to ask for it over the network,\nwhich is a different decision with a different failure mode — and reporting\n\"nobody is in this call\" when the question could not be asked would be exactly the\nunknown-rendered-as-zero this surface refuses elsewhere.",
    "read": true
   },
   {
@@ -6466,8 +6466,8 @@
    "doc": "Signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one."
   },
   {
-   "id": "delete_team_files_by_workspace_by_filename",
-   "doc": "Removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success."
+   "id": "delete_team_files_by_space_by_filename",
+   "doc": "Removes one blob from a space's file store. The caller must\nhold a verified session AND be a member of the space; anything else — an\nunknown space, another tenant's space, a space the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success."
   },
   {
    "id": "get_team_account_providers",
@@ -6481,30 +6481,30 @@
   },
   {
    "id": "get_team_bots",
-   "doc": "Returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
+   "doc": "Returns the caller org's bot members — the org's agents projected as\nthe space Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
    "read": true
   },
   {
    "id": "get_team_rooms",
-   "doc": "Returns every room of the caller's org, across the workspaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
+   "doc": "Returns every room of the caller's org, across the spaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
    "read": true
   },
   {
    "id": "get_team_transactor_statistics",
-   "doc": "Statistics returns the transactor's live sessions for the workspace the caller's\ncredential names — the endpoint the front's workspace switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a workspace UUID names the workspace and is authorized against the\nmembership rows, an HS256 workspace token names it in its signed claims.\nactiveSessions carries ONLY that one workspace, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
+   "doc": "Statistics returns the transactor's live sessions for the space the caller's\ncredential names — the endpoint the front's space switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a space UUID names the space and is authorized against the\nmembership rows, an HS256 space token names it in its signed claims.\nactiveSessions carries ONLY that one space, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
    "read": true
   },
   {
    "id": "post_team_bots_sync",
-   "doc": "SyncBots re-projects the caller org's agents as workspace members into EVERY\nworkspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a workspace's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched."
+   "doc": "SyncBots re-projects the caller org's agents as space members into EVERY\nspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a space's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched."
   },
   {
    "id": "post_team_collaborator_rpc_by_documentid",
-   "doc": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists."
+   "doc": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or space token: the\ndocumentId's space must be the token's space when the token names one,\nand the caller must be a member of it. An unknown space, another tenant's\nspace and a space the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists."
   },
   {
    "id": "put_team_rooms_by_id",
-   "doc": "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open workspace\nrather than on the next reload."
+   "doc": "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open space\nrather than on the next reload."
   }
  ],
  "tel": [

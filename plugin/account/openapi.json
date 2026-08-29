@@ -469,7 +469,7 @@
             "type": "string"
           },
           "personal": {
-            "description": "Personal asks for the caller's own workspace: the name is derived from their\nusername and the slug auto-suffixes to stay unique. Meaningless — and refused\n— for a caller who already has an organization.",
+            "description": "Personal asks for the caller's own space: the name is derived from their\nusername and the slug auto-suffixes to stay unique. Meaningless — and refused\n— for a caller who already has an organization.",
             "type": "boolean"
           }
         },

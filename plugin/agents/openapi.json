@@ -416,7 +416,7 @@
             "name": "room",
             "in": "query",
             "required": false,
-            "description": "Room filters to the sessions started in one collaborative room — the query a\nworkspace view runs to show what has been run in it.",
+            "description": "Room filters to the sessions started in one collaborative room — the query a\nspace view runs to show what has been run in it.",
             "schema": {
               "type": "string"
             }
@@ -2310,7 +2310,7 @@
             "type": "string"
           },
           "room": {
-            "description": "Room is the collaborative room this run was started in (HIP-0523), so a\nworkspace view can list the sessions of one room. It is PROVENANCE and is set\nonly here: there is deliberately no way to move a session to another room, so\nit is absent from the patch input and from UpdateSession's SET list.",
+            "description": "Room is the collaborative room this run was started in (HIP-0523), so a\nspace view can list the sessions of one room. It is PROVENANCE and is set\nonly here: there is deliberately no way to move a session to another room, so\nit is absent from the patch input and from UpdateSession's SET list.",
             "type": "string"
           },
           "status": {
@@ -2700,7 +2700,7 @@
             "type": "string"
           },
           "room": {
-            "description": "Room is the collaborative room this run was started in (HIP-0523), empty\nwhen it came from anywhere else — a CLI, a schedule, an API call. It is what\nlets a workspace view show the runs of one room beside its messages.",
+            "description": "Room is the collaborative room this run was started in (HIP-0523), empty\nwhen it came from anywhere else — a CLI, a schedule, an API call. It is what\nlets a space view show the runs of one room beside its messages.",
             "type": "string"
           },
           "rootSessionId": {

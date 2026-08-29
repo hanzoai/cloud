@@ -451,6 +451,15 @@ func packagePrice(t *testing.T, dir string) (charges, allZero, priced bool) {
 			// function values rather than calling ours.
 			case "Gate", "Allow", "Meter", "MeterUsage", "Debit", "RecordUsage", "Authorize", "Record":
 				charges = true
+			// fare.Paid IS the meter, composed once for the whole metered-surface
+			// class instead of copied into each app: it opens with admit and closes
+			// with settle, and settle calls Bill.Meter. Qualified by its package,
+			// because a bare "Paid" is a word any app might use for something else.
+			case "Paid":
+				if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "fare" {
+					return true
+				}
+				charges = true
 			default:
 				return true
 			}
