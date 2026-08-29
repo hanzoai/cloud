@@ -159,7 +159,7 @@ type Hit struct {
 	// to branch on: the fused ranking is what decides order, and a caller that
 	// filters by corpus wants the backend's own endpoint instead.
 	Corpus string `json:"corpus"`
-	// DocType is the knowledge doctype: kb-page, kb-memory or kb-source from the
+	// DocType is the knowledge doctype: kb.page, kb.memory or kb.source from the
 	// semantic leg, and a lexical row's own doctype/type field otherwise. Absent
 	// when the row carried neither.
 	DocType string `json:"doctype,omitempty"`

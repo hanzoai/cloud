@@ -27,16 +27,16 @@
 // Google) that ingest external docs INTO the same store. Connectors are just
 // producers of framework documents — they never fork the vector-write path.
 //
-// Names are slug-style with a "kb-" prefix so they never collide with the CMS
-// (Author/Media/Page/…), ERP (erp-*), or Help (hd-*) lanes and never carry a
-// space the console's /cloud path filter would reject.
+// Names are slug-style and bare — "page", not "kb-page". The module namespaces
+// them, so the CMS may have a Page of its own and neither lane needs to spell the
+// other out of the way. A document is addressed by the pair: kb.page.
 package knowledge
 
 import "github.com/hanzoai/cloud/apps/framework"
 
 // Module is the framework module tag every KB DocType carries. The console's KB
 // surface is the generic DocType renderer scoped to this module (a page-tree
-// sidebar over kb-page.parent + the Lexical editor over kb-page.body).
+// sidebar over kb.page.parent + the Lexical editor over kb.page.body).
 const Module = "kb"
 
 // RoleKBEditor is the authoring role the KB DocTypes grant read/write/create/
@@ -46,19 +46,19 @@ const Module = "kb"
 // role is an explicit widening, never a loosening.
 const RoleKBEditor = "KB Editor"
 
-// DocType names (slug, kb- prefixed). Exported so the hooks (hooks.go) and the
-// retrieval subsystem (subsystem.go) reference the SAME identifiers as the
-// fixtures — one source of truth for the doctype set.
+// The DocType set, by address. Each value carries both halves of its identity,
+// so the fixtures, the hooks (hooks.go) and the retrieval subsystem
+// (subsystem.go) name one thing and not a string they each have to qualify.
 var (
 	DTPage      = framework.ID{Module: Module, Name: "page"}      // a Notion-like wiki page (nested via `parent`)
 	DTMemory    = framework.ID{Module: Module, Name: "memory"}    // a unit of agent/AI memory (note/fact/observation)
 	DTSource    = framework.ID{Module: Module, Name: "source"}    // a document ingested from an app connector or upload
 	DTConnector = framework.ID{Module: Module, Name: "connector"} // an app-connector connection (metadata only; token in KMS)
-	DTLink      = framework.ID{Module: Module, Name: "link"}      // a wikilink edge extracted from a kb-page body
+	DTLink      = framework.ID{Module: Module, Name: "link"}      // a wikilink edge extracted from a kb.page body
 )
 
 // indexedDocTypes is the set whose saves/trashes flow to the vector store — the
-// org's retrievable KNOWLEDGE. kb-connector is metadata (connection state) and is
+// org's retrievable KNOWLEDGE. kb.connector is metadata (connection state) and is
 // NOT indexed; it never carries knowledge text. hooks.go registers the indexing
 // hooks over exactly this set, and subsystem.go's search defaults to it.
 var indexedDocTypes = []framework.ID{DTPage, DTMemory, DTSource}
@@ -72,7 +72,7 @@ func init() {
 }
 
 // DocTypes returns the canonical KB + memory model. Masters have no cross-lane
-// Links (kb runs standalone); kb-page's `parent` is a SELF Link (the framework
+// Links (kb runs standalone); kb.page's `parent` is a SELF Link (the framework
 // resolves Link targets at document write, so a child may reference a parent
 // defined in any order, and a page tree is just parent chains).
 func DocTypes() []framework.DocType {
@@ -176,7 +176,7 @@ func connector() framework.DocType {
 	}
 }
 
-// link is a wikilink EDGE extracted from a kb-page body: the persisted form of a
+// link is a wikilink EDGE extracted from a kb.page body: the persisted form of a
 // "[[Page Title]]" reference. It is the ONE store for backlinks (kb.go's "Backlinks
 // are ordinary Link/Data references"): `source` is a Link to the page that contains
 // the wikilink (always a real page — the edge is written by that page's after_save
@@ -184,7 +184,7 @@ func connector() framework.DocType {
 // target is resolved to a page by VALUE at graph-read time (matching a page title
 // or slug), not stored as a foreign key — so a dangling link is representable, and a
 // rename or trash of the target needs no edge rewrite (values, not places). Edges
-// carry NO knowledge text, so kb-link is not in indexedDocTypes and never touches
+// carry NO knowledge text, so kb.link is not in indexedDocTypes and never touches
 // the vector store. Hash-named: an edge needs no stable slug.
 func link() framework.DocType {
 	return framework.DocType{

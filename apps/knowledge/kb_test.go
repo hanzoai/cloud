@@ -34,9 +34,9 @@ func TestDocTypesValidate(t *testing.T) {
 	}
 }
 
-// TestLinkEdgeIsSourceLinkPlusTitle asserts the kb-link edge is a Link (source) +
+// TestLinkEdgeIsSourceLinkPlusTitle asserts the kb.link edge is a Link (source) +
 // Data (target_title) reference — the persisted backlink form. source must be a Link
-// to kb-page, and there is no stored resolved-target foreign key (targets resolve by
+// to kb.page, and there is no stored resolved-target foreign key (targets resolve by
 // value at graph read), and no knowledge text (so it is never vector-indexed).
 func TestLinkEdgeIsSourceLinkPlusTitle(t *testing.T) {
 	l := link()
@@ -50,24 +50,24 @@ func TestLinkEdgeIsSourceLinkPlusTitle(t *testing.T) {
 	}
 	tt, ok := fields["target_title"]
 	if !ok || tt.Fieldtype != framework.FieldData || !tt.Reqd {
-		t.Errorf("kb-link.target_title must be a required Data field, got %+v", tt)
+		t.Errorf("kb.link.target_title must be a required Data field, got %+v", tt)
 	}
-	// kb-link must NOT be in the indexed (vector) set — an edge carries no knowledge.
+	// kb.link must NOT be in the indexed (vector) set — an edge carries no knowledge.
 	for _, dt := range indexedDocTypes {
 		if dt == DTLink {
-			t.Errorf("kb-link must not be vector-indexed")
+			t.Errorf("kb.link must not be vector-indexed")
 		}
 	}
 }
 
-// TestPageHierarchyIsSelfLink verifies kb-page carries a `parent` Link back to
-// kb-page — the self-reference that gives the Notion-like tree. The body must be the
+// TestPageHierarchyIsSelfLink verifies kb.page carries a `parent` Link back to
+// kb.page — the self-reference that gives the Notion-like tree. The body must be the
 // Lexical RichText fieldtype (so the console renders the rich editor) and the page
 // is slug-named.
 func TestPageHierarchyIsSelfLink(t *testing.T) {
 	p := page()
 	if p.Autoname != "field:slug" {
-		t.Errorf("kb-page autoname = %q, want field:slug", p.Autoname)
+		t.Errorf("kb.page autoname = %q, want field:slug", p.Autoname)
 	}
 	var parent, body *framework.DocField
 	for i := range p.Fields {
@@ -82,7 +82,7 @@ func TestPageHierarchyIsSelfLink(t *testing.T) {
 		t.Errorf("%s.parent must be a Link to %s, got %+v", DTPage, DTPage, parent)
 	}
 	if body == nil || body.Fieldtype != framework.FieldRichText {
-		t.Errorf("kb-page.body must be RichText (Lexical), got %+v", body)
+		t.Errorf("kb.page.body must be RichText (Lexical), got %+v", body)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestConnectorHasNoTokenField(t *testing.T) {
 	for _, f := range c.Fields {
 		nm := strings.ToLower(f.Fieldname)
 		if strings.Contains(nm, "token") || strings.Contains(nm, "secret") || f.Fieldtype == framework.FieldPassword {
-			t.Errorf("kb-connector must not store a token/secret; found field %q (%s)", f.Fieldname, f.Fieldtype)
+			t.Errorf("kb.connector must not store a token/secret; found field %q (%s)", f.Fieldname, f.Fieldtype)
 		}
 	}
 	// It MUST carry the KMS ref path so the token is fetched from KMS.
@@ -106,7 +106,7 @@ func TestConnectorHasNoTokenField(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("kb-connector must carry kms_ref (the KMS path of the token)")
+		t.Error("kb.connector must carry kms_ref (the KMS path of the token)")
 	}
 }
 

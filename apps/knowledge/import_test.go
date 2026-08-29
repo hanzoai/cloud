@@ -98,10 +98,10 @@ func TestImport_AllFormats(t *testing.T) {
 			t.Fatalf("obsidian imported %d, want 2", n)
 		}
 		g := graphOf(t, app, org)
-		if !g.hasNode("kb-page:q3-roadmap") || !g.hasNode("kb-page:incident-runbook") {
+		if !g.hasNode("kb.page:q3-roadmap") || !g.hasNode("kb.page:incident-runbook") {
 			t.Fatalf("obsidian pages missing: %+v", g.Nodes)
 		}
-		if !g.hasEdge("kb-page:q3-roadmap", "kb-page:incident-runbook", "link") {
+		if !g.hasEdge("kb.page:q3-roadmap", "kb.page:incident-runbook", "link") {
 			t.Fatalf("obsidian wikilink not resolved into an edge: %+v", g.Edges)
 		}
 	})
@@ -120,14 +120,14 @@ func TestImport_AllFormats(t *testing.T) {
 			t.Fatalf("notion imported %d, want 2", n)
 		}
 		g := graphOf(t, app, org)
-		if !g.hasNode("kb-page:engineering") || !g.hasNode("kb-page:runbook") {
+		if !g.hasNode("kb.page:engineering") || !g.hasNode("kb.page:runbook") {
 			t.Fatalf("notion pages missing: %+v", g.Nodes)
 		}
 		// Folder nesting → parent tree; relative links → wikilinks → edges.
-		if !g.hasEdge("kb-page:runbook", "kb-page:engineering", "parent") {
+		if !g.hasEdge("kb.page:runbook", "kb.page:engineering", "parent") {
 			t.Fatalf("notion parent tree missing: %+v", g.Edges)
 		}
-		if !g.hasEdge("kb-page:engineering", "kb-page:runbook", "link") {
+		if !g.hasEdge("kb.page:engineering", "kb.page:runbook", "link") {
 			t.Fatalf("notion link edge missing: %+v", g.Edges)
 		}
 	})
@@ -141,7 +141,7 @@ func TestImport_AllFormats(t *testing.T) {
 			t.Fatalf("roam imported %d, want 2", n)
 		}
 		g := graphOf(t, app, org)
-		if !g.hasEdge("kb-page:project-atlas", "kb-page:design-system", "link") {
+		if !g.hasEdge("kb.page:project-atlas", "kb.page:design-system", "link") {
 			t.Fatalf("roam wikilink not resolved: %+v", g.Edges)
 		}
 	})
@@ -155,11 +155,11 @@ func TestImport_AllFormats(t *testing.T) {
 			t.Fatalf("evernote imported %d, want 1", n)
 		}
 		g := graphOf(t, app, org)
-		if !g.hasNode("kb-page:meeting") {
+		if !g.hasNode("kb.page:meeting") {
 			t.Fatalf("evernote page missing: %+v", g.Nodes)
 		}
 		// Roadmap page doesn't exist → the authored wikilink dangles.
-		if !g.hasEdge("kb-page:meeting", "unresolved:roadmap", "link") {
+		if !g.hasEdge("kb.page:meeting", "unresolved:roadmap", "link") {
 			t.Fatalf("evernote authored wikilink not extracted: %+v", g.Edges)
 		}
 	})
@@ -176,7 +176,7 @@ func TestImport_AllFormats(t *testing.T) {
 		g := graphOf(t, app, org)
 		found := false
 		for _, nd := range g.Nodes {
-			if nd.ID == "kb-page:note" && nd.Project == "teamx" {
+			if nd.ID == "kb.page:note" && nd.Project == "teamx" {
 				found = true
 			}
 		}

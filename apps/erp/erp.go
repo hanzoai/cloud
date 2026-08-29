@@ -13,9 +13,9 @@
 //
 // # Naming (all names are slug-clean so the generic renderer can reach them)
 //
-//   - DocType names are slug-style with an "erp-" prefix, so they never collide
-//     with the cms or crm lanes' names, and never carry a space that the console's
-//     `/cloud` path filter would reject.
+//   - DocType names are slug-style and bare — "item", addressed as erp.item. The
+//     module keeps them clear of the cms and crm lanes, and none carries a space
+//     that the console's `/cloud` path filter would reject.
 //   - Transactional documents use a SERIES autoname ("erp-so-.#####" → "erp-so-00001"),
 //     always slug-clean and monotonic per org.
 //   - Masters use a field autoname ("field:item_code" …); the console slugifies the

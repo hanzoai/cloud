@@ -184,7 +184,7 @@ func TestContentLoopEndToEnd(t *testing.T) {
 	}
 
 	// Create a Campaign through the framework surface (fires the before_save hook).
-	code, b := req(t, app, http.MethodPost, "/v1/framework/Campaign", org, map[string]any{"title": "Spring Launch"})
+	code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeCampaign.String(), org, map[string]any{"title": "Spring Launch"})
 	if code != http.StatusCreated {
 		t.Fatalf("create campaign: %d %s", code, b)
 	}
@@ -204,7 +204,7 @@ func TestContentLoopEndToEnd(t *testing.T) {
 		t.Fatalf("board(draft): %d %s", code, b)
 	}
 
-	tpath := "/v1/content/Campaign/" + name + "/transition"
+	tpath := "/v1/content/" + DocTypeCampaign.String() + "/" + name + "/transition"
 
 	// An illegal jump is refused (409) without touching the document.
 	if code, b := req(t, app, http.MethodPost, tpath, org, map[string]any{"to": StatusPublished}); code != http.StatusConflict {
@@ -243,7 +243,7 @@ func TestContentLoopEndToEnd(t *testing.T) {
 	}
 
 	// A transition on an unknown item is 404 (framework.ErrNotFound), not a 5xx.
-	if code, _ := req(t, app, http.MethodPost, "/v1/content/Campaign/nope/transition", org, map[string]any{"to": StatusInReview}); code != http.StatusNotFound {
+	if code, _ := req(t, app, http.MethodPost, "/v1/content/"+DocTypeCampaign.String()+"/nope/transition", org, map[string]any{"to": StatusInReview}); code != http.StatusNotFound {
 		t.Fatalf("transition unknown item must be 404, got %d", code)
 	}
 	// An unknown content type is 404.
@@ -264,7 +264,7 @@ func TestContentRefusesForge(t *testing.T) {
 		{http.MethodGet, "/v1/content/lifecycle", nil},
 		{http.MethodGet, "/v1/content/channels", nil},
 		{http.MethodPost, "/v1/content/generate", map[string]any{"doctype": DocTypeSocialPost}},
-		{http.MethodPost, "/v1/content/Campaign/x/transition", map[string]any{"to": StatusInReview}},
+		{http.MethodPost, "/v1/content/" + DocTypeCampaign.String() + "/x/transition", map[string]any{"to": StatusInReview}},
 	} {
 		if code, _ := call(t, app, tc.method, tc.path, "victim", "", tc.body); code != http.StatusForbidden {
 			t.Errorf("%s %s with forged org must be 403, got %d", tc.method, tc.path, code)
@@ -281,7 +281,7 @@ func TestBoardPerOrgIsolation(t *testing.T) {
 		}
 	}
 	// Org A creates a SocialPost.
-	code, b := req(t, app, http.MethodPost, "/v1/framework/SocialPost", "a", map[string]any{"title": "A-secret"})
+	code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeSocialPost.String(), "a", map[string]any{"title": "A-secret"})
 	if code != http.StatusCreated {
 		t.Fatalf("create in a: %d %s", code, b)
 	}

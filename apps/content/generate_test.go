@@ -153,7 +153,7 @@ func TestGenerateCopyWritesDraftAndMeters(t *testing.T) {
 	if err := json.Unmarshal(b, &res); err != nil {
 		t.Fatalf("decode result: %v (%s)", err, b)
 	}
-	if res.DocType != DocTypeSocialPost || res.Name == "" || res.Status != StatusDraft {
+	if res.DocType != DocTypeSocialPost.String() || res.Name == "" || res.Status != StatusDraft {
 		t.Fatalf("unexpected result: %+v", res)
 	}
 
@@ -238,7 +238,7 @@ func TestGenerateAssetSubmitsGraphAndRecordsAsset(t *testing.T) {
 	}
 	var res GenerateResult
 	_ = json.Unmarshal(b, &res)
-	if res.DocType != DocTypeAsset || res.Name == "" || res.Status != StatusDraft {
+	if res.DocType != DocTypeAsset.String() || res.Name == "" || res.Status != StatusDraft {
 		t.Fatalf("unexpected result: %+v", res)
 	}
 
@@ -392,7 +392,7 @@ func TestGenerateAssetBillingGate(t *testing.T) {
 
 func TestCopyShapingFallbacks(t *testing.T) {
 	// Strict JSON → parsed fields, hashtags folded, leading '#' normalized.
-	d := buildSocialPost(GenerateInput{DocType: DocTypeSocialPost, Channels: "x"},
+	d := buildSocialPost(GenerateInput{DocType: DocTypeSocialPost.String(), Channels: "x"},
 		`{"title":"T","caption":"Hook line.","excerpt":"E","hashtags":["#Alpha","beta gamma"]}`)
 	cap, _ := d["caption"].(string)
 	if !strings.Contains(cap, "Hook line.") || !strings.Contains(cap, "#Alpha") || !strings.Contains(cap, "#betagamma") {
@@ -403,7 +403,7 @@ func TestCopyShapingFallbacks(t *testing.T) {
 	}
 
 	// Non-JSON prose → the model's words still become real copy (never empty/template).
-	d2 := buildSocialPost(GenerateInput{DocType: DocTypeSocialPost},
+	d2 := buildSocialPost(GenerateInput{DocType: DocTypeSocialPost.String()},
 		"Just a bare sentence with no JSON at all.")
 	if cap, _ := d2["caption"].(string); !strings.Contains(cap, "bare sentence") {
 		t.Fatalf("prose fallback lost the copy: %q", cap)
@@ -413,7 +413,7 @@ func TestCopyShapingFallbacks(t *testing.T) {
 	}
 
 	// Campaign requires a title; it is derived from the brief when the model omits it.
-	d3 := buildCampaign(GenerateInput{DocType: DocTypeCampaign, Brief: "A quiet winter drop."}, `{"brief":"A quiet winter drop."}`)
+	d3 := buildCampaign(GenerateInput{DocType: DocTypeCampaign.String(), Brief: "A quiet winter drop."}, `{"brief":"A quiet winter drop."}`)
 	if title, _ := d3["title"].(string); title == "" {
 		t.Fatal("campaign title must never be empty")
 	}

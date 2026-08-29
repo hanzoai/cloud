@@ -104,12 +104,12 @@ func TestCampaignDanglingProductRejectedOnWrite(t *testing.T) {
 	install(t, app, org)
 	mounted.State.sf = &fakeStorefront{exists: map[string]bool{"valentina": true}}
 
-	if code, b := req(t, app, http.MethodPost, "/v1/framework/Campaign", org, map[string]any{
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeCampaign.String(), org, map[string]any{
 		"title": "Ghost drop", "product": "ghost",
 	}); code == http.StatusCreated {
 		t.Fatalf("dangling product must be rejected at write, got 201: %s", b)
 	}
-	if code, b := req(t, app, http.MethodPost, "/v1/framework/Campaign", org, map[string]any{
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeCampaign.String(), org, map[string]any{
 		"title": "Valentina drop", "product": "valentina",
 	}); code != http.StatusCreated {
 		t.Fatalf("resolvable product must be accepted, got %d %s", code, b)

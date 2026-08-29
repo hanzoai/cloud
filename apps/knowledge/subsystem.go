@@ -12,7 +12,7 @@
 //     wikilinks, and connector provenance as edges.
 //
 //   - POST /v1/knowledge/import (import.go) — an Obsidian-importer-equivalent that ingests
-//     an Obsidian/Notion/Roam/Evernote export as a kb-page tree with links intact.
+//     an Obsidian/Notion/Roam/Evernote export as a kb.page tree with links intact.
 //
 //   - Connectors (connectors.go): per-org OAuth connections to Slack/GitHub/Google
 //     whose synced documents land in the SAME store + SAME index as manual pages.
@@ -113,7 +113,7 @@ type searchIn struct {
 	// Project narrows retrieval to one project scope.
 	Project string `json:"project,omitempty"`
 	// DocTypes restricts retrieval to a subset of the indexed knowledge doctypes
-	// (kb-page, kb-memory, kb-source). An empty or foreign list reads all of them.
+	// (kb.page, kb.memory, kb.source). An empty or foreign list reads all of them.
 	DocTypes []string `json:"doctypes,omitempty"`
 }
 

@@ -9,10 +9,10 @@ import (
 	"github.com/hanzoai/cloud/apps/framework"
 )
 
-// links.go extends the kb-page after_save/on_trash path (hooks.go) with wikilink
+// links.go extends the kb.page after_save/on_trash path (hooks.go) with wikilink
 // EDGE maintenance, alongside the vector index. When a page is saved, it parses
 // "[[Page Title]]" references out of the page body (the SAME flattened text the
-// indexer embeds, via lexicalText) and reconciles them into kb-link edge documents;
+// indexer embeds, via lexicalText) and reconciles them into kb.link edge documents;
 // when a page is trashed, it removes that page's outgoing edges. There is no
 // parallel link store — an edge IS a framework document (a Link + Data reference),
 // written through the SAME framework in-process API a connector sync uses.
@@ -84,7 +84,7 @@ func cleanTarget(raw string) string {
 	return strings.TrimSpace(t)
 }
 
-// linkOnSave is the kb-page after_save hook that reconciles the page's outgoing
+// linkOnSave is the kb.page after_save hook that reconciles the page's outgoing
 // wikilink edges. It is best-effort like the indexing hook: a returned error is
 // logged by the framework after() wrapper, and the page write already landed, so
 // edge maintenance never blocks a save.
@@ -106,7 +106,7 @@ func linkOnSave(ctx context.Context, ev *framework.Event) error {
 	return reconcileLinks(ctx, ev.Org, ev.Doc.Name, desired)
 }
 
-// reconcileLinks makes the kb-link edges of `source` exactly match `desired`
+// reconcileLinks makes the kb.link edges of `source` exactly match `desired`
 // (target titles), creating the missing edges and deleting the stale ones through
 // the framework in-process API. It writes only within `org`.
 func reconcileLinks(ctx context.Context, org, source string, desired []string) error {
@@ -149,7 +149,7 @@ func reconcileLinks(ctx context.Context, org, source string, desired []string) e
 	return firstErr
 }
 
-// delinkOnTrash is the kb-page on_trash hook that removes the trashed page's
+// delinkOnTrash is the kb.page on_trash hook that removes the trashed page's
 // outgoing edges. on_trash is a GATE (a returned error aborts the delete), so an
 // edge-cleanup failure is logged and nil is returned — a leftover edge is harmless
 // (graph-read drops an edge whose source page no longer exists), whereas blocking

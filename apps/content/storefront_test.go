@@ -120,7 +120,7 @@ func TestTransitionPublishesCatalogAssetImage(t *testing.T) {
 	mounted.State.sf = fake
 
 	// A rendered product Asset (design == the karma product slug), born draft.
-	code, b := req(t, app, http.MethodPost, "/v1/framework/Asset", org, map[string]any{
+	code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeAsset.String(), org, map[string]any{
 		"title": "Valentina front", "design": "valentina", "kind": "product", "role": "front",
 		"file": "orgs/karma/output/valentina/product_front.png", "caption": "Valentina",
 	})
@@ -130,7 +130,7 @@ func TestTransitionPublishesCatalogAssetImage(t *testing.T) {
 	var created struct{ Name string }
 	_ = json.Unmarshal(b, &created)
 	name := created.Name
-	tpath := "/v1/content/Asset/" + name + "/transition"
+	tpath := "/v1/content/" + DocTypeAsset.String() + "/" + name + "/transition"
 
 	// Walk the legal path to published. Only the final edge distributes.
 	var last TransitionResult
@@ -170,7 +170,7 @@ func TestTransitionSkipsNonCatalogAsset(t *testing.T) {
 	fake := &fakeStorefront{}
 	mounted.State.sf = fake
 
-	code, b := req(t, app, http.MethodPost, "/v1/framework/Asset", org, map[string]any{
+	code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeAsset.String(), org, map[string]any{
 		"title": "hover", "design": "valentina", "kind": "hover",
 		"file": "orgs/karma/output/valentina/hover_front.png",
 	})
@@ -179,7 +179,7 @@ func TestTransitionSkipsNonCatalogAsset(t *testing.T) {
 	}
 	var created struct{ Name string }
 	_ = json.Unmarshal(b, &created)
-	tpath := "/v1/content/Asset/" + created.Name + "/transition"
+	tpath := "/v1/content/" + DocTypeAsset.String() + "/" + created.Name + "/transition"
 	var last TransitionResult
 	for _, to := range []string{StatusInReview, StatusApproved, StatusPublished} {
 		_, b := req(t, app, http.MethodPost, tpath, org, map[string]any{"to": to})
@@ -207,7 +207,7 @@ func TestTransitionStorefrontFailClosed(t *testing.T) {
 		t.Fatalf("install: %d %s", code, b)
 	}
 	// Use the REAL storefront edge (default from Mount) — it must fail closed.
-	code, b := req(t, app, http.MethodPost, "/v1/framework/Asset", org, map[string]any{
+	code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeAsset.String(), org, map[string]any{
 		"title": "v", "design": "valentina", "kind": "product",
 		"file": "orgs/karma/output/valentina/product_front.png",
 	})
@@ -216,7 +216,7 @@ func TestTransitionStorefrontFailClosed(t *testing.T) {
 	}
 	var created struct{ Name string }
 	_ = json.Unmarshal(b, &created)
-	tpath := "/v1/content/Asset/" + created.Name + "/transition"
+	tpath := "/v1/content/" + DocTypeAsset.String() + "/" + created.Name + "/transition"
 	var last TransitionResult
 	for _, to := range []string{StatusInReview, StatusApproved, StatusPublished} {
 		code, b := req(t, app, http.MethodPost, tpath, org, map[string]any{"to": to})
@@ -229,7 +229,7 @@ func TestTransitionStorefrontFailClosed(t *testing.T) {
 		t.Fatalf("fail-closed must record not_configured, got %+v", last.Storefront)
 	}
 	// The status change committed regardless.
-	if _, b := req(t, app, http.MethodGet, "/v1/content/board?status=published&doctype=Asset", org, nil); !strings.Contains(string(b), created.Name) {
+	if _, b := req(t, app, http.MethodGet, "/v1/content/board?status=published&doctype="+DocTypeAsset.String(), org, nil); !strings.Contains(string(b), created.Name) {
 		t.Fatalf("asset must be published despite storefront being unconfigured: %s", b)
 	}
 }

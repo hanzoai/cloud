@@ -158,7 +158,7 @@ func TestModeIsHonest(t *testing.T) {
 func TestLexicalListIdentity(t *testing.T) {
 	payload := map[string]Hit{}
 	rows := []json.RawMessage{
-		json.RawMessage(`{"doctype":"kb-page","name":"runbook","title":"Runbook"}`),
+		json.RawMessage(`{"doctype":"kb.page","name":"runbook","title":"Runbook"}`),
 		json.RawMessage(`{"id":"orphan"}`),
 		json.RawMessage(`not json`),
 	}
@@ -166,10 +166,10 @@ func TestLexicalListIdentity(t *testing.T) {
 	if len(l.Keys) != 2 {
 		t.Fatalf("want 2 usable rows (bad JSON skipped), got %v", l.Keys)
 	}
-	if l.Keys[0] != "kb-page/runbook" {
-		t.Fatalf("key = %q, want kb-page/runbook", l.Keys[0])
+	if l.Keys[0] != "kb.page/runbook" {
+		t.Fatalf("key = %q, want kb.page/runbook", l.Keys[0])
 	}
-	if payload["kb-page/runbook"].Title != "Runbook" {
+	if payload["kb.page/runbook"].Title != "Runbook" {
 		t.Fatalf("payload not captured: %+v", payload)
 	}
 }

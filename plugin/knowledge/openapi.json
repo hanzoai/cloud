@@ -286,7 +286,7 @@
       "post": {
         "operationId": "post_knowledge_import",
         "summary": "Import an Obsidian, Notion, Roam or Evernote export into the org's knowledge base",
-        "description": "Ingests an uploaded export as a tree of kb-page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.\n\nThe pages are filed through the SAME ingest path a connector sync uses, so the kb-page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb-link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.\n\nScoped to the caller's validated org; `?project=` narrows every imported page to one project. No validated principal is 403, and an org that has not installed the kb module is refused with the install call to make first. The bounds are 64 MB per upload, 5000 pages and 8 MB per archive entry: pages past the five-thousandth are dropped and a larger entry is truncated at its bound, and a page the store rejects is skipped — so the answer's `imported` count is what was actually filed, not what was sent.",
+        "description": "Ingests an uploaded export as a tree of kb.page documents with its link structure intact. `?format=` picks the normalizer — obsidian, notion, roam or evernote — and the export arrives as a multipart `file` part, or as the raw request body when there is no multipart part: an Obsidian or Notion vault zip, a Roam JSON (raw or inside the zip Roam downloads), or an Evernote .enex.\n\nThe pages are filed through the SAME ingest path a connector sync uses, so the kb.page hook indexes each one for retrieval AND extracts its `[[wikilinks]]` into kb.link edges — the imported vault is searchable and its graph is navigable without a second pass. Parents are filed before their children, and each page takes a slug unique within the org (suffixed -2, -3, … on collision), so a re-import adds pages rather than overwriting the ones already there.\n\nScoped to the caller's validated org; `?project=` narrows every imported page to one project. No validated principal is 403, and an org that has not installed the kb module is refused with the install call to make first. The bounds are 64 MB per upload, 5000 pages and 8 MB per archive entry: pages past the five-thousandth are dropped and a larger entry is truncated at its bound, and a page the store rejects is skipped — so the answer's `imported` count is what was actually filed, not what was sent.",
         "tags": [
           "knowledge"
         ],
@@ -428,7 +428,7 @@
       "graphEdge": {
         "properties": {
           "from": {
-            "description": "From is the id of the node the edge starts at: the child page for a parent\nedge, the page holding the wikilink for a link edge, the kb-source for a\nprovenance edge. Always one of Nodes.",
+            "description": "From is the id of the node the edge starts at: the child page for a parent\nedge, the page holding the wikilink for a link edge, the kb.source for a\nprovenance edge. Always one of Nodes.",
             "type": "string"
           },
           "kind": {
@@ -436,7 +436,7 @@
             "type": "string"
           },
           "to": {
-            "description": "To is the id of the node the edge points at: the parent page, the linked\npage, the kb-connector. Always one of Nodes — a wikilink matching no page\npoints at a synthetic \"unresolved:\u003clowercased title\u003e\" node rather than\ndangling.",
+            "description": "To is the id of the node the edge points at: the parent page, the linked\npage, the kb.connector. Always one of Nodes — a wikilink matching no page\npoints at a synthetic \"unresolved:\u003clowercased title\u003e\" node rather than\ndangling.",
             "type": "string"
           }
         },
@@ -461,7 +461,7 @@
             "type": "string"
           },
           "type": {
-            "description": "kb-page | kb-memory | kb-source | kb-connector | unresolved",
+            "description": "kb.page | kb.memory | kb.source | kb.connector | unresolved",
             "type": "string"
           }
         },
@@ -493,7 +493,7 @@
       "hit": {
         "properties": {
           "doctype": {
-            "description": "DocType is which kind of knowledge matched: kb-page (a wiki page), kb-memory\n(a unit of agent memory) or kb-source (a document a connector ingested).\nThose three are the whole indexed set, and searchIn.DocTypes filters on them.",
+            "description": "DocType is which kind of knowledge matched, by address: kb.page (a wiki\npage), kb.memory (a unit of agent memory) or kb.source (a document a\nconnector ingested).\nThose three are the whole indexed set, and searchIn.DocTypes filters on them.",
             "type": "string"
           },
           "name": {
@@ -560,7 +560,7 @@
       "searchIn": {
         "properties": {
           "doctypes": {
-            "description": "DocTypes restricts retrieval to a subset of the indexed knowledge doctypes\n(kb-page, kb-memory, kb-source). An empty or foreign list reads all of them.",
+            "description": "DocTypes restricts retrieval to a subset of the indexed knowledge doctypes\n(kb.page, kb.memory, kb.source). An empty or foreign list reads all of them.",
             "items": {
               "type": "string"
             },

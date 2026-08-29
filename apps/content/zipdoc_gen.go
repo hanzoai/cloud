@@ -81,7 +81,7 @@ func init() {
 			"GenerateInput.brief":        "the brief/goal driving copy generation",
 			"GenerateInput.channels":     "target channels (SocialPost)",
 			"GenerateInput.design":       "studio design slug (asset source)",
-			"GenerateInput.doctype":      "Campaign | SocialPost | Asset",
+			"GenerateInput.doctype":      "marketing.Campaign | marketing.SocialPost | marketing.Asset",
 			"GenerateInput.kind":         "asset kind: ecom|product|lifestyle|hover|hero",
 			"GenerateInput.model":        "optional zen model override (copy)",
 			"GenerateInput.product":      "commerce product handle (copy context)",

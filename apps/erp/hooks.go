@@ -301,7 +301,7 @@ func reverseGL(ctx context.Context, ev *framework.Event, date string, legs []glL
 	return writeGL(ctx, ev, date, rev, "glrev")
 }
 
-// writeGL appends the legs as immutable erp-gl-entry rows with DETERMINISTIC names
+// writeGL appends the legs as immutable erp.gl-entry rows with DETERMINISTIC names
 // (voucher-<kind>-<index>), so a concurrent or retried post is idempotent.
 func writeGL(ctx context.Context, ev *framework.Event, date string, legs []glLeg, kind string) error {
 	glDT, err := ev.Store.GetDocType(ctx, ev.Org, dtGLEntry)
@@ -337,7 +337,7 @@ func reverseSLE(ctx context.Context, ev *framework.Event, date string, moves []s
 	return writeSLE(ctx, ev, date, rev, "slerev")
 }
 
-// writeSLE appends the movements as immutable erp-stock-ledger rows with
+// writeSLE appends the movements as immutable erp.stock-ledger rows with
 // DETERMINISTIC names (voucher-<kind>-<index>) — idempotent under concurrency/retry.
 func writeSLE(ctx context.Context, ev *framework.Event, date string, moves []sleMove, kind string) error {
 	sleDT, err := ev.Store.GetDocType(ctx, ev.Org, dtStockLedger)

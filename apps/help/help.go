@@ -31,10 +31,11 @@
 // engine (no Frappe, no Python, no Werkzeug), the product surface is native Go, and
 // the whole desk ships in the ONE cloud binary on Base.
 //
-// Names are slug-style with an "hd-" prefix, so they never collide with the CMS
-// (Author/Media/Page/…), ERP (erp-*), or KB (kb-*) lanes and never carry a space the
-// console's `/cloud` path filter would reject. Tickets use a monotonic series name
-// ("hd-tkt-.#####"); the masters use a field autoname the console slugifies on write.
+// Names are slug-style and bare — "ticket", addressed as help.ticket. The module
+// keeps the lane clear of the CMS, ERP and KB lanes without any of them spelling
+// the others out of the way, and nothing carries a space the console's `/cloud`
+// path filter would reject. Tickets use a monotonic series name ("hd-tkt-.#####");
+// the masters use a field autoname the console slugifies on write.
 package help
 
 import "github.com/hanzoai/cloud/apps/framework"
@@ -48,7 +49,7 @@ const Module = "help"
 // /v1/framework/roles; a role-less member stays denied (secure by default).
 const RoleHelpAgent = "Help Agent"
 
-// DocType names (slug, hd- prefixed). Exported names are referenced by subsystem.go
+// The DocType set, by address. Exported values are referenced by subsystem.go
 // (the public plane) so the fixtures and the surface share ONE identifier set.
 var (
 	DTTicket        = framework.ID{Module: Module, Name: "ticket"}
@@ -114,7 +115,7 @@ func ticket() framework.DocType {
 // Communication, in-lane. `ticket` Links the thread it belongs to; `sender_type`
 // distinguishes a customer message from an agent reply; `channel` records how it
 // arrived (portal/email/…). Hash-named (a message needs no slug). Agents read and
-// post the thread via the generic surface (GET/POST /v1/framework/hd-communication);
+// post the thread via the generic surface (GET/POST /v1/framework/help.communication);
 // the customer's opening message is written by the public intake (subsystem.go).
 func communication() framework.DocType {
 	return framework.DocType{

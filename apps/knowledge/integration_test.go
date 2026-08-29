@@ -21,7 +21,7 @@ import (
 // (SQLite) and a MOCK Qdrant + embeddings, driving the ACTUAL HTTP surface a client
 // hits. It verifies the two properties that matter:
 //
-//  1. RAG: creating a kb-page fires the after_save hook, which embeds the page and
+//  1. RAG: creating a kb.page fires the after_save hook, which embeds the page and
 //     upserts it into the org's OWN collection with an org-pinned payload; a search
 //     over the org's namespace retrieves it.
 //
@@ -245,8 +245,8 @@ func TestKBSpinePerOrgRAG(t *testing.T) {
 		"slug":  "incident-runbook",
 		"body":  `{"root":{"type":"root","children":[{"type":"paragraph","children":[{"type":"text","text":"Page the on-call and restart the pod."}]}]}}`,
 	}
-	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb-page", "A", pageBody); code != http.StatusCreated {
-		t.Fatalf("create kb-page in A: %d %s", code, b)
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb.page", "A", pageBody); code != http.StatusCreated {
+		t.Fatalf("create kb.page in A: %d %s", code, b)
 	}
 
 	// The hook must have upserted exactly one point into A's collection, org-pinned.
@@ -263,7 +263,7 @@ func TestKBSpinePerOrgRAG(t *testing.T) {
 	if len(aPoints) != 1 {
 		t.Fatalf("expected 1 upsert into %s, got %d", colA, len(aPoints))
 	}
-	if str(aPoints[0]["org"]) != "A" || str(aPoints[0]["doctype"]) != DTPage {
+	if str(aPoints[0]["org"]) != "A" || str(aPoints[0]["doctype"]) != DTPage.String() {
 		t.Errorf("%s payload not org-pinned/typed: %+v", colA, aPoints[0])
 	}
 	if len(bPoints) != 0 {
@@ -318,7 +318,7 @@ func TestSearchRefusesWithoutPrincipal(t *testing.T) {
 	}
 }
 
-// TestMemoryIndexedSameStore proves an AI memory (kb-memory) is indexed into the
+// TestMemoryIndexedSameStore proves an AI memory (kb.memory) is indexed into the
 // SAME per-org namespace as a wiki page — human wiki + AI memory are one store.
 func TestMemoryIndexedSameStore(t *testing.T) {
 	fv := newFakeVector(t)
@@ -328,14 +328,14 @@ func TestMemoryIndexedSameStore(t *testing.T) {
 		t.Fatalf("install: %d %s", code, b)
 	}
 	mem := map[string]any{"title": "api rotation", "content": "the prod API key rotates on the first of each month", "kind": "fact"}
-	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb-memory", "A", mem); code != http.StatusCreated {
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb.memory", "A", mem); code != http.StatusCreated {
 		t.Fatalf("create memory: %d %s", code, b)
 	}
 	colA := (&indexer{}).collection("A")
 	fv.mu.Lock()
 	pts := fv.upserts[colA]
 	fv.mu.Unlock()
-	if len(pts) != 1 || str(pts[0]["doctype"]) != DTMemory {
+	if len(pts) != 1 || str(pts[0]["doctype"]) != DTMemory.String() {
 		t.Fatalf("memory not indexed into %s: %+v", colA, pts)
 	}
 }

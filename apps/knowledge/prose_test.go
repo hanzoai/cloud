@@ -16,7 +16,7 @@ import (
 // zipdoc lifts one at a time. Retrieval is where that costs the most here: a
 // hit's `score` is a cosine similarity with no absolute cutoff, so it orders one
 // answer and means nothing across two, and `doctype` is the closed set
-// kb-page/kb-memory/kb-source that `doctypes` filters on. The catalog's
+// kb.page/kb.memory/kb.source that `doctypes` filters on. The catalog's
 // `configured` is about the DEPLOYMENT's OAuth credentials, not about whether
 // the caller's org has connected anything, and a graph edge's `from`/`to` are
 // always node ids — a wikilink matching no page points at a synthetic

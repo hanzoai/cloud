@@ -63,6 +63,7 @@
                     "reqd": true
                   }
                 ],
+                "module": "Projects",
                 "name": "Task"
               },
               "schema": {
@@ -101,11 +102,11 @@
             "name": "name",
             "in": "path",
             "required": true,
-            "description": "Name is the DocType's name, from the path. A name containing a space\n(\"Sales Invoice\") arrives percent-encoded and is decoded before it is\nmatched against the stored one.",
+            "description": "Name is the DocType's ADDRESS — \"module.name\", e.g. \"kb.page\". A name\ncontaining a space (\"erp.Sales Invoice\") arrives percent-encoded and is\ndecoded before it is matched against the stored one.",
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           }
         ],
         "responses": {
@@ -128,11 +129,11 @@
             "name": "name",
             "in": "path",
             "required": true,
-            "description": "Name is the DocType's name, from the path. A name containing a space\n(\"Sales Invoice\") arrives percent-encoded and is decoded before it is\nmatched against the stored one.",
+            "description": "Name is the DocType's ADDRESS — \"module.name\", e.g. \"kb.page\". A name\ncontaining a space (\"erp.Sales Invoice\") arrives percent-encoded and is\ndecoded before it is matched against the stored one.",
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           }
         ],
         "responses": {
@@ -165,7 +166,7 @@
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           }
         ],
         "requestBody": {
@@ -178,7 +179,7 @@
                     "fieldtype": "Data"
                   }
                 ],
-                "name": "Task"
+                "name": "Projects.Task"
               },
               "schema": {
                 "$ref": "#/components/schemas/DocType"
@@ -336,11 +337,11 @@
             "name": "doctype",
             "in": "path",
             "required": true,
-            "description": "DocType is the DocType to list, from the path.",
+            "description": "DocType is the DocType to list, by ADDRESS — \"module.name\", from the path.",
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           },
           {
             "name": "filters",
@@ -430,11 +431,11 @@
             "name": "doctype",
             "in": "path",
             "required": true,
-            "description": "DocType is the document's DocType, from the path.",
+            "description": "DocType is the document's DocType, by ADDRESS — \"module.name\", from the path.",
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           },
           {
             "name": "name",
@@ -467,11 +468,11 @@
             "name": "doctype",
             "in": "path",
             "required": true,
-            "description": "DocType is the document's DocType, from the path.",
+            "description": "DocType is the document's DocType, by ADDRESS — \"module.name\", from the path.",
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           },
           {
             "name": "name",
@@ -543,11 +544,11 @@
             "name": "doctype",
             "in": "path",
             "required": true,
-            "description": "DocType is the document's DocType, from the path.",
+            "description": "DocType is the document's DocType, by ADDRESS — \"module.name\", from the path.",
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           },
           {
             "name": "name",
@@ -592,11 +593,11 @@
             "name": "doctype",
             "in": "path",
             "required": true,
-            "description": "DocType is the document's DocType, from the path.",
+            "description": "DocType is the document's DocType, by ADDRESS — \"module.name\", from the path.",
             "schema": {
               "type": "string"
             },
-            "example": "Task"
+            "example": "Projects.Task"
           },
           {
             "name": "name",

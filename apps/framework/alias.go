@@ -71,6 +71,11 @@ const (
 	RoleAll           = doctype.RoleAll
 )
 
+// ParseID reads a DocType address — "kb.page" — back into the pair it renders.
+// It is the ONE reader, so a URL segment, a Link target and a stored document's
+// doctype key are all understood the same way.
+var ParseID = doctype.ParseID
+
 // Lifecycle hook actions.
 const (
 	ActionBeforeInsert = engine.ActionBeforeInsert

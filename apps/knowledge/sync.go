@@ -1,5 +1,5 @@
 // sync.go implements OAuth code exchange and the per-provider document pull. Every
-// pulled item is normalized to ONE shape (ingestDoc) and filed as a kb-source
+// pulled item is normalized to ONE shape (ingestDoc) and filed as a kb.source
 // document via framework.Ingest — so the SAME after_save hook indexes it into the
 // org's vector namespace, alongside manual pages and memories. This is the single
 // ingestion path; providers differ only in how they LIST and FETCH, never in how
@@ -35,7 +35,7 @@ const maxSyncDocs = 500
 var syncHTTP = &http.Client{Timeout: 30 * time.Second}
 
 // ingestDoc is the normalized shape every connector produces. runSync files it as a
-// kb-source document; the after_save hook then indexes its title+body.
+// kb.source document; the after_save hook then indexes its title+body.
 type ingestDoc struct {
 	Title      string
 	Body       string
@@ -66,8 +66,8 @@ func runSync(s *cloud.Service[state], ctx context.Context, org, provider, token 
 	}
 }
 
-// fileDoc writes ONE normalized document into the org's kb-source store,
-// idempotently: if a kb-source with the same external_id already exists it is
+// fileDoc writes ONE normalized document into the org's kb.source store,
+// idempotently: if a kb.source with the same external_id already exists it is
 // updated in place (so the vector point is refreshed, not duplicated); otherwise a
 // new one is created. Either way the after_save hook indexes it. Returns whether a
 // new document was created (for the count).
@@ -95,7 +95,7 @@ func fileDoc(ctx context.Context, org, provider string, d ingestDoc) (created bo
 // ---- GitHub (end-to-end) ----
 
 // syncGitHub pulls the authenticated user's repositories, then each repo's README
-// and open issues, normalizing every item to a kb-source. Bounded by maxSyncDocs.
+// and open issues, normalizing every item to a kb.source. Bounded by maxSyncDocs.
 // The cursor is the ISO timestamp of the run (a subsequent sync could pass it as
 // `since` for issues — recorded for incremental resumption).
 func syncGitHub(s *cloud.Service[state], ctx context.Context, org, token string) (int, string, error) {

@@ -46,7 +46,7 @@ func TestInstallModule_CreatesFixturesStampedWithModule(t *testing.T) {
 
 	// The fixtures now exist in the org AND carry the module tag (Gadget's stray
 	// "wrong" module is overwritten with the lane's own name).
-	code, body = do(t, app, http.MethodGet, "/v1/framework/doctypes/Gadget", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/framework/doctypes/shop.Gadget", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get installed doctype want 200, got %d (%s)", code, body)
 	}
@@ -173,11 +173,25 @@ func TestListAndGetModule(t *testing.T) {
 	}
 }
 
-// TestInstallModule_ReservedRouteNotShadowed proves "modules" is a reserved
-// DocType name, so the static module routes can never be shadowed by a document
-// route (define of a DocType named "modules" is refused).
-func TestInstallModule_ReservedRouteNotShadowed(t *testing.T) {
-	if err := (&DocType{Name: "modules", Fields: []DocField{{Fieldname: "a", Fieldtype: FieldData}}}).Validate(); err == nil {
-		t.Fatal("DocType named \"modules\" must be reserved (Validate should fail)")
+// TestStaticRoutesCannotBeShadowed proves what replaced the reserved-name list.
+// A DocType may now be NAMED "modules" — the list is gone — because a document
+// route addresses it as "shop.modules", and the dot is the thing no static
+// segment carries. Shadowing stopped being a rule and became a shape.
+func TestStaticRoutesCannotBeShadowed(t *testing.T) {
+	withTestModule(t, "shop", testFixtures())
+	app := mountApp(t)
+
+	for _, seg := range []string{"doctypes", "modules", "summary"} {
+		dt := &DocType{Name: seg, Module: "shop", Fields: []DocField{{Fieldname: "a", Fieldtype: FieldData}}}
+		if err := dt.Validate(); err != nil {
+			t.Fatalf("a DocType named %q is legal now: %v", seg, err)
+		}
+		if addr := dt.ID().String(); addr == seg {
+			t.Fatalf("address %q collides with a static segment", addr)
+		}
+		// And the static route still answers its own path, not this DocType's.
+		if code, body := do(t, app, http.MethodGet, "/v1/framework/"+seg, "acme", nil); code != http.StatusOK {
+			t.Errorf("GET /v1/framework/%s = %d %s, want the static route", seg, code, body)
+		}
 	}
 }

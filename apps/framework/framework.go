@@ -457,7 +457,7 @@ type docTypeList struct {
 // first caller to administer it is seeded as its System Manager, after which
 // only a System Manager (or a platform admin) may define. Answers 201.
 //
-// Example: {"name": "Task", "autoname": "TASK-.#####", "fields": [{"fieldname": "subject", "fieldtype": "Data", "reqd": true}]}
+// Example: {"name": "Task", "module": "Projects", "autoname": "TASK-.#####", "fields": [{"fieldname": "subject", "fieldtype": "Data", "reqd": true}]}
 func (o ops) createDocType(ctx context.Context, in *DocType) (*DocType, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
@@ -488,7 +488,7 @@ func (o ops) listDocTypes(ctx context.Context, _ *noInput) (*docTypeList, error)
 // permissions and lifecycle flags. Scoped to the caller's org, so another
 // tenant's DocType of the same name is simply not found.
 //
-// Example: {"name": "Task"}
+// Example: {"name": "Projects.Task"}
 func (o ops) getDocType(ctx context.Context, in *docTypeRef) (*DocType, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
@@ -510,7 +510,7 @@ func (o ops) getDocType(ctx context.Context, in *docTypeRef) (*DocType, error) {
 // the body's, and documents already stored under the DocType are left intact.
 // Manager-only.
 //
-// Example: {"name": "Task", "fields": [{"fieldname": "subject", "fieldtype": "Data"}]}
+// Example: {"name": "Projects.Task", "fields": [{"fieldname": "subject", "fieldtype": "Data"}]}
 func (o ops) replaceDocType(ctx context.Context, in *DocType) (*DocType, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
@@ -531,7 +531,7 @@ func (o ops) replaceDocType(ctx context.Context, in *DocType) (*DocType, error) 
 // definition and its data go together — a document with no schema can be neither
 // validated nor read back — so there is no undo. Manager-only. Answers 204.
 //
-// Example: {"name": "Task"}
+// Example: {"name": "Projects.Task"}
 func (o ops) deleteDocType(ctx context.Context, in *docTypeRef) (*noContent, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
@@ -687,16 +687,16 @@ func (in listDocumentsIn) id() (ID, error) { return address(in.DocType) }
 // against its schema: a filter, sort or field name the DocType does not declare
 // is refused rather than reaching the store.
 //
-// Example: {"doctype": "Task", "filters": "{\"priority\":\"High\"}", "order_by": "estimate asc", "limit": "20"}
+// Example: {"doctype": "Projects.Task", "filters": "{\"priority\":\"High\"}", "order_by": "estimate asc", "limit": "20"}
 func (o ops) listDocuments(ctx context.Context, in *listDocumentsIn) (*documentList, error) {
 	cl := callerOf(ctx)
-	id, err := in.id()
-	if err != nil {
-		return nil, err
-	}
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
 		return nil, fail(err, "")
+	}
+	id, err := in.id()
+	if err != nil {
+		return nil, err
 	}
 	dt, err := eng.DocTypeOf(ctx, cl, id)
 	if err != nil {
@@ -724,7 +724,7 @@ func (o ops) listDocuments(ctx context.Context, in *listDocumentsIn) (*documentL
 
 // getDocument returns one document by name, with Password fields redacted.
 //
-// Example: {"doctype": "Task", "name": "TASK-00001"}
+// Example: {"doctype": "Projects.Task", "name": "TASK-00001"}
 func (o ops) getDocument(ctx context.Context, in *docRef) (*docView, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
@@ -745,7 +745,7 @@ func (o ops) getDocument(ctx context.Context, in *docRef) (*docView, error) {
 // deleteDocument removes one document, after its on_trash hooks agree. A
 // SUBMITTED document cannot be deleted — cancel it first. Answers 204.
 //
-// Example: {"doctype": "Task", "name": "TASK-00001"}
+// Example: {"doctype": "Projects.Task", "name": "TASK-00001"}
 func (o ops) deleteDocument(ctx context.Context, in *docRef) (*noContent, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
@@ -767,7 +767,7 @@ func (o ops) deleteDocument(ctx context.Context, in *docRef) (*noContent, error)
 // deletes are refused until it is cancelled. Only a submittable DocType has this
 // lifecycle; any other docstatus is an illegal transition.
 //
-// Example: {"doctype": "Task", "name": "TASK-00001"}
+// Example: {"doctype": "Projects.Task", "name": "TASK-00001"}
 func (o ops) submitDocument(ctx context.Context, in *docRef) (*docView, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {
@@ -789,7 +789,7 @@ func (o ops) submitDocument(ctx context.Context, in *docRef) (*docView, error) {
 // its on_cancel hooks agree. Cancelling is terminal — a cancelled document
 // cannot be re-submitted — but it CAN then be deleted.
 //
-// Example: {"doctype": "Task", "name": "TASK-00001"}
+// Example: {"doctype": "Projects.Task", "name": "TASK-00001"}
 func (o ops) cancelDocument(ctx context.Context, in *docRef) (*docView, error) {
 	eng, err := engineFor(o.s, ctx)
 	if err != nil {

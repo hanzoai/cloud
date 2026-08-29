@@ -112,7 +112,7 @@ func createSocialPost(t *testing.T, app *zip.App, org string, fields map[string]
 	t.Helper()
 	body := map[string]any{"title": "Post"}
 	maps.Copy(body, fields)
-	code, b := req(t, app, http.MethodPost, "/v1/framework/SocialPost", org, body)
+	code, b := req(t, app, http.MethodPost, "/v1/framework/"+DocTypeSocialPost.String(), org, body)
 	if code != http.StatusCreated {
 		t.Fatalf("create SocialPost: %d %s", code, b)
 	}
@@ -135,7 +135,7 @@ func installMarketing(t *testing.T, app *zip.App, org string) {
 
 func docExternalIDs(t *testing.T, org, name string) map[string]any {
 	t.Helper()
-	doc, err := framework.Get(context.Background(), org, "SocialPost", name)
+	doc, err := framework.Get(context.Background(), org, DocTypeSocialPost, name)
 	if err != nil {
 		t.Fatalf("framework.Get: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestPublishFanOutRecordsExternalIDs(t *testing.T) {
 	})
 
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name})
 	if code != http.StatusOK {
 		t.Fatalf("publish: %d %s", code, b)
 	}
@@ -254,7 +254,7 @@ func TestPublishScheduleVsNow(t *testing.T) {
 
 	const when = "2026-08-01T12:00:00Z"
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name, "scheduleAt": when})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name, "scheduleAt": when})
 	if code != http.StatusOK {
 		t.Fatalf("schedule publish: %d %s", code, b)
 	}
@@ -279,7 +279,7 @@ func TestPublishPartialFailure(t *testing.T) {
 	name := createSocialPost(t, app, org, map[string]any{"caption": "mixed", "channels": "x,instagram"})
 
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name})
 	// Partial failure is NEVER a 5xx — it is a 200 with the honest per-channel truth.
 	if code != http.StatusOK {
 		t.Fatalf("partial failure must be 200, got %d %s", code, b)
@@ -318,7 +318,7 @@ func TestPublishAllChannelsFail(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "doomed", "channels": "x"})
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name})
 	if code != http.StatusOK {
 		t.Fatalf("total channel failure must still be 200 (honest), got %d %s", code, b)
 	}
@@ -338,7 +338,7 @@ func TestPublishUnknownChannelIsHonest(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "typo", "channels": "x,mastodon"})
 	code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name})
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name})
 	if code != http.StatusOK {
 		t.Fatalf("publish: %d %s", code, b)
 	}
@@ -372,7 +372,7 @@ func TestPublishFailClosedNoKey(t *testing.T) {
 	name := createSocialPost(t, app, org, map[string]any{"caption": "no creds", "channels": "x"})
 	// Direct publish → honest 503, never a crash.
 	if code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name}); code != http.StatusServiceUnavailable {
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name}); code != http.StatusServiceUnavailable {
 		t.Fatalf("no key must be 503 not_configured, got %d %s", code, b)
 	}
 	// The stub was never touched (fail-closed BEFORE any post).
@@ -390,7 +390,7 @@ func TestPublishFailClosedNoChannels(t *testing.T) {
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "nowhere", "channels": "x"})
 	if code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-		map[string]any{"doctype": "SocialPost", "name": name}); code != http.StatusServiceUnavailable {
+		map[string]any{"doctype": DocTypeSocialPost.String(), "name": name}); code != http.StatusServiceUnavailable {
 		t.Fatalf("zero channels must be 503 not_configured, got %d %s", code, b)
 	}
 }
@@ -403,7 +403,7 @@ func TestTransitionFailClosedRecordsNotConfigured(t *testing.T) {
 	useStub(t, stub)
 
 	name := createSocialPost(t, app, org, map[string]any{"caption": "walk", "channels": "x"})
-	tpath := "/v1/content/SocialPost/" + name + "/transition"
+	tpath := "/v1/content/" + DocTypeSocialPost.String() + "/" + name + "/transition"
 	for _, to := range []string{StatusInReview, StatusApproved, StatusPublished} {
 		code, b := req(t, app, http.MethodPost, tpath, org, map[string]any{"to": to})
 		if code != http.StatusOK {
@@ -463,7 +463,7 @@ func TestPublishCarriesPerBrandKey(t *testing.T) {
 		installMarketing(t, app, org)
 		name := createSocialPost(t, app, org, map[string]any{"caption": "hi", "channels": "x"})
 		if code, b := req(t, app, http.MethodPost, "/v1/content/publish", org,
-			map[string]any{"doctype": "SocialPost", "name": name}); code != http.StatusOK {
+			map[string]any{"doctype": DocTypeSocialPost.String(), "name": name}); code != http.StatusOK {
 			t.Fatalf("publish %s: %d %s", org, code, b)
 		}
 	}

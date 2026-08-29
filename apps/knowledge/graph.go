@@ -9,13 +9,13 @@ import (
 )
 
 // graph.go serves GET /v1/knowledge/graph: the org's knowledge as a node/edge graph shaped
-// for a force-directed renderer. Nodes are kb-page / kb-memory / kb-source
+// for a force-directed renderer. Nodes are kb.page / kb.memory / kb.source
 // documents (plus the connector and dangling-link endpoints edges reach); edges are
-// the parent tree (kb-page.parent), the wikilinks (kb-link edges resolved to a page
-// by value), and connector provenance (a kb-source to its kb-connector). Everything
+// the parent tree (kb.page.parent), the wikilinks (kb.link edges resolved to a page
+// by value), and connector provenance (a kb.source to its kb.connector). Everything
 // is org-scoped through principal.Org and optionally narrowed to a project.
 //
-// Wikilink targets are resolved HERE, by matching a kb-link's target_title against
+// Wikilink targets are resolved HERE, by matching a kb.link's target_title against
 // the current pages' titles/slugs — so a rename or trash of a target never needs an
 // edge rewrite, and a target that matches no page renders as a distinct "unresolved"
 // node (an honest dangling link).
@@ -40,11 +40,11 @@ type graphNode struct {
 
 type graphEdge struct {
 	// From is the id of the node the edge starts at: the child page for a parent
-	// edge, the page holding the wikilink for a link edge, the kb-source for a
+	// edge, the page holding the wikilink for a link edge, the kb.source for a
 	// provenance edge. Always one of Nodes.
 	From string `json:"from"`
 	// To is the id of the node the edge points at: the parent page, the linked
-	// page, the kb-connector. Always one of Nodes — a wikilink matching no page
+	// page, the kb.connector. Always one of Nodes — a wikilink matching no page
 	// points at a synthetic "unresolved:<lowercased title>" node rather than
 	// dangling.
 	To   string `json:"to"`
@@ -104,7 +104,7 @@ func (o ops) graph(ctx context.Context, in *graphIn) (*graphOut, error) {
 	if err != nil {
 		return o.graphUnavailable(org, err), nil
 	}
-	// kb-link edges: fetched org-wide, then filtered to sources that are in the
+	// kb.link edges: fetched org-wide, then filtered to sources that are in the
 	// (project-scoped) page set during the build.
 	links, err := framework.Search(ctx, org, DTLink, nil, graphEdgeLimit)
 	if err != nil {
@@ -204,7 +204,7 @@ func buildGraph(pages, memories, sources, connectors, links []framework.Document
 		addEdge(graphEdge{From: from, To: to, Kind: "link"})
 	}
 
-	// Connector provenance: a source → the kb-connector for its provider.
+	// Connector provenance: a source → the kb.connector for its provider.
 	for id, provider := range sourceProvider {
 		cn, ok := connectorByProvider[provider]
 		if !ok {

@@ -1,6 +1,6 @@
 // sync_piece.go is the LONG-TAIL connector pull: for a provider whose list+fetch is
 // an activepieces JS "piece" (not native Go), it runs that piece through the isolated
-// auto engine runner, then files each returned record as a kb-source via the SAME
+// auto engine runner, then files each returned record as a kb.source via the SAME
 // framework.Ingest path the native connectors use. This is the hybrid model's payoff:
 // Go connectors (github/slack/google) and JS connectors (notion + the ~280 activepieces
 // apps) both land in the ONE per-org knowledge store + index — the user never sees
@@ -68,7 +68,7 @@ type pieceConnector struct {
 	auth func(token string) any
 	// records extracts the list of items from the piece's raw output.
 	records func(output any) []map[string]any
-	// normalize maps ONE record to a kb-source document.
+	// normalize maps ONE record to a kb.source document.
 	normalize func(rec map[string]any) ingestDoc
 }
 
@@ -119,7 +119,7 @@ type pieceRunResult struct {
 }
 
 // pieceSync runs a long-tail provider's piece through the auto engine and files each
-// returned record as a kb-source. org is the validated tenant; token is this org's
+// returned record as a kb.source. org is the validated tenant; token is this org's
 // OAuth access token (from KMS). Returns the count ingested and a resume cursor.
 func pieceSync(s *cloud.Service[state], ctx context.Context, org, provider, token string) (int, string, error) {
 	conn, ok := pieceConnectors[provider]

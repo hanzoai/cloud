@@ -40,7 +40,7 @@ func TestGenerate_CompletesWithoutInstall_HTTP(t *testing.T) {
 	if err := json.Unmarshal(b, &res); err != nil {
 		t.Fatalf("decode result: %v (%s)", err, b)
 	}
-	if res.DocType != DocTypeCampaign || res.Name == "" || res.Status != StatusDraft {
+	if res.DocType != DocTypeCampaign.String() || res.Name == "" || res.Status != StatusDraft {
 		t.Fatalf("unexpected result: %+v", res)
 	}
 }
@@ -54,7 +54,7 @@ func TestGenerate_CompletesWithoutInstall_InProcess(t *testing.T) {
 	_ = mountWith(t, cloud.Deps{AI: ai, Env: "testnet"})
 
 	res, err := Generate(context.Background(), org, GenerateInput{
-		DocType: DocTypeCampaign,
+		DocType: DocTypeCampaign.String(),
 		Title:   "Positioning",
 		Brief:   "one crisp positioning statement",
 	})
@@ -64,7 +64,7 @@ func TestGenerate_CompletesWithoutInstall_InProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate on a fresh org: %v", err)
 	}
-	if res.Name == "" || res.DocType != DocTypeCampaign {
+	if res.Name == "" || res.DocType != DocTypeCampaign.String() {
 		t.Fatalf("unexpected result: %+v", res)
 	}
 }
