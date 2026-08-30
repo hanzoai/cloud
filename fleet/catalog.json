@@ -3027,6 +3027,18 @@
    "doc": "Finds repositories on GitHub.\n\nThis reads the PUBLIC index and returns nothing an installation unlocks: it is\nhow you find a repository to fork, not a way to see inside one. The org's own\ntoken is used only so the query is rate-limited against the installation\nrather than anonymously — the results are the same ones anyone would get."
   },
   {
+   "id": "post_integrations_linear_claim",
+   "doc": "Binds the caller's Linear organization to the org and seals the\nwebhook secret. The organization is READ from the caller's own key, never taken\nfrom the body: a person can only bind an organization they are a member of. An\norganization another org already holds is refused."
+  },
+  {
+   "id": "post_integrations_linear_comments",
+   "doc": "Posts a comment on a Linear issue with the caller's own key, so it\ncarries their name. This is the op an agent is offered when it should answer in\nLinear rather than in chat."
+  },
+  {
+   "id": "post_integrations_linear_issues_backfill",
+   "doc": "Seeds the native todo with the EXISTING Linear issues the\ncaller's key can see (default state=open); the webhook keeps them live\nthereafter. Synchronous and bounded, idempotent by ExtRef."
+  },
+  {
    "id": "post_integrations_telegram_connect",
    "doc": "Mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit."
   },

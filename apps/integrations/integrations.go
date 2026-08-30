@@ -735,6 +735,21 @@ func init() {
 			"Authentication is the secret token Telegram echoes on every update, compared in "+
 			"constant time. A message in a chat that has never been bound is dropped, which "+
 			"is why the bind command exists."+vendorCall+asyncTurn)
+	openapi.Describe("/v1/integrations/linear/webhook", http.MethodPost,
+		"Linear webhook",
+		"The address Linear delivers Issue and Comment events to. An issue event is "+
+			"mirrored into the native todo — idempotently by identifier, so ENG-123 is one "+
+			"row however many times it is edited, moved or closed — and every issue and "+
+			"comment event is handed to the automations engine as a verified trigger, "+
+			"which is how an org runs an agent when an issue is assigned to it or a comment "+
+			"mentions it. A remove is never propagated: the native side is canonical.\n\n"+
+			"It answers a benign 200 for what it does not act on — an unknown organization, "+
+			"other event types — so Linear does not retry-storm. A bad signature and a "+
+			"delivery older than a minute are 401; only a sink failure is 502.\n\n"+
+			"The delivery names its Linear organization; that organization's own webhook "+
+			"secret — sealed at /v1/integrations/linear/claim — verifies the HMAC over the raw body, "+
+			"so the tenant is the organization the signature proves, never a header."+
+			vendorCall)
 	openapi.Describe("/v1/integrations/github/webhook", http.MethodPost,
 		"GitHub App webhook",
 		"The address the GitHub App delivers events to. A push is handed to the repository "+
@@ -940,6 +955,9 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// raw because it speaks GitHub's webhook protocol: the HMAC covers the raw body,
 	// which an op handed the decoded In could not re-verify.
 	app.Post("/v1/integrations/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
+	// Linear delivers Issue and Comment events here (linear_webhook.go). Raw and
+	// Terminal for the same reason as GitHub's: the HMAC covers the raw body.
+	app.Post("/v1/integrations/linear/webhook", cloud.Terminal(cloud.Handle(s, linearWebhook)))
 	// OpenRouter's Broadcast destination (openrouter.go). Raw and Terminal like its
 	// siblings, and public at the JWT layer for the same reason: the credential is a
 	// key in the destination's Headers map, admitted INSIDE the handler through the
@@ -961,6 +979,12 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// Seed the native todo with the org's EXISTING GitHub issues (the webhook
 	// keeps them live thereafter). Org-authed via the principal; bounded + idempotent.
 	zip.Post(zapp, "/v1/integrations/github/issues/backfill", o.githubIssuesBackfill)
+	// Linear (linear.go): bind the caller's Linear organization + webhook secret,
+	// comment on an issue with the caller's own key, seed the native todo. All three
+	// spend the person's connector, so the caller is (org,user).
+	zip.Post(zapp, "/v1/integrations/linear/claim", o.linearClaim)
+	zip.Post(zapp, "/v1/integrations/linear/comments", o.linearComment, zip.WithStatus(http.StatusCreated))
+	zip.Post(zapp, "/v1/integrations/linear/issues/backfill", o.linearIssuesBackfill)
 	// GitHub Pages management (github_pages.go), one repo as a resource. Registered
 	// AFTER the literal /repos/import so registration-order matching keeps the literal
 	// unshadowed; the :repo routes all carry a /pages suffix, so /repos/import (no
