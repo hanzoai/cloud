@@ -9,7 +9,7 @@
     "build": "vite build"
   },
   "dependencies": {
-    "@hanzo/ui": "8.27.0",
+    "@hanzo/ui": "8.27.2",
     "@hanzogui/config": "8.3.1",
     "@hanzogui/lucide-icons-2": "8.3.1",
     "@hanzogui/next-theme": "8.3.1",
