@@ -542,3 +542,48 @@ func TestAnEscapeIsDecodedOnceAndOnlyOnce(t *testing.T) {
 	// refuses it — a 400 rather than a key with a stray percent — for a raw client
 	// that can put those bytes on the wire.
 }
+
+// TestTheUploadTakesItsBucketFromTheAddress drives POST /buckets/:bucket/objects
+// at the address the published document declares, with the bucket ONLY in the path.
+//
+// It exists because uploadIn.Bucket carried `url:"-"`, and bindURL skips such a
+// field for every URL source — the path included, not just the query. The document
+// declares bucket a REQUIRED PATH PARAMETER, so every generated client builds this
+// exact address, and every one of them was answered `400 invalid bucket name`. The
+// operation was reachable only by repeating the bucket in the body, which no
+// generated client does.
+//
+// The decoy half is the same property TestTheAddressBeatsADecoy pins for download
+// and delete: path outranks body, so a body cannot name a target the URL did not.
+// With the field skipped, the body was the ONLY source, which inverted it.
+func TestTheUploadTakesItsBucketFromTheAddress(t *testing.T) {
+	app, _ := live(t)
+
+	at := "/v1/s3/buckets/photos/objects"
+	st, body := ask(t, app, http.MethodPost, at, `{"key":"a.txt"}`)
+	if st != http.StatusOK {
+		t.Fatalf("POST %s with the bucket only in the path = %d %s, want 200 — the document "+
+			"declares bucket a required path parameter, so this is the address every "+
+			"generated client builds", at, st, body)
+	}
+	var signed struct{ URL, Key string }
+	if err := json.Unmarshal([]byte(body), &signed); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	if !strings.Contains(signed.URL, "photos") {
+		t.Errorf("the signed upload URL %q does not name the bucket the address did", signed.URL)
+	}
+
+	// The body must not be able to aim it somewhere the URL never named.
+	st, body = ask(t, app, http.MethodPost, at, `{"bucket":"victim","key":"a.txt"}`)
+	if st != http.StatusOK {
+		t.Fatalf("POST %s with a body decoy = %d %s, want 200", at, st, body)
+	}
+	if err := json.Unmarshal([]byte(body), &signed); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	if strings.Contains(signed.URL, "victim") {
+		t.Errorf("a body decoy redirected the upload to %q — path binds last precisely so "+
+			"the target signed is the target the URL named", signed.URL)
+	}
+}

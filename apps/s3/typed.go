@@ -351,7 +351,7 @@ func (o ops) listObjects(ctx context.Context, in *listIn) (*objectList, error) {
 // uploadIn names the object to mint an upload URL for.
 type uploadIn struct {
 	// Bucket is the bucket to upload into, from the path.
-	Bucket string `json:"bucket" url:"-"`
+	Bucket string `json:"bucket"` // untagged on purpose: bindURL skips `url:"-"` for the path too, so the declared address bound no bucket and answered 400
 	// Key is the object key relative to the bucket root. It is path-cleaned, so a
 	// "../" cannot escape the bucket, and an empty or unclean key is 400.
 	Key string `json:"key" url:"-"`
