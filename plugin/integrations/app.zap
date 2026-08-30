@@ -201,6 +201,38 @@ struct gitlabProjectsOut {
     Account  text        @8
 }
 
+struct linearBackfillIn {
+    State text @0
+}
+
+struct linearBackfillResult {
+    Issues    i64  @0
+    Created   i64  @8
+    Updated   i64  @16
+    Failed    i64  @24
+    Truncated bool @32
+}
+
+struct linearClaimIn {
+    Secret text @0
+}
+
+struct linearClaimOut {
+    Organization text @0
+    Name         text @8
+    Path         text @16
+}
+
+struct linearCommentIn {
+    Issue text @0
+    Body  text @8
+}
+
+struct linearCommentOut {
+    ID  text @0
+    URL text @8
+}
+
 struct listOut {
     Providers list<bytes> @0
 }
@@ -408,6 +440,19 @@ interface integrations {
     # token is used only so the query is rate-limited against the installation
     # rather than anonymously — the results are the same ones anyone would get.
     post_integrations_github_search(req: githubSearchReq) returns (rep: githubSearchOut)
+    # Binds the caller's Linear organization to the org and seals the
+    # webhook secret. The organization is READ from the caller's own key, never taken
+    # from the body: a person can only bind an organization they are a member of. An
+    # organization another org already holds is refused.
+    post_integrations_linear_claim(req: linearClaimIn) returns (rep: linearClaimOut)
+    # Posts a comment on a Linear issue with the caller's own key, so it
+    # carries their name. This is the op an agent is offered when it should answer in
+    # Linear rather than in chat.
+    post_integrations_linear_comments(req: linearCommentIn) returns (rep: linearCommentOut)
+    # Seeds the native todo with the EXISTING Linear issues the
+    # caller's key can see (default state=open); the webhook keeps them live
+    # thereafter. Synchronous and bounded, idempotent by ExtRef.
+    post_integrations_linear_issues_backfill(req: linearBackfillIn) returns (rep: linearBackfillResult)
     # Mints a short, single-use deep-link code bound to the caller's
     # org and returns the t.me link the console navigates to. Org-authed: a caller with
     # no validated principal is 403 (same gate as the framework connect). The code is
@@ -422,7 +467,7 @@ interface integrations {
 }
 
 # ---------------------------------------------------------------------
-# 27 op(s) here. What follows is what this schema does not carry.
+# 30 op(s) here. What follows is what this schema does not carry.
 #
 # opaque (13) — crosses, arrives without its name:
 #   connectorProvidersOut.Providers  integrations.connectorProviderView (list element)
