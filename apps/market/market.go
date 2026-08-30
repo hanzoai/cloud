@@ -80,9 +80,9 @@ type state struct {
 	http *http.Client
 }
 
-// Mount registers the read surface.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "market", build, routes)
+// Use registers the read surface.
+func Use(app cloud.Router, deps cloud.Deps) error {
+	return cloud.Use(app, deps, "market", build, routes)
 }
 
 // build resolves the registry for this deployment's environment and records the
