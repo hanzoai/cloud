@@ -118,7 +118,7 @@
     {
       "name": "channels",
       "path": "_channels/index.json",
-      "skill_count": 4
+      "skill_count": 5
     },
     {
       "name": "cloudflare",
@@ -596,7 +596,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 678,
+  "skill_count": 679,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Hanzo surface..",
@@ -1773,6 +1773,13 @@
       "path": "catalog_catalog/SKILL.md",
       "service": "catalog",
       "sha256": "852c179a444b6cfbf860462637a1c8a180a88078782c0adbcd35427b08171f0f"
+    },
+    {
+      "description": "Read channels agent: Returns which agent answers the caller org's channel: the default and every room bound to another agent..",
+      "name": "channels_agent",
+      "path": "channels_agent/SKILL.md",
+      "service": "channels",
+      "sha256": "3e9ce0d3d80a33221723b58d505fb18d47302d224861f17fbebf7c2ad6f20d3b"
     },
     {
       "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",

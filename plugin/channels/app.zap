@@ -13,6 +13,10 @@ struct approvePairingIn {
     Code    text @8
 }
 
+struct channelAgentRef {
+    Channel text @0
+}
+
 struct chatChannels {
     Channels list<bytes> @0
 }
@@ -69,8 +73,11 @@ interface channels {
 # ---------------------------------------------------------------------
 # 4 op(s) here. What follows is what this schema does not carry.
 #
-# blocked (3) — the op is absent; the field has no wire form:
+# blocked (6) — the op is absent; the field has no wire form:
+#   get_channels_agent  channelAgents.Rooms  map[string]string  (map)
 #   get_channels_allowlist  allowlistView.AccessGroups  map[string]map[string][]string  (map)
+#   put_channels_agent  channelAgents  channels.channelAgents  (reaches one)
+#   put_channels_agent  channelAgentsPut.Rooms  map[string]string  (map)
 #   put_channels_allowlist  allowlistPutIn.AccessGroups  map[string]map[string][]string  (map)
 #   put_channels_allowlist  allowlistView  channels.allowlistView  (reaches one)
 #

@@ -26,8 +26,8 @@ import (
 //   - A BROWSER LEG (12). Each answers a 302 to a sign-in, or a short HTML
 //     confirmation that sets a __Host- cookie. A typed op always marshals JSON
 //     and cannot set the status a redirect needs.
-//   - AN INBOUND WEBHOOK (8). Each speaks its platform's own protocol over the
-//     RAW request. Four are signed over the exact received bytes (Slack and
+//   - AN INBOUND WEBHOOK (9). Each speaks its platform's own protocol over the
+//     RAW request. Five are signed over the exact received bytes (Slack and
 //     GitHub HMAC, Discord Ed25519), which a re-encoded In is not. Two are
 //     header-authed and answer an EMPTY 200 to a body they cannot parse — zip
 //     unmarshals before the handler, so typing them would turn that 200 into a
@@ -55,6 +55,7 @@ var untypedByDesign = map[string]string{
 	"POST /v1/integrations/slack/events":         "Slack's HMAC covers the RAW received bytes, which a re-encoded In is not.",
 	"POST /v1/integrations/slack/commands":       "Slack's slash-command wire: form-encoded, HMAC over the raw bytes.",
 	"POST /v1/integrations/github/webhook":       "GitHub's HMAC covers the RAW received bytes.",
+	"POST /v1/integrations/linear/webhook":       "Linear's HMAC covers the RAW received bytes.",
 	"POST /v1/integrations/discord/interactions": "Discord's Ed25519 signature covers the RAW received bytes.",
 	"POST /v1/integrations/teams/events": "header-authed, and answers an EMPTY 200 to a body it cannot parse; zip " +
 		"unmarshals before the handler, so a typed In turns that 200 into a 400 and retry-storms the platform.",

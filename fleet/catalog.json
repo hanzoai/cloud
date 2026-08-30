@@ -931,6 +931,11 @@
    "read": true
   },
   {
+   "id": "get_channels_agent",
+   "doc": "Returns which agent answers the caller org's channel: the default and\nevery room bound to another agent.",
+   "read": true
+  },
+  {
    "id": "get_channels_allowlist",
    "doc": "Returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
    "read": true
@@ -948,6 +953,10 @@
   {
    "id": "post_channels_pairing_approve",
    "doc": "Turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant."
+  },
+  {
+   "id": "put_channels_agent",
+   "doc": "Binds agents to the caller org's channel and answers the bindings as\nGET would. It requires ORG ADMIN. The agent is named by its ref — the name an\norg gave it at POST /v1/agents, or a built-in such as dev, des or vi."
   },
   {
    "id": "put_channels_allowlist",
@@ -3025,6 +3034,18 @@
   {
    "id": "post_integrations_github_search",
    "doc": "Finds repositories on GitHub.\n\nThis reads the PUBLIC index and returns nothing an installation unlocks: it is\nhow you find a repository to fork, not a way to see inside one. The org's own\ntoken is used only so the query is rate-limited against the installation\nrather than anonymously — the results are the same ones anyone would get."
+  },
+  {
+   "id": "post_integrations_linear_claim",
+   "doc": "Binds the caller's Linear organization to the org and seals the\nwebhook secret. The organization is READ from the caller's own key, never taken\nfrom the body: a person can only bind an organization they are a member of. An\norganization another org already holds is refused."
+  },
+  {
+   "id": "post_integrations_linear_comments",
+   "doc": "Posts a comment on a Linear issue with the caller's own key, so it\ncarries their name. This is the op an agent is offered when it should answer in\nLinear rather than in chat."
+  },
+  {
+   "id": "post_integrations_linear_issues_backfill",
+   "doc": "Seeds the native todo with the EXISTING Linear issues the\ncaller's key can see (default state=open); the webhook keeps them live\nthereafter. Synchronous and bounded, idempotent by ExtRef."
   },
   {
    "id": "post_integrations_telegram_connect",
