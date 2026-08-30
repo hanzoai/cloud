@@ -69,6 +69,13 @@ import (
 // unchanged rather than treating it as an unknown attribute.
 const mixinRoom = "hanzo:mixin:Room"
 
+// spaceRooms is the model space a room DOCUMENT lives in. A room is itself a
+// Space in this model, and every Space is filed under core's own — so this is
+// the document's home, not the tenant space the room belongs to. That second
+// one is the (org, space) pair every read here is already scoped by, and
+// conflating the two is how a room would be written into the wrong tenant.
+const spaceRooms = "core:space:Space"
+
 // Room lifecycle intent. These say what a room is FOR, which is a
 // different question from whether it is open right now.
 const (
@@ -108,6 +115,7 @@ type roomBridge struct {
 func (b *roomBridge) register(app cloud.Router) {
 	g := app.Group(teamPrefix)
 	zip.Get(g, "/rooms", b.listRooms)
+	zip.Post(g, "/rooms", b.openRoom, zip.WithStatus(http.StatusCreated))
 	zip.Put(g, "/rooms/:id", b.bindRoom)
 }
 
@@ -412,4 +420,159 @@ func ownsSpace(owned []space, uuid string) bool {
 func truthy(v any) bool {
 	b, _ := v.(bool)
 	return b
+}
+
+// teamRoomNew opens a room. A name and nothing else is a complete request:
+// everything here except the name has a defensible default, and a caller that
+// states only what it cares about gets the rest.
+type teamRoomNew struct {
+	// Name is what a person sees in a sidebar — "bugfix-1010", not "#bugfix-1010".
+	// The sigil is how a client DRAWS a room, and storing it would put it in the
+	// name twice the first time a client added its own.
+	Name string `json:"name"`
+	// Space is where the room is opened. Optional: an org with one space has no
+	// choice to make, so it does not have to state one. An org with several must,
+	// because picking for it would make the room's home depend on iteration order.
+	Space string `json:"space,omitempty"`
+	// Topic is the room's one-line subject.
+	Topic string `json:"topic,omitempty"`
+	// Private restricts the room to its members. Public is the default because a
+	// room nobody can find is the more surprising of the two.
+	Private bool `json:"private,omitempty"`
+	// Members are the account uuids in the room. A public room may open empty —
+	// anyone in the org can find it — and a private one that names nobody is
+	// refused rather than created unreachable.
+	Members []string `json:"members,omitempty"`
+	// Life is the lifecycle intent, "standing" or "bound"; empty reads standing.
+	Life string `json:"life,omitempty"`
+	// Bindings are what the room is about, each "<kind>:<ref>".
+	Bindings []string `json:"bindings,omitempty"`
+}
+
+// openRoom opens a named room and answers it as the store now holds it.
+//
+// It writes through the SAME applyTx path the Team client uses, so a room opened
+// here is broadcast to every live client of the space and appears in an open
+// sidebar without a reload — the same property listRooms rests on, read from the
+// write side.
+//
+// TWO TRANSACTIONS, NOT ONE, when the request states a facet. The document and
+// its mixin are separate writes in this model (bindRoom writes only the second),
+// and composing them here rather than inventing a combined tx keeps one write
+// path for each. A create that lands and a facet that does not is visible as a
+// room with default intent, which is the honest partial state.
+//
+// Example: {"name": "bugfix-1010", "life": "bound", "bindings": ["issue:1010"]}
+func (b *roomBridge) openRoom(ctx context.Context, in *teamRoomNew) (*teamRoom, error) {
+	if b.degraded {
+		return nil, unavailable()
+	}
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, zip.ErrBadRequest("room name is required")
+	}
+	// A private room nobody is in cannot be entered by anyone, including the
+	// caller: it would be a document only an admin could reach. Refused at the
+	// door rather than created and then explained.
+	if in.Private && len(in.Members) == 0 {
+		return nil, zip.ErrBadRequest("a private room needs at least one member")
+	}
+	owned, err := b.accounts.SpacesForOrg(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "team: spaces: %v", err)
+	}
+	ws, err := spaceFor(owned, strings.TrimSpace(in.Space))
+	if err != nil {
+		return nil, err
+	}
+	// A second #general in one space is a mistake being persisted: two rooms that
+	// read identically in a sidebar, and no way to tell which one a message landed
+	// in. Direct messages carry no name and are not compared.
+	rooms, err := b.trans.store.byClasses(org, ws, []string{clChannel})
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "team: rooms of space %s: %v", ws, err)
+	}
+	for _, doc := range rooms {
+		if strings.EqualFold(strings.TrimSpace(str(doc["name"])), name) {
+			return nil, zip.Errorf(http.StatusConflict, "team: a room named %q is already open here", name)
+		}
+	}
+	members := in.Members
+	if members == nil {
+		members = []string{}
+	}
+	id := newMsgID()
+	topic := strings.TrimSpace(in.Topic)
+	create := createTx(id, clChannel, spaceRooms, acctSystem, map[string]any{
+		"name":        name,
+		"description": topic,
+		"topic":       topic,
+		"private":     in.Private,
+		"archived":    false,
+		"members":     members,
+	})
+	sess := &session{server: b.trans, store: b.trans.store, hier: b.trans.hier, org: org, space: ws, account: acctSystem}
+	if err := apply(sess, b.trans, ws, create); err != nil {
+		return nil, err
+	}
+	// The facet, when the request states one. workOf is the same reader bindRoom
+	// uses, so "life" and "bindings" mean here exactly what they mean there.
+	work, err := workOf(&teamRoomBind{Life: in.Life, Bindings: in.Bindings})
+	if err != nil {
+		return nil, err
+	}
+	if len(work) > 0 {
+		if err := apply(sess, b.trans, ws, mixinTx(id, clChannel, spaceRooms, mixinRoom, acctSystem, work)); err != nil {
+			return nil, err
+		}
+	}
+	after, err := b.trans.store.get(org, ws, id)
+	if err != nil || after == nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "team: room after open: %v", err)
+	}
+	v := roomOf(ws, after)
+	return &v, nil
+}
+
+// spaceFor resolves which space a room is opened in. Naming one is only required
+// where there is a choice — the answer is otherwise the org's single space, and
+// asking a caller to state the only possible value is asking it to know a uuid
+// for nothing.
+func spaceFor(owned []space, named string) (string, error) {
+	if named != "" {
+		if !ownsSpace(owned, named) {
+			// 404, not 403: a caller who may not write here must not learn whether
+			// the space exists.
+			return "", zip.ErrNotFound("space not found")
+		}
+		return named, nil
+	}
+	switch len(owned) {
+	case 0:
+		return "", zip.ErrNotFound("this org has no space to open a room in")
+	case 1:
+		return owned[0].UUID, nil
+	default:
+		return "", zip.ErrBadRequest("this org has more than one space: name the one to open the room in")
+	}
+}
+
+// apply marshals one tx, writes it through the session and broadcasts what
+// landed. Two writers here would otherwise each repeat the marshal, the apply and
+// the broadcast, and a broadcast forgotten in one of them is a room that exists
+// but does not appear until a reload.
+func apply(sess *session, srv *transServer, ws string, tx map[string]any) error {
+	raw, err := json.Marshal(tx)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "team: tx: %v", err)
+	}
+	_, applied := sess.applyTx(raw)
+	if len(applied) > 0 {
+		srv.hub.broadcast(ws, applied)
+	}
+	return nil
 }

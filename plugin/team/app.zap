@@ -56,6 +56,16 @@ struct teamRoomBind {
     Bindings list<text> @24
 }
 
+struct teamRoomNew {
+    Name     text       @0
+    Space    text       @8
+    Topic    text       @16
+    Private  bool       @24
+    Members  list<text> @32
+    Life     text       @40
+    Bindings list<text> @48
+}
+
 struct teamRooms {
     Rooms list<bytes> @0
 }
@@ -114,6 +124,17 @@ interface team {
     # gateway-minted admin flag, which a client can never forge. It answers how many
     # roster entries the reconcile touched.
     post_team_bots_sync() returns (rep: botSync)
+    # Opens a named room and answers it as the store now holds it.
+    # It writes through the SAME applyTx path the Team client uses, so a room opened
+    # here is broadcast to every live client of the space and appears in an open
+    # sidebar without a reload — the same property listRooms rests on, read from the
+    # write side.
+    # TWO TRANSACTIONS, NOT ONE, when the request states a facet. The document and
+    # its mixin are separate writes in this model (bindRoom writes only the second),
+    # and composing them here rather than inventing a combined tx keeps one write
+    # path for each. A create that lands and a facet that does not is visible as a
+    # room with default intent, which is the honest partial state.
+    post_team_rooms(req: teamRoomNew) returns (rep: teamRoom)
     # States what a room is for: its lifecycle intent, and what it is
     # about. It answers the room as it now stands.
     # The write is a platform MIXIN on the room document, applied through the
@@ -124,7 +145,7 @@ interface team {
 }
 
 # ---------------------------------------------------------------------
-# 8 op(s) here. What follows is what this schema does not carry.
+# 9 op(s) here. What follows is what this schema does not carry.
 #
 # blocked (3) — the op is absent; the field has no wire form:
 #   get_team_transactor_statistics  statsOut.Statistics  team.statsSessions  (reaches one)
