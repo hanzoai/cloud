@@ -1,4 +1,4 @@
-// personalities.go seeds an org's BUILT-IN agents — the named personas a human
+// persona.go seeds an org's BUILT-IN agents — the named personas a human
 // @-mentions in Hanzo Team (@dev to build, @des to design, @vi for vision). They
 // are ordinary rows in the ONE agent registry (this package's store): nothing
 // about them is special-cased downstream — they list, project into Team as bot
@@ -30,10 +30,10 @@ type persona struct {
 	Instructions string
 }
 
-// personalities is the canonical built-in crew. Adding one here is the ONE way a
+// personas is the canonical built-in crew. Adding one here is the ONE way a
 // new default persona ships — no per-org config, no duplicate definition. The old
 // hanzo.ai site's voices, brought into Team.
-var personalities = []persona{
+var personas = []persona{
 	{
 		Name:        "dev",
 		Description: "Dev — the builder",
@@ -255,7 +255,7 @@ var personalities = []persona{
 	},
 }
 
-// SeedPersonalities ensures the built-in crew exists for org. Idempotent: an
+// SeedPersonas ensures the built-in crew exists for org. Idempotent: an
 // already-present persona (UNIQUE org+name) is left untouched, so it is safe to
 // call on every org first-touch (a new Team space, say). Returns the number
 // newly created.
@@ -265,7 +265,7 @@ var personalities = []persona{
 // binary has a model to run them on, never a half-created persona that can't run.
 // A subsystem that is not mounted also no-ops rather than erroring, so a caller on
 // the login path can call it best-effort without ever blocking a human.
-func SeedPersonalities(ctx context.Context, org string) (int, error) {
+func SeedPersonas(ctx context.Context, org string) (int, error) {
 	sto, _, serr := mountedStore(org)
 	if serr != nil {
 		return 0, nil // never mounted, or an org this deployment cannot place: no-op
@@ -274,7 +274,7 @@ func SeedPersonalities(ctx context.Context, org string) (int, error) {
 
 	created := 0
 	now := time.Now().Unix()
-	for _, p := range personalities {
+	for _, p := range personas {
 		id := mint.ID("agent")
 		a := Agent{
 			ID:           id,

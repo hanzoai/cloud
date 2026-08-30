@@ -195,23 +195,23 @@ func TestMigrateModelRewritesStoredRows(t *testing.T) {
 	}
 }
 
-// TestSeedPersonalitiesUsesHanzoModel proves the built-in crew (dev/des/vi) is
+// TestSeedPersonasUsesHanzoModel proves the built-in crew (dev/des/vi) is
 // seeded on a Hanzo model — the seed path that put deepseek-v4-flash on three
 // live agents.
-func TestSeedPersonalitiesUsesHanzoModel(t *testing.T) {
+func TestSeedPersonasUsesHanzoModel(t *testing.T) {
 	ai := &catalogAI{content: "pong", ids: []string{"enso", cloud.DefaultModel, "deepseek-v4-flash"}}
 	app := mountAppModel(t, ai)
 
-	n, err := SeedPersonalities(context.Background(), "acme")
+	n, err := SeedPersonas(context.Background(), "acme")
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if n != len(personalities) {
-		t.Fatalf("seeded %d personas, want %d", n, len(personalities))
+	if n != len(personas) {
+		t.Fatalf("seeded %d personas, want %d", n, len(personas))
 	}
 	code, body := do(t, app, http.MethodGet, "/v1/agents", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list: want 200, got %d (%s)", code, body)
 	}
-	scanUpstream(t, "GET /v1/agents after SeedPersonalities", body)
+	scanUpstream(t, "GET /v1/agents after SeedPersonas", body)
 }

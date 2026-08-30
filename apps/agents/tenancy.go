@@ -78,7 +78,7 @@ func tenantStore(ctx context.Context, st *state) (*Store, string, error) {
 
 // mountedStore is the entry every IN-PROCESS client uses — ListForOrg,
 // TargetsForOrg, ResolveTarget, LoadOn, the inproc session calls, StopSessions,
-// SeedPersonalities. Their shared contract is that the CALLER has already
+// SeedPersonas. Their shared contract is that the CALLER has already
 // resolved the org server-side (principal.Org, or a verified token claim) and
 // never hands on a raw client header; this re-applies the same bound the HTTP
 // path applies, so an org that could not have come from a validated principal is
