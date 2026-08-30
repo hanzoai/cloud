@@ -12,7 +12,7 @@ import (
 )
 
 // mountSeedTest wires the `mounted` singleton to a fresh store, so
-// SeedPersonalities has a store to write. It took a default model until that
+// SeedPersonas has a store to write. It took a default model until that
 // knob was deleted; the seed model is cloud.DefaultModel and cannot vary.
 func mountSeedTest(t *testing.T) {
 	t.Helper()
@@ -24,21 +24,21 @@ func mountSeedTest(t *testing.T) {
 	t.Cleanup(func() { mounted = prev })
 }
 
-// TestSeedPersonalities proves the built-in crew is created once, is idempotent,
+// TestSeedPersonas proves the built-in crew is created once, is idempotent,
 // projects the exact @-handles a human mentions in Team, and seeds every persona
 // on cloud.DefaultModel — the full contract of the one-way seed.
-func TestSeedPersonalities(t *testing.T) {
+func TestSeedPersonas(t *testing.T) {
 	mountSeedTest(t)
 	ctx := context.Background()
 	const org = "acme"
 
 	// First seed creates the whole crew.
-	n, err := SeedPersonalities(ctx, org)
+	n, err := SeedPersonas(ctx, org)
 	if err != nil {
-		t.Fatalf("SeedPersonalities: %v", err)
+		t.Fatalf("SeedPersonas: %v", err)
 	}
-	if n != len(personalities) {
-		t.Fatalf("created %d, want %d (the full built-in crew)", n, len(personalities))
+	if n != len(personas) {
+		t.Fatalf("created %d, want %d (the full built-in crew)", n, len(personas))
 	}
 
 	// They are ordinary registry rows — ListForOrg returns them with the @-handles.
@@ -61,15 +61,15 @@ func TestSeedPersonalities(t *testing.T) {
 	}
 
 	// Idempotent: a re-seed creates nothing and never duplicates.
-	n2, err := SeedPersonalities(ctx, org)
+	n2, err := SeedPersonas(ctx, org)
 	if err != nil {
 		t.Fatalf("re-seed: %v", err)
 	}
 	if n2 != 0 {
 		t.Fatalf("re-seed created %d, want 0 (idempotent)", n2)
 	}
-	if list2, _ := ListForOrg(ctx, org); len(list2) != len(personalities) {
-		t.Fatalf("after re-seed: %d agents, want %d (no dup)", len(list2), len(personalities))
+	if list2, _ := ListForOrg(ctx, org); len(list2) != len(personas) {
+		t.Fatalf("after re-seed: %d agents, want %d (no dup)", len(list2), len(personas))
 	}
 
 	// A fresh org seeds its full crew, every persona on cloud.DefaultModel. This
@@ -78,9 +78,9 @@ func TestSeedPersonalities(t *testing.T) {
 	// deployment always had a default, so the no-op never happened in production
 	// and now cannot be expressed at all.
 	mountSeedTest(t)
-	n3, err := SeedPersonalities(ctx, "globex")
-	if err != nil || n3 != len(personalities) {
-		t.Fatalf("fresh-org seed = (%d,%v), want (%d,nil)", n3, err, len(personalities))
+	n3, err := SeedPersonas(ctx, "globex")
+	if err != nil || n3 != len(personas) {
+		t.Fatalf("fresh-org seed = (%d,%v), want (%d,nil)", n3, err, len(personas))
 	}
 	for _, a := range mustList(t, ctx, "globex") {
 		if a.Model != cloud.DefaultModel {

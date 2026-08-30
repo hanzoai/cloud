@@ -541,8 +541,8 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 		// blocks login; the crew simply appears on the next touch. They project into
 		// the space roster as bot members (bots.go) and answer @-mentions through
 		// the Chunter responder (chat.go), same as any org agent.
-		if n, err := agents.SeedPersonalities(ctx, oorg); err != nil {
-			g.log.Warn("account: seed personalities", "org", oorg, "err", err)
+		if n, err := agents.SeedPersonas(ctx, oorg); err != nil {
+			g.log.Warn("account: seed personas", "org", oorg, "err", err)
 		} else if n > 0 {
 			g.log.Info("account: seeded default crew", "org", oorg, "created", n)
 		}
