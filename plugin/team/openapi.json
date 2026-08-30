@@ -507,6 +507,45 @@
         },
         "x-public": true,
         "x-tool": true
+      },
+      "post": {
+        "operationId": "post_team_rooms",
+        "summary": "Opens a named room and answers it as the store now holds it.",
+        "description": "Opens a named room and answers it as the store now holds it.\n\nIt writes through the SAME applyTx path the Team client uses, so a room opened\nhere is broadcast to every live client of the space and appears in an open\nsidebar without a reload — the same property listRooms rests on, read from the\nwrite side.\n\nTWO TRANSACTIONS, NOT ONE, when the request states a facet. The document and\nits mixin are separate writes in this model (bindRoom writes only the second),\nand composing them here rather than inventing a combined tx keeps one write\npath for each. A create that lands and a facet that does not is visible as a\nroom with default intent, which is the honest partial state.",
+        "tags": [
+          "team"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bindings": [
+                  "issue:1010"
+                ],
+                "life": "bound",
+                "name": "bugfix-1010"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/teamRoomNew"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/teamRoom"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
       }
     },
     "/v1/team/rooms/{id}": {
@@ -891,6 +930,45 @@
           },
           "space": {
             "description": "Space names the space holding the room. It is required, because\na room id is unique only within one and searching every space for a\nmatching id would make the write's target depend on iteration order.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "teamRoomNew": {
+        "properties": {
+          "bindings": {
+            "description": "Bindings are what the room is about, each \"\u003ckind\u003e:\u003cref\u003e\".",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "life": {
+            "description": "Life is the lifecycle intent, \"standing\" or \"bound\"; empty reads standing.",
+            "type": "string"
+          },
+          "members": {
+            "description": "Members are the account uuids in the room. A public room may open empty —\nanyone in the org can find it — and a private one that names nobody is\nrefused rather than created unreachable.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is what a person sees in a sidebar — \"bugfix-1010\", not \"#bugfix-1010\".\nThe sigil is how a client DRAWS a room, and storing it would put it in the\nname twice the first time a client added its own.",
+            "type": "string"
+          },
+          "private": {
+            "description": "Private restricts the room to its members. Public is the default because a\nroom nobody can find is the more surprising of the two.",
+            "type": "boolean"
+          },
+          "space": {
+            "description": "Space is where the room is opened. Optional: an org with one space has no\nchoice to make, so it does not have to state one. An org with several must,\nbecause picking for it would make the room's home depend on iteration order.",
+            "type": "string"
+          },
+          "topic": {
+            "description": "Topic is the room's one-line subject.",
             "type": "string"
           }
         },

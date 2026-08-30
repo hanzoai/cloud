@@ -146,6 +146,29 @@ func init() {
 	zip.Describe("POST /v1/team/files/:space", zip.Doc{
 		Description: "Stores the uploaded bytes under the CLIENT-supplied blob uuid (the\nmultipart file's filename). The server does NOT mint the id — the front owns it\n(front.ts: formData.append('file', file, uuid)). Response body is irrelevant\n(uploadFile discards it); we echo the id for curl/debug.",
 	})
+	zip.Describe("POST /v1/team/rooms", zip.Doc{
+		Description: "Opens a named room and answers it as the store now holds it.\n\nIt writes through the SAME applyTx path the Team client uses, so a room opened\nhere is broadcast to every live client of the space and appears in an open\nsidebar without a reload — the same property listRooms rests on, read from the\nwrite side.\n\nTWO TRANSACTIONS, NOT ONE, when the request states a facet. The document and\nits mixin are separate writes in this model (bindRoom writes only the second),\nand composing them here rather than inventing a combined tx keeps one write\npath for each. A create that lands and a facet that does not is visible as a\nroom with default intent, which is the honest partial state.",
+		Fields: map[string]string{
+			"teamRoom.archived":    "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
+			"teamRoom.bindings":    "Bindings are what this room is ABOUT, each a \"<kind>:<ref>\" string —\n\"project:acme/web\", \"repo:hanzoai/cloud\", \"issue:1010\". One list rather\nthan one field per kind, because the next thing a room can be about should\nnot be a schema change; and a bound value is opaque here on purpose, since\nthe app that owns a project is the app that can resolve one. HIP-0523 §2:\na binding is a REFERENCE, never a copy — a room holding an issue's title or\nstatus would be the parallel work-item store HIP-1160 §1 forbids.",
+			"teamRoom.direct":      "Direct reports that this is a room between people rather than a named\nroom. It is derived from the document's class, so it cannot disagree\nwith what the client will render.",
+			"teamRoom.id":          "ID is the room document's own id, and the value the bind op addresses.\nIt is unique within a space, not across the org.",
+			"teamRoom.life":        "Life is the room's lifecycle INTENT — \"standing\" or \"bound\" (HIP-0523 §2).\nAbsent on the document it reads \"standing\": a room nobody classified is one\nthat persists.",
+			"teamRoom.members":     "Members are the account uuids in the room, agents included: an agent\nprojects as a space member under a uuid derived from its id, so a\ncaller comparing this against GET /v1/team/bots learns which rooms an\nagent is in.",
+			"teamRoom.name":        "Name is what a person sees in a sidebar. A direct message carries none, so\nthis is empty for one — the members are its name.",
+			"teamRoom.private":     "Private reports that the room is restricted to its members.",
+			"teamRoom.space":       "Space is the space uuid holding this room. It is part of the\nroom's address: two spaces of one org may each hold a room with\nthe same name, and only the pair identifies one.",
+			"teamRoom.topic":       "Topic is the room's own one-line subject, as the Team client sets it.",
+			"teamRoomNew.bindings": "Bindings are what the room is about, each \"<kind>:<ref>\".",
+			"teamRoomNew.life":     "Life is the lifecycle intent, \"standing\" or \"bound\"; empty reads standing.",
+			"teamRoomNew.members":  "Members are the account uuids in the room. A public room may open empty —\nanyone in the org can find it — and a private one that names nobody is\nrefused rather than created unreachable.",
+			"teamRoomNew.name":     "Name is what a person sees in a sidebar — \"bugfix-1010\", not \"#bugfix-1010\".\nThe sigil is how a client DRAWS a room, and storing it would put it in the\nname twice the first time a client added its own.",
+			"teamRoomNew.private":  "Private restricts the room to its members. Public is the default because a\nroom nobody can find is the more surprising of the two.",
+			"teamRoomNew.space":    "Space is where the room is opened. Optional: an org with one space has no\nchoice to make, so it does not have to state one. An org with several must,\nbecause picking for it would make the room's home depend on iteration order.",
+			"teamRoomNew.topic":    "Topic is the room's one-line subject.",
+		},
+		Example: json.RawMessage(`{"name":"bugfix-1010","life":"bound","bindings":["issue:1010"]}`),
+	})
 	zip.Describe("PUT /v1/team/rooms/:id", zip.Doc{
 		Description: "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open space\nrather than on the next reload.",
 		Fields: map[string]string{
