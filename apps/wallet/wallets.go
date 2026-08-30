@@ -1,6 +1,6 @@
 package wallet
 
-// wallets.go owns the HTTP surface (/v1/wallet/*), the Mount/config client that
+// wallets.go owns the HTTP surface (/v1/wallet/*), the Use/config client that
 // selects the custody set, the process singleton, and the finance client.
 //
 //	POST /v1/wallet/accounts   {name}                              -> create account
@@ -56,12 +56,12 @@ type state struct {
 	audit          *audit.Recorder // best-effort; nil disables it
 }
 
-// mounted is the process singleton the finance client resolves. nil when the
+// live is the process singleton the finance client resolves. nil when the
 // subsystem is not linked/enabled, which makes WalletForLedgerAccount a no-op.
-var mounted *cloud.Service[state]
+var live *cloud.Service[state]
 
-// Mount wires the wallets surface onto app per HIP-0106. Complex flavour: it
-// holds a package-global (mounted, the finance client singleton) so it constructs
+// Use composes the wallets surface onto app per HIP-0106. Complex flavour: it
+// holds a package-global (live, the finance client singleton) so it constructs
 // the Service value directly rather than via cloud.Use.
 func Use(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
@@ -88,7 +88,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		defaultCustody: def,
 		audit:          deps.Audit,
 	}}
-	mounted = s
+	live = s
 	if err := routes(app, s); err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	exposePayee()
 
 	_, mpcOK := custody[KindMPC]
-	log.Info("wallets mounted", "brand", deps.Brand, "defaultCustody", def, "mpcConfigured", mpcOK)
+	log.Info("wallets live", "brand", deps.Brand, "defaultCustody", def, "mpcConfigured", mpcOK)
 	return nil
 }
 
@@ -119,7 +119,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 func routes(app cloud.Router, s *cloud.Service[state]) error {
 	// The typed registrars take the App behind the Router: a typed op is a route
 	// PLUS a registry entry, and the registry lives on the App. A subsystem that
-	// cannot reach it must fail its mount rather than serve routes no projection
+	// cannot reach it must refuse to compose rather than serve routes no projection
 	// knows about.
 	zapp := cloud.ZipApp(app)
 	if zapp == nil {
@@ -749,9 +749,9 @@ func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposa
 
 // WalletForLedgerAccount resolves the on-chain wallet bound to a finance ledger
 // account — the client by which the treasury reserve signer BECOMES an MPC treasury
-// wallet later. Pure lookup; ("",false) when unmounted/unbound. Does NOT modify treasury.
+// wallet later. Pure lookup; ("",false) when absent/unbound. Does NOT modify treasury.
 func WalletForLedgerAccount(ctx context.Context, org, ledgerAccount string) (address string, ok bool) {
-	s := mounted
+	s := live
 	if s == nil || strings.TrimSpace(org) == "" || strings.TrimSpace(ledgerAccount) == "" {
 		return "", false
 	}
@@ -770,22 +770,22 @@ type PaymentTarget struct {
 	Subject string // ledger subject for the earnings credit (the wallet id)
 }
 
-// Mounted reports whether this process holds the wallet store.
+// Live reports whether this process holds the wallet store.
 //
 // It exists because ResolvePaymentTarget folds two facts into one false — "there is
 // no such wallet" and "the wallets subsystem is not in this binary" — and a caller
 // that must ask elsewhere when it is absent has to tell them apart. Answering the
 // first over a socket would be a second lookup of a question already answered NO;
 // answering the second in memory is impossible.
-func Mounted() bool { return mounted != nil }
+func Live() bool { return live != nil }
 
 // ResolvePaymentTarget resolves a payout wallet {org, walletID} to its address +
 // ledger subject — the client the x402 settlement uses to route payment to a
 // recipient wallet. The lookup is org-scoped (getWallet), so a resource can only
 // ever name a wallet WITHIN the org it declared: no cross-org payee spoofing.
-// ("", false) when wallets is unmounted or the wallet is not found in that org.
+// ("", false) when wallets is absent or the wallet is not found in that org.
 func ResolvePaymentTarget(ctx context.Context, org, walletID string) (PaymentTarget, bool) {
-	s := mounted
+	s := live
 	if s == nil || strings.TrimSpace(org) == "" || strings.TrimSpace(walletID) == "" {
 		return PaymentTarget{}, false
 	}
@@ -884,10 +884,10 @@ func mustJSON(v any) json.RawMessage {
 
 // Shutdown closes the store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.State.store == nil {
+	if live == nil || live.State.store == nil {
 		return nil
 	}
-	err := mounted.State.store.Close()
-	mounted = nil
+	err := live.State.store.Close()
+	live = nil
 	return err
 }

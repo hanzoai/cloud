@@ -13,7 +13,7 @@ import (
 // A settlement needs two things about the seller's wallet: the ADDRESS the 402
 // challenge names, and the LEDGER SUBJECT the credit is written to. Both are rows
 // in this store, and the store has one process. x402 reached them through the
-// mounted singleton, which is nil in its own binary — so a priced listing resolved
+// live singleton, which is nil in its own binary — so a priced listing resolved
 // to no payee and every purchase 503'd.
 //
 // THE ORG RIDES THE CAPABILITY, which is what makes this safe to publish at all.

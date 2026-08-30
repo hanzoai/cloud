@@ -48,8 +48,8 @@ func newService(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Servic
 		Base:  cloud.NewBase(cloud.Deps{}, "wallets"),
 		State: state{store: st, custody: custody, defaultCustody: def},
 	}
-	mounted = s
-	t.Cleanup(func() { mounted = nil })
+	live = s
+	t.Cleanup(func() { live = nil })
 	app := zip.New(zip.Config{Logger: log})
 	compose(app)
 	routes(app, s)

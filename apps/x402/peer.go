@@ -16,7 +16,7 @@ import (
 // x402 is the RAIL and nothing else. What a resource costs and who is paid is the
 // marketplace's table; which address and ledger subject a payout wallet is, is
 // wallets'; the books both halves are written to are commerce's. Each of those was
-// reached through a process-global — x402.reg, wallets' mounted singleton,
+// reached through a process-global — x402.reg, wallets' live singleton,
 // finance.Current — and the fleet runs one binary per app, so in the shipped x402
 // process all three are nil and the rail could enforce nothing.
 //
@@ -118,7 +118,7 @@ func payeeOf(ctx context.Context, org, walletID string) (wallet.PaymentTarget, b
 	if target, ok := wallet.ResolvePaymentTarget(ctx, org, walletID); ok {
 		return target, true
 	}
-	if wallet.Mounted() {
+	if wallet.Live() {
 		return wallet.PaymentTarget{}, false // wallets is HERE and says no such wallet
 	}
 	return payeePeer(org, walletID)
