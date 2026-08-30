@@ -28,6 +28,16 @@ func init() {
 			"chatChannels.channels":      "Channels is every chat transport this deployment supports, in a fixed\norder, each carrying whether the org has connected it, the account behind\nthe connection, what the transport can do, the org's DM/group access\npolicies for it, and how many pairing requests are waiting.",
 		},
 	})
+	zip.Describe("GET /v1/channels/agent", zip.Doc{
+		Description: "Returns which agent answers the caller org's channel: the default and\nevery room bound to another agent.",
+		Fields: map[string]string{
+			"channelAgentRef.channel": "Channel is the transport: discord, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
+			"channelAgents.channel":   "Channel is the transport these bindings are for.",
+			"channelAgents.default":   "Default is the agent that answers any room without a binding of its own;\n\"hanzo\" when the org has never set one.",
+			"channelAgents.rooms":     "Rooms maps a platform room id to the agent that answers there.",
+		},
+		Response: json.RawMessage(`{"channel":"slack","default":"eng","rooms":{"C024BE91L":"des"}}`),
+	})
 	zip.Describe("GET /v1/channels/allowlist", zip.Doc{
 		Description: "Returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
 		Fields: map[string]string{
@@ -106,6 +116,19 @@ func init() {
 			"pairingApproved.sender":            "Sender is the external chat identity that is now allowed to DM the org's bot.",
 		},
 		Example: json.RawMessage(`{"channel":"telegram","code":"PAIR-7Q2M"}`),
+	})
+	zip.Describe("PUT /v1/channels/agent", zip.Doc{
+		Description: "Binds agents to the caller org's channel and answers the bindings as\nGET would. It requires ORG ADMIN. The agent is named by its ref — the name an\norg gave it at POST /v1/agents, or a built-in such as dev, des or vi.",
+		Fields: map[string]string{
+			"channelAgents.channel":    "Channel is the transport these bindings are for.",
+			"channelAgents.default":    "Default is the agent that answers any room without a binding of its own;\n\"hanzo\" when the org has never set one.",
+			"channelAgents.rooms":      "Rooms maps a platform room id to the agent that answers there.",
+			"channelAgentsPut.channel": "Channel is the transport to edit. Required; an unknown value is a 404.",
+			"channelAgentsPut.default": "Default sets the agent for rooms with no binding of their own; \"hanzo\"\nrestores the built-in. Empty or absent leaves it unchanged.",
+			"channelAgentsPut.rooms":   "Rooms binds platform room ids to agents; rooms not named are left alone.",
+			"channelAgentsPut.unbind":  "Unbind removes the bindings of these rooms, so they fall back to Default.",
+		},
+		Example: json.RawMessage(`{"channel":"slack","default":"eng","rooms":{"C024BE91L":"des"},"unbind":["C0OLD"]}`),
 	})
 	zip.Describe("PUT /v1/channels/allowlist", zip.Doc{
 		Description: "Edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404.",

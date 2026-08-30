@@ -9,8 +9,15 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 4,
+  "skill_count": 5,
   "skills": [
+    {
+      "description": "Read channels agent: Returns which agent answers the caller org's channel: the default and every room bound to another agent..",
+      "name": "channels_agent",
+      "path": "channels_agent/SKILL.md",
+      "service": "channels",
+      "sha256": "3e9ce0d3d80a33221723b58d505fb18d47302d224861f17fbebf7c2ad6f20d3b"
+    },
     {
       "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
       "name": "channels_allowlist",

@@ -931,6 +931,11 @@
    "read": true
   },
   {
+   "id": "get_channels_agent",
+   "doc": "Returns which agent answers the caller org's channel: the default and\nevery room bound to another agent.",
+   "read": true
+  },
+  {
    "id": "get_channels_allowlist",
    "doc": "Returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
    "read": true
@@ -948,6 +953,10 @@
   {
    "id": "post_channels_pairing_approve",
    "doc": "Turns one pending pairing code into a standing allow entry, so\nthat person can DM the org's bot on that channel from now on. It requires ORG\nADMIN, not merely membership. The first approval an org makes on a channel also\nbootstraps that sender as the channel's owner, which the answer reports. An\nunknown or expired code is a 404, and a code always belongs to exactly one\norg, so it can never approve someone into another tenant."
+  },
+  {
+   "id": "put_channels_agent",
+   "doc": "Binds agents to the caller org's channel and answers the bindings as\nGET would. It requires ORG ADMIN. The agent is named by its ref — the name an\norg gave it at POST /v1/agents, or a built-in such as dev, des or vi."
   },
   {
    "id": "put_channels_allowlist",

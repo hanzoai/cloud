@@ -9,8 +9,15 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 4,
+  "skill_count": 5,
   "skills": [
+    {
+      "description": "Read channels agent: Returns which agent answers the caller org's channel: the default and every room bound to another agent..",
+      "name": "channels_agent",
+      "path": "channels_agent/SKILL.md",
+      "service": "channels",
+      "sha256": "b2187ca51a1d90c34a75ab7ecc4c1c7a81ca052eb50bb4c665f32e6d42b16c5b"
+    },
     {
       "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
       "name": "channels_allowlist",
