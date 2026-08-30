@@ -1,6 +1,6 @@
 {
-  "paths": 1737,
-  "operations": 2402,
+  "paths": 1742,
+  "operations": 2408,
   "products": {
     "account": 10,
     "ad": 7,
@@ -24,7 +24,7 @@
     "campaign": 11,
     "captable": 31,
     "catalog": 1,
-    "channels": 7,
+    "channels": 9,
     "cloudflare": 33,
     "code": 7,
     "commerce": 181,
@@ -58,7 +58,7 @@
     "iam": 159,
     "index": 17,
     "ingress": 18,
-    "integrations": 50,
+    "integrations": 54,
     "kms": 7,
     "knowledge": 9,
     "kv": 6,

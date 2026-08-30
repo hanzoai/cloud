@@ -411,6 +411,41 @@ func init() {
 		Example:  json.RawMessage(`{"q":"language:go raft","limit":5}`),
 		Response: json.RawMessage(`{"repos":[{"full_name":"hashicorp/raft","stars":8000,"language":"Go"}],"count":1}`),
 	})
+	zip.Describe("POST /v1/integrations/linear/claim", zip.Doc{
+		Description: "Binds the caller's Linear organization to the org and seals the\nwebhook secret. The organization is READ from the caller's own key, never taken\nfrom the body: a person can only bind an organization they are a member of. An\norganization another org already holds is refused.",
+		Fields: map[string]string{
+			"linearClaimIn.secret":        "Secret is the signing secret configured on the webhook in Linear. Claiming\nagain with a new value rotates it.",
+			"linearClaimOut.name":         "Name is the organization's URL key.",
+			"linearClaimOut.organization": "Organization is the Linear organization id now bound to this org.",
+			"linearClaimOut.path":         "Path is the address to configure in Linear, on this deployment's origin.",
+		},
+		Example:  json.RawMessage(`{"secret":"whsec_…"}`),
+		Response: json.RawMessage(`{"organization":"6f0b…","name":"acme","path":"/v1/integrations/linear/webhook"}`),
+	})
+	zip.Describe("POST /v1/integrations/linear/comments", zip.Doc{
+		Description: "Posts a comment on a Linear issue with the caller's own key, so it\ncarries their name. This is the op an agent is offered when it should answer in\nLinear rather than in chat.",
+		Fields: map[string]string{
+			"linearCommentIn.body":  "Body is the comment, Markdown.",
+			"linearCommentIn.issue": "Issue is the issue's identifier (ENG-123) or its id.",
+			"linearCommentOut.id":   "ID is the comment's id in Linear.",
+			"linearCommentOut.url":  "URL is the comment's address in Linear.",
+		},
+		Example:  json.RawMessage(`{"issue":"ENG-123","body":"Reproduced on main; fix in #482."}`),
+		Response: json.RawMessage(`{"id":"c0f1…","url":"https://linear.app/acme/issue/ENG-123#comment-c0f1"}`),
+	})
+	zip.Describe("POST /v1/integrations/linear/issues/backfill", zip.Doc{
+		Description: "Seeds the native todo with the EXISTING Linear issues the\ncaller's key can see (default state=open); the webhook keeps them live\nthereafter. Synchronous and bounded, idempotent by ExtRef.",
+		Fields: map[string]string{
+			"linearBackfillIn.state":         "State is the set of issues to walk: \"open\" (the default), \"closed\" or \"all\".",
+			"linearBackfillResult.created":   "Created is how many native issues this pass created.",
+			"linearBackfillResult.failed":    "Failed is how many issues errored; the pass continues past each.",
+			"linearBackfillResult.issues":    "Issues is how many Linear issues were seen.",
+			"linearBackfillResult.truncated": "Truncated is set when the time budget or the issue cap stopped the pass early.\nRe-run to continue — the mirror is idempotent by ExtRef, so nothing duplicates.",
+			"linearBackfillResult.updated":   "Updated is how many existing native issues this pass refreshed.",
+		},
+		Example:  json.RawMessage(`{"state":"all"}`),
+		Response: json.RawMessage(`{"issues":430,"created":410,"updated":20,"failed":0}`),
+	})
 	zip.Describe("POST /v1/integrations/telegram/connect", zip.Doc{
 		Description: "Mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
 		Fields: map[string]string{

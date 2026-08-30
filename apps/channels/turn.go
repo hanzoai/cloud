@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -236,7 +235,7 @@ func answer(ctx context.Context, s *cloud.Service[state], org string, m Message)
 	}
 
 	run, err := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](ctx, "agents", plane.AgentsRunOnBehalf,
-		&plane.RunOnBehalfIn{Org: org, Subject: who.Subject, Ref: agentFor(m.Channel), Input: m.Text, Model: who.Model})
+		&plane.RunOnBehalfIn{Org: org, Subject: who.Subject, Ref: agentFor(ctx, s.State.store, org, m), Input: m.Text, Model: who.Model})
 	if err != nil {
 		s.Log.Error("channels: agent run", "channel", m.Channel, "org", org, "err", err) // never a token
 		return "The agent hit an error handling that. This is on our side — please try again.", false, "", err
@@ -266,14 +265,4 @@ func answer(ctx context.Context, s *cloud.Service[state], org string, m Message)
 		return "(the agent returned an empty response)", false, run.RunID, errors.New("empty output")
 	}
 	return run.Output, false, run.RunID, nil
-}
-
-// agentFor names the agent a channel's turns run. One agent for every channel
-// unless a deployment says otherwise, because the answer should not depend on
-// which app someone happened to open.
-func agentFor(channel string) string {
-	if v := strings.TrimSpace(os.Getenv(strings.ToUpper(channel) + "_AGENT_REF")); v != "" {
-		return v
-	}
-	return "hanzo"
 }

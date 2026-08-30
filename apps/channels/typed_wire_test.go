@@ -69,8 +69,8 @@ func channelOps(t *testing.T) (served map[string]bool, typed map[string]*openapi
 // surface, so a stale reason cannot hide behind a route that no longer exists.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	served, typed := channelOps(t)
-	if len(served) != 7 {
-		t.Fatalf("channels serves %d operations, not the 7 these ledgers know: %s", len(served), sortedOps(served))
+	if len(served) != 9 {
+		t.Fatalf("channels serves %d operations, not the 9 these ledgers know: %s", len(served), sortedOps(served))
 	}
 	var untyped []string
 	for key := range served {
@@ -109,8 +109,8 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // the state this whole subsystem was in.
 func TestEveryTypedOpIsDescribed(t *testing.T) {
 	_, typed := channelOps(t)
-	if len(typed) != 6 {
-		t.Fatalf("the registry carries %d operations, want 6", len(typed))
+	if len(typed) != 8 {
+		t.Fatalf("the registry carries %d operations, want 8", len(typed))
 	}
 	for key, op := range typed {
 		if strings.TrimSpace(op.Description) == "" {

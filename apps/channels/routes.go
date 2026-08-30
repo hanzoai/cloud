@@ -75,6 +75,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 	zip.Post(ch, "/pairing/approve", o.pairingApprove)
 	zip.Get(ch, "/allowlist", o.allowlistGet)
 	zip.Put(ch, "/allowlist", o.allowlistPut)
+	zip.Get(ch, "/agent", o.agentGet)
+	zip.Put(ch, "/agent", o.agentPut)
 
 	// UNTYPED BY DESIGN — send has TWO independent blockers, both wire facts.
 	//

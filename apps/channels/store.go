@@ -144,6 +144,17 @@ CREATE TABLE IF NOT EXISTS channel_send (
 -- does. Without it a stranger the org never approved left behind a permanent
 -- reply target, since an unapproved pairing lapses and nothing else here ever
 -- deletes a route.
+-- Which agent answers: room_id '' is the transport's default for the org, a
+-- room row wins over it (agent.go). Absent means the built-in agent.
+CREATE TABLE IF NOT EXISTS channel_agent (
+  org        TEXT NOT NULL,
+  channel    TEXT NOT NULL,
+  room_id    TEXT NOT NULL DEFAULT '',
+  agent      TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (org, channel, room_id)
+);
+
 CREATE TABLE IF NOT EXISTS channel_route (
   org        TEXT NOT NULL,
   channel    TEXT NOT NULL,

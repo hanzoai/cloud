@@ -1095,6 +1095,144 @@
         "x-tool": true
       }
     },
+    "/v1/integrations/linear/claim": {
+      "post": {
+        "operationId": "post_integrations_linear_claim",
+        "summary": "Binds the caller's Linear organization to the org and seals the webhook secret.",
+        "description": "Binds the caller's Linear organization to the org and seals the\nwebhook secret. The organization is READ from the caller's own key, never taken\nfrom the body: a person can only bind an organization they are a member of. An\norganization another org already holds is refused.",
+        "tags": [
+          "integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "secret": "whsec_…"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/linearClaimIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "name": "acme",
+                  "organization": "6f0b…",
+                  "path": "/v1/integrations/linear/webhook"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/linearClaimOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/integrations/linear/comments": {
+      "post": {
+        "operationId": "post_integrations_linear_comments",
+        "summary": "Posts a comment on a Linear issue with the caller's own key, so it carries their name.",
+        "description": "Posts a comment on a Linear issue with the caller's own key, so it\ncarries their name. This is the op an agent is offered when it should answer in\nLinear rather than in chat.",
+        "tags": [
+          "integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Reproduced on main; fix in #482.",
+                "issue": "ENG-123"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/linearCommentIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "c0f1…",
+                  "url": "https://linear.app/acme/issue/ENG-123#comment-c0f1"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/linearCommentOut"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/integrations/linear/issues/backfill": {
+      "post": {
+        "operationId": "post_integrations_linear_issues_backfill",
+        "summary": "Seeds the native todo with the EXISTING Linear issues the caller's key can see (default state=open); the webhook keeps them live thereafter.",
+        "description": "Seeds the native todo with the EXISTING Linear issues the\ncaller's key can see (default state=open); the webhook keeps them live\nthereafter. Synchronous and bounded, idempotent by ExtRef.",
+        "tags": [
+          "integrations"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "state": "all"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/linearBackfillIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created": 410,
+                  "failed": 0,
+                  "issues": 430,
+                  "updated": 20
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/linearBackfillResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/integrations/linear/webhook": {
+      "post": {
+        "operationId": "post_integrations_linear_webhook",
+        "summary": "Linear webhook",
+        "description": "The address Linear delivers Issue and Comment events to. An issue event is mirrored into the native todo — idempotently by identifier, so ENG-123 is one row however many times it is edited, moved or closed — and every issue and comment event is handed to the automations engine as a verified trigger, which is how an org runs an agent when an issue is assigned to it or a comment mentions it. A remove is never propagated: the native side is canonical.\n\nIt answers a benign 200 for what it does not act on — an unknown organization, other event types — so Linear does not retry-storm. A bad signature and a delivery older than a minute are 401; only a sink failure is 502.\n\nThe delivery names its Linear organization; that organization's own webhook secret — sealed at /v1/integrations/linear/claim — verifies the HMAC over the raw body, so the tenant is the organization the signature proves, never a header.\n\nThe caller here is the PLATFORM, not a Hanzo tenant, so there is no bearer and no principal. The signature check IS the authentication, and it fails closed. The tenant is never read from the payload either: it is resolved from the verified platform identifier through the connection map, so an event from a workspace nobody connected does nothing. Refusals are written with their own status rather than being flattened to a 500, so a rejected signature reads as 401 and a malformed body as 400.",
+        "tags": [
+          "integrations"
+        ],
+        "x-public": true
+      }
+    },
     "/v1/integrations/openrouter/webhook": {
       "post": {
         "operationId": "post_integrations_openrouter_webhook",
@@ -2342,6 +2480,92 @@
               "$ref": "#/components/schemas/gitlabProjectView"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "linearBackfillIn": {
+        "properties": {
+          "state": {
+            "description": "State is the set of issues to walk: \"open\" (the default), \"closed\" or \"all\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "linearBackfillResult": {
+        "properties": {
+          "created": {
+            "description": "Created is how many native issues this pass created.",
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Failed is how many issues errored; the pass continues past each.",
+            "type": "integer"
+          },
+          "issues": {
+            "description": "Issues is how many Linear issues were seen.",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated is set when the time budget or the issue cap stopped the pass early.\nRe-run to continue — the mirror is idempotent by ExtRef, so nothing duplicates.",
+            "type": "boolean"
+          },
+          "updated": {
+            "description": "Updated is how many existing native issues this pass refreshed.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "linearClaimIn": {
+        "properties": {
+          "secret": {
+            "description": "Secret is the signing secret configured on the webhook in Linear. Claiming\nagain with a new value rotates it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "linearClaimOut": {
+        "properties": {
+          "name": {
+            "description": "Name is the organization's URL key.",
+            "type": "string"
+          },
+          "organization": {
+            "description": "Organization is the Linear organization id now bound to this org.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the address to configure in Linear, on this deployment's origin.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "linearCommentIn": {
+        "properties": {
+          "body": {
+            "description": "Body is the comment, Markdown.",
+            "type": "string"
+          },
+          "issue": {
+            "description": "Issue is the issue's identifier (ENG-123) or its id.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "linearCommentOut": {
+        "properties": {
+          "id": {
+            "description": "ID is the comment's id in Linear.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the comment's address in Linear.",
+            "type": "string"
           }
         },
         "type": "object"

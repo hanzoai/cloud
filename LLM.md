@@ -7611,3 +7611,50 @@ So: any backup, restore, or inspection tool for this data must link libsqlcipher
 via cgo. And a backup must copy the `{db, -wal, -shm}` triple together — the
 `.db` alone is missing whatever the WAL holds. Waiting for the WALs to empty is
 not a step; they do not empty.
+
+## Linear: one connector, and the org half built on it
+
+The Linear provider is the user-scoped API-key connector in
+`apps/integrations/saas.go` — a person enrols their own key under
+`/v1/integrations/connectors/linear`. There is deliberately no second, org-plane
+Linear provider: the registry refuses a duplicate id, and the two custody planes
+are disjoint by construction (`integrations.Use` asserts it at boot).
+
+What the org needs from Linear is the webhook, and `linear.go` builds it on the
+person's key rather than beside it:
+
+- `POST /v1/integrations/linear/claim {secret}` reads `organization { id }` with
+  the CALLER's key — so a person can bind only an organization they belong to —
+  writes the org-plane row `(org, provider=linear, external_id=<organization>)`
+  that `OrgForExternalID` resolves, and seals the webhook secret under
+  `kmsPath(org,"linear")/webhook_secret`. An organization another org holds is
+  refused by `store.write` (errBound → 409). Claiming again rotates the secret.
+- `POST /v1/integrations/linear/webhook` (raw, public at the JWT layer) reads ONE
+  field before trusting anything — `organizationId`, to pick which org's secret to
+  verify with — then HMAC-verifies the raw bytes with that secret, refuses a
+  delivery older than a minute (`webhookTimestamp`), mirrors an Issue into the
+  native todo (`ExtRef linear:<identifier>`, `Repo` = team key, state folded to
+  open/closed) and fires `linear` automation triggers (`issue.<action>`,
+  `comment.<action>`). A remove is never propagated.
+- `POST /v1/integrations/linear/comments` and `/issues/backfill` spend the caller's
+  key, so a comment an agent posts carries the person's name.
+
+The ledger moved by exactly these routes: `ops_projection_test.go` (3 typed + 1
+raw), `typed_wire_test.go` (the raw webhook), `openapi/floor.json` (+4 paths/ops),
+`openapi/untyped.json` (+1). No skill is generated for Linear and none should be:
+`plugin/gen-skills` clusters on paths that carry a GET, and every Linear route is a
+POST.
+
+## Channels: which agent answers is the org's row, not a deployment variable
+
+`apps/channels/turn.go` used to pick the answering agent from
+`<CHANNEL>_AGENT_REF` in the process environment — one agent for every org on a
+transport, and "several agents in Slack" a redeploy. It is a row now
+(`apps/channels/agent.go`, table `channel_agent (org, channel, room_id, agent)`):
+the room's binding wins, else the transport's default for the org (room_id ''),
+else the built-in `hanzo`. A binding to `hanzo` is not stored, because it answers
+the same as no row. `GET /v1/channels/agent?channel=slack` reads it,
+`PUT /v1/channels/agent {channel, default?, rooms?, unbind?}` edits it (org
+admin), and the room ids are the platform's own — the same value the envelope
+carries. The agent is named by its ref, the name given at `POST /v1/agents`.
+The env override is gone; nothing in universe set it.
