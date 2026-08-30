@@ -244,6 +244,22 @@ func newHandler(rawURL string) (http.Handler, error) {
 		base(r)              // sets scheme/host to target; path unchanged
 		r.Host = target.Host // upstream vhost, not api.hanzo.ai
 	}
+	// An unreachable upstream has to SAY SO. The default ErrorHandler answers 502
+	// with an EMPTY body, so a retired Deployment behind this fallback reads as
+	// `{"detail":"","status":502}` on every /v1/o11y/* request and on every error
+	// envelope /v1/event relays here — a fleet whose error ingest is down, saying
+	// nothing about why, which is the one failure that also hides every other one.
+	//
+	// The target is named to the LOG and not to the caller: it is an internal
+	// address, and the caller can act on "unreachable" without learning the
+	// topology.
+	log := luxlog.Default().New("subsystem", "o11y-runtime")
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Warn("o11y upstream unreachable", "target", target.Host, "method", r.Method, "path", r.URL.Path, "err", err)
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"detail":"the o11y runtime is not reachable","status":502,"title":"Bad Gateway","type":"about:blank"}`))
+	}
 	return proxy, nil
 }
 
@@ -401,7 +417,13 @@ func mountRuntime(deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "o11y-runtime")
 
 	if h, err := buildEmbeddedHandler(deps); err != nil {
-		log.Warn("embedded o11y init failed; falling back to reverse proxy", "err", err)
+		// ERROR, not Warn. The fallback below reverse-proxies a Deployment this
+		// design expects to RETIRE, so when the embed does not start the usual
+		// outcome is not a slower o11y — it is no o11y, and no error ingest
+		// either, because /v1/event relays its Sentry envelopes here. This line
+		// is the only statement of the root cause; everything downstream can say
+		// no more than "unreachable".
+		log.Error("embedded o11y init failed; falling back to reverse proxy — telemetry and error ingest depend on that upstream still existing", "err", err)
 	} else if h != nil {
 		gh := gate(h)
 		runtimeHandler = gh
