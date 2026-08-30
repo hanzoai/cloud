@@ -166,7 +166,7 @@ func surface(t *testing.T, root string) *zip.App {
 	t.Helper()
 	t.Setenv("LUX_EXPLORE", root)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Brand: "lux", Env: "mainnet"}); err != nil {
+	if err := Use(app, cloud.Deps{Brand: "lux", Env: "mainnet"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	return app
@@ -317,7 +317,7 @@ func TestNoIndexerIsUnconfigured(t *testing.T) {
 func TestNoRegistryIsUnconfigured(t *testing.T) {
 	t.Setenv("LUX_EXPLORE", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Brand: "lux", Env: "devnet"}); err != nil {
+	if err := Use(app, cloud.Deps{Brand: "lux", Env: "devnet"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	_, got := get[Roster](t, app, "/v1/market/chains")
