@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "kms_config",
       "path": "kms_config/SKILL.md",
       "service": "kms",
-      "sha256": "38fe836c03df5d5f95e436816dfa57bdebf7f27115bc1c8a461ded158c0a86fb"
+      "sha256": "0155bca1d4bcd66bf99c5a93dab15e5eeeefaa1434effc480cdc9bdcb79e15fe"
     },
     {
       "description": "Read kms health: Reports whether this broker can actually serve secrets..",
       "name": "kms_health",
       "path": "kms_health/SKILL.md",
       "service": "kms",
-      "sha256": "26334a3446e39817a292c518667478918d01a226ab36fb4c2712cabdeb18f386"
+      "sha256": "705f7e7dcafca726136dc229d7c755adbdd61205b682a7b2824078e221d843b3"
     },
     {
       "description": "Read kms secrets: Lists the secrets your org holds, without their values., Reads one secret's value from your org..",
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "1f4c779cd0894206d2e17deb4771ecfbf4495d1b54322a1c5e49190716d2600e"
+      "sha256": "caacc02bcd7f49d4fb8608064a64ff7f961b3e310bf331548fc245d01fcf6bb6"
     }
   ],
   "spec_version": "8.0.0"

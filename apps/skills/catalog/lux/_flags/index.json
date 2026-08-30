@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "flags_activity",
       "path": "flags_activity/SKILL.md",
       "service": "flags",
-      "sha256": "3a99b627ddca2df548523d0cb03f90e4bb66619a9121dbfb4efa5e0a88ee22c2"
+      "sha256": "9abd2e23dfbb409185cb3cfe8b4eff60393b8ab6f2152d89faf1fa4ff9dc6c6a"
     },
     {
       "description": "Read flags defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
       "name": "flags_defs",
       "path": "flags_defs/SKILL.md",
       "service": "flags",
-      "sha256": "8bfe7630d81a276fac0bc25daed96d7669a584f1f41fd91a5805df3c53673f31"
+      "sha256": "ab0aeab46cdf23c363e242d8ea0d2aa7cabb372917ae1b3a0dab5bdeca9e6dab"
     },
     {
       "description": "Read flags health: Health reports that the flag engine is serving..",
       "name": "flags_health",
       "path": "flags_health/SKILL.md",
       "service": "flags",
-      "sha256": "c4ea4963ba6b285e8435613ea606304034d3df7d34d31eb5efe3e3b9001cf241"
+      "sha256": "c6d3d95db94a33b4a9e1f9e67680b75e06876926074414f5d682ec786d0f215c"
     }
   ],
   "spec_version": "8.0.0"

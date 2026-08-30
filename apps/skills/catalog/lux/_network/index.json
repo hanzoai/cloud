@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "network_network",
       "path": "network_network/SKILL.md",
       "service": "network",
-      "sha256": "db04539f8f1f88db2fe838c2f98906d617430ff8db6dfeb31b62d8267018b7e6"
+      "sha256": "e66965c07f8e2f7ee51340488a2ee2ca46e1c3ee68c686330cdaae49bee4ee28"
     },
     {
       "description": "Read network routers: Returns the Zero Trust routers the caller's org owns..",
       "name": "network_routers",
       "path": "network_routers/SKILL.md",
       "service": "network",
-      "sha256": "dac2d3f117f609763cda59b044682dddb22f7b61a49606cceec9511095c311b5"
+      "sha256": "5cf24f3c056701ef6b7d156a2d193676abf20668f2487f6ef338f5e96edc6124"
     },
     {
       "description": "Read network services: Returns the Zero Trust edge services the caller's org owns..",
       "name": "network_services",
       "path": "network_services/SKILL.md",
       "service": "network",
-      "sha256": "634cf4748a290b2a89090ebbbf7f6179e18d34059d2b3774527686c9827702eb"
+      "sha256": "a7ab90898463ceded7c62bdce8fb7df74cd52fe674e16fe2e011370746eb335a"
     }
   ],
   "spec_version": "8.0.0"

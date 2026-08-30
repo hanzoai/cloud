@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "leaderboard_activity",
       "path": "leaderboard_activity/SKILL.md",
       "service": "leaderboard",
-      "sha256": "921eee2da301541e93744f58d975f967df11d00e2c69c0b8956a2e177a5966c7"
+      "sha256": "179cfbab6836255a3ee7daec1bbb0c4bb534e24a692a419721db28fbfad9aaa0"
     },
     {
       "description": "Read leaderboard leaderboard: Leaderboard ranks AI usage over a window, either the users of the caller's own org or organizations against each other, and always reports the caller's own standing even when it falls outside the returned page..",
       "name": "leaderboard_leaderboard",
       "path": "leaderboard_leaderboard/SKILL.md",
       "service": "leaderboard",
-      "sha256": "c95790fc9d93c593132c987cf8aad95ae685868502a6bf5e69b158cbd0d3fa94"
+      "sha256": "bd6c146368005a848d133482228cc990e6bf3feba4ef9cee4262deebdacdfa1c"
     },
     {
       "description": "Read leaderboard optin: Returns the caller's own public-listing preference and their org's, each with whether the caller may change it..",
       "name": "leaderboard_optin",
       "path": "leaderboard_optin/SKILL.md",
       "service": "leaderboard",
-      "sha256": "433af0cd0e7fdc508531d7449f2b7422ecf865a04a0374e6aafc49f34a6a4a68"
+      "sha256": "c01f21a9a4a7a350dde3a138f3f7157e33ffbe842cf3b9d1f77f47c510fee03c"
     }
   ],
   "spec_version": "8.0.0"

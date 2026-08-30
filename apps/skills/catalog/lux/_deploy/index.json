@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 12,
   "skills": [
     {
@@ -11,84 +16,84 @@
       "name": "deploy_account",
       "path": "deploy_account/SKILL.md",
       "service": "deploy",
-      "sha256": "8f0d9e5af14bdbe33b7a3cfaf27c2db7d07326a40f25f37eb971fb0a30f1e857"
+      "sha256": "f23d5f2bfa3f0ec1f29e6894280e0489d54f6ace4884bcce64b9e65daca4224c"
     },
     {
       "description": "Read deploy applications: Returns the fleet as an argocd ApplicationList: one projected Application per operator App CR, carrying the image tag the CR DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled health, and the sync verdict those two produce (de",
       "name": "deploy_applications",
       "path": "deploy_applications/SKILL.md",
       "service": "deploy",
-      "sha256": "95e0ae97c0634f5a8e13091bfd58a97e1e49c4f16d73957937b234d47abcf47c"
+      "sha256": "f61be2bb8014f7b07e4b72dd425167cf0b0122d693da6720cbd3faec955cfabc"
     },
     {
       "description": "Read deploy callback: Finish the sign-in round trip and mint the console session.",
       "name": "deploy_callback",
       "path": "deploy_callback/SKILL.md",
       "service": "deploy",
-      "sha256": "c7582311e2b608f7713ab52da6ab9d146369a6f1815a5cfde181f29bd7ce4a99"
+      "sha256": "0ae0e5627ca45da8b03bc5ec31e4782228e9566d6f61ff5789dba36a0a8234eb"
     },
     {
       "description": "Read deploy clusters: Returns the argocd ClusterList of the destinations the caller's applications reconcile into: one entry per distinct destination server, carrying the count of applications reconciling into it..",
       "name": "deploy_clusters",
       "path": "deploy_clusters/SKILL.md",
       "service": "deploy",
-      "sha256": "6ea9f22f8d6bc61f31b488db9fff74415a883b793b1195221eea055add6ad0db"
+      "sha256": "71c1da40b457e5ccab21fca320a934fa87dd395141e2c63359a414c970c828df"
     },
     {
       "description": "Read deploy gitops: Lists every Lux CD Application in the cluster: the git source each one polls, the commit it last APPLIED, how its last sync operation ended, and its recent deploy history — newest deploy first, ordered by namespace then name..",
       "name": "deploy_gitops",
       "path": "deploy_gitops/SKILL.md",
       "service": "deploy",
-      "sha256": "8e2ddd9c63bbc5e5e20d4d6c62c87da115e4b6174f3643d40697f5b2120e4a51"
+      "sha256": "f2f45a873dd4e6eaa24ad35ca63e6e5997843f02a88f10c7c3a1c616cd986d57"
     },
     {
       "description": "Read deploy health: Health reports whether this deployment can observe the delivery plane..",
       "name": "deploy_health",
       "path": "deploy_health/SKILL.md",
       "service": "deploy",
-      "sha256": "6c014f2687d65d5084f39e62df969ea22bb037e48cb398d36a3df3a092fff867"
+      "sha256": "3d270c3acf7d3bafea6b2c22c01b74b0888942ff1d465682ba6c937537335951"
     },
     {
       "description": "Read deploy login: Start the sign-in round trip for this console.",
       "name": "deploy_login",
       "path": "deploy_login/SKILL.md",
       "service": "deploy",
-      "sha256": "f6483be5b2cc775f4b09d3e62153e6fc8f6dbc25f2e5a0aeadfda49ac04d21fc"
+      "sha256": "a53b8738c6d9eaf205d1e7f44e36d25a5bc9fb65ec7779b89d00fc0aef6fbd11"
     },
     {
       "description": "Read deploy projects: Returns the argocd AppProjectList this console groups and filters applications by..",
       "name": "deploy_projects",
       "path": "deploy_projects/SKILL.md",
       "service": "deploy",
-      "sha256": "6dcb02ec606aec178cd13336b50245b712b7855dc0aa1b3199a9965d51fb41f9"
+      "sha256": "ba090a45232ca177e963b8faf154b210b8e297de1fb09d1b1c8b767ddb5432b5"
     },
     {
       "description": "Read deploy session: Answers \"is this browser signed in, and if not where does it sign in?\" — the dashboard SPA's bootstrap question, and the only route on this plane that answers for an anonymous caller..",
       "name": "deploy_session",
       "path": "deploy_session/SKILL.md",
       "service": "deploy",
-      "sha256": "1564564880678ded0d18ca1fd088b23b198492c800e2896f37c908d21c8c29d5"
+      "sha256": "a7b6356b1c2d8750ade63f79568bf4caf55c4b453ce6b8dbd2d1bc75a1a76e57"
     },
     {
       "description": "Read deploy settings: Returns the argocd AuthSettings object the dashboard SPA awaits before its first render..",
       "name": "deploy_settings",
       "path": "deploy_settings/SKILL.md",
       "service": "deploy",
-      "sha256": "56979cb220969f720290cecc83eaa8e93da774777df19bcdc75e43c5c794cccf"
+      "sha256": "59bac1860c785072066db82fdfaad1eeb231d7de3d838e3d0c078f4c54609709"
     },
     {
       "description": "Read deploy stream: Live application fleet updates as Server-Sent Events, Live resource tree for one application, as Server-Sent Events.",
       "name": "deploy_stream",
       "path": "deploy_stream/SKILL.md",
       "service": "deploy",
-      "sha256": "5f93cfcbc6525d4473a6d77c3ff33ba1d33b4b06ab78af7a2d052302c6ef3a1c"
+      "sha256": "1dbf95b4a93aed3141c63d672cfae860468e968c17c7e6296cd22678c39e439f"
     },
     {
       "description": "Read deploy version: Returns the argocd VersionMessage the dashboard SPA reads at bootstrap..",
       "name": "deploy_version",
       "path": "deploy_version/SKILL.md",
       "service": "deploy",
-      "sha256": "ee1121a1320e443251a4ce2de3da72e752bee9543931afc2422d6516257275cc"
+      "sha256": "451f630905b6d9a3b1c1598611217ed586f89aa6ab64f8a51447e1d1db47a015"
     }
   ],
   "spec_version": "8.0.0"

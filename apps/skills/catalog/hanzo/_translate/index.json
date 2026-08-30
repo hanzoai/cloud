@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 1,
   "skills": [
     {
@@ -11,7 +16,7 @@
       "name": "translate_memory",
       "path": "translate_memory/SKILL.md",
       "service": "translate",
-      "sha256": "9669e056f51005c291c927f8b6ea4229e40281322020d1625757667c21f3956f"
+      "sha256": "b67dbf6998759b1e4c415b6edb079fe74ddf4fcc485f1535b6d4eec4919bb612"
     }
   ],
   "spec_version": "8.0.0"

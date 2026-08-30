@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 5,
   "skills": [
     {
@@ -11,35 +16,35 @@
       "name": "account_appearance",
       "path": "account_appearance/SKILL.md",
       "service": "account",
-      "sha256": "5334b0029bff998080bb242cc551cac7990d33355b6922e14fc3bd0adb3a68d7"
+      "sha256": "425fff2cba701a68dc08770250e6f80409be8f99f77e8ae73a1ef3e4b1166690"
     },
     {
       "description": "Read account avatar: Fetch a profile photo.",
       "name": "account_avatar",
       "path": "account_avatar/SKILL.md",
       "service": "account",
-      "sha256": "920f52cdb856e9c9ceab6e0dae2a620c4f3a8ba8e2bc904a1160122764b55604"
+      "sha256": "f1de6ea2cbe52013db131015c1b690207e792324c67f0799db07d43d978d0edd"
     },
     {
       "description": "Read account csrf: IssueCSRFToken mints the anti-forgery token a browser echoes as X-CSRF-Token on every change it asks for..",
       "name": "account_csrf",
       "path": "account_csrf/SKILL.md",
       "service": "account",
-      "sha256": "a4dce7096466c5f78712b8701b34101136d92e1055de3f6d4cf42799a607068c"
+      "sha256": "ea9b58732234d4cc9af11f6ebba04c611991303f3087573efde1cf8fc0b1c1ad"
     },
     {
       "description": "Read account embed: Reports whether one of this brand's shared embedded apps (cms, erp, help) may be framed by the caller and is actually running, so a console module can choose between the embed and the provision panel..",
       "name": "account_embed",
       "path": "account_embed/SKILL.md",
       "service": "account",
-      "sha256": "b970550f567bf2e88310810e90eaa5856fc61b4955b2ea9947034bfd2b86a30b"
+      "sha256": "21227ce7ff5e87204448111b511150035133c8ba2ad5deb684bd380be81bf363"
     },
     {
       "description": "Read account keys: Returns the caller's own API keys — every type they hold, read AUTHORITATIVELY from IAM rather than from the session claim, which lags a key minted moments ago..",
       "name": "account_keys",
       "path": "account_keys/SKILL.md",
       "service": "account",
-      "sha256": "74dd86a59d84c3231597b2bc6d4180f7fa8a326cdc713df89751a3e402848f79"
+      "sha256": "40779c338b5448d4a5699be510ec299bfa1ed83cf2b485d6774eed1ac5266b67"
     }
   ],
   "spec_version": "8.0.0"

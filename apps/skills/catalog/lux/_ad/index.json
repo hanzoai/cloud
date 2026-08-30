@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "ad_campaigns",
       "path": "ad_campaigns/SKILL.md",
       "service": "ad",
-      "sha256": "8d848cd154650e773ee5abc72e179db9a0cb4e2da1fe652f3a6e2e84eacb1eb1"
+      "sha256": "860ad01a3b5238bc3d752d89c4dfaff21b69b2895ca22c50a213aa2ca10b96da"
     },
     {
       "description": "Read ad summary: Rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them..",
       "name": "ad_summary",
       "path": "ad_summary/SKILL.md",
       "service": "ad",
-      "sha256": "fd0d9ab85207a7cd5d5bbf7dfab21cb6663bb0cead9faf70520dfed19ac01428"
+      "sha256": "a0172e42979ce45a8efc4c9719a6749808e089e4db19fd9e226673bb502a7466"
     }
   ],
   "spec_version": "8.0.0"

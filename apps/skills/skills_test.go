@@ -55,11 +55,73 @@ type catalog struct {
 	Brand   string `json:"brand"`
 	BaseURL string `json:"base_url"`
 	Issuer  string `json:"issuer"`
-	Skills  []struct {
+	MCP     struct {
+		Description string `json:"description"`
+		Method      string `json:"method"`
+		URL         string `json:"url"`
+	} `json:"mcp"`
+	Skills []struct {
 		Name   string `json:"name"`
 		Path   string `json:"path"`
 		Sha256 string `json:"sha256"`
 	} `json:"skills"`
+}
+
+// The catalogue is deliberately the READ surface — one skill per GET, per
+// product — so two halves of what an agent can do are absent from it by
+// construction: every operation that is not a GET, and every tool that exists
+// only for a caller (a connected connector, the org's own external MCP server,
+// its functions, its agents), which is not a value any build-time projection
+// can hold.
+//
+// Both are at one address, and an agent that read the catalogue and hit the
+// read-only wall had nowhere to go. This asserts the index names it, per brand,
+// on the brand's OWN host — a Hanzo URL in the Lux catalogue is the white-label
+// leak [rebrand] exists to stop, and it would arrive here rather than in a
+// skill's prose.
+func TestTheIndexNamesTheAgentDoor(t *testing.T) {
+	sub, err := fs.Sub(catalogFS, "catalog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	brands, err := fs.ReadDir(sub, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, b := range brands {
+		if !b.IsDir() {
+			continue
+		}
+		raw, err := fs.ReadFile(sub, path.Join(b.Name(), "index.json"))
+		if err != nil {
+			t.Fatalf("%s: index.json: %v", b.Name(), err)
+		}
+		var doc catalog
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("%s: %v", b.Name(), err)
+		}
+		seen++
+		if doc.MCP.URL != doc.BaseURL+"/v1/mcp" {
+			t.Errorf("%s names the agent door at %q; want %q. The catalogue's read-only "+
+				"surface has no onward pointer without it.", b.Name(), doc.MCP.URL, doc.BaseURL+"/v1/mcp")
+		}
+		if doc.MCP.Method != "POST" {
+			t.Errorf("%s says the door takes %q", b.Name(), doc.MCP.Method)
+		}
+		// The sentence is the operation's own, lifted from the published
+		// contract — so an empty one means the contract stopped describing it
+		// and the generator wrote a door nobody can use.
+		if strings.TrimSpace(doc.MCP.Description) == "" {
+			t.Errorf("%s names the door and says nothing about it", b.Name())
+		}
+		if b.Name() != "hanzo" && strings.Contains(strings.ToLower(doc.MCP.Description), "hanzo") {
+			t.Errorf("%s carries Hanzo prose on its agent door: %q", b.Name(), doc.MCP.Description)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no brand catalogue was read, so this test asserted nothing")
+	}
 }
 
 // TestServeIndex proves the catalogue is served with the right

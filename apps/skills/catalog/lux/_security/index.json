@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "security_findings",
       "path": "security_findings/SKILL.md",
       "service": "security",
-      "sha256": "231dca7cfaebe984f94d2f8e61277f8a6bc8ee86bb02690a7afa804085adfc41"
+      "sha256": "6c7099d2971e914a84f4918e2496d91fdb65ba088764dd9a0bd05301a99817a1"
     },
     {
       "description": "Read security health: Reports that the scanning subsystem is serving and how many secret-detection rules the engine holds..",
       "name": "security_health",
       "path": "security_health/SKILL.md",
       "service": "security",
-      "sha256": "f580c676273b64409c0db67af0eee04c52090446ab5a00b5e24ab7f4798c3f21"
+      "sha256": "43c5671855bc4c1b39a7164a17c67dcdf69bb4ea0142bbaf89c25938b566a528"
     },
     {
       "description": "Read security rules: Is the secret-detection catalog the engine scans with..",
       "name": "security_rules",
       "path": "security_rules/SKILL.md",
       "service": "security",
-      "sha256": "8e51c2f4c6b74892e9c9a670a2532b2f77752518176ab90a26bd20132c6a4b24"
+      "sha256": "e316aa38ef87765f40363606facfee488a0e0311ee0f2be25d9951f23cb4628b"
     },
     {
       "description": "Read security scans: Is the org's scan history, newest first, each as the same summary the submission answered — files read, findings fired, tally by severity., Returns one scan together with every finding on it, so the detail view is one round-trip rather than a list call per sc",
       "name": "security_scans",
       "path": "security_scans/SKILL.md",
       "service": "security",
-      "sha256": "8775b9ae6559966534465d2458b1eb7d0859db9351d5aaadf4d1937d50db013b"
+      "sha256": "64ecb0caa784ab14db907b49ad36dc20f52211d4bb131d66ff750723bec45faf"
     }
   ],
   "spec_version": "8.0.0"

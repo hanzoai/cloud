@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "node_connect",
       "path": "node_connect/SKILL.md",
       "service": "node",
-      "sha256": "de2a62c9f4c0e97e4d6d98f954b244c07863c269e7e5f1ede10d59ddec8bb3ff"
+      "sha256": "873ad23b4b8319f5a1af812abad1ff9a6d41023e3b1ea0924f7d8b7d4a4b36f2"
     },
     {
       "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
       "name": "node_node",
       "path": "node_node/SKILL.md",
       "service": "node",
-      "sha256": "7e5c4d11137a24d90fe8f922189a9f737c0643a402c339e43b03f830ad08a0ba"
+      "sha256": "3638499cb49f881aaeb18999841763d4949679203a254e4f88253cd3ff039283"
     }
   ],
   "spec_version": "8.0.0"

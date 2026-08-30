@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 6,
   "skills": [
     {
@@ -11,42 +16,42 @@
       "name": "visor_clusters",
       "path": "visor_clusters/SKILL.md",
       "service": "visor",
-      "sha256": "ba12633dafd3e8c5cd394f11aecf7618399bf6d8e099ca7ca826c6719cb87c86"
+      "sha256": "0c999f7ba52f4301c770fc7557f47ec85cbc16ad2395c3d93a9f08591db25f63"
     },
     {
       "description": "Read visor compute: Returns the caller org's bot machines — the kind=bot machines — each joined with the agent binding that says which cloud Agent it runs., Returns one of the caller org's bot machines with its agent binding., Regions lists the regions a machine can be launched i",
       "name": "visor_compute",
       "path": "visor_compute/SKILL.md",
       "service": "visor",
-      "sha256": "ad6f3002420a7994ec393e7f5168d54d470f8f2f71f1f412300d00aee8da28bc"
+      "sha256": "e0f903e5f1ad7ddd171fa381bb9934f2d444ce60bc5199352cbfafb2584b366b"
     },
     {
       "description": "Read visor fleet: Returns every compute unit the caller's org has, from every source, each carrying its latest utilization: agent run-targets, the BYO machines that dialed in, attached BYO clusters and Visor-provisioned machines., Returns the caller org's gpu-jobs render queue, e",
       "name": "visor_fleet",
       "path": "visor_fleet/SKILL.md",
       "service": "visor",
-      "sha256": "4bcef176ba42d1d8cf92393289c535faae9d4ab19fec9d7dc6db892270103a6c"
+      "sha256": "b25771f59a08921f5f0d0c211ad625f84177035c5624ec8ef81b1b12419b85fd"
     },
     {
       "description": "Read visor gpus: Returns one row per physical accelerator the caller's org has, derived from its real GPU machines (the size slug says how many cards a node holds) and from the accelerators BYO workers report through nvidia-smi., Is an HONEST empty surface: Visor exposes no GPU a",
       "name": "visor_gpus",
       "path": "visor_gpus/SKILL.md",
       "service": "visor",
-      "sha256": "3b29c9e9786621c1143aaea968755c93c4657fe01eee5346f8c0bdfd6dfff63f"
+      "sha256": "aa59ad98ebf3682ae91926ccbfa5894dd234410e237ff6727d40941ca2aecc3b"
     },
     {
       "description": "Read visor k8s: Lists the org's DOKS clusters (Visor, house account) folded with the org's BYO clusters — ONE fleet cluster view under the unified k8s noun., Returns one cluster's detail: node pools + worker nodes., Returns every DOKS worker node in the org's clusters as a machin",
       "name": "visor_k8s",
       "path": "visor_k8s/SKILL.md",
       "service": "visor",
-      "sha256": "c6401ede33be7dc712c9bd2a11fc42a16c1297d33358aebd963e9ff547f7ea93"
+      "sha256": "920aa12580398dca733aabcce5b54b42c202ca6161d8f6bc1e127ced3aa71fd6"
     },
     {
       "description": "Read visor machines: Returns every machine the caller's org has — Visor's registry, the live DigitalOcean droplets and the DOKS worker nodes (deduped into one union), plus the BYO machines that dialed in via `hanzo link` (provider \"byo\")., Returns every agent↔machine binding in t",
       "name": "visor_machines",
       "path": "visor_machines/SKILL.md",
       "service": "visor",
-      "sha256": "f5ce8a60c2537e01d5158b5ea0ad85e0f42589b061e98f550f88fc785516414c"
+      "sha256": "24a4875fd6660c8d3b775c10e75bc2b98d601151ba80c013a9a2593c50286bb8"
     }
   ],
   "spec_version": "8.0.0"

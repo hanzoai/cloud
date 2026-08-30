@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "content_board",
       "path": "content_board/SKILL.md",
       "service": "content",
-      "sha256": "60e935bde9e8311919dfca508e036cc5d9860fd9a77995af05f4bb985d807095"
+      "sha256": "91a70a24b38ad3579cfca1ed397205878255c140b038afb2092af86d52416ec3"
     },
     {
       "description": "Read content channels: Lists the distribution channels the caller's org has connected — the social integrations a publish can target..",
       "name": "content_channels",
       "path": "content_channels/SKILL.md",
       "service": "content",
-      "sha256": "90b576d332e9a6d0cdea34d5c616abf943a6e4196e6b454013be7f79f6e934b1"
+      "sha256": "578bea7559c6427246d8be4121d73edf61f4bf03fba7b0969cd2eff01dc8928f"
     },
     {
       "description": "Read content lifecycle: Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state..",
       "name": "content_lifecycle",
       "path": "content_lifecycle/SKILL.md",
       "service": "content",
-      "sha256": "c145aab6680d27e92ca1181458f25ea6354ea21954d525345b8618b81c101902"
+      "sha256": "79fff414fb649d44907cf003955a504346da31622d415919ba53581f0064280f"
     }
   ],
   "spec_version": "8.0.0"

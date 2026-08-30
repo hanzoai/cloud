@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 10,
   "skills": [
     {
@@ -11,70 +16,70 @@
       "name": "platform_apps",
       "path": "platform_apps/SKILL.md",
       "service": "platform",
-      "sha256": "4f4ac36699651cb766e1ce05afd1b9811cb5de513fbf669107b3fe14c7283963"
+      "sha256": "18a018a817bcdb8c04fd3190c189b6c5eca4a4cc269441fd9f76040c963ad031"
     },
     {
       "description": "Read platform builds: Returns real build records for your org..",
       "name": "platform_builds",
       "path": "platform_builds/SKILL.md",
       "service": "platform",
-      "sha256": "1fccca1bc4fc66ca991242717aaa0b4c63bd4643d4bdfa5a5d26584aa9b0d85c"
+      "sha256": "d8e32cccebb78c22f22e75da4c1a84c774799a2edc55d86bf8716d04109ad982"
     },
     {
       "description": "Read platform cd: Answers every Application the delivery plane holds..",
       "name": "platform_cd",
       "path": "platform_cd/SKILL.md",
       "service": "platform",
-      "sha256": "24b137d21036fdb6aeca15813cdef57254f3cce905af6624291e59802e900ad9"
+      "sha256": "910229d8e53779450e13d8b39d3ff69544066c257d2dc8032814e238d37c7e56"
     },
     {
       "description": "Read platform ci: Continuous integration (not wired).",
       "name": "platform_ci",
       "path": "platform_ci/SKILL.md",
       "service": "platform",
-      "sha256": "7f54777b22f6a7d9473135746d8720059267e08753e03e2e5b25cff621307832"
+      "sha256": "7e5c009a90848c3248ed4d748246a94e67538740d2848abc788098a85cbc5f83"
     },
     {
       "description": "Read platform environments: Returns your deploy targets, and what is running on each..",
       "name": "platform_environments",
       "path": "platform_environments/SKILL.md",
       "service": "platform",
-      "sha256": "f9fffe0ae1ceb29b83a0331ba38dc517b02eebffb25d67a9caf3e0d8800247cb"
+      "sha256": "fb8bfdadd2b4ecbb2b6b9b2e0fb41d14db1409b2f08a5201182bc91e15573329"
     },
     {
       "description": "Read platform fleet: Returns the platform's own service tier, and where it has drifted., Returns one platform service, resolved to production by default..",
       "name": "platform_fleet",
       "path": "platform_fleet/SKILL.md",
       "service": "platform",
-      "sha256": "358eb8b6fa154955e57414aaf94e53d4f3d5e2282066288bf71379eb0785f3db"
+      "sha256": "c66d38f4c27da95b4d53167425e73ba65d45039e604a8092c778c05ca53a8567"
     },
     {
       "description": "Read platform health: Reports whether this control plane can actually deploy anything..",
       "name": "platform_health",
       "path": "platform_health/SKILL.md",
       "service": "platform",
-      "sha256": "247219913359ffe9dbca31e3d19fb86d670793ea0fc50811f12ebc6af95b535c"
+      "sha256": "86f03978b6a637613db7bb367aef39f85134230eb4399c212fdb55686fcba381"
     },
     {
       "description": "Read platform pipelines: Returns one build-and-deploy pipeline per app, with its latest run..",
       "name": "platform_pipelines",
       "path": "platform_pipelines/SKILL.md",
       "service": "platform",
-      "sha256": "0c6b522730614bf3136883067589c839aaa81e2f29213ea8482c4817f4eddff0"
+      "sha256": "c1147c6bd44ac596bf82e777e054aa85b963ff528c23ab838b6f081705c00b50"
     },
     {
       "description": "Read platform projects: Returns your org's projects, each with how many apps live under it., Returns one project and its app count., Returns the applications in one project, with what the cluster says about them..",
       "name": "platform_projects",
       "path": "platform_projects/SKILL.md",
       "service": "platform",
-      "sha256": "24a57f67df592ed9b1e36f4038522f9c3717e094122bbca3308fca9efafcb9bb"
+      "sha256": "f396572529e0aa38ef9d5621c4ddd90c2eab379f82250a0dea25d33aa41b4d48"
     },
     {
       "description": "Read platform releases: Returns the versions that actually reached the cluster..",
       "name": "platform_releases",
       "path": "platform_releases/SKILL.md",
       "service": "platform",
-      "sha256": "6d29be3ca17cb289e1ca84bfc736d3818c0acf2ff50782f1c03ed8c53b84d7a7"
+      "sha256": "28cbab75459fc00f4058351e7dba543bf383285ac96f5e797dfd4aeb1e29e9f8"
     }
   ],
   "spec_version": "8.0.0"

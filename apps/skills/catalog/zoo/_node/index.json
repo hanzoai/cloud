@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "node_connect",
       "path": "node_connect/SKILL.md",
       "service": "node",
-      "sha256": "337ccf938ca0b69e3a4f7076a211b1dae64f93c6c1e53606f4c048a6b58a4be8"
+      "sha256": "658b00d70cb6fccd59034bf3e222813c16074ff3c3f39868e8b471c6a4e75077"
     },
     {
       "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
       "name": "node_node",
       "path": "node_node/SKILL.md",
       "service": "node",
-      "sha256": "acaf8dad364866d2c144eeff77aa7ccbfb43f0734114aa9919ae9c5e5cb3e2b7"
+      "sha256": "34d27c32d104508dc8ddf3c667851a6791f277d14266a2d39e6355c9693f6bb3"
     }
   ],
   "spec_version": "8.0.0"

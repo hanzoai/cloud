@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "code_ask",
       "path": "code_ask/SKILL.md",
       "service": "code",
-      "sha256": "d5bfd25c5a034fd18da8ff5f34f69e7e1b465bf552818d058e6e8f013fba7331"
+      "sha256": "8bb4fd9a76a57cc7f2c2d3e5dffa8dc778e2593d34c00d4de203cf64d1b2e0b7"
     },
     {
       "description": "Read code file: Returns the INDEXED content of one file — read_file over the chunks the search tiers hold, for pulling up code an agent just found..",
       "name": "code_file",
       "path": "code_file/SKILL.md",
       "service": "code",
-      "sha256": "f2f795e930251c11985a9ab0dd181ce5f3dd96493eb25f31a1dddbd8bd93d1d4"
+      "sha256": "06c39ea9a78cb313e035f38d7ef119ffb81f5d7d9022123f22665daac28bed88"
     },
     {
       "description": "Read code search: Finds code in the caller org's index across three orthogonal retrieval tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over code-tokenized text), symbolic (real definition and reference edges), and semantic (embedding cosine over AST-boundary chunks",
       "name": "code_search",
       "path": "code_search/SKILL.md",
       "service": "code",
-      "sha256": "087532b7cc54a5c4523b255db0e41ba0a60eeded55c22083d494051c244a97d9"
+      "sha256": "3ae5f57f45c45c8fe9cb5eebdf988714ed394b24da38ed3d068bbe1422de4167"
     },
     {
       "description": "Read code tree: Returns one repository's file structure with a per-file symbol count — get_repo_structure over the org's own index, with no git checkout involved..",
       "name": "code_tree",
       "path": "code_tree/SKILL.md",
       "service": "code",
-      "sha256": "4973d3ea8282bf884dd4c9f45c6fb8ab322f2a012b5312889d4f7f69d42aad30"
+      "sha256": "05cf5c07d3427efab8163e5c4ae5a30ad16e39f231ba2b9eb76458e64b16668d"
     }
   ],
   "spec_version": "8.0.0"

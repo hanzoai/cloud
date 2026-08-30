@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "explorer_indexers",
       "path": "explorer_indexers/SKILL.md",
       "service": "explorer",
-      "sha256": "d3dc84e2602c2d5668c983115509a3c536805543507028dda15f55d4258e366b"
+      "sha256": "93c852f77cf795f512f6844788d4a9a61f5fc02d4b52752af136579d03512f2d"
     },
     {
       "description": "Read explorer oracles: Reports the on-chain price/data oracles from the graph's O-Chain PriceFeed registry..",
       "name": "explorer_oracles",
       "path": "explorer_oracles/SKILL.md",
       "service": "explorer",
-      "sha256": "83fbabf8b575a1166ba7ecc687b8bf5e660ac17a06184fed7b42bf7931bb9323"
+      "sha256": "635b7c3998beb7c0641087ccac2034b8dd2255f6daf6824076810f46026c4685"
     }
   ],
   "spec_version": "8.0.0"

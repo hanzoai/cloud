@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "prompt_catalog",
       "path": "prompt_catalog/SKILL.md",
       "service": "prompt",
-      "sha256": "f20bb7a22edf633a800da7a214fbe712510c997d039bd6a2fd2ac2d8f4b9f5df"
+      "sha256": "758789699755c7bc3a9e0ebee822507ef417475bf310ec7660a97003673dc397"
     },
     {
       "description": "Read prompt metrics: Metrics returns real per-prompt statistics for the caller's org: how many versions each prompt has, which one is current, and when it was created and last changed..",
       "name": "prompt_metrics",
       "path": "prompt_metrics/SKILL.md",
       "service": "prompt",
-      "sha256": "0a79e423b18338977f67ffdcf854113e98352b528ca4d158dd8f8c1b7f8611a9"
+      "sha256": "14e4ff18d8b395fa83b58828d61676bd677f9c22a30f1d5b20bc6e5508f635a8"
     },
     {
       "description": "Read prompt prompt: List returns the caller org's prompt library as one row per prompt: its name, type, every version number it has, its taxonomy and when it last changed., Get returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version i",
       "name": "prompt_prompt",
       "path": "prompt_prompt/SKILL.md",
       "service": "prompt",
-      "sha256": "e5652e51d0ca7d7c334e429017d018662aa4d08a3de858b94afa872904aa581f"
+      "sha256": "087b0dd7fe9e0bcd76b88a40a43cb2a4472b92e07e506853af32b6c9fc3088d7"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 10,
   "skills": [
     {
@@ -11,70 +16,70 @@
       "name": "integrations_callback",
       "path": "integrations_callback/SKILL.md",
       "service": "integrations",
-      "sha256": "b34b1751c318f3c2af0c30ac2c3371940eec60e26a3ede663ad9a3e2883a989a"
+      "sha256": "b989d79978f14fc963661c6a93149f84799c2f241969bd8e3127ed86ed9e9b5f"
     },
     {
       "description": "Read integrations connectors: Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints., Lists the user-scoped provider cards — the catalog of what a user can connect, and how., Hands the custodied access token to its owner — the ONE place cus",
       "name": "integrations_connectors",
       "path": "integrations_connectors/SKILL.md",
       "service": "integrations",
-      "sha256": "f2e28306c39886f17f96a8ece3f1660c7f58e42c879f21b07c1204d364914b1b"
+      "sha256": "46a5ca907376b05596495cf4bf4910b601c27bcca7cfe6c1d8e65dcaa9c04b7c"
     },
     {
       "description": "Read integrations discord: Begin linking a Lux account from Discord, Complete the Discord account link, Discord sign-in return leg.",
       "name": "integrations_discord",
       "path": "integrations_discord/SKILL.md",
       "service": "integrations",
-      "sha256": "127649a14400421b8b709cd7a5af03f2f8c0286b8195cb740dd198de9d8618b2"
+      "sha256": "9649841936469ee10f69ccd1b1c5f15f843140ea2b842f500e05bf7d74384f77"
     },
     {
       "description": "Read integrations github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object",
       "name": "integrations_github",
       "path": "integrations_github/SKILL.md",
       "service": "integrations",
-      "sha256": "115e79ae382b1290fc9fd732f351a81832a1194782d51b3477c8cabdd4b446cf"
+      "sha256": "dcc3d12a67c9c111818782b1c9813743091ede0b89150b15782b2f67218ea8e7"
     },
     {
       "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
       "name": "integrations_gitlab",
       "path": "integrations_gitlab/SKILL.md",
       "service": "integrations",
-      "sha256": "3454dad751a42752b8a0324cbf3cac6a60ac0d9b536cd3372e1a6e5c7d6b1505"
+      "sha256": "415ad60596e02e73062cf41a88e5ee533d53ababf8cd8160bae467460f126ad3"
     },
     {
       "description": "Read integrations integrations: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a singl",
       "name": "integrations_integrations",
       "path": "integrations_integrations/SKILL.md",
       "service": "integrations",
-      "sha256": "1ac1fb1c6f0fa5edbdbb0d2a75937e5be6b06bf13021e7fcfe7e029b6f59f6aa"
+      "sha256": "57c0c811d68966f1fbe0a5eec187b302ca430bfafa4cac93e66366680550f5a6"
     },
     {
       "description": "Read integrations slack: Install the Lux app into a Slack workspace, Begin linking a Lux account from Slack, Complete the Slack account link.",
       "name": "integrations_slack",
       "path": "integrations_slack/SKILL.md",
       "service": "integrations",
-      "sha256": "848ccb43ddd8b8249a0f36f40e728fc361e0d0827b549e3846df0edb4810be10"
+      "sha256": "6442f4cf31d038cee975c87211ff7de0badaa471df3543ed107327a277a6a5b8"
     },
     {
       "description": "Read integrations teams: Begin linking a Lux account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
       "name": "integrations_teams",
       "path": "integrations_teams/SKILL.md",
       "service": "integrations",
-      "sha256": "ba6c78285b1e67cdd45dc3db9b9acb8518f86d938815a8ccbc079359cbf7cd98"
+      "sha256": "48b9ac545113a4db1723c89c12408700aa23195bf8844d50c7496a5c47b2d6f1"
     },
     {
       "description": "Read integrations telegram: Begin linking a Lux account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
       "name": "integrations_telegram",
       "path": "integrations_telegram/SKILL.md",
       "service": "integrations",
-      "sha256": "87db5b617bac4fe1cc04cb58207ba6dcbe6a0aa5ea3cf95a19c693db428418cb"
+      "sha256": "15d53362f638ce1573739c0a7fbf881c979c5cabe337d7a635831d30b50dc4e9"
     },
     {
       "description": "Read integrations whatsapp: WhatsApp Cloud API subscription challenge.",
       "name": "integrations_whatsapp",
       "path": "integrations_whatsapp/SKILL.md",
       "service": "integrations",
-      "sha256": "d613330cc2b7e3f33932c4db2975659583a3fc68fc09ec26d7de3db20c72657a"
+      "sha256": "02ad8deb78e4138edc480b4b6fc485bdfb30c95b2477ce6d8d9ad1fedda5179d"
     }
   ],
   "spec_version": "8.0.0"

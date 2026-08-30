@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 8,
   "skills": [
     {
@@ -11,56 +16,56 @@
       "name": "guide_actions",
       "path": "guide_actions/SKILL.md",
       "service": "guide",
-      "sha256": "d2ebc15b7a1602110427af1df5f215e74d63cf35f835efba7d9d71b6af61313f"
+      "sha256": "4ac6d9f02f58fb77d7f5fcd4bf24201bdd5481f4c8abced63481cb2c1b339d7a"
     },
     {
       "description": "Read guide analytics: Analytics returns the caller org's funnel from the analytics lens plus the GTM recommendations derived from it..",
       "name": "guide_analytics",
       "path": "guide_analytics/SKILL.md",
       "service": "guide",
-      "sha256": "e057bf3734fbc92a69171edc37f8a37715bb6088c98fef5bcee716aeb48d58ee"
+      "sha256": "b1d7e082fa4a93f7e94f3c2e8741705cf5332047f19ab191504f41a176996570"
     },
     {
       "description": "Read guide blueprint: Returns the FULL authored brand blueprint — every principle, section, step, strategy and template WITH its enabled flag made explicit, including the disabled items the org-facing reads never see — plus the active version number, the brand key it is stored un",
       "name": "guide_blueprint",
       "path": "guide_blueprint/SKILL.md",
       "service": "guide",
-      "sha256": "b9c7aca398fe90165881ce729f4d6767755ed07c8ee4269e2c5e283b64181ccb"
+      "sha256": "6e84359e559771c279548a39251eeec791de18dc585eaf0c889c5dfdf6ad9d84"
     },
     {
       "description": "Read guide curriculum: Returns the journey the caller's org is actually running, and whether it comes from the org's OWN override (custom) or from the platform default — the brand blueprint, else the embedded fixture..",
       "name": "guide_curriculum",
       "path": "guide_curriculum/SKILL.md",
       "service": "guide",
-      "sha256": "50a3e6b3d06cca5e6974764e374d9263a17213f26023c650fa6fca108347e722"
+      "sha256": "8ed01f743d62e8315d954402c5b92ab8486d286be15dc4114d4a8da5a4c35f03"
     },
     {
       "description": "Read guide guide: Overview returns the caller org's launch journey: the active curriculum's version and title, every step with its state, whether it is available, what blocks it and whether the Business AI can run it, the done/total/percent progress with the next step to take, an",
       "name": "guide_guide",
       "path": "guide_guide/SKILL.md",
       "service": "guide",
-      "sha256": "37ec8a532d1c566de9fa0a7d314c3602f6342090cf95eba09df784285e612d03"
+      "sha256": "fad0a735a436e618e8216806f1bf35a66df90bb24eb5041cbba7067b4ee0e1b3"
     },
     {
       "description": "Read guide profile: Profile returns the caller org's OBSERVED growth profile — the signal set, the classified growth stage, and the org's own key metrics..",
       "name": "guide_profile",
       "path": "guide_profile/SKILL.md",
       "service": "guide",
-      "sha256": "704be027d7bef471f97deda4b38a2700b40a72064364250867b816b435ca4aba"
+      "sha256": "adf53fb6e2b5dc0be6c3f7ac60999a00522bf2f8ff5247195b3e979555e2f480"
     },
     {
       "description": "Read guide strategies: Strategies returns the ENABLED tactics corpus for the caller's org: the tactics library narrowed by the explicit category/workload filters AND by the org's OBSERVED growth stage and capability signals (a tactic's tags are preconditions, so it surfaces only ",
       "name": "guide_strategies",
       "path": "guide_strategies/SKILL.md",
       "service": "guide",
-      "sha256": "e23f911df9293fded6181c19cde2303372c3c7ac311e6b67bd921cc1dadd82b3"
+      "sha256": "b09fd9a3364d5baed5dd6dbf983b878ccb790c64ed7edab646d573cd57d82013"
     },
     {
       "description": "Read guide suggest: Suggest returns the caller org's next-best quests: the available, non-terminal steps of its journey ranked by how much downstream work each unblocks, each with the grounded reason it is a good next move and whether the Business AI can run it, plus the org's fu",
       "name": "guide_suggest",
       "path": "guide_suggest/SKILL.md",
       "service": "guide",
-      "sha256": "ac9ca5f77a6bfa5d22b6a17d4a10d0ad771466647be58acc422619ddb3b8336f"
+      "sha256": "2a9f1428ede479ed83f0d311cca8ca5a2ef8ca54866615f5758700c5d1b22b48"
     }
   ],
   "spec_version": "8.0.0"

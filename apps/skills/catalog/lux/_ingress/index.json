@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 5,
   "skills": [
     {
@@ -11,35 +16,35 @@
       "name": "ingress_middlewares",
       "path": "ingress_middlewares/SKILL.md",
       "service": "ingress",
-      "sha256": "eef99c67f189ec84bfa5582cb0d766560fe82a68b4ff67d7bea52d1a2e145cba"
+      "sha256": "1b4033587f8ffcce6abd2ba0f6e96699211a954c9847cdd0402b939d8cec1ac0"
     },
     {
       "description": "Read ingress routes: Returns every routing rule the caller's org has configured, ordered by id., Returns one of the caller org's routing rules by id..",
       "name": "ingress_routes",
       "path": "ingress_routes/SKILL.md",
       "service": "ingress",
-      "sha256": "8f7939fb83ed2abc74d979796ecf2f728c041a4a6327508b91603c8b3ebe4c7b"
+      "sha256": "85eb71ee6795867d3565a236a1bcf4fcf891bc3130f054f48d78dbb5c87846ce"
     },
     {
       "description": "Read ingress services: Returns every backend pool the caller's org has configured, ordered by id., Returns one of the caller org's backend pools by id..",
       "name": "ingress_services",
       "path": "ingress_services/SKILL.md",
       "service": "ingress",
-      "sha256": "519794aba0bcf83fed4b91ef03cf5fe8e08d0946a2c1b9e16d21a98de550cba4"
+      "sha256": "0f38de3ce0d4f9dc9c741c29fdfc3d700d9ad1d56a32b67efe51ad8f87c31e69"
     },
     {
       "description": "Read ingress status: Status reports the ingress edge's live posture: the role this instance runs in (app or edge), whether its listeners are bound and on which addresses, the ACME posture (staging flag and certificate cache directory), how many hosts the compiled route table curr",
       "name": "ingress_status",
       "path": "ingress_status/SKILL.md",
       "service": "ingress",
-      "sha256": "66d543f035053cda2c9d157b10b73a8e547680213e6066de6ed8f36aa1b3e7db"
+      "sha256": "1ac32f335671bc0822831dfbce2d9b08f42ad26c879d555f0735ccfb8ba06e92"
     },
     {
       "description": "Read ingress tls: GetTLS returns the caller org's ACME intent together with the edge-wide TLS facts it lands in: which role this instance runs in, whether its listeners are bound, every host the ACME HostPolicy will issue a certificate for (the union across ALL orgs of TLS-marked",
       "name": "ingress_tls",
       "path": "ingress_tls/SKILL.md",
       "service": "ingress",
-      "sha256": "4aa15b58932cc0788919c07031881bb491945a78484b6675654e2864d0d722e1"
+      "sha256": "57f86fbc27b01222b2412368d1f26f41440e97ae0ba50d3fecc1439a4dce9a87"
     }
   ],
   "spec_version": "8.0.0"

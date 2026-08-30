@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "kv_history",
       "path": "kv_history/SKILL.md",
       "service": "kv",
-      "sha256": "ade05b96d4972b115f40b2567bb8a7d4e73f72b8fe2f618be87900dd4905282c"
+      "sha256": "436955945d945eff4f2d22fbca09a66601d99fdfb7199315ba2f3be92ea737bf"
     },
     {
       "description": "Read kv kv: Get returns one key's current value and revision..",
       "name": "kv_kv",
       "path": "kv_kv/SKILL.md",
       "service": "kv",
-      "sha256": "3aebacd598f6aafc82455168816bf0eef2a27fe4584387d61e2af4c5353bdf95"
+      "sha256": "cb9f1bf9a51ab09990a948cce51565e9390ac8538b78e8444c50f66a985a412a"
     }
   ],
   "spec_version": "8.0.0"

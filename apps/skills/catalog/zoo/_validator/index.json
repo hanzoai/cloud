@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "validator_challenge",
       "path": "validator_challenge/SKILL.md",
       "service": "validator",
-      "sha256": "aa8bfcfce5f72abe13e94514310d9409ac86bce0968a559cc25bce03b288d662"
+      "sha256": "f7a51d0392208c265777a4a47d9b723a2ea10dba131c3846981d51c5bedd69a9"
     },
     {
       "description": "Read validator validator: Returns the validator slots the caller's org has claimed., Returns one claimed validator slot, scoped to the caller's org..",
       "name": "validator_validator",
       "path": "validator_validator/SKILL.md",
       "service": "validator",
-      "sha256": "9f2c2170357d7724cd97bb3f181ebf39fe1a04d1700e0b76d839e23fda35ded6"
+      "sha256": "eb2fa73b2135f0f2dc9af6c704f7bb1dd2e6191716cf0645e02a6c0e1b44a40c"
     }
   ],
   "spec_version": "8.0.0"

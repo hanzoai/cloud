@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "channels_allowlist",
       "path": "channels_allowlist/SKILL.md",
       "service": "channels",
-      "sha256": "5084e745db82c805cd38dda0411b1fbfcded07abd3bd1a3558550a536589bb30"
+      "sha256": "d4d4dd2bcef00c83cf9a278ae0289f98c22c19f1f5566fd7790e1d429f4a5b99"
     },
     {
       "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",
       "name": "channels_channels",
       "path": "channels_channels/SKILL.md",
       "service": "channels",
-      "sha256": "ceb572b8b9a461083230b87252167e0f5c7b91978a9b23a04a700e8c4c698651"
+      "sha256": "38a55430e987d74144180ac40f58ee9c2da2430ae3199d3fa120c05d1c398316"
     },
     {
       "description": "Read channels inbox: Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into..",
       "name": "channels_inbox",
       "path": "channels_inbox/SKILL.md",
       "service": "channels",
-      "sha256": "a38491b527474d3497e2d60103b5f3be1cc18556c6ca97bbac6541d68960dfaf"
+      "sha256": "07dc6b0145f853540f3f953d35a0678318e839d9675cac3f972f0d24486fbf1a"
     },
     {
       "description": "Read channels pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet..",
       "name": "channels_pairing",
       "path": "channels_pairing/SKILL.md",
       "service": "channels",
-      "sha256": "e43e773274fd4d7e2f5c926ac5b9963a25f75691c173210397aa5807135bd66b"
+      "sha256": "f8c319af209c669b746af6a8c186f89f12f0a3b165db51de481802253aed1154"
     }
   ],
   "spec_version": "8.0.0"

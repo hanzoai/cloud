@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 5,
   "skills": [
     {
@@ -11,35 +16,35 @@
       "name": "licensing_download",
       "path": "licensing_download/SKILL.md",
       "service": "licensing",
-      "sha256": "ba5b0bb1f6a39657a8c137a9e01fbb67243e0867a1017c1311c8ab0818958d9e"
+      "sha256": "142d140212c7883fafdd15e19c09a20448e55b2c4ffedcdc56bb3efaaaea358b"
     },
     {
       "description": "Read licensing healthz: Health reports which signer this deployment mints with, and in which env..",
       "name": "licensing_healthz",
       "path": "licensing_healthz/SKILL.md",
       "service": "licensing",
-      "sha256": "0e44c9a189e88a233b8bc01e2e8df8e22913689eb56213cb0d205fab51e43ba6"
+      "sha256": "8e23a8d931207af9736b19b8ac500c876d604c400e847b3ba7208cdd3c80af6c"
     },
     {
       "description": "Read licensing jwks: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
       "name": "licensing_jwks",
       "path": "licensing_jwks/SKILL.md",
       "service": "licensing",
-      "sha256": "734e91aad7db80754fddcfa0ae29160d96e634488b647893083c35cf04579192"
+      "sha256": "a9410dea8a3c8aa0609e6b63b2165e2b62fc10acf4e966bbfc9b684ba25c7161"
     },
     {
       "description": "Read licensing pubkey: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
       "name": "licensing_pubkey",
       "path": "licensing_pubkey/SKILL.md",
       "service": "licensing",
-      "sha256": "0bc2de88380537de52a6a2e6b527f72af515d430c4f7a0d0fb5bf69a258f8771"
+      "sha256": "976e2d545fbb1224e844eef183ddb5cb772857a6839e4520f7c879a141fa1240"
     },
     {
       "description": "Read licensing releases: Lists the signed binary releases this deployment can serve., Reads one release's metadata: its product, version, platform and the cosign material a client verifies the binary against..",
       "name": "licensing_releases",
       "path": "licensing_releases/SKILL.md",
       "service": "licensing",
-      "sha256": "5d6b27be043aef5f3c6ec24cb978091d256b2f045200f9073bdd41a6947c60b1"
+      "sha256": "bc1c868d20660d8459b275384cfb3e67d4fa31be1b02cd412268a3d314ee8983"
     }
   ],
   "spec_version": "8.0.0"

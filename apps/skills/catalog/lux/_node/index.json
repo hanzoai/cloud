@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "node_connect",
       "path": "node_connect/SKILL.md",
       "service": "node",
-      "sha256": "cd793288fdaa2ae9660933fc94156990949cc21e0a020a807e64cb0b4def9a1e"
+      "sha256": "5556f0d82e768eaac77acd20c5c2a2a8372d7bc57dce551d2cba4ab21eb88515"
     },
     {
       "description": "Read node node: Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported..",
       "name": "node_node",
       "path": "node_node/SKILL.md",
       "service": "node",
-      "sha256": "a75d2a18257d0c8d44acd018752bb3b6720ce2045b95c56e19324aff17074a34"
+      "sha256": "12e2506802da7cfd043d6b8bf8f8989ae7cd31f3200cbdcfb21d6f2acc990e8f"
     }
   ],
   "spec_version": "8.0.0"

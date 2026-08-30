@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "content_board",
       "path": "content_board/SKILL.md",
       "service": "content",
-      "sha256": "04330903acd1241bf01b523e47b2f525641e3e98bdb49dd22dc2b50ce558e20e"
+      "sha256": "6145880d07a1705889178189f92e09e41027b7b7cf0183056c432fc532b461af"
     },
     {
       "description": "Read content channels: Lists the distribution channels the caller's org has connected — the social integrations a publish can target..",
       "name": "content_channels",
       "path": "content_channels/SKILL.md",
       "service": "content",
-      "sha256": "43d0f754ea593893e3c92000073f1d77f18866ed0a5dce1188e179bdde1096e3"
+      "sha256": "c365f57062965aadafa4a8d217da53b375fe3700019fdb0b74acd224402a3f3f"
     },
     {
       "description": "Read content lifecycle: Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state..",
       "name": "content_lifecycle",
       "path": "content_lifecycle/SKILL.md",
       "service": "content",
-      "sha256": "44f1eddb32e1bb20ecd443d601a0f58e517f40b1bd65ad15b6ac00a54dc21b1d"
+      "sha256": "b8dedbbb76a7f477c6a77b14d6353029adf11f8356985e7a5b7da2735a156446"
     }
   ],
   "spec_version": "8.0.0"

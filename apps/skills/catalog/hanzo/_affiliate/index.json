@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "affiliate_affiliate",
       "path": "affiliate_affiliate/SKILL.md",
       "service": "affiliate",
-      "sha256": "474b90907242af2c047b50949e48ced7ff56a570cba4e3e768c2e8d5fbea073a"
+      "sha256": "0a12557b268e7d4fcb001f871f82856da3b1f98bf35f893b30da08952c6fec09"
     },
     {
       "description": "Read affiliate leaderboard: Answers the top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank..",
       "name": "affiliate_leaderboard",
       "path": "affiliate_leaderboard/SKILL.md",
       "service": "affiliate",
-      "sha256": "3a910b6ead821d1ce590837338148c8aff555945374f58712e0b39e5a982c7bb"
+      "sha256": "4bcf6a6a68aa518773302a44148ec8ac930fe5f30fe4eba938b4e639d07754d6"
     },
     {
       "description": "Read affiliate me: Answers the richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there., Answers ",
       "name": "affiliate_me",
       "path": "affiliate_me/SKILL.md",
       "service": "affiliate",
-      "sha256": "b80ecc93824f352940044ffc85418d476833cfb9aee14078b8b07e76d1841ddf"
+      "sha256": "d4d4cae773f99f4a1058d68f134601877d7b3fc4053e07021932f9d033b8fdfc"
     }
   ],
   "spec_version": "8.0.0"

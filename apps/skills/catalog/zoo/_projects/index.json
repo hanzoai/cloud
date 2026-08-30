@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 8,
   "skills": [
     {
@@ -11,56 +16,56 @@
       "name": "projects_deployments",
       "path": "projects_deployments/SKILL.md",
       "service": "projects",
-      "sha256": "4a8609655b2cf2112f57b3948a86213e7e838323d9488677f12e7c804bd346a2"
+      "sha256": "6042c623debfa831476707c29e59aded75eb21feff924b2747e52f6b3af79594"
     },
     {
       "description": "Read projects domains: Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes..",
       "name": "projects_domains",
       "path": "projects_domains/SKILL.md",
       "service": "projects",
-      "sha256": "62de3edbdf147a27676b6e1b948c27fbd79a3ee2c84a3c9f180dd311fad784d2"
+      "sha256": "855e3521d293d98805aafd6377873d671f2e3f6de947f156fa7edf59c371374b"
     },
     {
       "description": "Read projects edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
       "name": "projects_edge",
       "path": "projects_edge/SKILL.md",
       "service": "projects",
-      "sha256": "443cc578f4b3c3d1c4531834af0e263ebfe78bcdcb48515222de712f7a745a6e"
+      "sha256": "e9f5165247f495254a7d7c4546f15cad20b7a0f33ff98e65e6a3e94f9cb1aea4"
     },
     {
       "description": "Read projects projects: Returns every project your org owns., Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it..",
       "name": "projects_projects",
       "path": "projects_projects/SKILL.md",
       "service": "projects",
-      "sha256": "5cc9991d60d0e46dcf76d9d21cc544894d8333019b3dc6f21fdf58a51232ddd7"
+      "sha256": "ae9b2f4def01b5a746881ac6b473c1e20bb9cba5f177868bd1238617f965102d"
     },
     {
       "description": "Read projects releases: Returns a site's releases newest-first, marking the active one — the rollback menu..",
       "name": "projects_releases",
       "path": "projects_releases/SKILL.md",
       "service": "projects",
-      "sha256": "773fcf0ea91deba8329a97e6d0efdfc86861e34df2ed5d5a11c046f084a28290"
+      "sha256": "ff270a307172c43e7beaed2d52a6ee85277948e5bb920d5071f1b7aa321e17d9"
     },
     {
       "description": "Read projects shot: Get a PNG of the project's live site.",
       "name": "projects_shot",
       "path": "projects_shot/SKILL.md",
       "service": "projects",
-      "sha256": "0508dddb6172b756b0bb5ebba9d91934b07ff92e774638f3a324edd467c1a018"
+      "sha256": "21456c451904169985069477557672e1a7079bcad5a4b487b110e12b018a1155"
     },
     {
       "description": "Read projects sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
       "name": "projects_sites",
       "path": "projects_sites/SKILL.md",
       "service": "projects",
-      "sha256": "6bf7e67635ee6fe808e9d1ff83a86e24e78149e3a0d1007b9166e18d27490285"
+      "sha256": "36c37746fcd06d2f8cd695bb4baead9521fbd4000c27d9c0e715ca84395056c3"
     },
     {
       "description": "Read projects tags: The site's browser tag set for the hosted tag — which pixels to inject, by publishable key.",
       "name": "projects_tags",
       "path": "projects_tags/SKILL.md",
       "service": "projects",
-      "sha256": "5cfeb035a2c47ff18dcaf3492c202ad290b6cdf8cbe9aff3d2bd4fe20269985e"
+      "sha256": "9a2ebe0c2c2bc2a963ae8d8a3bac99e2aa0f0bbe4e4bb15b6dfbfe58a65aa651"
     }
   ],
   "spec_version": "8.0.0"

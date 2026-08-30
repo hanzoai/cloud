@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "link_devices",
       "path": "link_devices/SKILL.md",
       "service": "link",
-      "sha256": "925830593e90795f1fb17411f808d18acc72b8c51a7d5033226d8958b151c862"
+      "sha256": "90f86b44ccf7f7bff9d435ffdba6f2f212d5154e83c4a1f8382ce75ed82abfa9"
     },
     {
       "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
       "name": "link_link",
       "path": "link_link/SKILL.md",
       "service": "link",
-      "sha256": "1254b2628f7b78b3a6c8bd8852dcdbf15d1392cfa2706490c63d8819a8ebd76c"
+      "sha256": "b38650f62ef2ba0d9837f71538d26b373589d745ab71a6a9d2e30cd86723152d"
     },
     {
       "description": "Read link route: Gets the failover order across your linked accounts..",
       "name": "link_route",
       "path": "link_route/SKILL.md",
       "service": "link",
-      "sha256": "272134b307c70bd3b3745ee34fa8e66f119f361dded9509e4ebab547a66a315b"
+      "sha256": "55abf87f8b9c2871fd3ee699f51e6e369c5e7241c7cc0c0221bd0f023c648096"
     },
     {
       "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Zoo spend side by side..",
       "name": "link_usage",
       "path": "link_usage/SKILL.md",
       "service": "link",
-      "sha256": "54f9443abd616b418aece4e2986acbd9abec33ecc3dd52507b45c5b49eea7dac"
+      "sha256": "b582a46aba09ac58b8a83929d3b28d2cb818c355b1bb533a777d16c00e9d9909"
     }
   ],
   "spec_version": "8.0.0"

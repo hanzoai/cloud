@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 19,
   "skills": [
     {
@@ -11,133 +16,133 @@
       "name": "billing_accounts",
       "path": "billing_accounts/SKILL.md",
       "service": "billing",
-      "sha256": "60141216a07314fa3670f439c06f4f974320c88affc6861331b9e4b4bf879313"
+      "sha256": "86b87ed1e6259d730929e3bc88d8be78b02906c16dfbbbad00a063e1b783710d"
     },
     {
       "description": "Read billing alerts: Lists this org's spend caps: the ceiling, its scope, whether it enforces, and how much of it has been spent this period., Answers whether one proposed spend fits inside this org's caps..",
       "name": "billing_alerts",
       "path": "billing_alerts/SKILL.md",
       "service": "billing",
-      "sha256": "ddbb79a4ed3b09af3ef63715f55af1c2d6e4b7c6c53f2e7850f70ddb12e45444"
+      "sha256": "9a581f6f3bb37ba04dc4c8df67b2082f4703e8b325b3426c559e336607f5a0ee"
     },
     {
       "description": "Read billing balance: Prepaid credit the caller's org can still spend.",
       "name": "billing_balance",
       "path": "billing_balance/SKILL.md",
       "service": "billing",
-      "sha256": "602e5943c62d73f2f10680418cfad93e81c51de34f2e11764038a95efc6e5fd0"
+      "sha256": "8da566991b822b92f154ecdfc55560486f22a7d345e295e9a64749541d2aaca4"
     },
     {
       "description": "Read billing credit balance: Answers what the caller can spend right now, one entry per currency., Answers that same spendable credit split by grant tag, with the earliest expiry under each and the total across all of them..",
       "name": "billing_credit-balance",
       "path": "billing_credit-balance/SKILL.md",
       "service": "billing",
-      "sha256": "2e47e3548a2a74cb719b4df53d34d4b7670908f90415c5d597eb563e6963e851"
+      "sha256": "4f26084546da12ae78a827ea8955c718e4ba615bd8ac84c088a98382351b440d"
     },
     {
       "description": "Read billing credits: Lists the caller's credit grants — every one of them, spent and lapsed and voided included..",
       "name": "billing_credits",
       "path": "billing_credits/SKILL.md",
       "service": "billing",
-      "sha256": "2e067f4c884224c41cb3d1bf85436e0b6477b2750ddb6480702413d4ee054a54"
+      "sha256": "1a0458a34ce05b214d7f3a0d29c4a1a2b32ebf5d8c645efea826fded02b1c15c"
     },
     {
       "description": "Read billing crypto: Reads one of the caller's own deposit intents back — pending, confirming, or succeeded., Answers which chains and tokens the crypto rail accepts — what an asset picker renders..",
       "name": "billing_crypto",
       "path": "billing_crypto/SKILL.md",
       "service": "billing",
-      "sha256": "487e57bbf8270d379264f0f9da42f9a91463a3286a970f970d600c495f064f5f"
+      "sha256": "83bb1853f23b93ec3d01780a9a4d7ef59bca229f51ea0769e5a9d64578e52d5f"
     },
     {
       "description": "Read billing invoices: Lists the caller's invoices, newest first, with the count beside them., Read one invoice, Download one invoice as a PDF.",
       "name": "billing_invoices",
       "path": "billing_invoices/SKILL.md",
       "service": "billing",
-      "sha256": "b8cbc923bd682823a9d2b799bc7498acda13f8264609ca0cadffdafc08de5267"
+      "sha256": "afed6013c30ec4ebdede9d4af4dad3c45e3a7267a1a620f280e9fc4e87d74ef0"
     },
     {
       "description": "Read billing ledger: Answers the org's own postings inside `range=`, each as a signed entry: a DEPOSIT CREDITS the wallet (positive, account `credits:<org>`) and every other posting DEBITS it (negative, account `usage:<org>`), described by its notes or its tags..",
       "name": "billing_ledger",
       "path": "billing_ledger/SKILL.md",
       "service": "billing",
-      "sha256": "bedd9924a9c5dd9f3ce17eb5cfb116f96bde623b9e8eb2652dd50e8cc493ab3d"
+      "sha256": "a6aeaabec325e8ac815d804d6f6685c120f6256988cb568c1a68682f9f6e98b7"
     },
     {
       "description": "Read billing methods: Cards and accounts on file for the caller.",
       "name": "billing_methods",
       "path": "billing_methods/SKILL.md",
       "service": "billing",
-      "sha256": "3d0af127e3efeacfb62b3fdb0d15ec6b1c93330b82b7ae07af62eaf48ae0488d"
+      "sha256": "5006a5876657628d1fcf9fccb1ec2a09f9246074ced34083c92c638d233f7c3d"
     },
     {
       "description": "Read billing payouts: Answers the org's outbound payouts, newest first — amount, destination, status, and the failure reason where one applies..",
       "name": "billing_payouts",
       "path": "billing_payouts/SKILL.md",
       "service": "billing",
-      "sha256": "70b5c322d03e73d37ed079890e79e54db0afb5bae08d5f01274fedaa7bd59f0f"
+      "sha256": "f3010a2ed0295c2da375bfb9f170e5b45a36b43ad767d60df928888313351587"
     },
     {
       "description": "Read billing plans: The plan catalog, priced with whatever offer is in force.",
       "name": "billing_plans",
       "path": "billing_plans/SKILL.md",
       "service": "billing",
-      "sha256": "865c7d718434e1093c9f2b3cf47a78abf690d0f8370bc6169069b63020ff206d"
+      "sha256": "ffb84f2f89109d5bba315efa5a6f6876b5a397fb7a0ee984ae49ad6fceef69d9"
     },
     {
       "description": "Read billing portal: Cards and accounts on file for the caller.",
       "name": "billing_portal",
       "path": "billing_portal/SKILL.md",
       "service": "billing",
-      "sha256": "4ac9737ba43ad863dc74896f7fe284463c79c8cb786ab6bbbcf5988291a7e3ca"
+      "sha256": "1edd2ef41c2fc93a57948577dfa17c90bc9e999ab7411df7982bdb9a06782321"
     },
     {
       "description": "Read billing recharge: Reads the caller's auto-reload rule: top the balance up by `amountCents` whenever it falls below `thresholdCents`, charging the card on file off-session..",
       "name": "billing_recharge",
       "path": "billing_recharge/SKILL.md",
       "service": "billing",
-      "sha256": "ee4f3b34d05bcfe9f2237d79ff2211da386f89c690e57cb75a50e5d476b2712e"
+      "sha256": "969d25f181c6eb250c0962ddd2eedbee302a350617e491c2e1066cd5032c371a"
     },
     {
       "description": "Read billing settings: Answers the PUBLIC half of this org's processor configuration — the ids a browser needs to tokenize a card, and the environment it must tokenize against..",
       "name": "billing_settings",
       "path": "billing_settings/SKILL.md",
       "service": "billing",
-      "sha256": "ae087b95275127949b3d321fc7f7f9b10e910c5254526f960ebe2c6a48930cd5"
+      "sha256": "06ba215700f0704c71683120d3956260fd6968c48022eb6196f96293a22b68de"
     },
     {
       "description": "Read billing subscriptions: Lists the plans the caller holds, with the count beside them..",
       "name": "billing_subscriptions",
       "path": "billing_subscriptions/SKILL.md",
       "service": "billing",
-      "sha256": "af393920095ff5b253ceebdfe52f7f270c745ba7b60afd340fefab7700ecc7c7"
+      "sha256": "6d9a05f7cc026ff723adf13dd68e476c2e221379deb6edd6be2601318465a7f3"
     },
     {
       "description": "Read billing tier: Answers which tier the caller is on, what it allows, and what is left to spend..",
       "name": "billing_tier",
       "path": "billing_tier/SKILL.md",
       "service": "billing",
-      "sha256": "0a244fa77d29d20b3d1c9aecbabd19d2b15b0d4abc7a6b30c6c1cbf1def6598b"
+      "sha256": "08c99924210b171539de8806b4332159ecac12cf5d44122e213de0ebfaf639a5"
     },
     {
       "description": "Read billing transactions: Answers one page of the caller's own ledger, newest first: what moved, how much, when, and what it was tagged with., Reads one ledger entry by its id..",
       "name": "billing_transactions",
       "path": "billing_transactions/SKILL.md",
       "service": "billing",
-      "sha256": "f314a2d2b3ff870c7b607c2499a02e14a11744a0d677bc7b7098e51123c5f7de"
+      "sha256": "e3a7a376980d93c5fbbd59d51b5a3a37f23bcf19c0928c360d93257289f21bdc"
     },
     {
       "description": "Read billing usage: Every billed call the caller's org made, attributed to a product, Answers per-account totals for the linked provider accounts the gateway ROUTED this caller's traffic through — requests, prompt and completion tokens, recorded cost — plus their honest sum., Ans",
       "name": "billing_usage",
       "path": "billing_usage/SKILL.md",
       "service": "billing",
-      "sha256": "392c550943cb100d52363ef353db52a70f170e7d8f926df4d4508bf984d27804"
+      "sha256": "5d782a661ae56f906aaf00c3547613843504eb315d2c67e3e8ac1c38a62a96e2"
     },
     {
       "description": "Read billing wire: Answers where to send a wire top-up: the receiving bank details, with the caller's own payment reference..",
       "name": "billing_wire",
       "path": "billing_wire/SKILL.md",
       "service": "billing",
-      "sha256": "b0c328fcea0472fa60c024b574f7af10fddcb50b14265ad1171d1097e16c64c9"
+      "sha256": "08252f56fb09281952ccd4c2e0d0a192bbd21f33c458bc58457746fa55b384ca"
     }
   ],
   "spec_version": "8.0.0"

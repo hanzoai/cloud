@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "social_accounts",
       "path": "social_accounts/SKILL.md",
       "service": "social",
-      "sha256": "17927478067446eb6b5bbe714791ac0721811b42fe813cbe196dd0b9f5da2a53"
+      "sha256": "43fc757147f7e5cdbe5c4813dfce6e1e4b53a030e00dcaa3312627b074917491"
     },
     {
       "description": "Read social posts: Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first., Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external ",
       "name": "social_posts",
       "path": "social_posts/SKILL.md",
       "service": "social",
-      "sha256": "251076edf566b5c0db687cd702dd742f1c6d9b72e3e6a4feee0462067af9f581"
+      "sha256": "04fc4e3d10a8bc9bbc9095893d0da06a6d7618268b6ca76aafec1c40caf667b0"
     },
     {
       "description": "Read social providers: Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing..",
       "name": "social_providers",
       "path": "social_providers/SKILL.md",
       "service": "social",
-      "sha256": "b538c8283c038b23d7d214d02f7b91567d0ae9a329ae623441d91e42adeb3266"
+      "sha256": "6cf140d92c709237d08723532d1901052ce652c8027aba613b4988428e846f40"
     },
     {
       "description": "Read social summary: Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected..",
       "name": "social_summary",
       "path": "social_summary/SKILL.md",
       "service": "social",
-      "sha256": "e38807af11e9710086fd65e53e0bceffc0e190da3b049d851422324867f34a44"
+      "sha256": "fa7c568598e0c0b269786c638891379771ff32774fdbd06af8a038efcafcb1b7"
     }
   ],
   "spec_version": "8.0.0"

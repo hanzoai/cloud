@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "provisioning_datastore",
       "path": "provisioning_datastore/SKILL.md",
       "service": "provisioning",
-      "sha256": "215e9c4cbdaa0d7ba44c2c4471e1e21cd3301bffd8681e33765e2d119a44e2bb"
+      "sha256": "e83a494daeef3442a9fa4673d02f27cf14b7ad40b2a43f8ba5d5f2dd1be80567"
     },
     {
       "description": "Read provisioning docdb: ListDocDB lists the caller org's Hanzo DocDB document databases., GetDocDB returns one Hanzo DocDB database's metadata..",
       "name": "provisioning_docdb",
       "path": "provisioning_docdb/SKILL.md",
       "service": "provisioning",
-      "sha256": "ff91040a51efb4739c4bbf0a5894870cdd1709ebc5b5a4bfb56c838ca39909a7"
+      "sha256": "b2ff0fdadf079600995d8f44834e35e67e4b54072655f38bbf7003929607695a"
     },
     {
       "description": "Read provisioning kv: ListKV lists the caller org's Hanzo KV stores., GetKV returns one Hanzo KV store's metadata..",
       "name": "provisioning_kv",
       "path": "provisioning_kv/SKILL.md",
       "service": "provisioning",
-      "sha256": "d16be62582f9291c86cd4f91f1871971843909b9655acef552840e81b7bf8113"
+      "sha256": "1a319591566ae2883de0ee62fa9237579681f62d18914447e77fec630bcb30fc"
     },
     {
       "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
       "name": "provisioning_s3",
       "path": "provisioning_s3/SKILL.md",
       "service": "provisioning",
-      "sha256": "c89ef473b95d1dfbcc816d604b51340f107b34f1b71a457ef57b153eec7c8155"
+      "sha256": "8d5eafde92a5cfaab5cb40d6baa1b6dfb232718e7b9b5565d3ebc5c3df9cce26"
     },
     {
       "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
       "name": "provisioning_search",
       "path": "provisioning_search/SKILL.md",
       "service": "provisioning",
-      "sha256": "ed1ce5647876245ace30c113330be415eb94b701b03aa4d7e9e385dec68f3595"
+      "sha256": "ecfd662110513cf49bcbf847e9662eaf7bf588e81064d0643fa4de033e142eab"
     },
     {
       "description": "Read provisioning sql: ListSQL lists the caller org's Hanzo SQL databases., GetSQL returns one Hanzo SQL database's metadata..",
       "name": "provisioning_sql",
       "path": "provisioning_sql/SKILL.md",
       "service": "provisioning",
-      "sha256": "8c30e10433ee22ce74652f00cd3cb8b577c7fb8ae9307091ab212642e37cbadf"
+      "sha256": "84ad908dbff92f43611c00f7a1cae1d2ad50e232737ad11f1626b5f0c0c8f7b4"
     },
     {
       "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
       "name": "provisioning_vector",
       "path": "provisioning_vector/SKILL.md",
       "service": "provisioning",
-      "sha256": "dd7c69f90b88e634eefe7011bb0c0c221b5376f2a6c63e789b2291d51742e31c"
+      "sha256": "636e2e7b6e0cca663af4af4f890956abecf3237da40847ba87b9ea0e6c792eae"
     }
   ],
   "spec_version": "8.0.0"

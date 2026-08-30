@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "gateway_config",
       "path": "gateway_config/SKILL.md",
       "service": "gateway",
-      "sha256": "237cc6403243d8993b0c42cb50ae4e2f6b2df9c7e81711b81cba31ceff35e96c"
+      "sha256": "d5d6745ea3f678966bc8a47bed0b9676d886d05ce41f488568aa9059dddcc3ef"
     },
     {
       "description": "Read gateway traffic: Report who is calling this org's API right now.",
       "name": "gateway_traffic",
       "path": "gateway_traffic/SKILL.md",
       "service": "gateway",
-      "sha256": "829a05bbd1f0147a35709b47f427e3c02bbf84f3f507b41f934afa7f49a77123"
+      "sha256": "fc6498083c4e92af60839e034f2d50ca4b5c9faf6a6c61efd8e243c1825bbe25"
     }
   ],
   "spec_version": "8.0.0"

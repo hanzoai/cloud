@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "usage_analytics",
       "path": "usage_analytics/SKILL.md",
       "service": "usage",
-      "sha256": "447f3f7038fe8b09acb60218df80e30beb0eadb8ff43bdfa66471d3fad7dcee2"
+      "sha256": "c97af7398e9d204bdbe9c1730948c0b880bf0425713dda4d83faba528f9eeca4"
     },
     {
       "description": "Read usage samples: Is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my plan is 47% through its 6h window, resets at 14:20\"..",
       "name": "usage_samples",
       "path": "usage_samples/SKILL.md",
       "service": "usage",
-      "sha256": "d3b528be2bd67a46b40078802ebf215c0dadfb16dba3c36676f0616c19fa1007"
+      "sha256": "d1338c546db43d08dd87abf85ef1807fc0a4704809ed4d9f082e99258a840421"
     },
     {
       "description": "Read usage summary: Answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse, and the caller's OWN linked provider accounts beside the org's Lux-routed u",
       "name": "usage_summary",
       "path": "usage_summary/SKILL.md",
       "service": "usage",
-      "sha256": "40ab92a1f61b63c897fa44357ff702d473c6d3ba203a54af62adc62f584577a4"
+      "sha256": "20ab1be828e9a3422e27da050b5c056fb340de4391e250d3146e3f2805c81fb2"
     }
   ],
   "spec_version": "8.0.0"

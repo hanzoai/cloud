@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "wallet_accounts",
       "path": "wallet_accounts/SKILL.md",
       "service": "wallet",
-      "sha256": "4d7184f04200ebabed6cbbde6c7475bd73286247f22c5983857076fbe09d2a04"
+      "sha256": "0f9c297f39d7dfba1a8cd06eb9a4eb30502a1322eb75fc02f8efd8a4dccafff4"
     },
     {
       "description": "Read wallet wallet: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
       "name": "wallet_wallet",
       "path": "wallet_wallet/SKILL.md",
       "service": "wallet",
-      "sha256": "c02e5ca7140cc87c17217c8dd535d02aace96c776a2e60b4f7193439117bf298"
+      "sha256": "6abd03932613f6ba19bba67617e42a8b1351b2df950036a5b6631ecb84267f20"
     }
   ],
   "spec_version": "8.0.0"

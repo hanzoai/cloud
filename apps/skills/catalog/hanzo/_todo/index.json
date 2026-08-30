@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "todo_board",
       "path": "todo_board/SKILL.md",
       "service": "todo",
-      "sha256": "b367d42fbbfd3ed69123e39c59f1806e0a832185165391db5a565ed61dbf039b"
+      "sha256": "c438e5f87e05f3e804724776eeb1fd099ee8fa9827392dbe4001268906a5eabe"
     },
     {
       "description": "Read todo issues: Answers across every project in the org..",
       "name": "todo_issues",
       "path": "todo_issues/SKILL.md",
       "service": "todo",
-      "sha256": "1d9719348b9a6ac40ca5cffc1132aa886774611a487b1f077ed419589b2f5188"
+      "sha256": "0e4c35f0162c590a206da98bb7754e423e530b25e5d435d26a3818d8b81abb80"
     },
     {
       "description": "Read todo projects: Returns the boards of your org — the places your work actually is., Returns one board of your org by its key — the repository name., Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
       "name": "todo_projects",
       "path": "todo_projects/SKILL.md",
       "service": "todo",
-      "sha256": "5e4df47920969cef3f4b7e46bbb6a585b7cde42a02100bc241e6408304b01732"
+      "sha256": "d7d4cf71c68e2ff9633d8dbba34e5d6ad02614d85d955380e6e82e39b1523529"
     },
     {
       "description": "Read todo rooms: Summarises one room's work..",
       "name": "todo_rooms",
       "path": "todo_rooms/SKILL.md",
       "service": "todo",
-      "sha256": "8e44ed66bc6e474612e435c7469a6dd85c3a5b1a13e6952f1a31cb70b664cfc6"
+      "sha256": "273d8486e231fcbb5b4e93887c3c24e293e12103cdf2d0d8f85484be7afdc022"
     }
   ],
   "spec_version": "8.0.0"

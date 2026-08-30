@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 5,
   "skills": [
     {
@@ -11,35 +16,35 @@
       "name": "registry_images",
       "path": "registry_images/SKILL.md",
       "service": "registry",
-      "sha256": "2dda22df9ebd9f3b3589add52a5be5ffad8e43ef93b30deb491b4b03d691ae87"
+      "sha256": "064db18b0f3b5e4d3220f9a72b9a35b81d05711b880fa8fdb0acb05e1a0ce027"
     },
     {
       "description": "Read registry packages: Packages lists the org's npm packages — `<org>` and `@<org>/…` — from the npm registry's search index, optionally narrowed by a query within that scope..",
       "name": "registry_packages",
       "path": "registry_packages/SKILL.md",
       "service": "registry",
-      "sha256": "c5c5673a7a776df7e39943956ddef60c48c770fa97928e2c6eeb46832dbf7bed"
+      "sha256": "21e72ddbca911db364b37094c9b9fe20912f027f862858e902365257b029dae4"
     },
     {
       "description": "Read registry projects: Projects lists the namespaces the caller can see with what each holds: the org's slug, its repository count on the OCI catalog, and its package count on the npm registry..",
       "name": "registry_projects",
       "path": "registry_projects/SKILL.md",
       "service": "registry",
-      "sha256": "0c1d7131e04c016c70220e2e4632cd24c4c21dc798ee28d0ebe4129f0c49c91a"
+      "sha256": "1936c815e3b48710eab4516fbd351893d75eb9658a492509a8aba4247e2acad0"
     },
     {
       "description": "Read registry status: Status reports whether the OCI and npm registries are reachable and, when the OCI half is auth-gated, which token realm its challenge advertises — an honest lens for \"is the registry plane up\", never a fabricated ok..",
       "name": "registry_status",
       "path": "registry_status/SKILL.md",
       "service": "registry",
-      "sha256": "34038c930618888e3ba960c93733548092d137af1839d368ce626235710c1347"
+      "sha256": "3b87b0fb8a4b401b79aee29f4023df5dd45723817f84c20a47b696c93a50b34a"
     },
     {
       "description": "Read registry tags: Tags lists one org-owned repository's tags, read live from the OCI registry..",
       "name": "registry_tags",
       "path": "registry_tags/SKILL.md",
       "service": "registry",
-      "sha256": "0fe8668d02037b1a8eb8d8c15c97bb606b403e7ebdc0e01de680b3970c8156e8"
+      "sha256": "5276820d13fb5c6abfbdc369586d51323009b34997dcd36e36b5893266904dbf"
     }
   ],
   "spec_version": "8.0.0"

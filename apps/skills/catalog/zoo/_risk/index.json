@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 5,
   "skills": [
     {
@@ -11,35 +16,35 @@
       "name": "risk_features",
       "path": "risk_features/SKILL.md",
       "service": "risk",
-      "sha256": "126f628fcd75b70293d6bad7f714b108bdd3f906395605d705b5b3f040a0f6cc"
+      "sha256": "845353caa159ab631df5a3d4a57776c3099e992846e6982713d770c4f33ba1e5"
     },
     {
       "description": "Read risk health: Whether the risk model plane can actually work right now.",
       "name": "risk_health",
       "path": "risk_health/SKILL.md",
       "service": "risk",
-      "sha256": "a23ead1086e119fcaae8ad1b43c111617aee7eb7bf0d9ea666f80d15517ae552"
+      "sha256": "b9cdb42d2e80e75fb77677ccf971604c7e8a2e9f051d0496968d5a8f3f6761d2"
     },
     {
       "description": "Read risk policy: Your organisation's decision-regime history, and which version is in force.",
       "name": "risk_policy",
       "path": "risk_policy/SKILL.md",
       "service": "risk",
-      "sha256": "434d24bd37a8d612deb24a06420906ae1e7a08814521094c8992b86580d1c6b0"
+      "sha256": "f7f9cf7183a475e84ed63c82d1c1bfafc76ad7a4a8ce4c322f5181b103702f06"
     },
     {
       "description": "Read risk search: Read back one exhaustive search.",
       "name": "risk_search",
       "path": "risk_search/SKILL.md",
       "service": "risk",
-      "sha256": "408b4ba753d9d0b56575a5f774b4b8cbcf8916bf94aa8288f5bef73b6550e7ac"
+      "sha256": "d8148d50687e9b741c2f2c54c423bf8a3e4190c6f50864ae6463a725ca8bf84f"
     },
     {
       "description": "Read risk state: Report your organisation's model: what it learned, and what it realised.",
       "name": "risk_state",
       "path": "risk_state/SKILL.md",
       "service": "risk",
-      "sha256": "884cf7dac1db6cb3b649416a23440b19816065993ddac24099bb7c7158a04e01"
+      "sha256": "1da136821784734499acc80f6176cd18c90c2e518158491f714791b1ae022c8b"
     }
   ],
   "spec_version": "8.0.0"

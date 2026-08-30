@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "treasury_accounts",
       "path": "treasury_accounts/SKILL.md",
       "service": "treasury",
-      "sha256": "b686f30cb3b9b3f344efbc7d2e7dcd13deef139571c95c1f68823611997b3b88"
+      "sha256": "88e6345430caa29ea97af77d398123c80eb4417d938b3d47da3f86a7c7d04e4f"
     },
     {
       "description": "Read treasury treasury: Returns the reserve fund's health and the current revenue-share policy for any validated caller..",
       "name": "treasury_treasury",
       "path": "treasury_treasury/SKILL.md",
       "service": "treasury",
-      "sha256": "cce501b463da991470b324d69fff3545a7d3440299bc89bc2d2539f7afcc78d1"
+      "sha256": "b0977a5eedac0c56259442c5eef526849219222dc9dcf52056becdd605126e27"
     }
   ],
   "spec_version": "8.0.0"

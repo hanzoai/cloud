@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "experiment_assign",
       "path": "experiment_assign/SKILL.md",
       "service": "experiment",
-      "sha256": "3f8b965f54cca6e16f0e54697b79b80da14c18c4d63c14e7c70ac97c551ff35d"
+      "sha256": "26af685e01a986de4fee507559f731a5f94a6390a0df06dbcc2f19c834fe6fa7"
     },
     {
       "description": "Read experiment experiment: Is every experiment in the caller's org, with its variants, status and decision, ordered by project then id., Is one experiment's definition and lifecycle: variants, weights, control arm, status and winner..",
       "name": "experiment_experiment",
       "path": "experiment_experiment/SKILL.md",
       "service": "experiment",
-      "sha256": "f4fd1fe873d45ae76b1ee8c3966fc0e1322ff089150e32af7c76fb9ad9347e2c"
+      "sha256": "53c041d89897e214d7c3c7242ecd961bc2e1abc7af3a1e8ffb465b488f002199"
     },
     {
       "description": "Read experiment health: Is whether the experiments subsystem is mounted and serving in this process..",
       "name": "experiment_health",
       "path": "experiment_health/SKILL.md",
       "service": "experiment",
-      "sha256": "86c75b5b755c14e4e50d83875fd56dd4bd2702c58d4bea1bb4bb7d146d341ef8"
+      "sha256": "e17354ac4d16d7534169f4798da210ab4f33ceffc02e13b46205f6fcb73d8927"
     }
   ],
   "spec_version": "8.0.0"

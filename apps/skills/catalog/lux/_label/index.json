@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "label_coverage",
       "path": "label_coverage/SKILL.md",
       "service": "label",
-      "sha256": "b9e107ccfca34289c5bdcae148bacc9fd14ee80f116b086ba9f088efa45e18c6"
+      "sha256": "e2e86f55d28a5bbfaa4e10238d9d39b21bb4a6b760b3cc21003b83c02d40bd51"
     },
     {
       "description": "Read label label: Read the assertions this tenant has recorded.",
       "name": "label_label",
       "path": "label_label/SKILL.md",
       "service": "label",
-      "sha256": "0404c51ea01d68b4853395ae4583ac6252185a2a4dc3b0fafc14a450dd8478d3"
+      "sha256": "e0dab49ec81e9d6e3ee205aa497267529b7dc8a4287bc1aec4b0b370421447cd"
     },
     {
       "description": "Read label vocabulary: The closed vocabularies and the precedence rule that resolves a conflict.",
       "name": "label_vocabulary",
       "path": "label_vocabulary/SKILL.md",
       "service": "label",
-      "sha256": "a54750cf18087d26f96622a70ca84c48e21e6e777b5a068eaa453d56e41c9765"
+      "sha256": "2d5fbb6ac7ab1ce3d04614e16daf31d80207a4420098a88b615b11879a9198fc"
     }
   ],
   "spec_version": "8.0.0"

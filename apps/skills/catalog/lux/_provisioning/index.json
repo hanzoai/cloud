@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "provisioning_datastore",
       "path": "provisioning_datastore/SKILL.md",
       "service": "provisioning",
-      "sha256": "8f8de029c4fd7f8626019e0b5cfe39972830322e1f0c490e37efc3ed26221ace"
+      "sha256": "c6f3af1234744fa25ba81ebc2d44ee2867bc0665a4b1943255a2b0527e7340ff"
     },
     {
       "description": "Read provisioning docdb: ListDocDB lists the caller org's Lux DocDB document databases., GetDocDB returns one Lux DocDB database's metadata..",
       "name": "provisioning_docdb",
       "path": "provisioning_docdb/SKILL.md",
       "service": "provisioning",
-      "sha256": "81eb242f540b1b2f829aafb44a6376423602c10b1906d32e52d7116460ad7c14"
+      "sha256": "b52fb7bfac8389cc19d29584900d6f94225cb847595bc90c1f1ca34704e1a026"
     },
     {
       "description": "Read provisioning kv: ListKV lists the caller org's Lux KV stores., GetKV returns one Lux KV store's metadata..",
       "name": "provisioning_kv",
       "path": "provisioning_kv/SKILL.md",
       "service": "provisioning",
-      "sha256": "36bbcd3960d95bab867375cd92c3025ff4e5d1fd1b05ddcfd1ee80a0d6dfe42e"
+      "sha256": "124a2f5b04064eae44f6956b8a0d1cf7b2260d4b1ed5efe2299323dfc0090887"
     },
     {
       "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
       "name": "provisioning_s3",
       "path": "provisioning_s3/SKILL.md",
       "service": "provisioning",
-      "sha256": "6fa78f337919cc5a4506c5e13c851a0b92ea6fd7cf68fe4a348e63932363e55f"
+      "sha256": "48baf8554f7a6983193c3bd5257d54e3e54bdcc57d01097909cd578556c83571"
     },
     {
       "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
       "name": "provisioning_search",
       "path": "provisioning_search/SKILL.md",
       "service": "provisioning",
-      "sha256": "b8dd52b1c6f2652d9eee198084b850f7a5178787eb29e3d7c65a7c33a7b5e8b3"
+      "sha256": "272ad1f21bd46558df431cbcabee99b61624cc99291f73f0e2896c250e2f0b34"
     },
     {
       "description": "Read provisioning sql: ListSQL lists the caller org's Lux SQL databases., GetSQL returns one Lux SQL database's metadata..",
       "name": "provisioning_sql",
       "path": "provisioning_sql/SKILL.md",
       "service": "provisioning",
-      "sha256": "3da74ad5fb0d7dc4fdf22020eca7e21975c93f04e6e1ea1ceff0f4a12110decd"
+      "sha256": "94cd84deb6f1a36fc0452c77369e5ea6d7fd55e35b279d179d787fd602005dbb"
     },
     {
       "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
       "name": "provisioning_vector",
       "path": "provisioning_vector/SKILL.md",
       "service": "provisioning",
-      "sha256": "8381dfe7a2bd653c3c4fd68e0cc6ad4bc52ec50b188656b25bf1666ceda0d4f1"
+      "sha256": "9f2e42045932cd6aa18a8f130d382112cf17a3ab3b61331e38ef5be1a83f88f8"
     }
   ],
   "spec_version": "8.0.0"

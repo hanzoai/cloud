@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "engine_model",
       "path": "engine_model/SKILL.md",
       "service": "engine",
-      "sha256": "8fa6e2718c7d4c4cd6d228e95c3f84de61efb560eb73c5b3db8a4d0f20f2bf87"
+      "sha256": "6f3a8ff6bed048bd209f9b07a6cd3f778a01c35794aa6c46e595f41e097c564e"
     },
     {
       "description": "Read engine models: List the models the serving runtime holds, with each one's load state.",
       "name": "engine_models",
       "path": "engine_models/SKILL.md",
       "service": "engine",
-      "sha256": "5af7eab3cbc1324a7978fa16f243f7aeda6b9f8d8456233b019e30b0bcaf4825"
+      "sha256": "02edabbe983ecc2cb17111d4e289d4a0622507806d4da4877db1b230f5225017"
     },
     {
       "description": "Read engine status: Whether the serving runtime is reachable, and which build it runs.",
       "name": "engine_status",
       "path": "engine_status/SKILL.md",
       "service": "engine",
-      "sha256": "448613992187cc08ed2d4c2401d22b2e35711c7ee2ee480ed2408b6d1f48f61f"
+      "sha256": "c0b3ed399e1d96787232da2286e355f32aafc818e36f4d32ce2024fb1522bcdb"
     },
     {
       "description": "Read engine system: The serving host's own inventory: devices, memory and build capabilities.",
       "name": "engine_system",
       "path": "engine_system/SKILL.md",
       "service": "engine",
-      "sha256": "7d03e484428924b6e3582824a3f728e6b6671e95026d9ef7cf695798124b7787"
+      "sha256": "ed6155235d3ee7e58e1677e687e54120e144231a1f2f2b7020b9cec0caa43668"
     }
   ],
   "spec_version": "8.0.0"

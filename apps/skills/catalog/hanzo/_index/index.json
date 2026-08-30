@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 5,
   "skills": [
     {
@@ -11,35 +16,35 @@
       "name": "index_health",
       "path": "index_health/SKILL.md",
       "service": "index",
-      "sha256": "e621932f4832d1d6c6fe4ef1b6ddff895f42c5a600153197c35b6451061154d1"
+      "sha256": "29e973f621b19672d627813c8dac2cf429e7778b45e9e1698b245a1d1c9b525e"
     },
     {
       "description": "Read index indexes: Lists the indexes your org holds., Reads one index's definition., Pages through the documents in an index..",
       "name": "index_indexes",
       "path": "index_indexes/SKILL.md",
       "service": "index",
-      "sha256": "916f0063b7c9bed3dd414b840a08617d9e8abebc55063df6cf37e05047f1f81c"
+      "sha256": "7dc08875f67da97ec6fe7761b66b2cc19406083d3b8e4aa6e6ad4e5730ca22ab"
     },
     {
       "description": "Read index stats: Counts the documents in each of your indexes..",
       "name": "index_stats",
       "path": "index_stats/SKILL.md",
       "service": "index",
-      "sha256": "b7c332f81a3992d77a2db9a21b47ac567c1e716552bf7acdbfa5fe3159dfe626"
+      "sha256": "2a6d78b90a5ac5f6826f98222976271af6bf43f1b5febae94ad511949da47d30"
     },
     {
       "description": "Read index tasks: Checks a write task, which has already finished..",
       "name": "index_tasks",
       "path": "index_tasks/SKILL.md",
       "service": "index",
-      "sha256": "dc2abd0815c5533c1ff9bd579b76c975c0ab76876b745e843723927045a2c5c0"
+      "sha256": "388214a41cdeb324d0388ffe1f8411f6848ed028b19c68ee65cb3f3671151fcb"
     },
     {
       "description": "Read index version: Identifies the search implementation answering..",
       "name": "index_version",
       "path": "index_version/SKILL.md",
       "service": "index",
-      "sha256": "37f56a057cea4f13fd0f660dcc7af9d86c801f15bcff9241e9f4c5a30310362f"
+      "sha256": "7970815dc9b201a170f2393ccf36823459a34ce1b3c21b3bf2d733768fed8eb2"
     }
   ],
   "spec_version": "8.0.0"

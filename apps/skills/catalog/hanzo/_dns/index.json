@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "dns_health",
       "path": "dns_health/SKILL.md",
       "service": "dns",
-      "sha256": "cf1e2dae3ed8d2f546ef13a7353485d4e2b38fd412c4c90d5252fb5ca319c0ee"
+      "sha256": "677cc15e6108368544d9443fc00085b80d4844d698fac011f78d24ab804f76c8"
     },
     {
       "description": "Read dns zones: List your org's DNS zones, Read one DNS zone, List a zone's DNS records.",
       "name": "dns_zones",
       "path": "dns_zones/SKILL.md",
       "service": "dns",
-      "sha256": "2b4b0e85060c5b7bd42703125dd55bcfab958f398d926d1b92661cab46973291"
+      "sha256": "870ee9c676b681c7e3f474337f01473e0a1d755db95fd8fe2c58c1eb6a6c8df5"
     }
   ],
   "spec_version": "8.0.0"

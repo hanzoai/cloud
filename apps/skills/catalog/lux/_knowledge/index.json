@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "knowledge_connectors",
       "path": "knowledge_connectors/SKILL.md",
       "service": "knowledge",
-      "sha256": "b678c73c2a62fd9932f7acc86d1a89df97dc9547a85a11d6d908fa9914cbb11b"
+      "sha256": "7a72649fdeaf479c8bd78734cd84d39acc26984395474cc8f4d82671ca59e860"
     },
     {
       "description": "Read knowledge graph: Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges..",
       "name": "knowledge_graph",
       "path": "knowledge_graph/SKILL.md",
       "service": "knowledge",
-      "sha256": "c758524fe64741679dbe24cc4598d468070b51b81e3d73ddd2038567ed1744b2"
+      "sha256": "5c79535a74e402dc02d31256bc9b55a82f34c9e221e15ee0b7f19d786435cd27"
     }
   ],
   "spec_version": "8.0.0"

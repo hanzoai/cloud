@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "space_drives",
       "path": "space_drives/SKILL.md",
       "service": "space",
-      "sha256": "aae4167c27ab43f6bd491526ca01a74cf1487820d70eb0ccee5838821468a634"
+      "sha256": "a2e699738219aa47bac4051130a7fe99e01fa2905f63ef38dcb3c3e81a5f3b28"
     },
     {
       "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
       "name": "space_health",
       "path": "space_health/SKILL.md",
       "service": "space",
-      "sha256": "d64830ffd108d1fd628a61f624f635d09b55ea0a411c73027bbcdae086aec793"
+      "sha256": "a7a9a0a1af79a1e45c97332f3fdff2de2ade8ecf44d55537503970619478cc04"
     },
     {
       "description": "Read space spaces: Lists the caller org's own spaces..",
       "name": "space_spaces",
       "path": "space_spaces/SKILL.md",
       "service": "space",
-      "sha256": "ab6da9d8baef8a8d7ba036d45f8426433d9e612606c8b502d76873b57aa7af52"
+      "sha256": "49fdc6cc1434e375dec8d8faf5135ff78a8314a6c82b45f2603b081dafa4d46e"
     }
   ],
   "spec_version": "8.0.0"

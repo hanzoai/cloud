@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "link_devices",
       "path": "link_devices/SKILL.md",
       "service": "link",
-      "sha256": "dcbdfb425ca8122c8b3907f77c29e5ebb1804db6ed2521adf4555fee2a997832"
+      "sha256": "7237a9eb1844c70a6b8c84462e3b35618808738e5f27670c698cca6983fff108"
     },
     {
       "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
       "name": "link_link",
       "path": "link_link/SKILL.md",
       "service": "link",
-      "sha256": "6d1e0e994ec73ef8fd7aff210941bb5db6bdbd9c175c92a27700651eae60f325"
+      "sha256": "4481d032cf3c3dae9e35148b7efa6ffa1028d37d06d2eff0643c5ab78d808da8"
     },
     {
       "description": "Read link route: Gets the failover order across your linked accounts..",
       "name": "link_route",
       "path": "link_route/SKILL.md",
       "service": "link",
-      "sha256": "31b0fc37274db52a2626f6f9f96de9854f46175fc59cb40780968cb96f851230"
+      "sha256": "333b532d02347108663103cce43322575a5202f949d04141f2f5fb01f6425f6a"
     },
     {
       "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Hanzo spend side by side..",
       "name": "link_usage",
       "path": "link_usage/SKILL.md",
       "service": "link",
-      "sha256": "6f89ca2a94c79ea84b0fe0b0f153e6224244d026eaa9919387d733458e982d34"
+      "sha256": "64ed6bc58f170aa50c598049b16dbb65cbf311a57083c7c30880702387e47fc7"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 6,
   "skills": [
     {
@@ -11,42 +16,42 @@
       "name": "cloudflare_d1",
       "path": "cloudflare_d1/SKILL.md",
       "service": "cloudflare",
-      "sha256": "0404079d00b9adff7d512c78ee6e2ca7eca09789ea0c6ce30478c5ac43c9925d"
+      "sha256": "8904e60fba54fc8c8ded58abeac8cb95205d25a06ca220f4665a0a049b318426"
     },
     {
       "description": "Read cloudflare kv: KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare account., Read a Workers KV value as its stored bytes.",
       "name": "cloudflare_kv",
       "path": "cloudflare_kv/SKILL.md",
       "service": "cloudflare",
-      "sha256": "b014b7781bc7b3fa708c52d36b166ed65ff8624826d1c84840868ea35915a4cf"
+      "sha256": "58a9aee1e8e079ec93dfaa15e5faa54477dd3da65e14f71ecfa0feac61965a5d"
     },
     {
       "description": "Read cloudflare pages: Lists the org's Cloudflare Pages projects., Reads one Cloudflare Pages project — its build config, deployment configs and latest deployment..",
       "name": "cloudflare_pages",
       "path": "cloudflare_pages/SKILL.md",
       "service": "cloudflare",
-      "sha256": "60146425f58320bce1d803bd67ead3d268e39d1f67f85ada6da53041d8a03400"
+      "sha256": "842cf9c0cba31b6744586d83f5c6d7f79bce4207b6a5fe3674801acb17e61a50"
     },
     {
       "description": "Read cloudflare r2: Lists the R2 buckets on the org's Cloudflare account..",
       "name": "cloudflare_r2",
       "path": "cloudflare_r2/SKILL.md",
       "service": "cloudflare",
-      "sha256": "c96fdc8713718611def761fc291e5d63e543ca6d18c34ce3dc381740ba5eb6cc"
+      "sha256": "3f28ac51e6106ae7288e67cd73acd190608f3b60153f8d12628e43040ee5f022"
     },
     {
       "description": "Read cloudflare workers: Lists the Worker scripts on the org's Cloudflare account., Reads the org account's workers.dev subdomain — the name under which every subdomain-enabled script is served., Lists the Worker routes bound within one zone — the URL patterns that dispatch to a ",
       "name": "cloudflare_workers",
       "path": "cloudflare_workers/SKILL.md",
       "service": "cloudflare",
-      "sha256": "595df1cddceafad90fee93aa24e552cf70abf574ce53abbac3533c787a724e9a"
+      "sha256": "5b21d72ec61aee2d4acc97781da70a854a1c3e9f373095698018384e11ee1521"
     },
     {
       "description": "Read cloudflare zones: Lists the Cloudflare zones the org's connected API token can see, paged and filtered by the query parameters Cloudflare itself accepts., Reads one Cloudflare zone the org's token can see., Reads a zone's Cloudflare traffic dashboard — requests, bandwidth, t",
       "name": "cloudflare_zones",
       "path": "cloudflare_zones/SKILL.md",
       "service": "cloudflare",
-      "sha256": "4041979a586790b139196a5695be3aa0ba12b398f95a2319d029442649eeb8b1"
+      "sha256": "67ad302a48980843dfb53fff88d774d78aca631538a32d27d8616c10c9d03ca3"
     }
   ],
   "spec_version": "8.0.0"

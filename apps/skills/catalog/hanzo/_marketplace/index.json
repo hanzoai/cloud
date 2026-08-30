@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "marketplace_listings",
       "path": "marketplace_listings/SKILL.md",
       "service": "marketplace",
-      "sha256": "a741a81d7c88d1b4c3ffdcb6e957e24939bdc2e91dfcd4b6abdaf147e92402de"
+      "sha256": "948c28a1c06dad381b5376630155794ec3a39603f89f68dce0c74f2483c10d41"
     },
     {
       "description": "Read marketplace marketplace: Discover lists every tool and agent the caller can reach in their own org and project, enriched with any public listing's title, category and price, and with installed=true on the ones already activated for that scope..",
       "name": "marketplace_marketplace",
       "path": "marketplace_marketplace/SKILL.md",
       "service": "marketplace",
-      "sha256": "6e3fc0e21ffe2a67041560dbbdb0c6b230a1159a514ac34ecb3c505f856271e4"
+      "sha256": "2d613c258b718b86fca10d9754062e260d16974d18a02f63bc8653ca6456b03c"
     }
   ],
   "spec_version": "8.0.0"

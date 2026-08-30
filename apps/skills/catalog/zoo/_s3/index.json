@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "c10575c86bc0012d4d78abf005fc4911078d7631f2bef1049756235ea64b712d"
+      "sha256": "e05334518b1b20d013bb70f913f40e04eed7cf499a4cf448026b2d6119691a6f"
     },
     {
       "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
       "name": "s3_health",
       "path": "s3_health/SKILL.md",
       "service": "s3",
-      "sha256": "082b5c7d00dcca22728e176a69f23cb53b6e69842cea7cc71a9af85c8a901c1c"
+      "sha256": "5fa346240d82ef226a62b889f8afebe420840b228b76a0980dc10af94793f815"
     }
   ],
   "spec_version": "8.0.0"

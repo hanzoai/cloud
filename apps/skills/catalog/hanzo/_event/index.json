@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "event_errors",
       "path": "event_errors/SKILL.md",
       "service": "event",
-      "sha256": "425f5b40f6b9a9e7437213994486a25c2f71b5f9dd586d3691f34494a4321ca5"
+      "sha256": "7122791d9527a0978dad6bc1117f7c8a5da77f93ee35f4c4f6c9c999dd30b067"
     },
     {
       "description": "Read event health: Health reports whether the event plane can take a write and the warehouse can answer a read..",
       "name": "event_health",
       "path": "event_health/SKILL.md",
       "service": "event",
-      "sha256": "fa151eb4a6992729e3c7a55a8416597f3f0eb62c925bc58be3d9597ec7ce68f4"
+      "sha256": "a0e4e0c71e110a9092d05557f69baa7e1e21acc55103a57a38b8b8d1eafd59e1"
     },
     {
       "description": "Read event insights: Returns the caller org's most recent product events, newest first., Reports that the unified insights surface is serving..",
       "name": "event_insights",
       "path": "event_insights/SKILL.md",
       "service": "event",
-      "sha256": "d0897553a9fb0517264465482de468b036f797d4a0ebab65ff81a93b6d5d3eda"
+      "sha256": "855f1cf9291fea63ef7cdf16c503fc02148b41b862096e80967310558fc7485e"
     },
     {
       "description": "Read event overview: Overview returns the caller org's analytics KPIs for one time window..",
       "name": "event_overview",
       "path": "event_overview/SKILL.md",
       "service": "event",
-      "sha256": "400449254440353cb9ea56291af75454d7e29cff393b542279ad5f15a8a52ffd"
+      "sha256": "2f5b3bab706c10177edd6ee7188a88027561442702080a28c709710cabb9b4c1"
     },
     {
       "description": "Read event tag js: The Hanzo event tag — the one-line install for a surface with no bundler.",
       "name": "event_tag-js",
       "path": "event_tag-js/SKILL.md",
       "service": "event",
-      "sha256": "f3a5fadb48671cb3ba1db75c211cb6ba78d9ecd962102c4d1c4be0bb6173abb3"
+      "sha256": "8cfb9d8154db8e465727c144943c4dec5bcd66af0086ed74d805a4ce8d9cb2da"
     },
     {
       "description": "Read event timeseries: Timeseries returns the caller org's LLM usage over time as an evenly-spaced series..",
       "name": "event_timeseries",
       "path": "event_timeseries/SKILL.md",
       "service": "event",
-      "sha256": "bb5f4be077371b0997a3777f242bd00a56207406db118fc996f7fe3ad090d213"
+      "sha256": "ae9cab01dd248b46005ed1abfccf272e9478d679cfac2fd7e6d3f4a41d70bfbb"
     },
     {
       "description": "Read event top: Top returns the caller org's ranked lenses for one window, five of them at once..",
       "name": "event_top",
       "path": "event_top/SKILL.md",
       "service": "event",
-      "sha256": "48c55b3a86da32c7a96566c20a7cc44f94f3f4af9b290e6afaf60375ec8bd95c"
+      "sha256": "ccf50bf5dbc9596b440873cd02fe40dc062877454a09d20f2a0b78111dd43601"
     }
   ],
   "spec_version": "8.0.0"

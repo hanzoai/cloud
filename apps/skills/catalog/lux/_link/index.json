@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "link_devices",
       "path": "link_devices/SKILL.md",
       "service": "link",
-      "sha256": "62f6ac7fac7edb66a7fee0bfa23f01386ec8856ecdea75dfe00624972c74e3ed"
+      "sha256": "fb15d896c950fda84138e405f2df52acf1c18a1e2de28a6cef2dec3b30b4ce54"
     },
     {
       "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
       "name": "link_link",
       "path": "link_link/SKILL.md",
       "service": "link",
-      "sha256": "9bb56c68751241cb2d6908dc0273c6ac4335595c3848a07393fff15492ed7fa0"
+      "sha256": "812fb2b9966b380b0163bb18217208acecc7f8862ad8e4bd8b0b17257f564e5f"
     },
     {
       "description": "Read link route: Gets the failover order across your linked accounts..",
       "name": "link_route",
       "path": "link_route/SKILL.md",
       "service": "link",
-      "sha256": "156ead44ad62cb057b5d725d8179277f08a7cbf65c318021a07855eb697a00a6"
+      "sha256": "27e213768b633767e0464555cb31af670686eed4667a8176fbc5985d56381ad9"
     },
     {
       "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Lux spend side by side..",
       "name": "link_usage",
       "path": "link_usage/SKILL.md",
       "service": "link",
-      "sha256": "4602c7dbc2b0470f22a3d3e809975dfe771da5ba23b58be6bfd8b85bb2309912"
+      "sha256": "3923a2e6e18fb395961a42999baa4ea8aae5cef60d286c46c32466b419db994a"
     }
   ],
   "spec_version": "8.0.0"
