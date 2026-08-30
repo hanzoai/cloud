@@ -4,11 +4,6 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
-  "mcp": {
-    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
-    "method": "POST",
-    "url": "https://api.lux.network/v1/mcp"
-  },
   "skill_count": 8,
   "skills": [
     {
@@ -16,56 +11,56 @@
       "name": "agents_activity",
       "path": "agents_activity/SKILL.md",
       "service": "agents",
-      "sha256": "bb7dc30337b83e758b68ecdd9d451cbc6af11d4bc2d78bf61881d9eaa68e96c3"
+      "sha256": "e8a64d27b69b4d1397c4255e3d7905e59768fb1959c770ae1bbadfa3e2a1070c"
     },
     {
       "description": "Read agents agents: Returns every agent defined in the caller's org, each with the number of runs recorded against it., Returns one agent with its system prompt and its 20 most recent runs..",
       "name": "agents_agents",
       "path": "agents_agents/SKILL.md",
       "service": "agents",
-      "sha256": "1eec7bd754048b4969400edf630fe49190fa71bb673d87a762252aa3283ecc96"
+      "sha256": "22a5fc58c0e32b691635215fe45477e59f35936b2962f66b9e76717b8792ad45"
     },
     {
       "description": "Read agents builds: Returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product., Returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the rea",
       "name": "agents_builds",
       "path": "agents_builds/SKILL.md",
       "service": "agents",
-      "sha256": "9cc330a3778e62bf855de79f5ed84cc2a54415245a87cceba17e8af247032892"
+      "sha256": "cbe7f131463d002f62f060a37866ae233aa18e2c9669e7ec3a81bb62bf08f033"
     },
     {
       "description": "Read agents chat: List the agent threads in your org, Read one agent thread in full, List the agent presets available to a caller.",
       "name": "agents_chat",
       "path": "agents_chat/SKILL.md",
       "service": "agents",
-      "sha256": "c6bd68eee4e9afa00b68c8c37194584b219345ffaedd0cfbbb65e633c679a3df"
+      "sha256": "60ee367ed5cbce3f81277efe6751672017f2e75f58d5f35e124659427f5a86e0"
     },
     {
       "description": "Read agents metrics: Serves the invocations-over-time histogram for the org's Agents dashboard..",
       "name": "agents_metrics",
       "path": "agents_metrics/SKILL.md",
       "service": "agents",
-      "sha256": "eb0d38a04f2190209f703bb37868d1d944c43aca163d7943d38ed593d406472d"
+      "sha256": "13fc1ef876fed79ef55e526b47cdc1f59be8e99174c2f43dd3a6456d586ec120"
     },
     {
       "description": "Read agents runs: Returns the org's agent runs across EVERY agent, newest first — what ran here, for whom, on which model, how long it took, and why it failed., Returns one agent's execution history, newest first — each run's input, its output or its error, and how long it took..",
       "name": "agents_runs",
       "path": "agents_runs/SKILL.md",
       "service": "agents",
-      "sha256": "2c3388e5fe500d900d0bce8bc829dc36bab39508a2ba8b803af7647d08623802"
+      "sha256": "bfcd70433edfa33dc6a52b46d32caee300f5c9d11b128adbba943b8e5a5c8179"
     },
     {
       "description": "Read agents sessions: Returns the caller org's live sessions, newest first — each with its event count, its direct-child count and a one-line preview of its latest event., Live session and event updates for the caller's org, as Server-Sent Events., Returns one session with its di",
       "name": "agents_sessions",
       "path": "agents_sessions/SKILL.md",
       "service": "agents",
-      "sha256": "8091a7ac0b4b31791566f5e24ddb0cb51d1988c2bc8e0ba6dbae387b157249bb"
+      "sha256": "62f79925ad75aeda6e4333866a3321f43a4fdc3f6ff7f04821f28e0628030cfb"
     },
     {
       "description": "Read agents targets: Returns every machine registered to the caller's org, newest first, each with its live session load., Returns one registered machine, with its live session load..",
       "name": "agents_targets",
       "path": "agents_targets/SKILL.md",
       "service": "agents",
-      "sha256": "0b4b556721e4bd61379f4afca00a57dbcb38b50384876c3f0080fdb4d50d9928"
+      "sha256": "f91b99033c1b8d1dc9947e0c2922e0d408f6d03187902c5ed2de8b10b070a53e"
     }
   ],
   "spec_version": "8.0.0"

@@ -5,9 +5,9 @@
 package team
 
 struct blobRef {
-    Workspace text @0
-    Filename  text @8
-    File      text @16
+    Space    text @0
+    Filename text @8
+    File     text @16
 }
 
 struct botRoster {
@@ -37,23 +37,23 @@ struct statsIn {
 }
 
 struct teamRoom {
-    ID        text       @0
-    Workspace text       @8
-    Name      text       @16
-    Topic     text       @24
-    Direct    bool       @32
-    Private   bool       @33
-    Archived  bool       @34
-    Members   list<text> @40
-    Life      text       @48
-    Bindings  list<text> @56
+    ID       text       @0
+    Space    text       @8
+    Name     text       @16
+    Topic    text       @24
+    Direct   bool       @32
+    Private  bool       @33
+    Archived bool       @34
+    Members  list<text> @40
+    Life     text       @48
+    Bindings list<text> @56
 }
 
 struct teamRoomBind {
-    ID        text       @0
-    Workspace text       @8
-    Life      text       @16
-    Bindings  list<text> @24
+    ID       text       @0
+    Space    text       @8
+    Life     text       @16
+    Bindings list<text> @24
 }
 
 struct teamRooms {
@@ -71,16 +71,16 @@ interface team {
     # callback set is a different credential with a different lifetime and is left
     # alone, so this is a team sign-out, not a platform one.
     delete_team_account_cookie() returns (rep: cookieAck)
-    # Removes one blob from a workspace's file store. The caller must
-    # hold a verified session AND be a member of the workspace; anything else — an
-    # unknown workspace, another tenant's workspace, a workspace the caller is not
+    # Removes one blob from a space's file store. The caller must
+    # hold a verified session AND be a member of the space; anything else — an
+    # unknown space, another tenant's space, a space the caller is not
     # in — answers the same 404, so a probe learns nothing about what exists.
     # It is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a
     # delete never confirms a blob's existence and a foreign blob id (a physical key
     # the caller can never name into another tenant's box) is a harmless no-op. A
     # storage backend that is unavailable fails closed with 502 rather than lying
     # about success.
-    delete_team_files_by_workspace_by_filename(req: blobRef)
+    delete_team_files_by_space_by_filename(req: blobRef)
     # Returns the identity providers this deployment starts a login
     # with. It is always exactly one — hanzo.id. Which identities that provider accepts
     # (Google, GitHub, passkey, password) is IAM's question, answered on IAM's own
@@ -97,20 +97,20 @@ interface team {
     # 502 rather than a false "0 members".
     get_team_billing_plan() returns (rep: planInfo)
     # Returns the caller org's bot members — the org's agents projected as
-    # the workspace Employees they become, each with the member account uuid and
+    # the space Employees they become, each with the member account uuid and
     # Person reference the roster addresses it by. An agents subsystem that is not
     # mounted answers an empty list, never an error.
     get_team_bots() returns (rep: botRoster)
-    # Returns every room of the caller's org, across the workspaces
+    # Returns every room of the caller's org, across the spaces
     # it owns, with the work facet each carries.
     # It reads the SAME Chunter documents the transactor serves, so a room opened
     # in the Team client appears here with no sync, and a facet written here is read
     # by anything holding the document. Direct messages are included: a room between
     # two people is a room with no name, not a different kind of thing.
     get_team_rooms() returns (rep: teamRooms)
-    # SyncBots re-projects the caller org's agents as workspace members into EVERY
-    # workspace of the org, and removes the ones whose agent is gone. It is
-    # idempotent, and admin only: mutating a workspace's roster requires the
+    # SyncBots re-projects the caller org's agents as space members into EVERY
+    # space of the org, and removes the ones whose agent is gone. It is
+    # idempotent, and admin only: mutating a space's roster requires the
     # gateway-minted admin flag, which a client can never forge. It answers how many
     # roster entries the reconcile touched.
     post_team_bots_sync() returns (rep: botSync)
@@ -118,7 +118,7 @@ interface team {
     # about. It answers the room as it now stands.
     # The write is a platform MIXIN on the room document, applied through the
     # SAME applyTx path the Team client's own writes take and broadcast to every
-    # connected client — so a room bound here updates live in an open workspace
+    # connected client — so a room bound here updates live in an open space
     # rather than on the next reload.
     put_team_rooms_by_id(req: teamRoomBind) returns (rep: teamRoom)
 }
