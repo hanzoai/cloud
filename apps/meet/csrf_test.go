@@ -51,8 +51,11 @@ func TestAmbientCookieMintNeedsCSRF(t *testing.T) {
 		rq.Header.Set("Cookie", "hanzo_iam_token=session-value")
 		rq.Header.Set("X-Org-Id", "acme")
 		rq.Header.Set("X-User-Id", "u_acme")
+		// Names what the BROWSER says about where this came from. It was a token
+		// to echo; the control reads Sec-Fetch-Site now, so a forgery is a request
+		// that says it came from elsewhere rather than one carrying a bad token.
 		if csrf != "" {
-			rq.Header.Set("X-CSRF-Token", csrf)
+			rq.Header.Set("Sec-Fetch-Site", csrf)
 		}
 		resp, err := app.Test(rq, zip.TestConfig{Timeout: 5 * time.Second, FailOnTimeout: true})
 		if err != nil {
@@ -71,11 +74,11 @@ func TestAmbientCookieMintNeedsCSRF(t *testing.T) {
 		}
 	})
 
-	t.Run("a forged token is refused", func(t *testing.T) {
-		got := browser(t, http.MethodPost, "/v1/meet/getToken", "not-a-real-token",
+	t.Run("a sibling subdomain is refused", func(t *testing.T) {
+		got := browser(t, http.MethodPost, "/v1/meet/getToken", "same-site",
 			map[string]any{"roomName": "acme_standup", "participantName": "Ada"})
 		if got != http.StatusForbidden {
-			t.Errorf("mint with a forged CSRF token = %d, want 403", got)
+			t.Errorf("mint from a sibling *.hanzo.ai page = %d, want 403", got)
 		}
 	})
 

@@ -568,8 +568,12 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 		rq.Header.Set("X-Org-Id", "hanzo")
 		rq.Header.Set("X-User-Id", "u_alice")
 		rq.Header.Set(authz.HeaderUserName, "alice")
+		// The parameter names what the BROWSER says about where the request came
+		// from. It was a token to echo; the control reads Sec-Fetch-Site now, so a
+		// forgery is no longer "a bad token" — it is a request that says it came
+		// from somewhere else, which is the thing the browser will not lie about.
 		if csrf != "" {
-			rq.Header.Set("X-CSRF-Token", csrf)
+			rq.Header.Set("Sec-Fetch-Site", csrf)
 		}
 		resp, err := app.Test(rq, zip.TestConfig{Timeout: wireTimeout, FailOnTimeout: true})
 		if err != nil {
@@ -594,10 +598,10 @@ func TestAmbientCookieWritesNeedCSRF(t *testing.T) {
 		}
 	})
 
-	t.Run("a forged token is refused", func(t *testing.T) {
+	t.Run("a sibling subdomain is refused", func(t *testing.T) {
 		if got := browser(t, http.MethodPatch, "/v1/todo/projects/api/issues/7",
-			"not-a-real-token", map[string]any{"status": "done"}); got != http.StatusForbidden {
-			t.Errorf("write with a forged CSRF token = %d, want 403", got)
+			"same-site", map[string]any{"status": "done"}); got != http.StatusForbidden {
+			t.Errorf("write from a sibling *.hanzo.ai page = %d, want 403", got)
 		}
 	})
 

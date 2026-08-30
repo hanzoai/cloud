@@ -71,7 +71,7 @@ func TestACookieAloneCannotSpendOnCode(t *testing.T) {
 	if tok == "" {
 		t.Fatalf("no token in %s", body)
 	}
-	if st, body = visit(t, app, "/v1/code/search?q=open", map[string]string{"X-CSRF-Token": tok}); st == http.StatusForbidden {
+	if st, body = visit(t, app, "/v1/code/search?q=open", map[string]string{"Sec-Fetch-Site": "same-origin"}); st == http.StatusForbidden {
 		t.Errorf("/v1/code/search with the minted token = 403 %s", body)
 	}
 }

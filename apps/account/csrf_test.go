@@ -81,42 +81,54 @@ func TestCSRF_AmbientWriteWithoutTokenIsRefused(t *testing.T) {
 	}
 }
 
-// TestCSRF_AmbientWriteWithValidTokenAllows: same request WITH a valid token mints.
+// TestCSRF_AmbientWriteFromTheConsoleAllows: the same request, made by the console
+// itself. What says so is Sec-Fetch-Site, which the browser sets and script cannot,
+// so there is no token to mint and no key for two processes to agree on.
 func TestCSRF_AmbientWriteWithValidTokenAllows(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	tok := csrfToken(t, app, "alice", "acme")
 	code, body := req(t, app, http.MethodPost, "/v1/account/keys", map[string]string{
 		"X-User-Id": "alice", "X-Org-Id": "acme",
-		"Cookie":       "iam_access_token=opaque-sid",
-		"X-CSRF-Token": tok,
+		"Cookie":         "iam_access_token=opaque-sid",
+		"Sec-Fetch-Site": "same-origin",
 	}, "")
 	if code != http.StatusOK {
-		t.Fatalf("ambient write with valid CSRF token: want 200, got %d (%s)", code, body)
+		t.Fatalf("ambient write from the console itself: want 200, got %d (%s)", code, body)
 	}
 	if len(f.mintedFor) != 1 || f.mintedFor[0] != "acme/alice" {
 		t.Fatalf("mint should target acme/alice: %v", f.mintedFor)
 	}
 }
 
-// TestCSRF_TokenBoundToIdentity: a token minted for alice cannot authorize a write as
-// mallory — the MAC binds (X-User-Id, X-Org-Id).
-func TestCSRF_TokenBoundToIdentity(t *testing.T) {
+// TestCSRF_ASiblingSubdomainIsRefused is what the identity-bound MAC was really
+// defending, stated directly.
+//
+// The old control minted a token whose MAC bound (X-User-Id, X-Org-Id), so a token
+// minted by an attacker could not authorize a write carried by the VICTIM's cookie.
+// That mattered because a page on a sibling *.hanzo.ai host can set a custom header
+// — same-site requests are not stopped by preflight the way cross-site ones are —
+// and SameSite sends the session cookie to it.
+//
+// Sec-Fetch-Site answers that case at the door: a sibling subdomain's request says
+// `same-site`, never `same-origin`. No token, no MAC, no identity binding, and the
+// forgery never reaches the handler. A write as mallory FROM mallory's own console
+// is not forgery and is not refused — the old test read that as a violation because
+// the token was the only thing it could measure.
+func TestCSRF_ASiblingSubdomainIsRefused(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	aliceTok := csrfToken(t, app, "alice", "acme")
 	code, _ := req(t, app, http.MethodPost, "/v1/account/keys", map[string]string{
-		"X-User-Id": "mallory", "X-Org-Id": "acme", // different principal
-		"Cookie":       "iam_access_token=opaque-sid",
-		"X-CSRF-Token": aliceTok, // stolen/replayed token bound to alice
+		"X-User-Id": "alice", "X-Org-Id": "acme",
+		"Cookie":         "iam_access_token=opaque-sid",
+		"Sec-Fetch-Site": "same-site", // a page on another *.hanzo.ai host
 	}, "")
 	if code != http.StatusForbidden {
-		t.Fatalf("cross-identity CSRF token replay: want 403, got %d", code)
+		t.Fatalf("a same-site (sibling subdomain) write: want 403, got %d", code)
 	}
 	if len(f.mintedFor) != 0 {
-		t.Fatalf("mint reached on a cross-identity token: %v", f.mintedFor)
+		t.Fatalf("mint reached on a sibling-subdomain forgery: %v", f.mintedFor)
 	}
 }
 

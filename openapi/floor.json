@@ -1,6 +1,6 @@
 {
   "paths": 1732,
-  "operations": 2396,
+  "operations": 2392,
   "products": {
     "account": 10,
     "ad": 7,
@@ -8,7 +8,7 @@
     "admission": 1,
     "affiliate": 17,
     "agents": 39,
-    "ai": 293,
+    "ai": 294,
     "allowance": 1,
     "ask": 2,
     "audit": 1,
@@ -68,6 +68,7 @@
     "licensing": 11,
     "link": 11,
     "lsp": 5,
+    "market": 5,
     "marketing": 35,
     "marketplace": 6,
     "meet": 7,
@@ -103,7 +104,6 @@
     "share": 2,
     "skills": 3,
     "social": 13,
-    "space": 10,
     "standing": 1,
     "sync": 6,
     "tasks": 10,

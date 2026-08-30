@@ -3276,6 +3276,29 @@ components:
             reaches D1.
           type: string
       type: object
+    Day:
+      properties:
+        close:
+          type: string
+        count:
+          description: Count is transactions in the day, where the table keeps one.
+          type: integer
+        date:
+          description: Date is the day's start, unix seconds.
+          type: integer
+        high:
+          type: string
+        locked:
+          type: string
+        low:
+          type: string
+        open:
+          type: string
+        price:
+          type: string
+        volume:
+          type: string
+      type: object
     Declaration:
       properties:
         application:
@@ -4224,6 +4247,17 @@ components:
             consumer never re-derives it.
           type: string
       type: object
+    Figures:
+      properties:
+        count:
+          type: integer
+        locked:
+          type: string
+        pools:
+          type: integer
+        volume:
+          type: string
+      type: object
     File:
       properties:
         createdTime:
@@ -5146,6 +5180,23 @@ components:
           type: string
         size:
           type: integer
+      type: object
+    History:
+      properties:
+        at:
+          description: At is the token this is the history of, lowercased.
+          type: string
+        chain:
+          type: string
+        days:
+          description: |-
+            Days is oldest first, which is the order a chart draws. `[]` for a token the
+            indexer holds no day for, `null` where the read failed.
+          items:
+            $ref: '#/components/schemas/Day'
+          type: array
+        reach:
+          $ref: '#/components/schemas/Reach'
       type: object
     Hit:
       properties:
@@ -6223,6 +6274,66 @@ components:
           description: |-
             URL is the server's JSON-RPC endpoint. Always a public http(s) host: the
             registration boundary and the dialer both refuse anything else.
+          type: string
+      type: object
+    Market:
+      properties:
+        amm:
+          description: |-
+            Amm reports whether an automated market maker is deployed on this chain,
+            which is the registry's factory addresses being present and not the indexer
+            having rows. The two disagree in exactly the interesting case: a chain with a
+            factory and nothing traded yet is a live venue with no history, and a chain
+            with neither has no venue at all.
+          type: boolean
+        coin:
+          type: string
+        day:
+          $ref: '#/components/schemas/Day'
+        factory:
+          additionalProperties:
+            type: string
+          description: |-
+            Factory is the AMM's factory contracts, by generation, omitted where none is
+            deployed. Addresses come from the registry because that is what the indexer
+            itself ingested from; anything else is a second copy free to drift.
+          type: object
+        figures:
+          $ref: '#/components/schemas/Figures'
+          description: |-
+            Figures is the chain's whole market maker, and Day its most recent active one.
+            Both are absent unless Reach says Read, so a caller cannot mistake a zero this
+            process never received for one the indexer computed. Day is also absent on a
+            chain that has never traded — which reach reports as Read, so the two absences
+            are told apart by the state beside them and never by the gap itself.
+        graph:
+          description: Graph is where this chain's indexer answers, empty where it
+            has none.
+          type: string
+        id:
+          description: ID is the EVM chain id, which is what a wallet must agree with.
+          type: integer
+        name:
+          type: string
+        reach:
+          $ref: '#/components/schemas/Reach'
+          description: |-
+            Reach is how far the read of this chain's FIGURES got — its own, so one
+            indexer being down describes one row and leaves the others to answer.
+        rpc:
+          description: |-
+            RPC is the chain's PUBLIC JSON-RPC, empty where the registry names only a
+            route this process happens to have. The registry's own `rpc` field is the
+            INDEXER's route to the node and is sometimes inside its cluster — plain HTTP
+            on a `.svc.cluster.local` name — which is reachable from the indexer, from
+            nothing else, and from no browser. Publishing that as the chain's endpoint
+            hands every caller an address that cannot answer them. See [endpoint].
+          type: string
+        slug:
+          description: |-
+            Slug is the chain's word in every indexer path — `cchain`, `zoo`. It is the
+            value a caller passes back as `chain`, and it is NOT the chain id: `96369`,
+            `C` and `c-chain` all answer 404 in that position.
           type: string
       type: object
     Memory:
@@ -7330,6 +7441,54 @@ components:
             SuperAdmin-only.
           type: integer
       type: object
+    Pool:
+      properties:
+        at:
+          description: At is the pool contract's address, lowercase.
+          type: string
+        count:
+          type: integer
+        fee:
+          description: |-
+            Fee is the pool's tier in hundredths of a basis point — 3000 is 0.3%. It is
+            the integer the contract stores, unconverted, so nothing here rounds a rate.
+          type: integer
+        locked:
+          type: string
+        token0:
+          $ref: '#/components/schemas/Token'
+        token0Price:
+          description: |-
+            Token0Price is token1 per token0, and Token1Price its reciprocal, both as the
+            indexer computed them. Neither is a price ON anything: it is the ratio the
+            pool's reserves stand at.
+          type: string
+        token1:
+          $ref: '#/components/schemas/Token'
+        token1Price:
+          type: string
+        volume:
+          type: string
+      type: object
+    Pools:
+      properties:
+        chain:
+          type: string
+        pools:
+          description: |-
+            Pools is `[]` where the chain has none and `null` where the read failed.
+
+            The two are different sentences and the wire says which: an empty ARRAY is the
+            indexer answering that nothing is deployed there, and `null` is nobody having
+            answered. `omitempty` would collapse both to an absent key — which is the
+            exact flattening the reach beside it exists to prevent, reintroduced one
+            struct tag lower down.
+          items:
+            $ref: '#/components/schemas/Pool'
+          type: array
+        reach:
+          $ref: '#/components/schemas/Reach'
+      type: object
     Position:
       properties:
         character:
@@ -7354,6 +7513,21 @@ components:
           items:
             $ref: '#/components/schemas/CalendarPost'
           type: array
+      type: object
+    Precompile:
+      properties:
+        at:
+          type: string
+        code:
+          description: |-
+            Code is whether the address carries any. False is an ANSWER — the node
+            replied and there is nothing deployed there — and is not the same as the read
+            having failed, which the enclosing Reach reports instead.
+          type: boolean
+        name:
+          type: string
+        role:
+          type: string
       type: object
     Preset:
       properties:
@@ -7985,6 +8159,24 @@ components:
             MicroUSDPerVCPUHour is the price of one vCPU for one hour, in millionths of
             a US dollar.
           type: integer
+      type: object
+    Reach:
+      properties:
+        at:
+          description: |-
+            At is `read`, `unconfigured`, `unreachable` or `refused`.
+
+            The four values are written out here because this document cannot carry an
+            enum, so the description IS the contract a client reads. Spelling the Go
+            constant names instead would name four identifiers no caller can see.
+          type: string
+        why:
+          description: |-
+            Why is the upstream's own words, on Unreachable and Refused, and empty
+            otherwise. It is the upstream's and not ours: a failure reported without its
+            reason sends the reader to look at the venue, which is the one place the fault
+            is not.
+          type: string
       type: object
     Receipt:
       properties:
@@ -8882,6 +9074,25 @@ components:
           items:
             $ref: '#/components/schemas/Capability'
           type: array
+      type: object
+    Roster:
+      properties:
+        chains:
+          description: |-
+            Chains is `[]` where the registry answered and named none, and `null` where
+            it did not answer — never absent, because a missing key and an empty list
+            read alike and only one of them means "there are none". Each row carries its
+            OWN reach for its figures, so a chain whose indexer is down is one row
+            saying so.
+          items:
+            $ref: '#/components/schemas/Market'
+          type: array
+        reach:
+          $ref: '#/components/schemas/Reach'
+          description: |-
+            Reach is how far the read of the REGISTRY got. It governs the list: a
+            registry that did not answer yields no rows, and the reason it did not is
+            here rather than in an empty array a caller would read as "no chains exist".
       type: object
     RoundInput:
       properties:
@@ -10484,6 +10695,25 @@ components:
             $ref: '#/components/schemas/Suppression'
           type: array
       type: object
+    Survey:
+      properties:
+        carries:
+          description: |-
+            Carries is all four where the node answered and `null` where it did not. It is
+            never a short list: a partial read reporting three would let a reader count
+            them and conclude the chain is missing one.
+          items:
+            $ref: '#/components/schemas/Precompile'
+          type: array
+        chain:
+          type: string
+        reach:
+          $ref: '#/components/schemas/Reach'
+        rpc:
+          description: RPC is the endpoint that was asked, so an answer names where
+            it came from.
+          type: string
+      type: object
     Sweep:
       properties:
         asset:
@@ -10818,6 +11048,31 @@ components:
         start:
           description: Start is the window's inclusive lower bound, RFC3339 UTC.
           type: string
+      type: object
+    Token:
+      properties:
+        at:
+          description: At is the token's contract address, lowercase.
+          type: string
+        decimals:
+          type: integer
+        name:
+          type: string
+        symbol:
+          type: string
+      type: object
+    Tokens:
+      properties:
+        chain:
+          type: string
+        reach:
+          $ref: '#/components/schemas/Reach'
+        tokens:
+          description: Tokens is `[]` where the indexer holds none and `null` where
+            the read failed.
+          items:
+            $ref: '#/components/schemas/Token'
+          type: array
       type: object
     Tool:
       properties:
@@ -94396,6 +94651,187 @@ paths:
       x-app: lsp
       x-public: true
       x-tool: true
+  /v1/market/chains:
+    get:
+      description: |-
+        Answers every chain this deployment can read, what is deployed on each, and what
+        its automated market maker amounts to.
+
+        One call. It reads the chain registry, then every chain's indexer for its figures
+        and its most recent active day, all at once — where a client doing it itself makes
+        one registry request and two more per chain.
+
+        THE ROW IS THE UNIT OF TRUTH. Each carries its own reach, so one indexer being
+        unreachable costs one row its figures and leaves the rest answered. A chain with no
+        market maker deployed — the registry names no factory for it — answers `read` with
+        totals of nothing, which is a fact about that chain and is not the same as a chain
+        nobody could ask.
+      operationId: get_market_chains
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Roster'
+          description: ok
+      security: []
+      summary: Answers every chain this deployment can read, what is deployed on each,
+        and what its automated market maker amounts to.
+      tags:
+      - market
+      x-app: market
+      x-public: true
+      x-tool: true
+  /v1/market/pools:
+    get:
+      description: |-
+        Answers the automated market makers on one chain: their two tokens, their fee tier,
+        and what has moved through each.
+
+        The two price fields on a pool are the ratio its own reserves stand at, as the
+        indexer computed them. They are not a price ON either token and not a mark: nothing
+        here derives one, ranks the pools, or names a route through them.
+
+        A chain with no market maker deployed answers `read` with no pools. That is the
+        chain's real condition, and it is deliberately not the same answer as an indexer
+        that could not be asked.
+      operationId: get_market_pools
+      parameters:
+      - description: |-
+          Chain is the chain's slug — `cchain`, `zoo` — as `chains` reports it. It is
+          the indexer's word for the chain and NOT the chain id: `96369`, `C` and
+          `c-chain` all name nothing.
+        in: query
+        name: chain
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pools'
+          description: ok
+      security: []
+      summary: 'Answers the automated market makers on one chain: their two tokens,
+        their fee tier, and what has moved through each.'
+      tags:
+      - market
+      x-app: market
+      x-public: true
+      x-tool: true
+  /v1/market/survey:
+    get:
+      description: |-
+        Answers which of the four settlement precompiles carry code on one chain.
+
+        An address with no code answers a call with empty data rather than an error, so
+        "this chain has no view precompile" and "this market was never opened" reach a
+        caller as the same silence — and only the second is a fact about a market. This
+        says which it is, by asking the node for the code at each address.
+
+        It reads presence and nothing else. No market, no quote, no depth and no order is
+        requested here, and `eth_getCode` is the only method this operation ever sends.
+      operationId: get_market_survey
+      parameters:
+      - description: |-
+          Chain is the chain's slug — `cchain`, `zoo` — as `chains` reports it. It is
+          the indexer's word for the chain and NOT the chain id: `96369`, `C` and
+          `c-chain` all name nothing.
+        in: query
+        name: chain
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Survey'
+          description: ok
+      security: []
+      summary: Answers which of the four settlement precompiles carry code on one
+        chain.
+      tags:
+      - market
+      x-app: market
+      x-public: true
+      x-tool: true
+  /v1/market/token:
+    get:
+      description: |-
+        Answers one token's daily history — open, high, low, close, price and volume per
+        UTC day, oldest first.
+
+        Every figure is the indexer's own arithmetic, passed through as the decimal string
+        it computed. Nothing here rounds one, converts one, or fills a gap: a day the
+        indexer holds no figure for arrives with that field absent, which says "not
+        indexed" where a zero would say "worth nothing".
+      operationId: get_market_token
+      parameters:
+      - in: query
+        name: chain
+        required: false
+        schema:
+          type: string
+      - description: At is the token's contract address.
+        in: query
+        name: at
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/History'
+          description: ok
+      security: []
+      summary: Answers one token's daily history — open, high, low, close, price and
+        volume per UTC day, oldest first.
+      tags:
+      - market
+      x-app: market
+      x-public: true
+      x-tool: true
+  /v1/market/tokens:
+    get:
+      description: |-
+        Answers the tokens one chain's indexer has seen, with the decimals a caller needs
+        to read any amount of one correctly.
+
+        This is what the indexer INGESTED, which is not the same as what exists on the
+        chain: a token nothing has traded has no row here, and this is not a registry of
+        what is permitted or listed.
+      operationId: get_market_tokens
+      parameters:
+      - description: |-
+          Chain is the chain's slug — `cchain`, `zoo` — as `chains` reports it. It is
+          the indexer's word for the chain and NOT the chain id: `96369`, `C` and
+          `c-chain` all name nothing.
+        in: query
+        name: chain
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tokens'
+          description: ok
+      security: []
+      summary: Answers the tokens one chain's indexer has seen, with the decimals
+        a caller needs to read any amount of one correctly.
+      tags:
+      - market
+      x-app: market
+      x-public: true
+      x-tool: true
   /v1/marketing/audiences:
     get:
       description: Returns the org's saved audiences, most recently updated first.
@@ -123435,6 +123871,9 @@ tags:
     types, hover, outline and diagnostics — over a repository AND its resolved dependencies,
     with no toolchain on the caller's machine.
   name: lsp
+- description: Package market is what trades on each chain, and how far the read of
+    it got.
+  name: market
 - description: 'Package marketing is lifecycle email: drip sequences that reach the
     right people.'
   name: marketing

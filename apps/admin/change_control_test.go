@@ -144,19 +144,21 @@ func TestTheControlCoversEverySeam(t *testing.T) {
 // TestAValidTokenReachesPastTheControl is the positive control, and without it the two
 // tests above would pass against a board that refused everything.
 //
-// The token is minted by the REAL issuer — apps/account's GET /v1/account/csrf, mounted
-// here beside the board — so this also measures the property the boot verdicts exist to
-// guarantee: the process that mints and the process that verifies hold ONE key, and a
-// token minted at one address verifies at the other. The caller then gets past the
-// control and meets the NEXT gate, which is the board's own admission.
+// It drives the header a same-origin fetch carries. There is no minted token and no
+// shared key: the control reads Sec-Fetch-Site, which the browser sets and script
+// cannot, so "the console's own request" is a fact about the request rather than an
+// agreement between processes. The caller gets past the control and meets the NEXT
+// gate, which is the board's own admission.
 func TestAValidTokenReachesPastTheControl(t *testing.T) {
 	app := seamApp(t)
-	tok := mintToken(t, app)
+	// The console's own request. There is no token to mint any more — the control
+	// reads the browser's Sec-Fetch-Site, which a page cannot write — so the
+	// positive control is the header a same-origin fetch actually carries.
 	got := drive(t, app, http.MethodPost, "/v1/admin/caps", map[string]string{
-		"Cookie": "session=v", "X-CSRF-Token": tok,
+		"Cookie": "session=v", "Sec-Fetch-Site": "same-origin",
 	})
 	if strings.Contains(got, "CSRF") {
-		t.Fatalf("a token minted at /v1/account/csrf was refused at an admin change: %q", clip(got))
+		t.Fatalf("the console's own same-origin change was refused at an admin change: %q", clip(got))
 	}
 	if !strings.Contains(got, "admin required") {
 		t.Fatalf("past the control the caller should meet the board's own admission, got %q", clip(got))

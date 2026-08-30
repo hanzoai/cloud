@@ -125,9 +125,6 @@ const keysWriteRatePerMin = 30
 // singleton (csrf.go), so a token minted here verifies wherever it is echoed — and
 // `own` is the boot question about that key this app, as the MINTER, must answer.
 func newService(deps cloud.Deps) (*cloud.Service[state], error) {
-	if err := own(cloud.Deployed()); err != nil {
-		return nil, err
-	}
 	b := cloud.NewBase(deps, "account")
 	st := state{iam: newIAMClient(), vfs: deps.VFS}
 	st.writesRL = newRateLimiter(keysWriteRatePerMin)
