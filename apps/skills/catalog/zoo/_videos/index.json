@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "videos_content",
       "path": "videos_content/SKILL.md",
       "service": "videos",
-      "sha256": "0c55f8dd3eecae2e3c0e6dc906abe58e5f29840878c00c502cfbeddaab7b84ea"
+      "sha256": "a84b1f81b363dbd8c093be24120eb50b2f3e0afaf081b15366d238fe2c03224c"
     },
     {
       "description": "Read videos videos: Implements GET /v1/videos/{id} — poll a job's status..",
       "name": "videos_videos",
       "path": "videos_videos/SKILL.md",
       "service": "videos",
-      "sha256": "39d6f664bb1e3070e791c451caff9e1d189fa934a02ff047207613eca538a6c9"
+      "sha256": "69de3ccecf2068c4839b9096e78957c119cb75980f6abbd2519547ce6066fde1"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "sandbox_fs",
       "path": "sandbox_fs/SKILL.md",
       "service": "sandbox",
-      "sha256": "bdccadba0912e3f16e9a77f74768c12968864ead85574742fbd01d08a94a5a37"
+      "sha256": "c9d90d8dd76b97abcf5ac48feb22331e64beb8dcf65b4705bf0dab7016a0b610"
     },
     {
       "description": "Read sandbox sandbox: Lists the caller org's sandboxes, newest first., Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends..",
       "name": "sandbox_sandbox",
       "path": "sandbox_sandbox/SKILL.md",
       "service": "sandbox",
-      "sha256": "8536252150a02bfb213fbd8ee03b18dc4627528ad93843871bee97e14a7bef82"
+      "sha256": "6fa552bcf94a66e412bf5b1e3e09ce41b4de18dc0e09e79ed3ad4ba72351a1ff"
     },
     {
       "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",
       "name": "sandbox_screen",
       "path": "sandbox_screen/SKILL.md",
       "service": "sandbox",
-      "sha256": "c27c8f9d124754ca743b8794e96f8192e40f9e13aca3f8f38a329c2cfbd1226f"
+      "sha256": "d8e2148c26f9a64f91758cd30bbdfa371c21aa3391f15e9f0272ae87e70b300d"
     },
     {
       "description": "Read sandbox terminal: The terminal, as a page, The terminal, as a socket.",
       "name": "sandbox_terminal",
       "path": "sandbox_terminal/SKILL.md",
       "service": "sandbox",
-      "sha256": "3d6ce39ffebec7d45cf4e5a9c06edd6995047f84de5de0e8773debfee1cfb70f"
+      "sha256": "b7afda3ba52abe791a8fdbf4808b81302636eef149f2b0286fda1688842c0f57"
     }
   ],
   "spec_version": "8.0.0"

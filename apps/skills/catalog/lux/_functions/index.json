@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "functions_deployments",
       "path": "functions_deployments/SKILL.md",
       "service": "functions",
-      "sha256": "12788979c77c076c12747d8c289b7c2a62914e68bba224a9d4d4bb856574aed8"
+      "sha256": "c67a75ae2826853bb81ed18814cec435e8fa15207cb2faac6bae9e6b3ea36ad0"
     },
     {
       "description": "Read functions functions: Is every serverless function the caller's org has published, each with its real 7-day rollup., Is one function with everything a detail page needs in one round-trip: its definition, its 7-day rollup, its trigger, its twenty most recent invocations and th",
       "name": "functions_functions",
       "path": "functions_functions/SKILL.md",
       "service": "functions",
-      "sha256": "f4a4898062337311f68551b28dbd62d34ac0553b28ac4052d06bc6186c219ffb"
+      "sha256": "543acd4463dcf342486b5e30b6ffd66d75b9b6b7302c994b166b88e317af0288"
     },
     {
       "description": "Read functions invocations: Is one function's past runs, newest first — each with its status, HTTP code, method, time and duration..",
       "name": "functions_invocations",
       "path": "functions_invocations/SKILL.md",
       "service": "functions",
-      "sha256": "27f2a7b27171730fe93a2a554064c657e3d7dc0d96789ac70441e1327aacf4ff"
+      "sha256": "d0a523125d02001952d162437909d0568173b4a7d462163b3b611a105cc843fd"
     },
     {
       "description": "Read functions logs: Is the output of a function's most recent run — its error text when that run failed, else what it printed..",
       "name": "functions_logs",
       "path": "functions_logs/SKILL.md",
       "service": "functions",
-      "sha256": "dde8a64111b63fc7665b4c07abe26dbfa52ef43b566c63913476bdeeb65987c7"
+      "sha256": "50bb707f90562652391e8eaa5c23bdd429083e72dcf966b8c574e1b0d1b38ec3"
     },
     {
       "description": "Read functions metrics: Is the org's serverless dashboard over a window: a per-function invocation costLine and how those invocations ended..",
       "name": "functions_metrics",
       "path": "functions_metrics/SKILL.md",
       "service": "functions",
-      "sha256": "e8213594e2e2b92b8fadbafd413389dabeac48c0abb4d76b2097db2b3ec0b775"
+      "sha256": "97470570562c7162e6d3296f0065a39d0f94994911cb88bb0988e43abe7b126b"
     },
     {
       "description": "Read functions secrets: Is the NAMES of the secrets the caller org's functions mount..",
       "name": "functions_secrets",
       "path": "functions_secrets/SKILL.md",
       "service": "functions",
-      "sha256": "5d4a609940f90947b2089224bcc21c1c9d70a8468c256d3b60f8144e0cc5b82b"
+      "sha256": "d7c2630c220a2ae768158136cdd2854b57ef25abe64e0467d82e08cc45e81e20"
     },
     {
       "description": "Read functions triggers: Is what calls the caller org's functions — one row per function..",
       "name": "functions_triggers",
       "path": "functions_triggers/SKILL.md",
       "service": "functions",
-      "sha256": "d6627d58ecee9e7963a91e69b0fd5593f8a124d67794c860eeea54d299954903"
+      "sha256": "fcb2799521f6b5f9e9ebfb189ed4d355976773bdf4a7cb18e0f52fe6c1db9d8e"
     }
   ],
   "spec_version": "8.0.0"

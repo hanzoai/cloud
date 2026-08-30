@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "blueprint_blueprint",
       "path": "blueprint_blueprint/SKILL.md",
       "service": "blueprint",
-      "sha256": "27f066a32c47d4bca84f3a38bee3d0fada805789095f695093963b5ab4c8c227"
+      "sha256": "96b062d0a2f352542921aac00a9603f361b417e6e9ce2c9abe1ebd0258820209"
     },
     {
       "description": "Read blueprint health: Reports blueprint liveness and echoes the compute rate card in force..",
       "name": "blueprint_health",
       "path": "blueprint_health/SKILL.md",
       "service": "blueprint",
-      "sha256": "a2376a47317f6f982b86180bcc7c19cdffcd4cd7fe153de17927ae7ab3b42576"
+      "sha256": "cd992265e4d361eeed6010ae6c0dcda2dce0cf4e5f0762e34ddcea17b990de26"
     },
     {
       "description": "Read blueprint sbom: A blueprint's bill of images and what running it costs.",
       "name": "blueprint_sbom",
       "path": "blueprint_sbom/SKILL.md",
       "service": "blueprint",
-      "sha256": "c0554472ebcbe1d0b7cf43fcd17dc1d038fc8485909bc8f5552e5e13b91c168b"
+      "sha256": "514ba0d77aca729d38e50f400e465ad2f171a1d32da395c04284a940a4b672c2"
     }
   ],
   "spec_version": "8.0.0"

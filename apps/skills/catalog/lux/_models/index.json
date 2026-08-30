@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "models_access",
       "path": "models_access/SKILL.md",
       "service": "models",
-      "sha256": "b2f5d3628c0912df36b77f0daa2e53591e0bc27ef9e39c16b5247a9c921eb973"
+      "sha256": "bc93e4e1435874210aee03f05e6477db4461bf1db071a284878fe0468f8972cb"
     },
     {
       "description": "Read models models: Returns the list of available models from the routing table..",
       "name": "models_models",
       "path": "models_models/SKILL.md",
       "service": "models",
-      "sha256": "71d7d9ba79818c050ed8e556008aeb172e4f825f942b5cc46a07144422d90993"
+      "sha256": "d73c64ece60e893679525a02e62d55c0d88c5e0fd3e19d5a7b9f493e9fdb704c"
     },
     {
       "description": "Read models providers: Public, secret-free list of the providers serving the models that GET /v1/models lists — the same source, projected..",
       "name": "models_providers",
       "path": "models_providers/SKILL.md",
       "service": "models",
-      "sha256": "ca53fc5c1be6ec12bc2a4177ef65a5c8409ab120c1d4d982bf0fa4e23f7bba15"
+      "sha256": "fad50f88d9e542809d911a41a0109001278a6d638e26118d45c5aedd066d7438"
     }
   ],
   "spec_version": "8.0.0"

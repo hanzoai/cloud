@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "usage_analytics",
       "path": "usage_analytics/SKILL.md",
       "service": "usage",
-      "sha256": "621bbcd32b33f551453d2546e10fcdca514e207834af44725cda4ca11b84703a"
+      "sha256": "8f74e94cca090156f71a14b5e3c21f0cf3a4432f97b601d8a39b30a9060ab631"
     },
     {
       "description": "Read usage samples: Is the PER-PROVIDER view: one connected account's own consumption of its own plan — \"my plan is 47% through its 6h window, resets at 14:20\"..",
       "name": "usage_samples",
       "path": "usage_samples/SKILL.md",
       "service": "usage",
-      "sha256": "c45d5cb06c9fc82c67140d798c005801719bf22e40cba7071e99ee311d2d4ec3"
+      "sha256": "73c8547b6c743750ec5f235a9d5a695cb1803bff1de7cc613401da299f343ac1"
     },
     {
       "description": "Read usage summary: Answers GET /v1/usage/summary: the caller's own usage footprint over one window — the categorized spend roll-up from the commerce ledger, the org's LLM usage totals from the warehouse, and the caller's OWN linked provider accounts beside the org's Zoo-routed u",
       "name": "usage_summary",
       "path": "usage_summary/SKILL.md",
       "service": "usage",
-      "sha256": "c4ba9543ba3005cf5bf9c49ba979ed696014db50464fbea05a49461e45e024b6"
+      "sha256": "2be9d5c5362aba94b36b66f42e59bf5952d1425990628b8906bf494c36f74adc"
     }
   ],
   "spec_version": "8.0.0"

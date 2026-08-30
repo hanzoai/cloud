@@ -1,0 +1,51 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://zoolabs.id",
+  "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
+  "skill_count": 5,
+  "skills": [
+    {
+      "description": "Read market chains: Answers every chain this deployment can read, what is deployed on each, and what its automated market maker amounts to..",
+      "name": "market_chains",
+      "path": "market_chains/SKILL.md",
+      "service": "market",
+      "sha256": "b5cd7d50b088709caf5c7c6ec836f313aae63887b8e90a5e0402d1371f5261a4"
+    },
+    {
+      "description": "Read market pools: Answers the automated market makers on one chain: their two tokens, their fee tier, and what has moved through each..",
+      "name": "market_pools",
+      "path": "market_pools/SKILL.md",
+      "service": "market",
+      "sha256": "d8c34c63c2d2921cb1d8f91019631771f741829a9cd83de71c601ad591234bed"
+    },
+    {
+      "description": "Read market survey: Answers which of the four settlement precompiles carry code on one chain..",
+      "name": "market_survey",
+      "path": "market_survey/SKILL.md",
+      "service": "market",
+      "sha256": "8fa8c5c5c5b25b2ab5b9d269f2ed1656e7ace057e706e7872c2bd5c741dacfbf"
+    },
+    {
+      "description": "Read market token: Answers one token's daily history — open, high, low, close, price and volume per UTC day, oldest first..",
+      "name": "market_token",
+      "path": "market_token/SKILL.md",
+      "service": "market",
+      "sha256": "a67c7d961fbb15e90c1869b96d5ad5862d93bd7635701257d8e1fb820d7c47bd"
+    },
+    {
+      "description": "Read market tokens: Answers the tokens one chain's indexer has seen, with the decimals a caller needs to read any amount of one correctly..",
+      "name": "market_tokens",
+      "path": "market_tokens/SKILL.md",
+      "service": "market",
+      "sha256": "d393d0da90bce88a9b6054b5bafd3e447e12771149c434392b47db0b006cc833"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

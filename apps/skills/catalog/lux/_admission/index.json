@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 1,
   "skills": [
     {
@@ -11,7 +16,7 @@
       "name": "admission_waitlist",
       "path": "admission_waitlist/SKILL.md",
       "service": "admission",
-      "sha256": "2bdf65a5b9b6d6ab60ad1d67ec9847182658ce62e1b87a355741564ba9c9a470"
+      "sha256": "6190f044906ec3130a0bd84d27c198c025735efaa1854c10dbe5719479eee64c"
     }
   ],
   "spec_version": "8.0.0"

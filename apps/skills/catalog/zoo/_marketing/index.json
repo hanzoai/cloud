@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 8,
   "skills": [
     {
@@ -11,56 +16,56 @@
       "name": "marketing_audiences",
       "path": "marketing_audiences/SKILL.md",
       "service": "marketing",
-      "sha256": "54a41375dcea30369107d0aa0fde33b28159171e23e20c8b60516a6c8313e241"
+      "sha256": "5f92424a5e9242133957cc184d360a4469725847e27903883e109c3f6e90badc"
     },
     {
       "description": "Read marketing calendar: Returns the org's calendar, latest scheduled first, optionally narrowed to one status., Returns one of the caller org's posts, including the exact error behind a failed publish..",
       "name": "marketing_calendar",
       "path": "marketing_calendar/SKILL.md",
       "service": "marketing",
-      "sha256": "ed8b6f15a70f0147be0fe74f7064ebfdf6899a13d47431e88d77b37cb34060ac"
+      "sha256": "ad9fcce1a2f12a708ed9a4529700cb5cf1cdefb701c692e31187470f2d5160e2"
     },
     {
       "description": "Read marketing campaigns: Returns the org's campaigns, most recently updated first, optionally narrowed to one lifecycle status., Returns one of the caller org's campaigns..",
       "name": "marketing_campaigns",
       "path": "marketing_campaigns/SKILL.md",
       "service": "marketing",
-      "sha256": "6e11240965d4ce374f8e99f4b2e1a26c14ef7796d82226b3bfcf3a5747540080"
+      "sha256": "0ddb6e5af1fb2db2e70453abeab1be5e786b15557e416e7a5cabfa0514af9d3e"
     },
     {
       "description": "Read marketing promos: Returns every promo the deployment offers with its live counters: how many orgs have redeemed it and how many redemptions remain under the cap., Prices a promo against a plan and seat count., Returns the caller org's OWN redemption of a promo — an org-scope",
       "name": "marketing_promos",
       "path": "marketing_promos/SKILL.md",
       "service": "marketing",
-      "sha256": "6db8bf65067f5e7541d34d7ba58b21accd7c8923e97e636dab87591e1a68ae15"
+      "sha256": "af2e6ae4caefa32ff13a97dd756bed35bb7e13d61efff4618ed0c5e5110a8f2c"
     },
     {
       "description": "Read marketing sequences: Returns the org's drip sequences, most recently updated first., Returns one of the caller org's sequences together with its steps in send order., Returns who is walking one sequence, most recently enrolled first, with each walk's current step and next du",
       "name": "marketing_sequences",
       "path": "marketing_sequences/SKILL.md",
       "service": "marketing",
-      "sha256": "a94435225fb226001e4adf3178790ae51fab108dde09d60930b6150866bb5ccb"
+      "sha256": "7a7385a58e0cec4409ff5bc6fbe8417b17e7d694b7684b7ea77c43e52d39a879"
     },
     {
       "description": "Read marketing summary: Rolls up the caller org's campaigns: how many there are, how many are active, and the summed budget and spend in cents..",
       "name": "marketing_summary",
       "path": "marketing_summary/SKILL.md",
       "service": "marketing",
-      "sha256": "aa0449a7183f7fc68387ecd1f5093bc1b24d97222630479a64bae4acff26b073"
+      "sha256": "ea00342c147933acbdb4439d6b68510fd09d0966eddaac941ce9d8e5f5fda249"
     },
     {
       "description": "Read marketing suppressions: Returns the org's opt-out list, newest first — everyone the send gate will refuse to deliver to..",
       "name": "marketing_suppressions",
       "path": "marketing_suppressions/SKILL.md",
       "service": "marketing",
-      "sha256": "3e582b89742c53102da70ad158cba476f6a72ca25d5720509fbd4d4ab634e616"
+      "sha256": "f30ca15c85b48d6caab19d3607a515b19026d9645fa812b34a09b8607ad695e6"
     },
     {
       "description": "Read marketing unsubscribe: Is the PUBLIC one-click endpoint (no principal): a recipient clicks the signed link in an email footer..",
       "name": "marketing_unsubscribe",
       "path": "marketing_unsubscribe/SKILL.md",
       "service": "marketing",
-      "sha256": "69338bba4f089d76c31760958b6b2cee5f2ec87113a380b103607db0b712059c"
+      "sha256": "67cfca4ce4fa7f9c597753c8a8eca3e190182b18d37f89207350fa8f207c6f81"
     }
   ],
   "spec_version": "8.0.0"

@@ -30,7 +30,10 @@ import (
 	"sort"
 	"strings"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/hanzoai/cloud/brand"
+	"github.com/hanzoai/cloud/manifest/door"
 	"github.com/hanzoai/cloud/openapi"
 )
 
@@ -448,6 +451,14 @@ func render(sk skill, id, description string) string {
 	add("## When NOT to use this skill")
 	add("")
 	add("- You need to CREATE, UPDATE or DELETE — this skill is read-only (`GET`).")
+	// Where to go instead, which the line above never said. The two things this
+	// catalogue cannot hold — a write, and a tool that exists only for the caller
+	// — are at one address, and an agent meets that wall HERE rather than back at
+	// the index it may never have read. Same shape as the bullets below: name the
+	// need, then the one document that answers it.
+	add(fmt.Sprintf("- You need to WRITE, or a tool that exists only for your org — a connected connector, "+
+		"your own registered MCP server, a function, an agent — no build-time catalogue holds those. "+
+		"Ask the agent MCP door: `POST %s%s`, JSON-RPC `tools/list`.", url, door.Path))
 	// The NEAREST document first. A reader that wants a sibling capability wants
 	// this product's own index, which lists only its skills; the top catalogue is
 	// named second, for a capability in a DIFFERENT product. Pointing only at the
@@ -483,12 +494,97 @@ type product struct {
 	SkillCount int    `json:"skill_count"`
 }
 
+// mcpDoor is the fleet's ONE agent MCP address, named in the catalogue index.
+//
+// A skill is a BUILD-TIME artifact and this catalogue is deliberately the READ
+// surface — one skill per GET, per product. Two halves of what an agent can
+// actually do are therefore absent from it by construction, and neither absence
+// is visible from inside a skill:
+//
+//   - the operations that are not GETs. 1047 of the contract's 2255 are, so the
+//     other 1208 — every create, every update, every delete — have no skill and
+//     no onward pointer.
+//   - the tools that exist only for a CALLER: an org's connected connectors, its
+//     own registered external MCP servers, its functions and its agents. Those
+//     are rows, not values; no build-time catalogue can hold them, however it is
+//     generated, because they are not known until someone asks.
+//
+// Both are reachable at one address, and it was not named here. An agent that
+// read the catalogue and hit the read-only wall had nowhere to go.
+//
+// It is NAMED, never restated: the address is [door.Path] — the same constant
+// the host serves and the edge refuses to answer with HTML — and the sentence is
+// the operation's own description in the published contract, lifted the way every
+// skill lifts its prose. Reword the handler's doc comment and this changes with
+// it; there is no second copy to drift.
+//
+// Fields are alphabetical, for the reason [entry]'s are.
+type mcpDoor struct {
+	Description string `json:"description"`
+	Method      string `json:"method"`
+	URL         string `json:"url"`
+}
+
+// theDoor reads the agent MCP door out of the published contract.
+//
+// openapi.yaml rather than a plugin subset, because the door is the HOST's: it
+// serves the union of every mounted subsystem's catalogue, so it appears in no
+// child's document. The sibling generator reads the same file for the same kind
+// of reason (gen-fleet-catalog: the audience is a fleet fact an app cannot see).
+//
+// Absence is a REFUSAL. A catalogue whose index quietly stopped naming the door
+// is the failure this whole function exists to remove, and it would regenerate
+// green — 670 skills, three brands, no diff anyone would read as wrong.
+func theDoor(root string) (mcpDoor, error) {
+	path := filepath.Join(root, "openapi.yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return mcpDoor{}, fmt.Errorf("read %s: %w — run `make -f mk/fleet.mk openapi` first", path, err)
+	}
+	var contract struct {
+		Paths map[string]map[string]struct {
+			Description string `json:"description"`
+			Summary     string `json:"summary"`
+		} `json:"paths"`
+	}
+	if err := yaml.Unmarshal(raw, &contract); err != nil {
+		return mcpDoor{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	for method, op := range contract.Paths[door.Path] {
+		if method == "parameters" {
+			continue
+		}
+		text := op.Description
+		if text == "" {
+			text = op.Summary
+		}
+		if text != "" {
+			return mcpDoor{Description: text, Method: strings.ToUpper(method)}, nil
+		}
+	}
+	return mcpDoor{}, fmt.Errorf("%s does not describe %s — the catalogue would name no way past the read-only surface",
+		path, door.Path)
+}
+
+// doorFor puts one brand's host on the door and rewrites the prose for it, the
+// same two steps every skill's own text goes through. The description is authored
+// on the Hanzo surface because that is where the handler was written, so shipping
+// it verbatim into the Lux or Zoo catalogue is the white-label leak [rebrand]
+// exists to stop.
+func doorFor(d mcpDoor, id string) mcpDoor {
+	d.Description = rebrand(d.Description, id)
+	d.URL = baseURL(id) + door.Path
+	return d
+}
+
 type index struct {
 	BaseURL     string `json:"base_url"`
 	Brand       string `json:"brand"`
 	GeneratedBy string `json:"generated_by"`
 	Issuer      string `json:"issuer"`
 	Schema      string `json:"schema"`
+	// MCP is the way past this catalogue's two build-time limits. See [mcpDoor].
+	MCP mcpDoor `json:"mcp"`
 	// Products is the progressive tier, and it is ADDITIVE: Skills stays whole so
 	// a reader of the published discovery convention that already walks it keeps
 	// working unchanged. A reader that wants less reads Products instead.
@@ -533,6 +629,16 @@ func main() {
 		os.Exit(1)
 	}
 	sort.Strings(specs)
+
+	// Read before a single skill is rendered, because it is the one input whose
+	// absence has to stop the run: everything else here degrades to a smaller
+	// catalogue, and a catalogue that silently stopped naming the door regenerates
+	// green.
+	theMCPDoor, err := theDoor(root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gen-skills: %v\n", err)
+		os.Exit(1)
+	}
 
 	// ONE pass over every subset, grouped by product — the paths of one product
 	// can arrive from two apps (/v1/finance is billing and treasury), so the
@@ -634,6 +740,7 @@ func main() {
 				Brand:       id,
 				GeneratedBy: generatedBy,
 				Issuer:      brand.For(id).IAMIssuer,
+				MCP:         doorFor(theMCPDoor, id),
 				Schema:      schemaID,
 				SkillCount:  len(own),
 				Skills:      own,
@@ -659,6 +766,7 @@ func main() {
 			Brand:       id,
 			GeneratedBy: generatedBy,
 			Issuer:      brand.For(id).IAMIssuer,
+			MCP:         doorFor(theMCPDoor, id),
 			Products:    products,
 			Schema:      schemaID,
 			SkillCount:  len(entries),

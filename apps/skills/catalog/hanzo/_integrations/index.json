@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 10,
   "skills": [
     {
@@ -11,70 +16,70 @@
       "name": "integrations_callback",
       "path": "integrations_callback/SKILL.md",
       "service": "integrations",
-      "sha256": "ba77830acda66ceae3c11f6f755a381df9ae65bab2c60b9500c2e893f2f79090"
+      "sha256": "6db42fd9b7fb9e2a178670dc1fd2deeae2b15389ad9bf19f0a5a937695a398a3"
     },
     {
       "description": "Read integrations connectors: Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints., Lists the user-scoped provider cards — the catalog of what a user can connect, and how., Hands the custodied access token to its owner — the ONE place cus",
       "name": "integrations_connectors",
       "path": "integrations_connectors/SKILL.md",
       "service": "integrations",
-      "sha256": "cbde4a3fc3eed23aa3ad97fc2737859ff1d2a2989f4b2aef553f3d13caaa059f"
+      "sha256": "0fd72697cacf001644f5baa9a8c8d17ce89898b6dfa13c6d770218be6750e016"
     },
     {
       "description": "Read integrations discord: Begin linking a Hanzo account from Discord, Complete the Discord account link, Discord sign-in return leg.",
       "name": "integrations_discord",
       "path": "integrations_discord/SKILL.md",
       "service": "integrations",
-      "sha256": "aea9536d64a563875ae79561a6bdbb70ebda79806589027f571d9ad0acb1533a"
+      "sha256": "00bf52a09d1e0e02ac8671339e127f67f6bfe46fdc9c144c5244942737096543"
     },
     {
       "description": "Read integrations github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object",
       "name": "integrations_github",
       "path": "integrations_github/SKILL.md",
       "service": "integrations",
-      "sha256": "79c267518eed947ad33dd8c63345b1586c400e46cebd2daa86ad464801cd3ff1"
+      "sha256": "7e7876bbd88adbfc5f38cb435b66e1673948c16fc11f4d00093c1ac48957651c"
     },
     {
       "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
       "name": "integrations_gitlab",
       "path": "integrations_gitlab/SKILL.md",
       "service": "integrations",
-      "sha256": "7df8802055851adc498217891613713eacccd696b202745c74d799a5c8257b7d"
+      "sha256": "846cc8cc1034974479b10b0e8acb2f70e86dafa63ebe3273faa84bed26ed52f4"
     },
     {
       "description": "Read integrations integrations: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a singl",
       "name": "integrations_integrations",
       "path": "integrations_integrations/SKILL.md",
       "service": "integrations",
-      "sha256": "6cdcbe00d0a579a581e0c4720c4d335f8654eb9bea1329b8e2de51590f0caad3"
+      "sha256": "0074076934d2dc3f24d1f68c4593ec8abffa48c4ae408988a58d142333842fa7"
     },
     {
       "description": "Read integrations slack: Install the Hanzo app into a Slack workspace, Begin linking a Hanzo account from Slack, Complete the Slack account link.",
       "name": "integrations_slack",
       "path": "integrations_slack/SKILL.md",
       "service": "integrations",
-      "sha256": "fa74c71fc59571a0945208984bc01712a2c457290fa09e6f7178091919e7e057"
+      "sha256": "697b34f1f633070a3162a6f2c44cc20b3792f162e6ad5ad3bcaf7476cb32e655"
     },
     {
       "description": "Read integrations teams: Begin linking a Hanzo account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
       "name": "integrations_teams",
       "path": "integrations_teams/SKILL.md",
       "service": "integrations",
-      "sha256": "c3216afeef3e32e22ce23d6f83623c93fbae871ff7dd306bc254ec2cae8e236d"
+      "sha256": "338245218d02e38948ed3de50c4d11ee58bbf2230da01cd01bcc55dd6dab29c9"
     },
     {
       "description": "Read integrations telegram: Begin linking a Hanzo account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
       "name": "integrations_telegram",
       "path": "integrations_telegram/SKILL.md",
       "service": "integrations",
-      "sha256": "6943a4705dd9fa8a4adf9b3f1612ac84e92941016a399e8d24424d2c4cc66016"
+      "sha256": "1f7bfbf40a35574acb9a28cf030da7b48b25d2083e7c1ff9ba14176f64ae57cd"
     },
     {
       "description": "Read integrations whatsapp: WhatsApp Cloud API subscription challenge.",
       "name": "integrations_whatsapp",
       "path": "integrations_whatsapp/SKILL.md",
       "service": "integrations",
-      "sha256": "82963e9d4e655f2acf723c43d1293b4fb669f9495308ff4583e656a42fd90467"
+      "sha256": "e360d511352f2d8ea28bb92a2c2d2c0012e56a66edf78dcd44a2eedcd479164c"
     }
   ],
   "spec_version": "8.0.0"

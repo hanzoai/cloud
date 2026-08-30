@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "domain_availability",
       "path": "domain_availability/SKILL.md",
       "service": "domain",
-      "sha256": "7a6634351f1eb61777e9ed425f696409fee0c3709940b3bda3d71b0b0324067a"
+      "sha256": "9ca76ffc1af5782c7998309d7a9ca5449d2b8f5b96963020d27f02ade24e200f"
     },
     {
       "description": "Read domain domains: Is the domains your org has bought here, newest registration first, each carrying the name, when it was registered, when it expires, what the org paid, the registrar order id and the nameservers it points at..",
       "name": "domain_domains",
       "path": "domain_domains/SKILL.md",
       "service": "domain",
-      "sha256": "3ca30156f06683b86db9e9e149225e9fff72311e012b7388f2062944b5f42a71"
+      "sha256": "65826635e58271e42df8c4622a8c04b30a58cfdd103be37791feb438a0c5cc1c"
     },
     {
       "description": "Read domain health: Reports registrar reachability honestly: ok only when the wholesale credentials are present AND name.com accepted them on a live call made while you waited..",
       "name": "domain_health",
       "path": "domain_health/SKILL.md",
       "service": "domain",
-      "sha256": "53c2cdc9fbd900a49f6a66e18b7be093fd4e76fbf8ec2434fcd8cd5a4eca320e"
+      "sha256": "f23682a50cc900c59f3189411a16a0b8ded970c292eb4cac91d7a024d0cce799"
     },
     {
       "description": "Read domain search: Finds names built from the keyword q, plus the registrar's alternate-TLD suggestions, and answers a quote for each: the name, whether it is purchasable, whether it is premium, the first-term and renewal price in cents, and the TLD..",
       "name": "domain_search",
       "path": "domain_search/SKILL.md",
       "service": "domain",
-      "sha256": "7f3283e13b86a1d346f71027ea013149c179a687e0a595bc8bf36897f2b9368b"
+      "sha256": "9fd72b8dc336b63b420aab00eca57dc43af493d98af41d9794eb2d5d5b2cf96b"
     }
   ],
   "spec_version": "8.0.0"

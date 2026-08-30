@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "author_author",
       "path": "author_author/SKILL.md",
       "service": "author",
-      "sha256": "06b32c9a656de7e8ef44a9c3608bfbec0c872c32670da5e4e32571cf614b8c4b"
+      "sha256": "271a602525375dcbb88dbbec070c120d06bca60feda6b1b77780be76b8faddd9"
     },
     {
       "description": "Read author basis: Returns the AUDIT TRAIL behind the caller's own royalty: every ledger row with the spend it was computed from, the share applied at the time, the platform's matching half, whether each row satisfies the formula, and the attribution edges that already existed wh",
       "name": "author_basis",
       "path": "author_basis/SKILL.md",
       "service": "author",
-      "sha256": "06a996d1609e86576d65f591456c0e566a0a639cb737256e7438ae1d64ed63b5"
+      "sha256": "2e788186376b3475eb8c35cca1189f63699f2f66078c1bc9d9087e11fe6aad36"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "auto_connectors",
       "path": "auto_connectors/SKILL.md",
       "service": "auto",
-      "sha256": "83233a6732d398e4469a04f162a6cb6b5983ec1dba268facee66f409711d53ef"
+      "sha256": "a8028d5b1c8a0970bafb352c74f9bf7ac7b7aed329af34ad3c4ede6d7b5277be"
     },
     {
       "description": "Read auto flows: Returns the caller org's automations, most-recently-updated first., Returns one automation and its latest version., Returns one flow's versions, newest first..",
       "name": "auto_flows",
       "path": "auto_flows/SKILL.md",
       "service": "auto",
-      "sha256": "dacf74e7d9e72124fa0b3fdc9565471561b0905fb109bc2a1cbbf96f8a38be92"
+      "sha256": "c35388dc267e82203f06202241fd56da74ddcc4f1d607281a6ad8a01219a4641"
     },
     {
       "description": "Read auto runs: Returns the caller org's run history, newest first., Returns one run..",
       "name": "auto_runs",
       "path": "auto_runs/SKILL.md",
       "service": "auto",
-      "sha256": "fd057a0548dada59b5ec3748097334e1a028297cb2f577e78a0e406b8d0783d1"
+      "sha256": "107f76022bfb68faaa2b88054c78698f89ec57c92ff80f691d9d3b25459e0b18"
     }
   ],
   "spec_version": "8.0.0"

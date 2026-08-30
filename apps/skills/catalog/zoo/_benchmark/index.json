@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 6,
   "skills": [
     {
@@ -11,42 +16,42 @@
       "name": "benchmark_catalog",
       "path": "benchmark_catalog/SKILL.md",
       "service": "benchmark",
-      "sha256": "6e6072516eb556aa2489197a6e304ef661158c36df727822855a3c284b79a1b4"
+      "sha256": "bee7fe18fda946f1bd37f0a5e407540c3e0a29cf8c69dc59070871c7ba43709b"
     },
     {
       "description": "Read benchmark claims: Lists the effective published claims: what the leaderboard will use for each (benchmark, model) after the seed, the import and any stored correction are layered..",
       "name": "benchmark_claims",
       "path": "benchmark_claims/SKILL.md",
       "service": "benchmark",
-      "sha256": "374422338e1dc0537d6a987868305428fec5edd39cd28b0e5d31ab038779e65e"
+      "sha256": "5d3a315a9d80b0cc21335ca5b6e0e498c58da262cb5a167582281a932889e900"
     },
     {
       "description": "Read benchmark compare: Is the ONLY valid arm-vs-arm test: it pairs the two models on the items BOTH completed, and answers rescue and damage counts with an exact-McNemar p..",
       "name": "benchmark_compare",
       "path": "benchmark_compare/SKILL.md",
       "service": "benchmark",
-      "sha256": "7a3048c8b699e73df2e8caa8f87f996f841b72aadb07bf92338abef10cfe934d"
+      "sha256": "e38a531b14bef7c7e23cb71c0a37e21c8a56ea05168d1c4510bba9e35f6d8ad1"
     },
     {
       "description": "Read benchmark history: Returns each model's measured score per run over time, oldest first, with the change between runs..",
       "name": "benchmark_history",
       "path": "benchmark_history/SKILL.md",
       "service": "benchmark",
-      "sha256": "a08ddd34f04faf80cf0590634ceff7db4f38316c712eb7971c56b3dd4c6b586a"
+      "sha256": "343360d925a6de36265d4030a78b0a15ff9899a68c496f706064f224d0bbb898"
     },
     {
       "description": "Read benchmark leaderboard: Answers one row per model for the benchmark named — what our own harness measured, beside what the vendor claims, and the gap between them..",
       "name": "benchmark_leaderboard",
       "path": "benchmark_leaderboard/SKILL.md",
       "service": "benchmark",
-      "sha256": "fb2d8542b5c1d645e0dab50de357919037f4764ed612e1ef54b7361f5560b759"
+      "sha256": "7b86a55f824f27b36191afeaf1cf26df5683ac0c31befa8113073fb3121056a9"
     },
     {
       "description": "Read benchmark presets: Are the router blends available to compose from — a named set of model arms, the rank they escalate through and the panel width that bounds fan-out — each served by the model layer as enso-<name>..",
       "name": "benchmark_presets",
       "path": "benchmark_presets/SKILL.md",
       "service": "benchmark",
-      "sha256": "ef510110f8461766dc917d82d5fcd7de77b1091d9ae346cf5e58b6a8cb705e11"
+      "sha256": "62f539ffe6c60f84deda80b9bf5f56ab75e99b328015643b58699fca792ed0e3"
     }
   ],
   "spec_version": "8.0.0"

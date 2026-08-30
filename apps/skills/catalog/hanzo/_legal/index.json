@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "legal_documents",
       "path": "legal_documents/SKILL.md",
       "service": "legal",
-      "sha256": "e4d96bc45dc2f90e1ee7fcd006454a0d0fd1317753bd322001c9718778a3ede1"
+      "sha256": "894344a3c5334ed4304f4126dbff1abf81eb96cc26ebe6fd03cc5e6c6dc7dcca"
     },
     {
       "description": "Read legal filings: Returns the org's filing records, newest first — which documents were filed where, through which provider, and what the filing's honest status is..",
       "name": "legal_filings",
       "path": "legal_filings/SKILL.md",
       "service": "legal",
-      "sha256": "395b431754dac10b61fafff268bbeb94e87f00ac29b1b695f89ac11ffa6cf5f9"
+      "sha256": "5a13de705e5967ac160d1252eb02e253c4ae600959ac5db7aa77803b8523b6fa"
     },
     {
       "description": "Read legal health: Reports that the legal subsystem is serving and how many built-in templates its catalog carries..",
       "name": "legal_health",
       "path": "legal_health/SKILL.md",
       "service": "legal",
-      "sha256": "5808985c5c5a944b5e85dd222f7ca578c7b9d0aa1e6254c0ebabea958c43c9b6"
+      "sha256": "02eb94d6c45824dcb98fa98df25069edab51279af1a9c43e63d95ec174effd5e"
     },
     {
       "description": "Read legal templates: Returns the org's effective template catalog: every built-in template, with any the org has overridden replaced by its own latest version., Returns one template resolved for the caller's org — the org's own override if it has saved one, else the built-in — w",
       "name": "legal_templates",
       "path": "legal_templates/SKILL.md",
       "service": "legal",
-      "sha256": "9a426a87e795b077533d052cdf17873dff5180c18c3ab550930026bc8e5976f7"
+      "sha256": "434296bb616f66fbf7b5ec0e6063e21a3b7af3ab79baec115c5339b3e71d794c"
     }
   ],
   "spec_version": "8.0.0"

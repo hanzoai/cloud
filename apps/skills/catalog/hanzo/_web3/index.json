@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "web3_chains",
       "path": "web3_chains/SKILL.md",
       "service": "web3",
-      "sha256": "b67e6868431b1c14fe7c366a034b5e7745075f6ec20657cb47d39b9c4fdf2e6e"
+      "sha256": "89cd623947e136fb0e5f67a4fdde268fc44137fc476c01403baefeb1003dfcf7"
     },
     {
       "description": "Read web3 tokens: Reads an address's native balance on a chain..",
       "name": "web3_tokens",
       "path": "web3_tokens/SKILL.md",
       "service": "web3",
-      "sha256": "6cc964b5dd973c8528ef7fc3ed36d4305e709e58587d71463fe9ae2a90b3a6e1"
+      "sha256": "46aca1fe81fdc418b507d2836a03e786dc052d24305c709a6e2a15902b707d91"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "validator_challenge",
       "path": "validator_challenge/SKILL.md",
       "service": "validator",
-      "sha256": "d4e048b78e7a5d49db32d37ca64aded1f061058181e88b4619257b34daf65aed"
+      "sha256": "d96b2d95ffb15cd99046aae95c91cc8b9ba681e74cfb5695c67dfed687147a3a"
     },
     {
       "description": "Read validator validator: Returns the validator slots the caller's org has claimed., Returns one claimed validator slot, scoped to the caller's org..",
       "name": "validator_validator",
       "path": "validator_validator/SKILL.md",
       "service": "validator",
-      "sha256": "31633f35eed094fb16056fb51b53ee7db90697815291ca40e1b6f0a934c8a01b"
+      "sha256": "f308d89149a7392e0d8a3c63e84d19f030831898cbb00315996fa43235262441"
     }
   ],
   "spec_version": "8.0.0"

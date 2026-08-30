@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "provisioning_datastore",
       "path": "provisioning_datastore/SKILL.md",
       "service": "provisioning",
-      "sha256": "5b1c2a89ff3f7972b7a977e8040cb9c05fa436e5b14c952c9c02aba3622fb1ae"
+      "sha256": "40dd5d3726d1bb652b78f9c25ee956e0626c119d424d757526c61084b43d9ca9"
     },
     {
       "description": "Read provisioning docdb: ListDocDB lists the caller org's Zoo DocDB document databases., GetDocDB returns one Zoo DocDB database's metadata..",
       "name": "provisioning_docdb",
       "path": "provisioning_docdb/SKILL.md",
       "service": "provisioning",
-      "sha256": "36ba8afd9ea534c41c64160f6886db44606d6eeed1e3f3de53f84373085030c4"
+      "sha256": "6df802bd08ce5498d2d25bf6383e0f89cc77cf104a6cfcce76858b95d3df282b"
     },
     {
       "description": "Read provisioning kv: ListKV lists the caller org's Zoo KV stores., GetKV returns one Zoo KV store's metadata..",
       "name": "provisioning_kv",
       "path": "provisioning_kv/SKILL.md",
       "service": "provisioning",
-      "sha256": "b6424ac140212a890e9de7a694bacc1f93c497bf47f954e1991585459344d0da"
+      "sha256": "06510f43515c86328cde6710bb61e76d395d69fe2341c19b00c7f480d08663d0"
     },
     {
       "description": "Read provisioning s3: Lists the caller org's object-storage buckets., Returns one bucket's metadata..",
       "name": "provisioning_s3",
       "path": "provisioning_s3/SKILL.md",
       "service": "provisioning",
-      "sha256": "3058218a449871bac660e27f709f5e22d2c91b33e74b6147dad65bff52a4a198"
+      "sha256": "5070a30f6819c61efc73849c59631b88f18867b848f6adaca13cd0b91bea2cde"
     },
     {
       "description": "Read provisioning search: Lists the caller org's search indexes., Returns one search index's metadata..",
       "name": "provisioning_search",
       "path": "provisioning_search/SKILL.md",
       "service": "provisioning",
-      "sha256": "0d784c57e95061ab666e595621367351732a7b5f2bb7edfd07a9aa399b849b01"
+      "sha256": "01fb8156b8aa97f579488e055f6758518d2e1dc69cea29608b7e1e2e507aedbc"
     },
     {
       "description": "Read provisioning sql: ListSQL lists the caller org's Zoo SQL databases., GetSQL returns one Zoo SQL database's metadata..",
       "name": "provisioning_sql",
       "path": "provisioning_sql/SKILL.md",
       "service": "provisioning",
-      "sha256": "50793b68cd981ad734c1b22ea197821255fb1f4614f936e3fddc4021d371667b"
+      "sha256": "bc6dae2e67ed15859726d02172fab9686bd0882dcf68f25b947a204ca69788c4"
     },
     {
       "description": "Read provisioning vector: Lists the caller org's vector collections., Returns one vector collection's metadata..",
       "name": "provisioning_vector",
       "path": "provisioning_vector/SKILL.md",
       "service": "provisioning",
-      "sha256": "233798e54bc02c899b96cbc23574a45aa76c21524df905f6fcd7da79eb6e1d57"
+      "sha256": "a302dca98856fbf12d72168951ed2209bd1500f3f9394183177ed0101a743296"
     }
   ],
   "spec_version": "8.0.0"

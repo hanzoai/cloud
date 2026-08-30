@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "knowledge_connectors",
       "path": "knowledge_connectors/SKILL.md",
       "service": "knowledge",
-      "sha256": "8e83b097a7a569585d280c5b6a5f65ab2bc2989c36ebe0793ac9058f4884a378"
+      "sha256": "6ea6ab637b4047b95a798ac348e3bd7bfd0864e85533f2d982ebd31eb9d5906b"
     },
     {
       "description": "Read knowledge graph: Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges..",
       "name": "knowledge_graph",
       "path": "knowledge_graph/SKILL.md",
       "service": "knowledge",
-      "sha256": "36ec28c8d9d2ae0f425bf7650190ee6f2527bc806133f92446a86db94815c4b0"
+      "sha256": "0a913b1845c4f84fc2eda22e572ff4dd0945cffc0c1e812ce76906c9b8384cf6"
     }
   ],
   "spec_version": "8.0.0"

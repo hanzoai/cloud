@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "esign_documents",
       "path": "esign_documents/SKILL.md",
       "service": "esign",
-      "sha256": "5ff2725012ca22f698a78fd1de87f6ae9a34b324ebe274a0b833bb51bfacce8b"
+      "sha256": "15da0a03d624d3265c96a614b13a9a6941ba0ab7d9b749f9096ed0beee794d24"
     },
     {
       "description": "Read esign health: Reports whether the e-signature surface is mounted..",
       "name": "esign_health",
       "path": "esign_health/SKILL.md",
       "service": "esign",
-      "sha256": "d3a743cf7683ecb4b2875f8eb309927a103cc2d383190470393ead72fa574631"
+      "sha256": "bc277538c06c66898acd0874cb6646f05782cf93ef5191160fe17f37593c9af7"
     },
     {
       "description": "Read esign o: Opens a document you were asked to sign, using your signing link..",
       "name": "esign_o",
       "path": "esign_o/SKILL.md",
       "service": "esign",
-      "sha256": "6e5af25caa2435253802e58c3c9c6203c0cc7a1d13e30801454a83cddd202e8b"
+      "sha256": "931dbb382d815b109b7164b7686dab3aa2fb87d774c6a04152e5b8a576ea5e39"
     }
   ],
   "spec_version": "8.0.0"

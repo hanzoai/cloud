@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "company_company",
       "path": "company_company/SKILL.md",
       "service": "company",
-      "sha256": "3436ba837472d770059c3f7b0e88f81bf5caf59f9d0ebb43717f45e2513bde61"
+      "sha256": "3d07794365722b3f0e70c4dceb6625f8b2ade24b26b4c87558b3603d16ae5d9d"
     },
     {
       "description": "Read company register: Returns the platform's whole formation register, newest activity first — every org's formation, not the caller's., Counts the platform's formations by stage — the register's shape in one read, so a queue that is growing is visible as a number rather than in",
       "name": "company_register",
       "path": "company_register/SKILL.md",
       "service": "company",
-      "sha256": "288a3dd871a36699dfad91323cb3cff54117b7a29f69e00fb4cf47329282fe31"
+      "sha256": "32d6728b5ab029b7fad86762080cd0058d9d3bc4e2de75edc0d1eabbe5b31e00"
     },
     {
       "description": "Read company review: Reports the founders whose KYC is not yet settled, oldest formation first, so the queue drains in the order founders have been waiting..",
       "name": "company_review",
       "path": "company_review/SKILL.md",
       "service": "company",
-      "sha256": "e4ad6d8d5e18d3076094ddb454cd47858bba7047451e65e32a265821512b8af8"
+      "sha256": "4e7d31ed251d097d25f696a9c2c5c48e2999d5010f1141665d7006882cbb46e5"
     }
   ],
   "spec_version": "8.0.0"

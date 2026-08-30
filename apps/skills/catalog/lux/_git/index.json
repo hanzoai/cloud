@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 9,
   "skills": [
     {
@@ -11,63 +16,63 @@
       "name": "git_blob",
       "path": "git_blob/SKILL.md",
       "service": "git",
-      "sha256": "3799500bd898f29919a611e57219edb5eedf36940890f3d256ff8007e8055868"
+      "sha256": "2cd1a99c128e1fd8bf44c3dcfb49d8cf858ede90ca845b9791fd4fb1be978e0f"
     },
     {
       "description": "Read git commits: Read a repository's commit log.",
       "name": "git_commits",
       "path": "git_commits/SKILL.md",
       "service": "git",
-      "sha256": "aa71a0688341684c143dbfcd7589315a5a74c2caa85952e8ae8e08260c49ba40"
+      "sha256": "dca2e5bdd767ed1b0392ca8798b58e2c2a0a1bfa3938b3cfc2d736dd64c973fe"
     },
     {
       "description": "Read git explore: Discover public repositories across every org.",
       "name": "git_explore",
       "path": "git_explore/SKILL.md",
       "service": "git",
-      "sha256": "da23675753ebcefddd47f688461a8444927ee617131920f5ca9596107a79153f"
+      "sha256": "d37a7e0832433a84aebfeb66871c7df6ed7174a11330a22f259730d9b2fe6ce8"
     },
     {
       "description": "Read git git: Browse your org's repositories, Open a repository's home page.",
       "name": "git_git",
       "path": "git_git/SKILL.md",
       "service": "git",
-      "sha256": "40db7dfc462a68dfd964d305b6eb84563863a86b5e61b28cedb666eb7c1502c3"
+      "sha256": "8f54632c1e4123017cedb5df50a37394c702843b7295203ee2acd4d962c30e37"
     },
     {
       "description": "Read git info: Advertise a repository's refs to a git client, Advertise a repository's refs to a git client.",
       "name": "git_info",
       "path": "git_info/SKILL.md",
       "service": "git",
-      "sha256": "55f11c5d5c53883fd0bebf1afba131428216faac8c42fa5adb83afefcc8f0aee"
+      "sha256": "f7dc8ee6c9c33655630ec31671c43b2642f7dd89bd2587f4a712569dfab7573c"
     },
     {
       "description": "Read git keys: Returns the SSH public keys registered to the caller's org — the keys that authenticate `git clone git@<host>:<org>/<repo>.git`..",
       "name": "git_keys",
       "path": "git_keys/SKILL.md",
       "service": "git",
-      "sha256": "e7347684715ce58d351d37f49431d498493f912bed47d300de26faec8ac3d2fd"
+      "sha256": "3393bc2ff378c543a2de1a670bba0da2a5f0daa0d197b93c0ab1e038551b8590"
     },
     {
       "description": "Read git repos: Returns the repos in the caller's scope, most recently updated first., Returns one repo with its live ref state: every branch name and the resolved HEAD commit., Returns one file's bytes at one revision..",
       "name": "git_repos",
       "path": "git_repos/SKILL.md",
       "service": "git",
-      "sha256": "149b5a9df5eb99ac06658576be6eee8d9f43a45bd73e68759e30bb5faf6cecf3"
+      "sha256": "9ee85b8c0a834ce017de2d8c0c3c3f04c25ec006509100b2e62932ff720efe47"
     },
     {
       "description": "Read git tree: Browse a directory inside a repository.",
       "name": "git_tree",
       "path": "git_tree/SKILL.md",
       "service": "git",
-      "sha256": "41649308bc8475bb77909a672ce509f3bac62f3c67db94d9a6c2ee61fb9bd75d"
+      "sha256": "dcd678d74ab948edee7e468f3dd571d7e889c77b607475d5997714b569706a67"
     },
     {
       "description": "Read git usage: Returns per-repo and total storage bytes for the caller's org — the queryable, per-tenant number commerce and o11y meter on..",
       "name": "git_usage",
       "path": "git_usage/SKILL.md",
       "service": "git",
-      "sha256": "406403673db0263644067456440e4ff0aa880a37b5387e61414a26c2ba9a4ace"
+      "sha256": "bb277b839131afd450b012b2a47e516a5d33e27ee54d58b8342b6af39a497d9a"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "flow_runs",
       "path": "flow_runs/SKILL.md",
       "service": "flow",
-      "sha256": "063e07def6ba9bc7ae5d0352f1af931f632e23ef3728b821084442ae2b9c11ef"
+      "sha256": "0c6791a943a0c2ad8fcdc4d61a1530b07cd15234b0f0b64c62a72f704277cd38"
     },
     {
       "description": "Read flow status: Status reports whether the flow service is reachable and which version it runs..",
       "name": "flow_status",
       "path": "flow_status/SKILL.md",
       "service": "flow",
-      "sha256": "6f63bbde644b4070dbda8a7711e41a8615b1f213e852c1b700d11147e1ec15c1"
+      "sha256": "44b7135729808a057811246e24d863669ebf6596ef930dc6ff1aee359e0a2852"
     },
     {
       "description": "Read flow workflows: Workflows lists the caller's workflows, paged., Workflow reads one of the caller's workflows — the full record, graph included..",
       "name": "flow_workflows",
       "path": "flow_workflows/SKILL.md",
       "service": "flow",
-      "sha256": "cb38e556091268aef731097f33e666016359b6233d931a94cde05024f8cee5dc"
+      "sha256": "e08773ea0da84a559b6dded41194d317c210a25b0267c5bcb5b44ce67d226f51"
     }
   ],
   "spec_version": "8.0.0"

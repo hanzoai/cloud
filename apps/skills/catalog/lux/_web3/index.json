@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "web3_chains",
       "path": "web3_chains/SKILL.md",
       "service": "web3",
-      "sha256": "7578ae32db92220dae2e9ef1b33d8d5186fb78567e4ed97155bb079fe1c797b8"
+      "sha256": "5ad2564462fa924402ea2f75edb776a6a66f6f94db86f1b64e68360a0542006b"
     },
     {
       "description": "Read web3 tokens: Reads an address's native balance on a chain..",
       "name": "web3_tokens",
       "path": "web3_tokens/SKILL.md",
       "service": "web3",
-      "sha256": "00150d58418a1618096715e4261d52ebc0d3987753ccf47263f1bd19e4e7dba1"
+      "sha256": "45a8f0767a1a585d4e6813647027a169fda5ddc09db4342cc27c7eed16fc7044"
     }
   ],
   "spec_version": "8.0.0"

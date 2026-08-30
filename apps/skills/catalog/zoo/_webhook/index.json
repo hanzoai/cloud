@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "webhook_deliveries",
       "path": "webhook_deliveries/SKILL.md",
       "service": "webhook",
-      "sha256": "23d58a0df13b5bf1bf5085fb51e6f5a44b1754c030159efb33b5aacd51e0333f"
+      "sha256": "c876e3dc2f1c639e321b8bc131d495fb35768b3c839b9bfd7b1c0abfae5adf8c"
     },
     {
       "description": "Read webhook webhook: Returns every webhook endpoint the caller's org has registered, newest first, each with its 7-day delivery and failure counts., Returns one of the caller org's webhook endpoints with its 7-day delivery and failure counts, signing secret redacted..",
       "name": "webhook_webhook",
       "path": "webhook_webhook/SKILL.md",
       "service": "webhook",
-      "sha256": "df0f5aaf24ee95c23c68813a2c37e4b2ff98f350058b99c4ecacb47ad30eb700"
+      "sha256": "b740ac0df02af751fb900b7266efa26209c416276f9e853d7a851082e49c75da"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "dataroom_analytics",
       "path": "dataroom_analytics/SKILL.md",
       "service": "dataroom",
-      "sha256": "26ae2f44e92075da48036806a6f9fee2297798a1c2e39051475eb9f9660fb7fa"
+      "sha256": "c54303c5578ded92f67e8d982996979e3a3f1aebdaaf8af3696488fc3dcf0c46"
     },
     {
       "description": "Read dataroom datarooms: Returns every data room in the caller org's own store, newest first, with its short public id, name, description and timestamps., Reads one of the caller org's data rooms together with every document in it, each carrying its membership id and order index.",
       "name": "dataroom_datarooms",
       "path": "dataroom_datarooms/SKILL.md",
       "service": "dataroom",
-      "sha256": "cbc673dd7ae2815c7cd752a93e12e8abc5b86401dde9b38148b0818ac32cefd9"
+      "sha256": "db3fb087c53257ea43cfb6353d4a6c83bccdd10cc14174164d1a331c15973e23"
     },
     {
       "description": "Read dataroom documents: Returns every document in the caller org's own store, newest first — name, opaque storage key, content type, page count, size and timestamps., Reads one of the caller org's documents — its name, opaque storage key, content type, page count, size and times",
       "name": "dataroom_documents",
       "path": "dataroom_documents/SKILL.md",
       "service": "dataroom",
-      "sha256": "7db432a443ed34f5bdc36c4649bbbc48d267efb9b2789dcae889dee70d9bb78e"
+      "sha256": "faed3981f1c8468f0986ae19939aed71640bfecec599518d454e361ceeae766f"
     },
     {
       "description": "Read dataroom health: Health reports that the data room subsystem is up..",
       "name": "dataroom_health",
       "path": "dataroom_health/SKILL.md",
       "service": "dataroom",
-      "sha256": "542fe02923f9fd95aecb0f95e8aada4b4757c6f59198f57b44d98f51bb8e601d"
+      "sha256": "54069dfd4ecab216134a3dbb5d8386c98509e23a20d17b005b5c7c69714b7579"
     },
     {
       "description": "Read dataroom links: Returns every live share link in the caller org's own store, newest first, with the controls a visitor will meet: whether an address is required, whether a password is set, the allow and deny lists, whether download is permitted, and when the link expires..",
       "name": "dataroom_links",
       "path": "dataroom_links/SKILL.md",
       "service": "dataroom",
-      "sha256": "39bae54901657fd394630f56ff3f0c380f3a7b58b7d0cfb4d46ba707089e5b1f"
+      "sha256": "a6991f3a3181ef79eb08f26a7bf319d80a962a1359a7d740e85401e12e25293b"
     },
     {
       "description": "Read dataroom trust: Answers the caller org's OWN trust centre: its settings, every item it holds in both tiers, the requests waiting on it, and the grants it has made., Answers an org's public trust centre: its name, the text a party must accept to ask for a document, and every ",
       "name": "dataroom_trust",
       "path": "dataroom_trust/SKILL.md",
       "service": "dataroom",
-      "sha256": "bbb3b27417752af368b97832174a8bc3540d3cebc9548f8f7ce80f38a6531d42"
+      "sha256": "33f5d2522b4b85e71055225ab526abae745b94234fb566af0d50a6c38d8a0901"
     },
     {
       "description": "Read dataroom view: What a share link's visitor sees before authenticating, Read a document's bytes as an authorised link visitor.",
       "name": "dataroom_view",
       "path": "dataroom_view/SKILL.md",
       "service": "dataroom",
-      "sha256": "b655f242ad1f26e3770f8535c2b11483e8189f33b3959252f5407887d0582b8a"
+      "sha256": "abbc2ba68f5014e037c384e46ded7204f27a7563c70b7e75d64957ec121e13c8"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "eval_datasets",
       "path": "eval_datasets/SKILL.md",
       "service": "eval",
-      "sha256": "65769302910fe9b56027f4aa309e087aa18d47e31023a802c5e7f33c21129a57"
+      "sha256": "168a84de1133da85e1a29c877416e23177376dba96633a1a098d5d3aea1563d5"
     },
     {
       "description": "Read eval evaluators: Is the judges your org has defined, each with its judge model, criteria and the score name it writes under..",
       "name": "eval_evaluators",
       "path": "eval_evaluators/SKILL.md",
       "service": "eval",
-      "sha256": "ad6e773bf6ced02b465b23a94b411f638e9ad418ee86c2ae90771365767b7b41"
+      "sha256": "9cba78618f11736c4ef42924b33a6b247fdbea06f5acc279a1623237337a0ddb"
     },
     {
       "description": "Read eval metrics: Is your org's AI overview board over a window: totals (generations, prompt and completion tokens, cost in cents, errors, success rate, distinct models and users), a gap-filled time series, a per-model breakdown with the long tail folded into \"other\", and latenc",
       "name": "eval_metrics",
       "path": "eval_metrics/SKILL.md",
       "service": "eval",
-      "sha256": "661d3b53394dabcd3bb85cb14c29ff8f49f9de3d8278b3b6712db7d400e21d66"
+      "sha256": "3a1ce1f2b4b25107ed41bebd7b15b381c05751b82ce432666040a3701edd0213"
     },
     {
       "description": "Read eval rubrics: Is the score shapes your org has declared — each name's data type, its numeric bounds and its allowed categories..",
       "name": "eval_rubrics",
       "path": "eval_rubrics/SKILL.md",
       "service": "eval",
-      "sha256": "cc70e48c6ada45cd6d9edf2730c6a440361bbd4cbab3db38aab725f44fa05822"
+      "sha256": "8e3bfd802a352c25d41ad672632fc362b9c1b9ffc2f506e1783bd51ebaa3af4b"
     },
     {
       "description": "Read eval runs: Is your past runs and how they scored — the dataset and model, the judge model, how many examples were attempted and how many scored, the average score, and when it happened..",
       "name": "eval_runs",
       "path": "eval_runs/SKILL.md",
       "service": "eval",
-      "sha256": "3a5e955d50426a9a7cece42a669f3182ba815b276960184e160aa83886657087"
+      "sha256": "8ef2eba6fcc99a5f586f9835731ef301b7fe5957d10e5d4c276044014fdd2f73"
     },
     {
       "description": "Read eval scores: Is the score events your org has recorded, narrowed by any of name, runName and traceId..",
       "name": "eval_scores",
       "path": "eval_scores/SKILL.md",
       "service": "eval",
-      "sha256": "e711fa101f5d24bf262ec8b3c0e7369f5cedc9a610544929cb327b70086a401d"
+      "sha256": "26e8eb1d5915791474efbbf753606554d433c7c629ca9b8f9ebed96ea3023b79"
     },
     {
       "description": "Read eval traces: Is the traces behind your evaluations — one per model call an evaluation made, carrying its input, output, model and timing — narrowed by any of sessionId, runName and datasetName..",
       "name": "eval_traces",
       "path": "eval_traces/SKILL.md",
       "service": "eval",
-      "sha256": "8dd1637914f71fe02fb16f32452569682e8a03a2b82332b41f615f2072a93b30"
+      "sha256": "6914bb73cd9e97ef8bcf48e5d72011fc7896e082000e0758bfa0b8270a46facb"
     }
   ],
   "spec_version": "8.0.0"

@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "ml_health",
       "path": "ml_health/SKILL.md",
       "service": "ml",
-      "sha256": "874ecba9efb583a8b7e2004584dd44cd9e0c0fce15a750f9b9487dc9772972b9"
+      "sha256": "e42daa751cc8cd0d1967228d46811cc3a9b8e7563fda1436a5338c32e6812c8f"
     },
     {
       "description": "Read ml models: Lists the inference models deployed in the caller's org., Returns one deployed inference model..",
       "name": "ml_models",
       "path": "ml_models/SKILL.md",
       "service": "ml",
-      "sha256": "2916eb4d6c3d154efbd63b4373c31bc48c04c2d5a1c954d53f4bbe307c5d787b"
+      "sha256": "8a555d7c885b96199a46ca573edd0b07cb29aede30d08534fc195b7b467d22eb"
     }
   ],
   "spec_version": "8.0.0"

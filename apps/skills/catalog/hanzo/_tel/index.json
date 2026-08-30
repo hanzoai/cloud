@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "tel_calls",
       "path": "tel_calls/SKILL.md",
       "service": "tel",
-      "sha256": "dba8ebd3e9b711b297303c4892aebab98dee9c4da88d39c459120ed472b79331"
+      "sha256": "17174acaed77c4b136adf24c4e0e6e60484437e4ca0f0337b6387f52db3d2557"
     },
     {
       "description": "Read tel messages: Lists the messages this org has sent or received, newest first..",
       "name": "tel_messages",
       "path": "tel_messages/SKILL.md",
       "service": "tel",
-      "sha256": "d446bcfdb09e07bd6fb7c8517a35d1be3da1d6b89e27924c093627c5de4061a4"
+      "sha256": "c9267e8b1e08ffa5aecac2489558eb3342f046198a23968a1c306caf289dbea8"
     },
     {
       "description": "Read tel numbers: Lists the phone numbers this org HOLDS — the ones it has bought and not released., Asks the carrier what is available to buy..",
       "name": "tel_numbers",
       "path": "tel_numbers/SKILL.md",
       "service": "tel",
-      "sha256": "1db5d6e4b36e157483c661f1943edc6944fc6b518f3456236a7a1257a86c9ed8"
+      "sha256": "7cea193e10fbc4ded67f0d9f71705c126f654c00415755db8f5c69e48df1fd98"
     },
     {
       "description": "Read tel summary: Counts what this org holds on the telephony plane: its numbers, its calls and its messages..",
       "name": "tel_summary",
       "path": "tel_summary/SKILL.md",
       "service": "tel",
-      "sha256": "83a46762e3303a53c0676fa6981e8cdf9c26a82cb98a75b37b27c55ced3d52ed"
+      "sha256": "066da7c3cc40aa3f75b7311c7fb558e753bb53af4c935a6c2369880b36da65e2"
     }
   ],
   "spec_version": "8.0.0"

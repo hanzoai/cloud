@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 5,
   "skills": [
     {
@@ -11,35 +16,35 @@
       "name": "world_limits",
       "path": "world_limits/SKILL.md",
       "service": "world",
-      "sha256": "91ced3ab9d39f7c6c19452bb79ea37225ee7223ccf1db37e8512223eecff24ec"
+      "sha256": "ba0cc1bdbd4e5842d1963b721478b25444f4a4d9f8bdc84d95d2303391cff739"
     },
     {
       "description": "Read world news: Returns the caller's merged world-news feed: every source their project's pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed — fetched concurrently, narrowed by the pipeline's keyword/region/source filters, deduplicated by link and so",
       "name": "world_news",
       "path": "world_news/SKILL.md",
       "service": "world",
-      "sha256": "c137a0063c835cc56776d1abe72693cbb8daf573428da9de0fa2cb394a3e5066"
+      "sha256": "8bf7742a0f47d3265d64c0642945cd4390f77a0debd64c1346347733fc02a234"
     },
     {
       "description": "Read world pipeline: Returns the caller project's news pipeline: which feeds it reads and how the merged result is filtered..",
       "name": "world_pipeline",
       "path": "world_pipeline/SKILL.md",
       "service": "world",
-      "sha256": "08bf44faccf8d3345dba37aaea760b2e3929bd12c00d05bb8cf38b95b07e062b"
+      "sha256": "3cf86dd67ff8e966c50e0bea918759b88db03f0b337df24ad2b16a4dd17fd5fe"
     },
     {
       "description": "Read world stream: Live news refreshes for the caller's org and project, as Server-Sent Events..",
       "name": "world_stream",
       "path": "world_stream/SKILL.md",
       "service": "world",
-      "sha256": "0f1859d291f8e2bd3e0cc7fbccb380f099bce16a64a924d21eb2bcd081acdaa9"
+      "sha256": "0930094d55e55c04142c3d7f26578242f4e05c01fe2bff06710d2a7a69e25591"
     },
     {
       "description": "Read world world: Answers GET /v1/world — the product's public endpoint, naming every wire this surface answers on..",
       "name": "world_world",
       "path": "world_world/SKILL.md",
       "service": "world",
-      "sha256": "7a38f3e4037223b96c36fa19484245295bee088c7924b52eb7cb028ce96dde45"
+      "sha256": "ae2e1067f2857106229861e7c3fef92b18010e864a494f160ece9a0b50f057ec"
     }
   ],
   "spec_version": "8.0.0"

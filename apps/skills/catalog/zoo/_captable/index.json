@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 11,
   "skills": [
     {
@@ -11,77 +16,77 @@
       "name": "captable_classes",
       "path": "captable_classes/SKILL.md",
       "service": "captable",
-      "sha256": "e11af77985bc682405954b4fa5538405a91fea6cba68fbbc50635afc8d05bfd5"
+      "sha256": "1b30b996df317463b314f82d74d06c04a6af5597af2dc50e2c60791ed8535fbc"
     },
     {
       "description": "Read captable company: Returns the caller org's cap-table company record..",
       "name": "captable_company",
       "path": "captable_company/SKILL.md",
       "service": "captable",
-      "sha256": "a9c970a55584ede0973a0da88e87c7e07d4daabc7a662d4d9255e79f2b65d584"
+      "sha256": "2be0a708e3be3a670e7ad313c07c9794be47ed1834b63b5c40e70df7a1348c23"
     },
     {
       "description": "Read captable convertibles: Returns the caller org's convertible notes, newest first..",
       "name": "captable_convertibles",
       "path": "captable_convertibles/SKILL.md",
       "service": "captable",
-      "sha256": "b20b7d2809a45a4a9816df2d01ca266471b01566cbb0bc3ef07528162edcd6f9"
+      "sha256": "6192353ea56c61ef3708d681f9d2e988efcc7acc8be643fecef5574f214a4b6e"
     },
     {
       "description": "Read captable investments: Returns the caller org's investments, newest first..",
       "name": "captable_investments",
       "path": "captable_investments/SKILL.md",
       "service": "captable",
-      "sha256": "c5964f797477af1d260b4ef2aff0d2994122545d1470a6693e2e53588cd5f072"
+      "sha256": "cd00ecd98dc1cbf2b890e2f8c4635f3becb46c9de48c684764830c365c805e48"
     },
     {
       "description": "Read captable options: Returns the caller org's option grants, newest first..",
       "name": "captable_options",
       "path": "captable_options/SKILL.md",
       "service": "captable",
-      "sha256": "4430e15d672444e6d09d30bff1cb0e428c8ce8bd698fb932ab93692b9fb8f605"
+      "sha256": "6ea32eeef465c1d3d6892a4b84181d4597bd6d8d41a60b32603d37e84b84a4d5"
     },
     {
       "description": "Read captable plans: Returns the caller org's equity plans, newest first..",
       "name": "captable_plans",
       "path": "captable_plans/SKILL.md",
       "service": "captable",
-      "sha256": "6a139469848fa36f9621de736761f7ae4cdcd1ce6fe1a5c352a9291d85966619"
+      "sha256": "1468607c83a774853313d96e2fbe0dd0d08998b3be18382d5539d14968e591a2"
     },
     {
       "description": "Read captable rounds: Returns the caller org's fundraising rounds, newest first., Returns one of the caller org's fundraising rounds together with every investment written into it, oldest first..",
       "name": "captable_rounds",
       "path": "captable_rounds/SKILL.md",
       "service": "captable",
-      "sha256": "5bf43510f3b591887de181f1add052238d398d8b64e0051678604f2664d5cfd2"
+      "sha256": "77e8a4600f5eb2b67e2b03b99b36710c079e696dbed876344f8b5dfdea4720c1"
     },
     {
       "description": "Read captable safes: Returns the caller org's SAFEs, newest first..",
       "name": "captable_safes",
       "path": "captable_safes/SKILL.md",
       "service": "captable",
-      "sha256": "cf662907d15f62d13a76d84918e7ccac25be908cdcd1ab2769c1b970d96d4581"
+      "sha256": "fc769c6aa63643d8fb58d7a20e83e8b48fae59de006c7f79fa1ff8efab3ebaf8"
     },
     {
       "description": "Read captable shares: Returns the caller org's share certificates, newest first..",
       "name": "captable_shares",
       "path": "captable_shares/SKILL.md",
       "service": "captable",
-      "sha256": "558cc972cfbb778f6b0a99729d6a397e19443b6ce31db26784bca8d5109eed74"
+      "sha256": "6aefc4b9e3075e763e78404756f39015ba62f1d1dcef957dfef05595dcafd0a8"
     },
     {
       "description": "Read captable stakeholders: Returns the caller org's stakeholders, newest first..",
       "name": "captable_stakeholders",
       "path": "captable_stakeholders/SKILL.md",
       "service": "captable",
-      "sha256": "8f962833745edc1f7e04a094929ced5188673d2a1ed2e88827090472eda24d9e"
+      "sha256": "58395c9395332b8fcc8cddd13c7499a5fb6fc0c2989749d0e8846108b3fdb439"
     },
     {
       "description": "Read captable summary: Computes the caller org's cap table..",
       "name": "captable_summary",
       "path": "captable_summary/SKILL.md",
       "service": "captable",
-      "sha256": "3a05f112f76b15f22a0a5ad9db92f0b6303575d621d7e79c1fb3a8982ae5621a"
+      "sha256": "29c94d6e0ed2d26888ba1e843113828bb5657309b1e01267a14386cc61e9f6ff"
     }
   ],
   "spec_version": "8.0.0"

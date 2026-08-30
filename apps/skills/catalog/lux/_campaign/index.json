@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "campaign_campaign",
       "path": "campaign_campaign/SKILL.md",
       "service": "campaign",
-      "sha256": "c89ed1b3031b7317d47a70472bce0b54b8970dc9cf01c22bf76dc0bc702902fb"
+      "sha256": "3ade5ea0c776c29e4cbc69c21da0a4fdebafd7fa9bda378a24dc54abba25e9e6"
     },
     {
       "description": "Read campaign metrics: Returns a campaign's results over a window: the analytics funnel (impressions, clicks, conversions, revenue, visitors), the spend each channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and ROAS..",
       "name": "campaign_metrics",
       "path": "campaign_metrics/SKILL.md",
       "service": "campaign",
-      "sha256": "fec875cd9ad2e44e9c1e3d327bc22bd324733330d6697196d281079e1fd9c6a6"
+      "sha256": "bde43a142ad96529d16b9dcc1a886166137b62e47278698eda6e65f1c5ba87bc"
     },
     {
       "description": "Read campaign summary: Returns the org's go-to-market roll-up: how many campaigns exist, how many are live, their total budget in cents, and which channel executors this deployment can actually reach..",
       "name": "campaign_summary",
       "path": "campaign_summary/SKILL.md",
       "service": "campaign",
-      "sha256": "a078ea9164165de0db4333fa8478a41e8f8d0bc613fd83f5cc2852bdfc36329b"
+      "sha256": "9d9fddc042c5a024b56ff1409726dfc18e8fff79aeb97ff3163b1d1580eb3003"
     }
   ],
   "spec_version": "8.0.0"

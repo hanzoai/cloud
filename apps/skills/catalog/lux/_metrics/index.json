@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "metrics_health",
       "path": "metrics_health/SKILL.md",
       "service": "metrics",
-      "sha256": "4eee251467d43ed0f6797eab20bf918da5656a81ace08540d6755aef50e43afc"
+      "sha256": "73466a081067482624ad4077756cd10b086726a0de6172d8c244e7de55b3e68b"
     },
     {
       "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
       "name": "metrics_logs",
       "path": "metrics_logs/SKILL.md",
       "service": "metrics",
-      "sha256": "93c334b9d096627a9a7a052d3cf1a3a1067578154e5840fc70a4a41ed34a4aca"
+      "sha256": "8ed0047b0681fc8e941b46a38cc885d1785077953a5bf3d86e082b05d748ef9f"
     },
     {
       "description": "Read metrics query: Read your org's series back over a time range.",
       "name": "metrics_query",
       "path": "metrics_query/SKILL.md",
       "service": "metrics",
-      "sha256": "4719e6e4238e1292143d8a2e5682c6625dc87279bee558f0be9a39ce2946b0bd"
+      "sha256": "da8faa88d6c69fce27bdc0b25f3e906b7b64eb917ae9d010427ae5e661ae927e"
     },
     {
       "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
       "name": "metrics_traces",
       "path": "metrics_traces/SKILL.md",
       "service": "metrics",
-      "sha256": "a3821a16c3f7615e34d483107f6d54bad02481bda4ad3cbc1881df3b58423bce"
+      "sha256": "d29f649eaa1a722315e5bf522fb0b9a94e55b33e69d95e94ab45e089afeef54c"
     }
   ],
   "spec_version": "8.0.0"

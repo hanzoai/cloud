@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "authz_health",
       "path": "authz_health/SKILL.md",
       "service": "authz",
-      "sha256": "b413e02df8748c60b8bddbe10d339d68c5a8c8934a228a33d98fe8f30a27978d"
+      "sha256": "2dc47f6da25e32a6527423cd930f6ce5a331da656cddb0988374311b966ada79"
     },
     {
       "description": "Read authz readyz: Readiness of the policy engine.",
       "name": "authz_readyz",
       "path": "authz_readyz/SKILL.md",
       "service": "authz",
-      "sha256": "15b3edb7d9a186783996d2a3d6355ef19b6ae228ed95f2712d4640ae74755dba"
+      "sha256": "c02e87e8dbdfaaf9b0f3279da433d87de60fb8efbf7f0c9475272f9e3c697993"
     }
   ],
   "spec_version": "8.0.0"

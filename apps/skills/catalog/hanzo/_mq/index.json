@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "mq_health",
       "path": "mq_health/SKILL.md",
       "service": "mq",
-      "sha256": "0d45ad6f4d65e34d1563990c835a034804066c4616bd749b695a8a2a6894ad17"
+      "sha256": "a80685a8054d8b1fb922c49f1bfec8101d2bda14478f7da71ad660ac134ce6dd"
     },
     {
       "description": "Read mq info: Returns the broker's identity and the org's stream count..",
       "name": "mq_info",
       "path": "mq_info/SKILL.md",
       "service": "mq",
-      "sha256": "95279b62d5f79ab2744b67d9ffc06d44bf89f71756e9a39e6d3bf335254370e9"
+      "sha256": "102eb26f424cf7199eebda54e222e1d9cb8f0e527c4a228293dfa50ff46d3257"
     },
     {
       "description": "Read mq stream: Returns the org's streams, name-ordered, with their live state., Returns one stream's configuration and live state., Reads stored messages without a consumer: by sequence, by newest on a subject, or walking a subject forward from a sequence..",
       "name": "mq_stream",
       "path": "mq_stream/SKILL.md",
       "service": "mq",
-      "sha256": "20998ee0d761db2c46bafd39edb4a45be6b3b1c33c3c6dd190c001560cb2c701"
+      "sha256": "377fabc28f992eabe4a709b75925f994a1fff8e91c50b08b43ddb3dc94c38f00"
     }
   ],
   "spec_version": "8.0.0"

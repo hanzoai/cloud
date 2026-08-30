@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "exec_download",
       "path": "exec_download/SKILL.md",
       "service": "exec",
-      "sha256": "5c647b307a8456b5569775a0a5ed91ce7ce24c7a559d08828fd966431acf4fea"
+      "sha256": "d90cb9b570afddbc9f3935be4574355a6a9933f3196b3a94c27365694e267257"
     },
     {
       "description": "Read exec files: Lists the files in an execution session..",
       "name": "exec_files",
       "path": "exec_files/SKILL.md",
       "service": "exec",
-      "sha256": "6c0b6031dd82285f0e122cb3d409415ee7c46459c36e167325afd186a7a96524"
+      "sha256": "ee095b7310094483e8a0ea4c0ac1b9d78d56b1af07f683681f69243b1c904ac8"
     }
   ],
   "spec_version": "8.0.0"

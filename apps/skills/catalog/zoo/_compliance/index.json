@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 7,
   "skills": [
     {
@@ -11,49 +16,49 @@
       "name": "compliance_accreditation",
       "path": "compliance_accreditation/SKILL.md",
       "service": "compliance",
-      "sha256": "b185b404f7c9042582335bb5a60d864649ea15256afe65f0e51278582d8e7233"
+      "sha256": "31b167ad968694d02d69d63a78372d58ba7730d3ed07949ce7c1f603e46e780e"
     },
     {
       "description": "Read compliance audit: AuditRead is the compliance read of the SHARED tamper-evident audit plane — the SOC 2 posture surface (privileged actions: who started/decided what, when)..",
       "name": "compliance_audit",
       "path": "compliance_audit/SKILL.md",
       "service": "compliance",
-      "sha256": "8d0fd3e5b9a700d2e46aa1afce835d4369a077b754d522cc19460586ae8b051f"
+      "sha256": "1d7fa02fc3361659751517af23717c89671d203b9824db774bd33c17eea49116"
     },
     {
       "description": "Read compliance health: Health reports subsystem liveness and the wired verification provider..",
       "name": "compliance_health",
       "path": "compliance_health/SKILL.md",
       "service": "compliance",
-      "sha256": "6776b6158f9d102fe7b50be2db4e35927e00abf3e02c454fd3f8a05dab24b6d4"
+      "sha256": "58b1d0f9bd1fbc7714c60d0df124d84a367d308b1ced0ed4947260811c724810"
     },
     {
       "description": "Read compliance records: ListRecords is the unified compliance-record view for the org: its verifications and accreditation records together, each provider-reported or tracked, never platform-asserted..",
       "name": "compliance_records",
       "path": "compliance_records/SKILL.md",
       "service": "compliance",
-      "sha256": "d19256dbb25da9d3a1cdd993cc1ef4b9b8625ab069e1cf0cd19659b030a6cbad"
+      "sha256": "37a2adb085e60cb8cc7a97738f00d5418ce186bfd25000b1478dadf990518317"
     },
     {
       "description": "Read compliance status: Status is the org's honest posture read: the wired provider and the per-status tally of its verifications..",
       "name": "compliance_status",
       "path": "compliance_status/SKILL.md",
       "service": "compliance",
-      "sha256": "60b8a96dd9dde02dc536a00b6c3329952e09dcb9edb665927724f48b0f61baec"
+      "sha256": "676c99080f47e510ec1ba4f0845f888456a5fb388a0fe8e85f241e52ee35e193"
     },
     {
       "description": "Read compliance subjects: Returns the org's subjects as PII-MINIMIZED summaries — no name or email, only whether an email is on file., Returns one subject WITH its contact PII — the only surface that returns it, and only to the owning org..",
       "name": "compliance_subjects",
       "path": "compliance_subjects/SKILL.md",
       "service": "compliance",
-      "sha256": "8e7ed537053e8dfb03c2995cad5b6b11bc95bc7f2d2bf0f5138b483413e6def6"
+      "sha256": "327fc91e0a4f6325aa62427b216ea04a614836524a2aa505f628e8088332e1d4"
     },
     {
       "description": "Read compliance verifications: Returns the org's KYC/KYB verifications, newest first — opaque subject references and provider-reported statuses only, no subject PII., Returns one verification — its opaque subject reference and provider-reported status, no subject PII..",
       "name": "compliance_verifications",
       "path": "compliance_verifications/SKILL.md",
       "service": "compliance",
-      "sha256": "686b894c0af007c49378b52f0ce532c406d6e2e33629bce7d9d8912f7bed5d47"
+      "sha256": "a86f62d567a09af7c6d4f6f5582525756dfe2d5e0c9362178239e48034f902b6"
     }
   ],
   "spec_version": "8.0.0"

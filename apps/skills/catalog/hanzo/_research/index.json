@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "research_artifacts",
       "path": "research_artifacts/SKILL.md",
       "service": "research",
-      "sha256": "90fe833387600dcd018e8483a94e30b730e9c94bf423c4908fe722f8769cf6d7"
+      "sha256": "5ddbd28cd43874fe13743b3b404db401ed31c19c7ab86e36e35c1ca21ae8371c"
     },
     {
       "description": "Read research experiments: Returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history..",
       "name": "research_experiments",
       "path": "research_experiments/SKILL.md",
       "service": "research",
-      "sha256": "d910c9ae4b85f5ae24d74e6016816f92cf0df0359403f0304122e1b5253e332c"
+      "sha256": "95155627e63abe796cb315b52d3192ea68491699153903f97caa5e4947d0b900"
     },
     {
       "description": "Read research projects: Returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view..",
       "name": "research_projects",
       "path": "research_projects/SKILL.md",
       "service": "research",
-      "sha256": "c59002b5638d67156cee5c149744feb1c3e1974a93300e0d6ee18b4dfac4dd04"
+      "sha256": "c4d1fec03d9966eb05af73235af1f26973201030e7bc1339bd98ba9bb0bc5fa4"
     },
     {
       "description": "Read research totals: Returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target..",
       "name": "research_totals",
       "path": "research_totals/SKILL.md",
       "service": "research",
-      "sha256": "e13123a20835f37cb5a136aa49e7aac36eeed20fb148462bc67b121461b23f44"
+      "sha256": "3c5ae8d7045665cf8ca9e6bc90a40f589cd3e2c25262a4f0972796867dc03661"
     }
   ],
   "spec_version": "8.0.0"

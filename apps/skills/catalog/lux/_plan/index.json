@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 14,
   "skills": [
     {
@@ -11,98 +16,98 @@
       "name": "plan_blockchain",
       "path": "plan_blockchain/SKILL.md",
       "service": "plan",
-      "sha256": "5ca91ec5e4a44801bf8d10cdbf820881003ab168e3a376380a138eaf9a17c0e8"
+      "sha256": "93722ddb2ca59629601e64867e662950719b5d8d9e07de549abaae34a78a290c"
     },
     {
       "description": "Read plan dns: ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records per zone and queries per day..",
       "name": "plan_dns",
       "path": "plan_dns/SKILL.md",
       "service": "plan",
-      "sha256": "102e9bf9cb110c8b390c8fd8270dbd92957d4a6d9380df915f038d6eaf3dc57f"
+      "sha256": "856f65c83140c4651503fd3b5b222c05bccf49b81c3a6f8d406d78fac549445c"
     },
     {
       "description": "Read plan entitlements: Returns what one plan GRANTS and not what it costs: the canonical namespaced entitlement block and the flat license-feature list derived from it..",
       "name": "plan_entitlements",
       "path": "plan_entitlements/SKILL.md",
       "service": "plan",
-      "sha256": "b78e715b72efd01145caffbc037f5ab1542031c9c904599681fca33785fca691"
+      "sha256": "7138e8ccb86fc8d6e081cbfee11cd91ee257ed0ce64c1c7fa39bf7d5221d3860"
     },
     {
       "description": "Read plan gpu: ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPUs, host memory and hourly price..",
       "name": "plan_gpu",
       "path": "plan_gpu/SKILL.md",
       "service": "plan",
-      "sha256": "12b4503f427f88726c789f54c9afe237f1059736f11c79dbb6ed3fa521f93660"
+      "sha256": "f88d5fa50d1f53562512020bc2449211ff4f23d54b48f24ce26c2d28306f4f08"
     },
     {
       "description": "Read plan health: Health reports that the plans subsystem is mounted and serving..",
       "name": "plan_health",
       "path": "plan_health/SKILL.md",
       "service": "plan",
-      "sha256": "4f7fd32fb70ad4896740a7b1a053629b2edec6b5e0c6789c227f70bfc6a5492e"
+      "sha256": "c0381d2f710a1c7332544e700f907faad855779aa04ed1ce5996b0a1f58d843d"
     },
     {
       "description": "Read plan plan: Returns the Lux cloud plan catalog: every cloud tier with its price, included capacity, limits and feature list, scoped to the caller's catalog..",
       "name": "plan_plan",
       "path": "plan_plan/SKILL.md",
       "service": "plan",
-      "sha256": "91429227fe93b6ef8975ec39e659ced568c9594494769d75f2033a95b07b8e4b"
+      "sha256": "c04f69603bc4bd3a8a0d8c538e43ab79ec9d0021080f3f71bb77c882019ecadb"
     },
     {
       "description": "Read plan policy: Returns the published pricing policy: whether pricing is transparent, the revenue-sharing terms (idle compute resale and the open-source share) and the principles the catalog is priced by..",
       "name": "plan_policy",
       "path": "plan_policy/SKILL.md",
       "service": "plan",
-      "sha256": "c6c6d5b9a8aac70d5d42c1bea5697746f804460688b43a7b52bb2ee288b265a1"
+      "sha256": "50e27e6bfe5eeb7e972272e7af7a754868470a19f2d0e7247bc8e044ee421045"
     },
     {
       "description": "Read plan regions: Returns the regions cloud capacity is offered in, each with its display name and physical location..",
       "name": "plan_regions",
       "path": "plan_regions/SKILL.md",
       "service": "plan",
-      "sha256": "1236283910d02356ae8406311463cf564eb613c6a8f09153670bf1b5fd587d36"
+      "sha256": "6b3ddd128fbaf107cfe6a5edf8d80a5d7280ff800ded6045e4266abf89245b27"
     },
     {
       "description": "Read plan resolve: Resolves one plan to everything a consumer of the catalog needs at once: its canonical entitlement block, the flat license-feature list a signed license carries, its billing reference, and the catalog it came from..",
       "name": "plan_resolve",
       "path": "plan_resolve/SKILL.md",
       "service": "plan",
-      "sha256": "38addf6542ad87e3b5aee0459523b2b6412ce41f43c24b3d8fc09b6b33e6724d"
+      "sha256": "e6ed0f29e1155e48da57e319ae423ead15a1b14e1d8dcaf53e31c9bd39989e69"
     },
     {
       "description": "Read plan schema: Returns the two JSON Schema documents this surface speaks: entitlements.schema.json, which declares every entitlement key with its type, unit and enum, and plan.schema.json, which a catalog plan record conforms to..",
       "name": "plan_schema",
       "path": "plan_schema/SKILL.md",
       "service": "plan",
-      "sha256": "d3e3610547442e83d2f6a0756d7288c1b3084bc8545e3977c27a34591f2ff809"
+      "sha256": "76eedf6bff9dd56e5f2acaa1467fb4fdb8806fb8d7d4ce0d4305327f8f0d5ca4"
     },
     {
       "description": "Read plan storage: Returns the block-storage price block: the price per GB per month and the volume size bounds a cloud plan may attach..",
       "name": "plan_storage",
       "path": "plan_storage/SKILL.md",
       "service": "plan",
-      "sha256": "08c232038426cbcbb3c5e9721873cefd129ee609c835a274f1db821b383eba90"
+      "sha256": "ca23a1163ff180eab54ffba72323b4da3575cea8a6ad877f54dbaba9d2c64ef7"
     },
     {
       "description": "Read plan subscriptions: Returns the subscription ladder — the personal and team tiers a customer buys to use the cloud, each with its monthly and annual price, seat rules, limits and billing reference..",
       "name": "plan_subscriptions",
       "path": "plan_subscriptions/SKILL.md",
       "service": "plan",
-      "sha256": "bcb3ad9f0cd7d2b5d0bbeeb41f993a8f413fdacbfcb21b48e3b2a25c83a75c51"
+      "sha256": "478c25c7467af439c409949179cfb887b9c8b8f5e2a9a60841720dc0c7ab9988"
     },
     {
       "description": "Read plan tools: Returns the per-use price of every metered tool — web search, code interpreter, image generation, speech — each with the unit it is billed in..",
       "name": "plan_tools",
       "path": "plan_tools/SKILL.md",
       "service": "plan",
-      "sha256": "f99f6befc69bcc70e15cec4a23fb313cff59d41811a9016f60388acc1161fb57"
+      "sha256": "99b33be840d58a91f73ed142e9b7aa35c5d9da30c97e0d621c351d4e6d6cd6e0"
     },
     {
       "description": "Read plan vocab: Returns the entitlement key vocabulary: every key with its namespace, JSON type, nullability, unit, enum and title, the list of namespaces, and the engine features a license can grant..",
       "name": "plan_vocab",
       "path": "plan_vocab/SKILL.md",
       "service": "plan",
-      "sha256": "10fe4f42de565a9fc9ae8597e34bfb5b2c07419750ef7db992786a4aa5673b65"
+      "sha256": "b190c3de12f90ad8816b572d6e3e2184831f8c4bb88e7f03550f2efeb11fc6d5"
     }
   ],
   "spec_version": "8.0.0"

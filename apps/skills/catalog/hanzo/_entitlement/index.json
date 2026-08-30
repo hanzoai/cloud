@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "entitlement_entitlement",
       "path": "entitlement_entitlement/SKILL.md",
       "service": "entitlement",
-      "sha256": "e69817494ab009e7e7347c35b873b71ad07b8cf660ec434739b78cc3e77f3525"
+      "sha256": "9016ca597797372713d279957b47b42ddc9673fcc757f424fd9f5df1f42fdc9c"
     },
     {
       "description": "Read entitlement orgs: Get lists the products an org has ENABLED — its own intent, which the console's paid-product sidebar reads to decide what to show..",
       "name": "entitlement_orgs",
       "path": "entitlement_orgs/SKILL.md",
       "service": "entitlement",
-      "sha256": "77d268db4b706dfc005d2ce9c49f5107bc5ad39700c1f3a4ead3e569c9a3d134"
+      "sha256": "1a4cc28ee7cef2cccb0da3e26a2b38df0ef010cf5b834e624bf7e6a81db46999"
     }
   ],
   "spec_version": "8.0.0"

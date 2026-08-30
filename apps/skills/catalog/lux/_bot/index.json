@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 2,
   "skills": [
     {
@@ -11,14 +16,14 @@
       "name": "bot_runs",
       "path": "bot_runs/SKILL.md",
       "service": "bot",
-      "sha256": "14e6e5875cca5c05c719e837e5f9d6c4c7b9b4525cdb1181faf4d2d2041b22bc"
+      "sha256": "84496da6af1ebf610249572f841bbaf297dd167a4d1cefdacc202d2127678db0"
     },
     {
       "description": "Read bot runtime: Relay one of the bot runtime's own operational paths.",
       "name": "bot_runtime",
       "path": "bot_runtime/SKILL.md",
       "service": "bot",
-      "sha256": "d4ab3ffc855471503fd7bf1c64c9d3d87cfb15046c5daf62f5534c6d935ab533"
+      "sha256": "cf8e9d16ff1693f8b067867e5619bc57e9fa9aa38f827bfbc16e6dcac5f7a38e"
     }
   ],
   "spec_version": "8.0.0"

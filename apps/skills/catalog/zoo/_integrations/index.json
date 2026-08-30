@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 10,
   "skills": [
     {
@@ -11,70 +16,70 @@
       "name": "integrations_callback",
       "path": "integrations_callback/SKILL.md",
       "service": "integrations",
-      "sha256": "92f1f77513cc6343298f13542dfd995809851d414b801268b41fcbf12b8e229d"
+      "sha256": "5b1b4447f8705d36589e2e756e87d881dd31b959a9f807b684dc6e0945f1046c"
     },
     {
       "description": "Read integrations connectors: Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints., Lists the user-scoped provider cards — the catalog of what a user can connect, and how., Hands the custodied access token to its owner — the ONE place cus",
       "name": "integrations_connectors",
       "path": "integrations_connectors/SKILL.md",
       "service": "integrations",
-      "sha256": "8422c7b16b66e161b1eae74609b27bb5373914a00624e577f0935ad421acab64"
+      "sha256": "92f5a42ef3b6ecdec6e6cbb64b0259c8109b1da8320bbfdfc4987ddb197be9ad"
     },
     {
       "description": "Read integrations discord: Begin linking a Zoo account from Discord, Complete the Discord account link, Discord sign-in return leg.",
       "name": "integrations_discord",
       "path": "integrations_discord/SKILL.md",
       "service": "integrations",
-      "sha256": "62dbd46820e046cb30409c99368fc58191db183b376e10776a84c14f33c17e0e"
+      "sha256": "b4dcffa56c599103eb8c3f6ede41f9fcb238f5ddcf1f34bd27dac51cf51e5dcb"
     },
     {
       "description": "Read integrations github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object",
       "name": "integrations_github",
       "path": "integrations_github/SKILL.md",
       "service": "integrations",
-      "sha256": "e43410a91f4b91742cf21e47fff119f943f1de8d8d4400a4024ef698d8143084"
+      "sha256": "0271e1b8ccc616bfbc7fda47810183938a175f722d75f1c6a75b04b994b2e687"
     },
     {
       "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
       "name": "integrations_gitlab",
       "path": "integrations_gitlab/SKILL.md",
       "service": "integrations",
-      "sha256": "d9dee24bb23cee9f85ea8c66ba33f07248e48a301a5c3c7e824fec8d4987c287"
+      "sha256": "454d561bcdbf2146f5dd14185994f7a3298775c233153eedc24a95fc18ffd70b"
     },
     {
       "description": "Read integrations integrations: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a singl",
       "name": "integrations_integrations",
       "path": "integrations_integrations/SKILL.md",
       "service": "integrations",
-      "sha256": "90cc705e5ec7c244fd1cc14f0a8a80f43ad2ad8fdfe0ff9a11eb8c13c188898e"
+      "sha256": "be271cc56e7eeee1c2f5d9499bb74c71e52f117c177fc102ba38ffccd3341a0d"
     },
     {
       "description": "Read integrations slack: Install the Zoo app into a Slack workspace, Begin linking a Zoo account from Slack, Complete the Slack account link.",
       "name": "integrations_slack",
       "path": "integrations_slack/SKILL.md",
       "service": "integrations",
-      "sha256": "1e8bcdd42e02af0058df0d5df9d3ad15d2c5bb944faa87c13f2e8f48b6a4f5a9"
+      "sha256": "6c24d368b1e2456400c174f4a4e57dafa86722c6ac55b360bac60ef2c9c4d612"
     },
     {
       "description": "Read integrations teams: Begin linking a Zoo account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
       "name": "integrations_teams",
       "path": "integrations_teams/SKILL.md",
       "service": "integrations",
-      "sha256": "00bda425d0ad69a5ea505664b1d258f99da4999305baf579a82eae7af2d88e78"
+      "sha256": "9fa6eca1bd1d468a03e290a7eed1d88796e4b12cf86bb56b8fa1b166ca3bd16d"
     },
     {
       "description": "Read integrations telegram: Begin linking a Zoo account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
       "name": "integrations_telegram",
       "path": "integrations_telegram/SKILL.md",
       "service": "integrations",
-      "sha256": "1d1c059919c8943c24993bed28f2ec2ae615d0ab74bd343412a56ad0c200ae11"
+      "sha256": "c9359e6c1d4b1adac25281d3ea0ebc61f94cd46ae197298159eeaf0060f1eb2d"
     },
     {
       "description": "Read integrations whatsapp: WhatsApp Cloud API subscription challenge.",
       "name": "integrations_whatsapp",
       "path": "integrations_whatsapp/SKILL.md",
       "service": "integrations",
-      "sha256": "03e5016364ac0daef5b146ea3f4fcf76a5352e02a365838b88117ff9365467aa"
+      "sha256": "6579eb23a4a44b64b66285be46177aa0ba572cc192459381d4e5631868c3d8d1"
     }
   ],
   "spec_version": "8.0.0"

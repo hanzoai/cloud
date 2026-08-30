@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://lux.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "dataset_dataset",
       "path": "dataset_dataset/SKILL.md",
       "service": "dataset",
-      "sha256": "334b12400471e600ca7d06fad0b79e52b2a569b6fbee235abd47d558876f1b67"
+      "sha256": "57fdcddf0d94a526a4838fc853a947e6d7d2c22daaebf0f7e5371488b7459d6f"
     },
     {
       "description": "Read dataset export: Read a version's rows back, one page at a time.",
       "name": "dataset_export",
       "path": "dataset_export/SKILL.md",
       "service": "dataset",
-      "sha256": "86dc376e66d20682eab246611a01629bf4d16e7c402f6cbf2d7fa2180902f2e9"
+      "sha256": "41a040ee9363163644953c8d49805ea479546cc4b7e5d8555b9c9445be0cfd53"
     },
     {
       "description": "Read dataset lineage: Show where a version's rows came from, and whether that can still be demonstrated.",
       "name": "dataset_lineage",
       "path": "dataset_lineage/SKILL.md",
       "service": "dataset",
-      "sha256": "07cdffb763d8f7bf35e71969ea8f8ccc1c02276b04f74392cb21c25fec834c9c"
+      "sha256": "96d384e0cee578c2b1780b8bf8eacefc3a77272e1471d1ee233ac2b1908dd119"
     }
   ],
   "spec_version": "8.0.0"

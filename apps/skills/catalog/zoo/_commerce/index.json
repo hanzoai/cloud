@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 27,
   "skills": [
     {
@@ -11,189 +16,189 @@
       "name": "commerce_admin",
       "path": "commerce_admin/SKILL.md",
       "service": "commerce",
-      "sha256": "0d15cc824d8010f0ca9969d7dbbf9b4cb7b79940ae7b26d42cebd7a977a57630"
+      "sha256": "26b1892acab01ed74c10d50258eb4cf04085a65bf0d92c95b3ddc47b3cfe48f8"
     },
     {
       "description": "Read commerce cart: Read one cart with its lines and totals.",
       "name": "commerce_cart",
       "path": "commerce_cart/SKILL.md",
       "service": "commerce",
-      "sha256": "af40e5ed8aa22a156bd042bb8a8aa68c75b83ddf263a430b32779f74ffefde71"
+      "sha256": "33f226c507d283b2b64866bf361fc4b0e729e989481ad39a0ec484941ab5424d"
     },
     {
       "description": "Read commerce catalog: The public product catalog projection for a brand, The raw catalog entries, including the unpublished ones.",
       "name": "commerce_catalog",
       "path": "commerce_catalog/SKILL.md",
       "service": "commerce",
-      "sha256": "608e714504f8cdfa19a1c182a78e3be5bfabd366c918f872cb938a9eb2fe3af8"
+      "sha256": "f3b92ca2c57314d310954f2d52abd3472099e853e60cb58884a6723cc6bfa63c"
     },
     {
       "description": "Read commerce collection: List your org's collections, as a page, Fetch one collection.",
       "name": "commerce_collection",
       "path": "commerce_collection/SKILL.md",
       "service": "commerce",
-      "sha256": "6574f5c953a15e1596a7db31d94ca1c495904afaabdcf8bb625467e8e326f7fa"
+      "sha256": "aa8f368b01c8f7c7fa01abdb5229e6630c8c9cdded442b3361d99fafce1c66f8"
     },
     {
       "description": "Read commerce currencies: The reference currency list the price and settings pickers render.",
       "name": "commerce_currencies",
       "path": "commerce_currencies/SKILL.md",
       "service": "commerce",
-      "sha256": "eb3e9a870cc417c367561883161d420f5a4468e8df81af7bdeca40142e28cf34"
+      "sha256": "96817e02816bab54bfee2731e5a65c3e823880df323414c2027bcffe46f3fc93"
     },
     {
       "description": "Read commerce deposits: Read the crypto deposit watcher's runtime state, asset by asset.",
       "name": "commerce_deposits",
       "path": "commerce_deposits/SKILL.md",
       "service": "commerce",
-      "sha256": "84f9c363f473d5a93d8615800cd262c1b40b17c9e42e49ff417e62bc25ca3fc3"
+      "sha256": "8f0599ce1b5588598d3a070aadef4fdaddbb0ce0a96c7883a427df59d1fe723d"
     },
     {
       "description": "Read commerce disclosure: List your org's disclosures, as a page, Fetch one disclosure.",
       "name": "commerce_disclosure",
       "path": "commerce_disclosure/SKILL.md",
       "service": "commerce",
-      "sha256": "1b9748548fe69b5eb081650b5e7586cc59823645277371eacdd1b1550a770ebd"
+      "sha256": "8a531dbedf322cf0212611daa1bd96d4a4785151f921daebad29a014626ee48d"
     },
     {
       "description": "Read commerce discount: List your org's discounts, as a page, Fetch one discount.",
       "name": "commerce_discount",
       "path": "commerce_discount/SKILL.md",
       "service": "commerce",
-      "sha256": "bb6e0cf33dc138ac51c075ad6301f4f1765b753d7a382e0aed513e6d56e4107b"
+      "sha256": "93a710d4e626d2b15c8cbed4895ab80bb4082dcd05ea30d5e843435e060eaec1"
     },
     {
       "description": "Read commerce health: Answers ok whenever the commerce subsystem is mounted..",
       "name": "commerce_health",
       "path": "commerce_health/SKILL.md",
       "service": "commerce",
-      "sha256": "ff5ac6a364722e9590fda0ff1296e029792499a753c15dc7232147e9df75e810"
+      "sha256": "27b0ef6ed35920b6d0d89f22a1a974d97066574832b9d27ac0b1304ef91280ad"
     },
     {
       "description": "Read commerce movie: List your org's movies, as a page, Fetch one movie.",
       "name": "commerce_movie",
       "path": "commerce_movie/SKILL.md",
       "service": "commerce",
-      "sha256": "70ad6aef9eb081cf173c9d5036656028d600f95014f10a6eab32217e3d6174b6"
+      "sha256": "5c7b9b0b94b1a11cd289b42774e66cf683b09ec72422f496c6e57fa06903ba41"
     },
     {
       "description": "Read commerce note: List your org's notes, as a page, Fetch one note.",
       "name": "commerce_note",
       "path": "commerce_note/SKILL.md",
       "service": "commerce",
-      "sha256": "2e4dd1b559ae52fdbf58271e539e07b3596805d7f039156d3f6a911e8880bb66"
+      "sha256": "6e3d2fffea345f837c9f65a9d2cc26e924fb6f37f5d971c13bf8bf103f558541"
     },
     {
       "description": "Read commerce org: The public org configuration a checkout page boots from.",
       "name": "commerce_org",
       "path": "commerce_org/SKILL.md",
       "service": "commerce",
-      "sha256": "95d9bacb29e1fb01364ddb22cc41d2f78eb20c59f4c2733fa8707f8901d7c83a"
+      "sha256": "cd668ff4e8c05725800628ac5f9d20f28e26766a79028b963812ce2bcd2faf13"
     },
     {
       "description": "Read commerce plans: The raw plan authority rows.",
       "name": "commerce_plans",
       "path": "commerce_plans/SKILL.md",
       "service": "commerce",
-      "sha256": "501e6fb0d694754dad88e540484ec15026a929cbce659509f36d91fa49c6e8b6"
+      "sha256": "983712dc98cd37ce0fc0b4553836fd24f6f2ba53957edc2ef4cdd5a688b50c77"
     },
     {
       "description": "Read commerce product: List your org's products, as a page, Fetch one product.",
       "name": "commerce_product",
       "path": "commerce_product/SKILL.md",
       "service": "commerce",
-      "sha256": "9f6566ba02530317d09bd4251f49321b7d8dde3188ed8cb4ca828ec4bd25d727"
+      "sha256": "13a602ab446f12d991f973669d9c1e8e893bef8682a21266a8babf45f56ee35b"
     },
     {
       "description": "Read commerce rates: List what one unit of each metered thing costs.",
       "name": "commerce_rates",
       "path": "commerce_rates/SKILL.md",
       "service": "commerce",
-      "sha256": "ba5ddbacc826095928b91ca4d32e31cc09bbd5e9cf4f99a57f83bbcf450daee7"
+      "sha256": "cfc4220b4a593b81155d719e5069655b53246839952ee4d5db92bd4eead794d8"
     },
     {
       "description": "Read commerce return: List your org's returns, as a page, Fetch one return.",
       "name": "commerce_return",
       "path": "commerce_return/SKILL.md",
       "service": "commerce",
-      "sha256": "dc809073914ec166c458edf8ce09d035590fb553a9395a62804325b476b64afb"
+      "sha256": "73e5277c269be9679c67ad31c804e2f9e0cfef8f46dac14389c789a3b104641d"
     },
     {
       "description": "Read commerce saleschannel: List your org's sales channels, as a page, Fetch one sales channel.",
       "name": "commerce_saleschannel",
       "path": "commerce_saleschannel/SKILL.md",
       "service": "commerce",
-      "sha256": "5372d20c9636f4aff1e424474839ecdf9122ca294a5bf5df70b58ed662b9e8fb"
+      "sha256": "81dda6c6793b42e667e301d3ddfac09a7c4762a39a0be3dde14e2a349541e1df"
     },
     {
       "description": "Read commerce stocklocation: List your org's stock locations, as a page, Fetch one stock location.",
       "name": "commerce_stocklocation",
       "path": "commerce_stocklocation/SKILL.md",
       "service": "commerce",
-      "sha256": "4ac27c22d33da9e1c5573f5ba1f758af5de91c9bf2b17f0aa54c6d431b2e247e"
+      "sha256": "580492688b551484e5201bed02b2e21ff807e7332250a83e17556e67955d9bad"
     },
     {
       "description": "Read commerce store: List your org's storefronts as a page, Whether a store is entitled to trade, and why, Resolve your org's active storefront without naming an id.",
       "name": "commerce_store",
       "path": "commerce_store/SKILL.md",
       "service": "commerce",
-      "sha256": "bb0a916ded08523a2ace02d0e497b710c1ca7785df7648df3df0272dfc191a92"
+      "sha256": "d24821d73a1062aaddc8d69fe7515e2eda47e959bd0cd79fe60f1f11f1f09920"
     },
     {
       "description": "Read commerce submission: List your org's submissions, as a page, Fetch one submission.",
       "name": "commerce_submission",
       "path": "commerce_submission/SKILL.md",
       "service": "commerce",
-      "sha256": "bc559a62ba4c4f2d497d7f352261208800394a43f917377db4ce0fae03d4853e"
+      "sha256": "db1a44a2ae9d1ce6409d66f475a3f4d007941c6f5cb6238770aeda724cf96827"
     },
     {
       "description": "Read commerce subscriber: List your org's subscribers, as a page, Fetch one subscriber.",
       "name": "commerce_subscriber",
       "path": "commerce_subscriber/SKILL.md",
       "service": "commerce",
-      "sha256": "8ccc3f12e5ee53a3eeef00ecd999b56f40f6c469125f46ea1bfce33b46a3cdfc"
+      "sha256": "45240393f8b2547fb002cfa7ef49e343e840f1479aaade4fa3307b040c9bd90d"
     },
     {
       "description": "Read commerce tokentransaction: List your org's token transactions, as a page, Fetch one token transaction.",
       "name": "commerce_tokentransaction",
       "path": "commerce_tokentransaction/SKILL.md",
       "service": "commerce",
-      "sha256": "061e2e2c30bfd0dfe833af7890de152f045e167af83c375c3c02cc0fdc09d03a"
+      "sha256": "9efd6b247fb5119c9039909204df8de42e07cae339ed2b40c470024e75587d75"
     },
     {
       "description": "Read commerce transfer: List your org's transfers, as a page, Fetch one transfer.",
       "name": "commerce_transfer",
       "path": "commerce_transfer/SKILL.md",
       "service": "commerce",
-      "sha256": "291ac17398ae79c644592787eb6577fdf4d736bcf80edfae7ba292e8ff4afc6b"
+      "sha256": "ceff45eca9537e2dbc6847d32beda80fd3743ee1947f4117dc6d38087a4dc2a8"
     },
     {
       "description": "Read commerce variant: List your org's variants, as a page, Fetch one variant.",
       "name": "commerce_variant",
       "path": "commerce_variant/SKILL.md",
       "service": "commerce",
-      "sha256": "a7765d71a5a82b9b4d1d24fb4b764e68aa76d47e673c3b0715be35d1b18c6772"
+      "sha256": "dd054b523b46a35d14ee7f473ae08b753fd48e9531c0d1cc95995dfc43e7c35a"
     },
     {
       "description": "Read commerce wallet: List your org's wallets, as a page, Fetch one wallet.",
       "name": "commerce_wallet",
       "path": "commerce_wallet/SKILL.md",
       "service": "commerce",
-      "sha256": "f112500ca7069bfe22a67143836fc3ec02ba47dddb0c8759c484d57e249a86af"
+      "sha256": "a990034d7428e85a77733de1b3bef53719708b6401fe268dcae7714f56c580d9"
     },
     {
       "description": "Read commerce watchlist: List your org's watchlists, as a page, Fetch one watchlist.",
       "name": "commerce_watchlist",
       "path": "commerce_watchlist/SKILL.md",
       "service": "commerce",
-      "sha256": "99b77e52cd349af925f3b0fc072d84d95560bfc5c6191face7755f2891e1108d"
+      "sha256": "4b88160c3cf6f94a7fd09260bed688c012ca430086fbae45d00a4dbfbb680063"
     },
     {
       "description": "Read commerce webhook: List your org's webhooks, as a page, Fetch one webhook.",
       "name": "commerce_webhook",
       "path": "commerce_webhook/SKILL.md",
       "service": "commerce",
-      "sha256": "229daa40b30ab15aeca4d4a130043b8d996f565505734cc75fc395f59b9c4168"
+      "sha256": "a9c8cfbf06d71be29fdc184290e42b80277165090f118b7d001f18c68c02dc5e"
     }
   ],
   "spec_version": "8.0.0"

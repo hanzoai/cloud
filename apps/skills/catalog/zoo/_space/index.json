@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://zoolabs.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.zoo.ngo/v1/mcp"
+  },
   "skill_count": 3,
   "skills": [
     {
@@ -11,21 +16,21 @@
       "name": "space_drives",
       "path": "space_drives/SKILL.md",
       "service": "space",
-      "sha256": "ddfa5c71de9e5cb26a4ff5a817e1fc20a6d07ea43d6213a8dc0bf66d142e1938"
+      "sha256": "ba2f11b13a0706c93dc7f5b8b3eba6ebe1e705c4f31f1fc93de322d445cdc918"
     },
     {
       "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
       "name": "space_health",
       "path": "space_health/SKILL.md",
       "service": "space",
-      "sha256": "559bdf6673a2c9d29f2ee53825eede0176f3a5a0e8e5fa99a9a27a48b6b6ecf9"
+      "sha256": "5459f131bde2d2b4d94b283e107cad139aadeca3d219dd6bfa969dbf39b21413"
     },
     {
       "description": "Read space spaces: Lists the caller org's own spaces..",
       "name": "space_spaces",
       "path": "space_spaces/SKILL.md",
       "service": "space",
-      "sha256": "52ba4f8f8e5d4bb5ab4240b93764968d927b2eef6b0a3b2d5df40c2c04a0e9a6"
+      "sha256": "40694ff15e0efeee2bc08f579665fca7f8a038b19bfed883af18f56b7bff677a"
     }
   ],
   "spec_version": "8.0.0"
