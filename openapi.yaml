@@ -17820,6 +17820,46 @@ components:
             the email provider.
           type: string
       type: object
+    channelAgents:
+      properties:
+        channel:
+          description: Channel is the transport these bindings are for.
+          type: string
+        default:
+          description: |-
+            Default is the agent that answers any room without a binding of its own;
+            "hanzo" when the org has never set one.
+          type: string
+        rooms:
+          additionalProperties:
+            type: string
+          description: Rooms maps a platform room id to the agent that answers there.
+          type: object
+      type: object
+    channelAgentsPut:
+      properties:
+        channel:
+          description: Channel is the transport to edit. Required; an unknown value
+            is a 404.
+          type: string
+        default:
+          description: |-
+            Default sets the agent for rooms with no binding of their own; "hanzo"
+            restores the built-in. Empty or absent leaves it unchanged.
+          type: string
+        rooms:
+          additionalProperties:
+            type: string
+          description: Rooms binds platform room ids to agents; rooms not named are
+            left alone.
+          type: object
+        unbind:
+          description: Unbind removes the bindings of these rooms, so they fall back
+            to Default.
+          items:
+            type: string
+          type: array
+      type: object
     channelList:
       properties:
         data:
@@ -69242,6 +69282,73 @@ paths:
       - channels
       x-app: channels
       x-public: true
+  /v1/channels/agent:
+    get:
+      description: |-
+        Returns which agent answers the caller org's channel: the default and
+        every room bound to another agent.
+      operationId: get_channels_agent
+      parameters:
+      - description: |-
+          Channel is the transport: discord, slack, teams, telegram or whatsapp.
+          Required; an unknown value is a 404.
+        in: query
+        name: channel
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                channel: slack
+                default: eng
+                rooms:
+                  C024BE91L: des
+              schema:
+                $ref: '#/components/schemas/channelAgents'
+          description: ok
+      summary: 'Returns which agent answers the caller org''s channel: the default
+        and every room bound to another agent.'
+      tags:
+      - channels
+      x-app: channels
+      x-public: true
+      x-tool: true
+    put:
+      description: |-
+        Binds agents to the caller org's channel and answers the bindings as
+        GET would. It requires ORG ADMIN. The agent is named by its ref — the name an
+        org gave it at POST /v1/agents, or a built-in such as dev, des or vi.
+      operationId: put_channels_agent
+      requestBody:
+        content:
+          application/json:
+            example:
+              channel: slack
+              default: eng
+              rooms:
+                C024BE91L: des
+              unbind:
+              - C0OLD
+            schema:
+              $ref: '#/components/schemas/channelAgentsPut'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/channelAgents'
+          description: ok
+      summary: Binds agents to the caller org's channel and answers the bindings as
+        GET would.
+      tags:
+      - channels
+      x-app: channels
+      x-public: true
+      x-tool: true
   /v1/channels/allowlist:
     get:
       description: |-

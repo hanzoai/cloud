@@ -118,7 +118,7 @@
     {
       "name": "channels",
       "path": "_channels/index.json",
-      "skill_count": 4
+      "skill_count": 5
     },
     {
       "name": "cloudflare",
@@ -596,7 +596,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 678,
+  "skill_count": 679,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Lux surface..",
@@ -1773,6 +1773,13 @@
       "path": "catalog_catalog/SKILL.md",
       "service": "catalog",
       "sha256": "6121b0f9e6b88d4a337378b639d6cce25d1e85de34249ffb0b641faad9c27cb5"
+    },
+    {
+      "description": "Read channels agent: Returns which agent answers the caller org's channel: the default and every room bound to another agent..",
+      "name": "channels_agent",
+      "path": "channels_agent/SKILL.md",
+      "service": "channels",
+      "sha256": "b7cca3865f6cb9c72da703a9ba6fdbb8c07c9ed80950ebc627abe8f70398bb82"
     },
     {
       "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",

@@ -7644,3 +7644,17 @@ raw), `typed_wire_test.go` (the raw webhook), `openapi/floor.json` (+4 paths/ops
 `openapi/untyped.json` (+1). No skill is generated for Linear and none should be:
 `plugin/gen-skills` clusters on paths that carry a GET, and every Linear route is a
 POST.
+
+## Channels: which agent answers is the org's row, not a deployment variable
+
+`apps/channels/turn.go` used to pick the answering agent from
+`<CHANNEL>_AGENT_REF` in the process environment — one agent for every org on a
+transport, and "several agents in Slack" a redeploy. It is a row now
+(`apps/channels/agent.go`, table `channel_agent (org, channel, room_id, agent)`):
+the room's binding wins, else the transport's default for the org (room_id ''),
+else the built-in `hanzo`. A binding to `hanzo` is not stored, because it answers
+the same as no row. `GET /v1/channels/agent?channel=slack` reads it,
+`PUT /v1/channels/agent {channel, default?, rooms?, unbind?}` edits it (org
+admin), and the room ids are the platform's own — the same value the envelope
+carries. The agent is named by its ref, the name given at `POST /v1/agents`.
+The env override is gone; nothing in universe set it.
