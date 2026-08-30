@@ -2,8 +2,7 @@ package team
 
 import "maps"
 
-// This file is the `lookup` join support for findAll — ported VERBATIM from
-// github.com/hanzoai/team/pkg/transactor/lookup.go. The employees query is the
+// This file is the `lookup` join support for findAll. The employees query is the
 // load-bearing case that makes bots-as-members render:
 //
 //	findAll(contact:mixin:Employee, {}, { lookup: { _id: { socialIds: contact:class:SocialIdentity } } })

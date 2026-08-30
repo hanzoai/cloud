@@ -36,8 +36,7 @@ import (
 	"errors"
 )
 
-// This file is the ZAP envelope codec — ported VERBATIM from
-// github.com/hanzoai/team/pkg/transactor/envelope.go. Every frame on the
+// This file is the ZAP envelope codec. Every frame on the
 // transactor WebSocket is a single ZAP Envelope object tunnelling one RPC. The
 // browser side (a byte-identical TS port in the team front's zap-envelope.ts)
 // speaks the same Envelope; the exact bytes are locked by TestGoldenHex — the

@@ -1,7 +1,6 @@
 package team
 
-// This file is the class-hierarchy resolver — ported VERBATIM from
-// github.com/hanzoai/team/pkg/transactor/hierarchy.go. It resolves a queried
+// This file is the class-hierarchy resolver. It resolves a queried
 // _class to the set of concrete descendant classes whose docs match findAll, and
 // answers isDerived/isMixin. Built once from the embedded model.
 
