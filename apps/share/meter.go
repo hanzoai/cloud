@@ -48,7 +48,7 @@ func fee() int64 { return cloud.ResourceFeeCents(feeEnv, account) }
 // afford authorizes one provision BEFORE the fabric is asked, so a caller who
 // cannot cover it never gets an account minted on the platform's credential.
 func afford(s *cloud.Service[state], ctx context.Context) (*cloud.Charge, error) {
-	return s.Bill.Allow(ctx, cloud.PayerOf(ctx), account, fee())
+	return s.Bill.Reserve(ctx, cloud.PayerOf(ctx), account, fee())
 }
 
 // charge debits one provision, after the account exists.

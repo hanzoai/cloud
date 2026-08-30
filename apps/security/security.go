@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/hanzoai/cloud/audit"
@@ -56,7 +57,7 @@ var projectRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 type state struct {
 	store *Store
 	audit *audit.Recorder
-	bill  *cloud.ResourceMeter
+	bill  *cloud.Meter
 }
 
 // mounted is the process-wide handle so Shutdown can flush the store (mirrors
@@ -84,7 +85,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		State: state{
 			store: store,
 			audit: deps.Audit,
-			bill:  cloud.NewResourceMeter(deps, meterKind),
+			bill:  cloud.NewMeter(deps, meterKind),
 		},
 	}
 	mounted = s
@@ -372,7 +373,7 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 	// gate downstream of the work is a bill for compute already spent.
 	fee := cloud.ResourceFeeCents(feeEnvPrefix, "scan")
 	scopeProject, projectValidated := principal.ValidatedProject(c)
-	if err := s.State.bill.Gate(ctx, principal.Payer(c), scopeProject, projectValidated, meterKind, fee); err != nil {
+	if err := s.State.bill.Authorize(ctx, principal.Payer(c), scopeProject, projectValidated, meterKind, fee); err != nil {
 		return nil, cloud.Denied(err)
 	}
 
@@ -410,7 +411,13 @@ func (o ops) submitScan(ctx context.Context, in *submitReq) (*scanView, error) {
 	// One metered unit per scan (product=security), at the fee the Gate above
 	// authorized — the same number, read once, so the charge can never exceed what
 	// the balance was checked against. Nil/disabled meter → no-op.
-	s.State.bill.Meter(principal.Payer(c), principal.Project(c), meterKind, fee, c.RequestID(), clientIP(c))
+	s.State.bill.Record(principal.Payer(c), meterKind, metering.Usage{
+		Model:       meterKind,
+		AmountCents: fee,
+		Project:     principal.Project(c),
+		RequestID:   c.RequestID(),
+		ClientIP:    clientIP(c),
+	})
 
 	// Audit: the scan happened, by whom, with what tally. The redacted findings
 	// (never the secrets) are the evidence; the tally is the AU-3 outcome.

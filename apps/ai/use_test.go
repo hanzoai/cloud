@@ -15,13 +15,10 @@ import (
 // MONEY CROSSES THE PROCESS BOUNDARY OVER THE PLANE — ZAP on the canonical unix
 // socket — never HTTP back through our own edge.
 //
-// `ai` is its OWN process (prod pod: /cloud pid 7, /billing pid 111, /ai pid 83), so
-// cloud.BalanceReader() — a package-level var installFinance sets in the CLOUD process —
-// is ALWAYS nil there. The ai module then fell back to an HTTP self-call to
-// /v1/billing/balance carrying COMMERCE_SERVICE_TOKEN and no user; that is not a
-// validated principal at the edge, so it answered 401, and because the balance gate is
-// fail-CLOSED every completion became 503 balance_unavailable — chat, copilot and
-// documents dead on a pod whose ledger was healthy.
+// `ai` is its OWN process, so cloud.BalanceReader() — a package-level var installFinance
+// sets in the CLOUD process — is nil there. An HTTP self-call is not an alternative: the
+// edge validates a CUSTOMER credential and answers 401 to a service, and the balance gate
+// is fail-closed, so that path refuses every completion on a healthy ledger.
 //
 // The edge is for customers; the plane is for us. commerce already publishes both money
 // ops (apps/commerce/balance_rpc.go) precisely because the ledger has ONE writer and
@@ -33,16 +30,23 @@ func TestMoneyCrossesTheProcessBoundaryOverThePlaneNotHTTP(t *testing.T) {
 	}
 	body := string(src)
 
-	// Both directions must have a plane path for the split-process case.
+	// The balance READ is asked here. The debit is asked by the meter, one layer down,
+	// so its plane path is asserted where it lives rather than where it is called from.
 	for _, want := range []string{
 		`cloud.Ask[plane.BalanceIn, plane.Balance](`,
 		`plane.FinanceBalance`,
-		`cloud.Ask[plane.RecordIn, plane.Recorded](`,
-		`plane.FinanceRecord`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q — money must cross the process boundary over the plane", want)
 		}
+	}
+
+	meter, err := os.ReadFile("../metering/metering.go")
+	if err != nil {
+		t.Fatalf("read metering.go: %v", err)
+	}
+	if !strings.Contains(string(meter), "commerce.FinanceRecord(") {
+		t.Error("the debit must cross to commerce over the plane, never HTTP back through our own edge")
 	}
 
 	// Org scoping travels with the call: the callee scopes the ledger to the caller's

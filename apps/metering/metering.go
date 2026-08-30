@@ -22,7 +22,6 @@
 //
 //	GET  {BaseURL}/v1/billing/balance?user={user}&currency={cur}
 //	GET  {BaseURL}/v1/billing/tier?user={user}            (tier-aware)
-//	POST {BaseURL}/v1/billing/usage
 //
 // Auth is the commerce service token (admin-scoped S2S), sent as
 //
@@ -33,12 +32,12 @@
 // disk — the caller supplies it (typically from an env var the operator wires
 // from a KMS-backed secret, e.g. COMMERCE_SERVICE_TOKEN).
 //
-// Its only intra-repo dependency is the in-process finance client (clients/finance): when a
-// co-resident finance ledger is published, Authorize's balance read and Record's usage
-// debit resolve it DIRECTLY (a typed in-proc call, no HTTP); otherwise both fall back to
-// the commerce billing HTTP contract above. It pulls in NO commerce server internals, so
-// any product — Go service, CLI, or job — can meter through it: it is the canonical
-// client for commerce's billing API.
+// When a co-resident finance ledger is published, Authorize's balance read and Record's
+// usage debit resolve it DIRECTLY (a typed in-proc call, no HTTP); otherwise the balance
+// read falls back to the HTTP contract above and the debit crosses the internal plane to
+// the process that owns the ledger. It pulls in NO commerce server internals, so any
+// product — Go service, CLI, or job — can meter through it: it is the canonical client
+// for commerce's billing API.
 package metering
 
 import (
@@ -88,6 +87,12 @@ const headerOrg = "X-Org-Id"
 // a legacy-org GetById hot-loop caused). Short enough that a healthy in-proc call
 // (sub-50ms) is unaffected, while a stuck one is abandoned and the request proceeds.
 const capAuthorizeTimeout = 1500 * time.Millisecond
+
+// peerTimeout bounds one crossing to the process that owns the ledger — the gate
+// and the debit alike. Long enough for a per-org SQLite writer under lock
+// contention, short enough that an unwell biller does not become this caller's
+// latency.
+const peerTimeout = 10 * time.Second
 
 // OnCapError, when set, is called (best-effort) whenever the cap check FAILS OPEN — a
 // timeout or any error on the authorize call. It lets the host log/alert on a degraded
@@ -203,8 +208,11 @@ func New(cfg Config) (*Client, error) {
 	}, nil
 }
 
-// Enabled reports whether a commerce BaseURL is configured. When false,
-// Authorize always allows and Record is a no-op.
+// Enabled reports whether the ledger answers from THIS process — a commerce
+// BaseURL is configured, which cloud sets whenever commerce is co-resident. False
+// means the ledger lives elsewhere, not that nothing bills: the gate and the debit
+// then cross the internal plane to the process that owns it, and only
+// [plane.ErrNoPeer] says no such process exists.
 func (c *Client) Enabled() bool { return c != nil && c.baseURL != "" }
 
 // AuthInput identifies who to authorize.
@@ -332,9 +340,9 @@ func (c *Client) Authorize(ctx context.Context, in AuthInput) error {
 // The returned WarnPct (>0 when at/over a covering cap's soft threshold) lets the
 // caller emit X-Spend-Warn from this one round trip.
 func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, error) {
-	if !c.Enabled() {
-		return Verdict{Allow: true}, nil
-	}
+	// WHO IS ASKING, decided above the topology. Identity is a fact about the
+	// caller, not about where the ledger happens to live, so an unattributable
+	// request is refused the same on both deployments.
 	user := strings.TrimSpace(in.User)
 	if user == "" {
 		// No identity -> cannot bill. Fail-closed denies (anonymous traffic
@@ -359,8 +367,12 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 		}
 		return Verdict{}, fmt.Errorf("metering: empty org")
 	}
+	// The ledger is not in this process. Ask the one that holds it.
+	if !c.Enabled() {
+		return c.authorizePeer(ctx, in)
+	}
 
-	available, err := c.fetchAvailable(ctx, user, org, currencyOr(in.Currency))
+	available, err := c.Balance(ctx, user, org, in.Currency)
 	if err != nil {
 		if c.failOpen {
 			return Verdict{Allow: true}, nil
@@ -391,6 +403,50 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 		return Verdict{Allow: false, Reason: "spend_cap", CapCents: sv.CapCents, SpentCents: sv.SpentCents}, nil
 	}
 	return Verdict{Allow: true, WarnPct: sv.WarnPct}, nil
+}
+
+// authorizePeer asks the process that owns the ledger whether this act may run.
+//
+// [plane.ErrNoPeer] is the ONE answer that means nobody bills in this deployment,
+// and it is the only one that may be read as permission. Every other failure is a
+// biller that is there and did not answer — unknown, which takes the client's fail
+// posture exactly as the funds read does. Reading the two as one fact is how a
+// priced act goes free the moment its app is split into its own binary.
+func (c *Client) authorizePeer(ctx context.Context, in AuthInput) (Verdict, error) {
+	ctx, cancel := context.WithTimeout(plane.For(ctx, in.Org), peerTimeout)
+	defer cancel()
+	v, err := commerce.FinanceAuthorize(ctx, &plane.AuthorizeIn{
+		Subject:          in.User,
+		Amount:           plane.Amount(in.amount().Unwrap()),
+		Project:          in.Project,
+		Service:          in.Service,
+		ProjectValidated: in.ProjectValidated,
+	})
+	switch {
+	case errors.Is(err, plane.ErrNoPeer):
+		return Verdict{Allow: true}, nil
+	case err != nil:
+		return c.unknown(fmt.Errorf("metering: commerce unreachable: %w", err))
+	case v == nil:
+		// A void reply from a gate is not permission. Nothing said yes.
+		return c.unknown(fmt.Errorf("metering: commerce answered nothing"))
+	case v.OK:
+		return Verdict{Allow: true}, nil
+	case v.NoFunds:
+		return Verdict{Allow: false, Reason: "insufficient_balance"}, nil
+	case v.CapSpent:
+		return Verdict{Allow: false, Reason: "spend_cap"}, nil
+	default:
+		return c.unknown(fmt.Errorf("metering: %s", v.Reason))
+	}
+}
+
+// unknown applies the client's fail posture to a verdict that could not be read.
+func (c *Client) unknown(err error) (Verdict, error) {
+	if c.failOpen {
+		return Verdict{Allow: true}, nil
+	}
+	return Verdict{}, err
 }
 
 // ScopeRule is one scope's rate-limit config, consumed by the cloud
@@ -466,22 +522,49 @@ func (c *Client) scopeAuthorize(ctx context.Context, in AuthInput) (scopeVerdict
 	return v, nil
 }
 
-// fetchAvailable returns the spendable balance in cents. With TierAware it uses
-// the tier endpoint's effectiveAvailable (prepaid + included allotment);
-// otherwise the bare prepaid available from the balance endpoint.
-func (c *Client) fetchAvailable(ctx context.Context, user, org, cur string) (int64, error) {
-	// Co-resident native wallet: the balance is a DIRECT ledger read (no HTTP). user is the
-	// billing subject, org the wallet namespace; finance derives the account. A test-mode
-	// client reads the sandbox books so test and live money never mix.
+// Balance is the subject's spendable prepaid balance in cents, inside org's books.
+//
+// It resolves where the ledger lives exactly as [Client.Record] does: this process when
+// it owns the file, otherwise the process that does, over the plane. So the gate reads
+// the same wallet the debit writes on both topologies, without opening a file it must
+// not open and without a hop through the public edge — which validates a CUSTOMER
+// credential and answers 401 to a service.
+//
+// IT ROUNDS DOWN. The ledger keeps eighteen decimals and this figure is weighed against
+// a price, so rounding up admits a request the wallet cannot cover; the debit that
+// follows is exact, so the difference lands as a negative balance nobody authorized.
+// Nothing is billed from this number — it decides admission only.
+//
+// With TierAware the HTTP read is the tier endpoint's effective available (prepaid plus
+// the plan's included allotment) rather than the bare prepaid figure.
+func (c *Client) Balance(ctx context.Context, subject, org, currency string) (int64, error) {
+	cur := currencyOr(currency)
+	// Co-resident native wallet: a DIRECT ledger read, no HTTP. subject is the billing
+	// subject, org the wallet namespace; finance derives the account. A test-mode client
+	// reads the sandbox books so test and live money never mix.
 	if fin := finance.Current(); fin != nil {
-		bal, err := fin.Balance(ctx, org, user, cur, c.test)
+		bal, err := fin.Balance(ctx, org, subject, cur, c.test)
 		if err != nil {
 			return 0, err
 		}
-		return bal.Cents(), nil
+		return bal.CentsDown(), nil
+	}
+	if !c.Enabled() {
+		ctx, cancel := context.WithTimeout(plane.For(ctx, org), peerTimeout)
+		defer cancel()
+		bal, err := commerce.FinanceBalance(ctx, &plane.BalanceIn{Subject: subject, Currency: cur})
+		if err != nil {
+			return 0, fmt.Errorf("metering: plane balance read: %w", err)
+		}
+		if bal == nil {
+			// A void reply is not a balance. Answering zero would report a funded
+			// account as broke and refuse every paid call it makes.
+			return 0, fmt.Errorf("metering: commerce answered no balance")
+		}
+		return bal.Amount.FloorMinor()
 	}
 	if c.tierAware {
-		q := url.Values{"user": {user}}
+		q := url.Values{"user": {subject}}
 		body, err := c.get(ctx, pathTier, q, org)
 		if err != nil {
 			return 0, err
@@ -493,7 +576,7 @@ func (c *Client) fetchAvailable(ctx context.Context, user, org, cur string) (int
 		return tr.Balance.EffectiveAvailable, nil
 	}
 
-	q := url.Values{"user": {user}, "currency": {cur}}
+	q := url.Values{"user": {subject}, "currency": {cur}}
 	body, err := c.get(ctx, pathBalance, q, org)
 	if err != nil {
 		return 0, err
@@ -517,7 +600,7 @@ func (c *Client) fetchAvailable(ctx context.Context, user, org, cur string) (int
 //
 // Empty subject or a not-configured client returns ("", nil): the gate treats an
 // unknown tier as ALLOW (fail-safe), so a commerce hiccup never locks out a paying
-// caller. Unlike fetchAvailable this does NOT short-circuit to the finance ledger —
+// caller. Unlike [Client.Balance] this does NOT short-circuit to the finance ledger —
 // the plan tier is a commerce subscription fact, not a wallet balance.
 func (c *Client) Tier(ctx context.Context, subject, org string) (string, error) {
 	if !c.Enabled() || strings.TrimSpace(subject) == "" {
@@ -583,13 +666,8 @@ type Usage struct {
 	TotalTokens      int    `json:"totalTokens,omitempty"`
 	// RequestID is the request's CORRELATION id — the X-Request-Id a caller sent or the
 	// edge minted, carried so a debit can be traced back to the call that made it. It is
-	// attribution and nothing else.
-	//
-	// It was also the ledger's idempotency key, and that was a live revenue leak: the
-	// edge propagates this header verbatim from the client and CORS-allows it from a
-	// browser, so pinning one value made every call after the first dedup into the first
-	// one's debit — free inference, and a spend cap that never moved. The key is now
-	// [Usage.Ref], which the server mints. See [Usage.Seal].
+	// attribution and nothing else; the ledger's idempotency key is [Usage.Ref], which
+	// the server mints and no caller can choose. See [Usage.Seal].
 	RequestID string `json:"requestId,omitempty"`
 	// Ref is the SERVER's name for the metered act this Usage records, and the ledger's
 	// idempotency key for its debit. It never crosses the wire inbound and no caller can
@@ -651,9 +729,9 @@ func mintRef() string {
 // whose symptom is not a crash — it is another caller's bytes marshalled onto
 // this caller's debit, on a connection two tenants took turns on.
 //
-// So anything that retains a Usage clones it first. [ResourceMeter.MeterUsage]
-// records on a background goroutine and clones there, once, rather than each of
-// its callers having to remember.
+// So anything that retains a Usage clones it first. cloud.Meter.Record records on a
+// background goroutine and clones there, once, rather than each of its callers
+// having to remember.
 func (u Usage) Clone() Usage {
 	u.User = strings.Clone(u.User)
 	u.Actor = strings.Clone(u.Actor)
@@ -728,17 +806,18 @@ type RecordResult struct {
 
 // Record writes a usage event to commerce, debiting the user's balance.
 //
-// It is a no-op (nil, nil) when the client is not configured or when
-// AmountCents <= 0 (commerce treats zero-cost usage as "skipped"). Usage
-// recording is deliberately decoupled from gating: the work already happened
-// and must be recorded, so balance is NOT re-checked here — exactly as
+// It is a no-op (nil, nil) on a non-positive amount (commerce treats zero-cost
+// usage as "skipped") and on a deployment that runs no commerce at all
+// ([plane.ErrNoPeer]) — never merely because the ledger is in another process.
+// Usage recording is deliberately decoupled from gating: the work already
+// happened and must be recorded, so balance is NOT re-checked here — exactly as
 // commerce's RecordUsage documents.
 //
 // Provider is the service name doing the metering when no model/provider is
 // natural (e.g. "search", "functions"); set it on Usage.Provider.
 func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 	amt := u.amountMoney()
-	if !c.Enabled() || amt.IsZero() || amt.IsNeg() {
+	if amt.IsZero() || amt.IsNeg() {
 		return nil, nil
 	}
 	if strings.TrimSpace(u.User) == "" {
@@ -776,47 +855,39 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 		return &RecordResult{User: u.User, Amount: amt.Cents(), Currency: u.Currency, Type: "withdraw"}, nil
 	}
 
-	// SPLIT DEPLOY: the ledger is in another PROCESS, so the debit goes to the process
-	// that owns it over the internal PLANE — the same crossing the gate, the balance read
-	// and every other in-tree money call make.
-	//
-	// It used to POST the wire fields to commerce's /v1/billing/usage, and the act's name
-	// did not survive: Ref is `json:"-"` — deliberately, so no JSON body anywhere can set
-	// the ledger's idempotency key — so json.Marshal dropped it and every debit arrived
-	// anonymous. A caller that SEALED its usage precisely because it intends to re-send
-	// (the contract [Usage.Seal] states, and the one this client's own tests hold on the
-	// co-resident path) was therefore charged again on the retry. plane.Usage.Ref carries
-	// the same value as a FIELD OF ITS OWN, so the crossing keeps the key without putting
-	// it on a client-facing document.
-	//
-	// The HTTP path was not a second deployment to preserve, either. COMMERCE_URL resolves
-	// to the in-cluster commerce Service, which selects THESE pods — there is no separate
-	// commerce backend in prod — so the debit left the binary only to re-enter it through
-	// the public edge, which is the self-dispatch that has already surfaced as a 502 loop
-	// on the read side (apps/commerce/mount.go). The peer is a socket away; ask it.
+	// The ledger is in another PROCESS, so the debit crosses the internal plane to the
+	// one that owns it — the same crossing the gate, the balance read and every other
+	// in-tree money call make.
 	//
 	// The amount crosses as the EXACT decimal, never a folded cent or micro figure: the
 	// receiver parses it and debits it verbatim, so an 18-decimal per-token charge arrives
 	// unrounded. plane.Amount is the ONE conversion, so an amount cannot be packed by one
-	// rule here and read by another there.
-	if _, err := commerce.FinanceRecord(plane.For(ctx, u.Org), &plane.RecordIn{
+	// rule here and read by another there. The whole row crosses with it, so a debit taken
+	// off this path is attributed as richly as one taken on the co-resident path.
+	ctx, cancel := context.WithTimeout(plane.For(ctx, u.Org), peerTimeout)
+	defer cancel()
+	if _, err := commerce.FinanceRecord(ctx, &plane.RecordIn{
 		Subject: u.User,
 		Amount:  plane.Amount(amt.Unwrap()),
 		Usage: plane.Usage{
 			Model: u.Model, Provider: u.Provider, Project: u.Project, Service: u.Service,
 			// The act's name and the correlation id cross as two different things,
-			// which is the whole distinction this key exists on.
+			// which is the whole distinction this key exists on. The receiver keys the
+			// debit on the ref, so a crossing that dropped it would turn a re-drive of
+			// ONE act into a SECOND debit.
 			Ref: u.Ref, RequestID: u.RequestID, ClientIP: u.ClientIP,
-			// WHO acted and WHAT WORK was priced. Both rode the old HTTP body and had
-			// no field on the crossing, so every split-deploy debit arrived without an
-			// actor and without the counts its own amount was computed from — the same
-			// class of silent field loss as the anonymous Ref this crossing exists to
-			// fix, and invisible for the same reason: a dropped field is not an error.
+			// WHO acted and WHAT WORK was priced, so the amount can be re-derived and
+			// not merely re-read.
 			Actor:        u.Actor,
 			PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens,
 			TotalTokens: u.TotalTokens,
 		},
 	}); err != nil {
+		if errors.Is(err, plane.ErrNoPeer) {
+			// No commerce anywhere in this deployment: there is nothing to bill
+			// through, which is the one shape a missing debit is correct in.
+			return nil, nil
+		}
 		return nil, fmt.Errorf("metering: plane usage debit: %w", err)
 	}
 	// The debit's own figure, exactly as the co-resident branch reports it. No transaction

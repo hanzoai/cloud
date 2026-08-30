@@ -7,7 +7,7 @@ package platform
 // compute it consumed since the last tick, at the app's SBOM compute rate
 // (blueprint.EstimateService → the SAME rate card the console shows and the blueprint
 // estimator uses). The debit lands on the org's commerce ledger through the shared
-// cloud.ResourceMeter — the identical spine resource_billing and the build meter use
+// cloud.Meter — the identical spine resource_billing and the build meter use
 // — so the org's metered spend now includes real running-deployment compute.
 //
 // Why that closes the loop: the author-royalty sweep (clients/authors) accrues 20%
@@ -115,7 +115,7 @@ func effReplicas(a Application) int {
 // sweepComputeMeter is the testable core of one tick: over every live app it advances
 // the watermark and emits the org debit for the span since it was last billed. rate
 // prices an app's footprint per hour (µ$); emit records the debit (production: the
-// shared ResourceMeter). Returns the number of apps metered. Both rate and emit are
+// shared Meter). Returns the number of apps metered. Both rate and emit are
 // injected so a test drives the whole selection + idempotency path with a real store
 // and a capturing emit — no commerce, no cluster.
 func sweepComputeMeter(ctx context.Context, store *Store, now int64, rate func(Application) int64, emit func(org string, u metering.Usage)) (int, error) {
@@ -192,7 +192,7 @@ func runComputeMeter(s *cloud.Service[state], ctx context.Context) {
 	// a.Org), so it is a stored string and not a live principal — the address is parsed
 	// back out of it here.
 	emit := func(org string, u metering.Usage) {
-		s.Bill.MeterUsage(account.PayerOf("", org), "compute", u)
+		s.Bill.Record(account.PayerOf("", org), "compute", u)
 	}
 	for {
 		select {

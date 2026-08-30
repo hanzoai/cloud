@@ -1,7 +1,7 @@
 package lsp
 
 // meter.go charges for this surface, on the Bill/Gate pattern apps/answer and
-// every other metered app already use — Base.Bill is the per-org ResourceMeter
+// every other metered app already use — Base.Bill is the per-org Meter
 // the composition root builds, and the prepaid Commerce ledger behind it is the
 // one ledger. Nothing here is a second accounting of anything.
 //
@@ -85,7 +85,7 @@ func (s *state) gate(ctx context.Context, c *zip.Ctx, org string) error {
 	// the gate enforces — which is a different question from the attribution
 	// scope the ledger records below, and answered by a different call.
 	project, validated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(ctx, subject, project, validated, kind, prepareCents); err != nil {
+	if err := s.Bill.Authorize(ctx, subject, project, validated, kind, prepareCents); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 	return nil
@@ -103,7 +103,7 @@ func (s *state) charge(c *zip.Ctx, org string, prepared bool) {
 	if prepared {
 		model, cents = modelPrepare, prepareCents
 	}
-	s.Bill.MeterUsage(subject, kind, metering.Usage{
+	s.Bill.Record(subject, kind, metering.Usage{
 		Model:       model,
 		AmountCents: cents,
 		Project:     principal.ProjectScope(c),

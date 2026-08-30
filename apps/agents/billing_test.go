@@ -258,7 +258,7 @@ func TestRunAgentGateFailClosedOnUnreachableCommerce(t *testing.T) {
 	// Point at a dead URL so Authorize errors (unknown balance -> fail-closed).
 	m, _ := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Token: "t", Org: "hanzo", Timeout: 200 * time.Millisecond})
 	ai := &fakeAI{content: "must not run"}
-	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{stores: testStores(t), ai: ai, bill: cloud.NewResourceMeter(cloud.Deps{Metering: m}, meterKind)}}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{stores: testStores(t), ai: ai, bill: cloud.NewMeter(cloud.Deps{Metering: m}, meterKind)}}
 	a := mk("acme", "x")
 	_, gateErr := runAgent(s, context.Background(), a, "hi", nil, "acme", "", "")
 	if gateErr == nil {

@@ -54,6 +54,7 @@ import (
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/connectorruntime"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tools"
 	"github.com/hanzoai/cloud/audit"
@@ -155,7 +156,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// straight off that field. Move the label and a customer's spend splits into
 	// two products, with the history unreachable from the new name. The app name is
 	// the fleet's; this string is the ledger's, and only the fleet's is renamed.
-	b.Bill = cloud.NewResourceMeter(deps, "automations")
+	b.Bill = cloud.NewMeter(deps, "automations")
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:   store,
 		audit:   deps.Audit,
@@ -1251,7 +1252,7 @@ func recordRunEnd(s *cloud.Service[state], ctx context.Context, in RunEndInput) 
 func gateRun(s *cloud.Service[state], ctx context.Context, org string) error {
 	// The durable path carries the run's org as a stored string, so it is parsed into
 	// an address by the one rule — the same address meterRun debits below.
-	if err := s.Bill.Gate(ctx, account.PayerOf("", org), "", false, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind)); err != nil {
+	if err := s.Bill.Authorize(ctx, account.PayerOf("", org), "", false, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind)); err != nil {
 		return cloud.Denied(err)
 	}
 	return nil
@@ -1260,7 +1261,13 @@ func gateRun(s *cloud.Service[state], ctx context.Context, org string) error {
 // meterRun records one metered unit for a flow run from the durable path (no HTTP
 // context). Nil/disabled meter → no-op.
 func meterRun(s *cloud.Service[state], org string) {
-	s.Bill.Meter(account.PayerOf("", org), "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
+	s.Bill.Record(account.PayerOf("", org), meterKind, metering.Usage{
+		Model:       meterKind,
+		AmountCents: cloud.ResourceFeeCents(feeEnvPrefix, meterKind),
+		Project:     "",
+		RequestID:   "",
+		ClientIP:    "",
+	})
 }
 
 // emitRunEvent emits the ONE o11y event per run onto the unified observability plane

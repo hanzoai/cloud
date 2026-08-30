@@ -8,9 +8,9 @@ package commerce
 //
 // commerce's card core credits ITS OWN transaction store (api/billing
 // payment_core.go, transaction.Deposit). Nothing in this binary spends from that
-// store. The prepaid balance every gate consults is apps/finance — build.go's
-// balanceReader is fin.Balance, apps/metering's fetchAvailable is fin.Balance,
-// GET /v1/billing/balance is fin.Balance — and the two are different files on
+// store. The prepaid balance every gate consults is apps/finance —
+// apps/metering's Balance is fin.Balance and GET /v1/billing/balance is
+// fin.Balance — and the two are different files on
 // disk. So a customer's card was charged, commerce wrote a row, and the balance
 // that decides whether an inference request is served never moved. The one
 // endpoint that reaches finance, POST /v1/billing/credit, is not mounted at all.

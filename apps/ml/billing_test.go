@@ -58,7 +58,7 @@ func newBilledMLService(t *testing.T, commerceURL string) *cloud.Service[state] 
 		State: state{
 			hc:   &http.Client{},
 			dyn:  dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
-			bill: cloud.NewResourceMeter(deps, "compute"),
+			bill: cloud.NewMeter(deps, "compute"),
 		},
 	}
 }

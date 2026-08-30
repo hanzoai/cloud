@@ -42,7 +42,7 @@ var (
 // Biller is the two-phase deposit→charge a purchase bills through. Authorize refuses
 // when the org's prepaid balance cannot cover the marked-up price (BEFORE the
 // registrar is touched); Capture debits it AFTER the registrar succeeds. Backed by
-// cloud's ResourceMeter (Gate → Authorize, Meter → Capture).
+// cloud's Meter (Gate → Authorize, Meter → Capture).
 type Biller interface {
 	// Authorize returns ErrInsufficientFunds when the balance can't cover cents, nil
 	// to proceed, or another error when the balance is unknown (fail-closed).

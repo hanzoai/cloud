@@ -193,7 +193,7 @@ type state struct {
 	//
 	// It is a value rather than a reach through s.Bill because the sink is the one
 	// thing a money test has to be able to WATCH, and the alternative watches the
-	// wrong thing. MeterUsage posts to commerce on a background goroutine, so a
+	// wrong thing. Record posts to commerce on a background goroutine, so a
 	// test that observed it there would be timing a network client while trying to
 	// measure whether a span was billed once — and would go green on a debit that
 	// was emitted twice and lost once in flight.
@@ -216,7 +216,7 @@ type state struct {
 // principal.Ledger recorded on the row.
 func debit(b cloud.Base) func(string, metering.Usage) {
 	return func(payer string, u metering.Usage) {
-		b.Bill.MeterUsage(account.PayerOf("", payer), "sandbox", u)
+		b.Bill.Record(account.PayerOf("", payer), "sandbox", u)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
@@ -691,8 +692,13 @@ func validToolName(name string) bool {
 }
 
 func meterUnit(s *cloud.Service[state], c *zip.Ctx) {
-	s.Bill.Meter(principal.Payer(c), principal.Project(c), meterKind,
-		cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Record(principal.Payer(c), meterKind, metering.Usage{
+		Model:       meterKind,
+		AmountCents: cloud.ResourceFeeCents(feeEnvPrefix, meterKind),
+		Project:     principal.Project(c),
+		RequestID:   c.RequestID(),
+		ClientIP:    cloud.ClientIP(c),
+	})
 }
 
 // audrecordAction is audrecord with the action named: the plugin builder records

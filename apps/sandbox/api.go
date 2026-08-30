@@ -253,7 +253,7 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// resolved and what this gate has always keyed on.
 	fee := ResourceFee(class)
 	if fee > 0 {
-		if err := s.Bill.Gate(ctx, account.PayerOf("", ledger), "", false, "sandbox", fee); err != nil {
+		if err := s.Bill.Authorize(ctx, account.PayerOf("", ledger), "", false, "sandbox", fee); err != nil {
 			return Sandbox{}, err
 		}
 	}
@@ -381,7 +381,7 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// says which was leased rather than that one more thing happened.
 	// Same string boundary as the gate above: ledger is the argument, parsed here so
 	// the debit lands where the gate looked.
-	s.Bill.MeterUsage(account.PayerOf("", ledger), "sandbox", metering.Usage{
+	s.Bill.Record(account.PayerOf("", ledger), "sandbox", metering.Usage{
 		Model:       class + "/" + m.Runtime,
 		AmountCents: fee,
 	})

@@ -22,7 +22,7 @@ package flow
 // ONE KNOB, TWO USES. The gate authorizes exactly the amount the meter debits,
 // read from the same ResourceFeeCents call, so the number a caller is refused
 // for and the number they are charged cannot drift. A deployment that prices a
-// run at 0 is un-gated exactly as it is un-billed — ResourceMeter's own
+// run at 0 is un-gated exactly as it is un-billed — Meter's own
 // costCents<=0 short-circuit — which is the honest reading of "this operator
 // gives runs away".
 
@@ -30,6 +30,7 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 )
 
@@ -65,7 +66,7 @@ func (o ops) gate(ctx context.Context) error {
 	}
 	project, validated := principal.ValidatedProject(c)
 	fee := cloud.ResourceFeeCents(feeEnvPrefix, meterKind)
-	if err := o.s.Bill.Gate(c.Context(), principal.Payer(c), project, validated, meterKind, fee); err != nil {
+	if err := o.s.Bill.Authorize(c.Context(), principal.Payer(c), project, validated, meterKind, fee); err != nil {
 		return cloud.Denied(err)
 	}
 	return nil
@@ -74,7 +75,7 @@ func (o ops) gate(ctx context.Context) error {
 // meter debits the one run this call performed. It runs only after the upstream
 // returned a result: work that never ran is work nobody owes for.
 //
-// The debit is fire-and-forget on a background context (ResourceMeter.Meter) —
+// The debit is fire-and-forget on a background context (Meter.Record) —
 // the run already happened, so the charge must never block the reply nor be
 // cancelled by a client disconnect.
 func (o ops) meter(ctx context.Context) {
@@ -82,6 +83,11 @@ func (o ops) meter(ctx context.Context) {
 	if !ok {
 		return
 	}
-	o.s.Bill.Meter(principal.Payer(c), principal.Project(c), meterKind,
-		cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
+	o.s.Bill.Record(principal.Payer(c), meterKind, metering.Usage{
+		Model:       meterKind,
+		AmountCents: cloud.ResourceFeeCents(feeEnvPrefix, meterKind),
+		Project:     principal.Project(c),
+		RequestID:   c.RequestID(),
+		ClientIP:    cloud.ClientIP(c),
+	})
 }

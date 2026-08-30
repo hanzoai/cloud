@@ -61,7 +61,7 @@ const (
 	Free Price = -1
 
 	// Metered — the charge for this surface is owned by a meter DOWNSTREAM of the
-	// edge: the subsystem's own ResourceMeter, or the model plane's token meter. The
+	// edge: the subsystem's own Meter, or the model plane's token meter. The
 	// edge must add nothing on top or every request is billed twice. This is the value
 	// that says "money moves here, just not here" — spend.go's Billable is what
 	// requires standing before it runs.

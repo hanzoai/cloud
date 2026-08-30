@@ -46,6 +46,7 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
@@ -388,20 +389,20 @@ func TestPrepaidOverTheWireIsOrgScoped(t *testing.T) {
 
 // ── the OTHER meter: the one every chargeable product actually uses ──────────────
 
-// TestResourceMeterOverTheWire proves the client the fleet's money really moves
+// TestMeterOverTheWire proves the client the fleet's money really moves
 // through. BillingGate (above) charges what a surface DECLARES at the edge, and
 // no surface in the fleet declares a positive price — so today it charges nobody.
-// Every product that CAN be billed bills through ResourceMeter instead: gate
+// Every product that CAN be billed bills through Meter instead: gate
 // before the work, debit after it, inside the handler. That is 21 surfaces, and
 // until this test the pair had only ever been proven against a FAKE commerce over
 // HTTP (resource_billing_test.go) — which in the unified binary is not the path
 // taken at all, because Record short-circuits to the co-resident ledger before it
 // considers a socket.
 //
-// So: real bearer, real socket, real ResourceMeter, real double-entry ledger, and
+// So: real bearer, real socket, real Meter, real double-entry ledger, and
 // the canonical call pair copied from apps/functions — the shape every metered
 // handler in the fleet uses.
-func TestResourceMeterOverTheWire(t *testing.T) {
+func TestMeterOverTheWire(t *testing.T) {
 	for _, p := range e2ePayers {
 		t.Run(p.name, func(t *testing.T) { resourceMeterOverTheWire(t, p) })
 	}
@@ -424,11 +425,10 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 		t.Fatalf("fee knob resolves to %d¢, want %d¢", fee, e2ePrice)
 	}
 
-	bill := NewResourceMeter(Deps{
-		Metering: mustClient(t, forbiddenCommerce(t), false),
-	}, "e2e")
-	if !bill.Enabled() {
-		t.Fatal("the meter reports no ledger in this process — it would ask a peer, and " +
+	mc := mustClient(t, forbiddenCommerce(t), false)
+	bill := NewMeter(Deps{Metering: mc}, "e2e")
+	if !mc.Enabled() {
+		t.Fatal("the client reports no ledger in this process — it would ask a peer, and " +
 			"this test would prove nothing about the co-resident path")
 	}
 
@@ -438,18 +438,24 @@ func resourceMeterOverTheWire(t *testing.T, p payer) {
 	// The canonical metered handler, verbatim in shape from apps/functions/invoke.go.
 	app.Post(e2ePricedPath, func(c *zip.Ctx) error {
 		project, validated := principal.ValidatedProject(c)
-		if err := bill.Gate(c.Context(), principal.Payer(c), project, validated, kind, fee); err != nil {
+		if err := bill.Authorize(c.Context(), principal.Payer(c), project, validated, kind, fee); err != nil {
 			return DenyResource(c, err)
 		}
 		served.Add(1)
-		bill.Meter(principal.Payer(c), principal.Project(c), kind, fee, c.RequestID(), ClientIP(c))
+		bill.Record(principal.Payer(c), kind, metering.Usage{
+			Model:       kind,
+			AmountCents: fee,
+			Project:     principal.Project(c),
+			RequestID:   c.RequestID(),
+			ClientIP:    ClientIP(c),
+		})
 		return c.JSON(http.StatusOK, map[string]string{"ok": "served"})
 	})
 	base := e2eServer(t, app)
 	tok := e2eToken(t, key, p.owner, p.user)
 
 	// ── the address ─────────────────────────────────────────────────────────────
-	// ResourceMeter now addresses money by the resolved ACCOUNT — Usage.User is its
+	// Meter now addresses money by the resolved ACCOUNT — Usage.User is its
 	// Subject() and Usage.Org its Org() — so a handler still cannot bill someone else
 	// and the two halves can no longer disagree. Fund BOTH candidate wallets and let
 	// the binary say which one it moved: an assertion that only watched the one this
@@ -581,7 +587,7 @@ func TestTheAddressCarriesBothHalves(t *testing.T) {
 // In the shared signup org the gate's address and the meter's address were two
 // different wallets: principal.WalletOf said <org>/<username> — which is what the
 // customer's own balance page reads, what BillingGate charges, and what the paywall
-// consults — while ResourceMeter debited the bare <org>, the PLATFORM'S OWN POOL. A
+// consults — while Meter debited the bare <org>, the PLATFORM'S OWN POOL. A
 // stranger's top-up was unspendable and their usage landed on Hanzo's books.
 //
 // So this funds ONLY the person, and asserts the metered handler both serves and
@@ -607,7 +613,7 @@ func TestMigratedSurfaceDebitsThePerson(t *testing.T) {
 	t.Setenv("CLOUD_E2E_FEE_CENTS", "25")
 	const kind = "run"
 	fee := ResourceFeeCents("CLOUD_E2E_FEE_CENTS", kind)
-	bill := NewResourceMeter(Deps{
+	bill := NewMeter(Deps{
 		Metering: mustClient(t, forbiddenCommerce(t), false),
 	}, "e2e")
 
@@ -618,11 +624,17 @@ func TestMigratedSurfaceDebitsThePerson(t *testing.T) {
 	// the same value from the same call, which is what makes the surface atomic.
 	app.Post(e2ePricedPath, func(c *zip.Ctx) error {
 		project, validated := principal.ValidatedProject(c)
-		if err := bill.Gate(c.Context(), principal.Payer(c), project, validated, kind, fee); err != nil {
+		if err := bill.Authorize(c.Context(), principal.Payer(c), project, validated, kind, fee); err != nil {
 			return DenyResource(c, err)
 		}
 		served.Add(1)
-		bill.Meter(principal.Payer(c), principal.Project(c), kind, fee, c.RequestID(), ClientIP(c))
+		bill.Record(principal.Payer(c), kind, metering.Usage{
+			Model:       kind,
+			AmountCents: fee,
+			Project:     principal.Project(c),
+			RequestID:   c.RequestID(),
+			ClientIP:    ClientIP(c),
+		})
 		return c.JSON(http.StatusOK, map[string]string{"ok": "served"})
 	})
 	base := e2eServer(t, app)

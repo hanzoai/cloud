@@ -48,7 +48,7 @@ import (
 // anonymous caller could probe and drain a victim org's balance), or no resolvable
 // org.
 //
-// It exists because the in-handler meter (cloud.ResourceMeter) used to address money
+// It exists because the in-handler meter (cloud.Meter) used to address money
 // with ONE string, and the string it was handed was the LEDGER — the org. For a
 // tenant org that is the same value account.Payer returns, so nothing looked wrong;
 // in the SHARED SIGNUP ORG it is not, and that is exactly where a self-serve stranger
@@ -71,7 +71,7 @@ import (
 // the next layer substitutes". The metering client substituted the BRAND org, so a
 // principal whose owner claim carried a zero-width rune was gated against Hanzo's
 // balance and, had the debit not errored on the empty org, would have spent it. There
-// is no substitute payer. A zero Account reaches ResourceMeter.Gate as ErrNoLedger —
+// is no substitute payer. A zero Account reaches Meter.Authorize as ErrNoLedger —
 // the same fail-closed answer an empty org gave — so a caller hands this straight to
 // the gate and wants the gate's own refusal, not a second branch of its own.
 func Payer(c *zip.Ctx) account.Account {

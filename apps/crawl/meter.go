@@ -56,12 +56,12 @@ const defaultFeeCents int64 = 1
 // beside it is (see Bind): a render is reached from Read, which the answer
 // engine's read stage calls in-process with no deps to thread, and Mount runs at
 // boot while other subsystems are already serving.
-var meter atomic.Pointer[cloud.ResourceMeter]
+var meter atomic.Pointer[cloud.Meter]
 
 // bindMeter installs the process-wide meter. A nil meter leaves crawling fully
-// functional and unbilled — ResourceMeter's own contract is that an absent
+// functional and unbilled — Meter's own contract is that an absent
 // ledger allows, which is the right posture for a deployment with no commerce.
-func bindMeter(m *cloud.ResourceMeter) { meter.Store(m) }
+func bindMeter(m *cloud.Meter) { meter.Store(m) }
 
 // fee is what one render costs the caller.
 func fee() int64 { return cloud.FeeCents(feeEnv, kind, defaultFeeCents) }
@@ -94,7 +94,7 @@ func fee() int64 { return cloud.FeeCents(feeEnv, kind, defaultFeeCents) }
 // the shared key in front of it is already that control. Amplification is not a
 // billing question wearing a different hat.
 func afford(ctx context.Context, p cloud.Payer) (*cloud.Charge, error) {
-	return meter.Load().Allow(ctx, p, kind, fee())
+	return meter.Load().Reserve(ctx, p, kind, fee())
 }
 
 // charge debits one render, after the browser has actually produced a page.

@@ -16,7 +16,7 @@ import (
 	_ "github.com/hanzoai/cloud/internal/devmaster"
 )
 
-// fundedBiller wires the REAL production biller — meterBiller over cloud's ResourceMeter
+// fundedBiller wires the REAL production biller — meterBiller over cloud's Meter
 // over the metering client over the finance ledger — to a wallet with seedCents in it.
 //
 // Every layer is the real one because the question is what the LEDGER does with a
@@ -38,7 +38,7 @@ func fundedBiller(t *testing.T, seedCents int64) (finance.Client, *meterBiller) 
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return fin, &meterBiller{rm: cloud.NewResourceMeter(cloud.Deps{Metering: meter}, "domain")}
+	return fin, &meterBiller{rm: cloud.NewMeter(cloud.Deps{Metering: meter}, "domain")}
 }
 
 // settledCents waits for the fire-and-forget debits to land and reports the wallet.
@@ -92,7 +92,7 @@ func settledCents(t *testing.T, fin finance.Client, want int64) int64 {
 // MUTATION PROOF: give Capture the ref back and hand it to the ledger —
 //
 //	func (m *meterBiller) Capture(org string, cents int64, ref string) {
-//	    m.rm.MeterUsage(org, "domain.register", metering.Usage{..., Ref: ref})
+//	    m.rm.Record(org, "domain.register", metering.Usage{..., Ref: ref})
 //
 // and the wallet ends at 95¢ instead of 85¢: two of the three renewals were free.
 func TestRenewingOneDomainThreeTimesChargesThreeTimes(t *testing.T) {

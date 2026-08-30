@@ -6,7 +6,7 @@ package platform
 // completion. This is the ONE place that prices that compute: wall-clock BUILD
 // MINUTES, from the build record's creation (the Job launches immediately after)
 // to the moment the Job is observed finished. Metered on the CALLER's org ledger
-// via the shared cloud.ResourceMeter, exactly once per completed build.
+// via the shared cloud.Meter, exactly once per completed build.
 
 import (
 	"github.com/hanzoai/account"
@@ -26,7 +26,7 @@ const buildMinuteFeeEnvPrefix = "CLOUD_BUILD_MINUTE_CENTS"
 //
 // Integer-exact (no float): cents = round(seconds × fee / 60). A non-positive
 // span (clock skew, missing timestamp) or a non-positive fee yields 0, which
-// makes MeterUsage a no-op. Sub-minute builds round to the nearest cent (half up).
+// makes Record a no-op. Sub-minute builds round to the nearest cent (half up).
 func buildMinutesCents(startUnix, endUnix, feePerMinuteCents int64) int64 {
 	secs := endUnix - startUnix
 	if secs <= 0 || feePerMinuteCents <= 0 {
@@ -49,7 +49,7 @@ func meterBuild(s *cloud.Service[state], b Build, endUnix int64) {
 	// b.Org is a column on the stored build record, written when the build was
 	// launched; the reconciler calls this with no request in reach, so the address is
 	// parsed back out of the stored string.
-	s.Bill.MeterUsage(account.PayerOf("", b.Org), "build", metering.Usage{
+	s.Bill.Record(account.PayerOf("", b.Org), "build", metering.Usage{
 		Model:       "build", // the billed unit: wall-clock build minutes.
 		AmountCents: cents,
 	})

@@ -26,10 +26,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hanzoai/cloud/apps/principal"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/principal"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -204,7 +206,7 @@ func (o ops) createOf(ctx context.Context, kind string, in *provisionRequest) (*
 
 	fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := o.s.Bill.Gate(ctx, principal.Payer(c), project, projectValidated, kind, fee); err != nil {
+	if err := o.s.Bill.Authorize(ctx, principal.Payer(c), project, projectValidated, kind, fee); err != nil {
 		return nil, cloud.Denied(err)
 	}
 
@@ -311,9 +313,15 @@ func (o ops) createShared(ctx context.Context, c *zip.Ctx, kind, org, name, proj
 	// Resource is live + persisted — debit the caller's org ledger for the
 	// provision (per-org, env-attributed, async best-effort so the debit never
 	// blocks or corrupts this 201; a debit failure is logged for
-	// reconciliation). Recurring storage footprint reuses o.s.Bill.Meter with a
+	// reconciliation). Recurring storage footprint reuses o.s.Bill.Record with a
 	// GB-month amount once a live-size source exists.
-	o.s.Bill.Meter(principal.Payer(c), project, kind, fee, c.RequestID(), cloud.ClientIP(c))
+	o.s.Bill.Record(principal.Payer(c), kind, metering.Usage{
+		Model:       kind,
+		AmountCents: fee,
+		Project:     project,
+		RequestID:   c.RequestID(),
+		ClientIP:    cloud.ClientIP(c),
+	})
 
 	// Return the PUBLIC endpoint, never the internal admin host. Remap the
 	// connection string's host:port too so a copy-pasted DSN is routable.

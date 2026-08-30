@@ -103,7 +103,7 @@ var kinds = map[string]bool{
 //
 // The bill meter is the shared per-org resource gate+meter. A project todo is
 // FREE by default (charging per issue is the wrong product), so the create fee
-// defaults to 0 → Gate is a pass-through and Meter a no-op; the client is wired
+// defaults to 0 → Authorize is a pass-through and Record a no-op; the client is wired
 // uniformly with every other subsystem and ops can price it per deployment via
 // CLOUD_TODO_FEE_CENTS[_PROJECT|_ISSUE].
 type state struct {

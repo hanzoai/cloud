@@ -63,20 +63,18 @@ type ledger struct {
 	debit []int64
 }
 
-func (l *ledger) Gate(_ context.Context, _ account.Account, _ string, _ bool, _ string, cents int64) error {
+func (l *ledger) Authorize(_ context.Context, _ account.Account, _ string, _ bool, _ string, cents int64) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.cents = cents
 	return l.gate
 }
 
-func (l *ledger) Meter(_ account.Account, _, _ string, cents int64, _, _ string) {
+func (l *ledger) Record(_ account.Account, _ string, u metering.Usage) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.debit = append(l.debit, cents)
+	l.debit = append(l.debit, u.AmountCents)
 }
-
-func (l *ledger) Enabled() bool { return true }
 
 func (l *ledger) charged() []int64 {
 	l.mu.Lock()

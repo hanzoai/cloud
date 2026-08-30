@@ -64,7 +64,7 @@ type state struct {
 	// bill meters the nominal management fee. BYO clusters are MERGED into the
 	// managed clusters on /v1/visor/clusters — one fleet surface, two sources.
 	fleet *fleet.Registry
-	bill  *cloud.ResourceMeter
+	bill  *cloud.Meter
 }
 
 // ops carries the mounted Service into a TYPED op. zip fixes a typed handler's
@@ -128,7 +128,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		State: state{
 			cl:    newClient(),
 			fleet: fleet.New(deps.Brand, luxlog.Default().New("subsystem", "fleet")),
-			bill:  cloud.NewResourceMeter(deps, "compute"),
+			bill:  cloud.NewMeter(deps, "compute"),
 		},
 	}
 	o := ops{s}

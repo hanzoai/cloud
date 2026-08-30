@@ -21,6 +21,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 
@@ -247,7 +248,7 @@ func (o ops) createOf(ctx context.Context, k resourceKind, in *mlCreate) (*mlRes
 
 	fee := cloud.ResourceFeeCents(computeFeeEnvPrefix, k.kind)
 	_, projectValidated := principal.ValidatedProject(c)
-	if err := o.s.State.bill.Gate(ctx, principal.Payer(c), project, projectValidated, k.kind, fee); err != nil {
+	if err := o.s.State.bill.Authorize(ctx, principal.Payer(c), project, projectValidated, k.kind, fee); err != nil {
 		return nil, cloud.Denied(err)
 	}
 
@@ -277,7 +278,13 @@ func (o ops) createOf(ctx context.Context, k resourceKind, in *mlCreate) (*mlRes
 	}
 	// Created — debit the caller's org ledger for the compute submission (per-org,
 	// env-attributed, async best-effort, so a debit failure never corrupts a 201).
-	o.s.State.bill.Meter(principal.Payer(c), project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
+	o.s.State.bill.Record(principal.Payer(c), k.kind, metering.Usage{
+		Model:       k.kind,
+		AmountCents: fee,
+		Project:     project,
+		RequestID:   c.RequestID(),
+		ClientIP:    cloud.ClientIP(c),
+	})
 	v := view(out, true)
 	return &v, nil
 }

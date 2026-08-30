@@ -149,8 +149,8 @@ type state struct {
 	initErr string            // why dyn is nil, surfaced by health
 	hc      *http.Client      // predictor data-plane client (inference latency)
 	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
-	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
-	bill *cloud.ResourceMeter
+	// one commerce client). A nil meter makes Authorize allow and Record a no-op.
+	bill *cloud.Meter
 	// fleet is the shared per-org BYO-cluster registry (owned by the visor fleet
 	// surface). dynForOrg federates ML serving onto the org's registered cluster
 	// via it; a nil/empty registry => serving stays on the home in-cluster client.
@@ -167,7 +167,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "ml"),
-		State: state{hc: &http.Client{Timeout: predictTimeout}, bill: cloud.NewResourceMeter(deps, "compute")},
+		State: state{hc: &http.Client{Timeout: predictTimeout}, bill: cloud.NewMeter(deps, "compute")},
 	}
 	if dyn, err := newDynamic(); err != nil {
 		s.State.initErr = err.Error()
@@ -180,7 +180,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s.State.fleet = fleet.New(deps.Brand, s.Log)
 
 	mount(s, app)
-	s.Log.Info("ml surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env, "billing", s.State.bill.Enabled())
+	s.Log.Info("ml surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env)
 	return nil
 }
 

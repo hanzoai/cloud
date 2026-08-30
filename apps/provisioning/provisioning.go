@@ -136,7 +136,7 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 // CLOUD_PROVISION_FEE_CENTS, else the $1.00 default. Set a kind to 0 to make it
 // free (and therefore un-gated).
 //
-// Ongoing storage footprint (GB-month) is billed by REUSING s.Bill.Meter with a
+// Ongoing storage footprint (GB-month) is billed by REUSING s.Bill.Record with a
 // usage-derived amount; its unit price lives in hanzoai/pricing
 // (infrastructure.blockStorage.pricePerGBMonthly = $0.08/GB-month) and is
 // applied by the recurring caller, not at provision time — there is no live-size
@@ -145,7 +145,7 @@ const provisionFeeEnvPrefix = "CLOUD_PROVISION_FEE_CENTS"
 
 // state is provisioning's own data; shared deps (logger, per-org billing meter,
 // brand) live in the embedded cloud.Base, reached as s.Log / s.Bill. The billing
-// meter is nil/!Enabled() → Gate allows and Meter is a no-op.
+// meter is nil → Authorize allows and Record is a no-op.
 type state struct {
 	store *Store
 	sec   *secrets
@@ -261,7 +261,6 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		"kms", s.State.sec.Enabled(),
 		"brand", deps.Brand,
 		"env", deps.Env,
-		"billing", s.Bill.Enabled(),
 	)
 	return nil
 }

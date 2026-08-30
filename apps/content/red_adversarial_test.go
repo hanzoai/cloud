@@ -31,7 +31,7 @@ import (
 // ── counting commerce meter ───────────────────────────────────────────────────────
 //
 // redMeter is an httptest commerce backend that answers the two wire calls the
-// ResourceMeter makes — GET /v1/billing/balance (the gate) and POST /v1/billing/usage
+// Meter makes — GET /v1/billing/balance (the gate) and POST /v1/billing/usage
 // (the debit) — while counting each and capturing every debit body. Everything else
 // (tier, alerts) 404s so the scope-cap overlay fails OPEN (funds-only gating),
 // exactly as in production.
@@ -286,11 +286,11 @@ func TestRed_StudioNoImageProducedNotCharged(t *testing.T) {
 	meter.expectNoDebit(t)
 }
 
-// TestRed_CopyDoesNotDoubleBillViaResourceMeter proves the COPY path bills ONLY through
-// the AI plane (deps.AI), never a second time through content's own ResourceMeter
+// TestRed_CopyDoesNotDoubleBillViaTheMeter proves the COPY path bills ONLY through
+// the AI plane (deps.AI), never a second time through content's own Meter
 // (b.Bill). With Metering wired to b.Bill and an unmetered AI stub, the counting meter
 // must see ZERO gates and ZERO debits — content adds no charge of its own for copy.
-func TestRed_CopyDoesNotDoubleBillViaResourceMeter(t *testing.T) {
+func TestRed_CopyDoesNotDoubleBillViaTheMeter(t *testing.T) {
 	const org = "acme"
 	ai := &recordingAI{reply: `{"title":"T","caption":"Hook.","excerpt":"E","hashtags":["a"]}`}
 	meter := newRedMeter(t, 100000)

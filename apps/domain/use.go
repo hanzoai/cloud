@@ -147,12 +147,12 @@ func nsEnv(key string, def []string) []string {
 	return def
 }
 
-// ── billing adapter (ResourceMeter → Biller) ──────────────────────────────────────
+// ── billing adapter (Meter → Biller) ──────────────────────────────────────
 
-// meterBiller adapts cloud's ResourceMeter to the Biller interface: Gate is the
+// meterBiller adapts cloud's Meter to the Biller interface: Gate is the
 // pre-charge balance authorize, Meter is the debit capture. This is the exact
 // deposit→charge client every metered subsystem uses.
-type meterBiller struct{ rm *cloud.ResourceMeter }
+type meterBiller struct{ rm *cloud.Meter }
 
 func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) error {
 	// org crosses the Biller interface as a bare string — the purchase path hands it
@@ -162,7 +162,7 @@ func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) er
 	//
 	// ("", false): no project sub-scope on a domain purchase — org- and
 	// service-scoped caps apply; a domain buy is not project-attributed.
-	err := m.rm.Gate(ctx, account.PayerOf("", org), "", false, "domain.register", cents)
+	err := m.rm.Authorize(ctx, account.PayerOf("", org), "", false, "domain.register", cents)
 	if errors.Is(err, metering.ErrInsufficientBalance) {
 		return ErrInsufficientFunds
 	}
@@ -185,7 +185,7 @@ func (m *meterBiller) Authorize(ctx context.Context, org string, cents int64) er
 func (m *meterBiller) Capture(org string, cents int64) {
 	// Same string boundary as Authorize above: org is the Biller parameter, parsed
 	// here so the debit lands where the gate looked.
-	m.rm.MeterUsage(account.PayerOf("", org), "domain.register", metering.Usage{
+	m.rm.Record(account.PayerOf("", org), "domain.register", metering.Usage{
 		Model:       "domain.register",
 		AmountCents: cents,
 	})

@@ -45,7 +45,7 @@ type Payer struct {
 	Wallet account.Account
 	// Project is the caller's org sub-scope, and Validated says it is bound to a
 	// verified claim. Together they are what lets a project-scoped spend cap
-	// enforce hard rather than degrade — see ResourceMeter.Gate.
+	// enforce hard rather than degrade — see [Meter.Authorize].
 	Project   string
 	Validated bool
 	// Attribution, carried so the gate and the debit describe the same caller.
@@ -114,17 +114,17 @@ func PayerOf(ctx context.Context) Payer {
 	}
 }
 
-// Allow authorizes costCents against this payer and returns the CHARGE it opened.
+// Reserve authorizes costCents against this payer and returns the CHARGE it opened.
 //
-// It is [ResourceMeter.Gate] asked with a resolved Payer instead of three loose
-// strings, plus the two things every caller of Gate has to get right and one of
-// them could not get right at all:
+// It is [Meter.Authorize] asked with a resolved Payer instead of three loose
+// strings, plus the two things every caller of Authorize has to get right and one
+// of them could not get right at all:
 //
-//   - An absent payer is "no charge", not "refuse". Gate is fail-closed on an
+//   - An absent payer is "no charge", not "refuse". Authorize is fail-closed on an
 //     empty subject, which is correct when a wallet was expected and wrong when
 //     the caller is an in-process composer that was never going to pay. Leaving
 //     that to each surface is how one of them eventually 402s a background job.
-//   - A BALANCE IS NOT A PER-CALL LIMIT. Gate reads the ledger, and the ledger
+//   - A BALANCE IS NOT A PER-CALL LIMIT. Authorize reads the ledger, and the ledger
 //     does not yet know about the calls this pod already has in flight — so N
 //     simultaneous callers each saw the same untouched balance and each cleared
 //     it. Four numbers were ordered against a balance covering one. The fix is
@@ -137,13 +137,13 @@ func PayerOf(ctx context.Context) Payer {
 // must always do one of the two — `defer ch.Release()` is the safety net, and it
 // is a no-op once Debit has taken it. A charge that is never released is a
 // customer locked out of their own balance.
-func (rm *ResourceMeter) Allow(ctx context.Context, p Payer, kind string, costCents int64) (*Charge, error) {
+func (rm *Meter) Reserve(ctx context.Context, p Payer, kind string, costCents int64) (*Charge, error) {
 	if rm == nil || !p.Billable() || costCents <= 0 {
 		return &Charge{}, nil
 	}
 	h := &hold{to: &rm.inflight, org: p.Wallet.Subject(), cost: costCents}
 	// GIVE IT BACK ON EVERY EXIT THIS FUNCTION HAS, including the one it does not
-	// write down. Releasing only on the error return leaks the commitment when Gate
+	// write down. Releasing only on the error return leaks the commitment when Authorize
 	// panics — and a leaked commitment is not a lost cent, it is a wallet that can
 	// never clear the gate again until the pod restarts, because the phantom is
 	// added to every later weigh-in. Handing the hold to the returned Charge is the
@@ -157,7 +157,7 @@ func (rm *ResourceMeter) Allow(ctx context.Context, p Payer, kind string, costCe
 	// Commit FIRST, then weigh — see above. committed is this call's cost plus
 	// everything else outstanding for the same wallet.
 	committed := rm.inflight.commit(p.Wallet.Subject(), costCents)
-	if err := rm.Gate(ctx, p.Wallet, p.Project, p.Validated, kind, committed); err != nil {
+	if err := rm.Authorize(ctx, p.Wallet, p.Project, p.Validated, kind, committed); err != nil {
 		return &Charge{}, err
 	}
 	kept = true
@@ -173,7 +173,7 @@ func (rm *ResourceMeter) Allow(ctx context.Context, p Payer, kind string, costCe
 // and both of its methods are no-ops on it, so a surface never branches on
 // whether money is in play. It only has to say what happened.
 type Charge struct {
-	meter *ResourceMeter
+	meter *Meter
 	payer Payer
 	kind  string
 	// hold is taken by whichever of Debit and Release runs first, atomically, so
@@ -217,7 +217,7 @@ func (c *Charge) Debit(usage metering.Usage) {
 	usage.Actor = c.payer.Actor
 	usage.RequestID = c.payer.RequestID
 	usage.ClientIP = c.payer.ClientIP
-	c.meter.meterUsage(c.payer.Wallet, c.kind, usage, h.release)
+	c.meter.record(c.payer.Wallet, c.kind, usage, h.release)
 }
 
 // Release gives back the commitment without spending it — the work did not

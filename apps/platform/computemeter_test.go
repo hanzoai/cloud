@@ -214,7 +214,7 @@ func TestComputeRoyaltyFlows(t *testing.T) {
 
 	// The debit is what commerce accumulates into the org's month-to-date spend that
 	// payout.SpendCents returns — keyed on the deploying org (u.User is set to org by
-	// ResourceMeter.MeterUsage; here we assert the org the emit targeted).
+	// Meter.Record; here we assert the org the emit targeted).
 	if d.org != "acme" {
 		t.Fatalf("royalty base org = %q, want acme", d.org)
 	}

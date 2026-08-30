@@ -55,7 +55,7 @@ func afford(s *cloud.Service[state], ctx context.Context) (*cloud.Charge, error)
 	if !paid() {
 		return nil, nil
 	}
-	return s.Bill.Allow(ctx, cloud.PayerOf(ctx), piece, fee())
+	return s.Bill.Reserve(ctx, cloud.PayerOf(ctx), piece, fee())
 }
 
 // charge debits one piece run, after the engine has answered. A run that errored

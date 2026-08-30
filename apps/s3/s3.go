@@ -66,9 +66,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/apps/provisioning"
 	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/zap-proto/zip"
 )
 
@@ -98,7 +98,7 @@ var bucketNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 // CLOUD_S3_FEE_CENTS override, else the $1.00 default. Set it to 0 to make S3
 // data-plane ops free (and therefore un-gated). Object storage has no live-size
 // source in this data plane, so it is billed per-OPERATION (the S3 request-price
-// model) via the ONE shared cloud.ResourceMeter (product "s3"); GB-month storage
+// model) via the ONE shared cloud.Meter (product "s3"); GB-month storage
 // footprint reuses the SAME meter with a usage-derived amount once a live-size
 // source exists — there is no second metering path.
 const opFeeEnvPrefix = "CLOUD_S3_FEE_CENTS"
@@ -106,12 +106,10 @@ const opFeeEnvPrefix = "CLOUD_S3_FEE_CENTS"
 // state is s3's own data; shared deps live in the embedded cloud.Base. It holds
 // the shared S3 admin connection and nothing else: the per-org gate+meter is
 // Base.Bill, whose commerce product label is the subsystem name, and that name
-// is "s3" — the label the ledger has always carried for this plane. There was a
-// second ResourceMeter here only because the package was called storage and the
-// label was not; one name for the app removes the second meter with it. A
-// not-Configured() admin means no credentials are present; the subsystem then
-// mounts health/config only and every op fails closed 503. A nil/!Enabled() Bill
-// makes Gate allow and Meter a no-op.
+// is "s3" — the label the ledger carries for this plane. A not-Configured() admin
+// means no credentials are present; the subsystem then mounts health/config only
+// and every op fails closed 503. A nil Bill makes Authorize allow and Record a
+// no-op.
 type state struct {
 	admin s3admin.Admin
 }
@@ -207,8 +205,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 // Ready and Fee are the two facts [fare.Paid] asks this surface about itself.
 // A not-Configured() admin means no credentials are present, so the subsystem
-// mounts health/config only and every operation fails closed 503; a nil/!Enabled()
-// Bill makes the money leg a no-op.
+// mounts health/config only and every operation fails closed 503; a nil Bill makes
+// the money leg a no-op.
 
 // Ready is nil when the object store is configured, and the honest refusal
 // otherwise. It is what makes the whole route set answer 503 under its own name

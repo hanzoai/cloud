@@ -50,12 +50,12 @@ const defaultFeeCents int64 = 1
 // value to hang it off: its handlers are free functions and Mount builds no
 // cloud.Base. It is the shape apps/websearch uses, for the same reason — a
 // dependency every handler needs and none of them can be handed.
-var meter atomic.Pointer[cloud.ResourceMeter]
+var meter atomic.Pointer[cloud.Meter]
 
 // bindMeter installs the process-wide meter. A nil meter leaves the interpreter
-// fully functional and unbilled — ResourceMeter's own contract is that an absent
+// fully functional and unbilled — Meter's own contract is that an absent
 // ledger allows.
-func bindMeter(m *cloud.ResourceMeter) { meter.Store(m) }
+func bindMeter(m *cloud.Meter) { meter.Store(m) }
 
 func fee() int64 { return cloud.FeeCents(feeEnv, runKind, defaultFeeCents) }
 
@@ -67,7 +67,7 @@ func fee() int64 { return cloud.FeeCents(feeEnv, runKind, defaultFeeCents) }
 // that hangs up — and a detached context carries the org and nothing else, so the
 // payer has to be resolved on this side of that line.
 func afford(ctx context.Context) (*cloud.Charge, error) {
-	return meter.Load().Allow(ctx, cloud.PayerOf(ctx), runKind, fee())
+	return meter.Load().Reserve(ctx, cloud.PayerOf(ctx), runKind, fee())
 }
 
 // charge debits one run, after the program has actually run. A lease that failed

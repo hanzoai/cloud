@@ -44,7 +44,7 @@ const feeEnv = "WEBSEARCH_FEE_CENTS"
 // call with room — and not a claim about what search is worth. The scale matches
 // the neighbouring product decision: answer's `search` mode is 2c for a search
 // plus a synthesis. Operators move it with the knob above; 0 makes a paid engine
-// free again, and un-gated with it (ResourceMeter.Gate's own costCents<=0 rule).
+// free again, and un-gated with it (Meter.Authorize's own costCents<=0 rule).
 const defaultFeeCents int64 = 1
 
 // meter is the per-org gate and debit, bound once by Mount.
@@ -55,12 +55,12 @@ const defaultFeeCents int64 = 1
 // function over the enabled engines that every one of them reaches. An atomic
 // pointer rather than a plain var because Mount runs at boot while other
 // subsystems are already serving, exactly as crawl's archive is bound.
-var meter atomic.Pointer[cloud.ResourceMeter]
+var meter atomic.Pointer[cloud.Meter]
 
 // bindMeter installs the process-wide meter. A nil meter leaves search fully
 // functional and unbilled, which is what an unconfigured deployment should get:
-// ResourceMeter's own contract is that an absent ledger allows.
-func bindMeter(m *cloud.ResourceMeter) { meter.Store(m) }
+// Meter's own contract is that an absent ledger allows.
+func bindMeter(m *cloud.Meter) { meter.Store(m) }
 
 // paid reports whether asking this engine spends a vendor's money HERE — the
 // engine sells its API and this deployment holds the key. Keyless engines and
@@ -87,7 +87,7 @@ func renderFee() int64 { return cloud.FeeCents("CRAWL_FEE_CENTS", render, defaul
 // caller with no wallet is not billed and not gated — the render is our own
 // capacity, and the asymmetry with the paid engines is argued in apps/crawl/meter.go.
 func affordRender(ctx context.Context) (*cloud.Charge, error) {
-	return meter.Load().Allow(ctx, cloud.PayerOf(ctx), render, renderFee())
+	return meter.Load().Reserve(ctx, cloud.PayerOf(ctx), render, renderFee())
 }
 
 // chargeRender debits one render, after the browser has actually returned a page.
@@ -138,7 +138,7 @@ func afford(ctx context.Context, engs []engine) ([]engine, *cloud.Charge) {
 	}
 	// The WHOLE paid set is authorized as one amount: they run concurrently, and a
 	// balance that covers each of them separately need not cover both together.
-	ch, err := meter.Load().Allow(ctx, p, kind, total)
+	ch, err := meter.Load().Reserve(ctx, p, kind, total)
 	if err == nil {
 		return engs, ch
 	}

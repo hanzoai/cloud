@@ -86,7 +86,7 @@ const (
 	Private = "private"
 
 	// privateKind is the metering unit for keeping a project private. It shares
-	// the ONE cloud.ResourceMeter every other paid surface uses (hosting, agents,
+	// the ONE cloud.Meter every other paid surface uses (hosting, agents,
 	// functions, s3), so "must have a paid account" is the existing funded-org
 	// gate rather than a second notion of entitlement that could disagree with
 	// billing. Fee 0 (operator-configured) makes private free and un-gated.
@@ -107,7 +107,7 @@ func resolve(s *cloud.Service[state], c *zip.Ctx, want string) (string, error) {
 	case Private:
 		fee := cloud.ResourceFeeCents(deployFeeEnvPrefix, privateKind)
 		project, validated := principal.ValidatedProject(c)
-		if err := s.State.bill.Gate(c.Context(), principal.Payer(c), project, validated, privateKind, fee); err != nil {
+		if err := s.State.bill.Authorize(c.Context(), principal.Payer(c), project, validated, privateKind, fee); err != nil {
 			return "", err
 		}
 		return Private, nil

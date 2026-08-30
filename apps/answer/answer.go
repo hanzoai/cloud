@@ -35,7 +35,7 @@
 // the text that leaves the process. See ground.go.
 //
 // ONE REVENUE DEBIT, NOT ONE DEBIT. Every answer debits the resolved payer once
-// through the per-org ResourceMeter (Base.Bill): the mode's flat fee, which is the
+// through the per-org Meter (Base.Bill): the mode's flat fee, which is the
 // product price. That is the only REVENUE charge — but not the only charge. The AI
 // plane this engine is handed is itself metered (build.go wraps it in
 // meteredAIClient), so each internal completion also debits the payer per token
@@ -133,7 +133,7 @@ func (e Engine) Serve(c *zip.Ctx, in Request, q string) error {
 	fee := feeCents(m.name, m.feeCents)
 
 	// MONEY GATE — refuse the whole request if the payer cannot cover the fee.
-	if err := e.Bill.Gate(c.Context(), payer, capProject, capValidated, "web", fee); err != nil {
+	if err := e.Bill.Authorize(c.Context(), payer, capProject, capValidated, "web", fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -265,7 +265,7 @@ func (e Engine) Answer(ctx context.Context, in Request, q string) (*Report, erro
 	// MONEY GATE — the same refusal Serve makes, before any work, so an
 	// out-of-funds caller is told so rather than handed a half answer.
 	capValidated := principal.ValidatedFrom(ctx) && !principal.IsDefaultProject(project)
-	if err := e.Bill.Gate(ctx, payer, project, capValidated, "web", fee); err != nil {
+	if err := e.Bill.Authorize(ctx, payer, project, capValidated, "web", fee); err != nil {
 		return nil, err
 	}
 
@@ -383,9 +383,9 @@ func (e Engine) Run(ctx context.Context, p Params, out Sink) {
 // meter records the one per-answer debit on the payer's ledger via Base.Bill. The
 // amount is the mode's flat fee (a configurable policy price) set to cover the
 // bounded token cost; token counts are recorded for per-scope attribution.
-// MeterUsage forces User/Org to the payer, so a caller can never bill another org.
+// Record forces User/Org to the payer, so a caller can never bill another org.
 func (e Engine) meter(p Params, tok tokens) {
-	e.Bill.MeterUsage(p.payer, "web", metering.Usage{
+	e.Bill.Record(p.payer, "web", metering.Usage{
 		Model:            p.mode.name,
 		AmountCents:      p.fee,
 		Project:          p.projectScope,

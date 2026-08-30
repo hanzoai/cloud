@@ -119,7 +119,7 @@ func TestNamedCannotMoveTheDebit(t *testing.T) {
 	inner := &recordingAI{resp: &types.ChatResponse{Content: "hi", TotalTokens: 100}}
 	m := &meteredAI{
 		inner: inner,
-		meter: NewResourceMeter(Deps{Metering: mustClient(t, srv.URL, false)}, AIMeterProvider),
+		meter: NewMeter(Deps{Metering: mustClient(t, srv.URL, false)}, AIMeterProvider),
 		rate:  defaultAIPriceUUSDPer1kTokens,
 	}
 	if _, err := m.ChatCompletion(context.Background(), &types.ChatRequest{

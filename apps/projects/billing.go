@@ -2,6 +2,7 @@ package projects
 
 import (
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -9,7 +10,7 @@ import (
 // Per-deploy metering — product:hosting. Every go-live of a site (a tar-artifact
 // deploy, a /v1/projects/sites brief build, a /v1/projects/sites/deploy file manifest, or a git/CI
 // completion) is one billable hosting event, gated and metered through the ONE
-// shared cloud.ResourceMeter (s.State.bill) exactly like the functions invoke path
+// shared cloud.Meter (s.State.bill) exactly like the functions invoke path
 // (clients/functions) and the agent run path (clients/agents): gate → work →
 // meter-once-on-success. A failed deploy is never billed; a redeploy to the same
 // slug is a distinct billable event that returns the SAME URL (idempotent host
@@ -41,7 +42,7 @@ const (
 func gateHosting(s *cloud.Service[state], c *zip.Ctx) (fee int64, err error) {
 	fee = cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind)
 	project, projectValidated := principal.ValidatedProject(c)
-	return fee, s.State.bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, deployKind, fee)
+	return fee, s.State.bill.Authorize(c.Context(), principal.Payer(c), project, projectValidated, deployKind, fee)
 }
 
 // meterDeploy debits the caller's org ledger ONCE for a successful deploy. It is
@@ -50,5 +51,11 @@ func gateHosting(s *cloud.Service[state], c *zip.Ctx) (fee int64, err error) {
 // flipped the site live — never on a failed deploy. It attributes spend to the
 // caller's validated project sub-scope so a per-project cap sums correctly.
 func meterDeploy(s *cloud.Service[state], c *zip.Ctx, fee int64) {
-	s.State.bill.Meter(principal.Payer(c), principal.Project(c), deployKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.State.bill.Record(principal.Payer(c), deployKind, metering.Usage{
+		Model:       deployKind,
+		AmountCents: fee,
+		Project:     principal.Project(c),
+		RequestID:   c.RequestID(),
+		ClientIP:    cloud.ClientIP(c),
+	})
 }

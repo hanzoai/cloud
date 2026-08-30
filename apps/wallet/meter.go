@@ -68,7 +68,7 @@ func (o ops) afford(ctx context.Context, k Kind, act string) (*cloud.Charge, err
 	if !paid(k) {
 		return nil, nil
 	}
-	return o.s.Bill.Allow(ctx, cloud.PayerOf(ctx), act, fee(act))
+	return o.s.Bill.Reserve(ctx, cloud.PayerOf(ctx), act, fee(act))
 }
 
 // charge debits one ring act, after it has actually completed. A round that

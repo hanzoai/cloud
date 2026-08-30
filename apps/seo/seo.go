@@ -210,7 +210,7 @@ type state struct {
 //	            plane; a type assertion to the embedded client would yield nil
 //	            here and every credential read would fail closed while blaming a
 //	            master key that is correctly configured.
-//	metering    cloud.NewBase gives the per-org ResourceMeter. The surface is
+//	metering    cloud.NewBase gives the per-org Meter. The surface is
 //	            declared Metered (plugin/seo/main.go), which means the edge
 //	            charges nothing and the debit below is the whole charge — a
 //	            promise this package keeps in run().

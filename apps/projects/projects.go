@@ -108,9 +108,9 @@ type state struct {
 	ai cloud.AIClient
 	// bill is the ONE per-org gate+meter for product:hosting (reuses deps.Metering,
 	// the single commerce client). Every deploy entrypoint gates through it before
-	// any work and debits once on success; nil/!Enabled() makes both no-ops so an
+	// any work and debits once on success; a nil meter makes both no-ops so an
 	// unconfigured deployment still deploys, just unbilled.
-	bill *cloud.ResourceMeter
+	bill *cloud.Meter
 	// apex is the published-site zone (CLOUD_SITES_APEX, default hanzo.app). The
 	// canonical live URL of every deployed site is https://<slug>.<apex>, the pretty
 	// host the sites edge (clients/sites) serves — never a raw S3 URL.
@@ -356,7 +356,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		blob:        openBlobStore(),
 		edge:        newEdge(context.Background(), b.Log),
 		ai:          deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
-		bill:        cloud.NewResourceMeter(deps, hostingProvider),
+		bill:        cloud.NewMeter(deps, hostingProvider),
 		apex:        environ.Or("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
 		ensureSpace: base.EnsureSpace,                            // wired-by-default Base data space (fail-soft).
 		forge:       &forge.Source{},                             // the credential is read from KMS on first publish, not here.
@@ -427,7 +427,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	go audit(s, audited)
 
 	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
-		"ai", s.State.ai != nil, "apex", s.State.apex, "billing", s.State.bill.Enabled(), "brand", deps.Brand)
+		"ai", s.State.ai != nil, "apex", s.State.apex, "brand", deps.Brand)
 	return nil
 }
 

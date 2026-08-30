@@ -823,7 +823,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 	// The meter that pays for a run. Bound here because this subsystem's handlers
 	// are free functions with no service value to hang it off. See meter.go.
-	bindMeter(cloud.NewResourceMeter(deps, "exec"))
+	bindMeter(cloud.NewMeter(deps, "exec"))
 
 	// The identity a typed op reads, parked on the request AHEAD of the leaves.
 	//

@@ -19,6 +19,7 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 )
 
 // studio_render.go is the ASSET half of the Generator client: it turns a design + kind into
@@ -124,7 +125,7 @@ func newStudioClient(base string) *studioClient {
 }
 
 // draftAsset renders an Asset via studio and returns its field data. It BILLS the render
-// to the brand's org up-front (b.Bill.Gate — the AI plane never sees a studio render, so
+// to the brand's org up-front (b.Bill.Authorize — the AI plane never sees a studio render, so
 // content is the sole meter) and, on success, records the debit. A denial surfaces as the
 // raw metering error the handler renders 402/503; a studio failure fail-closes to 503.
 func (g *aiStudioGenerator) draftAsset(ctx context.Context, org string, in GenerateInput) (map[string]any, error) {
@@ -154,7 +155,7 @@ func (g *aiStudioGenerator) draftAsset(ctx context.Context, org string, in Gener
 	// request in reach — so the address is parsed back out of it. PayerOf answers a
 	// bare slug with that org's own account, which is what this gate has always keyed on.
 	fee := cloud.ResourceFeeCents("CONTENT_STUDIO_FEE_CENTS", kind)
-	if err := g.bill.Gate(ctx, account.PayerOf("", org), project, false, "asset", fee); err != nil {
+	if err := g.bill.Authorize(ctx, account.PayerOf("", org), project, false, "asset", fee); err != nil {
 		return nil, err
 	}
 
@@ -182,7 +183,13 @@ func (g *aiStudioGenerator) draftAsset(ctx context.Context, org string, in Gener
 	//
 	// Same string boundary as the gate above: org is the parameter, parsed here so the
 	// debit lands where the gate looked.
-	g.bill.Meter(account.PayerOf("", org), project, kind, fee, "", "")
+	g.bill.Record(account.PayerOf("", org), kind, metering.Usage{
+		Model:       kind,
+		AmountCents: fee,
+		Project:     project,
+		RequestID:   "",
+		ClientIP:    "",
+	})
 
 	file := g.persistOrLink(ctx, org, in.Design, img)
 	data := map[string]any{

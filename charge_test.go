@@ -59,13 +59,13 @@ func newLedger(t *testing.T, available int64, block chan struct{}) *moneyLedger 
 	return l
 }
 
-func meterAt(t *testing.T, l *moneyLedger) *ResourceMeter {
+func meterAt(t *testing.T, l *moneyLedger) *Meter {
 	t.Helper()
 	m, err := metering.New(metering.Config{BaseURL: l.url, Token: "svc", Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "test")
+	return NewMeter(Deps{Metering: m, Env: "mainnet"}, "test")
 }
 
 func spender(w string) Payer { return Payer{Wallet: account.PayerOf("", w)} }
@@ -88,7 +88,7 @@ func TestDebitOwnsTheHoldUntilTheLedgerHasIt(t *testing.T) {
 	l := newLedger(t, 100000, block)
 	rm := meterAt(t, l)
 
-	ch, err := rm.Allow(context.Background(), spender("acme"), "kind", 100)
+	ch, err := rm.Reserve(context.Background(), spender("acme"), "kind", 100)
 	if err != nil {
 		t.Fatalf("Allow: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestAHungLedgerDoesNotLockOutTheWallet(t *testing.T) {
 	l := newLedger(t, 100000, nil) // the BALANCE still answers; only the debit hangs
 	rm := meterAt(t, l)
 
-	ch, err := rm.Allow(context.Background(), spender("acme"), "kind", 100)
+	ch, err := rm.Reserve(context.Background(), spender("acme"), "kind", 100)
 	if err != nil {
 		t.Fatalf("Allow: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestAHungLedgerDoesNotLockOutTheWallet(t *testing.T) {
 	}
 
 	// And the wallet still works: the gate weighs a clean slate.
-	if _, err := rm.Allow(context.Background(), spender("acme"), "kind", 100); err != nil {
+	if _, err := rm.Reserve(context.Background(), spender("acme"), "kind", 100); err != nil {
 		t.Fatalf("the wallet is locked out after a hung debit: %v", err)
 	}
 }
@@ -163,7 +163,7 @@ func TestARefusedGateGivesTheCommitmentBack(t *testing.T) {
 	l := newLedger(t, 0, nil) // no money: the gate refuses
 	rm := meterAt(t, l)
 
-	if _, err := rm.Allow(context.Background(), spender("acme"), "kind", 100); err == nil {
+	if _, err := rm.Reserve(context.Background(), spender("acme"), "kind", 100); err == nil {
 		t.Fatal("an empty balance was allowed; this test proves nothing without the refusal")
 	}
 	if got := rm.inflight.pending("acme"); got != 0 {
@@ -171,7 +171,7 @@ func TestARefusedGateGivesTheCommitmentBack(t *testing.T) {
 	}
 	// And the wallet is not poisoned: funded, the very next call clears.
 	l.available = 100000
-	if _, err := rm.Allow(context.Background(), spender("acme"), "kind", 100); err != nil {
+	if _, err := rm.Reserve(context.Background(), spender("acme"), "kind", 100); err != nil {
 		t.Fatalf("a wallet refused once is still refused when funded: %v", err)
 	}
 }

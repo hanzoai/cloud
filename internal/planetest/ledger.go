@@ -18,7 +18,7 @@ import (
 )
 
 // Ledger is the plane peer that records debits plus the balance every
-// ResourceMeter.Gate reads before allowing one.
+// Meter.Authorize reads before allowing one.
 type Ledger struct {
 	*Commerce
 	// Available is the balance the gate reads, in cents. Zero refuses.
@@ -43,11 +43,11 @@ func Money(t *testing.T, available int64) *Ledger {
 
 // Client is the metering client a subsystem bills through, pointed at this
 // ledger. A caller wraps it in whatever its Mount takes — cloud.Deps{Metering: …}
-// for an app that builds its own Base, cloud.NewResourceMeter for one that keeps a
+// for an app that builds its own Base, cloud.NewMeter for one that keeps a
 // package-global meter.
 //
 // It stops at the CLIENT on purpose. Package cloud's own tests import this
-// package, so a helper here returning a cloud.Deps or a cloud.ResourceMeter would
+// package, so a helper here returning a cloud.Deps or a cloud.Meter would
 // close an import cycle. The money doubles are what is worth sharing; the one line
 // that wraps them is not worth a cycle.
 //

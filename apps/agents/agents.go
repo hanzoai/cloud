@@ -145,10 +145,10 @@ type state struct {
 	// chat is untouched.
 	failoverModel string
 	// bill is the shared per-org gate+meter (reuses deps.Metering, the ONE
-	// commerce client — the same object ml/provisioning use). Nil/!Enabled()
-	// makes Gate allow and Meter a no-op, so an unconfigured deployment runs
+	// commerce client — the same object ml/provisioning use). A nil meter
+	// makes Authorize allow and Record a no-op, so an unconstructed deployment runs
 	// agents without billing rather than failing closed on a missing ledger.
-	bill *cloud.ResourceMeter
+	bill *cloud.Meter
 	// sched is the long-running-agent scheduler; nil until started, stopped on
 	// Shutdown. It shares the Service so it runs agents through the SAME runAgent path.
 	sched *scheduler
@@ -498,7 +498,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 			stores:        cloud.NewOrgStore[*Store](b, "agents", openStore),
 			ai:            deps.AI,
 			failoverModel: cloud.FallbackModel,
-			bill:          cloud.NewResourceMeter(deps, meterKind),
+			bill:          cloud.NewMeter(deps, meterKind),
 			bus:           newBus(),
 			// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
 			// bespoke engine. Default is record-only; wiring client.Dial(TASKS_URL)
@@ -585,14 +585,9 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	// The periodic pass: reap the sessions nobody is driving any more, then bill
-	// the runtime of the ones still open (reap.go). It is NOT gated on
-	// s.Bill.Enabled(): once every app is its own binary that predicate is false in
-	// every process but commerce's, so gating on it would silence the meter across
-	// the whole fleet — the exact shape of "a store has one owner, and everyone else
-	// asks" that turned six other subsystems into silent no-ops. MeterUsage reaches
-	// the ledger over the plane from here; a deployment that genuinely runs no
-	// commerce answers ErrNoPeer and the debit is logged, not lost to a branch
-	// nobody took. The reap half is not money at all and runs regardless.
+	// the runtime of the ones still open (reap.go). Record reaches the ledger
+	// wherever it lives; a deployment that runs no commerce answers ErrNoPeer and
+	// the debit is a no-op. The reap half is not money at all and runs regardless.
 	s.State.stopSweep = startSweep(s)
 
 	// Register agents into the unified tool plane (SourceAgent): an agent is callable
@@ -604,7 +599,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// ends where the product starts (provenance.go).
 	mountProvenance(s)
 
-	log.Info("agents mounted", "ai", s.State.ai != nil, "billing", s.State.bill.Enabled(),
+	log.Info("agents mounted", "ai", s.State.ai != nil,
 		"scheduler", s.State.sched != nil, "brand", deps.Brand)
 	return nil
 }
@@ -1249,7 +1244,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// Gate the AGENT's own org — never a caller default, never another tenant.
 	// fee<=0 or unconfigured billing makes this a no-op (allows). Background run
 	// path: no request principal, so the project axis is empty + unvalidated (soft).
-	if err := s.State.bill.Gate(ctx, account.PayerOf("", a.Org), "", false, meterKind, fee); err != nil {
+	if err := s.State.bill.Authorize(ctx, account.PayerOf("", a.Org), "", false, meterKind, fee); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "balance gate denied")
 		return Run{}, err
@@ -1299,7 +1294,7 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input strin
 	// the throttled one it started on), and the actor for the audit trail.
 	// Fire-and-forget on a background context.
 	if r.Status == "ok" {
-		s.State.bill.MeterUsage(account.PayerOf("", a.Org), meterKind, metering.Usage{
+		s.State.bill.Record(account.PayerOf("", a.Org), meterKind, metering.Usage{
 			AmountCents: fee,
 			Model:       r.Model,
 			Actor:       actor,

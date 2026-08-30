@@ -163,7 +163,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// And the meter that pays for a render, bound the same way and for the same
 	// reason: escalation is reached from Read, which the answer engine calls
 	// in-process with no deps to thread. See meter.go.
-	bindMeter(cloud.NewResourceMeter(deps, "crawl"))
+	bindMeter(cloud.NewMeter(deps, "crawl"))
 
 	// The two request facts a typed op cannot reach, checked where a request is.
 	//

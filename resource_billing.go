@@ -52,15 +52,31 @@ import (
 // edge gate's price==0 pass-through).
 const DefaultResourceFeeCents int64 = 100
 
-// ResourceMeter gates and meters per-org spend for non-LLM resource creation,
-// reusing Deps.Metering (the single commerce billing client). Build it with
-// NewResourceMeter. A nil meter, or one whose commerce URL is unset, makes Gate
-// allow and Meter a no-op — so an unconfigured deployment is never blocked,
-// exactly like BillingGate.
-type ResourceMeter struct {
+// ledgerCallTimeout bounds the debit's wait on the money plane.
+//
+// A debit OWNS the commitment it settles (see [Charge.Debit]), so an unbounded
+// call holds that commitment for as long as the ledger is unwell — and a
+// commitment outstanding is money the wallet cannot spend. Bounded, the worst case
+// is a debit that is logged and not written: the charge is lost, the customer keeps
+// their money, and the gate goes on working.
+//
+// A var, not a const, so a test can drive the timeout path in milliseconds rather
+// than making the suite wait out a real one.
+var ledgerCallTimeout = 10 * time.Second
+
+// Meter gates and meters per-org spend for non-LLM resource creation, reusing
+// Deps.Metering (the single commerce billing client). Build it with NewMeter.
+//
+// It owns WHO pays and WHAT IS HELD: the payer's address is forced onto every
+// debit, so a surface cannot bill one caller and attribute the row to another, and
+// a reservation weighs its cost against this pod's other uncommitted spend. HOW the
+// ledger is reached — co-resident, or a socket away — belongs to
+// [metering.Client] and is not a question any caller here asks. A nil meter is
+// inert, so an unconstructed deployment is never blocked.
+type Meter struct {
 	// inflight is what this pod's authorized-but-unsettled calls have COMMITTED,
 	// so a second caller weighs the balance against the first one's commitment
-	// rather than against money that is already being spent. See Allow.
+	// rather than against money that is already being spent. See Reserve.
 	inflight commitments
 
 	m        *metering.Client
@@ -69,10 +85,10 @@ type ResourceMeter struct {
 	log      luxlog.Logger
 }
 
-// NewResourceMeter builds a ResourceMeter from the shared deps. provider labels
+// NewMeter builds a Meter from the shared deps. provider labels
 // the recorded usage so spend is attributable to the surface that metered it.
-func NewResourceMeter(deps Deps, provider string) *ResourceMeter {
-	return &ResourceMeter{
+func NewMeter(deps Deps, provider string) *Meter {
+	return &Meter{
 		m:        deps.Metering,
 		provider: provider,
 		env:      deps.Env,
@@ -80,15 +96,10 @@ func NewResourceMeter(deps Deps, provider string) *ResourceMeter {
 	}
 }
 
-// Enabled reports whether THIS process holds the ledger — a commerce URL is
-// configured here. False no longer means "nothing bills": once apps are their
-// own binaries the ledger usually lives one socket away, and Gate asks it.
-func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.m.Enabled() }
-
-// Gate is the pre-create balance gate. It returns:
+// Authorize is the pre-create balance gate. It returns:
 //
 //	nil                              -> allow (balance positive, OR not priced,
-//	                                    OR billing not configured).
+//	                                    OR no meter constructed).
 //	metering.ErrInsufficientBalance  -> deny, out of funds (render 402).
 //	other error                      -> balance unknown; fail-closed denies
 //	                                    (render 503). Fail-open returns nil.
@@ -122,45 +133,27 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 // service-scoped caps stay hard), so a forgeable X-Project-Id can neither
 // hard-stop nor be evaded. service is intrinsically this meter's provider. Pass
 // ("", false) on a background/no-principal path (org- and service-scoped caps only).
-func (rm *ResourceMeter) Gate(ctx context.Context, payer account.Account, project string, projectValidated bool, kind string, costCents int64) error {
+func (rm *Meter) Authorize(ctx context.Context, payer account.Account, project string, projectValidated bool, kind string, costCents int64) error {
 	if costCents <= 0 {
 		return nil
 	}
-	// An UNATTRIBUTABLE payer is an IDENTITY refusal, and it is answered here rather
-	// than by the money plane, because every way of asking the money plane to price a
-	// spend for a nameless subject answers in the vocabulary of money: the co-resident
-	// meter refuses an empty org fail-closed and renders 503 "Billing temporarily
-	// unavailable", and gatePeer ships AuthorizeIn{Subject:""} whose far end refuses
-	// with 400 `field "subject" is required` — a field that appears in no published
-	// request schema on any of these surfaces, so no caller can satisfy it.
+	// An UNATTRIBUTABLE payer is an IDENTITY refusal, so it is answered here rather
+	// than by the money plane, which can only answer in the vocabulary of money — a
+	// 503 "Billing temporarily unavailable" for a request whose problem is that
+	// nobody is asking.
 	//
-	// It sits ABOVE both branches so a fail-OPEN money policy cannot make an
+	// It sits ABOVE the ledger call so a fail-OPEN money policy cannot make an
 	// unidentified caller free: fail-open decides what to do when the ledger is
 	// unreachable, never who the caller is. See [ErrNoLedger] and [denial].
 	if payer.Zero() {
 		return ErrNoLedger
 	}
-	// NEVER CONSTRUCTED is not the same as NO LOCAL LEDGER, and only the second
-	// is answerable by asking a peer:
-	//
-	//	rm == nil, or rm.m == nil  -> defensive. Serve always builds a meter with
-	//	                              a client, so this is a construction defect,
-	//	                              not a deployment shape. Allow, and above all
-	//	                              never panic — the peer path dereferences rm.
-	//	rm.m != nil, !Enabled()    -> real: this process holds no ledger because
-	//	                              the ledger lives with commerce. Ask it.
+	// NEVER CONSTRUCTED, and nothing else. Serve always builds a meter with a
+	// client, so this is a construction defect rather than a deployment shape; where
+	// the ledger lives is the client's question and it answers it for both
+	// topologies. Allow, and above all never panic.
 	if rm == nil || rm.m == nil {
 		return nil
-	}
-	if !rm.Enabled() {
-		// No meter in THIS process, which is the normal case once apps are their own
-		// binaries: the ledger has one writer and it lives with commerce. Ask it.
-		//
-		// Allowing here — which is what "billing not configured" used to mean — turns
-		// every priced act free the moment an app is split out, and does it silently.
-		// The distinction that matters is "nobody bills in this deployment" versus
-		// "the biller is one socket away", and only the second is answerable.
-		return rm.gatePeer(ctx, payer, project, projectValidated, costCents)
 	}
 	return rm.m.Authorize(ctx, metering.AuthInput{
 		User: payer.Subject(), Org: payer.Org(), AmountCents: costCents,
@@ -170,36 +163,9 @@ func (rm *ResourceMeter) Gate(ctx context.Context, payer account.Account, projec
 	})
 }
 
-// Meter records a successful charge to the caller's org ledger. It is the ONE
-// metering entry point for BOTH the one-time create fee AND any recurring
-// footprint charge (storage GB-month, GPU-hour): the caller supplies the amount,
-// so a future recurring meter reuses this same method with a usage-derived
-// amount. No-op when billing is not configured or amountCents<=0.
-//
-// The debit is fire-and-forget on a background context: the resource already
-// exists, so the charge must never block or corrupt the response the caller
-// received, and a request-context cancellation must not cancel the debit (mirror
-// of BillingGate). A debit failure is logged for reconciliation, not swallowed.
-//
-// requestID is the CORRELATION id (c.RequestID()) and nothing more — it traces the
-// debit back to the call. It is NOT the ledger's key: that header is the client's to
-// choose, and keying money on it billed a caller who pinned it exactly once for every
-// call it ever made. The ledger's key is [metering.Usage.Ref], which the meter mints;
-// a caller holding a server-assigned act id (a registration ref, a settlement id) sets
-// it through MeterUsage instead.
-func (rm *ResourceMeter) Meter(payer account.Account, project, kind string, amountCents int64, requestID, clientIP string) {
-	rm.MeterUsage(payer, kind, metering.Usage{
-		Model:       kind, // the billed unit within the product (e.g. "sql", "invoke", "op") — per-item ledger attribution.
-		AmountCents: amountCents,
-		Project:     project, // scope attribution → the per-scope cap sums over it.
-		RequestID:   requestID,
-		ClientIP:    clientIP,
-	})
-}
-
-// MeterUsage is the general-purpose per-org debit: it records the caller-built
-// usage event after forcing the per-org billing invariants that make the debit
-// land on the CALLER's ledger and never another org's:
+// Record is the per-org debit: it writes the caller-built usage event after
+// forcing the per-org billing invariants that make the debit land on the
+// CALLER's ledger and never another org's:
 //
 //   - u.User and u.Org are OVERWRITTEN from payer — Subject() is the wallet the
 //     debit lands in, Org() the books that hold it — so a caller can never bill
@@ -208,23 +174,25 @@ func (rm *ResourceMeter) Meter(payer account.Account, project, kind string, amou
 //   - Provider defaults to the meter's provider; Status defaults to "success";
 //     Currency defaults to "usd".
 //
-// Everything else the caller supplies (AmountCents, Model, Actor, RequestID,
-// token counts, ClientIP) flows through so a metered surface can attribute spend
-// richly. Like Meter it is fire-and-forget on a background context and a no-op
-// when billing is unconfigured or AmountCents<=0. kind is for the failure log.
+// It carries BOTH the one-time create fee and any recurring footprint charge
+// (storage GB-month, GPU-hour) — the caller supplies the amount, so a usage-derived
+// charge is the same call. Everything else it supplies (AmountCents, Model, Actor,
+// RequestID, token counts, ClientIP) flows through so a metered surface can
+// attribute spend richly. It is fire-and-forget on a background context and a
+// no-op on a nil meter or a non-positive amount. kind is for the failure log.
 //
 // This is also the entry point for a surface that already HOLDS the act's
 // server-assigned name (a domain registration ref, a company formation ref): it sets
 // [metering.Usage.Ref] and the debit is exactly-once on it. Left unset, the meter mints
 // a fresh name and the debit stands alone — which is what every per-request meter
 // wants, since two calls are two acts.
-func (rm *ResourceMeter) MeterUsage(payer account.Account, kind string, u metering.Usage) {
-	rm.meterUsage(payer, kind, u, nil)
+func (rm *Meter) Record(payer account.Account, kind string, u metering.Usage) {
+	rm.record(payer, kind, u, nil)
 }
 
-// meterUsage is MeterUsage with the one thing a RESERVATION needs and a
-// fire-and-forget caller does not: posted, run once the debit has reached the
-// ledger (or failed to).
+// record is Record with the one thing a RESERVATION needs and a fire-and-forget
+// caller does not: posted, run once the debit has reached the ledger (or failed
+// to).
 //
 // A hold cannot be released when the call returns — the debit is still in flight
 // then, so the next gate would read a balance that still contains money already
@@ -232,49 +200,37 @@ func (rm *ResourceMeter) MeterUsage(payer account.Account, kind string, u meteri
 // moment that is true is inside the recording goroutine, so that is where the
 // release is handed. posted runs on EVERY exit, including the ones that record
 // nothing: a hold released late is a customer locked out of their own balance.
-func (rm *ResourceMeter) meterUsage(payer account.Account, kind string, u metering.Usage, posted func()) {
+func (rm *Meter) record(payer account.Account, kind string, u metering.Usage, posted func()) {
 	if posted == nil {
 		posted = func() {}
 	}
-	// Same defensive line as Gate: never-constructed records nothing and never
-	// panics; no-local-ledger asks the peer.
+	// Same defensive line as Authorize: never-constructed records nothing and never panics.
 	if rm == nil || rm.m == nil {
 		posted()
 		return
 	}
 	// Ask the VALUE what it is worth, never the wire fields. Usage carries three
-	// amount sources with a documented precedence (typed Amount, then micro-USD,
-	// then cents) and Usage.Money resolves them; reading two of the three here
-	// dropped every usage priced ONLY as a typed Amount — the shape a per-token
-	// 18-dp caller sends — before Record could bill it. Silently: no error, no log,
-	// no row. Record itself has always guarded on the resolved value, so this line
-	// was the one place the fleet disagreed with itself about what money is.
+	// amount sources with a documented precedence — typed Amount, then micro-USD,
+	// then cents — and Usage.Money is the one function that resolves them, so this
+	// guard and [metering.Client.Record]'s cannot disagree about what money is.
 	if amt := u.Money(); amt.IsZero() || amt.IsNeg() {
 		posted()
 		return
 	}
-	// OWN THE STRINGS BEFORE THEY OUTLIVE THE REQUEST. Both paths below hand this
-	// value to a background goroutine, and a Usage built in a handler carries
-	// zero-copy views into the server's reused request arena (c.User(),
-	// c.RequestID(), the forwarded IP). Without the clone the debit eventually
-	// marshals the NEXT request's bytes onto this caller's row — and connections
-	// are reused across tenants, so the row it corrupts belongs to someone else.
-	// One clone here, rather than every caller of a fire-and-forget meter having
-	// to remember. See [metering.Usage.Clone].
+	// OWN THE STRINGS BEFORE THEY OUTLIVE THE REQUEST. This value is handed to a
+	// background goroutine, and a Usage built in a handler carries zero-copy views
+	// into the server's reused request arena (c.User(), c.RequestID(), the forwarded
+	// IP). Without the clone the debit eventually marshals the NEXT request's bytes
+	// onto this caller's row — and connections are reused across tenants, so the row
+	// it corrupts belongs to someone else. One clone here, rather than every caller
+	// of a fire-and-forget meter having to remember. See [metering.Usage.Clone].
 	u = u.Clone()
-	// NAME THE ACT BEFORE CHOOSING WHO BILLS IT. Both branches below record this
-	// usage, and the ledger dedups on its ref whichever one carries it — so the name
-	// must be fixed HERE, above the topology, or the two paths key the same act
-	// differently. Sealing below the branch is what let a split deploy re-mint a ref
-	// per call and charge one act twice. Seal is idempotent, so a caller that already
-	// holds the act's own name (a formation ref, a registration ref) keeps it, and the
-	// co-resident path — where [metering.Client.Record] seals what it is given — is
+	// NAME THE ACT BEFORE BILLING IT. The ledger dedups on this ref, so the name is
+	// fixed here rather than left to the recording goroutine. Seal is idempotent, so a
+	// caller that already holds the act's own name (a formation ref, a registration
+	// ref) keeps it, and [metering.Client.Record] — which seals what it is given — is
 	// unchanged by having been sealed one step earlier.
 	u = u.Seal()
-	if !rm.Enabled() {
-		rm.meterPeer(payer, kind, u, posted)
-		return
-	}
 	u.User = payer.Subject() // the WALLET the debit lands in.
 	u.Org = payer.Org()      // WHICH BOOKS hold it (X-Org-Id; overrides the client default).
 	if u.Provider == "" {
@@ -345,7 +301,7 @@ func settle(posted func(), log luxlog.Logger, org, kind string, record func()) {
 // different ways.
 
 // ErrNoLedger is a priced act with no ledger to charge: there is nobody to bill
-// because there is nobody. It is the ONE value [ResourceMeter.Gate] answers with
+// because there is nobody. It is the ONE value [Meter.Authorize] answers with
 // when it is handed an empty org, so all of its callers refuse identically
 // without any of them re-deciding it — [denial] renders it as the tenant gate's
 // own 403 rather than as a fault of the biller.

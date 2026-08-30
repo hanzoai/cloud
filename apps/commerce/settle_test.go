@@ -149,9 +149,9 @@ func wallet(org string) string {
 	return account.Payer(account.Credential{Owner: org, Name: gateUser}).Subject()
 }
 
-// held reads the balance the AI gate reads, for ONE org's own wallet: build.go's
-// balanceReader is fin.Balance(ctx, org, subject, currency, test) and apps/metering's
-// fetchAvailable is the same call, so this IS the gate's read and not a paraphrase of it.
+// held reads the balance the AI gate reads, for ONE org's own wallet: apps/metering's
+// Balance is fin.Balance(ctx, org, subject, currency, test), so this IS the gate's read
+// and not a paraphrase of it.
 func held(t *testing.T, fin finance.Client, org string, test bool) int64 {
 	t.Helper()
 	bal, err := fin.Balance(context.Background(), org, wallet(org), "usd", test)

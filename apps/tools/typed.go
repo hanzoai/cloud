@@ -135,7 +135,7 @@ func principalOf(ctx context.Context) (Principal, error) {
 //
 // It gates the SAME fee meterUnit debits, read from the SAME knob, so the amount
 // authorized and the amount charged cannot drift; a deployment that prices dispatch
-// at 0 is un-gated exactly as it is un-billed (ResourceMeter.Gate's own
+// at 0 is un-gated exactly as it is un-billed (Meter.Authorize's own
 // costCents<=0 short-circuit). Off the HTTP path there is no payer, hence nothing to
 // gate — the same silence meter keeps, for the same reason.
 //
@@ -148,7 +148,7 @@ func (o toolOps) gate(ctx context.Context) error {
 	}
 	project, validated := principal.ValidatedProject(c)
 	fee := cloud.ResourceFeeCents(feeEnvPrefix, meterKind)
-	if err := o.s.Bill.Gate(c.Context(), principal.Payer(c), project, validated, meterKind, fee); err != nil {
+	if err := o.s.Bill.Authorize(c.Context(), principal.Payer(c), project, validated, meterKind, fee); err != nil {
 		return cloud.Denied(err)
 	}
 	return nil
