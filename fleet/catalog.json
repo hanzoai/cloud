@@ -3361,6 +3361,33 @@
    "doc": "Outlines one file: every declaration in it, with its kind and its span.\nThe position is ignored — the answer is the whole file."
   }
  ],
+ "market": [
+  {
+   "id": "get_market_chains",
+   "doc": "Answers every chain this deployment can read, what is deployed on each, and what\nits automated market maker amounts to.\n\nOne call. It reads the chain registry, then every chain's indexer for its figures\nand its most recent active day, all at once — where a client doing it itself makes\none registry request and two more per chain.\n\nTHE ROW IS THE UNIT OF TRUTH. Each carries its own reach, so one indexer being\nunreachable costs one row its figures and leaves the rest answered. A chain with no\nmarket maker deployed — the registry names no factory for it — answers `read` with\ntotals of nothing, which is a fact about that chain and is not the same as a chain\nnobody could ask.",
+   "read": true
+  },
+  {
+   "id": "get_market_pools",
+   "doc": "Answers the automated market makers on one chain: their two tokens, their fee tier,\nand what has moved through each.\n\nThe two price fields on a pool are the ratio its own reserves stand at, as the\nindexer computed them. They are not a price ON either token and not a mark: nothing\nhere derives one, ranks the pools, or names a route through them.\n\nA chain with no market maker deployed answers `read` with no pools. That is the\nchain's real condition, and it is deliberately not the same answer as an indexer\nthat could not be asked.",
+   "read": true
+  },
+  {
+   "id": "get_market_survey",
+   "doc": "Answers which of the four settlement precompiles carry code on one chain.\n\nAn address with no code answers a call with empty data rather than an error, so\n\"this chain has no view precompile\" and \"this market was never opened\" reach a\ncaller as the same silence — and only the second is a fact about a market. This\nsays which it is, by asking the node for the code at each address.\n\nIt reads presence and nothing else. No market, no quote, no depth and no order is\nrequested here, and `eth_getCode` is the only method this operation ever sends.",
+   "read": true
+  },
+  {
+   "id": "get_market_token",
+   "doc": "Answers one token's daily history — open, high, low, close, price and volume per\nUTC day, oldest first.\n\nEvery figure is the indexer's own arithmetic, passed through as the decimal string\nit computed. Nothing here rounds one, converts one, or fills a gap: a day the\nindexer holds no figure for arrives with that field absent, which says \"not\nindexed\" where a zero would say \"worth nothing\".",
+   "read": true
+  },
+  {
+   "id": "get_market_tokens",
+   "doc": "Answers the tokens one chain's indexer has seen, with the decimals a caller needs\nto read any amount of one correctly.\n\nThis is what the indexer INGESTED, which is not the same as what exists on the\nchain: a token nothing has traded has no row here, and this is not a registry of\nwhat is permitted or listed.",
+   "read": true
+  }
+ ],
  "marketing": [
   {
    "id": "delete_marketing_audiences_by_id",
