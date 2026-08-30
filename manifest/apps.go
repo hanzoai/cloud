@@ -367,6 +367,12 @@ var Apps = []App{
 	// not a SuperAdmin — answers at the operator's depth beside the tenant surface.
 	{Name: "dataroom", Prefixes: []string{"/v1/dataroom", "/v1/admin/dataroom"}},
 	{Name: "explorer", Prefixes: []string{"/v1/explorer"}},
+	// Chain data of a different kind, and its own capability rather than a second
+	// face on explorer's: explorer answers how far an INDEXER has caught up and what
+	// the oracles publish, while this answers what is deployed on each chain and what
+	// its market maker amounts to. Two questions, two stores of truth upstream, two
+	// names. Both are reads of a public ledger and neither owns any chain state.
+	{Name: "market", Prefixes: []string{"/v1/market"}},
 	{Name: "security", Prefixes: []string{"/v1/security"}},
 	{Name: "integrations", Prefixes: []string{"/v1/integrations"}},
 	// The browser tag config is served by the projects app, which holds both the

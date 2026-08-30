@@ -1,7 +1,6 @@
 package account
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -18,28 +17,10 @@ const testKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde
 // TestAKeylessProcessRefusesTheChangeAndServesTheRead), and cloud.keyed is the
 // composition-time rule, scoped to what a process actually SERVES.
 
-// TestTheMinterKeepsItsOwnKeyOnALaptopAndRefusesItOnADeployment: the issuer accepts
-// only the tokens it wrote, so one key over one lifetime is self-consistent and a
-// machine with no KMS still works. A deployment is neither — it holds a master key,
-// so it has a secret store, and a key per replica refuses every session that moves.
-func TestTheMinterKeepsItsOwnKeyOnALaptopAndRefusesItOnADeployment(t *testing.T) {
-	t.Setenv(KeyEnv, "")
-	if err := own(false); err != nil {
-		t.Fatalf("a machine with no secret store was refused its own key: %v", err)
-	}
-	err := own(true)
-	if err == nil {
-		t.Fatal("a deployment came up on a key of its own; it would hold one value per replica")
-	}
-	if !strings.Contains(err.Error(), KeyEnv) {
-		t.Errorf("the refusal does not name the value to set: %v", err)
-	}
-
-	t.Setenv(KeyEnv, testKey)
-	if err := own(true); err != nil {
-		t.Fatalf("a provisioned key was refused on a deployment: %v", err)
-	}
-}
+// The minter's key verdict is GONE with the key. Nothing mints a token another
+// process verifies, so there is no value two processes can disagree about and no
+// boot question to ask about one. cloud.Intended reads Sec-Fetch-Site instead —
+// a fact the browser states on the request, which needs no agreement at all.
 
 // TestDeployedDecidesWhichKeyTheMinterMayHold pins the fact `own` reads. cloud.Deployed
 // is false in this binary — nothing handed it a master key — which is exactly the
