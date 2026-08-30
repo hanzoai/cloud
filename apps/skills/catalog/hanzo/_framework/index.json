@@ -4,11 +4,6 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "mcp": {
-    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
-    "method": "POST",
-    "url": "https://api.hanzo.ai/v1/mcp"
-  },
   "skill_count": 4,
   "skills": [
     {
@@ -16,28 +11,28 @@
       "name": "framework_doctypes",
       "path": "framework_doctypes/SKILL.md",
       "service": "framework",
-      "sha256": "e653f44c348b39b59f083241ca50d3b595aa99f8967b5d8c375be2aaa3a951e8"
+      "sha256": "00aaeb7f7d674102ae01332c4d9deb06a2a55c37a17e33da3b4726cdd7881e93"
     },
     {
       "description": "Read framework framework: Returns the caller org's documents of one DocType, filtered, ordered and projected by the query., Returns one document by name, with Password fields redacted..",
       "name": "framework_framework",
       "path": "framework_framework/SKILL.md",
       "service": "framework",
-      "sha256": "bab95c4d714b754a786cdf6a178f3977071af9c89441b2c77578c4a46da1c51f"
+      "sha256": "cabb2518d2e0a3324db8641e0d2fbc3e89756414e2e594c77541cf0b9d1c2484"
     },
     {
       "description": "Read framework modules: Returns every app lane compiled into this deployment and the DocTypes each one installs., Returns one app lane's install state for the caller's org: the DocTypes the lane declares, and which of them already exist in the org..",
       "name": "framework_modules",
       "path": "framework_modules/SKILL.md",
       "service": "framework",
-      "sha256": "f92bee100bb5b0ed8fd859cb46d58f50ecf4e1f426fb78444ea6c1a54ddee573"
+      "sha256": "ba758b95847d447c6fc02657b17dff007c34049362fc71666b2442ed1d7c8e58"
     },
     {
       "description": "Read framework summary: Reports how much of the DocType surface the caller's org uses: how many DocTypes it has defined, and how many documents exist across them..",
       "name": "framework_summary",
       "path": "framework_summary/SKILL.md",
       "service": "framework",
-      "sha256": "27851b8f06bb462733cdc59d1b99999fd231c7aa4fedd1f0f1bfb0c231bfc538"
+      "sha256": "14e7302870c06b99e30ae4e1b01e5bd22219183a3173eaecc970ab1756359f51"
     }
   ],
   "spec_version": "8.0.0"

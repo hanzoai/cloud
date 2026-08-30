@@ -5,8 +5,8 @@
 package meet
 
 struct callIn {
-    Workspace text @0
-    Room      text @8
+    Space text @0
+    Room  text @8
 }
 
 struct meetHealth {
@@ -56,7 +56,7 @@ interface meet {
     # state.admits, the same function POST /v1/meet/getToken and all three recording
     # operations admit on, so a caller who is told where a call is, is a caller who
     # could have joined it. Answering the address to someone who cannot join would make
-    # this a workspace-membership oracle for anyone who can guess a room id.
+    # this a space-membership oracle for anyone who can guess a room id.
     # It deliberately does NOT report whether a call is in progress. That is a fact the
     # media server holds and this binary would have to ask for it over the network,
     # which is a different decision with a different failure mode — and reporting

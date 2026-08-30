@@ -4,11 +4,6 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
-  "mcp": {
-    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
-    "method": "POST",
-    "url": "https://api.hanzo.ai/v1/mcp"
-  },
   "skill_count": 7,
   "skills": [
     {
@@ -16,49 +11,49 @@
       "name": "team_account",
       "path": "team_account/SKILL.md",
       "service": "team",
-      "sha256": "a8bde2b658a9f4a86c85f0cc0b879c3896e9f72e115dd7e479e68b2128c8999e"
+      "sha256": "f554c74b9e9bad336b3114c16c0073aa204a414b03b1c8ad7ee3f9963c24bd7a"
     },
     {
       "description": "Read team billing: Returns the plan and seat counts for the caller's OWN org, resolved from the VERIFIED team session token — never a client header., Open the wallet page, Load an asset of the wallet page.",
       "name": "team_billing",
       "path": "team_billing/SKILL.md",
       "service": "team",
-      "sha256": "b28542cdcd73bdfcccda8451ef1649a0cfc82d8438953c8b35420cf5297e6212"
+      "sha256": "fbccbd7da2cb92a6dd44370a15501726b9d20cc3b14e33686559a59ecf1986fb"
     },
     {
       "description": "Read team bots: Returns the caller org's bot members — the org's agents projected as the space Employees they become, each with the member account uuid and Person reference the roster addresses it by..",
       "name": "team_bots",
       "path": "team_bots/SKILL.md",
       "service": "team",
-      "sha256": "a5fbb7071df948fed38403198232d0598aa29608f8139e11cbbe06547d1259e3"
+      "sha256": "daf59c30f45b67243f2e74a7cc9df6fdfe4f516e6408ccebcdf0a128d3113b76"
     },
     {
       "description": "Read team collaborator: Open the live collaborative-editing socket.",
       "name": "team_collaborator",
       "path": "team_collaborator/SKILL.md",
       "service": "team",
-      "sha256": "d9313b03efd6d6d740519d9fa999e5630b0a455f8e900e68f96b4c649d7b8b08"
+      "sha256": "958641d8c62e9ef781b7c64e5ceb32883326172a020990137d099310f8c27216"
     },
     {
       "description": "Read team files: Download a space file.",
       "name": "team_files",
       "path": "team_files/SKILL.md",
       "service": "team",
-      "sha256": "2ca49e669657318abb7d9b20232f4a65f976c1c301f1bc2bd154a2d3dccbb77d"
+      "sha256": "0b6864fd8f3efbea5b961577bee0f950533edc7002ca4efb9bbd6e0984ac069d"
     },
     {
       "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries..",
       "name": "team_rooms",
       "path": "team_rooms/SKILL.md",
       "service": "team",
-      "sha256": "56376f38db58d0358f886eb717ff89175347787386d7a77692e362c9f17250e3"
+      "sha256": "68aac0f76dfb556710678abe04b5dc39d711d91527002cd656f37481ee64fc65"
     },
     {
       "description": "Read team transactor: Statistics returns the transactor's live sessions for the space the caller's credential names — the endpoint the front's space switcher and server panel poll on the transactor base., Open the space data-plane socket.",
       "name": "team_transactor",
       "path": "team_transactor/SKILL.md",
       "service": "team",
-      "sha256": "20819dfae045ed62d1ac27572452f6db55f1e49d6f94e34e0738236739b51596"
+      "sha256": "e6ffbf02712f44ba528e30548d3b666c4e09568531654fbf14f89c251f8472f7"
     }
   ],
   "spec_version": "8.0.0"
