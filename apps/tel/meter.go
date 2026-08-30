@@ -51,7 +51,7 @@ const (
 // the one act here priced like every other create in the fleet. A message and a
 // placement are single-digit-cent wholesale acts, so a cent covers either with
 // room. Operators move any of them with the knobs above; 0 makes an act free
-// again, and un-gated with it (ResourceMeter.Gate's own costCents<=0 rule).
+// again, and un-gated with it (Meter.Authorize's own costCents<=0 rule).
 var price = map[string]int64{
 	number:  cloud.DefaultResourceFeeCents,
 	message: 1,
@@ -67,7 +67,7 @@ func (o ops) afford(ctx context.Context, act string) (*cloud.Charge, error) {
 	if !o.s.State.live {
 		return nil, nil
 	}
-	return o.s.Bill.Allow(ctx, cloud.PayerOf(ctx), act, fee(act))
+	return o.s.Bill.Reserve(ctx, cloud.PayerOf(ctx), act, fee(act))
 }
 
 // charge debits one act, after the carrier has confirmed it. Failed work is not

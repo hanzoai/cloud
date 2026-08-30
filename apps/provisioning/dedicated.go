@@ -19,7 +19,7 @@ package provisioning
 //     cross-tenant boundary; a caller cannot name another org's namespace.
 //   - BILLING ATTRIBUTION — a running instance consumes real compute/storage, so
 //     it is metered to the org's ledger through the ONE commerce meter
-//     (cloud.ResourceMeter): a provision debit carrying the size dimension at
+//     (cloud.Meter): a provision debit carrying the size dimension at
 //     create, and a recurring footprint charge for as long as it runs. Drop
 //     stops the meter (the row is removed).
 //
@@ -539,7 +539,7 @@ func meterProvision(s *cloud.Service[state], org, kind, size string, fee int64, 
 	// org arrives as a bare string parameter — the create path already resolved it and
 	// this function holds no request — so the address is parsed back out of it. PayerOf
 	// answers a bare slug with that org's own account, which is what the create gated on.
-	s.Bill.MeterUsage(account.PayerOf("", org), kind, metering.Usage{
+	s.Bill.Record(account.PayerOf("", org), kind, metering.Usage{
 		AmountCents: fee,
 		Model:       kind + ":" + size, // e.g. datastore:10Gi — names the instance on the invoice
 		RequestID:   requestID,
@@ -570,7 +570,7 @@ func meterDedicatedFootprint(s *cloud.Service[state], ctx context.Context) {
 		// r.Org is a column on the stored instance row, written when the instance was
 		// provisioned; this sweep runs on a ticker with no request behind it, so the
 		// address is parsed back out of the stored string.
-		s.Bill.MeterUsage(account.PayerOf("", r.Org), r.Kind, metering.Usage{
+		s.Bill.Record(account.PayerOf("", r.Org), r.Kind, metering.Usage{
 			AmountCents: cents,
 			Model:       r.Kind + ":" + r.Size + ":gbday",
 			RequestID:   r.ID,
@@ -579,10 +579,10 @@ func meterDedicatedFootprint(s *cloud.Service[state], ctx context.Context) {
 }
 
 // startFootprintMeter runs the recurring footprint charge on a ticker until
-// Shutdown. It only starts when billing actually enforces, so an unconfigured
-// deployment spins no goroutine.
+// Shutdown. An unconstructed meter spins no goroutine; where the ledger lives is
+// not this decision.
 func startFootprintMeter(s *cloud.Service[state]) {
-	if s.Bill == nil || !s.Bill.Enabled() {
+	if s.Bill == nil {
 		return
 	}
 	stop := make(chan struct{})

@@ -53,6 +53,7 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
@@ -128,7 +129,7 @@ func AbuseGate(deps Deps, t *edge.Traffic) zip.Handler {
 	g := &abuseGate{
 		traffic: t,
 		policy:  deps.GatewayPolicy,
-		meter:   NewResourceMeter(deps, "risk"),
+		meter:   NewMeter(deps, "risk"),
 		log:     luxlog.Default(),
 		cents:   screenCents(),
 	}
@@ -146,7 +147,7 @@ func screenCents() int64 {
 type abuseGate struct {
 	traffic *edge.Traffic
 	policy  *edge.Store
-	meter   *ResourceMeter
+	meter   *Meter
 	log     interface {
 		Info(msg string, args ...any)
 		Warn(msg string, args ...any)
@@ -239,7 +240,7 @@ func (g *abuseGate) handle(c *zip.Ctx) error {
 	//
 	//	o11y     — Traffic.Screen counts it for the org from the first request,
 	//	           whatever a screen costs, and GET /v1/gateway/traffic reports it.
-	//	billing  — ResourceMeter puts it on the org's OWN usage ledger, the same
+	//	billing  — Meter puts it on the org's OWN usage ledger, the same
 	//	           rail every other metered resource rides, so a plan's included
 	//	           allowance and its overage are one ledger and not a second
 	//	           billing path.
@@ -315,7 +316,13 @@ func (g *abuseGate) bill(org, project, request, ip string, v RiskVerdict) bool {
 	// account.PayerOf is the one parse from a key to an address, and a bare slug
 	// through it IS that org's own account. Stated rather than assumed, because the
 	// meter now takes an address and will not guess which half a string meant.
-	g.meter.Meter(account.PayerOf("", org), project, "screen", g.cents, request, ip)
+	g.meter.Record(account.PayerOf("", org), "screen", metering.Usage{
+		Model:       "screen",
+		AmountCents: g.cents,
+		Project:     project,
+		RequestID:   request,
+		ClientIP:    ip,
+	})
 	return true
 }
 

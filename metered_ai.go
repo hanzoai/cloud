@@ -8,11 +8,10 @@ package cloud
 // so it is impossible to call AI without declaring who pays; there is no exempt
 // path, no bypass, no side-channel key.
 //
-// It reuses the SAME commerce path (ResourceMeter over Deps.Metering) and per-org
+// It reuses the SAME commerce path (Meter over Deps.Metering) and per-org
 // invariants as every other Hanzo surface — the debit is forced onto the caller's
-// org, never a default or another org. When billing is unconfigured the wrapper
-// is a transparent pass-through (ResourceMeter.Enabled()==false → Gate allows,
-// Meter no-ops), so a dev/un-provisioned deployment is never blocked.
+// org, never a default or another org. With no meter constructed the wrapper is a
+// transparent pass-through, so a dev deployment is never blocked.
 
 import (
 	"context"
@@ -45,7 +44,7 @@ const defaultAIPriceUUSDPer1kTokens int64 = 2000
 
 type meteredAI struct {
 	inner types.AIClient
-	meter *ResourceMeter
+	meter *Meter
 	log   luxlog.Logger
 	rate  int64 // micro-USD per 1000 tokens.
 
@@ -62,7 +61,7 @@ type meteredAI struct {
 func meteredAIClient(inner types.AIClient, deps Deps) types.AIClient {
 	m := &meteredAI{
 		inner: inner,
-		meter: NewResourceMeter(deps, AIMeterProvider),
+		meter: NewMeter(deps, AIMeterProvider),
 		log:   luxlog.Default(),
 		rate:  aiPriceUUSDPer1kTokens(),
 	}
@@ -281,7 +280,7 @@ func (m *meteredAI) gate(ctx context.Context, payer account.Account, project str
 	// server-minted identity claim, so it is unvalidated here → a project-scoped
 	// cap stays soft. The request-edge BillingGate already hardens the validated
 	// project axis for the inbound LLM path.
-	return m.meter.Gate(ctx, payer, project, false, AIMeterProvider, cents)
+	return m.meter.Authorize(ctx, payer, project, false, AIMeterProvider, cents)
 }
 
 // atMost is what a chat could cost at most: the prompt, which is known before
@@ -378,7 +377,7 @@ func (m *meteredAI) record(payer account.Account, project, model string, u meter
 	u.Project = project
 	u.Model = model
 	u.Service = AIMeterProvider
-	m.meter.meterUsage(payer, AIMeterProvider, u, h.release)
+	m.meter.record(payer, AIMeterProvider, u, h.release)
 }
 
 // micros converts a token count to the debit in micro-USD at the configured rate.

@@ -26,7 +26,7 @@ package risk
 //	local ledger (this fixture) — metering refuses an empty org fail-closed, which
 //	   is not a 4xx, so the money wire's fallback renders 503 "Billing temporarily
 //	   unavailable". An unauthenticated caller is told the BILLER is broken.
-//	peer ledger (the deployed shape) — gatePeer ships plane.AuthorizeIn{Subject:""}
+//	peer ledger (the deployed shape) — the crossing ships plane.AuthorizeIn{Subject:""}
 //	   over the internal plane, commerce's own `validate:"required"` rejects it, and
 //	   because that refusal is a 4xx the money wire PRESERVES it verbatim: 400
 //	   `field "subject" is required`. The caller is told to send a field that
@@ -126,13 +126,13 @@ var pricedOps = []struct{ method, path, body string }{
 // WHERE THE RULE LIVES, since this file's own note used to name the wrong place.
 // It said "delete the empty-ledger guard from [ops.gate] and every op in this
 // table reports 503", and that stopped being true: the same refusal was fixed
-// FLEET-WIDE in [cloud.ResourceMeter.Gate], above both of its branches, as
+// FLEET-WIDE in [cloud.Meter.Authorize], above both of its branches, as
 // [cloud.ErrNoLedger] — so deleting this app's copy left the status and the
 // sentence unchanged and only changed the envelope. The copy is gone and the
 // fleet's meter is the one answer; the envelope is asserted by the test below,
 // which is the half no status assertion can see.
 //
-// Mutation proof: remove the `if org == ""` refusal from [cloud.ResourceMeter.Gate]
+// Mutation proof: remove the `if org == ""` refusal from [cloud.Meter.Authorize]
 // and every op in this table reports 503 instead of 403.
 func TestPricedOps_ResolveTheTenantBeforeTheyAskForMoney(t *testing.T) {
 	probe.reset(true)
@@ -209,7 +209,7 @@ func TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope(t *testing.T
 // TestPricedOps_RefuseAnUnidentifiedCallerEvenWhenTheOperatorPricesThemAtZero is
 // the hole the deletion above could have opened, closed.
 //
-// [cloud.ResourceMeter.Gate] returns EARLY when the cost is zero — before its own
+// [cloud.Meter.Authorize] returns EARLY when the cost is zero — before its own
 // empty-org refusal — and the price is an operator's row in the meter authority,
 // where 0 is a legal value that makes the surface free. So "the meter refuses an unidentified caller" is true only while
 // somebody is charged. The app's own copy of the rule used to cover that case by

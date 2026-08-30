@@ -29,9 +29,11 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/crawl"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/tenant"
 	"github.com/hanzoai/cloud/apps/websearch"
 	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/plane"
 )
@@ -187,7 +189,10 @@ func installWebSearch(search func(ctx context.Context, query, lang string) []web
 	})
 }
 
-// debitOverPlane charges one ai completion to the process that owns the ledger.
+// debit charges one ai completion through the metering client, which resolves where the
+// ledger is: this process when it owns the file, otherwise the process that does, over
+// the plane. The gate above reads the same wallet through the same client, so spend
+// cannot outrun the balance that admitted it.
 //
 // A NAMED function rather than the closure it came out of, because it is the only line of
 // this file that decides what a customer is charged and by what key, and a closure inside
@@ -196,33 +201,31 @@ func installWebSearch(search func(ctx context.Context, query, lang string) []web
 //
 // IT NAMES NO REF, and that is the point. The event's RequestID is the ai module's message
 // row id — `Owner + "/" + Name` — and both halves are fields of the JSON body the client
-// posts, so sending it as the debit's Ref handed the ledger's idempotency key to the payer:
-// pin one owner/name pair and every completion after the first deduped into the first one's
-// entry. An absent Ref is minted at the far end, per debit, by the server (Usage.Seal), so
-// two answers are two acts however identical the request that asked for them.
+// posts, so as the debit's Ref it hands the ledger's idempotency key to the payer: pin one
+// owner/name pair and every completion after the first dedups into the first one's entry.
+// It crosses as Usage.RequestID, which is correlation and nothing else. With no ref,
+// Record seals per call (metering.Usage.Seal), so two answers are two acts however
+// identical the request that asked for them.
 //
 // Nothing is lost by not naming one. This debit is made once per streamed answer and never
 // re-driven, and the sibling debit on the OpenAI surface already keys on a fresh uuid per
-// call — the two surfaces now mint the same way.
+// call — the two surfaces mint the same way.
 //
-// The currency default lives here for the same reason the amount does: the peer records
-// what it is sent, so the value has to be complete at the point it is built.
-func debitOverPlane(ctx context.Context, u aiobject.UsageEvent) error {
-	cur := u.Currency
-	if cur == "" {
-		cur = "usd"
-	}
-	_, err := cloud.Ask[plane.RecordIn, plane.Recorded](
-		cloud.For(ctx, u.Namespace), "commerce", plane.FinanceRecord,
-		&plane.RecordIn{
-			Subject: u.Subject,
-			Amount:  plane.Money{Decimal: u.USD, Currency: cur},
-			Usage:   plane.Usage{Model: u.Model, Provider: u.Provider},
+// The amount is the module's own decimal, parsed exact: a per-token price is routinely
+// finer than a cent, and a cents-only debit floors it to nothing. Record defaults an
+// absent currency to usd, so an event that names none still bills rather than erroring.
+func debit(m *metering.Client) aiobject.UsageRecorderFunc {
+	return func(ctx context.Context, u aiobject.UsageEvent) error {
+		amount, err := money.ParseUSD(u.USD)
+		if err != nil {
+			return fmt.Errorf("ai usage amount: %w", err)
+		}
+		_, err = m.Record(ctx, metering.Usage{
+			User: u.Subject, Org: u.Namespace, Amount: amount, Currency: u.Currency,
+			Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
-	if err != nil {
-		return fmt.Errorf("plane usage debit: %w", err)
+		return err
 	}
-	return nil
 }
 
 // record settles what ONE SERVED CALL consumed: money for a priced call, a count for a
@@ -317,7 +320,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// than plumbing.
 	//
 	// Research carries an explicit per-answer FEE — 25 cents, apps/answer/mode.go —
-	// charged through Bill.Gate on the request path, where a payer has been
+	// charged through Bill.Authorize on the request path, where a payer has been
 	// resolved and can be refused. A tool call has no payer. Installing this client
 	// with a direct call to the engine would therefore be an unbilled 25-cent
 	// operation an agent may invoke in a loop: free inference, arrived at by the
@@ -432,22 +435,22 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 			return cents, nil
 		})
 	}
-	// The DEBIT crosses the same way, for the same reason — and it must key on the SAME
-	// wallet the gate read, or spend can outrun the balance that admitted it.
+	// The DEBIT keys on the SAME wallet the gate read, or spend can outrun the balance
+	// that admitted it.
 	//
-	// Neither branch names the act. cloud.UsageEvent has no Ref to carry one and
-	// debitOverPlane sends none, so on both paths the ledger's key is minted by whoever
-	// writes the entry — never by the request that asked for the work.
-	money := debitOverPlane
+	// Neither branch names the act: cloud.UsageEvent carries no Ref and debit sends
+	// none, so on both paths the ledger's key is minted by whoever writes the entry —
+	// never by the request that asked for the work.
+	settle := debit(deps.Metering)
 	if f := cloud.UsageRecorder(); f != nil {
-		money = func(ctx context.Context, u aiobject.UsageEvent) error {
+		settle = func(ctx context.Context, u aiobject.UsageEvent) error {
 			return f(ctx, cloud.UsageEvent{
 				Subject: u.Subject, Namespace: u.Namespace, USD: u.USD,
 				Currency: u.Currency, Model: u.Model, Provider: u.Provider,
 			})
 		}
 	}
-	aiobject.SetUsageRecorder(record(money))
+	aiobject.SetUsageRecorder(record(settle))
 	if d := cloud.IngestDialer(); d != nil {
 		aiobject.SetIngestDialer(d)
 	}

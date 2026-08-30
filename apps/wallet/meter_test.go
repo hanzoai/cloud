@@ -50,7 +50,7 @@ func billed(t *testing.T, l *planetest.Ledger, kind Kind) (*zip.App, *ring) {
 	t.Helper()
 	r := &ring{kind: kind}
 	s, app := newService(t, map[Kind]Custody{kind: r}, kind)
-	s.Bill = cloud.NewResourceMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "wallets")
+	s.Bill = cloud.NewMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "wallets")
 	return app, r
 }
 

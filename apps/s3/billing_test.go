@@ -1,7 +1,7 @@
 package s3
 
 // Integration tests proving the per-org credit drawdown reaches the s3 data plane
-// through the ONE shared cloud.ResourceMeter: an unfunded org is refused 402
+// through the ONE shared cloud.Meter: an unfunded org is refused 402
 // before S3 is touched, a funded op debits the CALLER org (product "s3", unit
 // "op") once, a handler failure bills nothing, a free fee is un-gated, and
 // unconfigured commerce is a no-op. The metering client's DEFAULT org is "hanzo",
@@ -25,9 +25,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
-	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/internal/planetest"
 	"github.com/zap-proto/zip"
 )
@@ -211,19 +211,23 @@ func TestPaid_FreeFeeUngated(t *testing.T) {
 	}
 }
 
-// No commerce URL no longer means "nothing bills": the ledger has ONE writer and
-// it lives with commerce, so a meter without a local URL ASKS it, and a biller it
-// cannot reach is UNKNOWN — never allowed. The priced op is refused and the
-// handler never runs. See TestResourceMeter_UnconfiguredIsNoop.
-func TestPaid_UnreachableBillerRefusesAndRunsNothing(t *testing.T) {
-	s := newBilledService(t, "") // empty commerce URL ⇒ !Enabled()
+// No local ledger means the meter ASKS commerce, and a commerce that cannot
+// answer is UNKNOWN — never permission. The priced op is refused and the handler
+// never runs.
+//
+// The peer here serves the debit and NOT the gate, so its socket answers and its
+// op does not: an outage, which is the fact that must not be read as "nobody
+// bills here". See TestMeter_UnconfiguredIsNoop for both halves.
+func TestPaid_BillerOutageRefusesAndRunsNothing(t *testing.T) {
+	planetest.Serve(t)
+	s := newBilledService(t, "") // empty commerce URL ⇒ the gate crosses the plane
 
 	status, ran := callPaid(t, s, "acme", nil)
 	if status == http.StatusNoContent {
-		t.Fatal("a priced op ran with no reachable biller — that is free work")
+		t.Fatal("a priced op ran while the biller could not answer — that is free work")
 	}
 	if atomic.LoadInt32(ran) != 0 {
-		t.Fatalf("handler ran %d times with no biller reachable, want 0", atomic.LoadInt32(ran))
+		t.Fatalf("handler ran %d times while the biller could not answer, want 0", atomic.LoadInt32(ran))
 	}
 }
 

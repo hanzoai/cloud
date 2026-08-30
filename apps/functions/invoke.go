@@ -168,7 +168,7 @@ func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error)
 	// the post-success debit; fee==0 or unconfigured billing makes this a no-op.
 	fee := cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke")
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(ctx, principal.Payer(c), project, projectValidated, "invoke", fee); err != nil {
+	if err := s.Bill.Authorize(ctx, principal.Payer(c), project, projectValidated, "invoke", fee); err != nil {
 		return nil, cloud.Denied(err)
 	}
 
@@ -211,9 +211,15 @@ func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error)
 	// best-effort so the debit never blocks or corrupts this response; a debit
 	// failure is logged for reconciliation.
 	if runErr == nil {
-		s.Bill.Meter(principal.Payer(c), project, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
+		s.Bill.Record(principal.Payer(c), "invoke", metering.Usage{
+			Model:       "invoke",
+			AmountCents: fee,
+			Project:     project,
+			RequestID:   c.RequestID(),
+			ClientIP:    cloud.ClientIP(c),
+		})
 		gbSecCents := gbSecondsCents(dur, memLimitMB(f.MemoryLimit), cloud.ResourceFeeCents(gbSecFeeEnvPrefix, "gbsec"))
-		s.Bill.MeterUsage(principal.Payer(c), "gbsec", metering.Usage{
+		s.Bill.Record(principal.Payer(c), "gbsec", metering.Usage{
 			Model:       "gbsec", // the billed unit: GB-seconds of compute.
 			AmountCents: gbSecCents,
 			Project:     project,

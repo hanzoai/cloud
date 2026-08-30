@@ -80,7 +80,7 @@ func wireApp(t *testing.T, dyn dynamic.Interface) *zip.App {
 			dyn:     dyn,
 			initErr: "no in-cluster config and no kubeconfig",
 			hc:      &http.Client{},
-			bill:    cloud.NewResourceMeter(deps, "compute"),
+			bill:    cloud.NewMeter(deps, "compute"),
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("mltest"), DisableStartupMessage: true})

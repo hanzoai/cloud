@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -154,7 +155,7 @@ func (o ops) run(ctx context.Context, body *runReq) (*runView, error) {
 	// default — the anti-cross-tenant billing property (resource_billing.go).
 	fee := cloud.ResourceFeeCents(runFeeEnvPrefix, runKind)
 	gateProject, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(ctx, principal.Payer(c), gateProject, projectValidated, runKind, fee); err != nil {
+	if err := s.Bill.Authorize(ctx, principal.Payer(c), gateProject, projectValidated, runKind, fee); err != nil {
 		return nil, cloud.DenyResource(c, err)
 	}
 
@@ -222,7 +223,13 @@ func (o ops) run(ctx context.Context, body *runReq) (*runView, error) {
 	ensureSecretSync(s, ctx, org, a)
 
 	// Record the paid unit on the run's OWN org ledger (fire-and-forget).
-	s.Bill.Meter(principal.Payer(c), principal.Project(c), runKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Record(principal.Payer(c), runKind, metering.Usage{
+		Model:       runKind,
+		AmountCents: fee,
+		Project:     principal.Project(c),
+		RequestID:   c.RequestID(),
+		ClientIP:    cloud.ClientIP(c),
+	})
 
 	s.Log.Info("run (container-serverless)", "org", org, "app", slug, "ns", tenantNamespace(org),
 		"image", image, "min", minScale, "max", maxScale, "actor", c.User(), "requestID", c.RequestID())

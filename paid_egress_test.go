@@ -106,7 +106,7 @@ func TestFreeSurfaceBuysNothing(t *testing.T) {
 					"authorized and nothing recorded — the edge charges nothing, Billable "+
 					"requires no standing, and no meter downstream debits anybody.\n"+
 					"Either declare it cloud.Metered and debit the paid path through a "+
-					"ResourceMeter (apps/websearch/meter.go is the worked example), or, if "+
+					"Meter (apps/websearch/meter.go is the worked example), or, if "+
 					"the credential reaches nothing billable from here, say so in "+
 					"freeOfVendor with the reason.",
 					name, pkg, cred, why)

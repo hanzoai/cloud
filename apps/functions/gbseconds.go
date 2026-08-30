@@ -8,7 +8,7 @@ package functions
 // consumed: GB-seconds = (memory in GB) × (wall-clock seconds). It is the same
 // unit AWS Lambda / GCP Functions bill on, so the number is meaningful, not
 // fabricated. Both debits land on the CALLER's org ledger via the ONE shared
-// cloud.ResourceMeter; either is independently free (fee 0 → no-op).
+// cloud.Meter; either is independently free (fee 0 → no-op).
 
 import (
 	"strconv"
@@ -33,7 +33,7 @@ const defaultMemMB int64 = 256
 //
 // GB is 1024 MB (the MiB convention Lambda uses). The math is integer-exact (no
 // float drift): cents = round(durationMs × memMB × fee / 1_024_000). A
-// non-positive duration, memory, or fee yields 0, which makes MeterUsage a
+// non-positive duration, memory, or fee yields 0, which makes Record a
 // no-op. Sub-cent charges round to the nearest cent (half up).
 func gbSecondsCents(durationMs, memMB, feePerGBSecCents int64) int64 {
 	if durationMs <= 0 || memMB <= 0 || feePerGBSecCents <= 0 {

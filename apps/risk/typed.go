@@ -1359,7 +1359,7 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 		return func(int) {}, nil
 	}
 	ledger := principal.Payer(c)
-	// NO LEDGER IS AN IDENTITY REFUSAL, and [cloud.ResourceMeter.Gate] is where it
+	// NO LEDGER IS AN IDENTITY REFUSAL, and [cloud.Meter.Authorize] is where it
 	// is answered — above both of its branches, for every caller of the meter,
 	// as [cloud.ErrNoLedger]. [cloud.denial] renders that as 403 "no validated
 	// principal" and [cloud.DenyEnvelope] writes it in the fleet's own nested
@@ -1376,7 +1376,7 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	// [TestPricedOps_RefuseAnUnidentifiedCallerInTheFleetsOwnEnvelope] is what holds
 	// the remaining answer, and it fails if this file grows a second one back.
 	project, validated := principal.ValidatedProject(c)
-	if err := o.s.Bill.Gate(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(ctx, n))); err != nil {
+	if err := o.s.Bill.Authorize(ctx, ledger, project, validated, kind, cloud.MicrosToGateCents(screenMicros(ctx, n))); err != nil {
 		return nil, cloud.Denied(err)
 	}
 	who := metering.Usage{
@@ -1387,7 +1387,7 @@ func (o ops) gate(ctx context.Context, kind string, n int) (func(done int), erro
 	return func(done int) {
 		use := who
 		use.AmountMicros = screenMicros(ctx, done)
-		bill.MeterUsage(ledger, kind, use)
+		bill.Record(ledger, kind, use)
 	}, nil
 }
 

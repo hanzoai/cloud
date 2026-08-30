@@ -101,7 +101,7 @@ func rate(ctx context.Context, class string) int64 {
 //
 // A failure at any step is logged and dropped rather than returned: the lease is
 // already over, and a debit that could not be recorded must never turn ending a
-// sandbox into a refusal. It is the same posture MeterUsage takes.
+// sandbox into a refusal. It is the same posture Record takes.
 func retire(s *Service, ctx context.Context, st *Store, m Sandbox, purge bool) {
 	ns, err := cloud.OrgNamespace(m.Org, "")
 	if err != nil {

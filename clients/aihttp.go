@@ -147,7 +147,7 @@ func AIHTTPOn(baseURL, apiKey, defaultModel string, rt http.RoundTripper) types.
 // short-lived token from its OWN service identity (IAM_CLIENT_ID/SECRET), so
 // there is NO static key to rotate and no expiry cliff. On the Hanzo deployment
 // that identity resolves to admin/hanzo-cloud, which the gateway treats as
-// balance-exempt — so cloud's own per-org ResourceMeter stays the single
+// balance-exempt — so cloud's own per-org Meter stays the single
 // revenue debit (no double-bill).
 //
 // tokenURL is the IAM token endpoint ({issuer}/v1/iam/oauth/token). clientSecret

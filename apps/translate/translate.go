@@ -330,13 +330,13 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	}
 
 	// 2. bulk is not on the model plane, so it carries its own per-org gate+meter —
-	// the same ResourceMeter contract every non-LLM unit uses. quality needs none:
+	// the same Meter contract every non-LLM unit uses. quality needs none:
 	// deps.AI already authorizes and debits its own tokens, and a second charge here
 	// would double-bill.
 	payer := principal.Payer(c)
 	project, projectValidated := principal.ValidatedProject(c)
 	if tier == TierBulk {
-		if err := s.Bill.Gate(ctx, payer, project, projectValidated, meterKind, cloud.MicrosToGateCents(bulkMicros(ctx, usage.Characters))); err != nil {
+		if err := s.Bill.Authorize(ctx, payer, project, projectValidated, meterKind, cloud.MicrosToGateCents(bulkMicros(ctx, usage.Characters))); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 	}
@@ -357,7 +357,7 @@ func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	}
 
 	if tier == TierBulk {
-		s.Bill.MeterUsage(payer, meterKind, metering.Usage{
+		s.Bill.Record(payer, meterKind, metering.Usage{
 			Model: string(TierBulk), Project: project, Actor: c.User(),
 			AmountMicros: bulkMicros(ctx, usage.Characters),
 			RequestID:    c.RequestID(), ClientIP: cloud.ClientIP(c),

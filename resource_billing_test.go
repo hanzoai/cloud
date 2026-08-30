@@ -1,6 +1,6 @@
 package cloud
 
-// Tests for the shared per-org resource gate+meter (ResourceMeter). They drive
+// Tests for the shared per-org resource gate+meter (Meter). They drive
 // the real metering client against a fake commerce server that RECORDS the
 // X-Org-Id org header and request bodies, so the multitenancy contract is
 // proven end-to-end over HTTP — no mock of the metering client itself. The fake
@@ -86,24 +86,24 @@ func (f *recCommerce) lastUsage() (string, plane.RecordIn) {
 	return d.Org, d.In
 }
 
-// meterFor builds a ResourceMeter whose metering client has DEFAULT org "hanzo"
+// meterFor builds a Meter whose metering client has DEFAULT org "hanzo"
 // (so a caller-org assertion proves the per-call override), at the given env.
-func meterFor(t *testing.T, baseURL, env string, failOpen bool) *ResourceMeter {
+func meterFor(t *testing.T, baseURL, env string, failOpen bool) *Meter {
 	t.Helper()
 	m, err := metering.New(metering.Config{BaseURL: baseURL, Token: "svc-token", Org: "hanzo", FailOpen: failOpen})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return NewResourceMeter(Deps{Metering: m, Env: env}, "provisioning")
+	return NewMeter(Deps{Metering: m, Env: env}, "provisioning")
 }
 
-// Funded org (balance>0), priced kind → Gate allows, and the balance check
+// Funded org (balance>0), priced kind → Authorize allows, and the balance check
 // targeted the CALLER org, not the client default.
-func TestResourceMeter_GateAllowsFundedCallerOrg(t *testing.T) {
+func TestMeter_AuthorizeAllowsFundedCallerOrg(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(funded) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "acme" {
@@ -134,7 +134,7 @@ func payerFor(t *testing.T, headers map[string]string) string {
 	return payer
 }
 
-// TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin (LOW-1 fast-follow): the ml
+// TestMeter_AuthorizeKeysOnPayerForMasqueradingAdmin (LOW-1 fast-follow): the ml
 // + provisioning create-handlers pass principal.Ledger(c) (the HOME org) to the
 // pre-create balance Gate, matching the paired debit. So a masquerading SuperAdmin
 // (home=admin via X-User-Owner, acting in a victim org via X-Org-Id) is balance-gated
@@ -142,7 +142,7 @@ func payerFor(t *testing.T, headers map[string]string) string {
 // the effective org (the debit already keyed on home), so a masquerade was gated on
 // the victim's balance while its spend landed on admin's ledger — the gate/debit
 // asymmetry this closes (gate + debit both key on home; data scope stays effective).
-func TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin(t *testing.T) {
+func TestMeter_AuthorizeKeysOnPayerForMasqueradingAdmin(t *testing.T) {
 	// A create-handler resolves Payer(c) from the request; for a masquerade it is home.
 	payer := payerFor(t, map[string]string{
 		"X-User-Id":      "u_admin", // validated principal
@@ -158,7 +158,7 @@ func TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin(t *testing.T) {
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
 	// Gate keyed on the payer (home) → the balance check must hit admin's ledger.
-	if err := rm.Gate(context.Background(), account.PayerOf("", payer), "", false, "sql", 100); err != nil {
+	if err := rm.Authorize(context.Background(), account.PayerOf("", payer), "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(payer=admin, funded) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "admin" {
@@ -167,11 +167,11 @@ func TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin(t *testing.T) {
 }
 
 // Out of funds (balance<=0) → Gate denies with ErrInsufficientBalance (→ 402).
-func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
+func TestMeter_AuthorizeRefusesAtZero(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != metering.ErrInsufficientBalance {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != metering.ErrInsufficientBalance {
 		t.Fatalf("Gate(zero balance) = %v, want ErrInsufficientBalance", err)
 	}
 }
@@ -193,14 +193,14 @@ func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
 // whether the guard ran or not. It would be a test that cannot fail. What the
 // caller is TOLD does change, and that is what this pins.
 //
-// Mutation proof: delete the `org == ""` guard from [ResourceMeter.Gate] and the
+// Mutation proof: delete the `org == ""` guard from [Meter.Authorize] and the
 // tuple becomes (503, balance_unavailable); delete the [ErrNoLedger] case from
 // [denial] and it becomes (503, balance_unavailable) too.
 func TestGate_RefusesAnEmptyLedgerAsIdentityNotAsMoney(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000} // funded: a refusal can never be poverty
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	err := rm.Gate(t.Context(), account.PayerOf("", ""), "", false, "sql", 100)
+	err := rm.Authorize(t.Context(), account.PayerOf("", ""), "", false, "sql", 100)
 	if !errors.Is(err, ErrNoLedger) {
 		t.Fatalf("Gate(empty org) = %v, want ErrNoLedger — an empty ledger is an identity refusal", err)
 	}
@@ -224,22 +224,22 @@ func TestGate_FailOpenNeverMakesAnUnidentifiedCallerFree(t *testing.T) {
 	rm := meterFor(t, fc.server(t).URL, "mainnet", true) // fail-OPEN
 
 	// A named caller is let through by fail-open — that is the policy working.
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(named caller, fail-open, biller down) = %v, want nil", err)
 	}
 	// A nameless one is still refused, because that was never a money question.
-	if err := rm.Gate(t.Context(), account.PayerOf("", ""), "", false, "sql", 100); !errors.Is(err, ErrNoLedger) {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", ""), "", false, "sql", 100); !errors.Is(err, ErrNoLedger) {
 		t.Fatalf("Gate(empty org, fail-open) = %v, want ErrNoLedger — fail-open is not an identity", err)
 	}
 }
 
 // A free kind (cost 0) is un-gated AND never calls commerce (mirrors the edge
 // gate's price==0 short-circuit).
-func TestResourceMeter_GateFreeKindNoCommerceCall(t *testing.T) {
+func TestMeter_AuthorizeFreeKindNoCommerceCall(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 0); err != nil {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 0); err != nil {
 		t.Fatalf("Gate(free kind) = %v, want nil", err)
 	}
 	if n := fc.balances(); n != 0 {
@@ -250,11 +250,11 @@ func TestResourceMeter_GateFreeKindNoCommerceCall(t *testing.T) {
 // Commerce unreachable/5xx + fail-CLOSED (default) → Gate denies with a non-
 // ErrInsufficientBalance error (→ 503). The whole margin-protection point: a
 // billing outage must NOT yield free provisioning.
-func TestResourceMeter_GateFailClosedOnCommerceError(t *testing.T) {
+func TestMeter_AuthorizeFailClosedOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100)
+	err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100)
 	if err == nil {
 		t.Fatal("Gate(commerce 5xx, fail-closed) = nil, want a deny error (no free provisioning on outage)")
 	}
@@ -263,12 +263,12 @@ func TestResourceMeter_GateFailClosedOnCommerceError(t *testing.T) {
 	}
 }
 
-// Commerce unreachable/5xx + fail-OPEN → Gate allows (availability over billing).
-func TestResourceMeter_GateFailOpenOnCommerceError(t *testing.T) {
+// Commerce unreachable/5xx + fail-OPEN → Authorize allows (availability over billing).
+func TestMeter_AuthorizeFailOpenOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", true /* fail-open */)
 
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(commerce 5xx, fail-open) = %v, want nil", err)
 	}
 }
@@ -276,11 +276,17 @@ func TestResourceMeter_GateFailOpenOnCommerceError(t *testing.T) {
 // Meter debits the CALLER org: usage POST fires once, carries X-Org-Id:acme
 // (not the default 'hanzo'), body user=="acme", amount==cost. This is the
 // per-org / anti-cross-org debit proof.
-func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
+func TestMeter_RecordDebitsCallerOrg(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	rm.Meter(account.PayerOf("", "acme"), "", "sql", 250, "req-1", "203.0.113.7")
+	rm.Record(account.PayerOf("", "acme"), "sql", metering.Usage{
+		Model:       "sql",
+		AmountCents: 250,
+		Project:     "",
+		RequestID:   "req-1",
+		ClientIP:    "203.0.113.7",
+	})
 
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
 		t.Fatalf("usage records = %d, want 1 (Meter must debit on success)", fc.usages())
@@ -302,11 +308,11 @@ func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
 
 // A second org draws on ITS OWN ledger: gating "globex" must check globex,
 // never "acme" or the default. Proves no cross-org fold in the gate path.
-func TestResourceMeter_GateIsolatesTenants(t *testing.T) {
+func TestMeter_AuthorizeIsolatesTenants(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), account.PayerOf("", "globex"), "", false, "vector", 100); err != nil {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "globex"), "", false, "vector", 100); err != nil {
 		t.Fatalf("Gate(globex) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "globex" {
@@ -319,10 +325,10 @@ func TestResourceMeter_GateIsolatesTenants(t *testing.T) {
 // hardening (issue #70). The fake commerce is funded (so gating reaches the scope
 // cap) and enforces the project cap ONLY when it sees pv=1, exactly modelling
 // commerce's project-spoof degrade. This proves principal.ValidatedProject threads
-// through ResourceMeter.Gate into AuthInput.ProjectValidated: a claim-bound project
+// through Meter.Authorize into AuthInput.ProjectValidated: a claim-bound project
 // forwards pv=1 and 402s on the cap, while a forgeable/absent one forwards no pv and
 // is allowed, so a spoofed X-Project-Id can neither hard-stop nor evade a cap.
-func TestResourceMeter_GateProjectValidatedHardens(t *testing.T) {
+func TestMeter_AuthorizeProjectValidatedHardens(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/billing/balance":
@@ -343,74 +349,91 @@ func TestResourceMeter_GateProjectValidatedHardens(t *testing.T) {
 	rm := meterFor(t, srv.URL, "mainnet", false)
 
 	// Validated NAMED project → pv=1 → the project-scoped cap HARD-enforces (402).
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "acme-prod", true, "sql", 100); err != metering.ErrSpendCapExceeded {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "acme-prod", true, "sql", 100); err != metering.ErrSpendCapExceeded {
 		t.Fatalf("Gate(validated named project) = %v, want ErrSpendCapExceeded (project cap must HARD-enforce)", err)
 	}
 	// Default/unvalidated project → no pv → the SAME cap degrades to soft (allow).
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(default/unvalidated) = %v, want nil (unvalidated project cap must stay soft)", err)
 	}
 	// A NAMED project the caller did not prove (validated=false) also stays soft —
 	// a forgeable label can neither hard-stop nor be weaponised to evade a cap.
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "acme-prod", false, "sql", 100); err != nil {
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "acme-prod", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(unvalidated named project) = %v, want nil (forgeable label must not hard-enforce)", err)
 	}
 }
 
 // Env never bypasses billing: on testnet AND devnet, a zero balance still
 // refuses. test/dev are sandbox-but-billed, not free.
-func TestResourceMeter_EnvNeverBypassesGate(t *testing.T) {
+func TestMeter_EnvNeverBypassesTheGate(t *testing.T) {
 	for _, env := range []string{"testnet", "devnet"} {
 		fc := &recCommerce{balanceAvailable: 0}
 		rm := meterFor(t, fc.server(t).URL, env, false)
-		if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != metering.ErrInsufficientBalance {
+		if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != metering.ErrInsufficientBalance {
 			t.Fatalf("env=%s: Gate(zero) = %v, want ErrInsufficientBalance (test/dev must still bill)", env, err)
 		}
 	}
 }
 
-// An unconfigured metering client (no commerce URL) makes the gate a no-op: Gate
-// allows, Meter does nothing, Enabled() is false.
-func TestResourceMeter_UnconfiguredIsNoop(t *testing.T) {
+// A meter whose client holds no local ledger asks the peer, and the two answers
+// it can get are DIFFERENT facts:
+//
+//	no commerce anywhere      -> nobody bills here: allow, record nothing
+//	commerce that cannot answer -> UNKNOWN: refuse, fail-closed
+//
+// Reading the second as the first is what turns every priced act free the moment
+// an app is split out, silently. Both are asserted together because the defect
+// was precisely that they were one branch.
+func TestMeter_UnconfiguredIsNoop(t *testing.T) {
 	m, _ := metering.New(metering.Config{}) // no BaseURL
-	rm := NewResourceMeter(Deps{Metering: m}, "provisioning")
-	if rm.Enabled() {
-		t.Fatal("ResourceMeter with empty commerce URL must not be Enabled()")
+	rm := NewMeter(Deps{Metering: m}, "provisioning")
+	if m.Enabled() {
+		t.Fatal("fixture broken: an empty commerce URL must leave the client without a local ledger")
 	}
-	// !Enabled no longer means "nothing bills". Once apps are their own binaries
-	// the ledger has ONE writer and it lives with commerce, so a meter without a
-	// local URL asks it — and a biller it cannot reach is UNKNOWN, never allowed.
-	// Allowing would turn every priced act free the moment an app is split out,
-	// silently. The gate fires identically in every deployment; nothing bypasses
-	// it (see the env-awareness note in resource_billing.go).
-	t.Setenv(runDirEnv, t.TempDir()) // no commerce socket here
-	err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100)
-	if err == nil {
-		t.Fatal("Gate with no local ledger and no reachable biller must not allow")
-	}
-	if !strings.Contains(err.Error(), "commerce") {
-		t.Fatalf("Gate = %v, want an error naming the biller it could not reach", err)
-	}
-	rm.Meter(account.PayerOf("", "acme"), "", "sql", 100, "r", "") // must not panic
+
+	t.Run("no commerce in this deployment", func(t *testing.T) {
+		t.Setenv(runDirEnv, planetest.Dir(t)) // no commerce socket, no router
+		if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
+			t.Fatalf("Authorize = %v, want nil — there is no biller to refuse on behalf of", err)
+		}
+		rm.Record(account.PayerOf("", "acme"), "sql", metering.Usage{
+			Model:       "sql",
+			AmountCents: 100,
+			RequestID:   "r",
+		}) // must not panic
+	})
+
+	t.Run("commerce deployed and unable to answer", func(t *testing.T) {
+		// A commerce peer that serves the debit and NOT the gate: the socket answers,
+		// the op does not. That is an outage, whatever its shape, and never permission.
+		planetest.Serve(t)
+		err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100)
+		if err == nil {
+			t.Fatal("Authorize allowed while the biller could not answer — that is free work")
+		}
+		if !strings.Contains(err.Error(), "commerce") {
+			t.Fatalf("Authorize = %v, want an error naming the biller that did not answer", err)
+		}
+	})
 }
 
-// A nil ResourceMeter and a meter with a nil client are safe no-ops (defensive:
+// A nil Meter and a meter with a nil client are safe no-ops (defensive:
 // deps.Metering should never be nil, but the gate must never panic).
-func TestResourceMeter_NilSafe(t *testing.T) {
-	var rm *ResourceMeter
-	if rm.Enabled() {
-		t.Fatal("nil ResourceMeter must report !Enabled()")
-	}
-	if err := rm.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
+func TestMeter_NilSafe(t *testing.T) {
+	var rm *Meter
+	if err := rm.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
 		t.Fatalf("nil Gate = %v, want nil", err)
 	}
-	rm.Meter(account.PayerOf("", "acme"), "", "sql", 100, "r", "") // must not panic
+	rm.Record(account.PayerOf("", "acme"), "sql", metering.Usage{
+		Model:       "sql",
+		AmountCents: 100,
+		Project:     "",
+		RequestID:   "r",
+		ClientIP:    "",
+	}) // must not panic
 
-	rm2 := NewResourceMeter(Deps{}, "provisioning") // nil metering
-	if rm2.Enabled() {
-		t.Fatal("ResourceMeter with nil client must report !Enabled()")
-	}
-	if err := rm2.Gate(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
+	rm2 := NewMeter(Deps{}, "provisioning") // nil metering
+	if err := rm2.Authorize(t.Context(), account.PayerOf("", "acme"), "", false, "sql", 100); err != nil {
 		t.Fatalf("nil-client Gate = %v, want nil", err)
 	}
 }
@@ -484,7 +507,7 @@ func TestDenyResource(t *testing.T) {
 //
 // metering.Usage carries three amount sources with a documented precedence — the
 // typed Amount wins, then micro-USD, then whole cents — and Usage.Money resolves
-// them. MeterUsage used to ask its own version of the question, reading two of the
+// them. Record used to ask its own version of the question, reading two of the
 // three (`AmountCents <= 0 && AmountMicros <= 0`), and returned early on a Usage
 // whose cost was exact. That is the shape a per-token 18-dp caller sends, so the
 // money was dropped before Record could bill it: no error, no log, no row, and a
@@ -492,7 +515,7 @@ func TestDenyResource(t *testing.T) {
 //
 // $0.0025 is deliberately sub-cent: it survives only because the amount is exact,
 // which is the whole reason the typed field exists.
-func TestResourceMeter_MeterUsageBillsAnExactAmount(t *testing.T) {
+func TestMeter_RecordBillsAnExactAmount(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
@@ -500,7 +523,7 @@ func TestResourceMeter_MeterUsageBillsAnExactAmount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	rm.MeterUsage(account.PayerOf("", "acme"), "zen", metering.Usage{
+	rm.Record(account.PayerOf("", "acme"), "zen", metering.Usage{
 		User:   "acme",
 		Amount: exact, // no cents, no micros set.
 		Model:  "zen-1",
@@ -520,11 +543,10 @@ func TestResourceMeter_MeterUsageBillsAnExactAmount(t *testing.T) {
 //
 // plane.Money is a decimal string precisely so an amount survives the process
 // boundary unrounded, and the receiving side honors it (apps/commerce
-// meter_rpc.go parses the decimal and debits it verbatim). meterPeer defeated
-// both: it built the plane amount from u.AmountCents, so a usage priced only as
-// a typed money.Amount — the shape every per-token caller sends — crossed as
-// $0.00. The guard fix upstream (Usage.Money) made those debits SURVIVE to this
-// path; this is the test that they survive it whole.
+// meter_rpc.go parses the decimal and debits it verbatim). A sender that folded
+// to cents first would land a usage priced only as a typed money.Amount — the
+// shape every per-token caller sends — as $0.00. This is the test that the exact
+// figure survives the crossing whole.
 //
 // The capture op stands where commerce's /finance/record stands, on the same
 // plane socket, receiving the same RecordIn — what it sees is what commerce
@@ -566,22 +588,22 @@ func TestMeterPeer_CarriesTheExactDebit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "provisioning")
-	if rm.Enabled() {
-		t.Fatal("fixture broken: metering must be disabled so the debit takes the peer path")
+	rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "provisioning")
+	if m.Enabled() {
+		t.Fatal("fixture broken: the client must hold no local ledger so the debit takes the peer path")
 	}
 
 	exact, err := money.ParseUSD("0.0025") // sub-cent: survives ONLY if the wire is exact
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	rm.MeterUsage(account.PayerOf("", "acme"), "zen", metering.Usage{User: "acme", Amount: exact, Model: "zen-1"})
+	rm.Record(account.PayerOf("", "acme"), "zen", metering.Usage{User: "acme", Amount: exact, Model: "zen-1"})
 
 	var in plane.RecordIn
 	select {
 	case in = <-got:
 	case <-time.After(3 * time.Second):
-		t.Fatal("no debit crossed the plane — meterPeer dropped or never sent it")
+		t.Fatal("no debit crossed the plane — the debit was dropped or never sent")
 	}
 	if in.Subject != "acme" {
 		t.Fatalf("debit subject = %q, want acme", in.Subject)
@@ -644,24 +666,21 @@ func (l *oneLedger) count() int {
 // one charge whichever process holds the ledger.
 //
 // apps/company mints a formation ref and hands that same value to the debit precisely so
-// the formation and its charge are one thing under one name; MeterUsage documents the
-// debit as exactly-once on it. That promise held only while the ledger was co-resident.
-// In the SHIPPED split topology the debit goes out through meterPeer, which built its
-// plane.Usage from Project and Service alone — the ref never boarded — so the receiver
-// minted a new name per arrival and a re-driven formation charged the customer TWICE for
-// one company.
+// the formation and its charge are one thing under one name; Record documents the
+// debit as exactly-once on it. A crossing that drops the ref makes the receiver mint a
+// new name per arrival, so a re-driven formation charges the customer twice for one
+// company.
 //
-// The two topologies are asserted TOGETHER because the defect was precisely that they
-// disagreed: the fix seals the act above the branch, so neither path can name it
-// differently from the other.
-func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
+// The two topologies are asserted TOGETHER: the act is sealed above the transport
+// choice, so neither path can name it differently from the other.
+func TestRecord_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 	// The formation's own name, as apps/company mints it. Re-driven under the same name
 	// — a retried job, a replayed queue entry — it is still ONE act.
 	const formationRef = "pay_7f3ac2e1"
 
-	drive := func(rm *ResourceMeter) {
+	drive := func(rm *Meter) {
 		for range 2 {
-			rm.MeterUsage(account.PayerOf("", "acme"), "company-formation", metering.Usage{
+			rm.Record(account.PayerOf("", "acme"), "company-formation", metering.Usage{
 				User:        "acme",
 				AmountCents: 12900,
 				Model:       "company-formation",
@@ -670,9 +689,8 @@ func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 		}
 	}
 
-	// THE SHIPPED TOPOLOGY: the ledger is in another process, so the debit leaves through
-	// meterPeer. No BaseURL means metering is configured but DISABLED, which is the state
-	// of every process that does not hold the ledger.
+	// THE SHIPPED TOPOLOGY: the ledger is in another process, so the debit crosses the
+	// plane. No BaseURL is the state of every process that does not hold the ledger.
 	t.Run("split deploy", func(t *testing.T) {
 		led := &oneLedger{}
 		peer := &planeDebits{}
@@ -682,9 +700,9 @@ func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 		if err != nil {
 			t.Fatalf("metering.New: %v", err)
 		}
-		rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "company")
-		if rm.Enabled() {
-			t.Fatal("fixture broken: metering must be DISABLED so the debit takes the peer path")
+		rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "company")
+		if m.Enabled() {
+			t.Fatal("fixture broken: the client must hold no local ledger so the debit takes the peer path")
 		}
 
 		drive(rm)
@@ -694,7 +712,7 @@ func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 				"count means anything", peer.count())
 		}
 		if got, _ := peer.last(); got.In.Usage.Ref != formationRef {
-			t.Errorf("the act crossed as ref %q, want %q — meterPeer must carry the name the "+
+			t.Errorf("the act crossed as ref %q, want %q — the crossing must carry the name the "+
 				"caller sealed", got.In.Usage.Ref, formationRef)
 		}
 		if n := led.count(); n != 1 {
@@ -709,15 +727,15 @@ func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 		peer := &planeDebits{}
 		peer.serveWith(t, led.observe)
 
-		// A BaseURL is what ENABLES the client; MeterUsage never reads it (only the
+		// A BaseURL is what ENABLES the client; Record never reads it (only the
 		// balance gate does), so it is never dialled.
 		m, err := metering.New(metering.Config{BaseURL: "http://127.0.0.1:1", Token: "svc-token", Org: "hanzo"})
 		if err != nil {
 			t.Fatalf("metering.New: %v", err)
 		}
-		rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "company")
-		if !rm.Enabled() {
-			t.Fatal("fixture broken: metering must be ENABLED so the debit takes the local path")
+		rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "company")
+		if !m.Enabled() {
+			t.Fatal("fixture broken: the client must hold the local ledger so the debit takes the local path")
 		}
 
 		drive(rm)
@@ -740,7 +758,7 @@ func TestMeterUsage_OneActIsChargedOnceInEitherTopology(t *testing.T) {
 // This is the other half of the seal's contract and the regression the fix could
 // plausibly have introduced — a shared or reused ref would make two distinct inferences
 // bill once, which is a revenue leak pointing the other way.
-func TestMeterUsage_TwoUnnamedActsAreTwoCharges(t *testing.T) {
+func TestRecord_TwoUnnamedActsAreTwoCharges(t *testing.T) {
 	led := &oneLedger{}
 	peer := &planeDebits{}
 	peer.serveWith(t, led.observe)
@@ -749,14 +767,14 @@ func TestMeterUsage_TwoUnnamedActsAreTwoCharges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	rm := NewResourceMeter(Deps{Metering: m, Env: "mainnet"}, "company")
-	if rm.Enabled() {
-		t.Fatal("fixture broken: metering must be DISABLED so the debit takes the peer path")
+	rm := NewMeter(Deps{Metering: m, Env: "mainnet"}, "company")
+	if m.Enabled() {
+		t.Fatal("fixture broken: the client must hold no local ledger so the debit takes the peer path")
 	}
 
 	// No Ref: two ordinary metered calls, which are two acts however identical they look.
 	for range 2 {
-		rm.MeterUsage(account.PayerOf("", "acme"), "zen", metering.Usage{User: "acme", AmountCents: 100, Model: "zen-1"})
+		rm.Record(account.PayerOf("", "acme"), "zen", metering.Usage{User: "acme", AmountCents: 100, Model: "zen-1"})
 	}
 
 	if !waitFor(func() bool { return peer.count() == 2 }, 5*time.Second) {
@@ -776,7 +794,7 @@ func TestMeterUsage_TwoUnnamedActsAreTwoCharges(t *testing.T) {
 //
 // A Usage assembled in a handler carries zero-copy views into the server's
 // reused request arena — c.User(), c.RequestID() and the forwarded client IP are
-// header reads that alias fasthttp's buffer — and MeterUsage records on a
+// header reads that alias fasthttp's buffer — and Record records on a
 // background goroutine. The buffer is handed to the NEXT request on the same
 // connection the instant the handler returns, and connections are reused across
 // tenants, so the retained string does not merely go stale: it becomes somebody
@@ -786,16 +804,16 @@ func TestMeterUsage_TwoUnnamedActsAreTwoCharges(t *testing.T) {
 // it: the arena is a byte slice, the header read is the same unsafe view fiber
 // hands out, and the overwrite is the next request landing.
 //
-// Mutation proof: drop the u.Clone() in MeterUsage and the recorded requestId
+// Mutation proof: drop the u.Clone() in Record and the recorded requestId
 // below is the overwriting caller's.
-func TestResourceMeter_MeterOwnsTheStringsItRetains(t *testing.T) {
+func TestMeter_RecordOwnsTheStringsItRetains(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
 	arena := []byte("req-mine")
 	borrowed := unsafe.String(&arena[0], len(arena)) // exactly what c.RequestID() returns
 
-	rm.MeterUsage(account.PayerOf("", "acme"), "sql", metering.Usage{AmountCents: 250, RequestID: borrowed})
+	rm.Record(account.PayerOf("", "acme"), "sql", metering.Usage{AmountCents: 250, RequestID: borrowed})
 	copy(arena, "req-thrs") // the next request on this connection, same length
 
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
@@ -823,7 +841,7 @@ func TestResourceMeter_MeterOwnsTheStringsItRetains(t *testing.T) {
 // what is pinned here is the mechanism either side of it: unpriced records
 // nothing, priced records the amount asked for. Whoever wonders why usage is
 // empty should find this test before they go looking for the bug.
-func TestMeterUsage_ASandboxLeaseIsRecordedOnlyOnceItIsPriced(t *testing.T) {
+func TestRecord_ASandboxLeaseIsRecordedOnlyOnceItIsPriced(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		cents int64
@@ -836,7 +854,7 @@ func TestMeterUsage_ASandboxLeaseIsRecordedOnlyOnceItIsPriced(t *testing.T) {
 			fc := &recCommerce{balanceAvailable: 100000}
 			rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-			rm.MeterUsage(account.PayerOf("", "acme"), "sandbox", metering.Usage{
+			rm.Record(account.PayerOf("", "acme"), "sandbox", metering.Usage{
 				User:        "acme",
 				Model:       "exec/kata-fc",
 				AmountCents: tc.cents,

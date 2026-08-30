@@ -2,11 +2,13 @@ package cloud
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/plane/commerce"
 
 	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/cloud/types"
@@ -45,7 +47,7 @@ func (listerAI) Models(context.Context) ([]string, error)                       
 // URL), so the wrapper is a transparent pass-through — the dev/un-provisioned
 // posture that must never block a call.
 func passthroughMetered(inner types.AIClient) *meteredAI {
-	return &meteredAI{inner: inner, meter: &ResourceMeter{}, rate: defaultAIPriceUUSDPer1kTokens}
+	return &meteredAI{inner: inner, meter: &Meter{}, rate: defaultAIPriceUUSDPer1kTokens}
 }
 
 func TestEstTokens(t *testing.T) {
@@ -139,7 +141,7 @@ func TestMeteredAI_AdminMasqueradeBillsHomeOrg(t *testing.T) {
 	inner := &recordingAI{resp: &types.ChatResponse{Content: "hi", TotalTokens: 100}}
 	m := &meteredAI{
 		inner: inner,
-		meter: NewResourceMeter(Deps{Metering: mustClient(t, srv.URL, false)}, AIMeterProvider),
+		meter: NewMeter(Deps{Metering: mustClient(t, srv.URL, false)}, AIMeterProvider),
 		rate:  defaultAIPriceUUSDPer1kTokens,
 	}
 
@@ -337,14 +339,14 @@ func TestMicrosToGateCents(t *testing.T) {
 }
 
 // serveCommerceOK stands up the ledger these tests assume is there. The AI path
-// gates through the ONE ResourceMeter, and since the ledger moved to its own
+// gates through the ONE Meter, and since the ledger moved to its own
 // binary a meter with no local URL asks commerce over the socket. Without a
 // biller to answer, these would be asserting "the gate fails closed" — which is
-// true, and is TestResourceMeter_UnconfiguredIsNoop's job, not theirs.
+// true, and is TestMeter_UnconfiguredIsNoop's job, not theirs.
 func serveCommerceOK(t *testing.T) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
-	app := zip.New(zip.Config{AppName: peerCommerce})
+	app := zip.New(zip.Config{AppName: commerce.App})
 	zip.Post[plane.AuthorizeIn, plane.Verdict](app, "/finance/authorize",
 		func(context.Context, *plane.AuthorizeIn) (*plane.Verdict, error) {
 			return &plane.Verdict{OK: true}, nil
@@ -363,7 +365,7 @@ func serveCommerceOK(t *testing.T) {
 	// Measured: 1 root-suite run in 4, with the shadow's op list naming this helper.
 	// It was harmless while the debit was an HTTP POST to a captured URL; it stopped
 	// being harmless when the debit moved onto the plane, where a peer is found by NAME.
-	addr := zip.SocketPath(peerCommerce)
+	addr := zip.SocketPath(commerce.App)
 	go func() { _ = app.Listen(addr) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 

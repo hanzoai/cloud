@@ -190,7 +190,7 @@ func TestSchedulerBillsScheduledRun(t *testing.T) {
 		State: state{
 			stores: testStores(t),
 			ai:     &countingAI{},
-			bill:   cloud.NewResourceMeter(cloud.Deps{Metering: m}, meterKind),
+			bill:   cloud.NewMeter(cloud.Deps{Metering: m}, meterKind),
 		},
 	}
 	if err := storeOf(t, &s.State, "acme").Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
@@ -234,7 +234,7 @@ func TestSchedulerGatesUnfundedRun(t *testing.T) {
 		State: state{
 			stores: testStores(t),
 			ai:     ai,
-			bill:   cloud.NewResourceMeter(cloud.Deps{Metering: m}, meterKind),
+			bill:   cloud.NewMeter(cloud.Deps{Metering: m}, meterKind),
 		},
 	}
 	if err := storeOf(t, &s.State, "acme").Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {

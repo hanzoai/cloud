@@ -142,19 +142,19 @@ type providerSet struct {
 }
 
 // formationFeeCents is the one-time formation fee — $999. It is the billing SKU
-// price charged on the commerce metering rail (ResourceMeter). Ops may override per
+// price charged on the commerce metering rail (Meter). Ops may override per
 // deployment via CLOUD_COMPANY_FEE_CENTS, but the product default is fixed here.
 const formationFeeCents int64 = 99900
 
 // ---- Charger: the real, commerce-metering-backed implementation ----
 
-// resourceCharger charges the formation fee through the shared ResourceMeter (the
+// resourceCharger charges the formation fee through the shared Meter (the
 // ONE per-org commerce billing client every resource-create handler already uses).
 // It gates on the org's balance, then records the debit. When billing is not
 // configured the gate allows and the debit is a no-op — identical to every other
 // Hanzo resource, so dev/test are never blocked but production bills.
 type resourceCharger struct {
-	bill *cloud.ResourceMeter
+	bill *cloud.Meter
 }
 
 func (rc resourceCharger) Charge(ctx context.Context, org string, amountCents int64, memo string) (string, error) {
@@ -167,15 +167,15 @@ func (rc resourceCharger) Charge(ctx context.Context, org string, amountCents in
 	// The formation's payer arrives as a stored org string, not a live request, so it
 	// is parsed by the one rule into the address the debit below lands on.
 	payer := account.PayerOf("", org)
-	if err := rc.bill.Gate(ctx, payer, "", false, "company-formation", amountCents); err != nil {
+	if err := rc.bill.Authorize(ctx, payer, "", false, "company-formation", amountCents); err != nil {
 		return "", err
 	}
 	ref := mint.ID("pay")
 	// Record the debit on the org's own ledger (fire-and-forget; the formation
-	// already advanced, mirroring every ResourceMeter caller). ref names the ACT — it
+	// already advanced, mirroring every Meter caller). ref names the ACT — it
 	// is minted here and handed back to the caller, so the formation and its debit are
 	// the same thing under the same name.
-	rc.bill.MeterUsage(payer, "company-formation", metering.Usage{
+	rc.bill.Record(payer, "company-formation", metering.Usage{
 		Model:       "company-formation",
 		AmountCents: amountCents,
 		Ref:         ref,

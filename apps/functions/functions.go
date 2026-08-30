@@ -64,7 +64,7 @@ const (
 // to make invocations free (and therefore un-gated), mirroring the edge gate's
 // price==0 short-circuit. A serverless invocation runs real sandbox compute, so
 // it is billed the SAME way provisioning bills a create and ml bills a submit —
-// via the ONE shared cloud.ResourceMeter (product "functions"); there is no
+// via the ONE shared cloud.Meter (product "functions"); there is no
 // second metering path.
 const invokeFeeEnvPrefix = "CLOUD_FUNCTION_FEE_CENTS"
 
@@ -223,7 +223,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	routes(app, s)
 	// Register user functions into the unified tool plane (SourceFunction).
 	tools.Register(functionToolProvider{})
-	s.Log.Info("functions mounted", "exec", "sandboxes", "brand", s.Brand, "billing", s.Bill.Enabled())
+	s.Log.Info("functions mounted", "exec", "sandboxes", "brand", s.Brand)
 	return nil
 }
 

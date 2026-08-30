@@ -290,7 +290,7 @@ type Config struct {
 	// this identity and auto-refreshed — the durable no-static-key path, and the ONLY
 	// completions credential when AIAPIKey is the read-only pk- embed key. On the
 	// Hanzo deployment the identity resolves to admin/hanzo-cloud (gateway-balance-
-	// exempt), so cloud's per-org ResourceMeter remains the single debit. The token
+	// exempt), so cloud's per-org Meter remains the single debit. The token
 	// endpoint is derived from IAMIssuer ({issuer}/v1/iam/oauth/token). The secret is
 	// KMS-injected and never logged.
 	AIAuthClientID     string

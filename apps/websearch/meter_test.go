@@ -32,7 +32,7 @@ import (
 // meterOn binds the process-wide meter at a ledger for one test.
 func meterOn(t *testing.T, l *planetest.Ledger) {
 	t.Helper()
-	bindMeter(cloud.NewResourceMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "websearch"))
+	bindMeter(cloud.NewMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "websearch"))
 	t.Cleanup(func() { bindMeter(nil) })
 }
 

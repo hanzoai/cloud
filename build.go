@@ -684,8 +684,8 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 	}
 	// Commerce is not in this process. The MONEY ops it owns are reachable over the
 	// peer plane (plane/commerce: authorize, balance, credit, record, scope rules,
-	// txns, usage) and the gate already asks for them there — see gatePeer in
-	// resource_billing_peer.go. GetOrgConfig and CheckEntitlement declare no plane
+	// txns, usage) and the metering client already asks for them there. GetOrgConfig
+	// and CheckEntitlement declare no plane
 	// op, so there is nothing to ask and nothing to pretend: the honest client is
 	// the disabled one, which says "enable the subsystem" rather than failing every
 	// call from behind a configured-looking address.

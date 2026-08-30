@@ -41,7 +41,7 @@ func fee() int64 { return cloud.ResourceFeeCents(feeEnv, node) }
 // afford authorizes one node BEFORE the CR is applied, so a caller who cannot
 // cover it never gets a pod scheduled or a volume bound.
 func afford(s *cloud.Service[state], ctx context.Context) (*cloud.Charge, error) {
-	return s.Bill.Allow(ctx, cloud.PayerOf(ctx), node, fee())
+	return s.Bill.Reserve(ctx, cloud.PayerOf(ctx), node, fee())
 }
 
 // charge debits one node, after the CR has actually been applied. A claim that

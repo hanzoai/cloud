@@ -8,7 +8,7 @@ package cloud
 // SECOND COPY of that peer, and the copy is what proved the package should not
 // exist twice: both bound their socket under t.TempDir(), a unix address is a
 // fixed 108-byte field, and t.TempDir() spells the TEST'S NAME into the path — so
-// TestMeterUsage_OneActIsChargedOnceInEitherTopology/split_deploy produced a
+// TestRecord_OneActIsChargedOnceInEitherTopology/split_deploy produced a
 // 106-character address, the bind failed inside a goroutine where nothing read the
 // error, and the only symptom was a debit that never arrived. Whether it failed at
 // all depended on how long $TMPDIR was, which is to say on whose machine it ran.

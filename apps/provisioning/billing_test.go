@@ -69,7 +69,7 @@ func newBilledService(t *testing.T, commerceURL string, kinds ...string) (*cloud
 		t.Fatalf("metering.New: %v", err)
 	}
 	s := &cloud.Service[state]{
-		Base: cloud.Base{Log: log, Bill: cloud.NewResourceMeter(cloud.Deps{Metering: m, Env: "mainnet"}, "provisioning")},
+		Base: cloud.Base{Log: log, Bill: cloud.NewMeter(cloud.Deps{Metering: m, Env: "mainnet"}, "provisioning")},
 		State: state{
 			store: newTestStore(t),
 			sec:   openSecrets("hanzo", log),
@@ -186,20 +186,23 @@ func TestCreate_FreeKindUngated(t *testing.T) {
 	}
 }
 
-// No commerce URL no longer means "nothing bills": the ledger has ONE writer and
-// it lives with commerce, so a meter without a local URL ASKS it, and a biller it
-// cannot reach is UNKNOWN — never allowed. A priced create is refused and the
+// No local ledger means the meter ASKS commerce, and a commerce that cannot
+// answer is UNKNOWN — never permission. A priced create is refused and the
 // provisioner never runs, because provisioning first and discovering later that
-// nobody could bill it is a resource somebody has to find. See
-// TestResourceMeter_UnconfiguredIsNoop for the same rule at the gate.
-func TestCreate_UnreachableBillerRefusesAndProvisionsNothing(t *testing.T) {
-	s, mp := newBilledService(t, "", "vector") // empty commerce URL => !Enabled()
+// nobody could bill it is a resource somebody has to find.
+//
+// The peer here serves the debit and NOT the gate, so its socket answers and its
+// op does not: an outage, which is the fact that must not be read as "nobody
+// bills here". See TestMeter_UnconfiguredIsNoop for both halves.
+func TestCreate_BillerOutageRefusesAndProvisionsNothing(t *testing.T) {
+	planetest.Serve(t)
+	s, mp := newBilledService(t, "", "vector") // empty commerce URL => the gate crosses the plane
 	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode == http.StatusCreated {
-		t.Fatal("a priced create ran with no reachable biller — that is free work")
+		t.Fatal("a priced create ran while the biller could not answer — that is free work")
 	}
 	if mp.created != 0 {
-		t.Fatalf("provisioner ran %d times with no biller reachable, want 0", mp.created)
+		t.Fatalf("provisioner ran %d times while the biller could not answer, want 0", mp.created)
 	}
 }
 

@@ -191,6 +191,21 @@ func (a Amount) CentsUp() int64 {
 	return q.Int64()
 }
 
+// CentsDown rounds TOWARD NEGATIVE INFINITY to whole cents: a BALANCE read into a
+// cents-only comparison without ever reading as more than it is.
+//
+// Cents rounds to nearest, so 4.995 reads as 500 and admits a 500-cent charge the
+// wallet cannot cover — the debit that follows is exact, so the difference lands as a
+// negative balance nobody authorized. Down can only refuse a fraction of a cent early,
+// which is the safe direction for a fail-closed gate. Use Cents for display, CentsUp
+// for a charge, and this for the funds it is weighed against.
+func (a Amount) CentsDown() int64 {
+	// big.Int.Div is Euclidean, so with a positive divisor it IS floor: a negative
+	// balance rounds further from zero rather than drifting back toward it.
+	unit := new(big.Int).Exp(big.NewInt(10), big.NewInt(Decimals-2), nil)
+	return new(big.Int).Div(a.Atto(), unit).Int64()
+}
+
 // String renders the value as a trimmed decimal USD string ("6.6", "0.00132", "-0.5", "0")
 // — the human/JSON form. Exact: derived from the integer coefficient, never a float.
 func (a Amount) String() string { return a.a.String() }

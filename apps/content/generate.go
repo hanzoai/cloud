@@ -29,8 +29,8 @@ import (
 //         inference meter is a bug, and calling AI with an empty Org would be the very
 //         "unattributed inference" that meter forbids). See draftCopy.
 //       * ASSET — renders a studio image (the Qwen-Image-Edit-2511 ComfyUI graph) which
-//         the AI plane never sees, so content is the SOLE meter: b.Bill.Gate before the
-//         render (fail-closed 402) + b.Bill.MeterUsage after. See studio_render.go.
+//         the AI plane never sees, so content is the SOLE meter: b.Bill.Authorize before the
+//         render (fail-closed 402) + b.Bill.Record after. See studio_render.go.
 //   - Generate (this file) is the STABLE write path: it validates the type, requires the
 //     marketing module be installed, forces status=draft, and persists via
 //     framework.Ingest — the SAME validate + lifecycle-hook pipeline an HTTP create runs.
@@ -112,12 +112,12 @@ func newGenerator(deps cloud.Deps, b cloud.Base) Generator {
 // orchestrator. Every dependency is optional at construction; a missing one fail-closes
 // only the mode that needs it.
 type aiStudioGenerator struct {
-	ai     cloud.AIClient       // platform AI plane (metered) — copy
-	vfs    cloud.VFSClient      // blob plane — persist rendered assets (optional)
-	bill   *cloud.ResourceMeter // per-org meter — studio render billing
-	studio *studioClient        // ComfyUI graph submit/poll/fetch — assets
-	model  string               // operator copy-model override ("" → defaultCopyModel)
-	env    string               // deployment env (attribution)
+	ai     cloud.AIClient  // platform AI plane (metered) — copy
+	vfs    cloud.VFSClient // blob plane — persist rendered assets (optional)
+	bill   *cloud.Meter    // per-org meter — studio render billing
+	studio *studioClient   // ComfyUI graph submit/poll/fetch — assets
+	model  string          // operator copy-model override ("" → defaultCopyModel)
+	env    string          // deployment env (attribution)
 	log    luxlog.Logger
 }
 

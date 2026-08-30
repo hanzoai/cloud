@@ -77,6 +77,7 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/tenant"
 	"github.com/zap-proto/zip"
@@ -118,7 +119,7 @@ type plane struct {
 }
 
 // meter is the plane's half of the fleet's billing client: GATE before a priced act
-// and DEBIT after it. *cloud.ResourceMeter is the production value.
+// and DEBIT after it. *cloud.Meter is the production value.
 //
 // It is an interface for one reason a concrete meter cannot give: a gate can fail
 // with a FOREIGN error — "commerce unreachable: <transport detail>" — and what a
@@ -130,9 +131,8 @@ type plane struct {
 // what the real meter takes: an account carries both the books and the account
 // within them, so a gate and a debit cannot name different ones by accident.
 type meter interface {
-	Gate(ctx context.Context, payer account.Account, project string, projectValidated bool, kind string, costCents int64) error
-	Meter(payer account.Account, project, kind string, amountCents int64, requestID, clientIP string)
-	Enabled() bool
+	Authorize(ctx context.Context, payer account.Account, project string, projectValidated bool, kind string, costCents int64) error
+	Record(payer account.Account, kind string, u metering.Usage)
 }
 
 // scan is PROOF that a read of the source surface was ADMITTED: priced at the
@@ -162,7 +162,7 @@ type scan struct {
 //	tenant gate  cloud.Bridge parks the validated org on the context a typed op
 //	             receives; it is the composer's install — once at the root of
 //	             every program — so this package does not install it.
-//	meter+gate   cloud.NewResourceMeter(deps, "dataset"); Gate before the one
+//	meter+gate   cloud.NewMeter(deps, "dataset"); Gate before the one
 //	             priced op and Meter after it.
 //	logs         cloud.NewBase(deps, "dataset") gives the scoped logger.
 //	traces       global and already ZAP-native (OTLZ). This package imports no
@@ -202,7 +202,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	if err := mount(p, app); err != nil {
 		return err
 	}
-	base.Log.Info("dataset plane mounted", "brand", deps.Brand, "env", deps.Env, "billing", p.bill.Enabled())
+	base.Log.Info("dataset plane mounted", "brand", deps.Brand, "env", deps.Env)
 	return nil
 }
 
@@ -394,7 +394,7 @@ func (p *plane) charge(ctx context.Context, c caller, cost int64) error {
 	// request it can ask again — so the address is parsed back out of it. PayerOf
 	// answers a bare slug with that org's own account, which is what [plane.who]
 	// recorded and what this gate has always keyed on.
-	err := p.bill.Gate(ctx, account.PayerOf("", c.ledger), c.project, c.validated, "dataset", cost)
+	err := p.bill.Authorize(ctx, account.PayerOf("", c.ledger), c.project, c.validated, "dataset", cost)
 	if err == nil {
 		return nil
 	}

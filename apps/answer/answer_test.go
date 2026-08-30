@@ -561,7 +561,7 @@ func noNetworkSearch(t *testing.T) {
 }
 
 // newEngine builds the engine over a fake AI plane with a ZERO Base: Run()/meter()
-// never touch Log, and a nil Bill makes MeterUsage a safe no-op — the loop's
+// never touch Log, and a nil Bill makes Record a safe no-op — the loop's
 // envelope is exercised without a billing backend.
 func newEngine(ai types.AIClient) Engine { return Engine{AI: ai, Model: "test-model"} }
 

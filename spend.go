@@ -203,7 +203,7 @@ func creditIn(ctx context.Context, w account.Account) (ok, funded bool) {
 // zen subsystems meter their own token costs and an edge charge would double-bill —
 // so "we charge nothing HERE" silently meant "we authorize NOTHING here", and the
 // same fusion made every resource kind an operator prices at 0 un-gated as well
-// (ResourceMeter.Gate: `costCents <= 0 -> nil`). One int64 answering two questions is
+// (Meter.Authorize: `costCents <= 0 -> nil`). One int64 answering two questions is
 // why the LLM leak and the non-LLM gap are a single bug. They are two questions now:
 // Billable says WHETHER standing is required, DefaultPrice says WHAT the edge charges.
 // Pricing something at zero can no longer un-authorize it.

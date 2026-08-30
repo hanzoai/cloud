@@ -148,7 +148,7 @@ type askAnswer struct {
 //  204. over a nil one, so there is no Out that means "I already streamed".
 //  3. THE MONEY DENIAL IS A DOMAIN BODY. An out-of-funds caller gets
 //     cloud.DenyResource — the fleet-wide NESTED {"error":{"code","message"}} at
-//     402/503 (apps/answer/answer.go, the Bill.Gate branch). A typed op's only
+//     402/503 (apps/answer/answer.go, the Bill.Authorize branch). A typed op's only
 //     refusal is a RETURNED error, which zip renders as the flat HTTPError
 //     {status,code,error}. Same class as the apps/ml creates.
 //

@@ -359,7 +359,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// Bound the same way and for the same reason as the logger above: the paid
 	// engines are asked from metaSearch, which every caller reaches and none of
 	// them can hand a meter to. See meter.go.
-	bindMeter(cloud.NewResourceMeter(deps, "websearch"))
+	bindMeter(cloud.NewMeter(deps, "websearch"))
 
 	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
 	// the zip layer so the same request either reaches native meta-search or is

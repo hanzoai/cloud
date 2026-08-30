@@ -66,7 +66,7 @@ func recordFee() int64 { return cloud.ResourceFeeCents(feeEnv, record) }
 // ledger about somebody we are going to refuse anyway is a balance read nobody
 // needed.
 func afford(s *cloud.Service[state], ctx context.Context, unit string, cents int64) (*cloud.Charge, error) {
-	return s.Bill.Allow(ctx, cloud.PayerOf(ctx), unit, cents)
+	return s.Bill.Reserve(ctx, cloud.PayerOf(ctx), unit, cents)
 }
 
 // charge debits one act, after that act has happened. Work that failed handed out

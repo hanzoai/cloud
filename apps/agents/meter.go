@@ -112,7 +112,7 @@ func botRunning(a Agent, rate int64) cloud.Running {
 // apps/sandbox charges before its delete: crash after the charge and the row is
 // still resident with an advanced watermark, which bills nothing twice; crash after
 // the write and the span is gone. A failure is logged and dropped — the same
-// posture MeterUsage takes — because a debit that could not be recorded must not
+// posture Record takes — because a debit that could not be recorded must not
 // turn a working mode change into a refusal.
 func closeResidency(ctx context.Context, s *cloud.Service[state], sto *Store, org string, a Agent) {
 	ns, err := cloud.OrgNamespace(org, "")
@@ -132,7 +132,7 @@ func closeResidency(ctx context.Context, s *cloud.Service[state], sto *Store, or
 		func() (bool, error) { return s.State.stores.Sync(ns) },
 		// The sweep carries the session's STORED payer key, so it is parsed into an
 		// address here by the one rule rather than the store learning a new type.
-		func(payer string, u metering.Usage) { s.Bill.MeterUsage(account.PayerOf("", payer), meterKind, u) })
+		func(payer string, u metering.Usage) { s.Bill.Record(account.PayerOf("", payer), meterKind, u) })
 	if err != nil {
 		s.Log.Warn("runtime meter: a bot left residency unbilled", "org", org, "agent", a.Name, "err", err)
 	}
@@ -152,7 +152,7 @@ func closeResidency(ctx context.Context, s *cloud.Service[state], sto *Store, or
 // answer (stores.Owned) and the ship is what settles it.
 //
 // It takes `now` and `emit` rather than reading a clock and holding a
-// ResourceMeter, so a test drives THIS function over a real store instead of
+// Meter, so a test drives THIS function over a real store instead of
 // reassembling it — which is the shape a reassembled harness gets wrong: the
 // owner gate and the ship are what this pass IS, and a copy of the loop that
 // predates them proves the arithmetic of a meter nobody runs.

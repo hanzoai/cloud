@@ -1,7 +1,7 @@
 package functions
 
 // Integration tests proving the per-org credit-drawdown gate is wired into the
-// REAL invoke path via the ONE shared cloud.ResourceMeter: an unfunded org is
+// REAL invoke path via the ONE shared cloud.Meter: an unfunded org is
 // refused 402 before any sandbox compute runs, a funded org runs and its OWN org
 // ledger is debited (product "functions", unit "invoke"), an unreachable sandbox
 // bills nothing (no billable compute), a free fee is un-gated, and an
@@ -235,24 +235,26 @@ func TestInvoke_FreeFeeUngated(t *testing.T) {
 	}
 }
 
-// No commerce URL no longer means "nothing bills". Once apps are their own
-// binaries the ledger has ONE writer and it lives with commerce, so a meter
-// without a local URL ASKS it — and a biller it cannot reach is UNKNOWN, never
-// allowed. Allowing here is what turned every priced act free the moment an app
-// was split out, silently, so the priced invoke is REFUSED and the sandbox never
-// runs. See TestResourceMeter_UnconfiguredIsNoop, which pins the same rule at
-// the gate itself.
-func TestInvoke_UnreachableBillerRefusesAndRunsNothing(t *testing.T) {
+// No local ledger means the meter ASKS commerce, and a commerce that cannot
+// answer is UNKNOWN — never permission. The priced invoke is REFUSED and the
+// sandbox never runs.
+//
+// The peer here serves the debit and NOT the gate, so its socket answers and its
+// op does not: an outage, which is the fact that must not be read as "nobody
+// bills here". See TestMeter_UnconfiguredIsNoop, which pins both halves
+// of that distinction at the gate itself.
+func TestInvoke_BillerOutageRefusesAndRunsNothing(t *testing.T) {
 	sb := planetest.ServeSandboxes(t)
-	s := newBilledService(t, "") // empty commerce URL ⇒ !Enabled()
+	planetest.Serve(t)
+	s := newBilledService(t, "") // empty commerce URL ⇒ the gate crosses the plane
 	seedFn(t, s, "acme", "resize")
 
 	resp := fireInvoke(t, s, "acme", "resize")
 	if resp.StatusCode == http.StatusOK {
-		t.Fatal("a priced invoke ran with no reachable biller — that is free work")
+		t.Fatal("a priced invoke ran while the biller could not answer — that is free work")
 	}
 	if sb.Ran() != 0 {
-		t.Fatalf("sandbox ran %d times with no biller reachable, want 0", sb.Ran())
+		t.Fatalf("sandbox ran %d times while the biller could not answer, want 0", sb.Ran())
 	}
 }
 

@@ -186,7 +186,7 @@ func denial(t *testing.T, m map[string]any) (code, message string) {
 
 // TestPaymentDenialWire pins the money wire of the ONE action on this surface
 // that a billing gate can refuse. The $999 formation fee runs through the shared
-// ResourceMeter, so a refusal must answer the SAME contract the edge gate answers
+// Meter, so a refusal must answer the SAME contract the edge gate answers
 // — 402 insufficient_balance, 402 spend_cap_exceeded, 503 balance_unavailable,
 // each a {"error":{"code","message"}} body — because a metered client reads one
 // shape across every Hanzo surface.

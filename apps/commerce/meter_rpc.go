@@ -18,11 +18,10 @@ import (
 // The prepaid GATE and the debit, published on the internal plane for the same
 // reason the balance read is: the ledger has one writer and it lives here.
 //
-// Without these an app in its own process finds no metering client, and
-// ResourceMeter.Gate is documented to ALLOW when billing is unconfigured — which
-// is right for a deployment that does not bill and catastrophic for one that does.
-// Split into per-app binaries, every priced create became free: the gate could not
-// tell "nobody bills here" from "the biller is one socket away".
+// They are what makes "the biller is one socket away" answerable. An app in its
+// own process holds no local ledger and asks these; only a deployment that
+// publishes neither — plane.ErrNoPeer — bills nothing, and that is a different
+// fact from a biller that did not answer.
 
 // meterOps binds the metering client to the two plane ops that need it. A plane
 // handler is func(context.Context, *In) (*Out, error) — no parameter for the

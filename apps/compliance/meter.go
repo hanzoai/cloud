@@ -42,7 +42,7 @@ func fee() int64 { return cloud.ResourceFeeCents(feeEnv, inquiry) }
 // afford authorizes one inquiry BEFORE the provider is asked, so a caller who
 // cannot cover it never opens one on our account.
 func afford(s *cloud.Service[state], ctx context.Context) (*cloud.Charge, error) {
-	return s.Bill.Allow(ctx, cloud.PayerOf(ctx), inquiry, fee())
+	return s.Bill.Reserve(ctx, cloud.PayerOf(ctx), inquiry, fee())
 }
 
 // charge debits one inquiry, after the provider has actually opened it. A start

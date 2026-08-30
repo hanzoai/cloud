@@ -166,7 +166,7 @@ func (t tenant) org() string {
 //
 // NO PRINCIPAL IS [cloud.ErrNoLedger], the fleet's one value for "there is nobody
 // asking", refused in the fleet's one envelope. It is the same fact
-// [cloud.ResourceMeter.Gate] answers with when it is handed an empty org, and this
+// [cloud.Meter.Authorize] answers with when it is handed an empty org, and this
 // package must not hold a second spelling of it: the ops that price first reach
 // the meter and the ops that resolve the tenant first — [ops.search] — reach
 // here, so two spellings meant ONE surface answering ONE refusal in two shapes

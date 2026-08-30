@@ -51,7 +51,7 @@ func telAt(t *testing.T, l *planetest.Ledger) (*cloud.Service[state], *carrierSp
 		Base:  cloud.NewBase(cloud.Deps{Metering: nil, Env: "mainnet"}, "tel"),
 		State: state{store: store, carrier: spy, live: true},
 	}
-	s.Bill = cloud.NewResourceMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "tel")
+	s.Bill = cloud.NewMeter(cloud.Deps{Metering: l.Client(t), Env: "mainnet"}, "tel")
 	return s, spy
 }
 
@@ -208,7 +208,7 @@ func TestFleetAgentOrderBillsItsOwnOrg(t *testing.T) {
 // covering one. A narrower window does not fix that; nothing commits until the
 // debit lands, and the debit lands after the carrier has already been paid.
 //
-// cloud.ResourceMeter.Allow commits the cost BEFORE it weighs it, so the figure
+// cloud.Meter.Reserve commits the cost BEFORE it weighs it, so the figure
 // the balance must cover already includes every other call outstanding for the
 // same wallet, and the second caller must clear both.
 func TestConcurrentOrdersCannotOutrunTheBalance(t *testing.T) {

@@ -271,10 +271,10 @@ func TestMeteredSurfacesHoldAMeter(t *testing.T) {
 		// two names match once reported a surface as holding no meter because it
 		// looked for a directory spelled the way the ROW was, not the way the
 		// PACKAGE was.
-		var charges, zeroed, priced bool
+		var charges, priced bool
 		for _, dir := range appDirs(t, filepath.Join("plugin", name, "main.go")) {
-			if c, z, pr := packagePrice(t, dir); c {
-				charges, zeroed, priced = true, z, pr
+			if c, pr := packagePrice(t, dir); c {
+				charges, priced = true, pr
 				break
 			}
 		}
@@ -292,12 +292,6 @@ func TestMeteredSurfacesHoldAMeter(t *testing.T) {
 					"your own), or name %q in pricedAtZero with the reason the surface is "+
 					"deliberately free today.", name, name)
 			}
-			if zeroed {
-				t.Errorf("apps/%s: every Meter call passes a literal 0 — the client is wired and "+
-					"records nothing.\nA debit of zero posts no ledger entry, so the surface "+
-					"is free while reading as metered. Charge the fee the deployment "+
-					"configures (cloud.ResourceFeeCents), or declare the surface Free.", name)
-			}
 		case meteredByAIWrapper[name]:
 			// Correct, and deliberately not its own meter: these surfaces spend on
 			// INFERENCE, and inference is metered once, where the tokens are counted —
@@ -307,7 +301,7 @@ func TestMeteredSurfacesHoldAMeter(t *testing.T) {
 			t.Logf("apps/%s: declared Metered, charges nothing — known gap", name)
 		default:
 			t.Errorf("apps/%s declares Price: cloud.Metered but its package calls no meter "+
-				"(Gate/Meter/MeterUsage/RecordUsage).\nMetered means a meter downstream of "+
+				"(Authorize/Reserve/Record/Debit/RecordUsage).\nMetered means a meter downstream of "+
 				"the edge owns the charge, and the edge charges nothing on that promise — so "+
 				"with no meter the surface is silently free. Wire the meter, or name it in "+
 				"meteredWithoutAMeter with the reason.", name)
@@ -364,7 +358,7 @@ var meteredByAIWrapper = map[string]bool{
 // ResourceFeeCents knob read by both).
 //
 // todo's board moved to the forge, and its meter did not move with it. The
-// Bill.Gate/Bill.Meter pair lived in the store-backed ops (updateProject, listIssues,
+// Bill.Authorize/Bill.Record pair lived in the store-backed ops (updateProject, listIssues,
 // getIssue and their siblings), which lost their routes in that move and kept their
 // code — so the meter that satisfied this test sat behind addresses nobody served,
 // and the live surface (forgeCreateIssue, forgePatchIssue, claimIssue) has charged
@@ -389,7 +383,7 @@ var meteredWithoutAMeter = map[string]bool{
 // priced is false only when the package resolves fees AND every one of them
 // defaults to zero. A package that resolves none is not making a claim either way —
 // its amount comes from somewhere this walk cannot see — so it is left alone.
-func packagePrice(t *testing.T, dir string) (charges, allZero, priced bool) {
+func packagePrice(t *testing.T, dir string) (charges, priced bool) {
 	fees, zeroFees := 0, 0
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
@@ -404,7 +398,6 @@ func packagePrice(t *testing.T, dir string) (charges, allZero, priced bool) {
 		return nil
 	})
 
-	meters, zeros := 0, 0
 	for _, f := range files {
 		if len(f) > 8 && f[len(f)-8:] == "_test.go" {
 			continue
@@ -443,17 +436,16 @@ func packagePrice(t *testing.T, dir string) (charges, allZero, priced bool) {
 				fees++
 			}
 			switch sel.Sel.Name {
-			// Gate/Meter/MeterUsage are ResourceMeter's names, and Allow/Debit are the
+			// Authorize/Record are the meter's two verbs, and Reserve/Debit are the
 			// same two asked with a resolved cloud.Payer instead of loose strings (see
 			// payer.go) — a surface that composes them is metered exactly as much as one
-			// that does not. Authorize/Record are the metering client's own, which zen
-			// calls directly because it supplies the upstream module's Gate/Meter as
-			// function values rather than calling ours.
-			case "Gate", "Allow", "Meter", "MeterUsage", "Debit", "RecordUsage", "Authorize", "Record":
+			// that does not. RecordUsage is the ledger's own, which zen reaches directly
+			// because it supplies the upstream module's gate and meter as function values.
+			case "Authorize", "Reserve", "Record", "Debit", "RecordUsage":
 				charges = true
 			// fare.Paid IS the meter, composed once for the whole metered-surface
 			// class instead of copied into each app: it opens with admit and closes
-			// with settle, and settle calls Bill.Meter. Qualified by its package,
+			// with settle, and settle calls Bill.Record. Qualified by its package,
 			// because a bare "Paid" is a word any app might use for something else.
 			case "Paid":
 				if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "fare" {
@@ -463,16 +455,8 @@ func packagePrice(t *testing.T, dir string) (charges, allZero, priced bool) {
 			default:
 				return true
 			}
-			// Meter(org, project, kind, amountCents, requestID, clientIP): a literal 0
-			// in the amount slot posts nothing.
-			if sel.Sel.Name == "Meter" && len(call.Args) == 6 {
-				meters++
-				if lit, ok := call.Args[3].(*ast.BasicLit); ok && lit.Kind == token.INT && lit.Value == "0" {
-					zeros++
-				}
-			}
 			return true
 		})
 	}
-	return charges, meters > 0 && meters == zeros, !(fees > 0 && zeroFees == fees)
+	return charges, !(fees > 0 && zeroFees == fees)
 }

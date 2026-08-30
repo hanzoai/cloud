@@ -136,7 +136,7 @@ func run[T any](ctx context.Context, o ops, t task, want int, body any) ([]T, mo
 	// nearest that is zero — a charge a spend cap would not weigh at all. Rounding
 	// away from zero refuses a caller a fraction of a cent early rather than
 	// admitting them for free.
-	if err := o.s.Bill.Gate(ctx, ledger, project, validated, t.kind, o.s.State.quote(ctx, t, want).CentsUp()); err != nil {
+	if err := o.s.Bill.Authorize(ctx, ledger, project, validated, t.kind, o.s.State.quote(ctx, t, want).CentsUp()); err != nil {
 		return nil, money.Zero(), cloud.Denied(err)
 	}
 
@@ -156,7 +156,7 @@ func run[T any](ctx context.Context, o ops, t task, want int, body any) ([]T, mo
 		// Ref is deliberately left unset so the meter mints one. It is the ledger's
 		// idempotency key and it names an ACT, never a thing: keyed on a phrase or a
 		// domain, the second search for the same word would move no money at all.
-		o.s.Bill.MeterUsage(ledger, t.kind, u)
+		o.s.Bill.Record(ledger, t.kind, u)
 	}
 	return out, charged, err
 }

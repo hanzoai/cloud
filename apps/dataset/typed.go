@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/account"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/zap-proto/zip"
 )
 
@@ -463,7 +464,13 @@ func (o ops) materialize(ctx context.Context, in *riskMaterializeIn) (*riskDatas
 	// c.ledger is a field on the resolved caller — a string the op is carrying — so the
 	// address is parsed back out of it, the same way [plane.charge] does for the gate
 	// this debit settles.
-	o.p.bill.Meter(account.PayerOf("", c.ledger), c.project, "dataset", materializeCost, c.request, c.ip)
+	o.p.bill.Record(account.PayerOf("", c.ledger), "dataset", metering.Usage{
+		Model:       "dataset",
+		AmountCents: materializeCost,
+		Project:     c.project,
+		RequestID:   c.request,
+		ClientIP:    c.ip,
+	})
 	return o.view(c, e), nil
 }
 
@@ -514,7 +521,13 @@ func (o ops) lineage(ctx context.Context, in *riskLineageIn) (*riskLineage, erro
 	}
 	// Same string boundary as the materialize debit above: c.ledger is a carried
 	// field, parsed here so the debit lands where the gate looked.
-	o.p.bill.Meter(account.PayerOf("", c.ledger), c.project, "dataset", lineageCost, c.request, c.ip)
+	o.p.bill.Record(account.PayerOf("", c.ledger), "dataset", metering.Usage{
+		Model:       "dataset",
+		AmountCents: lineageCost,
+		Project:     c.project,
+		RequestID:   c.request,
+		ClientIP:    c.ip,
+	})
 	return &out, nil
 }
 

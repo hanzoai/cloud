@@ -265,7 +265,7 @@ func startSweep(s *cloud.Service[state]) func() {
 			case <-t.C:
 				reap(ctx, &s.State, s.Log, clk)
 				meterRuntime(ctx, &s.State, s.Log, time.Now().Unix(),
-					func(payer string, u metering.Usage) { s.Bill.MeterUsage(account.PayerOf("", payer), meterKind, u) })
+					func(payer string, u metering.Usage) { s.Bill.Record(account.PayerOf("", payer), meterKind, u) })
 				t.Reset(sweepEvery)
 			}
 		}

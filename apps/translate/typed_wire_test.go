@@ -29,7 +29,7 @@ var untypedByDesign = map[string]string{
 	// (type/title/status/detail, plus code): the nested body rides Detail intact and
 	// gains those members beside it. Same call apps/agents and apps/guide record —
 	// a change to the money wire, owned by whoever owns that wire. The two call
-	// sites are translate.go's `s.Bill.Gate(...) -> cloud.DenyResource` and its
+	// sites are translate.go's `s.Bill.Authorize(...) -> cloud.DenyResource` and its
 	// ErrInsufficientBalance / ErrSpendCapExceeded branch; cloud.DenyResource
 	// (resource_billing.go) is where the nested shape is written.
 	"POST /v1/translate": "a bulk-tier spend denial answers 402/503 carrying the fleet's NESTED " +

@@ -586,7 +586,7 @@ func LedgerFrom(ctx context.Context) string {
 }
 
 // Ledger is the bare-string form of BillingOrg for the in-handler resource meters
-// (ResourceMeter.Gate/Meter/MeterUsage), which take an org string rather than the
+// (Meter.Authorize/Record), which take an org string rather than the
 // ctx. It returns the SELECTED org that PAYS, or "" when the request may not be
 // billed. Call it ONLY after the caller has already resolved AND gated the effective
 // org via Org (every resource handler does), so "" cannot occur on a live path; the

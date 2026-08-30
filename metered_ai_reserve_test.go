@@ -123,7 +123,7 @@ func meterOn(t *testing.T, url string, inner types.AIClient) *meteredAI {
 	t.Helper()
 	return &meteredAI{
 		inner: inner,
-		meter: NewResourceMeter(Deps{Metering: mustClient(t, url, false)}, AIMeterProvider),
+		meter: NewMeter(Deps{Metering: mustClient(t, url, false)}, AIMeterProvider),
 		rate:  defaultAIPriceUUSDPer1kTokens,
 	}
 }

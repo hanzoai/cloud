@@ -4,7 +4,7 @@ package cloudflare
 // CF-hosted model with the org's OWN token and relays the result. Unlike the pure
 // passthrough of every other resource here, a run is INFERENCE, so it is priced:
 //
-//   - USAGE SPINE (one, shared): it meters through cloud.ResourceMeter under provider
+//   - USAGE SPINE (one, shared): it meters through cloud.Meter under provider
 //     cloud.AIMeterProvider ("ai") — the SAME product axis and per-scope caps as every
 //     LLM call — never a Cloudflare-specific usage label. The org's own token already
 //     paid Cloudflare for the compute, so Hanzo debits only the thin BYO routing fee
@@ -116,7 +116,7 @@ func (o ops) aiRun(c *zip.Ctx) error {
 	// The estimate prices the reservation; the exact debit lands after the call.
 	estTokens := cloud.EstTokens(aiPromptText(body))
 	gateCents := cloud.MicrosToGateCents(cloud.BYOInferenceFeeMicros(estTokens))
-	if err := s.State.aiBill.Gate(c.Context(), payer, project, projectValidated, cloud.AIMeterProvider, gateCents); err != nil {
+	if err := s.State.aiBill.Authorize(c.Context(), payer, project, projectValidated, cloud.AIMeterProvider, gateCents); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -141,7 +141,7 @@ func (o ops) aiRun(c *zip.Ctx) error {
 	// Debit the BYO fee on the EXACT tokens the model reported, falling back to the
 	// pre-call estimate when it reports none. A non-text modality reports 0 and estimates
 	// 0, but BYOInferenceFeeMicros is FLOORED, so the debit is still ≥ the floor — every
-	// /ai/run leaves a usage row, never a silent proxied call. MeterUsage forces User/Org
+	// /ai/run leaves a usage row, never a silent proxied call. Record forces User/Org
 	// to the payer and defaults Provider/Service to "ai", so Workers AI spend sums with
 	// LLM spend on the (project, "ai") axis; Model preserves per-model attribution.
 	billTokens := usage.TotalTokens
@@ -156,7 +156,7 @@ func (o ops) aiRun(c *zip.Ctx) error {
 		attribute.Int("gen_ai.usage.input_tokens", usage.PromptTokens),
 		attribute.Int("gen_ai.usage.output_tokens", usage.CompletionTokens),
 	)
-	s.State.aiBill.MeterUsage(payer, "workers-ai", metering.Usage{
+	s.State.aiBill.Record(payer, "workers-ai", metering.Usage{
 		AmountMicros:     cloud.BYOInferenceFeeMicros(billTokens),
 		Model:            model,
 		Project:          project,

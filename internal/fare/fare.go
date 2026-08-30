@@ -36,6 +36,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/account"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
@@ -128,7 +129,7 @@ func admit[S Surface](s *cloud.Service[S], c *zip.Ctx) (string, error) {
 	}
 	kind, cents := s.State.Fee()
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, kind, cents); err != nil {
+	if err := s.Bill.Authorize(c.Context(), principal.Payer(c), project, projectValidated, kind, cents); err != nil {
 		return "", cloud.Denied(err)
 	}
 	return org, nil
@@ -140,7 +141,13 @@ func admit[S Surface](s *cloud.Service[S], c *zip.Ctx) (string, error) {
 // it never blocks the answer; a zero fee or unconfigured billing makes it a no-op.
 func settle[S Surface](s *cloud.Service[S], c *zip.Ctx) {
 	kind, cents := s.State.Fee()
-	s.Bill.Meter(principal.Payer(c), principal.Project(c), kind, cents, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Record(principal.Payer(c), kind, metering.Usage{
+		Model:       kind,
+		AmountCents: cents,
+		Project:     principal.Project(c),
+		RequestID:   c.RequestID(),
+		ClientIP:    cloud.ClientIP(c),
+	})
 }
 
 // orgKey names the request-scoped slot the admitted org travels in. Unexported

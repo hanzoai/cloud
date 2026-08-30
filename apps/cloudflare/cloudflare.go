@@ -126,7 +126,7 @@ type state struct {
 	// LLM call (provider cloud.AIMeterProvider = "ai"), so a BYO Workers AI run
 	// debits the same product axis and shares the same per-scope caps — never a
 	// Cloudflare-specific usage path. It is the ONLY resource this subsystem owns.
-	aiBill *cloud.ResourceMeter
+	aiBill *cloud.Meter
 }
 
 // Mount wires /v1/cloudflare/* onto app. The subsystem holds no store and runs no
@@ -136,7 +136,7 @@ type state struct {
 func Use(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Use(app, deps, "cloudflare",
 		func(cloud.Base) (state, error) {
-			return state{aiBill: cloud.NewResourceMeter(deps, cloud.AIMeterProvider)}, nil
+			return state{aiBill: cloud.NewMeter(deps, cloud.AIMeterProvider)}, nil
 		},
 		routes)
 }

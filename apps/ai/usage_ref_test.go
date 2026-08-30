@@ -33,7 +33,7 @@ import (
 // It is the peer and not a spy on purpose. What is under test is whether a client can
 // name the key the LEDGER dedups on, and only a ledger can answer that: a recording fake
 // would show the ref arriving and say nothing about the money.
-func serveCommerce(t *testing.T, seedSubject string, seedCents int64) finance.Client {
+func serveCommerce(t *testing.T, seedSubject string, seedCents int64) (finance.Client, *metering.Client) {
 	t.Helper()
 	t.Setenv("ZIP_RUNTIME_DIR", planetest.Dir(t))
 	cloud.ResetPlane()
@@ -88,7 +88,7 @@ func serveCommerce(t *testing.T, seedSubject string, seedCents int64) finance.Cl
 	go func() { _ = app.Listen(path) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 	waitForCommerce(t, path)
-	return fin
+	return fin, meter
 }
 
 // waitForCommerce blocks until the peer's socket ACCEPTS. Listen runs in a goroutine, so
@@ -133,20 +133,21 @@ func walletCents(t *testing.T, fin finance.Client, subject string) int64 {
 // fallback's error text), and the sibling debit on the OpenAI surface already keys on a
 // fresh uuid per call. Both surfaces now mint.
 //
-// MUTATION PROOF: put the client's value back in debitOverPlane —
+// MUTATION PROOF: put the client's value back in debit —
 //
 //	Model: u.Model, Provider: u.Provider, Ref: u.RequestID,
 //
 // and the wallet ends at 99¢ instead of 80¢: nineteen of twenty answers billed nobody.
 func TestPinnedMessageIDBillsEveryAnswer(t *testing.T) {
 	const subject = "acme/bob"
-	fin := serveCommerce(t, subject, 100)
+	fin, meter := serveCommerce(t, subject, 100)
+	settle := debit(meter)
 
 	// One owner/name pair, posted on every request — the whole of the attack.
 	const pinned = "acme/msg-pinned"
 	const answers = 20
 	for i := range answers {
-		if err := debitOverPlane(context.Background(), aiobject.UsageEvent{
+		if err := settle(context.Background(), aiobject.UsageEvent{
 			Subject:   subject,
 			Namespace: "acme",
 			USD:       "0.01",
@@ -169,9 +170,9 @@ func TestPinnedMessageIDBillsEveryAnswer(t *testing.T) {
 // billed to the wrong books is the same failure as money not billed at all.
 func TestTheDebitCarriesTheOrgAndBillsTheSubjectsWallet(t *testing.T) {
 	const subject = "acme/bob"
-	fin := serveCommerce(t, subject, 100)
+	fin, meter := serveCommerce(t, subject, 100)
 
-	if err := debitOverPlane(context.Background(), aiobject.UsageEvent{
+	if err := debit(meter)(context.Background(), aiobject.UsageEvent{
 		Subject: subject, Namespace: "acme", USD: "0.25", Currency: "usd", Model: "zen", Provider: "hanzo",
 	}); err != nil {
 		t.Fatalf("debit: %v", err)
@@ -190,9 +191,9 @@ func TestTheDebitCarriesTheOrgAndBillsTheSubjectsWallet(t *testing.T) {
 // completion — the same hole from the other end.
 func TestAnAbsentCurrencyStillBills(t *testing.T) {
 	const subject = "acme/bob"
-	fin := serveCommerce(t, subject, 100)
+	fin, meter := serveCommerce(t, subject, 100)
 
-	if err := debitOverPlane(context.Background(), aiobject.UsageEvent{
+	if err := debit(meter)(context.Background(), aiobject.UsageEvent{
 		Subject: subject, Namespace: "acme", USD: "0.10", Model: "zen", Provider: "hanzo",
 	}); err != nil {
 		t.Fatalf("debit with no currency: %v", err)

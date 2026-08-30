@@ -17,10 +17,12 @@ package cloud
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/internal/planetest"
 	"net/http"
 	"sync/atomic"
 	"testing"
+
+	"github.com/hanzoai/cloud/internal/planetest"
+	"github.com/hanzoai/cloud/plane/commerce"
 
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/plane"
@@ -52,7 +54,7 @@ func servePlaneRules(t *testing.T, rules map[string][]plane.ScopeRule, calls *at
 			return &plane.ScopeRules{Rules: rules[org]}, nil
 		}, zip.WithOperationID(plane.FinanceScopeRules))
 
-	stop, err := ServePlane(peerCommerce, luxlog.NewNoOpLogger())
+	stop, err := ServePlane(commerce.App, luxlog.NewNoOpLogger())
 	if err != nil {
 		t.Fatalf("serve plane: %v", err)
 	}

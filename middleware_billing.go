@@ -223,13 +223,13 @@ func denyUnavailable(c *zip.Ctx) error {
 // serviceAliases maps a /v1/<seg> path segment to the CANONICAL service label
 // when a subsystem meters under a provider label that differs from its path
 // segment — so the edge gate (canonicalService) and the resource meter (its
-// NewResourceMeter provider) emit the SAME service axis and a per-scope cap binds
+// NewMeter provider) emit the SAME service axis and a per-scope cap binds
 // on both surfaces (issue #70 INFO-7). This map is the ONE source of truth; a new
 // subsystem whose provider != path segment adds itself here. Keep in lockstep with
-// the NewResourceMeter(deps, "<provider>") calls.
+// the NewMeter(deps, "<provider>") calls.
 var serviceAliases = map[string]string{
-	"ml":       "compute",       // clients/ml    NewResourceMeter(deps, "compute")
-	"visor":    "compute",       // clients/visor NewResourceMeter(deps, "compute")
+	"ml":       "compute",       // clients/ml    NewMeter(deps, "compute")
+	"visor":    "compute",       // clients/visor NewMeter(deps, "compute")
 	"agents":   "agent",         // clients/agents provider "agent"
 	"security": "security.scan", // clients/security provider "security.scan"
 }

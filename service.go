@@ -29,7 +29,7 @@ import (
 type Base struct {
 	Log     luxlog.Logger
 	KMS     KMSClient
-	Bill    *ResourceMeter
+	Bill    *Meter
 	Brand   string
 	Env     string
 	Domain  string
@@ -61,7 +61,7 @@ func NewBase(deps Deps, name string) Base {
 	return Base{
 		Log:     luxlog.Default().New("subsystem", name),
 		KMS:     deps.KMS,
-		Bill:    NewResourceMeter(deps, name),
+		Bill:    NewMeter(deps, name),
 		Brand:   deps.Brand,
 		Env:     deps.Env,
 		Domain:  deps.Domain,
