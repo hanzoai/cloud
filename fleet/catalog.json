@@ -6530,6 +6530,10 @@
    "doc": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or space token: the\ndocumentId's space must be the token's space when the token names one,\nand the caller must be a member of it. An unknown space, another tenant's\nspace and a space the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists."
   },
   {
+   "id": "post_team_rooms",
+   "doc": "Opens a named room and answers it as the store now holds it.\n\nIt writes through the SAME applyTx path the Team client uses, so a room opened\nhere is broadcast to every live client of the space and appears in an open\nsidebar without a reload — the same property listRooms rests on, read from the\nwrite side.\n\nTWO TRANSACTIONS, NOT ONE, when the request states a facet. The document and\nits mixin are separate writes in this model (bindRoom writes only the second),\nand composing them here rather than inventing a combined tx keeps one write\npath for each. A create that lands and a facet that does not is visible as a\nroom with default intent, which is the honest partial state."
+  },
+  {
    "id": "put_team_rooms_by_id",
    "doc": "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open space\nrather than on the next reload."
   }
