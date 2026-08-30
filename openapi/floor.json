@@ -1,6 +1,6 @@
 {
-  "operations": 2391,
-  "paths": 1731,
+  "paths": 1737,
+  "operations": 2402,
   "products": {
     "account": 10,
     "ad": 7,
@@ -104,11 +104,12 @@
     "share": 2,
     "skills": 3,
     "social": 13,
+    "space": 10,
     "standing": 1,
     "sync": 6,
     "tasks": 10,
     "taxonomy": 5,
-    "team": 20,
+    "team": 21,
     "tel": 10,
     "template": 5,
     "todo": 13,
