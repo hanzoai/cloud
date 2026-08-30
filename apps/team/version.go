@@ -1,8 +1,7 @@
 package team
 
 // This file owns the Team platform MODEL version — the single number the front
-// SPA handshakes against. Ported VERBATIM (as package-local functions) from
-// github.com/hanzoai/team/pkg/model.
+// SPA handshakes against.
 //
 // It is DISTINCT from the cloud binary's own release identity: MODEL_VERSION is
 // the Team model the front validates against — the transactor hello's
