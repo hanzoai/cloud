@@ -151,9 +151,9 @@ type state struct {
 	audit *audit.Recorder
 }
 
-// mounted is the process singleton Enforce + Publish resolve. nil ⇒ not linked ⇒
+// live is the process singleton Enforce + Publish resolve. nil ⇒ not linked ⇒
 // Enforce is a passthrough.
-var mounted *cloud.Service[state]
+var live *cloud.Service[state]
 
 // Mount wires /v1/x402 and the settlement store. Direct construction (not
 // cloud.Use) because it holds the package singleton the middleware reaches.
@@ -174,7 +174,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		cfg:   configFromEnv(),
 		audit: deps.Audit,
 	}}
-	mounted = s
+	live = s
 	routes(app, s)
 	exposeSettle(s)
 	// Finish anything the last process left in doubt. A settlement claimed but not
@@ -185,7 +185,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	} else if n > 0 {
 		s.Log.Info("x402: startup reconcile completed settlements", "count", n)
 	}
-	s.Log.Info("x402 mounted", "network", s.State.cfg.Network,
+	s.Log.Info("x402 live", "network", s.State.cfg.Network,
 		"asset", s.State.cfg.Asset != "", "meter", s.State.meter != nil && s.State.meter.Enabled())
 	return nil
 }
@@ -214,7 +214,7 @@ var (
 	// that does not verify, or a replayed nonce. The CHALLENGE is on the response's
 	// PAYMENT-REQUIRED header, so a client can pay and retry.
 	ErrPaymentRequired = errors.New("x402: payment required")
-	// ErrUnavailable — payment could not be enforced at all: x402 is not mounted in
+	// ErrUnavailable — payment could not be enforced at all: x402 is not live in
 	// this process, the price table or the recipient wallet did not resolve, the
 	// caller has no billable identity, or settlement failed.
 	ErrUnavailable = errors.New("x402: payment enforcement unavailable")
@@ -225,7 +225,7 @@ var (
 //
 // Applying it is a DECLARATION that the group is for sale, so anything that leaves
 // x402 unable to answer what the group costs is a refusal, never a passthrough. It
-// refuses when x402 is not mounted in this process and when no price table has been
+// refuses when x402 is not live in this process and when no price table has been
 // published — the two ways "I cannot enforce payment here" arises — because the
 // alternative renders both as "free", permanently and silently.
 //
@@ -251,9 +251,9 @@ var (
 // price an operation with Settle.
 func Enforce() zip.Handler {
 	return func(c *zip.Ctx) error {
-		s := mounted
+		s := live
 		if s == nil {
-			return refuse(c, unenforceable("x402 is not mounted in this process"))
+			return refuse(c, unenforceable("x402 is not live in this process"))
 		}
 		if currentRegistry() == nil {
 			return refuse(c, unenforceable("no price table is published in this process"))
@@ -290,7 +290,7 @@ func Settle(ctx context.Context, resource string) error {
 	// FREE FIRST, before anything is required of the world. A caller that offers
 	// every call to this client — which is the only way a gate and a settlement cannot
 	// disagree — must not have its free calls broken by a payment rail that is
-	// merely absent. Nothing unpriced needs x402 mounted, a request, or a payer.
+	// merely absent. Nothing unpriced needs x402 live, a request, or a payer.
 	terms, priced, err := priceOf(ctx, resource)
 	if err != nil {
 		return fmt.Errorf("%w: price lookup failed: %v", ErrUnavailable, err)
@@ -298,9 +298,9 @@ func Settle(ctx context.Context, resource string) error {
 	if !priced {
 		return nil
 	}
-	s := mounted
+	s := live
 	if s == nil {
-		return fmt.Errorf("%w: x402 is not mounted in this process", ErrUnavailable)
+		return fmt.Errorf("%w: x402 is not live in this process", ErrUnavailable)
 	}
 	c, _ := cloud.Request(ctx) // nil off the HTTP path; run refuses a PRICED resource there
 	var payer, payment string
@@ -326,7 +326,7 @@ func Settle(ctx context.Context, resource string) error {
 // price is not positive, which are the same fact and answer the same way.
 //
 // It is deliberately separate from run and takes no service: whether something is
-// free must be answerable with nothing mounted and no request in hand, or a caller
+// free must be answerable with nothing live and no request in hand, or a caller
 // that offers EVERY call to the payment client cannot exist.
 //
 // TWO TRANSPORTS, ONE TABLE. The published Registry is a process-global installed
@@ -702,7 +702,7 @@ func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, 
 // flow that owns them. Mount runs it once at startup; it is safe to run at any time
 // and any number of times.
 func Reconcile(ctx context.Context, olderThan time.Duration) (completed int, err error) {
-	s := mounted
+	s := live
 	if s == nil {
 		return 0, nil
 	}
@@ -955,10 +955,10 @@ func mustJSON(v any) json.RawMessage {
 
 // Shutdown closes the settlement store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.State.store == nil {
+	if live == nil || live.State.store == nil {
 		return nil
 	}
-	err := mounted.State.store.Close()
-	mounted = nil
+	err := live.State.store.Close()
+	live = nil
 	return err
 }

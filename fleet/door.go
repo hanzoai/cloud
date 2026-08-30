@@ -17,7 +17,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// MountGraph serves the fleet schema at path: GET renders it, POST runs a request
+// UseGraph serves the fleet schema at path: GET renders it, POST runs a request
 // against it.
 //
 // The schema and the dispatch are built from ONE composed document, once, so the
@@ -26,7 +26,7 @@ import (
 // Composed lazily and kept, for the reason the index is: composing reads every
 // app's embedded subset, and a deployment that never receives a GraphQL request
 // should not pay for one.
-func MountGraph(app *zip.App, path string, subsets func() ([]openapi.Part, error), at At) {
+func UseGraph(app *zip.App, path string, subsets func() ([]openapi.Part, error), at At) {
 	build := sync.OnceValues(func() (*door, error) {
 		parts, err := subsets()
 		if err != nil {

@@ -645,7 +645,7 @@ func TestAClaimIsNotAReceipt(t *testing.T) {
 		t.Fatalf("broken credit must refuse, got %d", code)
 	}
 	// The claim exists and is unsettled.
-	pending, err := mounted.State.store.pending(context.Background(), nowUnix())
+	pending, err := live.State.store.pending(context.Background(), nowUnix())
 	if err != nil {
 		t.Fatalf("pending: %v", err)
 	}

@@ -37,7 +37,7 @@ const (
 // calls resolve the SAME wallet (idempotent) — its address is stable, so funding
 // it for gas once is durable.
 func TreasuryAnchorSigner(ctx context.Context, org, chain string) (address string, sign func(context.Context, []byte) ([]byte, error), ok bool) {
-	s := mounted
+	s := live
 	if s == nil || strings.TrimSpace(org) == "" {
 		return "", nil, false
 	}

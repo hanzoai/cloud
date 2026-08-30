@@ -867,7 +867,7 @@ func index(app *zip.App, composed []string) {
 // /v1/graphql, never /v1/graph: the second is the knowledge graph's own address,
 // assertions and neighbours, and the two mean different things by the word.
 func graphql(app *zip.App, composed []string) {
-	fleet.MountGraph(app, openapi.GraphPath, subsets(composed), locate(app))
+	fleet.UseGraph(app, openapi.GraphPath, subsets(composed), locate(app))
 }
 
 // subsets is what this deployment publishes: each app's own document, read from
