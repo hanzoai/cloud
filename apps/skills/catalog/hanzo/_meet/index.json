@@ -4,6 +4,11 @@
   "generated_by": "plugin/gen-skills",
   "issuer": "https://hanzo.id",
   "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.hanzo.ai/v1/mcp"
+  },
   "skill_count": 4,
   "skills": [
     {
@@ -11,28 +16,28 @@
       "name": "meet_call",
       "path": "meet_call/SKILL.md",
       "service": "meet",
-      "sha256": "e98c80ca18d04ff77ae48bfb398e82c3dddfbedb715bbe7c91119efba3f6289d"
+      "sha256": "3cd69a7504d114e7cd63ba78b236c76a18d878a1c1702a33752fc840d51f36d2"
     },
     {
       "description": "Read meet health: Health reports whether the office can mint join tokens..",
       "name": "meet_health",
       "path": "meet_health/SKILL.md",
       "service": "meet",
-      "sha256": "e94eab49b2e2565c0ff89a9d93f126e8e50e88a50a4425a68bcc58c156a614ec"
+      "sha256": "34021783be63774348e865a71a857b58db0f97d8cf284279e792f4419b5853ec"
     },
     {
       "description": "Read meet record: What is being recorded in a room, and where the file goes.",
       "name": "meet_record",
       "path": "meet_record/SKILL.md",
       "service": "meet",
-      "sha256": "b3680071a64b03c3c8dcc4db7588b8b93ce07cb0080087eec2010ce97cc310af"
+      "sha256": "703b45a4f57bc4c1ecf161ceb070d3039c4347b2c3d844826cea6477f5d20692"
     },
     {
       "description": "Read meet session: What this caller may open a room in.",
       "name": "meet_session",
       "path": "meet_session/SKILL.md",
       "service": "meet",
-      "sha256": "c6c4085161d353671958d8200483cb84fe006a01fd6fdc25688c18391c9fcc7e"
+      "sha256": "20669680760ff70edd02a59857dcca4144b6da4c2b0cd35bfe318c26e8323523"
     }
   ],
   "spec_version": "8.0.0"
