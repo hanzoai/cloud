@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -58,5 +59,48 @@ func TestUpstreamDefault(t *testing.T) {
 	t.Setenv("O11Y_UPSTREAM", "http://example:9000")
 	if got := upstream(); got != "http://example:9000" {
 		t.Fatalf("upstream() = %q, want override", got)
+	}
+}
+
+// TestNewHandlerNamesAnUnreachableUpstream pins the ONE thing an operator reads
+// when the fallback's Deployment is gone.
+//
+// httputil.ReverseProxy's default ErrorHandler answers 502 with an EMPTY body, so
+// a retired upstream produced `{"detail":"","status":502}` on every /v1/o11y/*
+// request AND on every Sentry envelope, which apps/event relays here. A fleet
+// whose error ingest is down while saying nothing about why is the one failure
+// that also conceals every other failure — measured in production, where the
+// blank 502 had been answering every page load of the chat surface.
+//
+// The upstream is dialled and refused rather than mocked: an ErrorHandler is
+// reachable only through a real transport failure, so a fake would assert the
+// test's own arrangement instead of the proxy's behaviour.
+func TestNewHandlerNamesAnUnreachableUpstream(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	addr := dead.URL
+	dead.Close() // nothing listens on addr now, so the dial is refused
+
+	h, err := newHandler(addr)
+	if err != nil {
+		t.Fatalf("newHandler: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/o11y/health", nil))
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", rec.Code)
+	}
+	body := rec.Body.String()
+	if body == "" {
+		t.Fatal("an unreachable upstream answered with an EMPTY body — that is the default " +
+			"ErrorHandler, and it is what made this outage unreadable")
+	}
+	if !strings.Contains(body, `"detail":"the o11y runtime is not reachable"`) {
+		t.Errorf("body = %s, want a detail naming the condition", body)
+	}
+	// The internal address stays out of the answer; it belongs in the log.
+	if host := strings.TrimPrefix(addr, "http://"); strings.Contains(body, host) {
+		t.Errorf("the answer names the internal upstream %q — that is topology, not a fact "+
+			"the caller can act on", host)
 	}
 }
