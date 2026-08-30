@@ -467,3 +467,14 @@ func union(ms ...map[string]bool) map[string]bool {
 	}
 	return out
 }
+
+
+// Withheld answers whether an operation is kept off the agent surface, applying
+// the same rule ([TheRule]) the endpoint applies when it assembles a tool list.
+//
+// It is exported for the generator that projects this surface for a CLIENT
+// (plugin/gen-mcp-catalog), which must offer exactly what the endpoint serves. A
+// client deriving its set from the raw catalog offers what this withholds, so
+// the policy would hold on one transport and not the other — and the half left
+// unenforced is the one where an agent is already holding the tool.
+func Withheld(op string) bool { return refuse(op) }
