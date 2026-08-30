@@ -76,7 +76,17 @@ import (
 // The documents that ARE served here (openid-configuration,
 // oauth-authorization-server, jwks, openapi.json) register before the catch-all
 // and win as usual; this only decides the answer for the ones that do not.
-var apiPrefixes = []string{"/v1/", "/api/", "/zap", "/health", "/healthz", "/readyz", "/.well-known/"}
+// "/login/oauth" is a PROTOCOL namespace for the same reason "/.well-known/" is,
+// and it failed the same way. It is the address IAM's authorization endpoint
+// redirects a browser to, and iam claims it in its own prefix list — but the
+// catch-all answered anything under it that iam did not serve, so an OAuth
+// client on this host received the console shell. The console rendered its own
+// "No such page" and the sign-in ended there, 200 the whole way, which is what
+// made it invisible: `hanzo auth login` opened api.hanzo.ai, was handed HTML,
+// and stopped. A person reads "No such page" as a broken link; a client reads
+// 200 text/html as an authorization response it cannot parse. Neither can act
+// on it, and a 404 would have said the true thing.
+var apiPrefixes = []string{"/v1/", "/api/", "/zap", "/health", "/healthz", "/readyz", "/.well-known/", "/login/oauth"}
 
 // consoleTitleRe matches the single <head> <title>…</title> element (any
 // attributes, any inner text, across newlines) so serveIndex can rewrite it to
