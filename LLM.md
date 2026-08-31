@@ -7602,7 +7602,21 @@ non-empty `-wal`. Its durability is at Close/Checkpoint, not per-commit.
 
 The consequence that matters: **a tool built without cgo will refuse thousands of
 perfectly healthy databases** with "the whole-file codec cannot fold an encrypted
-sidecar". That is the wrong engine for the data, not a defect in the data. Two
+sidecar". That is the wrong engine for the data, not a defect in the data.
+
+**AND A CGO BUILD REACHES THE SAME ENVELOPE WHEN IT LINKS THE WRONG LIBRARY**,
+which is the trap, because the binary looks right: `CGO_ENABLED=1` and
+`-tags libsqlite3` are both satisfied by a plain `libsqlite3`, whose `PRAGMA key`
+is a silent no-op. `hanzoai/sqlite` PROBES for that at run time (`CodecLinked` →
+`encryptionProbe`) and falls back to the pure-Go envelope rather than writing
+plaintext — the right call, and it means the failure surfaces as that same
+sidecar refusal from a binary nobody would suspect. Measured on this box: the
+plugin the deployment runs names `libsqlcipher.so.1` under `ldd`; a build with
+the tags alone named `libsqlite3.so.0`, refused every store at boot, and the host
+answered `503 mount /v1/team: no instance running`. The image's own recipe is the
+one that works — `CGO_CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1
+-I/usr/include/sqlcipher"` with `CGO_LDFLAGS="-lsqlcipher"` (Dockerfile:134) — and
+`ldd` on the result is the check, before installing it anywhere. Two
 cheap ways to tell which path a process is on — `/dev/shm` holds
 `hanzo-sqlite-plain-*` dirs only under the envelope, and in production it is
 empty at 64 MB, far too small for the estate.
