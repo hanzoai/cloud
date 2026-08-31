@@ -16,14 +16,14 @@
       "name": "channels_agent",
       "path": "channels_agent/SKILL.md",
       "service": "channels",
-      "sha256": "b2187ca51a1d90c34a75ab7ecc4c1c7a81ca052eb50bb4c665f32e6d42b16c5b"
+      "sha256": "94da275c5ae160c3b336b9879800bad4ba6365032ce5f10a75ddf81555cd1f01"
     },
     {
       "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
       "name": "channels_allowlist",
       "path": "channels_allowlist/SKILL.md",
       "service": "channels",
-      "sha256": "e90f87982753b5a85d98807e0f740574ce5f4c292fd3b8314ab10b1c483b933d"
+      "sha256": "3d1118f52818f5d6c88f1828c6ffe9720251c74c6843d3bebf1ec48584f75adc"
     },
     {
       "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",

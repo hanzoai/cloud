@@ -194,7 +194,7 @@ func TestChannelsList(t *testing.T) {
 		} `json:"channels"`
 	}
 	decodeJSON(t, res.Body, &typed)
-	want := []string{"discord", "slack", "teams", "telegram", "whatsapp"}
+	want := []string{"discord", "github", "linear", "slack", "teams", "telegram", "whatsapp"}
 	if len(typed.Channels) != len(want) {
 		t.Fatalf("channels = %s, want the closed registry", res.Body)
 	}

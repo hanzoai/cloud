@@ -7658,3 +7658,20 @@ the same as no row. `GET /v1/channels/agent?channel=slack` reads it,
 admin), and the room ids are the platform's own — the same value the envelope
 carries. The agent is named by its ref, the name given at `POST /v1/agents`.
 The env override is gone; nothing in universe set it.
+
+## GitHub and Linear are channels transports: an issue is a room
+
+`apps/channels/{github,linear}.go` — an issue (or pull request) is the room, its
+comments the thread; capabilities are `thread` only, because a tracker has no DM
+and no other surface. The integrations webhooks turn a created comment that
+addresses the agent into the same `Inbound` Slack emits (`github_issues.go`
+`githubMentionInbound`: `@<app slug>` as a whole word, never a Bot;
+`linear_webhook.go` `linearMentionInbound`: `@hanzo`), so pairing/allowlist
+policy, the inbox, the per-room agent binding and the turn are the ONE path.
+The reply is `planeChatSend` `github` (issue comment via the installation token)
+or `linear` (comment via the claimer's key). Identity: a commenter who has
+linked resolves as anywhere; otherwise `channelIdentity` falls back to the
+org's DEFAULT subject — `getUserLink(org, provider, "*")`, written by
+`linearClaim` for the claimer. GitHub writes no default (its claim is platform
+sudo), so an unlinked GitHub commenter gets the link prompt; a GitHub link leg
+is the follow-up.

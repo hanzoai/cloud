@@ -85,7 +85,7 @@ type transport struct {
 // files. Fixed alphabetical order — the deterministic GET /v1/channels listing.
 // Adding one means adding its probes in capability_test.go, which is what makes
 // its published capabilities checkable rather than asserted.
-var transports = []transport{discordTransport, slackTransport, teamsTransport, telegramTransport, whatsappTransport}
+var transports = []transport{discordTransport, githubTransport, linearTransport, slackTransport, teamsTransport, telegramTransport, whatsappTransport}
 
 func transportFor(id string) (transport, bool) {
 	for _, t := range transports {

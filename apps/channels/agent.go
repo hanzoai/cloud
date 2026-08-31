@@ -89,7 +89,7 @@ func agentsFor(ctx context.Context, st *store, org, channel string) (channelAgen
 
 // channelAgentRef names the transport to read.
 type channelAgentRef struct {
-	// Channel is the transport: discord, slack, teams, telegram or whatsapp.
+	// Channel is the transport: discord, github, linear, slack, teams, telegram or whatsapp.
 	// Required; an unknown value is a 404.
 	Channel string `json:"channel"`
 }
