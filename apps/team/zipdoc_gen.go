@@ -87,6 +87,20 @@ func init() {
 		},
 		Example: json.RawMessage(`{"rooms":[{"id":"6543","name":"bugfix-1010","life":"bound","bindings":["repo:hanzoai/cloud"]}]}`),
 	})
+	zip.Describe("GET /v1/team/rooms/:id/messages", zip.Doc{
+		Description: "Returns the tail of one room's conversation, oldest first.\n\nIt reads the SAME Chunter documents the transactor serves, so a message typed\nin the Team client is here with no sync. A room the caller's org does not own\nanswers 404 rather than 403, so a probe learns nothing about what exists.",
+		Fields: map[string]string{
+			"teamMessage.author":    "Author is the team account uuid that wrote it. It is an ACCOUNT and not a\ndisplay name: what to call somebody is the roster's answer, and copying it\nonto every message is how the two come to disagree. An agent's messages\ncarry the account derived from its id, so the same field answers for both.",
+			"teamMessage.createdOn": "CreatedOn is unix MILLIseconds, which is what the platform stamps.",
+			"teamMessage.id":        "ID is the message document's own id.",
+			"teamMessage.room":      "Room is the room it was said in — the same id the room listing answers\nwith, so a caller holding a message can name its room without a second read.",
+			"teamMessage.text":      "Text is the message as PLAIN TEXT. The document stores markup; this is the\nsame `plainText` reduction the agent responder reads a prompt with, so a\ncaller never has to parse the client's markup to know what was said.",
+			"teamMessageRead.id":    "ID is the room, from the path. The URL is the authority.",
+			"teamMessageRead.space": "Space names the space holding the room, and is required for the reason the\nbind op requires it: a room id is unique within a space and not across the\norg, so searching every space for a match would make the answer depend on\niteration order.",
+			"teamMessages.messages": "Messages are the room's, oldest first, at most `messageMax` of them.",
+		},
+		Example: json.RawMessage(`{"messages":[{"id":"7a1c","room":"6543","author":"9f2…","text":"shipped","createdOn":1756598400000}]}`),
+	})
 	zip.Describe("GET /v1/team/transactor/:token", zip.Doc{
 		Description: "AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a\nrefusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs\nthe frame loop. The org is the VERIFIED tenant — the key for every store path —\nnever a client header.\n\nThe path segment carries whichever lane the caller is on, and a UUID is not a\nJWT so the two can never be read as each other:\n\nTHE PATH SEGMENT IS THE CREDENTIAL — the space token selectWorkspace minted,\nwhose signed claims name both the account and the space. Nothing ambient\nauthorizes this socket; see admitWS for why it must stay that way and what the\nIAM lane here will look like.",
 	})
@@ -168,6 +182,20 @@ func init() {
 			"teamRoomNew.topic":    "Topic is the room's one-line subject.",
 		},
 		Example: json.RawMessage(`{"name":"bugfix-1010","life":"bound","bindings":["issue:1010"]}`),
+	})
+	zip.Describe("POST /v1/team/rooms/:id/messages", zip.Doc{
+		Description: "Says one thing in a room, as the caller.\n\nThe write goes through the SAME applyTx path the Team client's own messages\ntake and is broadcast to every connected client of the space, so a message\nsent here appears live in an open room rather than on the next reload. It\nanswers the message as the store now HOLDS it.",
+		Fields: map[string]string{
+			"teamMessage.author":     "Author is the team account uuid that wrote it. It is an ACCOUNT and not a\ndisplay name: what to call somebody is the roster's answer, and copying it\nonto every message is how the two come to disagree. An agent's messages\ncarry the account derived from its id, so the same field answers for both.",
+			"teamMessage.createdOn":  "CreatedOn is unix MILLIseconds, which is what the platform stamps.",
+			"teamMessage.id":         "ID is the message document's own id.",
+			"teamMessage.room":       "Room is the room it was said in — the same id the room listing answers\nwith, so a caller holding a message can name its room without a second read.",
+			"teamMessage.text":       "Text is the message as PLAIN TEXT. The document stores markup; this is the\nsame `plainText` reduction the agent responder reads a prompt with, so a\ncaller never has to parse the client's markup to know what was said.",
+			"teamMessageWrite.id":    "ID is the room to say it in, from the path.",
+			"teamMessageWrite.space": "Space names the space holding the room. Body-only: a query string may not\nredirect a write.",
+			"teamMessageWrite.text":  "Text is what to say, as plain text. It is wrapped in the client's markup on\nthe way in, so a caller writes words rather than HTML.",
+		},
+		Example: json.RawMessage(`{"space":"0e3c…","text":"deploying now"}`),
 	})
 	zip.Describe("PUT /v1/team/rooms/:id", zip.Doc{
 		Description: "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open space\nrather than on the next reload.",

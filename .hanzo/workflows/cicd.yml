@@ -1,13 +1,10 @@
 name: CI/CD
 # ONE WORKFLOW, ONE GRAPH, ONE RELEASE.
 #
-#   gate ──┐
-#          ├─→ image ─→ live ─→ reach ─→ fanout ─→ receipt
-#   containment ─┘
+#   gate ─→ image ─→ live ─→ reach ─→ fanout ─→ receipt
 #
-# THE LAW: `.github/workflows` holds exactly one file — a sync nudge that runs
-# zero CI. Everything that gates, builds, releases or fans out lives here, and
-# runs on our own runners against git.hanzo.ai.
+# THE LAW: everything that gates, builds, releases or fans out lives here, and
+# runs on our own runners against git.hanzo.ai. There is no GitHub CI.
 #
 # WHAT CHANGED, AND WHY IT IS THE WHOLE POINT.
 #
@@ -373,78 +370,28 @@ jobs:
   # plugin/ingress silently lost eight paths) and checks with --porcelain rather
   # than `git diff` (so a NEW app's untracked subset cannot hide).
   gate:
-    # `.hanzo/workflows/`, because GitHub resolves only `.github/workflows` and
-    # git.hanzo.ai only `.hanzo/workflows`; hanzoai/ci publishes build.yml at BOTH
-    # paths from every tag, byte-identical apart from its header. Pinned at a path
-    # the ref does not carry, Hanzo Git cannot even construct a run — InsertRun
-    # fails before any run row is written, so there is no failed run to look at.
-    # Dead CI here is not red, it is absent.
+    # hanzoai/ci publishes the reusable at `.hanzo/workflows/build.yml` and nowhere
+    # else, and git.hanzo.ai resolves that path alone. Pinned at a path the ref does
+    # not carry, Hanzo Git cannot construct a run at all: no row is written, so dead
+    # CI here is not red, it is absent.
     #
-    # Pinned to the immutable patch tag, not the `v1` rolling alias, because the
-    # alias is only as current as the last sync and sync-from-github refuses to
-    # move a tag that already exists. On Hanzo Git `v1` still names a commit
-    # whose tree is `.github` and README alone, so the gate resolved to a ref
-    # carrying no `.hanzo/` at all and every release died at InsertRun — the
-    # condition the paragraph above describes, reached through the alias rather
-    # than the path. Neither pin needs a tag to be moved: a NEW immutable tag is
-    # what syncs, which is the same fact the refusal above is built on.
-    #
-    # v1.0.16 constructed the run and then died in its FIRST step: the reusable
-    # read GITHUB_WORKFLOW_REF to find its own tools, that variable is GitHub's
-    # and the Hanzo Git runner does not set it, and `set -u` turned the miss into an
-    # abort — so every step after it, build through deploy, reported skipped.
-    # v1.0.17 defaults the variable; nothing else about the job changed.
-    #
-    # PINNED TO @v1, NOT @v1.0.17, AND THE DIFFERENCE IS THAT THE TESTS RUN.
-    # v1.0.17 declares the reusable's `tests` input as `type: boolean`, and
-    # Hanzo Git substitutes a workflow_call input's DECLARED-TYPE ZERO VALUE — so
-    # `inputs.tests` was always false and the test step was SKIPPED on every run.
-    # Measured on this repo: 20 skipped, 0 executed. The most critical service in
-    # the fleet has been shipping without its suite ever running.
-    # @v1 declares it `type: string` with `default: 'true'` and guards on
-    # `inputs.tests != 'false'`, so the `tests:` expression below finally means
-    # what it says. Verified before moving: v1 (8e43277) CONTAINS v1.0.17
-    # (81b3c18), so the set -u default this pin was taken for comes with it.
-    # BACK ON @v1, and not because the alias is right.
-    #
-    # Pinning @v1.0.38 — which the paragraphs above call for — stopped Hanzo Git
-    # constructing a run AT ALL: no row, nothing to inspect, exactly the "dead CI
-    # is not red, it is absent" failure described above. A failing `gate` is worse
-    # than a passing one and better than no run, so this is reverted to the state
-    # that at least reports.
-    #
-    # A CALLER JOB IS A PARENT, NOT A JOB — read the CHILD before reading a fault.
-    #
-    # Hanzo Git expands `uses:` into a child job carrying the reusable's own key
-    # (here `cicd`), and the child is what holds the labels, the runner and the
-    # steps. So this row always shows runner_id 0, `runs_on` null and zero steps,
-    # and its duration and status are the CHILD's, inherited. That is the shape of
-    # every caller on Hanzo Git, the successful ones included — so none of it is
-    # a symptom, and a fault read off this row alone is a fault read off the wrong
-    # row. `SELECT * FROM action_run_job WHERE parent_job_id = <this job>` is the
-    # job that actually ran; its task carries the log.
-    #
-    # This replaces a paragraph asserting the opposite — that Hanzo Git declines to
-    # schedule a called workflow's jobs, so nothing had shipped since v1.801.490.
-    # Both halves were read off the parent row. Measured on Hanzo Git: 2159 caller
-    # jobs have succeeded across 292 repos, and this workflow's own gate succeeded 174
-    # times in the ten days that paragraph called dead.
-    #
-    # ci publishes the reusable at .hanzo/workflows/build.yml and NOWHERE ELSE.
-    # .github/workflows/build.yml was deleted upstream — present at v1.0.39, gone
-    # by v1.0.44 — so a caller pinning THAT path fails at InsertRun before a run
-    # row is written: no run, no red, and nothing to look at.
-    #
-    # Which release `v1` names is deliberately not written down here. It is a
-    # MOVING alias and this line said "v1.0.46" long after it had stopped being
-    # true, which is worse than saying nothing: a stale answer to the one question
-    # this comment exists to settle sends the next reader hunting a path that
-    # resolves fine. Ask the tag instead — it takes one command and cannot go
-    # stale:
+    # Which release `v1` names is deliberately not written down. It is a MOVING alias
+    # and a stale answer sends the next reader hunting a path that resolves fine. Ask
+    # the tag, which takes one command and cannot go stale:
     #
     #   git ls-tree -r --name-only v1 | grep workflows/
     #
     # Read the TAG, not a local checkout; a stale worktree still shows the file.
+    #
+    # A CALLER JOB IS A PARENT, NOT A JOB — read the CHILD before reading a fault.
+    # Hanzo Git expands `uses:` into a child job carrying the reusable's own key
+    # (here `cicd`), and the child holds the labels, the runner and the steps. So this
+    # row always shows runner_id 0, `runs_on` null and zero steps, and its duration
+    # and status are the child's, inherited. A fault read off this row alone is a
+    # fault read off the wrong row:
+    #
+    #   SELECT * FROM action_run_job WHERE parent_job_id = <this job>
+    #
     uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: the tag is minted below only after this gate passed on main
@@ -460,203 +407,8 @@ jobs:
       go-cache: "true"
     secrets: inherit
 
-  # Guards the Stage-1 byzantine ceremony containment (apps/controlplane,
-  # build tag `controlplane`). Its increment-1 crypto is stub/forgeable BY
-  # DESIGN (SHA256-of-public-inputs commitments, symmetric-HMAC
-  # proof-of-possession, seed-derived threshold shares — see
-  # apps/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
-  # Three independent checks; any one failing blocks the merge:
-  #
-  #   1. grep (tag)    — no build/release invocation anywhere in the repo
-  #      (Dockerfile, Makefile, shell scripts, any workflow) may pass a `-tags`
-  #      value containing `controlplane` to go build/vet/run/install. The
-  #      package's own `//go:build controlplane` tag declarations
-  #      (apps/controlplane/*) are the thing being guarded, not a violation,
-  #      and are excluded by path.
-  #   2. grep (spoof)  — no build/release invocation may pass
-  #      `-X testing.testBinary=1` (or any -ldflags containing it) to a REAL
-  #      `go build`. That linker flag is what `go test` itself uses to make
-  #      testing.Testing() report true (cmd/go/internal/load/test.go) — the
-  #      runtime guard in containment.go trusts that signal, so this is the one
-  #      concrete way to spoof it in a non-test binary. This grep is what turns
-  #      "someone could type this" into "CI fails the PR that types it".
-  #   3. graph         — no cmd/ main may reach apps/controlplane through its
-  #      untagged import graph (`go list -deps`), and
-  #      `go build ./apps/controlplane/...` with no tag must match zero
-  #      buildable packages (proves the tag still gates every file in it).
-  #
-  # Runtime belt-and-suspenders (defense in depth, not a substitute for the
-  # above): apps/controlplane/containment.go fail-closed panics if its stub
-  # crypto is ever constructed outside a go-test binary (testing.Testing()==
-  # false) — see TestContainment_NonHarnessProcessRefuses in
-  # containment_test.go. KNOWN RESIDUAL: testing.Testing() is a linker-set
-  # string var (testing.testBinary), not cryptographically bound to "actually
-  # is a test" — `-ldflags="-X testing.testBinary=1"` spoofs it in a real
-  # binary. Check #2 above is the mitigation: it fails the PR that would ship
-  # that flag. Closing the residual for real needs a signal `go build` cannot
-  # produce at all (increment-2, tracked in doc.go) rather than one merely
-  # absent by convention.
-  containment:
-    runs-on: [hanzo-build-linux-amd64]
-    # Bounded so a wedged run frees its runner. Absent this the job inherits
-    # GitHub's six-hour default, and the failure that actually happens is a
-    # runner reclaimed mid-build (exit 130, "runner has received a shutdown
-    # signal") whose job then sits on the slot for the rest of the morning.
-    # Generous: these checks read the import graph, they do not link, and the
-    # whole pipeline runs 13-26 min cold.
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: grep — no build/release path may set -tags controlplane, or spoof testing.Testing()
-        run: |
-          set -euo pipefail
-          hits=0
-
-          # NOTE: exclusions are plain substring matches on the path (not
-          # anchored to a leading "./") so this is robust across grep
-          # implementations that format recursive-search paths differently.
-          # char class includes `!` so a build-constraint negation form
-          # (`-tags '!x,controlplane'`) cannot slip the grep. (Belt only: the
-          # positive-proof step below is the syntax-agnostic guarantee — the
-          # package has zero untagged files, so importing it into serve code
-          # fails the untagged `go build ./...` regardless of any -tags syntax.)
-          if grep -RnE -- '-tags[= ]*["'"'"']?[!A-Za-z0-9_, ]*\bcontrolplane\b' \
-               --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
-               . 2>/dev/null \
-               | grep -v '\.git/' \
-               | grep -v 'apps/controlplane/' \
-               | grep -v '.hanzo/workflows/cicd.yml:'; then
-            echo "::error::found a build/release invocation passing -tags controlplane — apps/controlplane's stub crypto must never enter a release/serve binary (see apps/controlplane/doc.go)"
-            hits=1
-          fi
-
-          if grep -RnE -- 'testing\.testBinary' \
-               --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
-               . 2>/dev/null \
-               | grep -v '.hanzo/workflows/cicd.yml:'; then
-            echo "::error::found a reference to testing.testBinary outside the Go toolchain itself — this is the linker var that spoofs testing.Testing() in a real (non go-test) binary; the containment.go runtime guard trusts that signal, so setting it anywhere in a real build path defeats it (see doc.go)"
-            hits=1
-          fi
-
-          if [ "$hits" -ne 0 ]; then exit 1; fi
-          echo "OK: no build/release path sets -tags controlplane or spoofs testing.Testing()"
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: go env for private modules
-        env:
-          GIT_TOKEN: ${{ github.token }}
-          GH_PAT: ${{ secrets.GH_PAT }}
-          # The client credential the run already holds. forge-rewrites.sh spends it on
-          # ONE short-lived token scoped to this forge when there is no per-job token —
-          # which is every run here, because this deployment issues none.
-          IAM_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
-          IAM_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
-          # Reached ONLY when the IAM identity has been asked and the forge served
-          # nothing by it — the bootstrap described in forge-rewrites.sh. Not a
-          # preference: IAM is asked first on every run, and when the release that
-          # stamps the forge's audience is live this stops being reached and comes out.
-          FALLBACK_TOKEN: ${{ secrets.FORGE_TOKEN }}
-        # GOPRIVATE names exactly the namespace that is private. github.com/hanzoai/*
-        # is: ai, account, commerce, orm, xorm, beego, csqlite and ~30 more are
-        # private repos, so they must resolve direct+authenticated and skip a sumdb
-        # that cannot see them. Everything else stays on the public proxy + checksum
-        # db, which is what makes a module hash immutable: zap-proto (all 55 repos)
-        # and luxfi (all 37 deps here) are public and proxy-served.
-        #
-        # OUR OWN MODULES RESOLVE FROM OUR OWN GIT.HANZO.AI. The module PATH stays
-        # github.com/hanzoai/* — that is the package's name, not its address — but
-        # the address git dials is git.hanzo.ai, which is canonical anyway.
-        #
-        # This is not a preference. Every release for nine consecutive commits was
-        # blocked because hanzoai/zen's GitHub collaborator list drifted from its
-        # sibling modules': the token could read ai, commerce, orm and account, and
-        # answered `Repository not found` for zen alone. A private repo denies and
-        # a missing repo denies with the same 404, so the build could not even say
-        # which had happened. Nothing about zen changed; an ACL beside it did, and
-        # it stopped the fleet.
-        #
-        # A checksum makes the substitution safe rather than merely convenient:
-        # Hanzo Git mirrors the same objects, so the fetched zip hashes to the h1: line
-        # already committed in go.sum. Hanzo Git serving different bytes would
-        # fail the build, loudly, instead of shipping them.
-        #
-        # GH_PAT remains the fallback for a module Hanzo Git has not mirrored.
-        run: |
-          set -euo pipefail
-          # PER REPO, because `insteadOf` is a rewrite and not a chain: one prefix
-          # rewrite means GitHub is never tried, so a single repo the forge denies
-          # takes the whole build down — which is what happened to hanzoai/zen on
-          # the forge exactly as it had happened to it on GitHub. The script asks
-          # this token, repo by repo, what the forge will actually serve and
-          # rewrites only those; everything else keeps the GitHub address it
-          # already has, and the script authenticates that host in the same
-          # job-local credential store — one file, both hosts, no second place
-          # for a credential to be written where git will not read it.
-          # See .hanzo/ci/forge-rewrites.sh.
-          bash .hanzo/ci/forge-rewrites.sh
-          {
-            echo "GOPRIVATE=github.com/hanzoai/*"
-            echo "GOPROXY=https://proxy.golang.org,direct"
-          } >> "$GITHUB_ENV"
-
-      - name: zen streaming-fix floor — go.mod must pin github.com/hanzoai/zen >= v1.4.1
-        # The SSE body-close fix (zen commit 50328b8, first released in zen v1.4.1)
-        # is what makes streaming completions return a body instead of an empty
-        # stream. A stale-branch merge that reverts go.mod's zen pin below the floor
-        # silently re-breaks streaming, and `next build`'s ignoreBuildErrors hides
-        # the runtime break — so no image may be cut on a regressed pin. This is the
-        # durable root-cause guard: it reads the EFFECTIVE module version (post-MVS,
-        # exactly what the build links) and fails the PR/push below the floor.
-        run: |
-          set -euo pipefail
-          FLOOR="v1.4.1"
-          V="$(go list -m -f '{{.Version}}' github.com/hanzoai/zen)"
-          echo "effective github.com/hanzoai/zen = ${V} (floor ${FLOOR})"
-          # semver-correct compare: the lowest of {V, FLOOR} under `sort -V` must be
-          # the FLOOR, i.e. V >= FLOOR. (sort -V orders v1.4.2 above v1.4.10 too.)
-          low="$(printf '%s\n%s\n' "$V" "$FLOOR" | sort -V | head -1)"
-          if [ "$low" != "$FLOOR" ]; then
-            echo "::error::github.com/hanzoai/zen is pinned at ${V}, below the streaming-fix floor ${FLOOR} — this re-breaks SSE streaming (empty completions). Re-pin zen to >= ${FLOOR} in go.mod before merging."
-            exit 1
-          fi
-          echo "OK: zen ${V} is at or above the streaming-fix floor ${FLOOR}"
-
-      - name: positive proof — apps/controlplane is unreachable from the default build
-        run: |
-          set -euo pipefail
-
-          # Containment is an IMPORT-GRAPH property, so prove it with the import
-          # graph. `go list -deps` reads the same untagged file set without
-          # linking, in seconds, and the gate job is the ONE place that builds.
-          for m in $(go list ./cmd/... ./plugin/...); do
-            if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/apps/controlplane'; then
-              echo "::error::$m links apps/controlplane into a real binary — containment breach"
-              exit 1
-            fi
-          done
-
-          out="$(go build ./apps/controlplane/... 2>&1 || true)"
-          if ! printf '%s' "$out" | grep -q 'matched no packages'; then
-            echo "::error::apps/controlplane built successfully WITHOUT -tags controlplane (containment breach): $out"
-            exit 1
-          fi
-
-          echo "OK: containment holds — apps/controlplane has zero buildable files by default and is linked into no cmd/ binary"
-
-  # ══ image ══ THE IMAGE. Publish bytes; name them only once they boot.
-  #
-  # Unchanged from deploy.yml apart from `needs:` and the resume probe. The
-  # version maxes over BOTH published image tags AND git tags: the registry is the
-  # authority on what has been USED (an orphaned build publishes an image and no
-  # tag, so git alone would re-emit a live tag) but a tag can also outlive its
-  # image, so neither is a superset. The smoke gate stays BEFORE the tag, which is
-  # what makes a tag a receipt for an image that booted.
   image:
-    needs: [gate, containment, review]
+    needs: [gate, review]
     # NAME WHAT IS REFUSED, NOT WHAT IS ALLOWED — because this job's ref is not
     # reliably knowable and its absence must not read as "no".
     #
@@ -1752,7 +1504,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Same private-module contract as the containment job, including the Hanzo Git
+      # The private-module contract, including the Hanzo Git
       # substitution: our own modules resolve from git.hanzo.ai (the canonical
       # address) with GitHub as the fallback, so one drifted GitHub ACL cannot
       # stop a release. go.sum still decides whether the bytes were right.
@@ -1824,33 +1576,16 @@ jobs:
   #
   # Pokes every client projection so a release, not a clock, is what moves them.
   #
-  # THIS USED TO POST TO api.github.com AND COULD NEVER WORK. It sent
-  # `repository_dispatch: spec-update` to nine repos on github.com, and those
-  # repos' workflows ask for `hanzo-build-linux-amd64` — a label only Hanzo Git's
-  # fleet carries. github.com has zero self-hosted runners of ours, so the events
-  # were ACCEPTED and ran nothing: twelve of them. The job then failed for want
-  # of a FLEET_DISPATCH_TOKEN, a classic PAT spanning six GitHub owners, which
-  # made a missing GitHub credential look like the blocker. It was not. The
-  # plane was wrong. CI here is native (.hanzo/workflows on git.hanzo.ai), and a
-  # GitHub credential cannot fix an estate that does not run there.
+  # Hanzo Git serves `workflow_dispatch`, not `repository_dispatch`, and every
+  # projection's own cicd.yml declares a bare `workflow_dispatch:` to receive it.
+  # The credential is GIT_TOKEN, the same one `image` uses to read this repo's
+  # tags.
   #
-  # Hanzo Git has no `repository_dispatch` — that is the wall the old shape hit —
-  # but it has `workflow_dispatch`, and the receivers already migrated to it:
-  # every projection's cicd.yml now declares a bare `workflow_dispatch:` and
-  # says so in its own comment. So this sends the verb Hanzo Git HAS, with the
-  # GIT_TOKEN image already uses to read this repo's tags. Verified against
-  # a live projection before it was written here: POST -> 204, and the run
-  # appears as event=workflow_dispatch, in_progress, on a runner.
-  #
-  # WHAT IS LOST, stated plainly: the old payload carried (version, sha,
-  # spec_sha256) and a projection refused on a digest mismatch. A bare
-  # workflow_dispatch carries none of it, so a projection regenerates from the
-  # spec at HEAD and nothing records which release it is a projection of. That
-  # trade was already made by the receivers when they migrated; this restores
-  # the missing half, which is that a RELEASE is what pokes them. Today the only
-  # thing moving them is a nightly `schedule:`, so a client is a day stale on
-  # average. Carrying the digest again means giving each projection a
-  # `workflow_dispatch.inputs` contract and sending it here.
+  # WHAT A BARE DISPATCH DOES NOT CARRY, stated plainly: no (version, sha,
+  # spec_sha256), so a projection regenerates from the spec at HEAD and records
+  # nothing about which release it is a projection of, and it cannot refuse on a
+  # digest mismatch. Carrying the digest again means giving each projection a
+  # `workflow_dispatch.inputs` contract and sending it from here.
   fanout:
     needs: [image, live, reach]
     runs-on: [hanzo-build-linux-amd64]

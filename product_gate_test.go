@@ -61,7 +61,7 @@ var unextracted = []string{
 	// off when the functionality moves to hanzoai/market or proves it belongs here.
 	"market",
 	"code", "coding", "company", "compliance", "connectorruntime", "content",
-	"controlplane", "crawl", "crm", "cron", "dataset", "graph",
+	"crawl", "crm", "cron", "dataset", "graph",
 	"destination", "domain", "entitlement", "erp", "esign", "exec",
 	"experiment", "explorer", "finance", "fleet", "flow", "goja", "guide",
 	"help", "index", "integrations", "k8s", "knowledge",

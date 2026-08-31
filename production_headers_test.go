@@ -81,7 +81,7 @@ func TestProductionHeaders_WiredWithBrandRegistry(t *testing.T) {
 // resolves CLOUD_VERSION first, then the operator-set HANZO_VERSION, then the
 // link-time cloud.Version default. It exercises the sourcing directly rather
 // than LoadConfig, which registers process-global flags and must not be called
-// twice (see config_controlplane_test.go).
+// twice.
 //
 // The HANZO_VERSION rung is what makes a rollout verifiable: the operator sets
 // it on every container from the image tag it rendered, so a pod reports the
