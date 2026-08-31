@@ -137,7 +137,6 @@ func Intended(c *zip.Ctx) error {
 		// same-site (a sibling subdomain) and cross-site.
 		return zip.ErrForbidden(Unasked + " (CSRF): the browser says this came from another site")
 	}
-	return nil
 }
 
 // Unasked is the stem of every refusal this control speaks, and it is exported
