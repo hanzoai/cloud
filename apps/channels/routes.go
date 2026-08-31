@@ -572,7 +572,7 @@ func (o ops) pairingApprove(ctx context.Context, in *approvePairingIn) (*pairing
 
 // allowlistRef names the channel whose access policy to read.
 type allowlistRef struct {
-	// Channel is the transport to read: discord, slack, teams, telegram or whatsapp.
+	// Channel is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp.
 	// Required; an unknown value is a 404.
 	Channel string `json:"channel"`
 }
@@ -617,7 +617,7 @@ func (o ops) allowlistGet(ctx context.Context, in *allowlistRef) (*allowlistView
 // taken a policy there — without the opt-out `?dmPolicy=open` would open an
 // org's DMs from a URL.
 type allowlistPutIn struct {
-	// Channel is the transport to edit: discord, slack, teams, telegram or whatsapp.
+	// Channel is the transport to edit: discord, github, linear, slack, teams, telegram or whatsapp.
 	// Required; an unknown value is a 404.
 	Channel string `json:"channel" url:"-"`
 	// DMPolicy sets how direct messages are admitted: "pairing" (a person must be
@@ -782,7 +782,7 @@ func init() {
 	openapi.Describe("/v1/channels/:channel/send", http.MethodPost,
 		"Send a message from your org's bot to one chat room",
 		"Delivers text, attachments and actions to one room on a connected chat transport — "+
-			"discord, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the "+
+			"discord, github, linear, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the "+
 			"`messageId` it assigned and the Unix second it landed. An unknown channel is a 404.\n\n"+
 			"The body is the envelope's NARROW outbound projection: `room`, `text`, `attachments`, "+
 			"`actions`, `replyTo` and `idempotency`, and nothing else. Identity is not a field — the "+

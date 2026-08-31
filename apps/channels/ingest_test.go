@@ -282,6 +282,28 @@ func spyDiscord(t *testing.T) *doorRec {
 	return rec
 }
 
+func spyGitHub(t *testing.T) *doorRec {
+	t.Helper()
+	rec := &doorRec{id: "gh-c-1"}
+	saved := githubDoor
+	githubDoor = func(_ context.Context, org, room, text string) (string, error) {
+		return rec.hit(doorCall{org: org, room: room, text: text})
+	}
+	t.Cleanup(func() { githubDoor = saved })
+	return rec
+}
+
+func spyLinear(t *testing.T) *doorRec {
+	t.Helper()
+	rec := &doorRec{id: "ln-c-1"}
+	saved := linearDoor
+	linearDoor = func(_ context.Context, org, room, text string) (string, error) {
+		return rec.hit(doorCall{org: org, room: room, text: text})
+	}
+	t.Cleanup(func() { linearDoor = saved })
+	return rec
+}
+
 func spyWhatsApp(t *testing.T) *doorRec {
 	t.Helper()
 	rec := &doorRec{id: "wamid.1"}

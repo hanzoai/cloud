@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -30,8 +31,19 @@ const (
 // githubIssueEvent is the slice of GitHub's `issues` / `issue_comment` webhook
 // payloads we mirror — both carry issue + repository + installation.
 type githubIssueEvent struct {
-	Action     string      `json:"action"`
-	Issue      githubIssue `json:"issue"`
+	Action string      `json:"action"`
+	Issue  githubIssue `json:"issue"`
+	// Comment is set on `issue_comment` events: the body a turn reads and the
+	// account that wrote it. A Bot never addresses the agent.
+	Comment struct {
+		ID   int64  `json:"id"`
+		Body string `json:"body"`
+		User struct {
+			ID    int64  `json:"id"`
+			Login string `json:"login"`
+			Type  string `json:"type"`
+		} `json:"user"`
+	} `json:"comment"`
 	Repository struct {
 		Name     string `json:"name"`
 		FullName string `json:"full_name"`
@@ -111,7 +123,7 @@ func mirrorGitHubIssue(ctx context.Context, org, repo, fullName string, is githu
 // comment carries the issue's current state, so both events re-sync the one row). It
 // ALWAYS answers a benign 200 for a no-op (PR, no installation, unknown org) so
 // GitHub does not retry-storm; only a sink failure is a 502.
-func handleGitHubIssueEvent(c *zip.Ctx, body []byte) error {
+func handleGitHubIssueEvent(s *cloud.Service[state], c *zip.Ctx, body []byte) error {
 	var ev githubIssueEvent
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return zip.ErrBadRequest("invalid issue payload")
@@ -132,6 +144,14 @@ func handleGitHubIssueEvent(c *zip.Ctx, body []byte) error {
 	created, err := mirrorGitHubIssue(c.Context(), org, ev.Repository.Name, ev.Repository.FullName, ev.Issue)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "mirror issue: %v", err)
+	}
+	// A comment that addresses the App is a turn: the issue is the room, the
+	// commenter the sender, the installation the account (github.go in channels).
+	if in, ok := githubMentionInbound(ev); ok {
+		if !emitIngress(c.Context(), s, org, in, "") {
+			return zip.Errorf(http.StatusTooManyRequests, "github comment not taken; please redeliver")
+		}
+		return c.JSON(http.StatusOK, map[string]any{"mirrored": true, "created": created, "turn": true, "action": ev.Action})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"mirrored": true, "created": created, "action": ev.Action})
 }
@@ -284,4 +304,57 @@ func (o ops) githubIssuesBackfill(ctx context.Context, in *githubBackfillIn) (*g
 	o.s.Log.Info("github issues backfill", "org", org, "repos", out.Repos, "issues", out.Issues,
 		"created", out.Created, "updated", out.Updated, "failed", out.Failed, "truncated", out.Truncated)
 	return &out, nil
+}
+
+// githubMentionInbound turns a created issue comment that addresses the App —
+// `@<app slug>` as a whole word — into the normalized inbound. A comment by a
+// Bot account is never a turn, which is also what keeps the App's own replies
+// from re-entering.
+func githubMentionInbound(ev githubIssueEvent) (Inbound, bool) {
+	if ev.Action != "created" || ev.Comment.ID == 0 || ev.Comment.User.Type == "Bot" {
+		return Inbound{}, false
+	}
+	slug := strings.TrimSpace(os.Getenv(githubAppSlugEnv))
+	if slug == "" {
+		return Inbound{}, false
+	}
+	text, ok := stripMention(ev.Comment.Body, "@"+slug)
+	if !ok {
+		return Inbound{}, false
+	}
+	return Inbound{
+		Provider: "github", ExternalID: strconv.FormatInt(ev.Installation.ID, 10),
+		User:    strconv.FormatInt(ev.Comment.User.ID, 10),
+		Channel: strings.TrimSpace(ev.Repository.FullName) + "#" + strconv.Itoa(ev.Issue.Number),
+		Text:    text, DedupeKey: "issue_comment:" + strconv.FormatInt(ev.Comment.ID, 10),
+	}, true
+}
+
+// githubIssueComment posts one comment on "owner/repo#N" through the org's
+// installation for that owner and returns the comment id.
+func githubIssueComment(ctx context.Context, org, room, text string) (string, error) {
+	fullName, num, ok := strings.Cut(room, "#")
+	owner, repo, ok2 := strings.Cut(fullName, "/")
+	n, err := strconv.Atoi(num)
+	if !ok || !ok2 || err != nil || n <= 0 || owner == "" || repo == "" {
+		return "", fmt.Errorf("integrations: github room %q is not owner/repo#N", room)
+	}
+	tok, err := InstallationToken(ctx, org, owner)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(map[string]string{"body": text})
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", strings.TrimRight(githubAPIBase, "/"), owner, repo, n)
+	code, raw, _, err := githubCall(ctx, tok, http.MethodPost, endpoint, body)
+	if err != nil {
+		return "", err
+	}
+	if code/100 != 2 {
+		return "", fmt.Errorf("github http %d: %s", code, truncateBody(raw))
+	}
+	var out struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(raw, &out)
+	return strconv.FormatInt(out.ID, 10), nil
 }

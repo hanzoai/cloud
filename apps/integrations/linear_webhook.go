@@ -110,7 +110,73 @@ func linearWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"mirrored": true, "created": created, "action": ev.Action})
 	case "Comment":
 		fireTrigger(c.Context(), org, "linear", name, dedupe, 0, payload)
+		if in, ok := linearMentionInbound(ev); ok {
+			if !emitIngress(c.Context(), s, org, in, "") {
+				return zip.Errorf(http.StatusTooManyRequests, "linear comment not taken; please redeliver")
+			}
+			return c.JSON(http.StatusOK, map[string]any{"triggered": true, "turn": true, "action": ev.Action})
+		}
 		return c.JSON(http.StatusOK, map[string]any{"triggered": true, "action": ev.Action})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"ignored": "event"})
+}
+
+// linearComment is the slice of a Comment delivery a turn needs.
+type linearComment struct {
+	ID      string `json:"id"`
+	Body    string `json:"body"`
+	IssueID string `json:"issueId"`
+	UserID  string `json:"userId"`
+	User    struct {
+		ID string `json:"id"`
+	} `json:"user"`
+}
+
+// linearMentionInbound turns a created comment that addresses @hanzo into the
+// normalized inbound the channels transport reads: the issue is the room, the
+// commenter is the sender, the organization is the account. A reply this
+// platform posts never carries the mention, so it never re-enters here.
+func linearMentionInbound(ev linearEvent) (Inbound, bool) {
+	if ev.Action != "create" {
+		return Inbound{}, false
+	}
+	var cm linearComment
+	if err := json.Unmarshal(ev.Data, &cm); err != nil || cm.ID == "" || cm.IssueID == "" {
+		return Inbound{}, false
+	}
+	text, ok := stripMention(cm.Body, linearMention)
+	if !ok {
+		return Inbound{}, false
+	}
+	return Inbound{
+		Provider: "linear", ExternalID: ev.OrganizationID,
+		User:    firstNonEmpty(cm.UserID, cm.User.ID),
+		Channel: cm.IssueID, Text: text, DedupeKey: "comment:" + cm.ID,
+	}, true
+}
+
+// stripMention reports whether text addresses mention (case-insensitively, as
+// a whole word) and returns the text with the first occurrence removed.
+func stripMention(text, mention string) (string, bool) {
+	lower := strings.ToLower(text)
+	m := strings.ToLower(mention)
+	i := strings.Index(lower, m)
+	for i >= 0 {
+		end := i + len(m)
+		before := i == 0 || !isWordByte(lower[i-1])
+		after := end == len(lower) || !isWordByte(lower[end])
+		if before && after {
+			return strings.TrimSpace(text[:i] + text[end:]), true
+		}
+		j := strings.Index(lower[end:], m)
+		if j < 0 {
+			break
+		}
+		i = end + j
+	}
+	return "", false
+}
+
+func isWordByte(b byte) bool {
+	return b == '_' || b == '-' || (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }

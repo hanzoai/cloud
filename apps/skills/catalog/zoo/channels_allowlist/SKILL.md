@@ -20,7 +20,7 @@ Bearer JWT issued by Zoo IAM (OIDC issuer `https://zoolabs.id`). Send it as `Aut
 
 | Name | In | Required | Type | Description |
 |---|---|---|---|---|
-| `channel` | query | no | string | Channel is the transport to read: discord, slack, teams, telegram or whatsapp. Required; an unknown value is a 404. |
+| `channel` | query | no | string | Channel is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp. Required; an unknown value is a 404. |
 
 ## Response
 
