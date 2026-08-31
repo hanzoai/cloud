@@ -2,8 +2,11 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"cmp"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -77,16 +80,71 @@ func (c *iamClient) postForm(ctx context.Context, endpoint string, form url.Valu
 	return &tr, nil
 }
 
-// passwordGrant exchanges username+password for a token (the live IAM client
-// supports password grant; device_code is hard-rejected server-side).
-func (c *iamClient) passwordGrant(ctx context.Context, username, password, scope string) (*tokenResp, error) {
-	return c.postForm(ctx, "/v1/iam/oauth/token", url.Values{
-		"grant_type": {"password"},
-		"client_id":  {c.clientID},
-		"username":   {username},
-		"password":   {password},
-		"scope":      {scope},
+// codeLogin signs a person in with their username and password the way the IdP's
+// own sign-in page does: POST /v1/iam/login with type=code mints a PKCE-bound
+// authorization code for this public client, and the token endpoint exchanges it
+// with the verifier. IAM refuses the password grant to a public client — that
+// grant would make every public client_id a credential-stuffing oracle — so this
+// is the ONE credentialed path a CLI without a secret has. The code is bound to
+// the registered loopback redirect, which nothing here ever listens on: the code
+// arrives in the login response, not on the wire.
+func (c *iamClient) codeLogin(ctx context.Context, org, username, password, scope string) (*tokenResp, error) {
+	verifier, challenge, err := pkce()
+	if err != nil {
+		return nil, err
+	}
+	const redirect = "http://127.0.0.1/callback"
+	form, err := json.Marshal(map[string]string{
+		"type": "code", "username": username, "password": password,
+		"application": c.clientID, "organization": org, "clientId": c.clientID,
+		"redirectUri": redirect, "responseType": "code", "scope": scope,
+		"codeChallenge": challenge, "codeChallengeMethod": "S256",
 	})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.issuer+"/v1/iam/login", bytes.NewReader(form))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "hanzo-cli")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var out struct {
+		Status string `json:"status"`
+		Msg    string `json:"msg"`
+		Data   string `json:"data"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil || out.Status != "ok" || out.Data == "" {
+		msg := strings.TrimSpace(out.Msg)
+		if msg == "" {
+			msg = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return nil, fmt.Errorf("iam /v1/iam/login: %s", msg)
+	}
+	return c.postForm(ctx, "/v1/iam/oauth/token", url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {c.clientID},
+		"code":          {out.Data},
+		"redirect_uri":  {redirect},
+		"code_verifier": {verifier},
+	})
+}
+
+// pkce returns a fresh RFC 7636 verifier and its S256 challenge.
+func pkce() (verifier, challenge string, err error) {
+	raw := make([]byte, 48)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	verifier = base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(verifier))
+	return verifier, base64.RawURLEncoding.EncodeToString(sum[:]), nil
 }
 
 // refreshGrant exchanges a refresh token for a fresh access token.
@@ -168,7 +226,7 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 		// Paste an externally-minted token. Decode claims for identity.
 		creds = credsFromToken(&tokenResp{AccessToken: lf.token, TokenType: "Bearer"})
 	case lf.username != "" || lf.passwordStdin:
-		// Password grant — kept for automation (--username/--password-stdin).
+		// Username + password, through the IdP's own sign-in call (codeLogin).
 		username := lf.username
 		if username == "" {
 			u, err := prompt(cmd, "Email: ")
@@ -182,7 +240,10 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 			return err
 		}
 		iam := newIAMClient(env.IAMIssuer, env.ClientID)
-		tr, err := iam.passwordGrant(cmd.Context(), username, password, lf.scope)
+		// The organization is the tenant the account lives in — the brand's own
+		// for a brand portal. --org names it; the default is the org this
+		// deployment's issuer serves.
+		tr, err := iam.codeLogin(cmd.Context(), cmp.Or(env.Org, defaultOrg), username, password, lf.scope)
 		if err != nil {
 			return err
 		}
@@ -234,10 +295,9 @@ func newLoginCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 		Long: "Authenticate against Hanzo IAM (hanzo.id) and store the token in\n" +
 			"~/.hanzo/credentials.json (mode 0600). Default is the device flow: scan the\n" +
 			"QR (or open the link) from any signed-in device and approve — no password\n" +
-			"touches this terminal, works over ssh/headless. For automation use --token:\n" +
-			"the password grant needs a client secret, and this CLI is a public client\n" +
-			"that holds none. --username/--password-stdin therefore only work against a\n" +
-			"confidential --client-id. --token stores an externally-minted\n" +
+			"touches this terminal, works over ssh/headless. --username with\n" +
+			"--password-stdin signs in with a password the way the IdP's own page does\n" +
+			"(a PKCE code, no client secret) — for automation. --token stores an externally-minted\n" +
 			"token; --platform-token stores the platform control-plane service token\n" +
 			"needed by apps/deploy/clusters.",
 		Args: cobra.NoArgs,
