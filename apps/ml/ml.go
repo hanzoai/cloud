@@ -65,6 +65,10 @@ import (
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -380,8 +384,23 @@ func predict(s *cloud.Service[state], c *zip.Ctx) error {
 		model = name
 	}
 	target := strings.TrimRight(addr, "/") + "/v2/models/" + model + "/infer"
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, target, bytes.NewReader(c.Body()))
+
+	// The span opens here, after the model is resolved and immediately before the
+	// call it measures, so it times the inference rather than the lookup that chose
+	// it. It carries no gen_ai attributes: this is the kserve v2 inference protocol,
+	// which has no prompt and no tokens, and the llmobs views select on gen_ai.system
+	// — a predictor admitted there would be read as a chat model that answered nothing.
+	ctx, span := tracer().Start(c.Context(), "ml.infer", trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("ml.model", model),
+			attribute.String("ml.namespace", ns),
+		))
+	defer span.End()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(c.Body()))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "build request")
 		return zip.Errorf(http.StatusInternalServerError, "build predict request: %v", err)
 	}
 	ct := c.Header("Content-Type")
@@ -392,15 +411,29 @@ func predict(s *cloud.Service[state], c *zip.Ctx) error {
 	req.Header.Set("Accept", "application/json")
 	resp, err := s.State.hc.Do(req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "data plane unreachable")
 		return zip.Errorf(http.StatusBadGateway, "predict: model data plane unreachable: %v", err)
 	}
 	defer resp.Body.Close()
+	// The predictor's own status travels back to the caller untouched, so it is the
+	// span's outcome too: an inference the model refused is a failure here, not a
+	// success that happens to carry an error body.
+	span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
+	if resp.StatusCode >= http.StatusBadRequest {
+		span.SetStatus(codes.Error, http.StatusText(resp.StatusCode))
+	}
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, predictBodyCap))
 	if respCT := resp.Header.Get("Content-Type"); respCT != "" {
 		c.SetHeader("Content-Type", respCT)
 	}
 	return c.Bytes(resp.StatusCode, rb)
 }
+
+// tracer is a function rather than a package-level var because a var is evaluated at
+// init, before the composition root installs the global provider — every span built
+// from one would be a no-op recorded nowhere.
+func tracer() trace.Tracer { return otel.Tracer("hanzo.ai/cloud/ml") }
 
 // health is a REAL probe: it verifies the API server is reachable, that the
 // subsystem's CRDs are served, and — where the plane has one — that it holds the
