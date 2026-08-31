@@ -59,6 +59,10 @@ const (
 	// and a refresh token minted under one id was later presented under another.
 	// Override with `--client-id` / HANZO_CLIENT_ID / config.
 	defaultClientID = "hanzo-cli"
+	// defaultOrg is the tenant a credentialed sign-in resolves the account in when
+	// --org / HANZO_ORG / config say nothing: the brand the default issuer serves.
+	// A white-label deployment names its issuer and its org together.
+	defaultOrg = "hanzo"
 )
 
 // IsControlVerb reports whether sub names a command this binary serves, and so
