@@ -963,6 +963,18 @@
    "doc": "Edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404."
   }
  ],
+ "ci": [
+  {
+   "id": "get_ci_fleet",
+   "doc": "Compares what was written with what is running, one row per service\nalong a single causal line: head, the commit on the branch; built, the image\nthat commit produced; declared, the tag pinned in the universe repository;\nrunning, what the cluster serves. A service whose four values disagree names\nthe step that broke.",
+   "read": true
+  },
+  {
+   "id": "get_ci_runs",
+   "doc": "Lists recent builds: the repo, the branch, the commit and how each run\nended, newest first. A run names a repo, a branch and an actor, so the list is\nnever wider than the caller — a SuperAdmin sees the fleet, an org member sees\nonly its own org.",
+   "read": true
+  }
+ ],
  "cloudflare": [
   {
    "id": "delete_cloudflare_d1_databases_by_database",

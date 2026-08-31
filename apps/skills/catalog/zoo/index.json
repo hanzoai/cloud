@@ -121,6 +121,11 @@
       "skill_count": 5
     },
     {
+      "name": "ci",
+      "path": "_ci/index.json",
+      "skill_count": 2
+    },
+    {
       "name": "cloudflare",
       "path": "_cloudflare/index.json",
       "skill_count": 6
@@ -596,7 +601,7 @@
       "skill_count": 1
     }
   ],
-  "skill_count": 679,
+  "skill_count": 681,
   "skills": [
     {
       "description": "Read account appearance: Returns the signed-in caller's own appearance preference — text size, density and accent — read from their IAM account so it is the same on every device and every Zoo surface..",
@@ -1808,6 +1813,20 @@
       "path": "channels_pairing/SKILL.md",
       "service": "channels",
       "sha256": "9f31ced3571b99d6693f4617767c43e3954ab783ec194648e43a125abb9195d4"
+    },
+    {
+      "description": "Read ci fleet: Compares what was written with what is running, one row per service along a single causal line: head, the commit on the branch; built, the image that commit produced; declared, the tag pinned in the universe repository; running, what the cluster serves..",
+      "name": "ci_fleet",
+      "path": "ci_fleet/SKILL.md",
+      "service": "ci",
+      "sha256": "1c0b95c5793af2f036007dbb2b2bcf63ad3628e548314a779b218736043da63f"
+    },
+    {
+      "description": "Read ci runs: Lists recent builds: the repo, the branch, the commit and how each run ended, newest first..",
+      "name": "ci_runs",
+      "path": "ci_runs/SKILL.md",
+      "service": "ci",
+      "sha256": "9b045619d20299fd6f35a5b3df9a9cbfb2327f511b3729f2cc8b32c9ea6089c4"
     },
     {
       "description": "Read cloudflare d1: Lists the D1 databases on the org's Cloudflare account..",
