@@ -53,6 +53,7 @@ require (
 	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zip v1.36.16
 	golang.org/x/term v0.45.0
+	hanzo.ai/ci v1.0.101
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
@@ -125,7 +126,6 @@ require (
 	go.opentelemetry.io/collector/service v0.144.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	hanzo.ai/ci v1.0.101 // indirect
 	k8s.io/apiserver v0.36.2 // indirect
 	k8s.io/cli-runtime v0.36.2 // indirect
 	k8s.io/component-base v0.36.2 // indirect

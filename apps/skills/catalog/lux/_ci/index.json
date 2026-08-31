@@ -1,0 +1,30 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "plugin/gen-skills",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "mcp": {
+    "description": "Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, protocol revision 2026-07-28. tools/list answers without a credential with one tool per subsystem (its operations in the \"op\" enum) plus \"describe\", which returns one operation's input schema. tools/call names a subsystem tool and carries {\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST API does, and a call that carries none is answered 401 with a WWW-Authenticate header naming the resource metadata at /.well-known/oauth-protected-resource, which names the authorization server to sign in at. The tool surface is the public contract: the operator's admin product is not offered, and a name that would disclose a secret or mutate an identity is withheld — the list says how many, under _meta.",
+    "method": "POST",
+    "url": "https://api.lux.network/v1/mcp"
+  },
+  "skill_count": 2,
+  "skills": [
+    {
+      "description": "Read ci fleet: Compares what was written with what is running, one row per service along a single causal line: head, the commit on the branch; built, the image that commit produced; declared, the tag pinned in the universe repository; running, what the cluster serves..",
+      "name": "ci_fleet",
+      "path": "ci_fleet/SKILL.md",
+      "service": "ci",
+      "sha256": "b2d951cbaedfb374e91495c51cf1b196d39270b4412948c472a7667416560cbb"
+    },
+    {
+      "description": "Read ci runs: Lists recent builds: the repo, the branch, the commit and how each run ended, newest first..",
+      "name": "ci_runs",
+      "path": "ci_runs/SKILL.md",
+      "service": "ci",
+      "sha256": "1f0953c6d661547acb814fa65dae740b62c95a0d9d9b43612bc768ff5674c85b"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
