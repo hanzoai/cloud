@@ -330,6 +330,13 @@ var Apps = []App{
 	// endpoint is retired (retiredDoors, apps/event/doors_test.go). /v1/todo is NOT here
 	// and never was: the todo product owns that name.
 	{Name: "event", Prefixes: []string{"/v1/event"}},
+	// The CI half of the delivery plane, beside /v1/deploy and /v1/git. It
+	// answers head ─build─▶ built ─pin─▶ declared ─reconcile─▶ running, a line
+	// that spans all three, so it belongs on the same host and the same identity
+	// rather than behind a gate of its own — where a valid hanzo.id bearer got a
+	// bare 401. The surface itself stays in hanzo.ai/ci, which is deployed
+	// standalone too; apps/ci mounts it rather than forking it.
+	{Name: "ci", Prefixes: []string{"/v1/ci"}},
 	{Name: "git", Prefixes: []string{"/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},
 	{Name: "visor", Prefixes: []string{"/v1/visor"}},

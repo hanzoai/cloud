@@ -784,6 +784,13 @@ components:
         workflow:
           type: string
       type: object
+    Artifact:
+      properties:
+        digest:
+          type: string
+        tag:
+          type: string
+      type: object
     AskAnswer:
       properties:
         answer:
@@ -2714,6 +2721,42 @@ components:
           items:
             type: string
           type: array
+      type: object
+    Check:
+      properties:
+        at:
+          format: date-time
+          type: string
+        job:
+          description: |-
+            Job is the job that decided State. A run reports one conclusion for
+            however many jobs it holds, and the jobs are not interchangeable: the
+            pipeline fails at `gate` before it builds anything and at `receipt` after
+            it has already built, pinned and proved the release live. Both read
+            `failure` on the run, and only the first one means nothing shipped.
+          type: string
+        number:
+          type: integer
+        state:
+          description: |-
+            State is success | failure | running | absent. `absent` is not a kind of
+            failure and is kept apart from one: a failing run is a build that ran and
+            said no, while an absent run is Hanzo Git never having constructed a run
+            for the commit at all — a workflow it cannot parse or a reference it
+            cannot resolve. There is no log to open for the second, so a page that
+            draws them the same sends you looking for one that does not exist.
+          type: string
+        tested:
+          description: |-
+            Tested reports that the run's tests executed; Verdict reports that the run
+            said anything about tests at all. They are separate because the interesting
+            case is a run that passed while its test step was skipped — a green build
+            that proved nothing — and that is invisible if the two are one flag.
+          type: boolean
+        url:
+          type: string
+        verdict:
+          type: boolean
       type: object
     Citation:
       properties:
@@ -4876,6 +4919,69 @@ components:
           description: Stdout is everything the command wrote to standard output,
             as text.
           type: string
+      type: object
+    Execution:
+      properties:
+        actor:
+          type: string
+        branch:
+          type: string
+        conclusion:
+          type: string
+        endedAt:
+          format: date-time
+          type: string
+        event:
+          type: string
+        id:
+          type: integer
+        number:
+          type: integer
+        org:
+          type: string
+        repo:
+          type: string
+        sha:
+          type: string
+        startedAt:
+          format: date-time
+          type: string
+        status:
+          description: |-
+            Status and Conclusion are BOTH required to know how a run went, and
+            reading only one is wrong in a way that looks fine. Status answers
+            "is it over" (queued | in_progress | completed); Conclusion answers
+            "how did it end" and is empty until it is over. A view that buckets on
+            Status alone sees `completed` and cannot tell a pass from a failure, so
+            it draws every finished run — successes and cancellations included — the
+            same way.
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+        workflow:
+          type: string
+      type: object
+    Executions:
+      properties:
+        fetchedAt:
+          format: date-time
+          type: string
+        orgs:
+          items:
+            type: string
+          type: array
+        repos:
+          type: integer
+        runs:
+          items:
+            $ref: '#/components/schemas/Execution'
+          type: array
+        sourceErr:
+          type: string
+        stale:
+          type: boolean
       type: object
     Experiment:
       properties:
@@ -9105,6 +9211,73 @@ components:
           type: string
         status:
           type: string
+      type: object
+    Pipeline:
+      properties:
+        behind:
+          description: |-
+            Behind counts commits after the one that last produced an image whose own
+            build has FINISHED without producing one, and Since is when the oldest of
+            them landed. A commit still building is not counted, so a push in flight is
+            not drift and a service appears here only once something has actually
+            stopped without shipping. How long that has stood is the number worth
+            acting on; that it is true says nothing about whether anyone should move.
+          type: integer
+        built:
+          $ref: '#/components/schemas/Artifact'
+        declared:
+          $ref: '#/components/schemas/Artifact'
+        drift:
+          items:
+            type: string
+          type: array
+        head:
+          $ref: '#/components/schemas/Tip'
+        image:
+          description: ghcr.io/hanzoai/cloud
+          type: string
+        name:
+          description: cloud
+          type: string
+        namespace:
+          description: hanzo
+          type: string
+        org:
+          description: Hanzo Git owner; empty when the repo is unresolved
+          type: string
+        pinnedAt:
+          format: date-time
+          type: string
+        ready:
+          type: integer
+        repo:
+          description: hanzo-inc/cloud
+          type: string
+        running:
+          $ref: '#/components/schemas/Artifact'
+        since:
+          format: date-time
+          type: string
+        want:
+          type: integer
+      type: object
+    Pipelines:
+      properties:
+        fetchedAt:
+          format: date-time
+          type: string
+        orgs:
+          items:
+            type: string
+          type: array
+        services:
+          items:
+            $ref: '#/components/schemas/Pipeline'
+          type: array
+        sourceErr:
+          type: string
+        stale:
+          type: boolean
       type: object
     PnL:
       properties:
@@ -14004,6 +14177,18 @@ components:
           type: string
         start:
           description: Start is the window's inclusive lower bound, RFC3339 UTC.
+          type: string
+      type: object
+    Tip:
+      properties:
+        at:
+          format: date-time
+          type: string
+        build:
+          $ref: '#/components/schemas/Check'
+        sha:
+          type: string
+        title:
           type: string
       type: object
     Token:
@@ -57901,6 +58086,59 @@ components:
             type: string
           type: array
       type: object
+    teamMessage:
+      properties:
+        author:
+          description: |-
+            Author is the team account uuid that wrote it. It is an ACCOUNT and not a
+            display name: what to call somebody is the roster's answer, and copying it
+            onto every message is how the two come to disagree. An agent's messages
+            carry the account derived from its id, so the same field answers for both.
+          type: string
+        createdOn:
+          description: CreatedOn is unix MILLIseconds, which is what the platform
+            stamps.
+          type: integer
+        id:
+          description: ID is the message document's own id.
+          type: string
+        room:
+          description: |-
+            Room is the room it was said in — the same id the room listing answers
+            with, so a caller holding a message can name its room without a second read.
+          type: string
+        text:
+          description: |-
+            Text is the message as PLAIN TEXT. The document stores markup; this is the
+            same `plainText` reduction the agent responder reads a prompt with, so a
+            caller never has to parse the client's markup to know what was said.
+          type: string
+      type: object
+    teamMessageWrite:
+      properties:
+        id:
+          description: ID is the room to say it in, from the path.
+          type: string
+        space:
+          description: |-
+            Space names the space holding the room. Body-only: a query string may not
+            redirect a write.
+          type: string
+        text:
+          description: |-
+            Text is what to say, as plain text. It is wrapped in the client's markup on
+            the way in, so a caller writes words rather than HTML.
+          type: string
+      type: object
+    teamMessages:
+      properties:
+        messages:
+          description: Messages are the room's, oldest first, at most `messageMax`
+            of them.
+          items:
+            $ref: '#/components/schemas/teamMessage'
+          type: array
+      type: object
     teamRoom:
       properties:
         archived:
@@ -80675,6 +80913,53 @@ paths:
       - ai
       x-app: ai
       x-public: true
+  /v1/ci/fleet:
+    get:
+      description: |-
+        Compares what was written with what is running, one row per service
+        along a single causal line: head, the commit on the branch; built, the image
+        that commit produced; declared, the tag pinned in the universe repository;
+        running, what the cluster serves. A service whose four values disagree names
+        the step that broke.
+      operationId: get_ci_fleet
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipelines'
+          description: ok
+      summary: 'Compares what was written with what is running, one row per service
+        along a single causal line: head, the commit on the branch; built, the image
+        that commit produced; declared, the tag pinned in the universe repository;
+        running, what the cluster serves.'
+      tags:
+      - ci
+      x-app: ci
+      x-public: true
+      x-tool: true
+  /v1/ci/runs:
+    get:
+      description: |-
+        Lists recent builds: the repo, the branch, the commit and how each run
+        ended, newest first. A run names a repo, a branch and an actor, so the list is
+        never wider than the caller — a SuperAdmin sees the fleet, an org member sees
+        only its own org.
+      operationId: get_ci_runs
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Executions'
+          description: ok
+      summary: 'Lists recent builds: the repo, the branch, the commit and how each
+        run ended, newest first.'
+      tags:
+      - ci
+      x-app: ci
+      x-public: true
+      x-tool: true
   /v1/cloudflare/ai/run/{wildcard1}:
     post:
       description: |-
@@ -131071,6 +131356,83 @@ paths:
       x-app: team
       x-public: true
       x-tool: true
+  /v1/team/rooms/{id}/messages:
+    get:
+      description: |-
+        Returns the tail of one room's conversation, oldest first.
+
+        It reads the SAME Chunter documents the transactor serves, so a message typed
+        in the Team client is here with no sync. A room the caller's org does not own
+        answers 404 rather than 403, so a probe learns nothing about what exists.
+      operationId: get_team_rooms_by_id_messages
+      parameters:
+      - description: ID is the room, from the path. The URL is the authority.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: |-
+          Space names the space holding the room, and is required for the reason the
+          bind op requires it: a room id is unique within a space and not across the
+          org, so searching every space for a match would make the answer depend on
+          iteration order.
+        in: query
+        name: space
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/teamMessages'
+          description: ok
+      summary: Returns the tail of one room's conversation, oldest first.
+      tags:
+      - team
+      x-app: team
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Says one thing in a room, as the caller.
+
+        The write goes through the SAME applyTx path the Team client's own messages
+        take and is broadcast to every connected client of the space, so a message
+        sent here appears live in an open room rather than on the next reload. It
+        answers the message as the store now HOLDS it.
+      operationId: post_team_rooms_by_id_messages
+      parameters:
+      - description: ID is the room to say it in, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              space: 0e3c…
+              text: deploying now
+            schema:
+              $ref: '#/components/schemas/teamMessageWrite'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/teamMessage'
+          description: created
+      summary: Says one thing in a room, as the caller.
+      tags:
+      - team
+      x-app: team
+      x-public: true
+      x-tool: true
   /v1/team/transactor/{token}:
     get:
       description: |-
@@ -136185,6 +136547,8 @@ tags:
 - description: Package channels is one inbox for the chat apps you connect — Discord,
     Slack, Teams, Telegram.
   name: channels
+- description: Package ci mounts the CI fleet dashboard as a capability of this binary.
+  name: ci
 - description: 'Package cloudflare is your Cloudflare account, managed from Hanzo:
     zones, Pages, Workers, Workers AI, R2, KV and D1.'
   name: cloudflare
