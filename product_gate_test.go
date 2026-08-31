@@ -55,7 +55,7 @@ var unwired = []string{
 var unextracted = []string{
 	"admission", "ad", "affiliate", "agents", "allowance", "answer", "ask",
 	"auditlog", "author", "auto", "benchmark", "blueprint", "books",
-	"campaign", "catalog", "channels", "cloudflare", "cms",
+	"campaign", "catalog", "channels", "ci", "cloudflare", "cms",
 	// market reads an exchange's public surface and holds no repo of its own yet.
 	// The pin says so on purpose: it is unextracted, not forgotten, and it comes
 	// off when the functionality moves to hanzoai/market or proves it belongs here.
