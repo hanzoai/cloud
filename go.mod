@@ -80,7 +80,6 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-webauthn/webauthn v0.17.4 // indirect
 	github.com/go-webauthn/x v0.2.6 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
@@ -496,7 +495,7 @@ require (
 	github.com/luxfi/age v1.6.0 // indirect
 	github.com/luxfi/aml v0.3.5
 	github.com/luxfi/cache v1.3.1 // indirect
-	github.com/luxfi/consensus v1.36.11
+	github.com/luxfi/consensus v1.36.11 // indirect
 	github.com/luxfi/container v0.2.2 // indirect
 	github.com/luxfi/corona v0.10.4 // indirect
 	github.com/luxfi/crypto v1.20.7
@@ -513,7 +512,7 @@ require (
 	github.com/luxfi/metric v1.10.0
 	github.com/luxfi/mock v0.1.1 // indirect
 	github.com/luxfi/pq v1.1.0 // indirect
-	github.com/luxfi/pulsar v1.9.2
+	github.com/luxfi/pulsar v1.9.2 // indirect
 	github.com/luxfi/threshold v1.12.3 // indirect
 	github.com/luxfi/zap v1.2.7
 	github.com/magefile/mage v1.17.1 // indirect
