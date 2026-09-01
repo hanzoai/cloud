@@ -71,6 +71,7 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/openapi"
@@ -246,9 +247,14 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("sandbox.Use:  empty DataDir")
 	}
 	b := cloud.NewBase(deps, "sandbox")
+	rt := newRuntime()
+	// The fleet registry is how a lease that NAMES a cluster reaches it: the
+	// org's sealed kubeconfig, unsealed from KMS behind the one interface a
+	// test can stand in for. See runtime.at.
+	rt.attached = fleet.New(deps.Brand, b.Log)
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
-		rt:      newRuntime(),
+		rt:      rt,
 		tickets: newTickets(),
 		work:    newWork(),
 		clk:     newClocks(),
@@ -394,9 +400,11 @@ func New(deps cloud.Deps) (*Service, error) {
 		return nil, fmt.Errorf("sandbox.New: empty DataDir")
 	}
 	b := cloud.NewBase(deps, "sandbox")
+	rt := newRuntime()
+	rt.attached = fleet.New(deps.Brand, b.Log)
 	return &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewOrgStore(b, "sandbox", openStore),
-		rt:      newRuntime(),
+		rt:      rt,
 		tickets: newTickets(),
 		work:    newWork(),
 		clk:     newClocks(),
