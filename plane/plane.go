@@ -1532,6 +1532,10 @@ type IndexQueryIn struct {
 	// Limit bounds the page; Offset walks it.
 	Limit  int `json:"limit,omitempty"`
 	Offset int `json:"offset,omitempty"`
+	// Users bounds rows by the user each was written with; absent reaches every
+	// row. A caller asking on a person's behalf passes {"", theirs}: the rows
+	// written for everyone, and that person's own.
+	Users []string `json:"users,omitempty"`
 }
 
 // IndexQueryOut is the matching documents, as the index's OWN JSON relayed

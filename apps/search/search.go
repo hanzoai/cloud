@@ -336,7 +336,7 @@ func ForOrg(ctx context.Context, org, subject string, in *Request) (*Fusion, err
 			st.Status = StatusDisabled
 		default:
 			t0 := time.Now()
-			rows, err := index.Query(ctx, org, indexUID(in.Index), in.Query, window, 0)
+			rows, err := index.Query(ctx, org, indexUID(in.Index), in.Query, []string{"", subject}, window, 0)
 			st.TookMS = time.Since(t0).Milliseconds()
 			if err != nil {
 				st.Status, st.Error = StatusDegraded, err.Error()
@@ -593,7 +593,7 @@ func lexicalList(rows []json.RawMessage, payload map[string]Hit) rank.List {
 				Title:   firstString(d, "title", "name"),
 				URL:     firstString(d, "url"),
 				Project: firstString(d, "project"),
-				text:    knowledge.Text(doctype, firstString(d, "title"), d),
+				text:    firstString(d, "text"),
 			}
 		}
 	}

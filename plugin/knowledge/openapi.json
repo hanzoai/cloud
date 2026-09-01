@@ -293,6 +293,30 @@
         "x-public": true
       }
     },
+    "/v1/knowledge/reindex": {
+      "post": {
+        "operationId": "post_knowledge_reindex",
+        "summary": "Rebuilds the caller org's retrieval from its documents: the vector collection is dropped and created again at the configured embedding size and every page, memory and source is embedded into it; the lexical index is reconciled to the same set.",
+        "description": "Rebuilds the caller org's retrieval from its documents: the vector\ncollection is dropped and created again at the configured embedding size and\nevery page, memory and source is embedded into it; the lexical index is\nreconciled to the same set. It is what an operator runs after the embedding\nmodel or its dimension changes, and what puts an org's retrieval right after\na vector outage. It requires ORG ADMIN and runs inline: an org's knowledge is\na few thousand documents, and the answer is the count.\n\nThe request has no body. Response: {\"vectors\": 412, \"lexical\": 412, \"removed\": 3, \"failed\": 0}",
+        "tags": [
+          "knowledge"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/reindexOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/knowledge/search": {
       "post": {
         "operationId": "post_knowledge_search",
@@ -400,6 +424,7 @@
           },
           "docCount": {
             "description": "DocCount is the live count of this provider's documents in the org's store.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -510,6 +535,7 @@
           },
           "score": {
             "description": "Score is the cosine similarity between the query's embedding and the\ndocument's, from -1 to 1, higher being closer — the collection is created\nwith Cosine distance. Hits arrive ordered by it, descending. There is no\nabsolute cutoff: what counts as a good score moves with the query and the\nembedding model, so compare scores within one response and not across\nqueries.",
+            "format": "double",
             "type": "number"
           },
           "title": {
@@ -548,11 +574,37 @@
         "properties": {
           "ingested": {
             "description": "Ingested is how many documents landed in the org's knowledge store.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
             "description": "Provider is the connector that was pulled.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "reindexOut": {
+        "properties": {
+          "failed": {
+            "description": "Failed is how many documents could not be embedded; each is logged with\nits name, and the rest of the rebuild went on without it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "lexical": {
+            "description": "Lexical is how many rows the org's lexical index holds now; 0 in a\ndeployment without the index app.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "removed": {
+            "description": "Removed is how many rows the lexical index held for documents that no\nlonger exist; 0 without the index app.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "vectors": {
+            "description": "Vectors is how many documents were embedded and written to the org's\ncollection, which was dropped and created again at the configured size.",
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -568,6 +620,7 @@
           },
           "limit": {
             "description": "Limit bounds the hits returned. Default 10, maximum 50.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {

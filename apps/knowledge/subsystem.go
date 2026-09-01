@@ -82,6 +82,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/knowledge")
 	o := ops{s: s}
 	zip.Post(g, "/search", o.search)                            // RAG entry point
+	zip.Post(g, "/reindex", o.reindex)                          // rebuild both legs from the documents
 	zip.Get(g, "/graph", o.graph)                               // force-directed knowledge graph
 	zip.Get(g, "/connectors", o.listConnectors)                 // per-org OAuth ingestion
 	zip.Get(g, "/connectors/catalog", o.listCatalog)            // the ONE catalog

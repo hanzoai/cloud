@@ -7774,3 +7774,19 @@ their own. The subject is read from the validated principal (`subject(ctx)`,
 NOT here: a sync that pulls a person's own DMs through their connector —
 integrations holds that token and the plane hands no token to another app, so
 that sync has to be driven from integrations.
+
+## Both legs of knowledge, and a rebuild for either
+
+Knowledge now writes the lexical leg too: `lexical.go` puts one row per document
+into the org's `kb` index (`apps/index`) on save and removes it on trash — key
+`doctype/name` (the identity the legs fuse on), `text` (what a reranker reads),
+`user` (the owner, so `index.Query`'s users bound reaches a person's rows for
+that person alone; `/v1/search` passes `{"", subject}`). A deployment without
+the index app is `ErrNotMounted`, which is no lexical leg and not a failure.
+`POST /v1/knowledge/reindex` (org admin) drops and recreates the org's vector
+collection at the configured size, re-embeds every page, memory and source, and
+reconciles the lexical corpus — the one way to change `KB_EMBED_DIMS` or the
+model under a live org, and the way back after a vector outage. Production
+serves `qwen3-embedding` (4096) and `qwen3-reranker`; the `zen-*` names are not
+served there, so `CLOUD_EMBED_MODEL`/`CLOUD_RERANK_MODEL`/`KB_EMBED_DIMS` must
+say so in universe before a reindex.
