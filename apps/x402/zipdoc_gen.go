@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/x402/settlements/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 GET /v1/x402/settlements/:id", zip.Doc{
 		Description: "Settlement reads one x402 payment receipt by id.\n\nIt is scoped to the caller's PAYER org — the ledger that was debited — so one\ntenant can never read another's settlement, and an id that exists but belongs\nto somebody else is a 404 exactly like one that does not exist. A caller with\nno billable identity is refused outright.",
 		Fields: map[string]string{
 			"Receipt.amount":     "Amount is what actually moved, as an exact 18-decimal-place USD string. It\nis NOT the atomic-unit figure the client signed: the challenge quotes the\nasset's own units (USDC's 6 dp) and truncates to fit them, while the ledger\nmoves this exact value.",
@@ -25,7 +25,7 @@ func init() {
 			"settlementRef.id":   "ID is the settlement id from the URL — the deterministic keccak(from|nonce)\nkey an x402 receipt is issued under (the `id` field of a Receipt, and the\n`transaction` of the SettlementResponse on the PAYMENT-RESPONSE header a paid\nrequest answers with).",
 		},
 	})
-	zip.Describe("POST /x402/settle", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/x402 POST /x402/settle", zip.Doc{
 		Description: "Settle enforces payment for one priced resource on behalf of the calling tenant,\nand answers what happened.\n\nFREE FIRST: the price table is asked before anything is required of the world,\nbecause the tool plane offers EVERY dispatch to this client and an unpriced call must\nnot need a payer, a proof or a wallet. A price that cannot be looked up is NOT\nfree — that is a refusal, and the caller must serve nothing.\n\nPAID: the client's signed authorization arrives on the request as proof, the\nsignature is verified against exactly the terms it was challenged with, and the\nsettlement runs ONCE — keyed on keccak(payer address | nonce), so a retried\nauthorization moves money at most once and answers with the same receipt.\n\nUNPAID: the challenge comes back as data, not as an error. A 402 carries the\namount, the payee address and the chain the client must sign over, and an error\nbody has no room for them — so the caller reads the refusal off the reply and puts\nthe challenge on the response it is writing.\n\nThe PAYER is the caller's own tenant, resolved at the edge that holds the request\nand delegated on the call. It is not a field: a caller that could name the payer\ncould spend another tenant's ledger.",
 		Fields: map[string]string{
 			"Settled.challenge": "the PAYMENT-REQUIRED header value",

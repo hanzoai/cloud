@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/share", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/share GET /v1/share", zip.Doc{
 		Description: "Returns the tunnel shares the caller's org currently has open, across\nevery environment that org has enabled. It is a READ and it degrades honestly: an\nunconfigured deployment, an org that has not provisioned yet, and an unreachable\ncontroller all answer an EMPTY list at 200 rather than an error, so the console\nnever error-toasts on load.",
 		Fields: map[string]string{
 			"shareView.backend":     "Backend is the local endpoint the share proxies to.",
@@ -18,7 +18,7 @@ func init() {
 			"sharesOut.shares":      "Shares is the org's active shares — empty rather than absent when there are\nnone, or when the controller cannot be reached.",
 		},
 	})
-	zip.Describe("POST /v1/share/enable", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/share POST /v1/share/enable", zip.Doc{
 		Description: "Enable provisions the caller org's tunnel account and returns the credential the\n`hanzo share` CLI needs to run a tunnel. It is idempotent: the account is keyed\ndeterministically off the VALIDATED org, so a repeat call hands back the same\naccount rather than creating a second one, and a caller can only ever provision\ntheir OWN org's account. 503 when the deployment has no share controller\nconfigured; 502 when that controller is unreachable.",
 		Fields: map[string]string{
 			"enableResp.accountToken": "AccountToken is the org's own tunnel-account credential. Treat it as a secret:\nit is what the CLI enables an environment with.",

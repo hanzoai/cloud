@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/plugins", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/plugin GET /v1/admin/plugins", zip.Doc{
 		Description: "Reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
 		Fields: map[string]string{
 			"Drift.disabled":  "Disabled counts the hosts where it was stopped deliberately. Down and\nDisabled both answer 503 to a caller, which is exactly why they are counted\napart: one is an outage and one is a maintenance window.",
@@ -48,7 +48,7 @@ func init() {
 		Example:  json.RawMessage(`{"scope":"fleet"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"host":"cloud-0","self":true,"plugins":[{"name":"billing","prefix":"/v1/billing","source":"url","version":"9f2c…","running":true,"reloads":1,"restarts":0}]}],"drift":[{"name":"billing","versions":["9f2c…"],"running":1,"drifted":false}]}`),
 	})
-	zip.Describe("POST /v1/admin/plugins/:name/disable", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/plugin POST /v1/admin/plugins/:name/disable", zip.Doc{
 		Description: "Stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.\n\nThat is zip's choice and this keeps it. Removing the routes would mutate the\nroute table, and re-adding them on enable would grow it without bound across\nrepeated cycles, which is the invariant that makes reloads flat in memory. It\nis also the better answer: 404 says \"no such API\" and a client may cache it\nand stop retrying, while 503 says \"this API exists and is down right now\",\nwhich is true and retryable. Which of the two 503s this is — deliberate stop\nor crash — is what the status's disabled flag reports.",
 		Fields: map[string]string{
 			"ActionOut.data":   "Data is one row per host TOUCHED, in the order applied. Hosts the rollout\nnever reached are absent, so these rows are exactly the hosts whose state\nmay have moved.",
@@ -64,7 +64,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"billing"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"billing disabled","data":[{"host":"cloud-0","ok":true}]}`),
 	})
-	zip.Describe("POST /v1/admin/plugins/:name/enable", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/plugin POST /v1/admin/plugins/:name/enable", zip.Doc{
 		Description: "Brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
 		Fields: map[string]string{
 			"ActionOut.data":   "Data is one row per host TOUCHED, in the order applied. Hosts the rollout\nnever reached are absent, so these rows are exactly the hosts whose state\nmay have moved.",
@@ -80,7 +80,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"billing"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"billing enabled","data":[{"host":"cloud-0","ok":true}]}`),
 	})
-	zip.Describe("POST /v1/admin/plugins/:name/reload", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/plugin POST /v1/admin/plugins/:name/reload", zip.Doc{
 		Description: "Swaps a plugin for another build without dropping a request. The\nreplacement is started and proven to be LISTENING before any traffic moves to\nit, so a bad build leaves the old one serving and returns an error rather\nthan a hole; the old process then drains before it is killed.\n\nWith a version or url+sum it pins; naming a digest this host has run before is\nthe rollback, and costs no network because the digest IS the cache key. With\nneither it restarts what is already loaded.\n\nFleet scope applies it to one host at a time and STOPS at the first failure,\nso a build that cannot come up reaches exactly one host.",
 		Fields: map[string]string{
 			"ActionOut.data":   "Data is one row per host TOUCHED, in the order applied. Hosts the rollout\nnever reached are absent, so these rows are exactly the hosts whose state\nmay have moved.",

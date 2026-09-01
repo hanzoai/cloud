@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/seo/rates", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/seo GET /v1/seo/rates", zip.Doc{
 		Description: "Publishes what every call on this surface costs.\n\nThe numbers are read from the upstream's own published price list, not from a\ntable kept here, so a price change on their side moves this card within the hour\nand moves what is debited with it. That is the whole of the pricing model: this\nsurface resells at cost, and the cost is theirs to state.\n\nA row has two numbers because a call has two costs: a flat charge for asking, and\na charge per row returned. An op priced per request reports zero for the second,\nand for one priced per row the total is `request + result x limit` — which is the\namount your balance is authorized against before the call, and roughly what you\nwill be debited after it.\n\nIt is a read and it is free: asking what something costs must not require the\nbalance that would pay for it. If the upstream cannot be reached the card comes\nback empty rather than stale — a price nobody can confirm is not a price.",
 		Fields: map[string]string{
 			"seoCharge.op":      "Op is the operation id — seoKeyword, seoRank — so a line here and a tool in a\nmodel's list are the same name.",
@@ -16,7 +16,7 @@ func init() {
 			"seoRateOut.rates":  "Rates is one row per op on this surface.",
 		},
 	})
-	zip.Describe("POST /v1/seo/audit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/seo POST /v1/seo/audit", zip.Doc{
 		Description: "Fetches one page and reports what it gets wrong.\n\nIt returns the page's on-page score, its title and description, how much readable\ntext it carries, and the full set of named checks — is it https, does it have one\nh1, is the title duplicated, is it slow, is it a redirect, is anything on it\nbroken. It is the technical half of search visibility, and it is the half a\ndeveloper can act on this afternoon.\n\nONE PAGE, LIVE, IN THIS REQUEST. It is deliberately not a site crawl: a crawl is\na job with a lifecycle, and this answers the same questions about the page\nsomebody is actually looking at, now, with no task id to poll. Point it at the\npages that matter one at a time.\n\nIt is priced per page fetched, which is one.",
 		Fields: map[string]string{
 			"seoAuditIn.url":          "URL is the page, absolute and http or https.",
@@ -30,7 +30,7 @@ func init() {
 			"seoAuditOut.words":       "Words is how many words of readable text the page carries.",
 		},
 	})
-	zip.Describe("POST /v1/seo/backlinks", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/seo POST /v1/seo/backlinks", zip.Doc{
 		Description: "Summarises who links to a target.\n\nIt returns the authority score, how many links point at it and from how many\ndistinct sites, how many of those are broken, and how much of the profile reads\nas spam. Distinct sites is the number to read: a thousand links from one domain\nis one endorsement, and a profile that grew fast in links and not in domains is\nusually a profile somebody bought.\n\nThe target can be a whole domain, a subdomain, or one page URL — the summary is\nscoped to whatever is named. It is priced per request, so a domain with ten\nmillion links costs the same as one with ten.",
 		Fields: map[string]string{
 			"seoBacklinkIn.target":     "Target is a domain, a subdomain or a single page URL. A domain summarises the\nwhole site; a URL summarises that page.",
@@ -45,7 +45,7 @@ func init() {
 			"seoBacklinkOut.target":    "Target is the target as the upstream resolved it.",
 		},
 	})
-	zip.Describe("POST /v1/seo/competitors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/seo POST /v1/seo/competitors", zip.Doc{
 		Description: "Names the domains that place for the same phrases.\n\nGiven a set of phrases it returns the sites that appear across them, with each\none's average position, how many of the phrases it places for, its share of the\navailable attention and the visits that earns. It answers \"who am I actually up\nagainst here\", which is a different question from \"who do I think my competitors\nare\" and frequently a different answer.\n\nPair it with seoRank: this says who is in the race, seoRank says where any one of\nthem finishes. It is priced per row, so Limit decides the cost.",
 		Fields: map[string]string{
 			"seoCompetitorIn.keywords":     "Keywords are the phrases. At least one; blanks are dropped.",
@@ -62,7 +62,7 @@ func init() {
 			"seoDomain.visibility":         "Visibility is its share of the possible attention across those phrases.",
 		},
 	})
-	zip.Describe("POST /v1/seo/ideas", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/seo POST /v1/seo/ideas", zip.Doc{
 		Description: "Grows a seed phrase into the phrases nobody named yet.\n\nIt takes phrases you have and returns phrases in the same category that you do\nnot — relevant rather than merely containing the seed — each with its search\nvolume, click cost, competition and how hard its first page is to reach. This is\nwhere a keyword list comes FROM; seoKeyword is where a list you already have gets\nmeasured.\n\nIt is priced per row, so Limit is the knob that decides what the call costs.\nTotal says how many more there were.",
 		Fields: map[string]string{
 			"seoIdeaIn.keywords":    "Keywords are the seeds. At least one; blanks are dropped.",
@@ -80,7 +80,7 @@ func init() {
 			"seoMetric.volume":      "Volume is the average monthly searches.",
 		},
 	})
-	zip.Describe("POST /v1/seo/keywords", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/seo POST /v1/seo/keywords", zip.Doc{
 		Description: "Measures phrases the caller already has.\n\nIt answers, for each phrase named, how many people search it in a month, what an\nadvertising click on it costs, and how contested that advertising is. This is the\nground fact of search: everything else on this surface is a question about\nphrases, and this is the one that says whether a phrase is worth having.\n\nGive it phrases you already suspect. To find phrases you have not thought of,\nuse seoIdea; to find the ones a site already places for, use seoRank.\n\nThe market defaults to the United States in English. It is priced per request\nrather than per phrase, so asking about fifty phrases costs what asking about\none does.",
 		Fields: map[string]string{
 			"seoKeywordIn.keywords":  "Keywords are the phrases. At least one; blanks are dropped.",
@@ -96,7 +96,7 @@ func init() {
 			"seoMetric.volume":       "Volume is the average monthly searches.",
 		},
 	})
-	zip.Describe("POST /v1/seo/rankings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/seo POST /v1/seo/rankings", zip.Doc{
 		Description: "Reports every phrase a domain already places for.\n\nFor each one it gives the phrase, the position on the results page, the page of\nthe site that placed, that result's headline, the phrase's monthly searches and\nthe visits the placement is estimated to earn. It is the single most direct\nquestion about a site's search visibility — yours or a competitor's, since it\ntakes any domain.\n\nPosition is the ABSOLUTE rank, counting every element on the page — the ads, the\nanswer boxes, the map — because that is what a person scrolling actually passes.\nAn organic-only rank flatters a result that sits below half a screen of other\nthings.\n\nIt is priced per row, so Limit decides what the call costs, and Total says how\nmany more there were.",
 		Fields: map[string]string{
 			"seoRankIn.domain":    "Domain is the site, with or without a subdomain — \"hanzo.ai\", \"docs.hanzo.ai\".",

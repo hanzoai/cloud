@@ -7,19 +7,19 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/sandbox/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox DELETE /v1/sandbox/:id", zip.Doc{
 		Description: "Ends a sandbox and releases the compute behind it. Answers 204.\n\nENDING IS NOT STOPPING. This releases the resource: the pod goes and anything\nonly inside it goes with it. To end what a sandbox is RUNNING while keeping\nthe sandbox — the checkout, the logs, the half-written file — the verb is\nPOST /v1/sandbox/stop.\n\n`?purge=1` additionally removes the record, so the sandbox stops being listed\nat all rather than being listed as ended.",
 		Fields: map[string]string{
 			"endIn.id": "ID is the sandbox to end, from the path.",
 		},
 	})
-	zip.Describe("GET /:id/screen/ws", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox GET /:id/screen/ws", zip.Doc{
 		Description: "Serves one screen: RFB from the sandbox's display, as long as somebody\nis looking. The window is ignored — a browser pane's size is not the X\nserver's, and the page scales what it is given rather than asking a server\nwith no RandR to resize itself.",
 	})
-	zip.Describe("GET /:id/terminal/ws", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox GET /:id/terminal/ws", zip.Doc{
 		Description: "open mints the ticket for one ENDPOINT. Gated exactly like its siblings — a\nvalidated principal, resolved to the org whose sandboxes may be addressed —\nand it resolves the sandbox before minting, so a ticket never names a sandbox\nthe caller does not own or one that is not running.\n\nTHE ENDPOINT IS THE ADDRESS AND NOT THE GRANT. A ticket says which org and which\nsandbox, and the terminal and the screen are two views of that one machine —\na caller holding the authority to type in a sandbox holds the authority to\nlook at it. Binding the endpoint into the token would be a second gate answering\na question the first one already closed, and a gate that decides nothing is\none somebody later has to reason about anyway. What the endpoint decides is the\nURL a caller is handed back, which is the only part that differs.\npty serves one terminal: a shell on a pseudo-terminal, for as long as\nsomebody is typing.",
 	})
-	zip.Describe("GET /v1/sandbox", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox GET /v1/sandbox", zip.Doc{
 		Description: "Lists the caller org's sandboxes, newest first.\n\n`?project=` and `?status=` narrow it. Only the caller's org's: the store is\nkeyed on the validated org, so another tenant's sandbox is not something this\noperation can return.",
 		Fields: map[string]string{
 			"Sandbox.class":         "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
@@ -39,7 +39,7 @@ func init() {
 			"sandboxList.sandboxes": "Sandboxes are the caller org's sandboxes matching the filter. Never null.",
 		},
 	})
-	zip.Describe("GET /v1/sandbox/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox GET /v1/sandbox/:id", zip.Doc{
 		Description: "Returns one sandbox: its class, project, image, the runtime it was\ngiven, its status and when its lease ends.\n\nAn id the caller's org does not hold is the same 404 an unknown id gives — the\nstore is keyed on the org, so a cross-tenant id simply is not there.",
 		Fields: map[string]string{
 			"Sandbox.class":       "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
@@ -59,20 +59,20 @@ func init() {
 			"sandboxRef.id":       "ID is the sandbox to address, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/sandbox/:id/fs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox GET /v1/sandbox/:id/fs", zip.Doc{
 		Description: "Answers text, because this address always has: a file as its bytes, a\ndirectory as one entry per line. The typed Entry the core returns is what the\nplane carries; here it is rendered back to the one shape this route has served.",
 	})
-	zip.Describe("POST /sandbox/attach", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /sandbox/attach", zip.Doc{
 		Description: "Stamps ATTENTION on the sandbox a project currently holds.\n\nIt is the half of the idle clock this process cannot observe. A sandbox knows\nwhen it was last CALLED, and that is a poor proxy for whether anyone is there:\nreading a diff for twenty minutes touches nothing, and a tab closed twenty\nminutes ago touches nothing either. Only the stream can tell those apart, and\nthe stream is in another process (see plane.SandboxAttach).\n\nKEYED ON THE PROJECT, not a sandbox id, because that is what the watcher holds\n— an id changes when a lease is reaped and re-taken while the tab stays open,\nso presence keyed on it would go stale at exactly the moment it decides a reap.\n\nA project with no live sandbox is a SUCCESSFUL empty answer, not an error: a\nuser who opened the page before anything was leased is the ordinary case, and\nanswering with an error would make an idle stream log a failure every beat.",
 	})
-	zip.Describe("POST /sandbox/end", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /sandbox/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
 		Fields: map[string]string{
 			"EndIn.id":    "ID is the sandbox whose lease ends, from an earlier lease.",
 			"EndIn.purge": "Purge deletes the project's DISK as well. It is opt-in because the disk holds\nthe only copy of the checkout: ending a lease is cheap and reversible,\ndeleting someone's uncommitted work is neither.",
 		},
 	})
-	zip.Describe("POST /sandbox/lease", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /sandbox/lease", zip.Doc{
 		Description: "Leases the caller's sandbox, or returns the one it named if that\nlease is still running.\n\nWhat comes back is a real computer: a pod under a runtime boundary with a\ntoolchain already in it, its own filesystem, and a lease that ends it. Every\nother op here acts on the one this returns.",
 		Fields: map[string]string{
 			"LeaseIn.class":   "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\tandroid  a desktop with a phone running on that screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.\n\nAn `android` needs a node that can virtualise a CPU, so it is the one class\na deployment may not be able to place. Where the fleet has none, the lease\nsucceeds and the pod stays Pending naming the device it is waiting for —\nwhich is the honest answer, because the alternative is an emulator running\non an interpreted CPU and never finishing its boot.",
@@ -87,7 +87,7 @@ func init() {
 			"Leased.workdir":  "Workdir is the absolute directory this sandbox keeps files in, and what a\nrelative path in a later read, write or run resolves against — /work for dev,\ndesktop and android (the project volume's mount point), /mnt/data for exec\n(the artifact directory the code tool tells the model to write to). A path\nthat climbs above it is refused rather than rewritten.",
 		},
 	})
-	zip.Describe("POST /sandbox/read", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /sandbox/read", zip.Doc{
 		Description: "Reads one path in the caller's sandbox: a file's bytes, or a\ndirectory's entries when the path names one.",
 		Fields: map[string]string{
 			"Blob.data":    "Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory\nand for an empty file alike; Dir is what tells those apart.",
@@ -98,7 +98,7 @@ func init() {
 			"PathIn.path":  "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
 		},
 	})
-	zip.Describe("POST /sandbox/run", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /sandbox/run", zip.Doc{
 		Description: "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
 		Fields: map[string]string{
 			"Ran.exitCode":     "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
@@ -114,14 +114,14 @@ func init() {
 			"RunIn.timeoutSec": "TimeoutSec bounds this ONE command, so a wedged program holds the caller for\nits own timeout rather than for the whole lease.",
 		},
 	})
-	zip.Describe("POST /sandbox/stop", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /sandbox/stop", zip.Doc{
 		Description: "Interrupts whatever the caller's sandbox is running and answers how\nmany commands it ended. The sandbox stays leased — stop ends the WORK, end ends\nthe RESOURCE — so whoever stopped a run can still read what it left behind.",
 		Fields: map[string]string{
 			"StopIn.id":       "ID is the sandbox to interrupt, from an earlier lease. Every command running\nin it stops; the lease itself survives, so the checkout and the half-written\nfiles are still there to read. Use EndIn to give the computer back.",
 			"Stopped.stopped": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
 		},
 	})
-	zip.Describe("POST /sandbox/write", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /sandbox/write", zip.Doc{
 		Description: "Writes bytes to one path in the caller's sandbox, creating parents,\nand answers the resolved path.",
 		Fields: map[string]string{
 			"WriteIn.data": "Data is the file's bytes, and replaces whatever was there.",
@@ -131,7 +131,7 @@ func init() {
 			"Wrote.path":   "Path is where the bytes actually landed: the caller's path resolved against\nthe sandbox's working directory (Leased.Workdir), which is what a later read\nor a shell line inside the sandbox has to name.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox", zip.Doc{
 		Description: "Leases a sandbox — a real computer — for the caller's org.\n\nThe class decides what it is for and therefore its image, working directory\nand isolation. A dev or desktop sandbox is SINGLE-ATTACH per project, so\nasking twice for one project resumes the one that exists rather than paying\nfor a second; an exec sandbox carries no project and is bounded per org\ninstead, refused 429 past the ceiling because the caller's correct response is\nto wait.\n\nAnswers 201 with the sandbox as leased, which names the runtime it GOT — not\nthe one that was asked for.",
 		Fields: map[string]string{
 			"Sandbox.class":       "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
@@ -155,7 +155,7 @@ func init() {
 			"leaseIn.ttlSec":      "TTLSec is how long the lease runs before the reaper may take it, in\nseconds. Zero takes the class's own default.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/:id/exec", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/:id/exec", zip.Doc{
 		Description: "Runs one command in a sandbox the caller holds and answers with\nits exit code, stdout and stderr.\n\nSend `argv` — an argument vector cannot be word-split by accident — or\n`command` for a shell line, which is the only input here that ever reaches a\nshell. A non-zero exit is a SUCCESSFUL call carrying a failed command: the\nstatus is 200 and the exit code is in the answer, because \"the command failed\"\nand \"the call failed\" are different facts.",
 		Fields: map[string]string{
 			"ExecResult.exitCode":    "ExitCode is the command's own exit status. A non-zero one is a SUCCESSFUL\ncall carrying a failed command — the HTTP status stays 200, because \"the\ncommand failed\" and \"the call failed\" are different facts and a caller has\nto be able to tell them apart.",
@@ -169,7 +169,7 @@ func init() {
 			"execRequest.timeoutSec": "TimeoutSec bounds the run in seconds. Zero takes the default.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/:id/screen/ticket", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/:id/screen/ticket", zip.Doc{
 		Description: "Mints a short-lived grant to open the screen of a desktop\nsandbox. Same properties as the terminal ticket, for the other endpoint.",
 		Fields: map[string]string{
 			"sandboxRef.id":         "ID is the sandbox to address, from the path.",
@@ -178,7 +178,7 @@ func init() {
 			"ticketGrant.url":       "URL is the PATH to open, ticket included — not an absolute URL. Which host\nthis address wears in public is the edge's answer and not this process's, so\nan absolute URL would be a guess; the client already knows the host it is\ntalking to. It names the PAGE, which is what a caller embeds — the page\nfinds its own socket, and a caller that wants the raw socket adds `/ws`.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/:id/terminal/ticket", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/:id/terminal/ticket", zip.Doc{
 		Description: "Mints a short-lived grant to open a terminal on a sandbox.\n\nThe ticket travels in the query string of the URL it answers with, because a\nbrowser cannot set an Authorization header on a WebSocket handshake. It is\nsingle-purpose and short-lived for exactly that reason. A sandbox that is not\nrunning is 409 rather than a ticket that cannot be used.",
 		Fields: map[string]string{
 			"sandboxRef.id":         "ID is the sandbox to address, from the path.",
@@ -187,14 +187,14 @@ func init() {
 			"ticketGrant.url":       "URL is the PATH to open, ticket included — not an absolute URL. Which host\nthis address wears in public is the edge's answer and not this process's, so\nan absolute URL would be a guess; the client already knows the host it is\ntalking to. It names the PAGE, which is what a caller embeds — the page\nfinds its own socket, and a caller that wants the raw socket adds `/ws`.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/end", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/end", zip.Doc{
 		Description: "Ends the caller's sandbox lease: the pod goes, and the volume goes only\nwhen the caller asked for that too.",
 		Fields: map[string]string{
 			"EndIn.id":    "ID is the sandbox whose lease ends, from an earlier lease.",
 			"EndIn.purge": "Purge deletes the project's DISK as well. It is opt-in because the disk holds\nthe only copy of the checkout: ending a lease is cheap and reversible,\ndeleting someone's uncommitted work is neither.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/lease", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/lease", zip.Doc{
 		Description: "Leases the caller's sandbox, or returns the one it named if that\nlease is still running.\n\nWhat comes back is a real computer: a pod under a runtime boundary with a\ntoolchain already in it, its own filesystem, and a lease that ends it. Every\nother op here acts on the one this returns.",
 		Fields: map[string]string{
 			"LeaseIn.class":   "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\tandroid  a desktop with a phone running on that screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.\n\nAn `android` needs a node that can virtualise a CPU, so it is the one class\na deployment may not be able to place. Where the fleet has none, the lease\nsucceeds and the pod stays Pending naming the device it is waiting for —\nwhich is the honest answer, because the alternative is an emulator running\non an interpreted CPU and never finishing its boot.",
@@ -209,7 +209,7 @@ func init() {
 			"Leased.workdir":  "Workdir is the absolute directory this sandbox keeps files in, and what a\nrelative path in a later read, write or run resolves against — /work for dev,\ndesktop and android (the project volume's mount point), /mnt/data for exec\n(the artifact directory the code tool tells the model to write to). A path\nthat climbs above it is refused rather than rewritten.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/read", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/read", zip.Doc{
 		Description: "Reads one path in the caller's sandbox: a file's bytes, or a\ndirectory's entries when the path names one.",
 		Fields: map[string]string{
 			"Blob.data":    "Data is the file's bytes, verbatim, base64 on the wire. Empty for a directory\nand for an empty file alike; Dir is what tells those apart.",
@@ -220,7 +220,7 @@ func init() {
 			"PathIn.path":  "Path is read relative to the sandbox's working directory unless it is\nabsolute, and a path that climbs out of it is refused rather than rewritten.\nEmpty names the working directory itself, which lists it.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/run", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/run", zip.Doc{
 		Description: "Runs one command inside the caller's sandbox and answers its exit code,\nstdout and stderr. A non-zero exit is a successful call carrying a failed\nprogram, so it comes back as data and not as an error.\n\nName a `session` and the command NARRATES INTO IT: its output is appended to\nthat session's live log as the program produces it, so anything watching the\nsession — GET /v1/agents/sessions/stream, scoped to one run with ?root= —\nwatches the work happen rather than waiting for the verdict. Without it the\ncall is what it always was: silent until it returns, which for an agentic run\nis twenty-five minutes of blank screen.\n\nThe session is named; the TENANT is not. It is the org the caller already\nproved, so a session belonging to somebody else is absent from the org this\ncall acts for and the append is refused there.",
 		Fields: map[string]string{
 			"Ran.exitCode":     "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
@@ -236,14 +236,14 @@ func init() {
 			"RunIn.timeoutSec": "TimeoutSec bounds this ONE command, so a wedged program holds the caller for\nits own timeout rather than for the whole lease.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/stop", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/stop", zip.Doc{
 		Description: "Interrupts whatever the caller's sandbox is running and answers how\nmany commands it ended. The sandbox stays leased — stop ends the WORK, end ends\nthe RESOURCE — so whoever stopped a run can still read what it left behind.",
 		Fields: map[string]string{
 			"StopIn.id":       "ID is the sandbox to interrupt, from an earlier lease. Every command running\nin it stops; the lease itself survives, so the checkout and the half-written\nfiles are still there to read. Use EndIn to give the computer back.",
 			"Stopped.stopped": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
 		},
 	})
-	zip.Describe("POST /v1/sandbox/write", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sandbox POST /v1/sandbox/write", zip.Doc{
 		Description: "Writes bytes to one path in the caller's sandbox, creating parents,\nand answers the resolved path.",
 		Fields: map[string]string{
 			"WriteIn.data": "Data is the file's bytes, and replaces whatever was there.",

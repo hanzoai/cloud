@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/blueprint", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/blueprint GET /v1/blueprint", zip.Doc{
 		Description: "Returns every deployable blueprint with its service count and estimated\nmonthly compute cost.\n\nIt is the lightweight index the console renders as a template gallery before\ndrilling into one stack's bill of images — GET /v1/blueprint/sbom?template=<id>\nis the detail view. The cost is the same figure the deploy path meters the\ndeploying org on and the 20% author royalty is taken from, priced from the\nactive rate card (GET /v1/blueprint/health echoes that card).",
 		Fields: map[string]string{
 			"blueprintIndex.data":           "Data is one row per embedded blueprint, sorted by template id.",
@@ -16,7 +16,7 @@ func init() {
 			"blueprintRow.templateId":       "TemplateID is the blueprint slug — the id GET /v1/blueprint/sbom takes as\n?template= and the path under templates.hanzo.ai/blueprints/<id>/.",
 		},
 	})
-	zip.Describe("GET /v1/blueprint/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/blueprint GET /v1/blueprint/health", zip.Doc{
 		Description: "Reports blueprint liveness and echoes the compute rate card in force.\n\nThe rate card is the one the estimator actually applies after the operator env\noverlay, so an operator can confirm a tuned knob took effect rather than\ninferring it from a price. Not JWT-gated — a liveness probe must be reachable —\nand it always answers 200 while the subsystem is mounted.",
 		Fields: map[string]string{
 			"RateCard.basis":               "Basis names where the rates come from, so a published price can be\nexplained rather than merely asserted.",
@@ -28,7 +28,7 @@ func init() {
 			"blueprintHealth.status":       "Status is \"ok\"; the route answers 200 whenever the subsystem is mounted.",
 		},
 	})
-	zip.Describe("GET /v1/blueprint/sbom", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/blueprint GET /v1/blueprint/sbom", zip.Doc{
 		Description: "Answers GET /v1/blueprint/sbom. With ?template=<id> it returns that\nblueprint's SBOM + cost (404 on an unknown id); with no template it returns the\nbatch of every blueprint's estimate for a gallery grid.",
 	})
 }

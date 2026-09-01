@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/leaderboard", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard GET /v1/leaderboard", zip.Doc{
 		Description: "Leaderboard ranks AI usage over a window, either the users of the caller's own org\nor organizations against each other, and always reports the caller's own standing\neven when it falls outside the returned page. Identities are private by default: a\ncaller sees themselves, plus the peers or orgs that opted into public listing, and\nonly an admin sees their own org's members named. Cross-org spend is restricted to\nplatform admins. When the warehouse is not connected the board answers empty with\navailable=false rather than a fabricated rank.",
 		Fields: map[string]string{
 			"LeaderboardRow.anonymous":  "Anonymous is true when this subject's identity was withheld and Handle is the\n\"Anonymous\" placeholder: the metric is real, the name is not. Render it as an\nunnamed row, never as someone actually called Anonymous.",
@@ -47,7 +47,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"scope":"personal","metric":"tokens","period":"week","limit":10}`),
 	})
-	zip.Describe("GET /v1/leaderboard/activity", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard GET /v1/leaderboard/activity", zip.Doc{
 		Description: "Activity returns the per-day usage series for ONE authorized subject — the points a\ncontribution heatmap and a timeline are drawn from, gap-filled so every day in the\nrange is present. Authorization is resolved server-side from the validated\nprincipal, so a caller can never widen the subject past what they are entitled to:\na non-admin reads only themselves and their own org. subject=project answers empty\nwith a note, because the usage ledger records no project column yet. When the\nwarehouse is not connected the series answers empty with available=false rather\nthan fabricated days.",
 		Fields: map[string]string{
 			"ActivityPoint.costCents":    "CostCents is the day's spend in whole US cents. A series is only ever returned\nfor a subject the caller is authorized to see, so this is never withheld: 0 means\nno spend that day.",
@@ -76,7 +76,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"subject":"user","from":"2026-01-01","to":"2026-03-31"}`),
 	})
-	zip.Describe("GET /v1/leaderboard/optin", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard GET /v1/leaderboard/optin", zip.Doc{
 		Description: "Returns the caller's own public-listing preference and their org's,\neach with whether the caller may change it. Public listing is opt-in and private\nby default, so a fresh caller reads listed=false for both.",
 		Fields: map[string]string{
 			"optinView.org":          "Org is the caller's org's listing preference on the cross-org board, and whether\nthis caller is allowed to change it. It is read for every caller — a member sees\nwhere their org stands even though only an admin may edit it.",
@@ -89,7 +89,7 @@ func init() {
 			"userOptinView.listed":   "Listed is true when the caller's board row is published under Handle to other\nviewers. False — the default for anyone who never opted in — anonymizes the row;\nthe metric still counts, only the name is withheld.",
 		},
 	})
-	zip.Describe("POST /v1/admin/leaderboard/rollup", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard POST /v1/admin/leaderboard/rollup", zip.Doc{
 		Description: "Backfill seeds the derived usage rollup from ledger history — the rows written\nbefore the incremental view existed, which that view can never capture. SuperAdmin\nonly. Because the rollup accumulates, a second unguarded run would double every\nday it re-reads, so it refuses with 409 when the rollup already holds rows unless\nforce=true is passed; forcing WILL double-count.",
 		Fields: map[string]string{
 			"backfillQuery.before":        "Before bounds the seed to ledger rows written before this RFC3339 instant.\nDefaults to now, and is snapped down to UTC midnight — the rollup's grain, so\nthe seeded days and the guarded days are the same set. Pass the day the\nincremental view started capturing, so seed and view never share a day.",
@@ -100,7 +100,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"before":"2026-01-01T00:00:00Z"}`),
 	})
-	zip.Describe("PUT /v1/leaderboard/optin", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard PUT /v1/leaderboard/optin", zip.Doc{
 		Description: "Sets the CALLER's own public-listing preference on the leaderboard.\nSelf only: the row written is keyed by the caller's validated ledger identity, so\nthis can never edit another member's visibility whatever the request says. A\ncaller opting in with no handle is given their username, so a listed row never\nrenders as \"Anonymous\" to its own owner.",
 		Fields: map[string]string{
 			"userOptinReq.handle":  "Handle is the display name shown on a listed row: 1-40 characters of letters,\ndigits, space, dot, underscore, apostrophe or hyphen. Left empty on a listing\nopt-in it defaults to the caller's username.",
@@ -111,7 +111,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"listed":true,"handle":"ada"}`),
 	})
-	zip.Describe("PUT /v1/leaderboard/optin/org", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/leaderboard PUT /v1/leaderboard/optin/org", zip.Doc{
 		Description: "Sets the ORG's listing on the cross-org global board. Only an admin of\nthe caller's own org — an org admin or a platform SuperAdmin — may change it, and\nthe org written is the caller's validated tenant, never a value from the request.\nListing consents to publishing the org's usage VOLUME; cross-org spend stays\nrestricted to platform admins regardless.",
 		Fields: map[string]string{
 			"orgOptinReq.display":    "Display is the name shown for the org on that board: 1-40 characters of\nletters, digits, space, dot, underscore, apostrophe or hyphen. Left empty on a\nlisting opt-in it defaults to the org id.",

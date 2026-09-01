@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/translate/memory", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/translate GET /v1/translate/memory", zip.Doc{
 		Description: "List returns the org's own translation-memory entries, newest first, optionally\nnarrowed to one target language and/or one position on the review ladder. It is\nthe review lane's read: what a human reviewer works through.\n\nThe org is ALWAYS the validated principal's org, never a request field, so one\ntenant can never read another's memory — the entries hold customer source text.",
 		Fields: map[string]string{
 			"MemoryEntry.actor":            "Actor is the validated user id that last wrote this entry by hand. Empty on an\nentry an engine produced, and on one written before attribution existed.",
@@ -26,7 +26,7 @@ func init() {
 			"MemoryQuery.target":           "Target narrows to one target language tag (BCP-47, e.g. \"es\" or \"pt-BR\").",
 		},
 	})
-	zip.Describe("PUT /v1/translate/memory", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/translate PUT /v1/translate/memory", zip.Doc{
 		Description: "Review records a human decision on one translation-memory entry, and returns the\nentry as stored. A human write always wins over the stored value, and once it lands\nat approved or published no machine write can move it again — which is what makes a\nlocale rebuild safe to run against reviewed work.\n\nThe org is ALWAYS the validated principal's org, never a request field, so a review\ncan only ever land in the caller's own memory.",
 		Fields: map[string]string{
 			"MemoryEntry.actor":            "Actor is the validated user id that last wrote this entry by hand. Empty on an\nentry an engine produced, and on one written before attribution existed.",

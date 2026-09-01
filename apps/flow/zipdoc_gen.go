@@ -9,39 +9,39 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/flow/workflows/:workflow", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow DELETE /v1/flow/workflows/:workflow", zip.Doc{
 		Description: "Deletes one of the caller's workflows and its runs. Ownership\nis verified first; a foreign id answers 404 and deletes nothing.",
 		Fields: map[string]string{
 			"flowRef.workflow": "Workflow is the workflow's UUID, taken from the path.",
 		},
 	})
-	zip.Describe("GET /v1/flow/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow GET /v1/flow/runs", zip.Doc{
 		Description: "Runs reads one workflow's recorded runs: every component build with its\nresult, keyed by component. Ownership is verified first — run records never\ncross the org boundary.",
 		Fields: map[string]string{
 			"flowRuns.workflow": "Workflow is the UUID of the workflow whose run records to read. It rides\nthe query string.",
 		},
 	})
-	zip.Describe("GET /v1/flow/status", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow GET /v1/flow/status", zip.Doc{
 		Description: "Status reports whether the flow service is reachable and which version it\nruns. It is the product's own /health and /v1/version composed — an honest\nlens for \"is the workflow plane up\", never a fabricated ok.",
 		Fields: map[string]string{
 			"flowStatus.reachable": "Reachable is true when the flow service answered its health probe.",
 			"flowStatus.version":   "Version is the flow service's own version, present only when reachable.",
 		},
 	})
-	zip.Describe("GET /v1/flow/workflows", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow GET /v1/flow/workflows", zip.Doc{
 		Description: "Workflows lists the caller's workflows, paged. The list is scoped\nserver-side to the org's project — the page can only ever hold the caller's\nown workflows.",
 		Fields: map[string]string{
 			"flowWorkflows.page": "Page is the 1-based page of workflows to return.",
 			"flowWorkflows.size": "Size is how many workflows one page holds (the product caps it at 100).",
 		},
 	})
-	zip.Describe("GET /v1/flow/workflows/:workflow", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow GET /v1/flow/workflows/:workflow", zip.Doc{
 		Description: "Workflow reads one of the caller's workflows — the full record, graph\nincluded. A workflow outside the caller's org answers 404, indistinguishable\nfrom one that does not exist.",
 		Fields: map[string]string{
 			"flowRef.workflow": "Workflow is the workflow's UUID, taken from the path.",
 		},
 	})
-	zip.Describe("PATCH /v1/flow/workflows/:workflow", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow PATCH /v1/flow/workflows/:workflow", zip.Doc{
 		Description: "Patches one of the caller's workflows: name, description,\ngraph, or the locked flag — only the stated fields move. Ownership is\nverified before the patch reaches the product.",
 		Fields: map[string]string{
 			"flowUpdate.data":        "Data replaces the workflow graph when present, verbatim.",
@@ -52,7 +52,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"description":"route tickets to the right queue"}`),
 	})
-	zip.Describe("POST /v1/flow/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow POST /v1/flow/runs", zip.Doc{
 		Description: "Run executes one of the caller's workflows synchronously: the graph runs in\nthe flow service and the response carries the run's session and outputs. A\ngraph whose components fail reports the product's own error. Runs are\nbounded by the product's five-minute sync ceiling.",
 		Fields: map[string]string{
 			"flowRun.input":    "Input is the run's chat input value, handed to the graph's input node.",
@@ -62,7 +62,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"workflow":"8f14e45f-…","input":"summarize today's tickets"}`),
 	})
-	zip.Describe("POST /v1/flow/workflows", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/flow POST /v1/flow/workflows", zip.Doc{
 		Description: "Creates a workflow in the caller's org. The org's project id\nis pinned server-side from the validated principal — there is no field by\nwhich a caller could place a workflow in another org.",
 		Fields: map[string]string{
 			"flowCreate.data":        "Data is the workflow graph (the product's nodes/edges document),\nverbatim. Omit it to create an empty workflow.",

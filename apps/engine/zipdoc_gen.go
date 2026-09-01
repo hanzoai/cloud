@@ -9,24 +9,24 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/engine/model", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/engine GET /v1/engine/model", zip.Doc{
 		Description: "Model reads one model's load state — loaded, unloading, or not_found, as\nthe engine itself reports it.",
 		Fields: map[string]string{
 			"engineModel.model": "Model is the model id to inspect, exactly as the model list reports it.",
 		},
 		Example: json.RawMessage(`{"model":"Qwen/Qwen3-4B"}`),
 	})
-	zip.Describe("GET /v1/engine/models", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/engine GET /v1/engine/models", zip.Doc{
 		Description: "Models lists the models the engine serves, each with its load state — the\nserver's own model table (its standard list envelope, load status\nincluded), relayed verbatim.",
 	})
-	zip.Describe("GET /v1/engine/status", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/engine GET /v1/engine/status", zip.Doc{
 		Description: "Status reports whether the engine deployment is reachable and which build\nrevision it runs — an honest lens for \"is the serving runtime up\", never a\nfabricated ok.",
 		Fields: map[string]string{
 			"engineStatus.reachable": "Reachable is true when the engine answered its health probe.",
 			"engineStatus.revision":  "Revision is the engine build's git revision, present only when\nreachable (the server's own build identity — it publishes no semver).",
 		},
 	})
-	zip.Describe("GET /v1/engine/system", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/engine GET /v1/engine/system", zip.Doc{
 		Description: "System reads the engine host's inventory: OS, CPU, memory, every accelerator\ndevice with its VRAM and compute capability, and the build's capabilities\n(CUDA/Metal/flash-attention) — the real hardware under the serving runtime,\nrelayed verbatim.",
 	})
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/ci/fleet", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ci GET /v1/ci/fleet", zip.Doc{
 		Description: "Compares what was written with what is running, one row per service\nalong a single causal line: head, the commit on the branch; built, the image\nthat commit produced; declared, the tag pinned in the universe repository;\nrunning, what the cluster serves. A service whose four values disagree names\nthe step that broke.",
 		Fields: map[string]string{
 			"Check.job":          "Job is the job that decided State. A run reports one conclusion for\nhowever many jobs it holds, and the jobs are not interchangeable: the\npipeline fails at `gate` before it builds anything and at `receipt` after\nit has already built, pinned and proved the release live. Both read\n`failure` on the run, and only the first one means nothing shipped.",
@@ -21,7 +21,7 @@ func init() {
 			"Pipeline.repo":      "hanzo-inc/cloud",
 		},
 	})
-	zip.Describe("GET /v1/ci/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ci GET /v1/ci/runs", zip.Doc{
 		Description: "Lists recent builds: the repo, the branch, the commit and how each run\nended, newest first. A run names a repo, a branch and an actor, so the list is\nnever wider than the caller — a SuperAdmin sees the fleet, an org member sees\nonly its own org.",
 		Fields: map[string]string{
 			"Execution.status": "Status and Conclusion are BOTH required to know how a run went, and\nreading only one is wrong in a way that looks fine. Status answers\n\"is it over\" (queued | in_progress | completed); Conclusion answers\n\"how did it end\" and is empty until it is over. A view that buckets on\nStatus alone sees `completed` and cannot tell a pass from a failure, so\nit draws every finished run — successes and cancellations included — the\nsame way.",

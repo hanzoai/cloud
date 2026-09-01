@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/company", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company GET /v1/company", zip.Doc{
 		Description: "Get returns the caller org's formation and the stages reachable from it, or 404\nwhen the org has not begun one.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -53,7 +53,7 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
-	zip.Describe("GET /v1/company/register", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company GET /v1/company/register", zip.Doc{
 		Description: "Returns the platform's whole formation register, newest activity\nfirst — every org's formation, not the caller's. It is a Hanzo platform\noperation: a caller who is not a platform reviewer gets 403.\n\nFilter by stage and structure, page with limit and offset. An unknown stage is\nrefused with 400 rather than returning a silently empty page.",
 		Fields: map[string]string{
 			"Registration.createdAt":   "CreatedAt is the unix second the formation was opened.",
@@ -73,14 +73,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"stage":"founders","limit":50}`),
 	})
-	zip.Describe("GET /v1/company/register/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company GET /v1/company/register/summary", zip.Doc{
 		Description: "Counts the platform's formations by stage — the register's\nshape in one read, so a queue that is growing is visible as a number rather\nthan inferred by paging the list. A Hanzo platform operation: a caller who is\nnot a platform reviewer gets 403.",
 		Fields: map[string]string{
 			"registerCounts.byStage": "ByStage counts formations per stage, keyed by the stage name.",
 			"registerCounts.total":   "Total is every formation in the register.",
 		},
 	})
-	zip.Describe("GET /v1/company/review", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company GET /v1/company/review", zip.Doc{
 		Description: "Reports the founders whose KYC is not yet settled, oldest formation\nfirst, so the queue drains in the order founders have been waiting. A Hanzo\nplatform operation: a caller who is not a platform reviewer gets 403.\n\nIt only says who is waiting; the decision itself is POST\n/v1/company/kyc/decision.",
 		Fields: map[string]string{
 			"reviewFilter.limit": "Limit bounds how many formations are scanned; 0 or less means the default of 200.",
@@ -96,7 +96,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"limit":50}`),
 	})
-	zip.Describe("POST /v1/company", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company", zip.Doc{
 		Description: "Begin starts the org's one formation and returns it with the stages reachable\nfrom it. It is idempotent: an org that already has a formation gets that one\nback with 200, while a first call creates it and answers 201.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -145,7 +145,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"structure":"c-corp","jurisdiction":"DE","name":"AgentCo, LLC"}`),
 	})
-	zip.Describe("POST /v1/company/advance", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/advance", zip.Doc{
 		Description: "Advance runs the ONE guarded transition of the formation machine. It is the\nonly endpoint between stages: the actions populate data, this decides ordering.\n\nAn edge the machine does not define answers 409; an edge whose guard is not yet\nsatisfied answers 422 naming what is missing. Reaching the terminal `company`\nstage also records the incorporation on the canonical cap table, and that must\nsucceed before the transition is persisted.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -191,7 +191,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"to":"founders"}`),
 	})
-	zip.Describe("POST /v1/company/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/documents", zip.Doc{
 		Description: "Renders the formation documents for the chosen structure and\njurisdiction, ingests each into the org's data room, and submits the state\nfiling through the filing client.\n\nWith no filing partner wired the filing is recorded honestly as \"manual\" — no\nfiling id is fabricated. Available only at the documents stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -235,7 +235,7 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
-	zip.Describe("POST /v1/company/ein", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/ein", zip.Doc{
 		Description: "Opens the EIN application and answers what it owes.\n\nThe answer states whether it can be filed ONLINE, because that is the fact\ndeciding whether the customer waits a sitting or several weeks — and it names\neach form with what that form is for, so nobody has to already know what an\nSS-4 is to understand why they are signing one.",
 		Fields: map[string]string{
 			"EIN.expedited":       "Expedited reports that prioritised handling was asked for.",
@@ -258,7 +258,7 @@ func init() {
 			"einIn.responsible":   "Responsible is the person the IRS holds answerable for the entity.",
 		},
 	})
-	zip.Describe("POST /v1/company/esign", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/esign", zip.Doc{
 		Description: "Sends the generated formation documents for signature by every\nfounder and records the provider's reference on the formation. Available only\nat the esign stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -303,7 +303,7 @@ func init() {
 			"esignOut.provider":             "Provider is the wired e-signature provider's name.",
 		},
 	})
-	zip.Describe("POST /v1/company/esign/complete", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/esign/complete", zip.Doc{
 		Description: "Records whether the formation documents have been signed. It\nconsults the e-signature provider, which a real provider's webhook drives; the\nsignal is idempotent.\n\nAn explicit `signed` in the request overrides the provider's answer, which is\nthe manual path for the stub provider that never self-completes.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -349,7 +349,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"signed":true}`),
 	})
-	zip.Describe("POST /v1/company/founders", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/founders", zip.Doc{
 		Description: "Replaces the formation's founders. Each founder needs a name, an\nemail and an equity share in basis points; every founder is (re)set to pending\nKYC, so a previously settled decision does not survive a change of the list.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -395,10 +395,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"founders":[{"name":"Ada","email":"ada@acme.com","equityBps":10000}]}`),
 	})
-	zip.Describe("POST /v1/company/fundraise/deck", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/fundraise/deck", zip.Doc{
 		Description: "Shares a pitch deck in the org's data room. It is the ONE action\non this surface that is not a typed op: the deck is the raw request\nBODY (any content type, named by ?name=), not a JSON document, so a typed In\nwould declare a request shape the route does not take — see routes(). Its byte\nrequest and this response ARE declared, through openapi.Register (see init).",
 	})
-	zip.Describe("POST /v1/company/fundraise/round", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/fundraise/round", zip.Doc{
 		Description: "Records a fundraising round on the org's canonical cap table.\nAvailable only after incorporation (stage company); roundType defaults to\nPRICED.",
 		Fields: map[string]string{
 			"RoundInput.name":              "Name is the round's name on the cap table, e.g. \"Seed\". Required.",
@@ -411,7 +411,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"Seed","roundType":"PRICED","targetAmount":2000000}`),
 	})
-	zip.Describe("POST /v1/company/fundraise/safe", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/fundraise/safe", zip.Doc{
 		Description: "Raises an e-signature request over documents already in the org's\ndata room — a SAFE, a convertible note, or any other fundraising paper.\nAvailable only after incorporation (stage company).",
 		Fields: map[string]string{
 			"Signer.email":       "Email is the address the signature request is sent to.",
@@ -423,7 +423,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"documentIds":["doc_safe"],"signers":[{"name":"Ada","email":"ada@acme.com"}]}`),
 	})
-	zip.Describe("POST /v1/company/genesis", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/genesis", zip.Doc{
 		Description: "Seeds the canonical cap table with the founding allocation\n(stakeholders, a common share class, issued shares) and anchors the\ndeterministic equity-genesis root on-chain.\n\nIt is idempotent: once a root is recorded the cap table is NOT re-seeded, which\nwould double-issue founder share certificates. The root is persisted even when\nthe on-chain submit fails, because the root is the tamper-evident witness and\nmust not be recomputed on retry. Available only at the genesis stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -467,7 +467,7 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
-	zip.Describe("POST /v1/company/import/captable", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/import/captable", zip.Doc{
 		Description: "Reads an existing company's cap table from a Google Sheet and\nadds its stakeholders to the canonical cap table.\n\nThe first row is a header and columns are matched by name (case-insensitive):\nname and email are required, type/relationship/institution optional. A sheet\nwithout name and email columns, or with no usable data rows, is refused with\n400. Available only at the import stage.",
 		Fields: map[string]string{
 			"Filing.at":                              "At is the unix second the filing record was written.",
@@ -515,7 +515,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"spreadsheetId":"1AbCdEfGhIjKlMnOpQrStUvWxYz","range":"Cap Table!A1:E100"}`),
 	})
-	zip.Describe("POST /v1/company/import/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/import/documents", zip.Doc{
 		Description: "Ingests an existing company's corporate documents from a Google\nDrive folder into the org's data room. The import is shallow — sub-folders are\nskipped, not walked — and available only at the import stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -561,7 +561,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"folderId":"1AbCdEfGhIjKlMnOpQrStUvWxYz"}`),
 	})
-	zip.Describe("POST /v1/company/kyc", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/kyc", zip.Doc{
 		Description: "StartKYC opens an identity-verification session for every founder with the\nwired provider and records each session's reference on the formation.\n\nA start is never a decision: any terminal status the provider reports at\ninquiry time is clamped back to pending, so the payment gate can never open\nhere. A terminal status arrives only from POST /v1/company/kyc/refresh (the\nprovider) or POST /v1/company/kyc/decision (a Hanzo platform reviewer).",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -610,7 +610,7 @@ func init() {
 			"kycStartOut.sessions":          "Sessions is one entry per founder, in the order the founders are recorded.",
 		},
 	})
-	zip.Describe("POST /v1/company/kyc/decision", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/kyc/decision", zip.Doc{
 		Description: "DecideKYC records a privileged reviewer's MANUAL decision on a founder's KYC —\nthe human-in-the-loop path, and the ONLY route to a pass when no real provider\nis wired. It produces a DISTINCT reviewer_confirmed, never a provider\n\"verified\".\n\nBecause Hanzo forms the entity and carries the formation KYC/AML obligation,\nthe reviewer is a HANZO platform reviewer (SuperAdmin), and the decision is\nATTRIBUTED to them.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -657,7 +657,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"email":"ada@acme.com","status":"reviewer_confirmed"}`),
 	})
-	zip.Describe("POST /v1/company/kyc/refresh", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/kyc/refresh", zip.Doc{
 		Description: "RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the\nPULL path to a provider-reported terminal status. For the manual provider the\ncheck stays pending; for a real provider it reflects the settled decision,\nATTRIBUTED to the provider.\n\nIt NEVER trusts a client-asserted status — the status comes from the PROVIDER —\nso a client cannot force a pass here, and an already-passing founder (e.g. a\nreviewer confirmation) is left untouched.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -701,7 +701,7 @@ func init() {
 			"kycRefreshOut.provider":        "Provider is the identity-verification provider that was consulted.",
 		},
 	})
-	zip.Describe("POST /v1/company/payment", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/payment", zip.Doc{
 		Description: "Charges the caller's own org the one-time Hanzo Company formation fee.\n\nIt is $999 unless the deployment sets another, and the answer is the formation\nrecord carrying its paid flag and the charge reference. It takes no body: the org is the validated tenant and the amount is the\nplatform's, never the caller's to assert.\n\nIDEMPOTENT on the formation rather than on the request: an already-paid\nformation answers 200 with the same record and is not charged again, so a\nretry or a double-clicked button costs nothing. Available only at the\n`payment` stage (409 anywhere else) and only for an org that has begun a\nformation (404 otherwise).\n\nA denial answers the fleet-wide billing contract — 402 insufficient_balance,\n402 spend_cap_exceeded, 503 balance_unavailable — carried by cloud.Denied,\nwhich is the money wire's own {\"error\":{\"code\",\"message\"}} body rather than a\nsecond vocabulary invented for this surface.\n\nThe gate is the LAST thing it does, after the stage check and the paid\nshort-circuit, so a caller the machine is about to refuse is never charged.\nThat ordering is why the gate cannot lift into middleware, where it would run\nfirst. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -745,7 +745,7 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
-	zip.Describe("POST /v1/company/skip", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/skip", zip.Doc{
 		Description: "Skip marks the org as already incorporated and moves it onto the import path,\nso an existing company brings its documents and cap table in instead of forming\na new entity. Available only at the structure stage.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",
@@ -789,7 +789,7 @@ func init() {
 			"formationView.nextStages":      "NextStages are the stages reachable from the formation's current stage,\nwhether or not their guards are satisfied yet.",
 		},
 	})
-	zip.Describe("POST /v1/company/tariff", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company POST /v1/company/tariff", zip.Doc{
 		Description: "Itemises what a formation costs before anyone commits to it.\n\nIt answers what is due now and what recurs, as separate figures, and marks the\nstate's filing fee as money we collect and remit rather than keep. A caller can\ntherefore show a payer the whole bill — which is the point of quoting at all,\nand was impossible while the fee was one number in an error string.\n\nA jurisdiction whose filing fee this deployment has not been told REFUSES,\nnaming the setting that fixes it. Quoting our half as though it were the total\nis the one answer that would be worse than no answer.",
 		Fields: map[string]string{
 			"Charge.amountCents":     "AmountCents is what this line costs.",
@@ -813,7 +813,7 @@ func init() {
 			"tariffIn.structure":     "Structure is the entity being formed: c-corp, llc or dao-llc.",
 		},
 	})
-	zip.Describe("PUT /v1/company/structure", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/company PUT /v1/company/structure", zip.Doc{
 		Description: "Records the entity kind, the state of formation and the proposed\nname. Available only at the structure stage; an unknown structure or\njurisdiction, or an empty name, is refused with 400.",
 		Fields: map[string]string{
 			"Filing.at":                     "At is the unix second the filing record was written.",

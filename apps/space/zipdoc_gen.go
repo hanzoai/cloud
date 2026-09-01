@@ -7,14 +7,14 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/space/:space/drives/:drive", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space DELETE /v1/space/:space/drives/:drive", zip.Doc{
 		Description: "Removes an EMPTY drive and answers 204.\n\nA drive holding files is 409 rather than a cascade: deleting an org's files\nbehind a single drive call is not a thing this surface will do silently. A\ndrive or space the caller's org does not own is the same 404 an unknown name\ngives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\ndrive is gone.",
 		Fields: map[string]string{
 			"driveRef.drive": "Drive is the drive's name, from the path.",
 			"driveRef.space": "Space is the space's name, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/space/:space/drives/:drive/files/+", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space DELETE /v1/space/:space/drives/:drive/files/+", zip.Doc{
 		Description: "Removes one file and answers 204.\n\nIt removes ONE file and never a folder: a name that looks like a folder is\nrefused, because a folder is emergent from the names beneath it and deleting\none would have to mean deleting them. The name is path-cleaned first, so the\ndelete cannot reach outside the drive it names, and a space the caller's org\ndoes not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nfile is gone.",
 		Fields: map[string]string{
 			"fileRef.drive": "Drive is the drive's name, from the path.",
@@ -22,7 +22,7 @@ func init() {
 			"fileRef.space": "Space is the space's name, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/space/:space/drives", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space GET /v1/space/:space/drives", zip.Doc{
 		Description: "Lists a space's drives.\n\nListing the drives IS listing the space's root folder, because a drive is the\nfirst segment of a key and nothing else — so the two can never disagree the way\na drives table and the keys under it would. A space the caller's org does not\nown is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
 		Fields: map[string]string{
 			"driveItem.name":   "Name is the drive's name — the first segment of every key it holds.",
@@ -32,7 +32,7 @@ func init() {
 			"spaceRef.space":   "Space is the space's name, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/space/:space/drives/:drive/files", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space GET /v1/space/:space/drives/:drive/files", zip.Doc{
 		Description: "Lists one folder level of a drive.\n\nFolder-style by default: sub-folders come back as folder entries, which is the\nfile-manager view. `?recursive=true` lists every file flat under the folder\ninstead. Names are RELATIVE to `?folder=`, and the listing is bounded so a huge\ndrive cannot exhaust memory — Total is what came back, not what the drive holds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
 		Fields: map[string]string{
 			"fileItem.etag":       "ETag is the store's entity tag for the bytes currently at this name, with the\nquotes the store wraps it in stripped. It is an opaque VERSION and not a\nchecksum to verify against: a single-part upload's tag happens to be the MD5\nof the content and a multipart upload's is not, and nothing here says which\nthis was. Compare two reads of one file to learn whether it changed; absent\nfor a folder, and for a file the store reports none for.",
@@ -49,7 +49,7 @@ func init() {
 			"folderRef.space":     "Space is the space to list in, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/space/:space/drives/:drive/files/+", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space GET /v1/space/:space/drives/:drive/files/+", zip.Doc{
 		Description: "Mints a URL the caller downloads the file from DIRECTLY.\n\nThe bytes never pass through this binary and the store credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nspace, drive and file, and expires. It carries a content disposition of\nattachment naming the file, so a browser following it saves the file rather\nthan rendering it in place. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe download that follows comes straight from the store and is not seen here.\nThe balance is checked BEFORE anything is touched, so an unfunded org is\nrefused with no URL issued.",
 		Fields: map[string]string{
 			"fileRef.drive":     "Drive is the drive's name, from the path.",
@@ -61,7 +61,7 @@ func init() {
 			"fileURL.url":       "URL is the presigned URL, signed against the PUBLIC host so a browser can\nfollow it.",
 		},
 	})
-	zip.Describe("GET /v1/space/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space GET /v1/space/health", zip.Doc{
 		Description: "Health reports whether this deployment can serve spaces, drives and files.\n\nIt is a REAL probe rather than a constant: 200 when object-store credentials\nare present, so the store is reachable in principle, and 503 with the reason\nwhen they are not. It is deliberately NOT gated — liveness has to be probe-able\nwithout a token — so it is the one operation here that names no space and bills\nnothing.",
 		Fields: map[string]string{
 			"spaceHealth.error":   "Error is why the probe is degraded, in plain words. Absent when it is not.",
@@ -71,7 +71,7 @@ func init() {
 			"spaceHealth.status":  "Status is \"ok\" when the store is reachable in principle, \"degraded\" when it\nis not. It is the field to read; the HTTP status carries the same fact for a\ncaller that only looks at the code.",
 		},
 	})
-	zip.Describe("GET /v1/space/spaces", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space GET /v1/space/spaces", zip.Doc{
 		Description: "Lists the caller org's own spaces.\n\nOnly the caller's: every space is physically named under a per-org prefix and\nthe listing strips that prefix, so another org's spaces are not in the answer at\nall. Another org's space is not refused but INVISIBLE, so this cannot be used to\nlearn that a name is taken elsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
 		Fields: map[string]string{
 			"spaceItem.createdAt": "CreatedAt is when the space was made, in unix seconds.",
@@ -80,7 +80,7 @@ func init() {
 			"spaceList.total":     "Total is how many spaces this org has. It equals len(spaces): the listing is\nnot paged, because one bucket per (org, space) keeps an org's count small by\nconstruction, which is the whole reason a drive is a prefix and not a bucket.",
 		},
 	})
-	zip.Describe("POST /v1/space/:space/drives", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space POST /v1/space/:space/drives", zip.Doc{
 		Description: "Makes a new drive in a space and answers 201 with it.\n\nA drive is a PREFIX and not a bucket, so making one writes a zero-byte marker\nat \"<name>/\" — which is what makes an empty drive visible to a listing that has\nno other key to find. A name already taken in the space is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\ndrive exists.",
 		Fields: map[string]string{
 			"driveIn.name":   "Name is the drive's name, matching the same shape a space name does. It\nbecomes the FIRST SEGMENT of every key the drive holds, which is why it may\ncarry no \"/\".",
@@ -88,7 +88,7 @@ func init() {
 			"driveItem.name": "Name is the drive's name — the first segment of every key it holds.",
 		},
 	})
-	zip.Describe("POST /v1/space/spaces", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space POST /v1/space/spaces", zip.Doc{
 		Description: "Makes a new space for the caller's org and answers 201 with it.\n\nThe one bucket a space's files live in is derived from the caller's VALIDATED\norg, so an org can only ever create inside its own namespace and no request\nfield can redirect that. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nspace exists.",
 		Fields: map[string]string{
 			"spaceIn.name":        "Name is the space's name, matching ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$ — the\nshape a drive name takes too, so a caller learns one rule. It is validated AS\nGIVEN and never lower-cased for you: a client that creates \"Photos\" and then\nlists \"photos\" would be reading a space it did not make, so mixed case is a\nclean 400.",
@@ -96,7 +96,7 @@ func init() {
 			"spaceItem.name":      "Name is the space's name, as the org created it.",
 		},
 	})
-	zip.Describe("PUT /v1/space/:space/drives/:drive/files/+", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/space PUT /v1/space/:space/drives/:drive/files/+", zip.Doc{
 		Description: "Mints a URL the caller uploads the file to DIRECTLY.\n\nThe bytes never pass through this binary and the store credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nspace, drive and file, and expires. Writing into a folder that does not exist\nis fine and creates nothing — a folder is emergent from \"/\" in the name. A\ndeployment with no public endpoint configured cannot mint a URL and answers 503\nrather than one that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe upload that follows goes straight to the store and is not seen here. The\nbalance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
 		Fields: map[string]string{
 			"fileRef.drive":     "Drive is the drive's name, from the path.",

@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/benchmark/catalog", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark GET /v1/benchmark/catalog", zip.Doc{
 		Description: "Is the canonical public benchmarks this arena runs — the id, title, axis,\nitem count and upstream source of each, with native marking the ones the\nstandardized harness runs today; the rest are registered and adapter-pending.\n\nThese ids are the vocabulary the rest of the surface takes: a run names them, and\nthe leaderboard and compare read them from ?benchmark=. The catalog is\ndeployment-wide and identical for every caller — there is no tenant in it.",
 		Fields: map[string]string{
 			"Benchmark.axis":         "what capability it measures",
@@ -20,7 +20,7 @@ func init() {
 			"benchmarkCatalog.total": "Total is how many rows Data holds.",
 		},
 	})
-	zip.Describe("GET /v1/benchmark/claims", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark GET /v1/benchmark/claims", zip.Doc{
 		Description: "Lists the effective published claims: what the leaderboard will use for\neach (benchmark, model) after the seed, the import and any stored correction\nare layered. It answers the operator's question — what does this arena\ncurrently believe someone else reported, and did we ship that or fix it.\n\nEffective values only. The history of a key lives in the append-only file and\nis not what this op is for; a list that returned every superseded row would\nmake the common question the hard one.",
 		Fields: map[string]string{
 			"ClaimRow.at":        "At is when a stored row was recorded. Zero for a seed row.",
@@ -41,7 +41,7 @@ func init() {
 			"claimsOut.total":    "Total is how many rows Data holds.",
 		},
 	})
-	zip.Describe("GET /v1/benchmark/compare", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark GET /v1/benchmark/compare", zip.Doc{
 		Description: "Is the ONLY valid arm-vs-arm test: it pairs the two models on the items\nBOTH completed, and answers rescue and damage counts with an exact-McNemar p.\n\nPairing is what prevents the subset artifact — comparing one model's easy subset\nagainst another's full run — so n_common, not either arm's own coverage, is the\nnumber to read this by.\n\nBoth a and b are required. The benchmark defaults to gpqa_diamond.",
 		Fields: map[string]string{
 			"compareQuery.a":          "A is the first model id. It is required.",
@@ -59,7 +59,7 @@ func init() {
 			"pairing.rescue_b_over_a": "RescueBOverA is how many items B got right and A got wrong.",
 		},
 	})
-	zip.Describe("GET /v1/benchmark/history", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark GET /v1/benchmark/history", zip.Doc{
 		Description: "Returns each model's measured score per run over time, oldest first,\nwith the change between runs.\n\nThis is the counterweight to a leaderboard: the board shows the latest run\nbecause that is what \"how good is it\" means, and a single latest number cannot\ndistinguish a model that has always been strong from one that just improved,\nor from one that regressed after a provider changed something. Both matter for\nrouting, and only one of them is visible on a board.\n\nRuns with no id — attempts recorded before runs existed — group under the\nempty run, which is honestly what they are: one undated measurement.",
 		Fields: map[string]string{
 			"ModelHistory.model":   "Model is the system these runs measured.",
@@ -77,7 +77,7 @@ func init() {
 			"historyOut.total":     "Total is how many models Data holds.",
 		},
 	})
-	zip.Describe("GET /v1/benchmark/leaderboard", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark GET /v1/benchmark/leaderboard", zip.Doc{
 		Description: "Answers one row per model for the benchmark named — what our own\nharness measured, beside what the vendor claims, and the gap between them.\n\nThe gap is the point of the arena; provider-reported claims have run materially\nhot against one standardized harness.\n\nThe two planes are NEVER blended, and that is the rule to read the rows by: a\nmodel we have measured but no vendor has claimed for shows published null, a\nmodel with only a claim shows measured null, and gap exists only where both do.\n\nn is coverage and is not decoration: two measured numbers taken over different\nitem counts are not comparable, so read the row's n before reading its accuracy.",
 		Fields: map[string]string{
 			"LeaderRow.ciHigh":         "CIHigh is the upper bound of that interval. Wilson rather than the normal\napproximation because the normal one produces bounds past 100 exactly where\nbenchmark scores live — at 194/198 that is the top of the board, not a\ncorner case.",
@@ -98,7 +98,7 @@ func init() {
 			"leaderboard.rows":         "Rows is one per model, ordered by measured accuracy descending.",
 		},
 	})
-	zip.Describe("GET /v1/benchmark/presets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark GET /v1/benchmark/presets", zip.Doc{
 		Description: "Are the router blends available to compose from — a named set of model\narms, the rank they escalate through and the panel width that bounds fan-out —\neach served by the model layer as enso-<name>.\n\nToday it answers exactly one row, the reference blend: a worked example written\nin models we name, published as an example of the FORM. It is deliberately not\nthe composition of a Hanzo-served tier — the tier name exists to abstract that —\nso fork it and swap arms by what the leaderboard measures on your own tasks\nrather than reading it as a disclosure.",
 		Fields: map[string]string{
 			"Preset.arms":     "the blend — model ids from the arena",
@@ -110,7 +110,7 @@ func init() {
 			"presetList.data": "Data is the blends available to compose from.",
 		},
 	})
-	zip.Describe("POST /v1/benchmark/claims", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark POST /v1/benchmark/claims", zip.Doc{
 		Description: "Records published claims: one to correct a number, many to import a\nleaderboard. Every row must carry a Source, because a claim without its\ncitation is a number nobody can check — and an unattributed number in the\npublished plane is indistinguishable from a measurement, which is the one\nconfusion this whole surface is built to prevent.\n\nWrites are append-only, so this never destroys the value it replaces. A\nvendor restating a score leaves both rows on disk, which is how the restating\nitself becomes visible.",
 		Fields: map[string]string{
 			"publishedClaim.benchmark": "Benchmark is the canonical test id the claim is about, from /catalog.",
@@ -125,7 +125,7 @@ func init() {
 			"putClaimsOut.rejected":    "Rejected names the rows that were not, and why.",
 		},
 	})
-	zip.Describe("POST /v1/benchmark/presets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark POST /v1/benchmark/presets", zip.Doc{
 		Description: "Validates a router blend — its name, its arms, the rank they escalate\nthrough and the panel fan-out width — and answers 202 with the preset and the\nenso-<name> it would be served as.\n\nIt VALIDATES AND ECHOES: the definition is not persisted yet, so a preset\naccepted here is not one the model layer will resolve. Treat the response as a\ncheck on the blend, not a promise to serve it.\n\nDefaults fill the shape rather than refusing it: an omitted rank becomes the arms\nin declared order and a panel below 1 becomes 1. The one real invariant is that\nrank may only name arms the blend declares — the same rule the model catalog\nenforces — and a rank naming anything else is a 422 listing exactly which entries\nwere undeclared. A blend with no name or no arms is a 400.",
 		Fields: map[string]string{
 			"Preset.arms":              "the blend — model ids from the arena",
@@ -140,7 +140,7 @@ func init() {
 			"presetAccepted.status":    "Status is \"accepted\": the blend is well-formed, not that it is now served.",
 		},
 	})
-	zip.Describe("POST /v1/benchmark/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/benchmark POST /v1/benchmark/runs", zip.Doc{
 		Description: "Admits and queues a benchmark run against a model or your own endpoint, and\nanswers 202 with the receipt.\n\nIt is an ADMISSION, not a result: the work is done by the harness afterwards and\nthe numbers appear on the leaderboard as it completes them.\n\nCost is bounded by the store rather than by a quota: attempts are append-only and\nkeyed by (benchmark, item, model), so an (item, model) pair already attempted is\nskipped instead of re-spent, and re-queuing the same run is close to free.\n\nValidation is up front and total — a request with neither model nor endpoint is a\n400, one with no benchmarks is a 400, and any benchmark id outside the catalog is\na 422 naming exactly which ids were unknown, so a typo never silently queues a\npartial run.",
 		Fields: map[string]string{
 			"admission.benchmarks": "Benchmarks are the catalog ids admitted.",

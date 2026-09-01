@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/catalog", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/catalog GET /v1/catalog", zip.Doc{
 		Description: "Browse searches AND browses the cross-org catalog: every project, app and site\nthe fleet has built, whichever org built it.\n\nIt reads TWO corpora and returns them as one page — the published,\nworld-readable catalog that every caller sees, plus the caller's OWN org's\nprivate entries when the request carries a validated principal. Each row says\nwhich it came from in `scope`, so a client can warn before sharing a link. An\nanonymous caller simply gets the published one; no filter can ever widen a\ncaller into another tenant's corpus, because the query that would return it is\nnever run for them.\n\nA request with no q is a browse rather than a search, and both answer the same\nshape: the page, the total before paging, and the facet counts over the whole\nmatching set.",
 		Fields: map[string]string{
 			"Entry.archetype":       "Archetype is WHAT KIND OF THING this is, from a closed and ordered list —\nmodel | contract | chain | sdk | template | infra | site | app — derived from\nthe repository's own topics, name and description, first match winning, and\nalways `site` for a deployed site. It is DERIVED, never guessed by a model,\nbecause a wrong archetype hides a row from the browse rail more thoroughly\nthan a missing one does. Empty when no topic matched: unclassified, not\nuncategorisable.",

@@ -7,23 +7,23 @@ import (
 )
 
 func init() {
-	zip.Describe("POST /agents/resolve-target", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/plugin/agents POST /agents/resolve-target", zip.Doc{
 		Description: "Answers with the org's machine, or an error. It returns\nonly the id and the label — never the row — so a caller learns nothing about a\nmachine it did not already name, and a reference that matches nothing in THIS\norg is not found rather than somebody else's target.",
 	})
-	zip.Describe("POST /agents/route-run", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/plugin/agents POST /agents/route-run", zip.Doc{
 		Description: "Puts the run on the durable engine IN THIS PROCESS.\n\nThat placement is the whole point of the op. The delivery activity offers the\nrun to an in-memory mailbox which the machine long-polls through this app's\nHTTP surface; enqueued anywhere else it would be offered to a mailbox nobody\nreads, and the workflow would spend its entire budget before failing. One\nprocess holds the engine, the mailbox and the completion — this one.",
 		Fields: map[string]string{
 			"RouteRunIn.actor":      "Actor + AgentRef are cloud-side attribution for the completion path (the\nsession close and the PR assignee). They never cross to the machine.",
 			"RouteRunIn.forgeActor": "ForgeActor is the forge login the run acts as. It is CLOUD-SIDE, like Actor:\nthe completion opens the pull request as that person and the executing\nmachine never sees it.",
 		},
 	})
-	zip.Describe("POST /agents/session/close", zip.Doc{})
-	zip.Describe("POST /agents/session/event", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/plugin/agents POST /agents/session/close", zip.Doc{})
+	zip.Describe("github.com/hanzoai/cloud/plugin/agents POST /agents/session/event", zip.Doc{
 		Fields: map[string]string{
 			"SessionEventIn.kind": "\"tool-call\" | \"log\" | \"status\"",
 		},
 	})
-	zip.Describe("POST /agents/session/open", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/plugin/agents POST /agents/session/open", zip.Doc{
 		Description: "Opens the session. Target is a VALUE of the request, not a\nsecond op: \"no machine\" is what an ordinary sandbox run says, and splitting it\nin two would be two ops onto one OpenSessionOn.",
 		Fields: map[string]string{
 			"SessionOpenIn.actor":  "the linked Hanzo subject the run is attributed to",
@@ -31,10 +31,10 @@ func init() {
 			"SessionOpenIn.target": "Target tags the session with the machine a ROUTED run was sent to. Empty is\nthe ordinary cloud-sandbox session.",
 		},
 	})
-	zip.Describe("POST /agents/target-gate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/plugin/agents POST /agents/target-gate", zip.Doc{
 		Description: "Is fail-closed by construction: the only success is a nil\nerror from the gate itself, so a machine that is absent, offline or has no\nlive runner stops the dispatch here rather than downstream.",
 	})
-	zip.Describe("POST /v1/agents/coding", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/plugin/agents POST /v1/agents/coding", zip.Doc{
 		Description: "Runs a coding task on a repository: clones it into a sandbox, lets a model read\nand edit the code, run the tests, and push the work to a branch. Say the thing\nyou want done — \"fix the failing auth test in hanzoai/cloud\" — and the run\ninfers the repo, the branch and the plan. No prefix, no ceremony.\n\nIt answers 202 with the run's handle the moment the run is ADMITTED — not when\nit finishes. A coding run takes minutes; holding a request open for one would\ntie a connection to a model loop and give the caller nothing it cannot get\nbetter from the session stream.\n\nThe handle is a session id, and that is deliberate: the session is already the\nrun's durable record and its live stream (/v1/agents/sessions/{id}/stream), so\nthis op does not grow a progress endpoint, a status endpoint or a cancel\nendpoint of its own. One way to watch a run, whoever started it.\n\nIt is also how work CONTINUES. Pass an earlier run's session as `after` and\nthis one starts from where that one stopped, so \"now add tests for it\" builds\non the branch already pushed instead of a fresh clone. The follow-up still gets\nits own branch and its own session — one run, one branch, always reviewable on\nits own.",
 		Fields: map[string]string{
 			"CodingStartIn.after":          "After names a previous run's session, and starts this one from where that\none stopped instead of from the repository's default. It is how a follow-up\ninstruction — \"now add tests for it\" — builds on work already done rather\nthan beginning again on a fresh clone.\n\nIt sets the base and nothing else, so this run still writes its OWN branch.\nOne run, one branch: a run that wrote back onto an earlier run's branch\nwould break the rule the forge's ref policy is built on, and would leave\ntwo turns of work with one name to review.\n\nA caller who already knows the branch may pass Base directly; this exists\nbecause the branch is derived from a session id and nobody should have to\nknow how. Base wins if both are given.",

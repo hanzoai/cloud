@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/audit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/auditlog GET /v1/audit", zip.Doc{
 		Description: "List reads the caller's OWN org audit trail, newest first, with the total the\nfilter matched so a console can page it.\n\nEvery filter is optional and applies WITHIN the caller's org — the org itself is\nthe validated principal's and can never be widened by a request. Fails closed:\nan absent principal is a true \"not signed in\" (401), and a deployment with no\nlocal tamper-evident store answers an honest 501 rather than silently serving\nsomebody else's trail.",
 		Fields: map[string]string{
 			"Wire.action":           "Action is the verb that was performed. It is the event's name, not the HTTP\nmethod — a request-sourced record carries both, and the pair is what makes a\nrow readable (\"grant.create\" at POST /v1/admin/grants).",

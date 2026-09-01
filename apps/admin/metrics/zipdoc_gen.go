@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/metrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/metrics GET /v1/admin/metrics", zip.Doc{
 		Description: "Answers GET /v1/admin/metrics by aggregating commerce.events directly\n(fleet-wide, no per-org fan-out). SuperAdmin only.\n\n\tGET /v1/admin/metrics?window=30d&limit=20",
 		Fields: map[string]string{
 			"MetricsData.generatedAt":         "GeneratedAt is when the admin plane served this read, RFC3339. Same instant as\nasOf: this board computes on demand and caches nothing, so the two cannot diverge.",

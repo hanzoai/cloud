@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/customers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/customer GET /v1/admin/customers", zip.Doc{
 		Description: "Lists every customer org at a glance, sorted by slug: owner email, plan,\nsuspend status, member count, balance, month-to-date spend and MRR.\n\nEach row costs one IAM read plus the org's money reads, fanned out under a fixed\nconcurrency ceiling so a large fleet cannot stampede the upstreams. Every read is\nbest-effort per row: an upstream miss degrades THAT field to its honest zero rather\nthan failing the fleet.",
 		Fields: map[string]string{
 			"CustomerRow.balanceCents": "BalanceCents is the prepaid wallet the org still holds, in USD cents. What is left\nto spend, not what was granted.",
@@ -30,7 +30,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","ownerEmail":"ada@acme.com","plan":"pro","status":"active","users":7,"balanceCents":5000,"spendCents":12500,"mrrCents":9900,"created":"2026-01-04T00:00:00Z","lastActive":"2026-07-26T18:00:00Z"}],"total":1}`),
 	})
-	zip.Describe("GET /v1/admin/customers/:org", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/customer GET /v1/admin/customers/:org", zip.Doc{
 		Description: "Answers GET /v1/admin/customers/:org.",
 		Fields: map[string]string{
 			"CustomerDetailData.apiKeys":      "APIKeys is how many members hold an access key — the org's programmatic reach,\ncounted from users[] and never the keys themselves.",
@@ -64,7 +64,7 @@ func init() {
 			"OrgIn.org":                       "Org is the tenant slug from the path.",
 		},
 	})
-	zip.Describe("GET /v1/admin/grants", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/customer GET /v1/admin/grants", zip.Doc{
 		Description: "Reads the credit-grant ledger across ALL orgs, newest first — who granted what\nto whom, when, and from which money bucket.\n\nIt is a PROJECTION of the tamper-evident audit trail, not a second store: every grant\nis written there as action \"admin.customer.credit\", so this view cannot drift from\nwhat actually happened, and FAILED grants appear too.\n\nA deployment with no local audit store has no history to project, and says so with an\nempty list and a msg rather than an error.",
 		Fields: map[string]string{
 			"GrantRow.actor":         "staff email (or sub) who issued it",
@@ -87,7 +87,7 @@ func init() {
 		Example:  json.RawMessage(`{"result":"success","limit":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","amountCents":5000,"currency":"usd","source":"trial","reason":"launch comp","actor":"z@hanzo.ai","createdAt":"2026-07-26T18:00:00Z","transactionId":"tx_01J","result":"success"}],"total":1}`),
 	})
-	zip.Describe("POST /v1/admin/customers/:org/credit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/customer POST /v1/admin/customers/:org/credit", zip.Doc{
 		Description: "Issues a staff credit grant to the org named in the path — a comp, refund\nor promo — through the ONE credit-write path core.ApplyGrant, which validates the\namount against the per-grant cap, checks the org exists, moves the money and records\nthe tamper-evident audit row.\n\nThe credit lands on the account account.Payer resolves, NOT necessarily the org: name\na member of a pooled org and the pool is credited. The receipt echoes the subject so\nthe caller can see which.",
 		Fields: map[string]string{
 			"GrantIn.amountCents":       "AmountCents is the credit, in whole cents. Must be positive and within the\nper-grant cap.",
@@ -111,7 +111,7 @@ func init() {
 		Example:  json.RawMessage(`{"amountCents":5000,"currency":"usd","reason":"launch comp","source":"trial"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"org":"acme","subject":"acme","grantedCents":5000,"currency":"usd","source":"trial","balanceCents":10000,"balanceExact":"100.000000000000000000","transactionId":"tx_01J"}}`),
 	})
-	zip.Describe("POST /v1/admin/customers/:org/reactivate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/customer POST /v1/admin/customers/:org/reactivate", zip.Doc{
 		Description: "Restores access for every member of the org, undoing a suspend. It\nreports the same per-user breakdown.",
 		Fields: map[string]string{
 			"AccessChange.affected":  "Affected lists the usernames that were updated.",
@@ -125,7 +125,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"org":"acme","suspended":false,"affected":["ada","bob"],"failed":[]}}`),
 	})
-	zip.Describe("POST /v1/admin/customers/:org/suspend", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/customer POST /v1/admin/customers/:org/suspend", zip.Doc{
 		Description: "Cuts off every member of the org: IAM refuses a forbidden user at\nlogin AND at token issuance, so a suspended customer can neither sign in nor mint a\nfresh token. Fully reversible with ReactivateCustomer.\n\nThe result names every user updated and every user that was NOT — a partial failure\nleaves the org in a mixed state and says so instead of reporting a clean success.",
 		Fields: map[string]string{
 			"AccessChange.affected":  "Affected lists the usernames that were updated.",
@@ -139,7 +139,7 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"org":"acme","suspended":true,"affected":["ada","bob"],"failed":[]}}`),
 	})
-	zip.Describe("POST /v1/admin/grants", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/customer POST /v1/admin/grants", zip.Doc{
 		Description: "Issues a credit grant to any org from the operator Grants view, with the\ntarget named in the body. It funnels through the SAME core.ApplyGrant that\nPOST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path\nand one audit trail behind both.",
 		Fields: map[string]string{
 			"GrantIn.amountCents":       "AmountCents is the credit, in whole cents. Must be positive and within the\nper-grant cap.",

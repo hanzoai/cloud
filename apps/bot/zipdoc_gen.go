@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/bot/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/bot GET /v1/bot/runs", zip.Doc{
 		Description: "List returns the caller org's live bot runs, read from the bot runtime and projected\ninto the console contract with each run's live session URL derived here.\n\nThe org is ALWAYS the validated principal's org, NEVER a request field, and it is\nwhat scopes the runtime's answer — so one tenant can never enumerate another's\nruns. A runtime that cannot answer is an error, not an empty list: [] would tell\nthe caller \"your org has no runs\", which is a different claim from \"we could not\nask\", and the difference is the whole reason this endpoint exists.",
 		Fields: map[string]string{
 			"BotRun.runId":      "RunID is the run's id in the bot runtime, and the node id its live VNC session\nis registered under.",
@@ -19,10 +19,10 @@ func init() {
 			"BotRuns.bots":      "Bots is the org's live runs. Always an array, never null.",
 		},
 	})
-	zip.Describe("POST /v1/bot/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/bot POST /v1/bot/runs", zip.Doc{
 		Description: "Answers 501 to every call: launching a bot run is not implemented.\n\nThe bot runtime exposes no launch operation, so nothing here can start a sandbox.\nThis address is published rather than dropped because it is the collection every\nrun is created in: GET lists them, POST would launch one.\n\nThe refusal is total and takes no input. No run id is minted, no session URL is\nhanded back, and no per-run fee is charged. That is the point: the earlier version\nminted an id the runtime had never heard of, pointed it at a VNC node that did not\nexist, and took real money for it. 501 is the truth, and the truth is cheaper than\na plausible lie.\n\nListing and stopping runs are live and org-scoped. Only the launch is missing, and\nit returns in the same change that can prove a bot boots — a runtime-side launch\noperation first (TS, cross-repo), with the entitlement gate and the meter beside\nit.",
 	})
-	zip.Describe("POST /v1/bot/runs/:runId/stop", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/bot POST /v1/bot/runs/:runId/stop", zip.Doc{
 		Description: "Stop terminates one of the caller org's own bot runs and reports its terminal state.\n\nThe own-key guard is the org: it is the caller's validated org, never theirs to\nchoose, and the runtime resolves the run id UNDER it. A run belonging to another\ntenant is not among this org's runs, so it answers absent — the same 404 a\nnonexistent id gets, which is what keeps this from being an oracle.\n\nAbsence is honoured ONLY when the runtime answers it. A runtime that does not\nserve stop reports nothing about the run, and reporting \"stopped\" on that basis\nwould be a stop that cannot fail — so it is a 502.",
 		Fields: map[string]string{
 			"BotStopped.runId":  "RunID is the run that was stopped.",

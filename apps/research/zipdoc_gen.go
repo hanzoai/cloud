@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/research/artifacts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research GET /v1/research/artifacts", zip.Doc{
 		Description: "Returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
 		Fields: map[string]string{
 			"ResearchArtifact.content":         "Content is the artifact's bytes, base64, on WRITE only, at most 16 MiB.\nNever returned: a read answers metadata and the address, and the bytes come\nfrom GET /v1/research/artifacts/{sha256}.",
@@ -32,10 +32,10 @@ func init() {
 			"artifactsOut.total":               "Total is len(data).",
 		},
 	})
-	zip.Describe("GET /v1/research/artifacts/:sha256", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research GET /v1/research/artifacts/:sha256", zip.Doc{
 		Description: "Serves one artifact's stored bytes, hash-addressed by :sha256 and\norg-scoped — the retrieval side of hash-addressing (the board fetches a snapshot by\nits content hash).\n\nIt is the ONE route on this surface that is not a typed op, and it cannot be one:\nit answers the artifact's RAW BYTES under the artifact's own Content-Type\n(image/png for a snapshot, application/octet-stream otherwise). A typed op\nserialises a Go value as application/json and has no vocabulary for a binary body,\nso typing this would change what every caller receives — a wire break, not a\ndescription. Its errors therefore stay in-band, as the rest of this file's did.",
 	})
-	zip.Describe("GET /v1/research/experiments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research GET /v1/research/experiments", zip.Doc{
 		Description: "Returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
 		Fields: map[string]string{
 			"Experiment.canonical":    "Canonical is DERIVED on read, never stored and never taken from an upload:\na version is canonical when it is the latest-appended non-retracted version\nof its stable id. The listing returns only canonical versions, so it is\ntrue on every row it answers with.",
@@ -67,7 +67,7 @@ func init() {
 			"listIn.project":          "Project narrows to one project. Empty reads the org's whole set across projects.",
 		},
 	})
-	zip.Describe("GET /v1/research/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research GET /v1/research/projects", zip.Doc{
 		Description: "Returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
 		Fields: map[string]string{
 			"ProjectSummary.attempts":             "Attempts counts the CANONICAL answered attempts, one per (benchmark, item,\nmodel).",
@@ -83,7 +83,7 @@ func init() {
 			"projectsOut.total":                   "Total is len(data).",
 		},
 	})
-	zip.Describe("GET /v1/research/totals", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research GET /v1/research/totals", zip.Doc{
 		Description: "Returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
 		Fields: map[string]string{
 			"KindTotal.cost_usd":                  "CostUSD is US DOLLARS (not cents) summed over those same runs.",
@@ -102,7 +102,7 @@ func init() {
 			"totalsIn.project":                    "Project narrows the aggregate to one project. Empty aggregates the whole org.",
 		},
 	})
-	zip.Describe("POST /v1/research/artifacts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research POST /v1/research/artifacts", zip.Doc{
 		Description: "Records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
 		Fields: map[string]string{
 			"ResearchArtifact.content":         "Content is the artifact's bytes, base64, on WRITE only, at most 16 MiB.\nNever returned: a read answers metadata and the address, and the bytes come\nfrom GET /v1/research/artifacts/{sha256}.",
@@ -125,7 +125,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"kind":"snapshot","content":"iVBORw0KGgo=","run_id":"benchmark:zen-1:mmlu"}`),
 	})
-	zip.Describe("POST /v1/research/experiments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research POST /v1/research/experiments", zip.Doc{
 		Description: "Appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
 		Fields: map[string]string{
 			"Attempt.answer":                  "Answer is what the model answered, after the harness extracted it from the\nraw generation.",
@@ -175,7 +175,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"experiments":[{"id":"benchmark:zen-1:mmlu","kind":"benchmark","subject":"zen-1","metric":"accuracy","value":0.81,"ts":1750000000}],"attempts":[]}`),
 	})
-	zip.Describe("POST /v1/research/grants", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/research POST /v1/research/grants", zip.Doc{
 		Description: "Records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
 		Fields: map[string]string{
 			"GrantRequest.id":          "ID addresses an experiment (run) by its stable id. The grant lands on EVERY\nretained version of that id, because the decision is about the run and not\nabout one version of it.",

@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("POST /v1/standing/upkeep", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/standing POST /v1/standing/upkeep", zip.Doc{
 		Description: "Reports what keeping this entity costs every year, itemised.\n\nThis is the figure that decides where to incorporate, and the one a formation\nprice cannot show: Delaware is cheaper to form than Wyoming for a corporation\nand dearer to keep, so a founder shown only the formation fee is shown the half\nthat reverses. Each state line carries the authority that publishes it and the\ndate it was checked, and a franchise tax that scales is marked a minimum rather\nthan quoted as final.",
 		Fields: map[string]string{
 			"Obligation.amountCents": "AmountCents is what it costs each period.",

@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/audit", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/audit GET /v1/admin/audit", zip.Doc{
 		Description: "Reads one chain of cloud's tamper-evident audit trail, newest first, with\nthat chain's live integrity attached so a listing can be badged as verified.\n\nWhen cloud has no local store configured it falls back to forwarding IAM's own\nget-records trail verbatim — a DIFFERENT trail, federated so the endpoint never\nregresses to an empty list. Those rows carry no integrity of ours, so the field is\nnull there.",
 		Fields: map[string]string{
 			"Integrity.brokenAt":   "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached).",
@@ -37,7 +37,7 @@ func init() {
 		Example:  json.RawMessage(`{"org":"acme","action":"admin.waitlist.grant","since":"2026-07-01T00:00:00Z","pageSize":"50"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"total":1,"integrity":{"name":"audit-admin","verdict":"intact","count":42,"head":"9f2c","brokenAt":-1}}`),
 	})
-	zip.Describe("GET /v1/admin/audit/verify", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/audit GET /v1/admin/audit/verify", zip.Doc{
 		Description: "Walks EVERY hash chain this deployment keeps and reports each one: which\nchains were checked, how many records each holds, the head hash to pin externally\nagainst tail-truncation, and — when a chain is broken — the seq of the first bad\nrecord and why.\n\nThe trail is a FAMILY of chains, one per process, so the answer is a set and not a\nboolean: `intact`, `broken` and `unread` count the three verdicts and sum to the\nnumber of chains. A chain that could not be READ is reported `unread` and is never\na pass — an unreadable chain and a verified one must not render the same, which is\nthe whole reason this is not one flag.\n\nAn unconfigured store is an honest failure here rather than a fabricated pass.",
 		Fields: map[string]string{
 			"Integrity.brokenAt": "BrokenAt is the seq of the FIRST record that failed verification, and -1\nwhenever the walk found no break (including an unread chain, where no seq\nwas reached).",

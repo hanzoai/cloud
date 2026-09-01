@@ -9,13 +9,13 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/team/account/cookie", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team DELETE /v1/team/account/cookie", zip.Doc{
 		Description: "Signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one.",
 		Fields: map[string]string{
 			"cookieAck.result": "Result is true when the cookie was written or cleared.",
 		},
 	})
-	zip.Describe("DELETE /v1/team/files/:space/:filename", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team DELETE /v1/team/files/:space/:filename", zip.Doc{
 		Description: "Removes one blob from a space's file store. The caller must\nhold a verified session AND be a member of the space; anything else — an\nunknown space, another tenant's space, a space the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
 		Fields: map[string]string{
 			"blobRef.file":     "File is the blob id, and wins over the path segment when both are present.",
@@ -24,13 +24,13 @@ func init() {
 		},
 		Example: json.RawMessage(`{"space":"6579…","file":"0d4f…"}`),
 	})
-	zip.Describe("GET /v1/team/account/auth/:provider", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/account/auth/:provider", zip.Doc{
 		Description: "Redirects the browser into IAM's authorize endpoint. team is a\nconfidential client (client_secret), so no PKCE — the code is exchanged\nserver-side in authCallback. state is a RANDOM nonce bound to a short-lived\ncookie (never the bare navigateUrl): the callback only proceeds when the two\nmatch, so a cross-site-initiated or replayed callback is refused.",
 	})
-	zip.Describe("GET /v1/team/account/auth/:provider/callback", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/account/auth/:provider/callback", zip.Doc{
 		Description: "Verifies the state nonce against the flow cookie, exchanges the\nIAM code for the user, ensures the account has a space, mints the account\ntoken, and bounces the browser back to the SPA with ?token= (which Auth reads\nvia getLoginInfoFromQuery).",
 	})
-	zip.Describe("GET /v1/team/account/providers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/account/providers", zip.Doc{
 		Description: "Returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that provider accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
 		Fields: map[string]string{
 			"ProviderInfo.displayName": "DisplayName is the human label for the sign-in button; this deployment\nsends \"Hanzo\". Omitted from the body when empty.",
@@ -38,7 +38,7 @@ func init() {
 		},
 		Response: json.RawMessage(`[{"name":"openid","displayName":"Hanzo"}]`),
 	})
-	zip.Describe("GET /v1/team/billing/plan", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/billing/plan", zip.Doc{
 		Description: "Returns the plan and seat counts for the caller's OWN org, resolved\nfrom the VERIFIED team session token — never a client header. Seats and guests\nare the org's distinct active human members (a bot member is not a seat); the\nplan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier. A\ncaller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
 		Fields: map[string]string{
 			"planInfo.active":     "Active is whether that plan's entitlement is live.",
@@ -50,13 +50,13 @@ func init() {
 		},
 		Response: json.RawMessage(`{"plan":"pro","active":true,"seats":3,"guests":1,"guestLimit":3,"upgradeUrl":"https://billing.hanzo.ai"}`),
 	})
-	zip.Describe("GET /v1/team/billing/ui", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/billing/ui", zip.Doc{
 		Description: "Serves the embedded wallet page: the exact asset when it exists, else\nindex.html (the SPA shell). Session-gated — an anonymous caller gets 401,\nnever the page. Fingerprinted assets/ cache hard; the shell never caches.",
 	})
-	zip.Describe("GET /v1/team/billing/ui/*", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/billing/ui/*", zip.Doc{
 		Description: "Serves the embedded wallet page: the exact asset when it exists, else\nindex.html (the SPA shell). Session-gated — an anonymous caller gets 401,\nnever the page. Fingerprinted assets/ cache hard; the shell never caches.",
 	})
-	zip.Describe("GET /v1/team/bots", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/bots", zip.Doc{
 		Description: "Returns the caller org's bot members — the org's agents projected as\nthe space Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
 		Fields: map[string]string{
 			"botMember.active":    "Active is whether the agent projects as a LIVE space member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
@@ -67,10 +67,10 @@ func init() {
 			"botRoster.bots":      "Bots is every agent of the caller's org, projected as a space member.",
 		},
 	})
-	zip.Describe("GET /v1/team/files/:space/:filename", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/files/:space/:filename", zip.Doc{
 		Description: "Streams a blob by its client id (?file=). The served Content-Type is\nderived from the STORED BYTES via a strict image allow-list — NEVER from the\nclient :filename (Red F-B: a crafted .svg name would otherwise force\nimage/svg+xml → active XSS). Anything not a recognized raster image is served\ninert: application/octet-stream + attachment + nosniff.",
 	})
-	zip.Describe("GET /v1/team/rooms", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/rooms", zip.Doc{
 		Description: "Returns every room of the caller's org, across the spaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
 		Fields: map[string]string{
 			"teamRoom.archived": "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
@@ -87,7 +87,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"rooms":[{"id":"6543","name":"bugfix-1010","life":"bound","bindings":["repo:hanzoai/cloud"]}]}`),
 	})
-	zip.Describe("GET /v1/team/rooms/:id/messages", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/rooms/:id/messages", zip.Doc{
 		Description: "Returns the tail of one room's conversation, oldest first.\n\nIt reads the SAME Chunter documents the transactor serves, so a message typed\nin the Team client is here with no sync. A room the caller's org does not own\nanswers 404 rather than 403, so a probe learns nothing about what exists.",
 		Fields: map[string]string{
 			"teamMessage.author":    "Author is the team account uuid that wrote it. It is an ACCOUNT and not a\ndisplay name: what to call somebody is the roster's answer, and copying it\nonto every message is how the two come to disagree. An agent's messages\ncarry the account derived from its id, so the same field answers for both.",
@@ -101,10 +101,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"messages":[{"id":"7a1c","room":"6543","author":"9f2…","text":"shipped","createdOn":1756598400000}]}`),
 	})
-	zip.Describe("GET /v1/team/transactor/:token", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/transactor/:token", zip.Doc{
 		Description: "AUTHORIZES the caller BEFORE the WebSocket upgrade (fail-secure: a\nrefusal is a 401, never an upgraded-then-dropped socket), then upgrades and runs\nthe frame loop. The org is the VERIFIED tenant — the key for every store path —\nnever a client header.\n\nThe path segment carries whichever lane the caller is on, and a UUID is not a\nJWT so the two can never be read as each other:\n\nTHE PATH SEGMENT IS THE CREDENTIAL — the space token selectWorkspace minted,\nwhose signed claims name both the account and the space. Nothing ambient\nauthorizes this socket; see admitWS for why it must stay that way and what the\nIAM lane here will look like.",
 	})
-	zip.Describe("GET /v1/team/transactor/statistics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/transactor/statistics", zip.Doc{
 		Description: "Statistics returns the transactor's live sessions for the space the caller's\ncredential names — the endpoint the front's space switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a space UUID names the space and is authorized against the\nmembership rows, an HS256 space token names it in its signed claims.\nactiveSessions carries ONLY that one space, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
 		Fields: map[string]string{
 			"statsIn.token":                "Token is the space token minted by selectWorkspace.",
@@ -116,7 +116,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"token":"eyJhbGciOiJIUzI1NiJ9…"}`),
 	})
-	zip.Describe("POST /team/member", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /team/member", zip.Doc{
 		Fields: map[string]string{
 			"Member.account":   "Account is the team AccountUuid the subject resolved to — the identity the\nasking process attributes the person by, so it never derives one itself.",
 			"Member.member":    "Member reports whether the subject holds a row in that space.",
@@ -125,7 +125,7 @@ func init() {
 			"MemberIn.subject": "Subject is the IAM subject, NOT a team account id. team owns the join from\none to the other — it is the join that created the rows — so a peer that\ncomputed its own would be a second derivation of the same address, which is\nhow two layers end up naming different accounts for one person.",
 		},
 	})
-	zip.Describe("POST /team/spaces", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /team/spaces", zip.Doc{
 		Fields: map[string]string{
 			"Space.name":       "Name is the human label for a picker.",
 			"Space.role":       "Role is the role on the caller's member row (owner | admin | member | guest).",
@@ -136,14 +136,14 @@ func init() {
 			"SpacesIn.subject": "Subject is the IAM subject, NOT a team account id — team owns the join from\none to the other, exactly as in MemberIn.",
 		},
 	})
-	zip.Describe("POST /v1/team/bots/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /v1/team/bots/sync", zip.Doc{
 		Description: "SyncBots re-projects the caller org's agents as space members into EVERY\nspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a space's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
 		Fields: map[string]string{
 			"botSync.projected": "Projected is how many roster entries the reconcile touched.",
 			"botSync.synced":    "Synced is true when the reconcile ran.",
 		},
 	})
-	zip.Describe("POST /v1/team/collaborator/rpc/:documentId", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /v1/team/collaborator/rpc/:documentId", zip.Doc{
 		Description: "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or space token: the\ndocumentId's space must be the token's space when the token names one,\nand the caller must be a member of it. An unknown space, another tenant's\nspace and a space the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
 		Fields: map[string]string{
 			"collabPayload.content":    "Content maps a document field to its ProseMirror markup JSON.",
@@ -157,10 +157,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"documentId":"6579…|tracker:class:Issue|issue-1|description","method":"getContent","payload":{"source":"issue-1-description-1730000000000"}}`),
 	})
-	zip.Describe("POST /v1/team/files/:space", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /v1/team/files/:space", zip.Doc{
 		Description: "Stores the uploaded bytes under the CLIENT-supplied blob uuid (the\nmultipart file's filename). The server does NOT mint the id — the front owns it\n(front.ts: formData.append('file', file, uuid)). Response body is irrelevant\n(uploadFile discards it); we echo the id for curl/debug.",
 	})
-	zip.Describe("POST /v1/team/rooms", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /v1/team/rooms", zip.Doc{
 		Description: "Opens a named room and answers it as the store now holds it.\n\nIt writes through the SAME applyTx path the Team client uses, so a room opened\nhere is broadcast to every live client of the space and appears in an open\nsidebar without a reload — the same property listRooms rests on, read from the\nwrite side.\n\nTWO TRANSACTIONS, NOT ONE, when the request states a facet. The document and\nits mixin are separate writes in this model (bindRoom writes only the second),\nand composing them here rather than inventing a combined tx keeps one write\npath for each. A create that lands and a facet that does not is visible as a\nroom with default intent, which is the honest partial state.",
 		Fields: map[string]string{
 			"teamRoom.archived":    "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
@@ -183,7 +183,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"bugfix-1010","life":"bound","bindings":["issue:1010"]}`),
 	})
-	zip.Describe("POST /v1/team/rooms/:id/messages", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team POST /v1/team/rooms/:id/messages", zip.Doc{
 		Description: "Says one thing in a room, as the caller.\n\nThe write goes through the SAME applyTx path the Team client's own messages\ntake and is broadcast to every connected client of the space, so a message\nsent here appears live in an open room rather than on the next reload. It\nanswers the message as the store now HOLDS it.",
 		Fields: map[string]string{
 			"teamMessage.author":     "Author is the team account uuid that wrote it. It is an ACCOUNT and not a\ndisplay name: what to call somebody is the roster's answer, and copying it\nonto every message is how the two come to disagree. An agent's messages\ncarry the account derived from its id, so the same field answers for both.",
@@ -197,7 +197,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"space":"0e3c…","text":"deploying now"}`),
 	})
-	zip.Describe("PUT /v1/team/rooms/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/team PUT /v1/team/rooms/:id", zip.Doc{
 		Description: "States what a room is for: its lifecycle intent, and what it is\nabout. It answers the room as it now stands.\n\nThe write is a platform MIXIN on the room document, applied through the\nSAME applyTx path the Team client's own writes take and broadcast to every\nconnected client — so a room bound here updates live in an open space\nrather than on the next reload.",
 		Fields: map[string]string{
 			"teamRoom.archived":     "Archived reports that the room has been closed. It is the platform's own\nSpace attribute — the same one the Team client writes — and NOT a field of\nthe work facet, so there is exactly one answer to \"is this room open\".",
