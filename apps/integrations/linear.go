@@ -90,7 +90,10 @@ func linearQuery(ctx context.Context, token, query string, vars map[string]any, 
 	return json.Unmarshal(env.Data, out)
 }
 
-// linearKey is the caller's own Linear key: their connector row (the one labelled
+// linearMention is the text a comment carries to address the agent.
+const linearMention = "@hanzo"
+
+// linearKey is a person's own Linear key: their connector row (the one labelled
 // "" when they hold several) opened through the same custody path tokenConn uses.
 func linearKey(ctx context.Context, s *cloud.Service[state], org, user string) (string, error) {
 	p, ok := userProvider(s, "linear")
@@ -183,6 +186,12 @@ func (o ops) linearClaim(ctx context.Context, in *linearClaimIn) (*linearClaimOu
 	}
 	if err := sealTokens(o.s, kmsPath(org, "linear"), map[string]string{linearWebhookSecret: secret}); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "seal secret: %v", err)
+	}
+	// The claimer is who a Linear turn runs as until the commenter has linked
+	// their own account: the person who bound the organization, and whose key
+	// posts the reply. The same rule Slack applies to its installer before pairing.
+	if err := putUserLink(o.s, org, "linear", defaultSubjectKey, userLink{Subject: user}); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "bind claimer: %v", err)
 	}
 	return &linearClaimOut{Organization: d.Organization.ID, Name: d.Organization.URLKey, Path: "/v1/integrations/linear/webhook"}, nil
 }
@@ -469,4 +478,28 @@ func (o ops) linearIssuesBackfill(ctx context.Context, in *linearBackfillIn) (*l
 	o.s.Log.Info("linear issues backfill", "org", org, "issues", out.Issues,
 		"created", out.Created, "updated", out.Updated, "failed", out.Failed, "truncated", out.Truncated)
 	return &out, nil
+}
+
+// linearIssueComment posts one comment on an issue as the organization's default
+// subject — the claimer — whose own key is the one that posts.
+func linearIssueComment(ctx context.Context, s *cloud.Service[state], org, issue, text string) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("integrations: not mounted")
+	}
+	link, ok, err := getUserLink(s, org, "linear", defaultSubjectKey)
+	if err != nil {
+		return "", err
+	}
+	if !ok || link.Subject == "" {
+		return "", fmt.Errorf("integrations: linear is not claimed for org %s", org)
+	}
+	tok, err := linearKey(ctx, s, org, link.Subject)
+	if err != nil {
+		return "", err
+	}
+	out, err := linearCommentWith(ctx, tok, &linearCommentIn{Issue: issue, Body: text})
+	if err != nil {
+		return "", err
+	}
+	return out.ID, nil
 }

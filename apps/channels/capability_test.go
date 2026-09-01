@@ -40,6 +40,13 @@ var probes = map[string][]probe{
 		// ever reaches normalize, so nothing arrives classified as a DM.
 		{"no guild", ingressEv("acme", "discord", "", "u1", "c-1", "", "hi", "d2", ""), RoomGroup},
 	},
+	"github": {
+		// An issue or pull request is one conversation; there is no direct message.
+		{"an issue thread", ingressEv("acme", "github", "111", "u1", "acme/widgets#7", "", "hi", "gh1", ""), RoomThread},
+	},
+	"linear": {
+		{"an issue", ingressEv("acme", "linear", "org-1", "u1", "6f0b-issue", "", "hi", "ln1", ""), RoomThread},
+	},
 	"slack": {
 		{"an IM conversation", ingressEv("acme", "slack", "T1", "u1", "D024BE91L", "", "hi", "s1", ""), RoomDM},
 		{"a public channel", ingressEv("acme", "slack", "T1", "u1", "C024BE91L", "", "hi", "s2", ""), RoomGroup},
@@ -101,6 +108,8 @@ func TestCapabilitiesAreFactsAboutTheTransport(t *testing.T) {
 // needs to find.
 var sendProbes = map[string]struct{ room, root string }{
 	"discord":  {"c-1", ""},
+	"github":   {"acme/widgets#7", ""},
+	"linear":   {"6f0b-issue", ""},
 	"slack":    {"C1", ""},
 	"teams":    {"19:x@thread.tacv2", "https://smba.example/amer/"},
 	"telegram": {"777", ""},
@@ -135,8 +144,8 @@ func TestEveryTransportFlattensWhatItCannotRender(t *testing.T) {
 		t.Fatal("channels not mounted")
 	}
 	spies := map[string]*doorRec{
-		"discord": spyDiscord(t), "slack": spySlack(t), "teams": spyTeams(t),
-		"telegram": spyTelegram(t), "whatsapp": spyWhatsApp(t),
+		"discord": spyDiscord(t), "github": spyGitHub(t), "linear": spyLinear(t),
+		"slack": spySlack(t), "teams": spyTeams(t), "telegram": spyTelegram(t), "whatsapp": spyWhatsApp(t),
 	}
 	ctx := context.Background()
 	now := time.Now().Unix()
@@ -178,8 +187,8 @@ func TestEveryTransportSendsAsTheOrg(t *testing.T) {
 		t.Fatal("channels not mounted")
 	}
 	spies := map[string]*doorRec{
-		"discord": spyDiscord(t), "slack": spySlack(t), "teams": spyTeams(t),
-		"telegram": spyTelegram(t), "whatsapp": spyWhatsApp(t),
+		"discord": spyDiscord(t), "github": spyGitHub(t), "linear": spyLinear(t),
+		"slack": spySlack(t), "teams": spyTeams(t), "telegram": spyTelegram(t), "whatsapp": spyWhatsApp(t),
 	}
 	ctx := context.Background()
 	const org = "acme"
@@ -230,6 +239,12 @@ func TestEveryDoorNamesTheOrgOnTheWire(t *testing.T) {
 	}
 	if _, err := whatsappDoor(ctx, org, "15551230000", "", "hi"); err != nil {
 		t.Fatalf("whatsapp: %v", err)
+	}
+	if _, err := githubDoor(ctx, org, "acme/widgets#7", "hi"); err != nil {
+		t.Fatalf("github: %v", err)
+	}
+	if _, err := linearDoor(ctx, org, "6f0b-issue", "hi"); err != nil {
+		t.Fatalf("linear: %v", err)
 	}
 	if len(sent) != len(transports) {
 		t.Fatalf("%d sends reached the wire, want one per transport", len(sent))

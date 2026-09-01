@@ -102,7 +102,7 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		// Issue lifecycle → native todo mirror (github_issues.go). Same signed
 		// installation → org resolution as push; the todo sink is idempotent by
 		// ExtRef, so opened/edited/closed/reopened + comment all re-sync one row.
-		return handleGitHubIssueEvent(c, body)
+		return handleGitHubIssueEvent(s, c, body)
 	default:
 		return c.JSON(http.StatusOK, map[string]any{"ignored": "event"})
 	}

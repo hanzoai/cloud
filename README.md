@@ -73,7 +73,7 @@ hanzo apps list                   # platform apps board: declared/running/latest
 hanzo apps get <org>/<app>/<env>  # one app row
 hanzo deploy <container> --project <p> --env <e>   # rolling, zero-downtime redeploy
 hanzo clusters …                  # dedicated DOKS cluster lifecycle
-hanzo build <repo> --sha <sha> --image <img>       # platform-native (arcd/Kaniko) build, no GitHub builders
+hanzo build <repo> --sha <sha> --image <img>       # platform-native Kaniko build, no GitHub builders
 hanzo run <task>                  # one-off task on the platform
 hanzo agent … | hanzo bot …       # managed agents and bot nodes
 hanzo engine … | hanzo runner …   # local engine, and this machine as a CI runner

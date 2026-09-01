@@ -30,6 +30,11 @@ import (
 // One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
 // In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
+	"apps/ci/ci.go": "a PROXY that forwards the caller's identity. `call` re-enters another " +
+		"handler in-process and writes the org header from the request the gateway attested, never " +
+		"from anything the caller sent — so the visibility rules stay in one place instead of being " +
+		"restated here. Forwarding an attested identity is the case this hatch exists for; " +
+		"principal.OrgFrom would give the org but not the attested request to hand on.",
 	"apps/provisioning/inventory.go": "operatorOf — an identity gate reading strictly more than the " +
 		"org. These two reads span the WHOLE vector backend across every tenant, so the fact they turn " +
 		"on is platform sudo (principal.IsSuperAdmin, which is the reserved admin org's membership as " +

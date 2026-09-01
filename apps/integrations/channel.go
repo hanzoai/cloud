@@ -331,6 +331,13 @@ func channelIdentity(s *cloud.Service[state], org, provider, externalID, user st
 	if linked {
 		return link, "", false
 	}
+	// An issue tracker has no sign-in leg of its own yet, so a turn there runs as
+	// the organization's default subject — the person who bound the account —
+	// when the commenter has not linked. Written by the claim, read here, and
+	// absent on the chat transports, whose users link themselves.
+	if link, linked, err = getUserLink(s, org, provider, defaultSubjectKey); err == nil && linked {
+		return link, "", false
+	}
 	u, lerr := linkURL(s, provider, externalID, user)
 	if lerr != nil {
 		s.Log.Error("channel: link url", "provider", provider, "err", lerr)
@@ -363,6 +370,11 @@ const (
 	userSecretPrefix = "user:"
 	userSecretSuffix = ":refresh"
 )
+
+// defaultSubjectKey is the platform-user slot that holds an organization's
+// DEFAULT answering subject for a provider. It is not a user id — no platform
+// issues "*" — so it can never collide with a real link.
+const defaultSubjectKey = "*"
 
 // userSecretName is the KMS secret name for a linked platform user's binding —
 // "user:<extUser>:refresh" under the org's integrations/<provider> namespace.
