@@ -129,3 +129,50 @@ func TestTheStatedCallerReachesTheInMemoryDoor(t *testing.T) {
 		t.Fatalf("the caller this hop states is %q, not acme", got)
 	}
 }
+
+func TestGraphReachesACoResidentSubsystemWithoutDialing(t *testing.T) {
+	// The GraphQL hop carries an arbitrary REST address rather than a typed op, so
+	// it cannot use zip.Here — it replays the request against the serving app's own
+	// router. Same proof: the dial is impossible, so an answer can only be local.
+	app := servingApp(t, "probe")
+
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	req.Header.SetMethod("GET")
+	req.SetRequestURI("/v1/probe/ping")
+
+	resp, err := fleet.ServeHere(app, req)
+	if err != nil {
+		t.Fatalf("serving in memory: %v", err)
+	}
+	defer fasthttp.ReleaseResponse(resp)
+
+	if code := resp.StatusCode(); code != 200 {
+		t.Fatalf("the live router answered %d, not 200: %s", code, resp.Body())
+	}
+	if body := string(resp.Body()); body != `{"ok":true}` {
+		t.Fatalf("the in-memory answer is %q", body)
+	}
+}
+
+func TestTheInMemoryRouterIsTheSERVEDOne(t *testing.T) {
+	// The failure this forbids: reaching for App.Test, which prepares an app of its
+	// own and can answer for routes the served one does not have. A route the app
+	// never registered must 404 here exactly as it would over the socket.
+	app := servingApp(t, "probe")
+
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	req.Header.SetMethod("GET")
+	req.SetRequestURI("/v1/probe/route-nobody-registered")
+
+	resp, err := fleet.ServeHere(app, req)
+	if err != nil {
+		t.Fatalf("serving in memory: %v", err)
+	}
+	defer fasthttp.ReleaseResponse(resp)
+
+	if code := resp.StatusCode(); code != 404 {
+		t.Fatalf("an unregistered route answered %d, not 404", code)
+	}
+}

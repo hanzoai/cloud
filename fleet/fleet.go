@@ -166,6 +166,38 @@ func here(ctx context.Context, a *zip.App, name string, req *fasthttp.Request) A
 	return Answer{App: name, Body: body}
 }
 
+// serveHere runs r against a's own live router, in this process.
+//
+// zip.Serving is what makes this safe: an app is only there because something in
+// this program BOUND its socket, so its router has already been prepared and this
+// is the same handler the socket path would have reached. It is not App.Test,
+// which prepares an app of its own and can therefore answer for routes the served
+// one does not have.
+//
+// Nothing about identity is special here: r carries the caller's headers, and the
+// handler reads them exactly as it does off the wire. The socket path's whole
+// contribution was to copy those bytes through a syscall.
+// ServeHere is [serveHere], exported for the tests that prove a co-resident hop
+// never leaves the process.
+func ServeHere(a *zip.App, r *fasthttp.Request) (*fasthttp.Response, error) { return serveHere(a, r) }
+
+func serveHere(a *zip.App, r *fasthttp.Request) (*fasthttp.Response, error) {
+	var rc fasthttp.RequestCtx
+	rc.Init(r, localAddr{}, nil)
+	a.Fiber().Handler()(&rc)
+	resp := fasthttp.AcquireResponse()
+	rc.Response.CopyTo(resp)
+	return resp, nil
+}
+
+// localAddr names the peer of a hop that never left the process. A handler that
+// logs its client, or rate-limits on one, sees a loopback address rather than the
+// empty string an uninitialised RequestCtx would hand it.
+type localAddr struct{}
+
+func (localAddr) Network() string { return "unix" }
+func (localAddr) String() string  { return "@here" }
+
 // dial is the hop to a peer this process does not serve.
 func dial(at At, name string, req *fasthttp.Request) Answer {
 	addr, path, err := at(name)
