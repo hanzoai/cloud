@@ -207,3 +207,29 @@ func orgOf(c *zip.Ctx) (string, bool) {
 	}
 	return "", false
 }
+
+// Bytes composes the same preamble onto a handler that reads or writes a BODY.
+//
+// A typed operation answers a value; some answer bytes. An object's contents, a
+// rendered file, an upload — none of them are a struct, and zip's typed pair
+// cannot carry them, so those handlers take the request itself. They are the same
+// decision about money and org scope as every other operation on the surface, and
+// this is that decision, not a second one: [Paid] and this call admit, run, and
+// settle in the same order, and both put the org where [Org] reads it.
+//
+// The org travels in the CONTEXT the handler reads off the request, so a bytes
+// handler learns its org exactly the way a typed one does and cannot name another.
+func Bytes[S Surface](s *cloud.Service[S], core func(*zip.Ctx) error) func(*zip.Ctx) error {
+	return func(c *zip.Ctx) error {
+		org, err := admit(s, c)
+		if err != nil {
+			return err
+		}
+		c.SetContext(context.WithValue(c.Context(), orgKey{}, org))
+		if err := core(c); err != nil {
+			return err
+		}
+		settle(s, c)
+		return nil
+	}
+}

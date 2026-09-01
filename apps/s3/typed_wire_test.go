@@ -28,17 +28,21 @@ import (
 // typed ops, each with the wire fact that keeps it raw. The address is written
 // the way the DOCUMENT writes it, which is the identity every projection keys on.
 //
-// It is EMPTY, and that is the whole surface's state rather than a gap: all eight
-// operations are typed. It stays because the sum below is what a ninth route added
-// untyped would violate, and because a genuine refusal needs somewhere to be
-// written down with its reason.
-//
 // FOUR refusals were recorded here over time and all four expired — each named a
 // capability zip did not have and now has. A refusal is kept as an entry rather
 // than as prose for exactly that reason: a sentence cannot notice that its reason
 // stopped being true, and three of the four were found by re-reading rather than
 // by anything going red. The fourth was, which is what the entries are for.
-var untypedByDesign = map[string]string{}
+//
+// The two below are the byte plane, and their reason is not a missing capability:
+// a typed op is a value in and a value out, and an object's CONTENTS are neither.
+// This pair is the one place on the surface where the body IS the subject, so it
+// is the one place a typed op cannot reach — no zip release makes a []byte a
+// schema. They are raw for as long as they carry bytes, which is permanently.
+var untypedByDesign = map[string]string{
+	"PUT /v1/s3/buckets/{bucket}/blob/{wildcard1}": "the request body IS the object; a typed op carries a value, not a stream",
+	"GET /v1/s3/buckets/{bucket}/blob/{wildcard1}": "the response body IS the object; a typed op answers a value, not a stream",
+}
 
 // TestEveryRouteIsTypedOrNamed reads BOTH projections of the live router at their
 // one shared address form — what the document says is served, and which of those
