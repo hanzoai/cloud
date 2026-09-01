@@ -531,18 +531,18 @@ func TestItOnlyEverReads(t *testing.T) {
 // a caller the indexer's own cluster-internal address gives them somewhere that
 // cannot answer them.
 func TestClusterAddressIsNeverPublished(t *testing.T) {
-	inside := row{RPC: "http://luxd-headless.lux-mainnet.svc.cluster.local:9630/v1/bc/C/rpc"}
+	inside := row{RPC: "http://luxd-headless.lux-mainnet.svc.cluster.local:9630/v1/chain/C/rpc"}
 	if at := endpoint(inside); at != "" {
 		t.Fatalf("published a cluster address: %q", at)
 	}
 	both := inside
-	both.PublicRPC = "https://api.lux.network/v1/bc/C/rpc"
+	both.PublicRPC = "https://api.lux.network/v1/chain/C/rpc"
 	if at := endpoint(both); at != both.PublicRPC {
 		t.Fatalf("want the public route, got %q", at)
 	}
 	// Most rows carry ONE route and it is already public — so the rule is about the
 	// address, not about which field it arrived in.
-	plain := row{RPC: "https://api.zoo.ngo/v1/bc/C/rpc"}
+	plain := row{RPC: "https://api.zoo.ngo/v1/chain/C/rpc"}
 	if at := endpoint(plain); at != plain.RPC {
 		t.Fatalf("a public rpc field was dropped: %q", at)
 	}
