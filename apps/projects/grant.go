@@ -107,11 +107,27 @@ func mintGrant(ctx context.Context, b *blobStore, prefix string, now time.Time) 
 	if err := p.SetContentLengthRange(0, grantMaxObjectBytes); err != nil {
 		return nil, fmt.Errorf("policy size: %w", err)
 	}
+	// Content-Type is SIGNED, and the empty prefix means "any value". S3 refuses a
+	// POST carrying a form field the policy does not name — "Each form field that
+	// you specify in a form must appear in the list of policy conditions" — and the
+	// publisher sends one per object so the bytes are served with the right type
+	// instead of application/octet-stream. Without this condition every upload in
+	// the deployment answers 403 while the grant itself looks perfectly good.
+	if err := p.SetContentTypeStartsWith(""); err != nil {
+		return nil, fmt.Errorf("policy content type: %w", err)
+	}
 
 	u, fields, err := cli.PresignedPostPolicy(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("presign post policy: %w", err)
 	}
+	// The empty Content-Type is a PLACEHOLDER the signer echoes back for the
+	// starts-with condition, exactly as `key` is, and it must not travel as a
+	// value: a caller that forwards it and then sends the object's real type posts
+	// the field twice, which S3 refuses as "FormValues have multiple values". The
+	// condition stays in the signed policy; only the empty value is dropped, so the
+	// caller states the type and the signature still covers it.
+	delete(fields, "Content-Type")
 	return &projectsUploadGrant{
 		URL: u.String(), Fields: fields, Prefix: prefix,
 		ExpiresAt: expires.Unix(), MaxBytes: grantMaxObjectBytes,
