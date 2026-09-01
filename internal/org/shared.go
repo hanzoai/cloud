@@ -15,26 +15,22 @@ package org
 //
 // cloud-SPECIFIC pieces that stay in this package: membership.go (the live IAM
 // membership Source + polling, the input to election) and cipher.go (the KMS-master
-// per-org envelope encryption — it satisfies replica.Cipher). vfsstore.go implements
-// the replica.Store over cloud's deps.VFS.
+// per-org envelope encryption — it satisfies replica.Cipher).
 //
-// The four names below are the substrates' vocabulary that cloud's OWN callers
+// The three names below are the substrates' vocabulary that cloud's OWN callers
 // speak — the HRW election, whose input is a membership this package builds and
 // whose answer build.go and every durable subsystem reads. Everything else is
-// spelled `ha.` or `replica.` at the point of use, which is why there are four
+// spelled `ha.` or `replica.` at the point of use, which is why there are three
 // aliases here and not seventeen: a second spelling that says nothing new is a
 // second name for one thing.
 
 import (
 	"github.com/hanzoai/ha"
-	"github.com/hanzoai/vfs/replica"
 )
 
 type (
 	// Member is one replica in the live membership set (HRW election input).
 	Member = ha.Member
-	// Store is the object-store surface (satisfied by vfsstore.go over deps.VFS).
-	Store = replica.Store
 )
 
 var (
