@@ -28,7 +28,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/hanzoai/namespace"
 	"github.com/zap-proto/zip"
 	upstream "hanzo.ai/ci"
 )
@@ -148,15 +147,21 @@ func call[T any](ctx context.Context, h http.Handler, path string) (*T, error) {
 // viewer is the org this request is answered as: the reserved admin org for a
 // SuperAdmin, which is what the surface reads as "sees everything", otherwise
 // the validated principal's own org.
+//
+// AN ISOLATION KEY, NOT A RESOURCE NAME — which is why this reads principal and
+// does not fold. Two shapes are in use in this binary and they are not
+// interchangeable. deploy, platform, provisioning and fare pass c.Org() through
+// namespace.Sanitize because there the org BECOMES something whose grammar is
+// fixed elsewhere: a k8s namespace, a DNS label. A fold is mandatory there.
+// Here the org answers "whose runs are these", so its only job is to equal the
+// key every other surface uses for the same caller. Folding it breaks exactly
+// that: "Acme" becomes acme-37036cd8f9746d33, and a claim past MaxOrgLen, which
+// the isolation rule refuses outright, folds into a well-formed key. Both fail
+// silently — a folded key still looks like an org, so the surface answers 200
+// with the runs of a tenant that does not exist.
 func viewer(c *zip.Ctx) (string, bool) {
-	if c.IsAdmin() {
+	if principal.IsSuperAdmin(c) {
 		return "admin", true
 	}
-	if !principal.Validated(c) {
-		return "", false
-	}
-	if org := namespace.Sanitize(c.Org()); org != "" {
-		return org, true
-	}
-	return "", false
+	return principal.Org(c)
 }
