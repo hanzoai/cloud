@@ -7,20 +7,20 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/s3/buckets/:bucket", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 DELETE /v1/s3/buckets/:bucket", zip.Doc{
 		Description: "Removes an EMPTY bucket and answers 204.\n\nA non-empty bucket is 409 rather than a cascade: deleting a tenant's objects\nbehind a single bucket call is not a thing this surface will do silently. A\nbucket the caller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nbucket is gone.",
 		Fields: map[string]string{
 			"bucketRef.bucket": "Bucket is the bucket's friendly name, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/s3/buckets/:bucket/objects/+", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 DELETE /v1/s3/buckets/:bucket/objects/+", zip.Doc{
 		Description: "Removes one object and answers 204.\n\nIt removes ONE object and never a prefix: a key that looks like a folder deletes\nthe placeholder at that key, not the objects beneath it. The key is path-cleaned\nfirst, so the delete cannot reach outside the bucket it names, and a bucket the\ncaller's org does not own is the same 404 an unknown name gives.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing deleted, and the debit lands only once the\nobject is gone.",
 		Fields: map[string]string{
 			"objectRef.bucket": "Bucket is the bucket's friendly name, from the path.",
 			"objectRef.key":    "Key is the object's key within the bucket — everything after that bucket's\n/objects/. It MAY contain \"/\", because a key is a path and this segment is\ncaptured whole: \"2019/summer/a.jpg\" is one key, not three. It is\npath-cleaned before use, so \"../\" reaches nothing outside the bucket, and a\nkey that is empty, absolute or a bare folder marker is refused 400.",
 		},
 	})
-	zip.Describe("GET /v1/s3/buckets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 GET /v1/s3/buckets", zip.Doc{
 		Description: "Lists the caller org's own buckets.\n\nOnly the caller's: every bucket is physically named under a per-org prefix and\nthe listing strips that prefix, so a tenant sees friendly names and another\ntenant's buckets are not in the answer at all. Another org's bucket is not\nrefused but INVISIBLE, so this cannot be used to learn that a name is taken\nelsewhere.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing done, and the debit lands only once the\nwork has succeeded.",
 		Fields: map[string]string{
 			"bucketItem.createdAt": "unix seconds",
@@ -29,7 +29,10 @@ func init() {
 			"bucketList.total":     "Total is how many buckets this org has. It equals len(buckets): the listing\nis not paged, because an org's bucket count is small by construction.",
 		},
 	})
-	zip.Describe("GET /v1/s3/buckets/:bucket/objects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 GET /v1/s3/buckets/:bucket/blob/+", zip.Doc{
+		Description: "Answers one object's bytes.\n\nServed INERT — octet-stream, attachment, nosniff — because the type would\notherwise be the uploader's claim about someone else's download, and a store\nthis general holds whatever an org put in it. The same rule apps/team applies\nto a space blob, for the same reason.",
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 GET /v1/s3/buckets/:bucket/objects", zip.Doc{
 		Description: "Lists one folder level of a bucket.\n\nFolder-style by default: sub-prefixes come back as directory entries, which is\nthe file-manager view. `?recursive=true` lists every key flat under the prefix\ninstead. Keys are RELATIVE to `?prefix=`, and the listing is bounded so a huge\nbucket cannot exhaust memory — Total is what came back, not what the bucket\nholds.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing read, and the debit lands only once the\nlisting has succeeded.",
 		Fields: map[string]string{
 			"listIn.bucket":           "Bucket is the bucket to list, from the path.",
@@ -44,7 +47,7 @@ func init() {
 			"objectList.total":        "Total is how many entries came back. The listing is BOUNDED, so a bucket\nwith more keys than the cap answers the cap and this says so — it is not a\ncount of what the bucket holds.",
 		},
 	})
-	zip.Describe("GET /v1/s3/buckets/:bucket/objects/+", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 GET /v1/s3/buckets/:bucket/objects/+", zip.Doc{
 		Description: "Mints a presigned GET URL the caller downloads from DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. It carries a content disposition of attachment\nnaming the object's file name, so a browser following it saves the object rather\nthan rendering it in place. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe download that follows it comes straight from the store and is not seen here.\nThe balance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
 		Fields: map[string]string{
 			"objectRef.bucket":          "Bucket is the bucket's friendly name, from the path.",
@@ -55,7 +58,7 @@ func init() {
 			"presignResponse.url":       "presigned URL the browser follows directly",
 		},
 	})
-	zip.Describe("GET /v1/s3/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 GET /v1/s3/health", zip.Doc{
 		Description: "Health reports whether this deployment can serve object storage.\n\nIt is a REAL probe rather than a constant: 200 when admin credentials are\npresent, so the store is reachable in principle, and 503 with the reason when\nthey are not. It is deliberately NOT gated — liveness has to be probe-able\nwithout a token — so it is the one operation here that names no bucket and\nbills nothing.",
 		Fields: map[string]string{
 			"s3Health.error":   "Error is why the probe is degraded, in plain words. Absent when it is not.",
@@ -65,7 +68,7 @@ func init() {
 			"s3Health.status":  "Status is \"ok\" when the store is reachable in principle, \"degraded\" when it\nis not. It is the field to read; the HTTP status carries the same fact for a\ncaller that only looks at the code.",
 		},
 	})
-	zip.Describe("POST /v1/s3/buckets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 POST /v1/s3/buckets", zip.Doc{
 		Description: "Makes a new bucket for the caller's org and answers 201 with it.\n\nThe physical name is derived from the caller's validated org, so a tenant can\nonly ever create inside its own namespace and no request field can redirect\nthat. A name already taken in the org is 409.\n\nBilled per call: the balance is checked BEFORE anything is touched, so an\nunfunded org is refused with nothing created, and the debit lands only once the\nbucket exists.",
 		Fields: map[string]string{
 			"bucketIn.name":        "Name is the bucket's friendly name, matching\n^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. It is validated AS GIVEN and never\nlower-cased for you: a client that creates \"Photos\" and then lists \"photos\"\nwould be reading a bucket it did not make, so mixed case is a clean 400.",
@@ -73,7 +76,7 @@ func init() {
 			"bucketItem.name":      "friendly name",
 		},
 	})
-	zip.Describe("POST /v1/s3/buckets/:bucket/objects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 POST /v1/s3/buckets/:bucket/objects", zip.Doc{
 		Description: "Mints a presigned PUT URL the caller uploads to DIRECTLY.\n\nThe bytes never pass through this binary and the admin credential never leaves\nthe server: the URL is signed against the PUBLIC host, scoped to exactly this\nbucket and key, and expires. A deployment with no public endpoint configured\ncannot mint one and answers 503 rather than a URL that will not work.\n\nBilled per call — for MINTING the URL, which is the work this operation does;\nthe upload that follows it goes straight to the store and is not seen here. The\nbalance is checked BEFORE anything is touched, so an unfunded org is refused\nwith no URL issued.",
 		Fields: map[string]string{
 			"presignResponse.expiresIn": "seconds until the URL expires",
@@ -83,5 +86,8 @@ func init() {
 			"uploadIn.bucket":           "Bucket is the bucket to upload into, from the path.",
 			"uploadIn.key":              "Key is the object key relative to the bucket root. It is path-cleaned, so a\n\"../\" cannot escape the bucket, and an empty or unclean key is 400.",
 		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/s3 PUT /v1/s3/buckets/:bucket/blob/+", zip.Doc{
+		Description: "Writes a request body into one object.\n\nThe org comes from the admission this handler is wrapped in, never from the\nrequest, so the bucket a caller names is resolved inside their own tenant and a\nkey cannot address another's.",
 	})
 }

@@ -190,6 +190,13 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(g, "/buckets/:bucket/objects/+", fare.Paid(s, o.presignDownload))
 	zip.Delete(g, "/buckets/:bucket/objects/+", fare.Paid(s, o.deleteObject))
 
+	// The BYTES, at their own address. Raw rather than typed because a body is
+	// not a struct: zip's typed pair carries a value in and a value out, and an
+	// object's contents are neither. fare.Bytes is the same admission, the same
+	// org, and the same debit the typed ops open with — see blob.go.
+	g.Put(blobPath, fare.Bytes(s, o.putBlob))
+	g.Get(blobPath, fare.Bytes(s, o.getBlob))
+
 	if !s.State.admin.Configured() {
 		s.Log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
 		return nil

@@ -38,8 +38,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/internal/fare"
 	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/internal/fare"
 	s3 "github.com/hanzos3/go"
 	"github.com/zap-proto/zip"
 )
@@ -382,7 +382,10 @@ func (o ops) presignUpload(ctx context.Context, in *uploadIn) (*presignResponse,
 		return nil, zip.ErrBadRequest("key is required and must be a clean object path")
 	}
 	if !o.s.State.admin.PresignConfigured() {
-		return nil, zip.Errorf(http.StatusServiceUnavailable, "presigned upload is not available (no public endpoint configured)")
+		// No public store to sign against, so the bytes come through here. The
+		// caller is told where to send them and does not learn which path it got:
+		// the answer is {url, method} either way. See blob.go.
+		return streamed(in.Bucket, key, http.MethodPut), nil
 	}
 	pub, err := o.s.State.admin.PublicClient()
 	if err != nil {
@@ -455,7 +458,7 @@ func (o ops) presignDownload(ctx context.Context, in *objectRef) (*presignRespon
 		return nil, zip.ErrBadRequest("object key is required and must be a clean path")
 	}
 	if !o.s.State.admin.PresignConfigured() {
-		return nil, zip.Errorf(http.StatusServiceUnavailable, "presigned download is not available (no public endpoint configured)")
+		return streamed(in.Bucket, key, http.MethodGet), nil
 	}
 	pub, err := o.s.State.admin.PublicClient()
 	if err != nil {
@@ -510,4 +513,25 @@ func (o ops) deleteObject(ctx context.Context, in *objectRef) (*struct{}, error)
 		return nil, zip.Errorf(http.StatusBadGateway, "delete object: %v", err)
 	}
 	return nil, nil
+}
+
+// streamed is the mint's answer when there is no public store to sign against:
+// the object's own byte address on this API, which is the one door every
+// deployment has. The response is the SAME shape a presigned mint returns, so a
+// caller follows {url, method} without knowing which it received — and a
+// deployment that later gains a public store starts handing out signed URLs with
+// no client change.
+//
+// Relative, not absolute. The API's own host is whatever the caller reached it
+// on, and a mint that named one would be wrong for every other — the same
+// mistake as signing against a host the browser cannot route to. `expiresIn` is 0
+// because this address does not expire: it is authorized per request, by the same
+// admission every other operation opens with, rather than by a signature with a
+// clock on it.
+func streamed(bucket, key, method string) *presignResponse {
+	return &presignResponse{
+		URL:    "/v1/s3/buckets/" + url.PathEscape(bucket) + "/blob/" + key,
+		Method: method,
+		Key:    key,
+	}
 }

@@ -105,6 +105,60 @@
         "x-tool": true
       }
     },
+    "/v1/s3/buckets/{bucket}/blob/{wildcard1}": {
+      "get": {
+        "operationId": "get_s3_buckets_by_bucket_blob_by_wildcard1",
+        "summary": "Read one object's bytes",
+        "description": "Answers the object's stored bytes.\n\nServed INERT — application/octet-stream, attachment, nosniff — because the content type would otherwise be one caller's claim about another caller's download, and this store holds whatever an org put in it. A caller that knows what it stored reads the bytes; a browser saves them rather than rendering them.\n\nThe counterpart of the PUT above, and the address GET /v1/s3/buckets/{bucket}/objects/{key} hands back where there is no public store to sign against.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_s3_buckets_by_bucket_blob_by_wildcard1",
+        "summary": "Write one object's bytes",
+        "description": "Stores the request body as the object at this address and answers its key and size. The body IS the object: whatever is sent is what is stored, and the declared Content-Type is kept with it.\n\nThis is the address POST /v1/s3/buckets/{bucket}/objects hands back on a deployment whose object store has no browser-routable host. Where one exists that mint answers a presigned URL against the store instead and the bytes never pass through this API — the caller follows {url, method} either way and does not choose.\n\nBounded: a body over the limit is refused 413 rather than held. An empty body is refused — a zero-byte object is almost always a failed read upstream.",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/s3/buckets/{bucket}/objects": {
       "get": {
         "operationId": "get_s3_buckets_by_bucket_objects",
@@ -326,6 +380,7 @@
         "properties": {
           "createdAt": {
             "description": "unix seconds",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -346,6 +401,7 @@
           },
           "total": {
             "description": "Total is how many buckets this org has. It equals len(buckets): the listing\nis not paged, because an org's bucket count is small by construction.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -367,10 +423,12 @@
           },
           "lastModified": {
             "description": "unix seconds (0 for a folder)",
+            "format": "int64",
             "type": "integer"
           },
           "size": {
             "description": "bytes (0 for a folder)",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -395,6 +453,7 @@
           },
           "total": {
             "description": "Total is how many entries came back. The listing is BOUNDED, so a bucket\nwith more keys than the cap answers the cap and this says so — it is not a\ncount of what the bucket holds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -404,6 +463,7 @@
         "properties": {
           "expiresIn": {
             "description": "seconds until the URL expires",
+            "format": "int64",
             "type": "integer"
           },
           "key": {
