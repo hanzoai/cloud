@@ -17,7 +17,7 @@ import (
 )
 
 // fakeZT is a stand-in for the real Hanzo Zero Trust controller's Edge Management
-// API. It speaks the Ziti password-auth + {data,meta} envelope and, crucially,
+// API. It speaks the ZT password-auth + {data,meta} envelope and, crucially,
 // scopes NOTHING itself — it returns the FULL cross-org inventory so a test can
 // prove that cloud (not the controller) enforces the "org-<org>" role-attribute
 // tenant boundary. It records the auth it saw for assertions.

@@ -1,4 +1,4 @@
-// types.go holds the ZT wire structs (what the OpenZiti Edge Management API
+// types.go holds the ZT wire structs (what the ZT Edge Management API
 // returns) and the console view structs (what this subsystem emits), plus the PURE
 // mapping between them. The view JSON keys mirror the console modules EXACTLY so the
 // Networks, Service Mesh and Edge pages render with no front-end change:
@@ -11,9 +11,9 @@
 // API does not carry (per-service request counts, per-router latency) is left off
 // the view so the UI renders "—", never a fabricated 0.
 //
-// TENANT ISOLATION. ZT (OpenZiti) has no native org tenancy; services and
+// TENANT ISOLATION. ZT (ZT) has no native org tenancy; services and
 // edge-routers are scoped by their `roleAttributes` — the SAME first-class strings
-// Ziti uses to drive service and edge-router policies. The org boundary is therefore
+// ZT uses to drive service and edge-router policies. The org boundary is therefore
 // the role attribute "org-<org>": a resource belongs to a tenant iff its
 // roleAttributes contains that exact string (the org is the validated IAM owner,
 // used verbatim). List/get filter to the caller's role, so one tenant can never see
@@ -39,7 +39,7 @@ const (
 // orgRole is the role attribute that marks a ZT resource as belonging to org.
 func orgRole(org string) string { return orgRolePrefix + org }
 
-// ---- ZT wire structs (OpenZiti rest_model subset, JSON as the API emits) ----
+// ---- ZT wire structs (ZT rest_model subset, JSON as the API emits) ----
 
 // ztService mirrors the Edge Management API ServiceDetail (JSON subset). Its
 // EdgeService model lives at controller/model/edge_service_model.go.
@@ -103,13 +103,13 @@ type ztOne[T any] struct {
 // A fabric name is global and a caller's name is per-org, so everything the
 // write half puts on the fabric carries the org as a dotted suffix: identity
 // "laptop" of org acme is "laptop.acme", service "k3s" is "k3s.acme", and the
-// service's DNS is its fabric name plus ".ziti". The fleet's dialer
-// (apps/fleet/ziti.go) strips that one suffix to get the fabric name back, and
+// service's DNS is its fabric name plus ".zt". The fleet's dialer
+// (apps/fleet/zt.go) strips that one suffix to get the fabric name back, and
 // nothing anywhere parses further.
 
 // ztDNSSuffix is what turns a fabric service name into the name the fabric's
 // DNS answers for it.
-const ztDNSSuffix = ".ziti"
+const ztDNSSuffix = ".zt"
 
 // scoped is the fabric spelling of an org's name — for identities, services,
 // and the role attributes a caller supplies (a role another tenant's policy
@@ -122,7 +122,7 @@ func scoped(name, org string) string { return name + "." + org }
 func short(name, org string) string { return strings.TrimSuffix(name, "."+org) }
 
 // label admits the names the write half will put on the fabric and into DNS: a
-// DNS label, lower-cased — so "<name>.<org>.ziti" is always well-formed and a
+// DNS label, lower-cased — so "<name>.<org>.zt" is always well-formed and a
 // name can never forge or split the org suffix beside it.
 func label(s string) (string, error) {
 	s = strings.ToLower(strings.TrimSpace(s))
@@ -237,7 +237,7 @@ func filterIdentities(all []ztIdentity, org string) []ztIdentity {
 // ---- mapping (PURE) ----
 
 // toMeshView maps a ZT edge service to the console mesh row. mtls is "required"
-// when the service mandates end-to-end encryption, else "enabled" (the Ziti fabric
+// when the service mandates end-to-end encryption, else "enabled" (the ZT fabric
 // always mutually authenticates every link — it is never truly off). status is
 // "active": a listed service is a configured, dialable mesh entry.
 func toMeshView(s ztService) meshView {

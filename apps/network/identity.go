@@ -47,7 +47,7 @@ type identityIn struct {
 // enrollmentView is the identity's one-time enrollment, while it has one.
 type enrollmentView struct {
 	// JWT is the one-time enrollment token the device presents ONCE to join the
-	// fabric (ziti edge enroll / ziti-edge-tunnel enroll). Spent or lapsed, it
+	// fabric (zt edge enroll / zt-edge-tunnel enroll). Spent or lapsed, it
 	// authenticates nothing; this surface stores it nowhere.
 	JWT string `json:"jwt"`
 	// ExpiresAt is when the un-used token lapses, RFC 3339.

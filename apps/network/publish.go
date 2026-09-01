@@ -4,13 +4,13 @@
 // is the only place their names, configs and roles are decided:
 //
 //	config  "<name>.<org>-host"       host.v1      where the HOSTING identity forwards: tcp, host, port
-//	config  "<name>.<org>-intercept"  intercept.v1 the DNS the fabric answers: "<name>.<org>.ziti"
+//	config  "<name>.<org>-intercept"  intercept.v1 the DNS the fabric answers: "<name>.<org>.zt"
 //	service "<name>.<org>"            tagged "org-<org>", end-to-end encryption required
 //	policy  "<name>.<org>-bind"       identities with role "<name>-host.<org>" may HOST it
 //	policy  "<name>.<org>-dial"       identities with role "org-<org>" may DIAL it — any of the
 //	                                  org's devices — and the cloud's own identity ("org-admin",
 //	                                  the reserved platform org) so the fleet can reach a
-//	                                  published apiserver (apps/fleet/ziti.go)
+//	                                  published apiserver (apps/fleet/zt.go)
 //
 // The two config types are the controller's own built-ins, addressed by the
 // fixed ids it creates them under (controller/db/migration_initialize.go:
@@ -38,7 +38,7 @@ const (
 // serviceIn is what POST /v1/network/services takes.
 type serviceIn struct {
 	// Name is the service's name within the org — a DNS label. The fabric knows
-	// the service as "<name>.<org>" and answers for it at "<name>.<org>.ziti".
+	// the service as "<name>.<org>" and answers for it at "<name>.<org>.zt".
 	Name string `json:"name"`
 	// Host is where the HOSTING identity forwards a connection — an address the
 	// host device itself can reach, "127.0.0.1" for a server on the device.
@@ -62,9 +62,9 @@ type publishedView struct {
 
 // publishService puts a name on the org's overlay: a fabric service forwarding
 // to host:port on whichever of the org's devices carries the "<name>-host"
-// role, dialable at "<name>.<org>.ziti" by any of the org's identities — and by
+// role, dialable at "<name>.<org>.zt" by any of the org's identities — and by
 // the cloud's own, which is what lets a BYO cluster's apiserver be attached to
-// the fleet with a ".ziti" kubeconfig.
+// the fleet with a ".zt" kubeconfig.
 //
 // Answers 201 with the service and its DNS name. The objects behind it are
 // created in dependency order and unwound on failure, so a half-published

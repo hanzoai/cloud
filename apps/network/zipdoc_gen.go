@@ -37,7 +37,7 @@ func init() {
 		Description: "Returns the fabric identities the caller's org owns.\n\nOne row per identity tagged with the org's \"org-<org>\" role attribute — a\ndevice minted here, enrolled or not. An identity that has not yet enrolled\nstill carries its one-time enrollment, so a mislaid JWT is read again here\nrather than re-minted.\n\nA tenancy read over the full inventory, so like the mesh list it does NOT\ndegrade: an unconfigured deployment answers 503.",
 		Fields: map[string]string{
 			"enrollmentView.expiresAt": "ExpiresAt is when the un-used token lapses, RFC 3339.",
-			"enrollmentView.jwt":       "JWT is the one-time enrollment token the device presents ONCE to join the\nfabric (ziti edge enroll / ziti-edge-tunnel enroll). Spent or lapsed, it\nauthenticates nothing; this surface stores it nowhere.",
+			"enrollmentView.jwt":       "JWT is the one-time enrollment token the device presents ONCE to join the\nfabric (zt edge enroll / zt-edge-tunnel enroll). Spent or lapsed, it\nauthenticates nothing; this surface stores it nowhere.",
 			"identityList.identities":  "Identities is one row per fabric identity tagged with the caller's org role.",
 			"identityView.enrollment":  "Enrollment is present only while the identity holds an un-used one-time\ntoken — on create, and on a listed identity that has not yet enrolled, so\na mislaid JWT can be read again until it is spent or lapses.",
 			"identityView.id":          "ID is the identity's fabric id — the key DELETE addresses.",
@@ -69,7 +69,7 @@ func init() {
 		Description: "Mints a fabric identity for a device the caller's org brings.\n\nThe identity is created of type Device, tagged with the org's \"org-<org>\" role\nattribute plus any supplied roles — each scoped to the org, and a\n\"<service>-host\" role refused unless the org has published that service. The\nanswer carries the controller's one-time enrollment JWT: the device presents\nit once to join the fabric, and until it does the same token can be read back\noff GET /v1/network/identities.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
 		Fields: map[string]string{
 			"enrollmentView.expiresAt": "ExpiresAt is when the un-used token lapses, RFC 3339.",
-			"enrollmentView.jwt":       "JWT is the one-time enrollment token the device presents ONCE to join the\nfabric (ziti edge enroll / ziti-edge-tunnel enroll). Spent or lapsed, it\nauthenticates nothing; this surface stores it nowhere.",
+			"enrollmentView.jwt":       "JWT is the one-time enrollment token the device presents ONCE to join the\nfabric (zt edge enroll / zt-edge-tunnel enroll). Spent or lapsed, it\nauthenticates nothing; this surface stores it nowhere.",
 			"identityIn.name":          "Name is the device's name within the org — a DNS label. The fabric knows\nthe identity as \"<name>.<org>\"; every answer here uses the caller's name.",
 			"identityIn.roles":         "Roles are extra role attributes for the identity, each scoped to the\ncaller's org on the way in (\"k3s-host\" is written as \"k3s-host.<org>\") so\nno caller can claim an attribute another tenant's policy selects. A role\nof the form \"<service>-host\" makes this identity a HOST of that published\nservice — the bind policy from POST /v1/network/services selects exactly\nthat attribute — and is refused when the org has no such service.",
 			"identityView.enrollment":  "Enrollment is present only while the identity holds an un-used one-time\ntoken — on create, and on a listed identity that has not yet enrolled, so\na mislaid JWT can be read again until it is spent or lapses.",
@@ -79,13 +79,13 @@ func init() {
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/network POST /v1/network/services", zip.Doc{
-		Description: "Puts a name on the org's overlay: a fabric service forwarding\nto host:port on whichever of the org's devices carries the \"<name>-host\"\nrole, dialable at \"<name>.<org>.ziti\" by any of the org's identities — and by\nthe cloud's own, which is what lets a BYO cluster's apiserver be attached to\nthe fleet with a \".ziti\" kubeconfig.\n\nAnswers 201 with the service and its DNS name. The objects behind it are\ncreated in dependency order and unwound on failure, so a half-published\nservice never lingers on the fabric.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
+		Description: "Puts a name on the org's overlay: a fabric service forwarding\nto host:port on whichever of the org's devices carries the \"<name>-host\"\nrole, dialable at \"<name>.<org>.zt\" by any of the org's identities — and by\nthe cloud's own, which is what lets a BYO cluster's apiserver be attached to\nthe fleet with a \".zt\" kubeconfig.\n\nAnswers 201 with the service and its DNS name. The objects behind it are\ncreated in dependency order and unwound on failure, so a half-published\nservice never lingers on the fabric.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
 		Fields: map[string]string{
 			"publishedView.dns":  "DNS is the name the fabric answers for this service — what a kubeconfig\nserver, or any client on the org's overlay, dials.",
 			"publishedView.id":   "ID is the fabric service's id.",
 			"publishedView.name": "Name is the service's name within the org.",
 			"serviceIn.host":     "Host is where the HOSTING identity forwards a connection — an address the\nhost device itself can reach, \"127.0.0.1\" for a server on the device.",
-			"serviceIn.name":     "Name is the service's name within the org — a DNS label. The fabric knows\nthe service as \"<name>.<org>\" and answers for it at \"<name>.<org>.ziti\".",
+			"serviceIn.name":     "Name is the service's name within the org — a DNS label. The fabric knows\nthe service as \"<name>.<org>\" and answers for it at \"<name>.<org>.zt\".",
 			"serviceIn.port":     "Port is the port beside Host, and the one the DNS name intercepts.",
 		},
 	})
