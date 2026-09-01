@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/pricing/catalog", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/admin/pricing/catalog", zip.Doc{
 		Description: "Returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console. Nothing is hidden:\nthis is the admin's view of what exists and what is currently off, in beta or\ngenerally available. SuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
 			"adminCatalogOut.models":    "Models is every model the catalog holds — disabled ones included — each\ncarrying its enablement state under \"_overlay\".",
@@ -17,7 +17,7 @@ func init() {
 			"adminCatalogOut.updated":   "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
-	zip.Describe("GET /v1/admin/pricing/enablement", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/admin/pricing/enablement", zip.Doc{
 		Description: "Returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta. An item\nnobody has touched is absent, because an untouched item is generally\navailable; the console composes the candidate list from the live catalog.\nSuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
 			"adminEnablementBoard.items":    "Items is every item an operator has set a state on. An item nobody has\ntouched is absent: it is generally available by default.",
@@ -28,52 +28,52 @@ func init() {
 			"adminEnablementItem.updatedAt": "UpdatedAt is when an operator last set this item's state, in SECONDS since\nthe Unix epoch (not milliseconds).",
 		},
 	})
-	zip.Describe("GET /v1/pricing", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing", zip.Doc{
 		Description: "Returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
 	})
-	zip.Describe("GET /v1/pricing/base", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/base", zip.Doc{
 		Description: "Returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
 		Fields: map[string]string{
 			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/blockchain", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/blockchain", zip.Doc{
 		Description: "Returns the blockchain access plans — the RPC and node\ntiers, each with its monthly price, compute-unit allowance and feature list.",
 		Fields: map[string]string{
 			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/cloud", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/cloud", zip.Doc{
 		Description: "Returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices. The\nsection's internal half — the provider costs Hanzo pays and the plan-to-\nprovider routing table — is stripped before it is served, so this is what a\ncustomer may see and nothing more.",
 	})
-	zip.Describe("GET /v1/pricing/cloud/plans", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/cloud/plans", zip.Doc{
 		Description: "Returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice. It is the plans of the cloud section on their own.",
 		Fields: map[string]string{
 			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/cloud/regions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/cloud/regions", zip.Doc{
 		Description: "Returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location. It is the regions of the\ncloud section on their own.",
 		Fields: map[string]string{
 			"pricingRegionList.regions": "Regions are the regions cloud instances can be placed in, each an opaque\nobject exactly as the pricing source emits it — typically id, name and\nlocation.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/cloud/storage", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/cloud/storage", zip.Doc{
 		Description: "Returns the block-storage prices of the cloud\nsection: the per-GB monthly rate and the volume size bounds a caller may ask\nfor.",
 	})
-	zip.Describe("GET /v1/pricing/compute", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/compute", zip.Doc{
 		Description: "Returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets. It is the\nwhole section as the pricing source records it, un-gated — no model or\nprovider identity appears in it.",
 	})
-	zip.Describe("GET /v1/pricing/compute/presets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/compute/presets", zip.Doc{
 		Description: "Returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price. It is the presets of the\ncompute section on their own, for a caller that does not need the full tier\ntable.",
 		Fields: map[string]string{
 			"pricingPresetList.presets": "Presets are the named compute sizes, each an opaque object exactly as the\npricing source emits it — typically id, name, provider slug, vCPU, memory,\ndisk and price.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/datastore", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/datastore", zip.Doc{
 		Description: "Returns the Hanzo Datastore rate card: the tier list, the\nper-GB storage and egress usage rates, the annual discount and the trial. It is\nthe section as authored, un-gated — no provider identity appears in it.\n\nThe route was missing while the data existed, so this 404d and every visitor to\nhanzo.ai's Infrastructure tab was told pricing was \"temporarily unavailable\".",
 	})
-	zip.Describe("GET /v1/pricing/enablement", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/enablement", zip.Doc{
 		Description: "Returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
 		Fields: map[string]string{
 			"enablementBoard.betas":        "Betas are the subset of Items the caller's org may still opt into.",
@@ -87,7 +87,7 @@ func init() {
 			"userEnablementItem.state":     "State is the item's GLOBAL availability — \"off\", \"beta\" or \"ga\" — which is\nthe operator's setting and not this caller's answer. Effective is that.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/featured", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/featured", zip.Doc{
 		Description: "Returns the models the catalog highlights, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks featured.",
 		Fields: map[string]string{
 			"pricingModelList.models":  "Models are the catalog entries visible to the caller, each an opaque\nobject exactly as the pricing source emits it, with any admin override\nmerged on top. An admin additionally sees hidden entries, each annotated\nunder \"_overlay\".",
@@ -95,7 +95,7 @@ func init() {
 			"pricingModelList.updated": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/free", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/free", zip.Doc{
 		Description: "Returns the models that cost nothing to call, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks free.",
 		Fields: map[string]string{
 			"pricingModelList.models":  "Models are the catalog entries visible to the caller, each an opaque\nobject exactly as the pricing source emits it, with any admin override\nmerged on top. An admin additionally sees hidden entries, each annotated\nunder \"_overlay\".",
@@ -103,13 +103,13 @@ func init() {
 			"pricingModelList.updated": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/gpu", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/gpu", zip.Doc{
 		Description: "ListGPUTiers returns the rentable GPU configurations, each with its\naccelerator count and model, VRAM, vCPU, host memory and hourly price.",
 		Fields: map[string]string{
 			"pricingTierList.tiers": "Tiers are the rentable GPU configurations, each an opaque object exactly\nas the pricing source emits it — typically id, name, accelerator count and\nmodel, VRAM, vCPU, memory and hourly price.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/health", zip.Doc{
 		Description: "Health reports that the pricing subsystem is mounted and serving. It answers\nfrom the process itself and consults neither the catalog bundle nor the\nenablement store, so it stays \"ok\" while either is degraded.",
 		Fields: map[string]string{
 			"pricingHealth.service": "Service names the subsystem that answered.",
@@ -117,20 +117,20 @@ func init() {
 		},
 		Response: json.RawMessage(`{"service":"pricing","status":"ok"}`),
 	})
-	zip.Describe("GET /v1/pricing/iam", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/iam", zip.Doc{
 		Description: "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its\nmonthly and annual price, monthly-active-user allowance and feature list.",
 		Fields: map[string]string{
 			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/model/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/model/:name", zip.Doc{
 		Description: "Returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
 		Fields: map[string]string{
 			"pricingModelRef.name": "Name is the model's name or its slugged id (\"zen4\",\n\"acme/some-model-1\"), matched case-insensitively. It comes from\nthe path: the URL is the addressing authority.",
 		},
 		Example: json.RawMessage(`{"name":"zen4"}`),
 	})
-	zip.Describe("GET /v1/pricing/models", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/models", zip.Doc{
 		Description: "Returns the whole model catalog — every model the gateway serves,\nZen and third-party alike — filtered to what the caller's org may see. A\nmodel an admin has disabled is absent; one in beta appears only for an org\ngranted it. A SuperAdmin sees every model, each annotated with its\nenablement state.",
 		Fields: map[string]string{
 			"pricingModelList.models":  "Models are the catalog entries visible to the caller, each an opaque\nobject exactly as the pricing source emits it, with any admin override\nmerged on top. An admin additionally sees hidden entries, each annotated\nunder \"_overlay\".",
@@ -138,41 +138,41 @@ func init() {
 			"pricingModelList.updated": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/paas", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/paas", zip.Doc{
 		Description: "ListPaaSPlans returns the application-hosting plans — the deploy-and-host\ntiers, each with its monthly and annual price, app and memory allowances and\nfeature list.",
 		Fields: map[string]string{
 			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/policy", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/policy", zip.Doc{
 		Description: "Returns the pricing policy document: the revenue-sharing\nterms (the idle-resale share and the open-source share, each with its\npercentage and who is eligible) and the commitments Hanzo makes about how it\nbills — no hidden fees, no egress charges, no surprise bills.",
 	})
-	zip.Describe("GET /v1/pricing/providers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/providers", zip.Doc{
 		Description: "Returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see. A provider an admin\nhas disabled is absent — and so are its models everywhere else on this\nsurface, because a provider's state cascades to what it serves.",
 		Fields: map[string]string{
 			"pricingProviderList.providers": "Providers maps a provider name to its opaque info object. A provider\nhidden for the caller's org is absent entirely.",
 			"pricingProviderList.updated":   "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/services", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/services", zip.Doc{
 		Description: "Returns the managed-service rate cards — Search, Crawl,\nVector, Console and Managed Services — each with its own tiers, and some with\nusage rates or a comparison table. It is the section as authored, un-gated.\n\nThese are DISPLAY rate cards: what a product costs, not what a plan grants. No\nentitlement or limit fields ride here, so nothing can bill off them.",
 	})
-	zip.Describe("GET /v1/pricing/subscriptions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/subscriptions", zip.Doc{
 		Description: "Returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
 		Fields: map[string]string{
 			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
 		},
 	})
-	zip.Describe("GET /v1/pricing/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/summary", zip.Doc{
 		Description: "Returns the catalog's headline statistics — model counts by\nfamily and the provider directory. The provider sub-object is filtered to what\nthe caller's org may see, so a disabled provider's name never leaks; the\naggregate counts are the catalog's own, over everything it holds.",
 	})
-	zip.Describe("GET /v1/pricing/tools", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing GET /v1/pricing/tools", zip.Doc{
 		Description: "Returns the per-use tool prices — web search, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.",
 		Fields: map[string]string{
 			"pricingToolList.tools": "Tools are the metered tools, each an opaque object exactly as the pricing\nsource emits it — typically name, billing unit and price.",
 		},
 	})
-	zip.Describe("PATCH /v1/admin/pricing/catalog/models/*", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing PATCH /v1/admin/pricing/catalog/models/*", zip.Doc{
 		Description: "Turns one model off, into beta for named orgs, or generally available.\n\nSets one model's availability overlay — and the price overrides applied on top\nof the catalog — then answers the new effective overlay, so a console needs no\nsecond read. The model id is the whole remaining path, so a slashed id like\n`acme/some-model-1` addresses intact.\n\nSuperAdmin only; every other caller is 403. The overlay is PLATFORM-WIDE —\nthis is the catalog every org prices against, not a per-org setting — and\n`betaOrgs` is what narrows a beta to named orgs.\n\nOnly the fields the patch names change; an entry with no overlay yet starts\nfrom the catalog default, which is enabled. `state` is the coherent tri-state\nsetter (`off`|`beta`|`ga`) and the low-level `enabled`/`beta` flags are applied\nAFTER it, so they win where both are sent; anything else in `state` is 400. A\nfield sent as an explicit `null` arrives indistinguishable from an absent one,\nso null does not clear anything.\n\nThe rule worth reading twice: a disabled entry that still carries beta orgs IS\na beta — `{\"enabled\":false,\"betaOrgs\":[\"acme\"]}` leaves acme seeing the model.\nOnly an explicit `off` (or `beta:false`) with an empty list is the absolute\nkill switch that a user's own beta opt-in can never re-open.\n\n`overrides` is an RFC 7386 merge patch, stored and echoed back verbatim; it\nmust be a JSON object or null — an array or a scalar is refused — and is\nbounded in size and nesting depth. An uninitialised overlay store answers 503.",
 		Fields: map[string]string{
 			"Overlay.beta":           "Beta matters only while Enabled is false, and it is what separates the two\nhidden states: true means the orgs in BetaOrgs still see the entry, false\nmeans nobody does and BetaOrgs is ignored. Absent reads as false.",
@@ -190,7 +190,7 @@ func init() {
 			"overlayPatch.state":     "State is the high-level tri-state setter (\"off\"|\"beta\"|\"ga\") that sets\nenabled+beta coherently; the low-level Enabled/Beta pointers (applied after)\noverride it for fine control. Anything else is 400.",
 		},
 	})
-	zip.Describe("PATCH /v1/admin/pricing/catalog/providers/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing PATCH /v1/admin/pricing/catalog/providers/:name", zip.Doc{
 		Description: "Sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
 		Fields: map[string]string{
 			"Overlay.beta":           "Beta matters only while Enabled is false, and it is what separates the two\nhidden states: true means the orgs in BetaOrgs still see the entry, false\nmeans nobody does and BetaOrgs is ignored. Absent reads as false.",
@@ -208,7 +208,7 @@ func init() {
 			"providerPatchIn.name":   "Name is the provider the overlay belongs to, from the URL.",
 		},
 	})
-	zip.Describe("POST /v1/pricing/enablement/optin", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing POST /v1/pricing/enablement/optin", zip.Doc{
 		Description: "Opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
 		Fields: map[string]string{
 			"enablementOptRef.id":          "ID is the item within that namespace.",
@@ -222,7 +222,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"kind":"feature","id":"labs"}`),
 	})
-	zip.Describe("POST /v1/pricing/enablement/optout", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing POST /v1/pricing/enablement/optout", zip.Doc{
 		Description: "Removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org.",
 		Fields: map[string]string{
 			"enablementOptRef.id":          "ID is the item within that namespace.",
@@ -236,14 +236,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"kind":"feature","id":"labs"}`),
 	})
-	zip.Describe("POST /v1/pricing/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing POST /v1/pricing/sync", zip.Doc{
 		Description: "Refreshes the third-party section of the catalog from its upstream\nlistings and returns the time the refreshed catalog was stamped with. The\nfetch runs in Go and the markup transform in the pricing bundle. SuperAdmin\nonly; every other caller is refused.",
 		Fields: map[string]string{
 			"pricingSyncOut.status":  "Status is \"ok\" when the sync completed.",
 			"pricingSyncOut.updated": "Updated is the RFC 3339 time the refreshed catalog was stamped with.",
 		},
 	})
-	zip.Describe("PUT /v1/admin/pricing/enablement", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pricing PUT /v1/admin/pricing/enablement", zip.Doc{
 		Description: "Sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta. It is generic over\nkind, so the same call manages models, providers and product features through\nthe one registry. `off` is an absolute kill switch: a self-service opt-in can\nnever re-open it. SuperAdmin only; every other caller is refused.",
 		Fields: map[string]string{
 			"adminEnablementItem.betaOrgs":  "BetaOrgs are the org ids granted this item's beta. It decides who sees a\n\"beta\" item and is IGNORED on an \"off\" one, so a non-empty list beside\n\"off\" grants nothing. Empty on a ga item, where there is nothing to grant.",

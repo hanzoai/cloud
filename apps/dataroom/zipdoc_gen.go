@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/dataroom/trust", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/admin/dataroom/trust", zip.Doc{
 		Description: "Roster lists every published trust centre in the deployment with the size of its\nqueue — the platform's view of who is running one and who is leaving people\nwaiting.\n\nIt is the ONE cross-tenant read in this subsystem and it is refused to anyone who\nis not a SuperAdmin: a member of the reserved admin org, the same predicate every\nother subsystem asks. An org's own admin is a different, org-scoped fact and does\nnot pass here — reading it as platform authority is how one customer comes to see\nevery other customer's queue.\n\nIt counts and does not read: no item, request, address or grant of any org's\ncrosses into the answer.",
 		Fields: map[string]string{
 			"trustRoster.grants":   "Grants is how many grants that org has made.",
@@ -19,7 +19,7 @@ func init() {
 			"trustRosters.centers": "Centers is every published centre, by address.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/analytics/dataroom/:dataroomId", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/analytics/dataroom/:dataroomId", zip.Doc{
 		Description: "Rolls up every share link pointing at one data room:\nsession and page-view totals for the room, plus the per-page breakdown for each\nlink beneath it.\n\nA room id outside the caller's own tenant store is not found. Only links that\nNAME the room are counted — a link created over a single document contributes\nnothing here, even when that document also sits in the room.",
 		Fields: map[string]string{
 			"dataroomLinkStats.linkId":         "LinkId is the link these counts are for.",
@@ -37,7 +37,7 @@ func init() {
 			"roomStatsRef.dataroomId":          "DataroomID is the room to report on. It is the path segment, resolved in\nthe caller's own tenant store.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/analytics/link/:linkId", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/analytics/link/:linkId", zip.Doc{
 		Description: "Reports how one share link was actually read: total viewing\nsessions, total page views, and per page the view count, the summed dwell\nmeasure and its average.\n\nThe link is resolved in the caller's OWN tenant store, so another org's link id\nis not found — knowing a link id is enough to OPEN the room it shares, and\nnever enough to read who has been reading it.",
 		Fields: map[string]string{
 			"dataroomLinkStats.linkId":         "LinkId is the link these counts are for.",
@@ -51,7 +51,7 @@ func init() {
 			"linkRef.linkId":                   "LinkID is the link to report on. It is the path segment, resolved in the\ncaller's own tenant store.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/datarooms", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/datarooms", zip.Doc{
 		Description: "Returns every data room in the caller org's own store, newest\nfirst, with its short public id, name, description and timestamps.\n\nDocuments are not included — a room's contents come from reading the single\nroom.",
 		Fields: map[string]string{
 			"dataroomRoom.createdAt":   "CreatedAt is when the room was created, in unix milliseconds.",
@@ -63,7 +63,7 @@ func init() {
 			"dataroomRooms.datarooms":  "Datarooms is every data room in the caller's own store, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/datarooms/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/datarooms/:id", zip.Doc{
 		Description: "Reads one of the caller org's data rooms together with every\ndocument in it, each carrying its membership id and order index.\n\nThe documents are sorted by that index with unordered ones last and creation\ntime breaking ties — the SAME order a link's visitor sees, so this is what the\nroom looks like from the outside. A room id outside the caller's own tenant\nstore is not found.",
 		Fields: map[string]string{
 			"dataroomMember.contentType":        "ContentType is the mime type recorded at upload, null when none was sent.",
@@ -88,7 +88,7 @@ func init() {
 			"dataroomRoomDetailOne.dataroom":    "Dataroom is the room and its contents.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/documents", zip.Doc{
 		Description: "Returns every document in the caller org's own store, newest\nfirst — name, opaque storage key, content type, page count, size and\ntimestamps.\n\nTenant isolation is the per-org store itself: there is one SQLite file per org\nand the org is never a parameter, so no input the caller controls can address\nanother tenant's documents. Metadata only — the bytes come from the file route.",
 		Fields: map[string]string{
 			"dataroomDocument.contentType": "ContentType is the mime type recorded at upload, null when none was sent.",
@@ -103,7 +103,7 @@ func init() {
 			"dataroomDocuments.documents":  "Documents is every document in the caller's own store, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/documents/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/documents/:id", zip.Doc{
 		Description: "Reads one of the caller org's documents — its name, opaque storage\nkey, content type, page count, size and timestamps.\n\nThe lookup runs in the caller's own tenant store, so an id belonging to another\norg is not found exactly like one that never existed. Metadata only: the bytes\nare a separate read.",
 		Fields: map[string]string{
 			"dataroomDocument.contentType": "ContentType is the mime type recorded at upload, null when none was sent.",
@@ -119,17 +119,17 @@ func init() {
 			"documentRef.id":               "ID is the document to read. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the caller's\nprincipal, so an id from another tenant is simply not found.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/documents/:id/file", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/documents/:id/file", zip.Doc{
 		Description: "Streams a document's bytes to an authenticated owner.",
 	})
-	zip.Describe("GET /v1/dataroom/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/health", zip.Doc{
 		Description: "Health reports that the data room subsystem is up.\n\nIt answers before the bundle loads, holds no state and touches no store, so it\nstays true in exactly the situation an operator is probing for. It says nothing\nabout whether a room can be OPENED — that is what the room operations answer —\nbecause a liveness probe that fails on a dependency takes a working process out\nof rotation.",
 		Fields: map[string]string{
 			"dataroomLiveness.service": "Service names the subsystem answering, so a probe response is attributable\nwhen several are collected together.",
 			"dataroomLiveness.status":  "Status is `ok`. This probe has no degraded answer by design: it reports\nprocess liveness and nothing that could be false while the process serves.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/links", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/links", zip.Doc{
 		Description: "Returns every live share link in the caller org's own store,\nnewest first, with the controls a visitor will meet: whether an address is\nrequired, whether a password is set, the allow and deny lists, whether download\nis permitted, and when the link expires.\n\nArchived links are omitted entirely. A link reports only THAT a password is\nset — the stored form is a bcrypt hash and no route returns it.",
 		Fields: map[string]string{
 			"dataroomLink.allowDownload":  "AllowDownload is whether a visitor may download, rather than only view.",
@@ -149,7 +149,7 @@ func init() {
 			"dataroomLinks.links":         "Links is every non-archived link, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/trust", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/trust", zip.Doc{
 		Description: "Answers the caller org's OWN trust centre: its settings, every item it\nholds in both tiers, the requests waiting on it, and the grants it has made.\n\nThe org is the caller's, taken from the validated bearer and from nothing else,\nso this op cannot be pointed at another tenant — there is no field for one. An\norg that has never opened a centre reads back an empty one rather than an error,\nbecause having no trust centre is an ordinary state and this is the read that\ntells you so.",
 		Fields: map[string]string{
 			"trustAskView.createdAt":   "CreatedAt is when the ask arrived, in unix milliseconds.",
@@ -191,7 +191,7 @@ func init() {
 			"trustItemView.updatedAt":  "UpdatedAt is when it last changed, in unix milliseconds.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/trust/center/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/trust/center/:slug", zip.Doc{
 		Description: "Answers an org's public trust centre: its name, the text a party must\naccept to ask for a document, and every item it publishes.\n\nAn item is either available NOW — the things the org states itself, its policies,\nits filled questionnaires, its subprocessor list, its knowledge base — or\navailable ON REQUEST, which is everything an independent auditor put their name\nto. Both are listed by name and kind, so a reader can see WHAT exists before\nasking for it; only the second withholds the content.\n\nNo principal is involved and none is accepted: the org is resolved from the\naddress, which answers only for a centre its owner has published. An address\nnobody publishes at is not found, the same answer an unpublished one gets.",
 		Fields: map[string]string{
 			"slugRef.slug":        "Slug is the centre's public address. It resolves only for an org that has\npublished; anything else is not found, so this cannot be used to learn which\norgs exist.",
@@ -210,13 +210,13 @@ func init() {
 			"trustPage.slug":      "Slug is the centre's public address.",
 		},
 	})
-	zip.Describe("GET /v1/dataroom/trust/center/:slug/file/:item", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/trust/center/:slug/file/:item", zip.Doc{
 		Description: "Streams a PUBLIC item's bytes to anyone. Untyped because the answer is\na byte stream under the document's own content type.\n\nEvery narrowing is in the lookup rather than in a check this handler is trusted\nto remember: publicArtifact's WHERE carries the tier and the retirement, and\ncenterOf refuses an unpublished centre, so a gated item, a retired item and an\nitem of an org that has withdrawn are all simply not found — the same answer as\nan id that never existed, which is what keeps this from reporting what the gated\ntier holds.",
 	})
-	zip.Describe("GET /v1/dataroom/view/:linkId/document/:documentId/file", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom GET /v1/dataroom/view/:linkId/document/:documentId/file", zip.Doc{
 		Description: "Streams a document's bytes to an authorised viewer.",
 	})
-	zip.Describe("PATCH /v1/dataroom/trust/artifacts/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom PATCH /v1/dataroom/trust/artifacts/:id", zip.Doc{
 		Description: "Amend changes an item on the caller org's trust centre — replace its file with a\nnewer edition, move it between public and gated, rewrite what it says, or retire\nit — and answers with the item as it now stands.\n\nRetiring is the withdrawal: the item leaves the public centre immediately and can\nno longer be granted, while grants already made over it stand, because a release\nthat happened is part of the record and un-happening it in the record would be a\nlie. Restoring is the same call with retired false.\n\nMoving an item an independent auditor signed to the public tier is refused, and\nrefused by the database rather than only here. Only an admin of the org may call\nit, and the item is resolved in that org's own store, so another org's id is not\nfound.",
 		Fields: map[string]string{
 			"trustEdit.body":          "Body replaces the item's content.",
@@ -241,7 +241,7 @@ func init() {
 			"trustItemView.updatedAt": "UpdatedAt is when it last changed, in unix milliseconds.",
 		},
 	})
-	zip.Describe("POST /v1/dataroom/datarooms", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/datarooms", zip.Doc{
 		Description: "Opens a new data room for the caller org and answers with it,\nincluding the short public id it is addressed by.\n\n`name` is required; without it the call is refused and the tenant store is\nuntouched, because a dispatch answering 4xx rolls its transaction back. A new\nroom holds no documents and is reachable by NOBODY until a share link is\ncreated over it — opening a room and granting access are two separate acts, so\na room cannot leak by existing.",
 		Fields: map[string]string{
 			"dataroomCreate.description": "Description is the room's description. Optional; any JSON scalar is\naccepted and stored as its text, and omitting it leaves the room with none.",
@@ -255,7 +255,7 @@ func init() {
 			"dataroomRoomOne.dataroom":   "Dataroom is the room itself.",
 		},
 	})
-	zip.Describe("POST /v1/dataroom/datarooms/:id/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/datarooms/:id/documents", zip.Doc{
 		Description: "Puts an already-uploaded document into one of the caller\norg's data rooms and answers with the new membership id.\n\nIt ATTACHES, it never uploads: the bytes must already be stored, so the usual\norder is upload the document, then add it to the room. Both the room and the\ndocument must exist in the caller's own store — either missing is not found —\nand a document already in the room is refused as a conflict rather than\nduplicated.",
 		Fields: map[string]string{
 			"dataroomAddDocument.documentId":        "DocumentId is the document to attach. Required, and it must already exist\nin the caller's own store — this route attaches, it never uploads.",
@@ -266,10 +266,10 @@ func init() {
 			"dataroomMembership.documentId":         "DocumentId is the document that was added.",
 		},
 	})
-	zip.Describe("POST /v1/dataroom/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/documents", zip.Doc{
 		Description: "Stores the request body (the file bytes) on the object-storage\nclient, then records the metadata row via the bundle. The file is the raw request\nbody; ?name= names it, Content-Type carries the mime type, ?numPages= is optional.",
 	})
-	zip.Describe("POST /v1/dataroom/links", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/links", zip.Doc{
 		Description: "Grants access: it mints a public share link over one data\nroom (`dataroomId`) or one document (`documentId`) — one of the two is\nrequired — and answers with the link, whose `id` is the token a visitor opens\nit with.\n\nThis is how a party is let in. The controls are declared HERE and enforced on\nthe viewer surface: `password` is hashed with bcrypt before storage and is\nnever readable back, `emailProtected` (on by default) makes a visitor state an\naddress, `allowList`/`denyList` narrow which addresses pass, `allowDownload`\n(off by default) governs downloads, and `expiresAt` closes the link. The target\nroom or document must exist in the caller's own store or it is not found.\n\nCreating a link also writes dataroom's ONE cross-tenant row: the link id to\nowning org mapping an anonymous visitor is routed through. That write is part\nof the operation — if it fails the call is 500 — so a link that no visitor\ncould open is never handed back as usable.\n\nThe address a visitor later states is recorded UNVERIFIED, so a link gated only\nby email is openable by anyone the link reaches. Use a password for a link that\nmust not travel.",
 		Fields: map[string]string{
 			"dataroomLink.allowDownload":        "AllowDownload is whether a visitor may download, rather than only view.",
@@ -298,7 +298,7 @@ func init() {
 			"dataroomLinkOne.link":              "Link is the link itself, including the id a visitor opens it with.",
 		},
 	})
-	zip.Describe("POST /v1/dataroom/trust/artifacts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/trust/artifacts", zip.Doc{
 		Description: "Publish puts an item on the caller org's trust centre and answers with it.\n\nThe item is GATED unless it says otherwise, so a kind nobody has thought of yet\narrives private and someone has to release it deliberately — that default is what\nkeeps an auditor's report from becoming readable because a field went unset. An\nitem whose attester is \"auditor\" cannot be public at all: the database refuses the\npair, so no path through this API can publish one.\n\nA file is optional and is uploaded FIRST, through POST /v1/dataroom/documents,\nthen named here — the data room is the one place bytes enter, so a trust centre\ndocument is an ordinary data-room document and inherits its storage, its grants\nand its page-by-page access record. A gated item that has a file is added to the\norg's release room, which is what lets a party be granted the whole gated tier in\none link.\n\nOnly an admin of the org may call it.",
 		Fields: map[string]string{
 			"trustItemView.attester":  "Attester is who vouched for it: self or auditor.",
@@ -323,7 +323,7 @@ func init() {
 			"trustPublish.tier":       "Tier is who may read it: \"public\" or \"gated\". It DEFAULTS TO GATED and\nanything that is not exactly \"public\" is gated, so an item published by a\ncaller that says nothing is private and someone has to release it on purpose.\n\"public\" is refused for an auditor-signed item.",
 		},
 	})
-	zip.Describe("POST /v1/dataroom/trust/center/:slug/requests", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/trust/center/:slug/requests", zip.Doc{
 		Description: "Records a request to read what an independent auditor signed, and\nanswers with its id.\n\nThe org that owns the centre decides. Nothing is released here and no link is\nminted: this writes the ask down, which is the whole promise the form makes.\nThe write is the answer — a request that could not be stored is an error, never\na receipt, so a form can never appear to have been sent and be gone.\n\n`email` is required and is the ONLY address the eventual grant will admit, so an\naddress the asker cannot read is an ask that cannot be answered. Where the centre\nstates an NDA, `accept` must be true and the text in force is recorded verbatim\nagainst the request.\n\nAsking twice for the same thing from the same address is the SAME ask: the second\nanswers with the first's id rather than opening a second row, which is also what\nkeeps an anonymous endpoint from filling a tenant's store.",
 		Fields: map[string]string{
 			"trustAsk.accept":  "Accept must be true when the centre states an NDA. The text accepted is\nrecorded verbatim on the request, so a later edit to the NDA cannot rewrite\nwhat this party agreed to.",
@@ -336,7 +336,7 @@ func init() {
 			"trustAsked.state": "State is always \"open\": recording an ask decides nothing.",
 		},
 	})
-	zip.Describe("POST /v1/dataroom/trust/requests/:id/grant", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/trust/requests/:id/grant", zip.Doc{
 		Description: "Grant answers a request by opening access: it mints a share link over what was\nasked for, addressed to the address that asked and closing at expiry, records the\ndecision, and mails the asker.\n\nThe link is NEVER a public URL. It carries the asker's address on its allow list,\nso forwarding it to somebody else does not open it, and it expires. What the\nparty then does with it — which document, which page, for how long — is recorded\nby the data room's own view tracking, which is where the access record for this\nrelease lives; there is no second log.\n\nA request that was already answered is refused rather than answered twice, so a\nsecond click cannot mint a second link. Only an admin of the org may call it, and\nthe request is resolved in that org's own store, so another org's request id is\nnot found — which is also what stops one org deciding another's queue.\n\nMail is best effort and the grant does not depend on it: a deployment that sends\nno mail still records the grant and says so in `delivery`, so the approver knows\nto pass the address on themselves.",
 		Fields: map[string]string{
 			"trustDecision.days":     "Days is how long the grant stays open, from now. Optional; 14 by default and\n365 at most — a longer release is describing a customer relationship rather\nthan a document.",
@@ -348,7 +348,7 @@ func init() {
 			"trustGranted.state":     "State is \"granted\".",
 		},
 	})
-	zip.Describe("POST /v1/dataroom/trust/requests/:id/refuse", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom POST /v1/dataroom/trust/requests/:id/refuse", zip.Doc{
 		Description: "Refuse answers a request by declining it, recording who declined and why.\n\nNothing is released and no link is minted. The refusal STAYS on the record beside\nthe ask — a request that was turned down is part of the access record exactly as\none that was granted is, and deleting it would leave a queue that only ever shows\nthe decisions somebody liked.\n\nA request that was already answered is refused rather than answered twice. Only an\nadmin of the org may call it, and the request is resolved in that org's own store,\nso another org's request id is not found.",
 		Fields: map[string]string{
 			"trustDecision.days": "Days is how long the grant stays open, from now. Optional; 14 by default and\n365 at most — a longer release is describing a customer relationship rather\nthan a document.",
@@ -357,7 +357,7 @@ func init() {
 			"trustRefused.state": "State is \"refused\".",
 		},
 	})
-	zip.Describe("PUT /v1/dataroom/trust", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/dataroom PUT /v1/dataroom/trust", zip.Doc{
 		Description: "SetCenter opens, publishes or withdraws the caller org's trust centre and answers\nwith the centre as it now stands.\n\nPublishing requires a name and an address, and the address must be free: another\norg already answering there is a conflict, never a takeover. Withdrawing closes\nthe public endpoint only — items, grants and the access record are untouched, so\nan org can go quiet and come back without losing anything.\n\nOnly an admin of the org may call it. The org is the caller's own, so there is no\nfield naming one and no way to point this at another tenant.",
 		Fields: map[string]string{
 			"trustAskView.createdAt":   "CreatedAt is when the ask arrived, in unix milliseconds.",

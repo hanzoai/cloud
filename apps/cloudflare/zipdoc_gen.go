@@ -9,21 +9,21 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/cloudflare/d1/databases/:database", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/d1/databases/:database", zip.Doc{
 		Description: "Deletes a D1 database and everything stored in it. Requires\norg admin.",
 		Fields: map[string]string{
 			"databaseRef.database": "Database is the Cloudflare D1 database id or name.",
 		},
 		Example: json.RawMessage(`{"database":"orders"}`),
 	})
-	zip.Describe("DELETE /v1/cloudflare/kv/namespaces/:namespace", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/kv/namespaces/:namespace", zip.Doc{
 		Description: "KVNamespaceDelete deletes a Workers KV namespace and every key in it. Requires\norg admin.",
 		Fields: map[string]string{
 			"namespaceRef.namespace": "Namespace is the Cloudflare KV namespace id.",
 		},
 		Example: json.RawMessage(`{"namespace":"0123456789abcdef0123456789abcdef"}`),
 	})
-	zip.Describe("DELETE /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
 		Description: "KVValueDelete removes one key from a Workers KV namespace. Requires org admin.",
 		Fields: map[string]string{
 			"valueRef.key":       "Key is the key within that namespace. KV keys are broad (up to 512 bytes),\nso this one is escaped rather than charset-restricted.",
@@ -31,14 +31,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"namespace":"0123456789abcdef0123456789abcdef","key":"session/abc"}`),
 	})
-	zip.Describe("DELETE /v1/cloudflare/pages/projects/:project", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/pages/projects/:project", zip.Doc{
 		Description: "Deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
 		Fields: map[string]string{
 			"projectRef.project": "Project is the Pages project name.",
 		},
 		Example: json.RawMessage(`{"project":"marketing-site"}`),
 	})
-	zip.Describe("DELETE /v1/cloudflare/pages/projects/:project/domains/:domain", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/pages/projects/:project/domains/:domain", zip.Doc{
 		Description: "Detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
 		Fields: map[string]string{
 			"domainRef.domain":  "Domain is the attached custom domain to detach.",
@@ -46,21 +46,21 @@ func init() {
 		},
 		Example: json.RawMessage(`{"project":"marketing-site","domain":"www.acme.com"}`),
 	})
-	zip.Describe("DELETE /v1/cloudflare/r2/buckets/:bucket", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/r2/buckets/:bucket", zip.Doc{
 		Description: "Deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
 		Fields: map[string]string{
 			"bucketRef.bucket": "Bucket is the R2 bucket name.",
 		},
 		Example: json.RawMessage(`{"bucket":"assets"}`),
 	})
-	zip.Describe("DELETE /v1/cloudflare/workers/scripts/:script", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/workers/scripts/:script", zip.Doc{
 		Description: "Removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
 		Fields: map[string]string{
 			"scriptRef.script": "Script is the Worker script name.",
 		},
 		Example: json.RawMessage(`{"script":"edge-router"}`),
 	})
-	zip.Describe("DELETE /v1/cloudflare/workers/zones/:zone/routes/:route", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare DELETE /v1/cloudflare/workers/zones/:zone/routes/:route", zip.Doc{
 		Description: "Unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
 		Fields: map[string]string{
 			"routeRef.route": "Route is the 32-hex Cloudflare route id.",
@@ -68,7 +68,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","route":"fedcba9876543210fedcba9876543210"}`),
 	})
-	zip.Describe("GET /v1/cloudflare/d1/databases", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/d1/databases", zip.Doc{
 		Description: "Lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
 		Fields: map[string]string{
 			"databasesIn.name":     "Name filters to the database with this name.",
@@ -76,7 +76,7 @@ func init() {
 			"databasesIn.per_page": "PerPage is how many databases one page holds.",
 		},
 	})
-	zip.Describe("GET /v1/cloudflare/kv/namespaces", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/kv/namespaces", zip.Doc{
 		Description: "KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare\naccount. Any org member may read.",
 		Fields: map[string]string{
 			"namespacesIn.order":    "Order names the field to sort by, and Direction sorts asc or desc.",
@@ -84,20 +84,20 @@ func init() {
 			"namespacesIn.per_page": "PerPage is how many namespaces one page holds.",
 		},
 	})
-	zip.Describe("GET /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
 		Description: "Relays a namespace key's raw value (getRaw — a stored value is bytes,\nnot the CF envelope), with its content type. A missing key is Cloudflare's own 404.\n\nNOT a typed op: a KV value is opaque bytes under whatever content type it was\nwritten with, and a typed op answers JSON. Typing it would re-encode a stored\nvalue into a JSON document.",
 	})
-	zip.Describe("GET /v1/cloudflare/pages/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/pages/projects", zip.Doc{
 		Description: "Lists the org's Cloudflare Pages projects. Any org member may read.",
 	})
-	zip.Describe("GET /v1/cloudflare/pages/projects/:project", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/pages/projects/:project", zip.Doc{
 		Description: "Reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
 		Fields: map[string]string{
 			"projectRef.project": "Project is the Pages project name.",
 		},
 		Example: json.RawMessage(`{"project":"marketing-site"}`),
 	})
-	zip.Describe("GET /v1/cloudflare/r2/buckets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/r2/buckets", zip.Doc{
 		Description: "Lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
 		Fields: map[string]string{
 			"bucketsIn.cursor":        "Cursor continues from the position a previous page returned.",
@@ -106,20 +106,20 @@ func init() {
 			"bucketsIn.per_page":      "PerPage is how many buckets one page holds.",
 		},
 	})
-	zip.Describe("GET /v1/cloudflare/workers/scripts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/workers/scripts", zip.Doc{
 		Description: "Lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
 	})
-	zip.Describe("GET /v1/cloudflare/workers/subdomain", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/workers/subdomain", zip.Doc{
 		Description: "Reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
 	})
-	zip.Describe("GET /v1/cloudflare/workers/zones/:zone/routes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/workers/zones/:zone/routes", zip.Doc{
 		Description: "Lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
 		Fields: map[string]string{
 			"zoneRef.zone": "Zone is the 32-hex Cloudflare zone id.",
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef"}`),
 	})
-	zip.Describe("GET /v1/cloudflare/zones", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/zones", zip.Doc{
 		Description: "Lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
 		Fields: map[string]string{
 			"zonesIn.name":     "Name filters to the zone with this domain name.",
@@ -129,14 +129,14 @@ func init() {
 			"zonesIn.status":   "Status filters by zone status (active, pending, initializing, …).",
 		},
 	})
-	zip.Describe("GET /v1/cloudflare/zones/:zone", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/zones/:zone", zip.Doc{
 		Description: "Reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
 		Fields: map[string]string{
 			"zoneRef.zone": "Zone is the 32-hex Cloudflare zone id.",
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef"}`),
 	})
-	zip.Describe("GET /v1/cloudflare/zones/:zone/analytics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare GET /v1/cloudflare/zones/:zone/analytics", zip.Doc{
 		Description: "Reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
 		Fields: map[string]string{
 			"analyticsIn.continuous": "Continuous asks Cloudflare for only fully-aggregated buckets.",
@@ -145,17 +145,17 @@ func init() {
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","since":"-1440","until":"0"}`),
 	})
-	zip.Describe("POST /v1/cloudflare/ai/run/*", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/ai/run/*", zip.Doc{
 		Description: "Runs a Workers AI model and relays the result, metering the BYO fee + emitting\na gen_ai span. See the file header for the usage/o11y/payer contract.\n\nNOT a typed op, for two independent reasons: the request body is whatever the\nchosen model takes (a prompt, chat messages, a base64 audio clip) and is forwarded\nverbatim, and the response is frequently NOT JSON — an image or audio model\nanswers bytes under Cloudflare's own content type, which a typed op cannot emit.",
 	})
-	zip.Describe("POST /v1/cloudflare/d1/databases", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/d1/databases", zip.Doc{
 		Description: "Creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
 		Fields: map[string]string{
 			"databaseCreateIn.name": "Name is the database name to create.",
 		},
 		Example: json.RawMessage(`{"name":"orders"}`),
 	})
-	zip.Describe("POST /v1/cloudflare/d1/databases/:database/query", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/d1/databases/:database/query", zip.Doc{
 		Description: "Runs one SQL statement against a D1 database. It executes on the org's\nOWN Cloudflare account and relays D1's result set. The body is checked for a\nnon-empty `sql` and then forwarded VERBATIM, so every field D1 accepts reaches D1\neven though only two are named here.\n\nRequires ORG ADMIN — a statement may INSERT, UPDATE or DROP, so a query takes the\nwrite gate rather than the read one — and a caller who is only an org member is\nrefused 403. A missing `sql` is 400; 503 if the org has never connected a\nCloudflare token.",
 		Fields: map[string]string{
 			"D1Query.params": "Params are the statement's bound values, in the order its `?` placeholders\nappear — a string, a number, a boolean or null, whatever the column takes.\nAbsent means the statement carries no placeholders; bind values here rather\nthan interpolating them into the statement.",
@@ -163,14 +163,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sql":"SELECT * FROM orders WHERE id = ?","params":[42]}`),
 	})
-	zip.Describe("POST /v1/cloudflare/kv/namespaces", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/kv/namespaces", zip.Doc{
 		Description: "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount. Requires org admin. Cloudflare mints the namespace id the value routes\naddress.",
 		Fields: map[string]string{
 			"namespaceCreateIn.title": "Title is the namespace's display title. Cloudflare mints the id.",
 		},
 		Example: json.RawMessage(`{"title":"sessions"}`),
 	})
-	zip.Describe("POST /v1/cloudflare/pages/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/pages/projects", zip.Doc{
 		Description: "Creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
 		Fields: map[string]string{
 			"PagesBuildConfig.build_command":            "BuildCommand is what Cloudflare runs to build the site (\"npm run build\").\nOmitted means no build step: the repository is published as it stands.",
@@ -196,10 +196,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"marketing-site","production_branch":"main"}`),
 	})
-	zip.Describe("POST /v1/cloudflare/pages/projects/:project/deployments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/pages/projects/:project/deployments", zip.Doc{
 		Description: "Triggers a new Pages deployment. Requires org admin.\n\nNOT a typed op: a body this handler cannot parse is IGNORED — the deployment\nfalls back to the project's production branch — where a typed In answers 400.\nThose are different contracts, and typing it would change what the route accepts.",
 	})
-	zip.Describe("POST /v1/cloudflare/pages/projects/:project/domains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/pages/projects/:project/domains", zip.Doc{
 		Description: "Attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
 		Fields: map[string]string{
 			"domainAddIn.name":    "Name is the custom domain to attach, e.g. \"www.acme.com\".",
@@ -207,14 +207,14 @@ func init() {
 		},
 		Example: json.RawMessage(`{"project":"marketing-site","name":"www.acme.com"}`),
 	})
-	zip.Describe("POST /v1/cloudflare/r2/buckets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/r2/buckets", zip.Doc{
 		Description: "Creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
 		Fields: map[string]string{
 			"bucketCreateIn.name": "Name is the bucket name to create.",
 		},
 		Example: json.RawMessage(`{"name":"assets"}`),
 	})
-	zip.Describe("POST /v1/cloudflare/workers/scripts/:script/subdomain", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/workers/scripts/:script/subdomain", zip.Doc{
 		Description: "Publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
 		Fields: map[string]string{
 			"subdomainSetIn.enabled": "Enabled publishes the script on <script>.<subdomain>.workers.dev when true,\nand withdraws it when false.",
@@ -222,7 +222,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"script":"edge-router","enabled":true}`),
 	})
-	zip.Describe("POST /v1/cloudflare/workers/zones/:zone/routes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/workers/zones/:zone/routes", zip.Doc{
 		Description: "Binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
 		Fields: map[string]string{
 			"routeCreateIn.pattern": "Pattern is the URL pattern to bind, e.g. \"acme.com/api/*\".",
@@ -231,7 +231,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","pattern":"acme.com/api/*","script":"edge-router"}`),
 	})
-	zip.Describe("POST /v1/cloudflare/zones/:zone/purge", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare POST /v1/cloudflare/zones/:zone/purge", zip.Doc{
 		Description: "Drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
 		Fields: map[string]string{
 			"purgeIn.files":            "Files purges exactly the listed URLs — at most 30, Cloudflare's per-request cap.",
@@ -240,10 +240,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"zone":"0123456789abcdef0123456789abcdef","purge_everything":true}`),
 	})
-	zip.Describe("PUT /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare PUT /v1/cloudflare/kv/namespaces/:namespace/values/:key", zip.Doc{
 		Description: "Writes a key's value: the request body IS the value (any content type),\nforwarded verbatim; optional expiration params ride the query. Mutation → org admin.\n\nNOT a typed op: the request body IS the stored value, under the caller's own\ncontent type. A typed In would parse it as JSON and refuse everything else.",
 	})
-	zip.Describe("PUT /v1/cloudflare/workers/scripts/:script", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/cloudflare PUT /v1/cloudflare/workers/scripts/:script", zip.Doc{
 		Description: "Uploads or replaces a module Worker script. It publishes to the\norg's OWN Cloudflare account under the name in the path, replacing whatever was\nthere, and relays Cloudflare's result. The compatibility date, compatibility\nflags and bindings are packed into the multipart upload Cloudflare expects,\nbeside the module source.\n\nRequires ORG ADMIN — a Worker is arbitrary code on the org's own account and\ndomains — so a caller who is only an org member is refused 403. An empty source\nis 400, as is a `mainModule` that is not a plain file name; 503 if the org has\nnever connected a Cloudflare token.",
 		Fields: map[string]string{
 			"WorkerScriptPut.bindings":           "Bindings are the resources the script can reach (KV, D1, R2, secrets, …), in\nCloudflare's own binding vocabulary, passed through as written: this plane\ndeliberately does not model Cloudflare's shapes. Absent uploads a script with\nNO bindings, which replaces whatever the previous version had.",

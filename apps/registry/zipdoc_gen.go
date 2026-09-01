@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/registry/images", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/registry GET /v1/registry/images", zip.Doc{
 		Description: "Images lists the org's container repositories, read live from the OCI\ncatalog and filtered server-side to the org's namespace — the page can only\never hold the caller's own images.",
 		Fields: map[string]string{
 			"registryImage.name":          "Name is the repository name inside the org's namespace (e.g. \"cloud\").",
@@ -18,7 +18,7 @@ func init() {
 			"registryImageList.truncated": "Truncated is true when the catalog walk hit its page bound before the\nregistry was exhausted — the list is a prefix, not the whole.",
 		},
 	})
-	zip.Describe("GET /v1/registry/packages", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/registry GET /v1/registry/packages", zip.Doc{
 		Description: "Packages lists the org's npm packages — `<org>` and `@<org>/…` — from the\nnpm registry's search index, optionally narrowed by a query within that\nscope. The org boundary is applied server-side after the search, so a query\ncan never widen it.",
 		Fields: map[string]string{
 			"registryPackage.description": "Description says what the package is, as published.",
@@ -29,7 +29,7 @@ func init() {
 			"registryPackages.query":      "Query narrows the listing within the org's scope when present; the org\nboundary itself is never widened by it. It rides the query string.",
 		},
 	})
-	zip.Describe("GET /v1/registry/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/registry GET /v1/registry/projects", zip.Doc{
 		Description: "Projects lists the namespaces the caller can see with what each holds: the\norg's slug, its repository count on the OCI catalog, and its package count\non the npm registry. Today that is exactly one row — the caller's org.",
 		Fields: map[string]string{
 			"registryProject.images":   "Images is how many of the org's repositories the OCI catalog holds.",
@@ -38,7 +38,7 @@ func init() {
 			"registryProjectList.data": "Data is the namespaces visible to the caller.",
 		},
 	})
-	zip.Describe("GET /v1/registry/status", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/registry GET /v1/registry/status", zip.Doc{
 		Description: "Status reports whether the OCI and npm registries are reachable and, when\nthe OCI half is auth-gated, which token realm its challenge advertises — an\nhonest lens for \"is the registry plane up\", never a fabricated ok.",
 		Fields: map[string]string{
 			"registryStatus.host":    "Host is the OCI registry host clients push to and pull from.",
@@ -49,7 +49,7 @@ func init() {
 			"registryStatus.service": "Service is the token service name from the same challenge.",
 		},
 	})
-	zip.Describe("GET /v1/registry/tags", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/registry GET /v1/registry/tags", zip.Doc{
 		Description: "Tags lists one org-owned repository's tags, read live from the OCI registry.\nThe repository is addressed inside the org's namespace — a name outside it\ncannot be expressed, and an unknown one answers 404.",
 		Fields: map[string]string{
 			"registryTagList.data":  "Data is the tag names, as the registry reports them.",
@@ -58,7 +58,7 @@ func init() {
 			"registryTags.image":    "Image is the repository name inside the org's namespace, as returned by\nthe images op. It rides the query string.",
 		},
 	})
-	zip.Describe("POST /v1/registry/token", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/registry POST /v1/registry/token", zip.Doc{
 		Description: "Token mints a short-lived, pull-only registry token for exactly one of the\norg's images, through the same IAM realm the docker CLI authenticates\nagainst. The scope is pinned server-side to `<org>/<image>` with the `pull`\naction — no field exists to name another org's image or ask for push. Use it\nas `Authorization: Bearer …` on the OCI wire; it expires in minutes.",
 		Fields: map[string]string{
 			"registryMint.image":    "Image is the repository name inside the org's namespace (e.g. \"cloud\").",

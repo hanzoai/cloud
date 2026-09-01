@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/web3/chains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/web3 GET /v1/web3/chains", zip.Doc{
 		Description: "Reports the chains this deployment can reach. The list is the\ndeclared registry, so it is exactly what /v1/web3/rpc will accept — a chain that\nappears here is one this deployment actually has an upstream for.",
 		Fields: map[string]string{
 			"Chain.chainId":    "ChainID is the EIP-155 id, so a caller can check it matches the wallet\nthey are about to sign with.",
@@ -16,7 +16,7 @@ func init() {
 			"chainList.chains": "Chains is every chain this deployment is configured to reach, sorted by\nid. Empty when none are configured — never a fabricated entry.",
 		},
 	})
-	zip.Describe("GET /v1/web3/chains/:chain", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/web3 GET /v1/web3/chains/:chain", zip.Doc{
 		Description: "Reports one chain and whether its upstream is answering. An\nunreachable chain is still a 200 with live:false — the chain is configured,\nwhich is a different fact from the chain being up, and a 502 here would make\na console page error rather than show the outage.",
 		Fields: map[string]string{
 			"Chain.chainId":      "ChainID is the EIP-155 id, so a caller can check it matches the wallet\nthey are about to sign with.",
@@ -27,7 +27,7 @@ func init() {
 			"chainStatus.live":   "Live is whether the upstream answered eth_blockNumber.",
 		},
 	})
-	zip.Describe("GET /v1/web3/tokens/:chain/:address", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/web3 GET /v1/web3/tokens/:chain/:address", zip.Doc{
 		Description: "Reads an address's native balance on a chain.\n\nERC-20 positions are NOT enumerated here: eth_getBalance answers the native\none, but \"every token this address holds\" is an indexer question — there is no\nRPC call that answers it, and walking a token list would return a number that\nsilently omits whatever the list missed. explorer owns the indexer\nrelationship; this returns the balance the chain itself can prove.",
 		Fields: map[string]string{
 			"balances.address": "Address is the account they belong to.",
@@ -37,7 +37,7 @@ func init() {
 			"tokenRef.chain":   "Chain is the registry id.",
 		},
 	})
-	zip.Describe("POST /v1/web3/rpc/:chain", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/web3 POST /v1/web3/rpc/:chain", zip.Doc{
 		Description: "Forwards a JSON-RPC call to the named chain and returns its answer\nunchanged. Only declared chains are reachable, and only to a caller with a\nvalidated principal — this is the deployment's upstream, not an open relay.",
 		Fields: map[string]string{
 			"rpcError.code":    "Code is the JSON-RPC error code the chain reported, passed through as it\ncame. -32603 (internal error) is the one value this deployment mints\nitself, for an upstream that could not be reached at all.",

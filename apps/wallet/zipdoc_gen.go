@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/wallet", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet GET /v1/wallet", zip.Doc{
 		Description: "Returns the caller org's wallets, newest first, optionally NARROWED\nwithin the org by project, agent or account. The org is always the bound\nisolation boundary — the filters only ever narrow inside it, so a caller can\nnever widen past its own org.",
 		Fields: map[string]string{
 			"Scope.accountId":       "AccountID names the WalletAccount grouping. Required when creating a wallet\nand it must be an account of the caller's own org; empty in a lookup means\nno narrowing by account.",
@@ -32,7 +32,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"account":"acct_9f8c1d"}`),
 	})
-	zip.Describe("GET /v1/wallet/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet GET /v1/wallet/:id", zip.Doc{
 		Description: "Returns one of the caller org's wallets: its scope, custody kind,\ntier, chain and on-chain address. The custody handle to the signing material is\nnever part of the answer. A wallet id another org owns reads as not found, so\nthe response cannot confirm that it exists.",
 		Fields: map[string]string{
 			"Scope.accountId":       "AccountID names the WalletAccount grouping. Required when creating a wallet\nand it must be an account of the caller's own org; empty in a lookup means\nno narrowing by account.",
@@ -51,7 +51,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77"}`),
 	})
-	zip.Describe("GET /v1/wallet/accounts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet GET /v1/wallet/accounts", zip.Doc{
 		Description: "Returns the caller org's wallet accounts, newest first. Accounts\nare physically org-scoped, so another tenant's are not reachable from here.",
 		Fields: map[string]string{
 			"WalletAccount.createdAt": "CreatedAt is when the account was opened, Unix seconds. Listings order by\nit, newest first.",
@@ -61,7 +61,7 @@ func init() {
 			"accountList.accounts":    "Accounts are the org's accounts, newest first.",
 		},
 	})
-	zip.Describe("POST /v1/wallet", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet POST /v1/wallet", zip.Doc{
 		Description: "Provisions a new signing identity under one of the caller org's\naccounts and answers the stored wallet including its on-chain address. The\ncustody backend generates the key material — a KMS-sealed secp256k1 key, an\nMPC threshold key on the ring, or a Safe smart wallet owned by one — and the\nHANDLE to it is kept server-side and never returned. A custody kind the\ndeployment has not wired fails CLOSED with 503: a signature is never\nfabricated. The wallet is scoped to the org, the caller's ambient project, and\noptionally an agent and the named account; those narrowings are what its key\nref is derived from, so each must be a url-safe segment.",
 		Fields: map[string]string{
 			"Scope.accountId":          "AccountID names the WalletAccount grouping. Required when creating a wallet\nand it must be an account of the caller's own org; empty in a lookup means\nno narrowing by account.",
@@ -86,7 +86,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"accountId":"acct_9f8c1d","name":"ops hot wallet","custody":"kms","tier":"hot","chain":"eip155:36963"}`),
 	})
-	zip.Describe("POST /v1/wallet/:id/keys", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet POST /v1/wallet/:id/keys", zip.Doc{
 		Description: "Rolls one wallet's signing material through its own custody backend\nand answers the wallet with whatever address that produced. For KMS custody a\nfresh secp256k1 key is generated and sealed, which CHANGES the address — funds\nand approvals at the old address do not move. For a Safe the address is\ncounterfactual and the owner shares are ring-managed, so rotation is a no-op\nand the address is unchanged. A backend that is not configured fails closed\nwith 503 rather than leaving the wallet half-rotated.",
 		Fields: map[string]string{
 			"Scope.accountId":       "AccountID names the WalletAccount grouping. Required when creating a wallet\nand it must be an account of the caller's own org; empty in a lookup means\nno narrowing by account.",
@@ -105,7 +105,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77"}`),
 	})
-	zip.Describe("POST /v1/wallet/:id/sign", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet POST /v1/wallet/:id/sign", zip.Doc{
 		Description: "Produces a secp256k1 signature from one of the caller org's wallets over\na 32-byte digest, through whichever custody backend that wallet uses. Give it\neither a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed\nwith Keccak256 first) — exactly one is required. The private key never leaves\nits backend: KMS custody opens the sealed key in-process, MPC custody produces\na threshold signature on the ring. The answer carries the digest that was\nsigned alongside the signature, so a caller can verify what it got.",
 		Fields: map[string]string{
 			"signIn.digest":       "Digest is a pre-computed 32-byte digest as hex, with or without the 0x\nprefix. When present it is signed verbatim and message is ignored.",
@@ -117,7 +117,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77","message":"approve withdrawal 42"}`),
 	})
-	zip.Describe("POST /v1/wallet/:id/transactions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet POST /v1/wallet/:id/transactions", zip.Doc{
 		Description: "Composes a Safe transaction on the MPC ring and answers its\nEIP-712 hash together with the owner approval the ring's threshold signature\nproduced. Only a wallet whose custody is \"safe\" can do this — any other custody\nis a 400, because the backend itself is asked whether it can propose rather\nthan the kind being switched on. The ring computes the Safe-tx hash bound to\nthe Safe contract and the chain id, so the hash a caller gets back is the one\nthe Safe will verify. This PROPOSES: it does not execute the transaction.",
 		Fields: map[string]string{
 			"safeProposal.r":           "R is the r component of the MPC threshold signature over the Safe-tx hash.",
@@ -133,7 +133,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"wal_4b1e77","to":"0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984","value":"0","data":"0x","chainId":36963,"nonce":7}`),
 	})
-	zip.Describe("POST /v1/wallet/accounts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet POST /v1/wallet/accounts", zip.Doc{
 		Description: "Opens a named wallet account for the caller's org. An account is\na GROUPING of wallets, not a key or a balance: wallets are created under one\nand can be listed by it. The org is stamped by the server from the validated\nprincipal, so a request can never open an account in another tenant.",
 		Fields: map[string]string{
 			"WalletAccount.createdAt": "CreatedAt is when the account was opened, Unix seconds. Listings order by\nit, newest first.",
@@ -144,7 +144,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"treasury"}`),
 	})
-	zip.Describe("POST /wallets/payee", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/wallet POST /wallets/payee", zip.Doc{
 		Description: "Payee resolves one payout wallet to the two things a settlement needs: the\nADDRESS a payment challenge names, and the LEDGER SUBJECT the earnings credit is\nwritten to.\n\nThe wallet is looked up ONLY within the org the caller is acting for, exactly as\nevery other read of this store is, so a settlement can only ever be paid into a\nwallet of the org that published the listing. Not-found is an ANSWER rather than\nan error — a listing naming somebody else's wallet must produce it, and the caller\nrefuses on it — because an error would read as an outage and invite a retry\nagainst a fact that will not change.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
 }

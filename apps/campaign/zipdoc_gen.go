@@ -9,13 +9,13 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/campaign/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign DELETE /v1/campaign/:id", zip.Doc{
 		Description: "Removes one campaign of the caller's org and answers 204 with no\nbody. 404 when the org has no campaign with that id.\n\nIt deletes the RECORD, not the executions: a campaign whose channels are live\non a provider should be paused first, or those executions keep running with\nnothing here to report them.",
 		Fields: map[string]string{
 			"campaignRef.id": "ID is the campaign's server-minted handle, \"cmp_\"-prefixed.",
 		},
 	})
-	zip.Describe("DELETE /v1/campaign/:id/channels/:kind", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign DELETE /v1/campaign/:id/channels/:kind", zip.Doc{
 		Description: "Drops one channel from a campaign and returns the updated\ncampaign. 404 when the campaign carries no channel of that kind.\n\nIt removes the channel from the PLAN. A channel that is live at its provider\nshould be paused first — dropping the row here leaves nothing to pause it with\nafterwards.",
 		Fields: map[string]string{
 			"ChannelSpec.account":       "Account is the provider account this channel runs under: an ad-account, a page\nor a mailing-list id. An executor may replace it at launch with the account it\nactually used.",
@@ -38,7 +38,7 @@ func init() {
 			"channelRef.kind":           "Kind is the channel to remove: paid, organic or email.",
 		},
 	})
-	zip.Describe("GET /v1/campaign", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign GET /v1/campaign", zip.Doc{
 		Description: "Returns the org's campaigns, newest first, optionally narrowed to\none status.\n\nA campaign is the top-level go-to-market object: a value that SPANS channels\n(paid, organic, email) and fans out to the executor for each. The listing is\norg-scoped server-side, so one org can never see another's campaigns.",
 		Fields: map[string]string{
 			"ChannelSpec.account":       "Account is the provider account this channel runs under: an ad-account, a page\nor a mailing-list id. An executor may replace it at launch with the account it\nactually used.",
@@ -63,7 +63,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"status":"live","limit":50}`),
 	})
-	zip.Describe("GET /v1/campaign/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign GET /v1/campaign/:id", zip.Doc{
 		Description: "Returns one campaign of the caller's org — its name, audience,\ncreatives, channels with their per-channel launch state, schedule, budget and\nstatus. 404 when the org has no campaign with that id.",
 		Fields: map[string]string{
 			"ChannelSpec.account":       "Account is the provider account this channel runs under: an ad-account, a page\nor a mailing-list id. An executor may replace it at launch with the account it\nactually used.",
@@ -85,7 +85,7 @@ func init() {
 			"campaignRef.id":            "ID is the campaign's server-minted handle, \"cmp_\"-prefixed.",
 		},
 	})
-	zip.Describe("GET /v1/campaign/:id/metrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign GET /v1/campaign/:id/metrics", zip.Doc{
 		Description: "Returns a campaign's results over a window: the analytics\nfunnel (impressions, clicks, conversions, revenue, visitors), the spend each\nchannel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and\nROAS.\n\nThere is exactly ONE metrics plane and nothing is stored here: the funnel is an\nanalytics query over the campaign's utm_campaign-tagged events, and the spend is\neach provider's own number read through the org's connector. A warehouse that is\nnot emitting yet degrades to available:false with zeroes — honest-empty, never a\n500 and never a fabricated number. When the campaign runs more than one creative\nand an experiment is wired, abTest carries the A/B analysis.",
 		Fields: map[string]string{
 			"ChannelMetric.externalId":    "ExternalID is the provider-side id of the execution the spend belongs to.\nAbsent until the channel has launched.",
@@ -121,7 +121,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"cmp_1f…","range":"7d"}`),
 	})
-	zip.Describe("GET /v1/campaign/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign GET /v1/campaign/summary", zip.Doc{
 		Description: "Returns the org's go-to-market roll-up: how many campaigns\nexist, how many are live, their total budget in cents, and which channel\nexecutors this deployment can actually reach.\n\nThe channel list is the deployment's honest capability, not a wish: a kind\nmissing from it is one a launch will record as \"unavailable\" rather than fail\non.",
 		Fields: map[string]string{
 			"campaignSummary.budget":    "Budget is the sum of every campaign's budget, in CENTS.",
@@ -130,7 +130,7 @@ func init() {
 			"campaignSummary.live":      "Live is how many of them are currently live.",
 		},
 	})
-	zip.Describe("POST /v1/campaign", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign POST /v1/campaign", zip.Doc{
 		Description: "Creates a campaign as a DRAFT and returns it.\n\nA draft is inert: nothing is sent, no connector is touched and no budget is\ncommitted until the campaign is launched. The channels named here are validated\nand de-duplicated by kind (one executor per kind), and every channel starts\n\"pending\" whatever the caller claims — a client can never assert a launched\nstate.",
 		Fields: map[string]string{
 			"ChannelSpec.account":       "Account is the provider account this channel runs under: an ad-account, a page\nor a mailing-list id. An executor may replace it at launch with the account it\nactually used.",
@@ -158,7 +158,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"Spring launch","budget":250000,"content":["Ship faster"],"channels":[{"kind":"paid","platform":"meta"}]}`),
 	})
-	zip.Describe("POST /v1/campaign/:id/channels", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign POST /v1/campaign/:id/channels", zip.Doc{
 		Description: "Adds a channel to a campaign, or REPLACES the one it already\nhas of that kind, and returns the updated campaign.\n\nA campaign carries at most one channel per kind, because the kind IS the\nexecutor: adding a second \"paid\" channel would mean two ad accounts running one\ncampaign with no way to tell their results apart. The new channel starts\n\"pending\" — adding it does not launch it.",
 		Fields: map[string]string{
 			"ChannelSpec.account":       "Account is the provider account this channel runs under: an ad-account, a page\nor a mailing-list id. An executor may replace it at launch with the account it\nactually used.",
@@ -184,13 +184,13 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"cmp_1f…","kind":"email","platform":"sendgrid","account":"list_42"}`),
 	})
-	zip.Describe("POST /v1/campaign/:id/launch", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign POST /v1/campaign/:id/launch", zip.Doc{
 		Description: "Fans a campaign out to its channels. A campaign with no channels\nis a 400 (nothing to launch). After the fan-out the campaign is live when at\nleast one channel launched, else failed. The channel rows carry the honest\nper-channel status. Idempotency: a channel already live is not re-launched.",
 	})
-	zip.Describe("POST /v1/campaign/:id/pause", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign POST /v1/campaign/:id/pause", zip.Doc{
 		Description: "Pauses every live channel on the provider and moves the campaign\nto paused. A channel whose executor is gone, or whose pause errors, is recorded\nhonestly; the campaign still reports paused (no live channel remains that this\nprocess will meter).",
 	})
-	zip.Describe("PUT /v1/campaign/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/campaign PUT /v1/campaign/:id", zip.Doc{
 		Description: "Rewrites a campaign's core fields — name, audience, creatives,\nschedule and budget — and returns the updated campaign.\n\nChannels are replaced ONLY while the campaign is still a draft. Once it is\nlaunched its channels carry provider state (an external id, a live status), so\nthey are added and removed explicitly through the channels sub-resource\ninstead; a whole-object write would silently orphan a running execution.",
 		Fields: map[string]string{
 			"ChannelSpec.account":       "Account is the provider account this channel runs under: an ad-account, a page\nor a mailing-list id. An executor may replace it at launch with the account it\nactually used.",

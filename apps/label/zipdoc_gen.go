@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/label", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/label GET /v1/label", zip.Doc{
 		Description: "Reads the assertions this tenant has recorded, newest event first.\n\nIt reads the RECORD — the tenant's own store — and not the columnar copy, so\nwhat it returns is what would be produced in an audit. Narrow it by entity, by\nasserter, or by event window.",
 		Fields: map[string]string{
 			"riskLabelRecord.at":          "At is when the judged EVENT happened, RFC 3339 in UTC, truncated to the\nsecond. The filer supplies it, and it is what a maturity horizon measures\nfrom: this event's as-of is At plus the horizon. A resolve names it back\nexactly, to the second.",
@@ -31,7 +31,7 @@ func init() {
 			"riskLabelsOut.labels":        "Labels is the page, newest event first.",
 		},
 	})
-	zip.Describe("GET /v1/label/coverage", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/label GET /v1/label/coverage", zip.Doc{
 		Description: "Reports how much of a window has matured and how much of that is\njudged, per source.\n\nIt is the gate on training. A supervised fit over a window whose judged count\nis near zero produces a number, and the number is meaningless; this op is what\nlets that be stated before the fit rather than discovered after it.\n\nIt reads the RECORD plane and folds every assertion at that event's OWN as-of,\nso the counts obey exactly the leakage rule a materialisation would. It counts\nonly what was ASSERTED: what share of the whole event STREAM carries a label is\na question about the feature plane's denominator and is not answerable here.",
 		Fields: map[string]string{
 			"riskCoverageIn.from":            "From and To bound the EVENT window, half-open, RFC 3339.\n\nUnstated, the window is the 90 days ENDING where maturity begins — `to` is\nthe horizon ago, not now. A default window running to now under a default\nhorizon could not contain one matured event, so every count below it would\nbe zero however much ground truth the tenant held.",
@@ -56,7 +56,7 @@ func init() {
 			"riskSourceCoverage.won":         "Won is how many JUDGED events this source's assertion was the one IN FORCE\nfor, at that event's own as-of — it beat every other visible claim under the\nprecedence rule. Summed over the sources it is Judged. Read against Facts it\nis the ratio that matters: many filed and few won is a source being outranked,\nnot a source that is broken, and one source winning nearly everything is a\nplane that looks labelled because one noisy filer dominates it.",
 		},
 	})
-	zip.Describe("GET /v1/label/vocabulary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/label GET /v1/label/vocabulary", zip.Doc{
 		Description: "Publishes the closed vocabularies and the precedence rule that\nresolves a conflict between two sources.\n\nA precedence rule nobody can read is a rule nobody can audit or dispute, and\nthe whole defensibility of a contested label rests on being able to say why\none assertion beat another. The order returned here is derived from the same\ndeclaration the resolver reads — it is not a description of it.",
 		Fields: map[string]string{
 			"riskLabelVocabulary.dispositions": "Dispositions is the closed set a write's `disposition` must be drawn from,\npublished in full so a caller can validate a batch before filing it instead of\ndiscovering a refusal per member: \"productive\", \"unproductive\", and \"\" — the\nEMPTY STRING is a member and means an explicit unjudged, so a client that\nfilters empties out of this list drops a third of the vocabulary and can never\nfile \"we looked and could not say\". They are the AML engine's own spelling,\nverbatim, which is what lets a replay there report against these values.",
@@ -66,7 +66,7 @@ func init() {
 			"riskLabelVocabulary.rule":         "Rule states the tie-breaks below rank, in order, so a caller reading a\ncontested resolution can reproduce it.",
 		},
 	})
-	zip.Describe("POST /v1/label", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/label POST /v1/label", zip.Doc{
 		Description: "Records a batch of ground truth against the entities it judges.\n\nEach assertion carries TWO times — when the judged event happened, and when\nthe assertion became knowable — and both are required. The second is what\nkeeps a chargeback that landed in June out of a model that had to decide in\nFebruary.\n\nIt is idempotent on the CONTENT of an assertion, so a webhook that redelivers\nis safe. It never overwrites: a source that corrects itself later files a NEW\nassertion, which wins from the moment it became knowable and leaves every\nearlier observation instant seeing exactly what it saw.\n\nThe asserter is stamped from the validated credential and is not a body field.",
 		Fields: map[string]string{
 			"riskLabelFact.at":          "At is when the judged event happened, RFC 3339.",
@@ -89,7 +89,7 @@ func init() {
 			"riskLabelResult.status":    "Status is recorded, duplicate or refused.",
 		},
 	})
-	zip.Describe("POST /v1/label/dispose", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/label POST /v1/label/dispose", zip.Doc{
 		Description: "Applies this tenant's retention, and only this tenant's.\n\nIt is bounded three ways, each a compliance property rather than a\nconvenience. It refuses a boundary younger than the platform floor, because a\nlabel can be the input to an adverse action and five years is what the\nretention ledger holds such a record for. It never touches a record under\nlitigation hold. And it disposes of whole records rather than redacting\nfields.\n\nIt removes the derived columnar copy BEFORE the record, and refuses the whole\ndisposal if the warehouse cannot be reached. The other order would leave rows\nin the warehouse that nothing can identify any more, which is a disposal that\ndid not happen and says it did.",
 		Fields: map[string]string{
 			"riskDisposeIn.before":     "Before disposes of assertions WRITTEN before this instant, RFC 3339. It is\nmeasured against the server clock at the write and not against the event\nor observation times, both of which the asserting caller supplies — a\ntenant that could back-date could delete a compliance record on demand.",
@@ -102,7 +102,7 @@ func init() {
 			"riskDisposeOut.total":     "Total and Oldest describe what the tenant still holds afterwards, so a\ndisposal that removed nothing is distinguishable from a tenant that had\nnothing.",
 		},
 	})
-	zip.Describe("POST /v1/label/hold", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/label POST /v1/label/hold", zip.Doc{
 		Description: "Places or releases a litigation hold on named records.\n\nA hold is a fact about the RECORD, not about the world: it says retention may\nnot dispose of this row, and it asserts nothing about what happened. So it is\nnot a field on an assertion and it is not folded into the content digest —\ncarried there it was silently a no-op on any record that already existed, since\nre-filing the same assertion with a hold flag produced the same digest, the\ninsert was ignored, and the caller was answered `duplicate` while the hold it\nasked for was never placed. This op is the one way a hold moves, in either\ndirection, and the move is written to the audit log.\n\nEvery named id is this tenant's or is nothing. The statement runs against the\ntenant's own file, which holds no other tenant's rows and has no column that\ncould name one.",
 		Fields: map[string]string{
 			"riskHoldIn.hold":     "Hold is the state to put them in: true places the hold, false releases it.\nOne op both ways, because a hold that can be placed and not released pins a\ncompliance record past every retention boundary with nothing able to let it\ngo — and an operator who cannot release a hold stops placing them.",
@@ -113,7 +113,7 @@ func init() {
 			"riskHoldOut.missing": "Missing is how many of the named ids this tenant does not hold. It is\nreported rather than refused, so a sweep over a list that includes disposed\nrecords still places every hold it can — but it is REPORTED, because a hold\nthat silently did nothing is a compliance control that lies.",
 		},
 	})
-	zip.Describe("POST /v1/label/resolve", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/label POST /v1/label/resolve", zip.Doc{
 		Description: "Answers, for each named event, which assertion was in force AS OF that\nevent's own horizon — and what disagreed with it.\n\nThis is the join surface: the dataset materialiser calls it to attach ground\ntruth to training rows, and the evaluator calls it to score a past decision\nagainst what was knowable when the decision had to be made. One mechanism for\nboth, so a model can never be trained under one leakage rule and scored under\nanother.\n\nThree answers are distinct and all three are honest: a resolved label, an\nevent that has not matured, and a matured event nobody has judged. The last is\nnever reported as unproductive.",
 		Fields: map[string]string{
 			"riskLabelEvent.at":           "At is the event's own instant, RFC 3339. It is part of the event's IDENTITY\nand not a filter: it is matched exactly, to the second, against the `at` the\nassertions were filed under, so an instant a second off names a different\nevent and resolves to nothing. It is also what this event's as-of is measured\nfrom — At plus the horizon.",

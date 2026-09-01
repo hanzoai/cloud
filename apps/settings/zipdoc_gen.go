@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/settings/:product", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/settings GET /v1/settings/:product", zip.Doc{
 		Description: "Reads the caller org's configuration for one product, with every\nsecret field MASKED — only the names of the set secrets come back, never their\nvalues, which live in KMS. A product the org has never configured is not a 404:\nit answers 200 with an empty config object, so the console's Settings tab always\nrenders and merges its own display defaults on top.",
 		Fields: map[string]string{
 			"productIn.product":       "Product is the catalog slug, from the path. Must match ^[a-z0-9][a-z0-9._-]{0,62}$.",
@@ -18,10 +18,10 @@ func init() {
 			"settingsView.updatedAt":  "UpdatedAt is when this configuration was last written, RFC 3339 UTC. Empty\nwhen nothing has been saved.",
 		},
 	})
-	zip.Describe("POST /settings/fleet", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/settings POST /settings/fleet", zip.Doc{
 		Description: "Answers for the RESERVED PLATFORM ORG and takes no org argument.\n\nThat is the whole of its safety. This store holds every tenant's product config,\nand the internal plane carries no principal — so an op with an org parameter\nwould be a cross-tenant read available to any app in the pod. The org here is a\nconstant, and the constant is authz.AdminOrg: the same predicate admin-guard and\nthe audit trail read, so there is no second notion of \"the platform\" to drift.\n\nSECRETS ARE NOT HERE. Only the non-secret document is returned; a secret field's\nvalue lives in KMS and a caller that needs one asks KMS with its own identity.\n\nAn unconfigured product answers with an empty document rather than an error,\nbecause a reader has to do the same thing in both cases — take its default — and\na reader that must distinguish \"never set\" from \"cannot ask\" is a reader with two\nbehaviours where one will do.",
 	})
-	zip.Describe("PUT /v1/settings/:product", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/settings PUT /v1/settings/:product", zip.Doc{
 		Description: "Writes the caller org's configuration for one product and answers the\nstored result, secrets masked. Secret VALUES are sealed into KMS under\norgs/{org}/settings/{product}/{key} and never touch this deployment's database;\nwith no KMS configured a write that carries any secret is refused whole (503)\nrather than dropping it or persisting it in the clear. A secret the body omits\nkeeps its stored value, so a partial write never silently clears one.",
 		Fields: map[string]string{
 			"settingsReq.config":      "Config is the product's non-secret configuration, stored verbatim. Bounded at\n64 KiB once serialized. Omit it to store an empty object.",

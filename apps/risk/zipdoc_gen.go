@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/risk/features", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk GET /v1/risk/features", zip.Doc{
 		Description: "Features is the feature catalogue in its two honest lenses.\n\nThe MODEL lens is the governed inventory: one entry per dimension of the model\nspace, each carrying the typology it serves, the supervisor's own words for the\nindicator, and the published standard those words come from — so a coverage\nclaim is checkable rather than asserted. It is the same for every organisation.\n\nThe SURFACE lens is what THIS organisation's own event surface actually carries,\nmeasured over the window: how many of its buckets carry each dimension at all,\nand what the dimension reads where it is present. A dimension present in no\nbucket is BLIND, and saying so is the difference between no risk and no data.",
 		Fields: map[string]string{
 			"riskBand.day":               "Day is the day the band covers.",
@@ -46,10 +46,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"days":30}`),
 	})
-	zip.Describe("GET /v1/risk/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk GET /v1/risk/health", zip.Doc{
 		Description: "Is a REAL probe: it reports whether the model plane exists, whether the\nper-org shelves can be written, and whether the event surface behind the\nfeature plane is reachable. 200 only when the model plane can actually work.\n\nThe warehouse being DOWN is reported and is NOT a failure: scoring reads\nin-memory rings and never the warehouse, so a warm that cannot run degrades the\nmoat and does not stop a decision. Saying so is the difference between a probe\nand status theatre.",
 	})
-	zip.Describe("GET /v1/risk/policy", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk GET /v1/risk/policy", zip.Doc{
 		Description: "Policy reports the caller organisation's own decision-regime history: every\ndistinct regime it has adopted, which version is in force, and what retention\nhas taken.\n\nWHY IT EXISTS. Every score cites the version it was decided under\n([riskScoreOut.Policy]), and the threshold that score was measured against is\nderived from the appetite that version states. Restate the appetite and, without\nthis record, every earlier decision becomes unreconstructible — the cut it was\njudged by no longer exists anywhere. An adverse decision that cannot be\nexplained against the policy in force when it was taken cannot be defended.\n\nIt covers ONE organisation. The history is on that organisation's own shelf, so\nanother's versions are not filtered out of the answer — they are not in the file\nthe answer is read from.",
 		Fields: map[string]string{
 			"riskPolicyOut.changes":     "Changes is how many DISTINCT regimes may be adopted per Window. A restatement\nidentical to the regime in force mints no version and is not counted against\nit.",
@@ -66,7 +66,7 @@ func init() {
 			"riskPolicyVersion.version": "Version names this regime in this organisation's history.",
 		},
 	})
-	zip.Describe("GET /v1/risk/search/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk GET /v1/risk/search/:id", zip.Doc{
 		Description: "Reads back one search run: every shape tried over this\norganisation's own history, best first, and the one that fit.\n\nA run another organisation started is simply not there — the same 404 an\nunknown id gives, so the read is not a probe oracle.",
 		Fields: map[string]string{
 			"riskModelValue.address":   "Address names this value by its own content: the model's shape, the geometry\nseed, its position in the window, its threshold, its masses as IEEE-754 bits\nand the fold watermark behind them. Nothing else — no clock, no counter and\ndeliberately NOT the organisation, so an identical model has one name and a\nname is never an authority. Holding another organisation's address resolves\nnothing.",
@@ -105,7 +105,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"srch_2f6a1c"}`),
 	})
-	zip.Describe("GET /v1/risk/state", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk GET /v1/risk/state", zip.Doc{
 		Description: "State reports the caller organisation's own model: what it has learned, whether\nit is live or still in shadow, the threshold in force, the appetite it stated\nbeside the share it actually realised, every refusal by reason, every feature\nthat read blind, and how much of the organisation's own event surface has been\nfolded in.\n\nIt covers ONE organisation. A caller cannot learn another's volumes, alert rate\nor behaviour from it, because the state is read out of a model that holds only\nits own.",
 		Fields: map[string]string{
 			"riskAggregates.bound":      "Bound is the most they can hold. It is a per-organisation bound: at it, this\norganisation degrades and no other one notices.",
@@ -144,7 +144,7 @@ func init() {
 			"riskSurface.window":        "Window is the lookback the fold covered.",
 		},
 	})
-	zip.Describe("POST /risk/decide", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk POST /risk/decide", zip.Doc{
 		Description: "Judges one subject against the CALLING organisation's own model and answers\nwhat to do about it. It learns nothing, records nothing and moves no counter:\nthe numbers it reads are that organisation's history as it stands.\n\nThe organisation is the CALLER's, minted from the plane principal and never\nfrom this body — there is no field here that could name one. A model is trained\non one organisation's own behaviour, so choosing which model answers would be\nthe only cross-tenant read this plane has to offer.\n\nA model still WARMING declines with a reason and no score. That is the whole\ncontract of the answer: the engine computes a score before it checks whether it\nhas learned enough to have an opinion, so a refusal carries a populated number\nthat means nothing, and publishing it would turn \"no opinion\" into \"this is\nfine\". Read `refusal` first; `scored` in the HTTP twin of this op says the same\nthing.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"RiskDecideIn.kind":    "Kind is whose behaviour this is — person, session or account. It namespaces\nthe subject, so a person and an account sharing an identifier stay two\nsubjects.",
@@ -159,7 +159,7 @@ func init() {
 			"RiskDecided.shape":    "Shape is the model SPACE the verdict was reached in, `<family>:<digest>`. It\nis what pins an adverse decision to a model: a score is only meaningful\nagainst the space that produced it.",
 		},
 	})
-	zip.Describe("POST /risk/observe", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk POST /risk/observe", zip.Doc{
 		Description: "Teaches the CALLING organisation's own model from something that settled.\n\n# Why the plane needs a learn endpoint at all\n\nThe aggregate halves of the credit endpoint's rule — pace and fan-out — read what\nan event's identifiers had ALREADY done. Nothing was teaching them. [planeDecide]\nrecords nothing by design, the published learn endpoint is an organisation calling\nitself over HTTP, and the organisation at a self-serve credit endpoint IS the payer:\na fresh org signs up, tops up, and teaches its model nothing at all. So the two\nhalves read an empty history for precisely the subject they were built for, and a\npayment split into five pieces looked like five first payments.\n\nThis is the source that fills them, and it has the three properties that make an\naccrual worth reading:\n\n\tIT IS THE SERVER'S OBSERVATION, NOT A CLAIM. The caller is a process in this\n\tfleet reporting what it watched settle. The value is the amount that moved at\n\tthe gateway, the moment is a server clock, and the subject is the one the\n\tcredit landed on. None of it is a field the paying customer filled in, which is\n\tthe difference between a velocity bound and a velocity suggestion.\n\n\tIT IS IDEMPOTENT ON THE SETTLEMENT. [plane.note] deduplicates on (tenant, id)\n\tand this states the settlement's own identifier as that id, so a retried\n\trequest, a replayed webhook and a redelivered event converge on ONE\n\tobservation. Learned=0 is the answer for a settlement already held — an\n\thonest receipt rather than a second count of the same money.\n\n\tIT CANNOT BE PRE-EMPTED. Dedupe means the FIRST writer of an id wins, so an id\n\ta customer could guess is an id a customer could claim in advance, after which\n\tthe real settlement is silently inert — velocity switched off by the party it\n\tbounds. The id lands in [reserved] namespace and the public learn endpoint refuses\n\tthat namespace outright ([riskEvent.observation]), so the only writer of a\n\tsettlement observation is a settlement.\n\n# It is a LEARN and it is priced like one — which is to say, not\n\nThe HTTP learn endpoint meters per event ([ops.learn] calls pay). This one does not,\nfor [planeDecide]'s reason one step further on: the settlement it records is a\ncustomer's payment ARRIVING, so the balance a charge would be taken from is the\nbalance being filled. Charging for the record of a payment is a fee on paying.\nThe per-tenant in-flight slot still applies, because that is a bound on this\nprocess rather than a price.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"RiskObserveIn.kind":       "Kind is whose behaviour this is. A settled payment is KindPayer.",
@@ -170,7 +170,7 @@ func init() {
 			"RiskObserved.learned":     "Learned is how many observations entered the model on this call: one, or zero\nfor a settlement already recorded.",
 		},
 	})
-	zip.Describe("POST /v1/risk/learn", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk POST /v1/risk/learn", zip.Doc{
 		Description: "Learn records a batch of events into the caller organisation's own aggregates\nand lets its model learn from them. It answers how many it learned from.\n\nIT DOES NOT SCORE, AND THAT IS THE POINT. An observation is a value you record;\nlearning is a transformation over observations; a verdict is a query against the\nresult. This op is the first two. [ops.score] is the third, it is pure, and it\nis the ONE entry point to a verdict. They were one call, which meant you could\nnot record without training and could not train without being answered — and the\nmodel ran twice over every event to produce a verdict the response carried and\nno caller read.\n\nTO OBSERVE AND JUDGE, COMPOSE THE TWO, and mind the order. Score FIRST, then\nlearn: the score is then the model's opinion of an event it has not yet learned\nfrom, which is the question worth asking. The other order answers for a model\nthat has already absorbed the event it is judging.\n\nThis is the training path, and there is no job behind it: the model IS a set of\nmass counters over half-space trees, so learning is an increment and the model\nis current the instant the last event lands. Nothing from any other\norganisation is in it, and nothing from this organisation leaves it.\n\nA RETRY IS INERT. The record deduplicates on the event id you send, and an event\nalready in it moves nothing, costs nothing and is not counted — so a client that\ntimed out can send the same batch again and its model holds what it holds.\nWithout an id of your own there is nothing to converge on: two identical bodies\nare two events.",
 		Fields: map[string]string{
 			"riskEvent.at":         "At is when it happened, RFC 3339. Empty means now. It must sit inside the\nthirty-day window the aggregates keep and no more than two minutes ahead of\nthis plane's clock; anything outside that is REFUSED rather than quietly\naccepted, because a future timestamp moves the aggregates' leading edge and\nleaves every later event for that subject reading as though it never\nhappened. History older than the window is folded in from your own event\nsurface, not through this endpoint.",
@@ -185,7 +185,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"events":[{"id":"tx_9","kind":"account","subject":"u_412","nano":420000000}]}`),
 	})
-	zip.Describe("POST /v1/risk/score", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk POST /v1/risk/score", zip.Doc{
 		Description: "Score judges one event against the caller organisation's OWN model and learns\nnothing from it. It is how a candidate is tried against real behaviour before\nanything depends on the answer, and it is the model's analogue of testing a\nrule.\n\nBecause it records nothing, the aggregates it reads do not include the event:\nthe numbers are the organisation's history as it stands. A model still warming\ndeclines with a reason rather than answering zero, because silence must never\nread as a clean result.",
 		Fields: map[string]string{
 			"riskCause.baseline":   "Baseline is the number it was measured against — always this\norganisation's own history, never a fixed limit and never another\norganisation's.",
@@ -225,7 +225,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"event":{"id":"tx_9","kind":"account","subject":"u_412","nano":420000000}}`),
 	})
-	zip.Describe("POST /v1/risk/search", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk POST /v1/risk/search", zip.Doc{
 		Description: "Search runs an exhaustive search for the model shape that best fits the caller\norganisation's own history, and answers 202 with the run to read back.\n\nEvery candidate is replayed over that organisation's OWN feature surface in its\nown sandbox — its own aggregates, its own model, neither of them the live one —\nso a run cannot move a live threshold and cannot see another organisation's\ndata. The result is the learning curve for each shape and the one that fit\nbest, ranked on how closely it honoured the stated appetite, whether it warmed\nat all, whether it saturated, and how much of the coordinate space it left\nblind.\n\nAn empty history is REFUSED rather than reported as zero alerts, because \"no\nalerts\" is exactly what a quiet model looks like.",
 		Fields: map[string]string{
 			"riskSearchIn.days":        "Days is how much of the organisation's own history to replay, 1 to 400.\nZero takes thirty.",
@@ -235,7 +235,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"days":30}`),
 	})
-	zip.Describe("POST /v1/risk/state/model", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk POST /v1/risk/state/model", zip.Doc{
 		Description: "Publishes your organisation's model as a NAMED VALUE, so a decision\ntaken today can be reconstructed tomorrow and a change made today can be undone.\n\nIt answers with a NAME and not with the state. The masses stay on your\norganisation's own encrypted store and are referred to by an address computed\nfrom their own content: the shape, the geometry seed, the position in the window,\nthe threshold, the masses themselves as IEEE-754 bits, and the fold watermark\nbehind them. That is what makes the value nameable without making the caller its\ncustodian.\n\nIT IS IDEMPOTENT ON THE VALUE. A model that has not changed publishes to the name\nit already has and mints nothing, reporting minted=false — so publishing at every\nboundary that matters is free. Ten values are retained per organisation, bounded\nin BYTES rather than in rows, and the oldest is disposed of past that.\n\nA model that has learned nothing is refused: planted is not learned, and a value\nthat reproduces nothing is not a value.\n\nIt is POST and PUT on one address because they are one plane's two verbs over one\nkind of thing: POST mints a value from the model in force, PUT puts a value in\nforce. They were /v1/risk/state/snapshot and /v1/risk/state/restore — two addresses\nnamed after the operation rather than after the thing, which is how a reader ends\nup asking what the difference between a snapshot and a value is.",
 		Fields: map[string]string{
 			"riskModelValue.address":  "Address names this value by its own content: the model's shape, the geometry\nseed, its position in the window, its threshold, its masses as IEEE-754 bits\nand the fold watermark behind them. Nothing else — no clock, no counter and\ndeliberately NOT the organisation, so an identical model has one name and a\nname is never an authority. Holding another organisation's address resolves\nnothing.",
@@ -249,7 +249,7 @@ func init() {
 			"riskPublishOut.value":    "Value is the published value: its name and what it is, never its masses.",
 		},
 	})
-	zip.Describe("PUT /v1/risk/policy", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk PUT /v1/risk/policy", zip.Doc{
 		Description: "States the decision regime the caller organisation's model decides\nunder: how much of its own stream may be sent for examination, how much of the\nrest is sampled to measure what was missed, and whether the model may change an\noutcome at all.\n\nThe appetite is the decision a model is not permitted to make for itself: its\noutput is a probability, so how likely it is to MISS something is a matter of\npolicy that has to be stated, measured and reviewed rather than absorbed into a\nconstant. The alert threshold is derived from it as a quantile of the scores\nactually observed, which is what keeps its meaning as the distribution drifts.\n\nIt is DURABLE BEFORE IT IS IN FORCE. The regime is recorded as a new version on\nthe organisation's own shelf before anything in memory moves, so a policy that\ncannot be written down is refused rather than answered from state the next\nrollout would silently undo.\n\nARMING IS AN ADMIN ACT AND TUNING IS NOT. Setting `live` requires an admin of\nthis organisation; stating the appetite and the sample is self-service for any\nmember. Taking the model live decides whether it may change an OUTCOME at all —\na payment frozen, a grant refused — for every customer this organisation has,\nand that is a decision an organisation takes rather than one of its members.\n\nA RESTATEMENT OF THE REGIME IN FORCE MINTS NOTHING and answers the version\nalready in force. Compare the version you receive with the version you had:\nunchanged means the numbers were the same, which is why there is no flag for it.\n\nLearned state survives the change. The model's identity covers its SHAPE — the\ninventory and the geometry — and not its appetite, so restating policy unlearns\nnothing. It also does not REPORT the learned state: what the model is is read\nfrom the model.",
 		Fields: map[string]string{
 			"riskAppetiteIn.live":       "Live turns the model out of shadow. It defaults to FALSE on every call, so\ngoing live is always an explicit act and never a side effect of changing a\nnumber.\n\nSetting it requires an ADMIN of this organisation. Arming decides whether the\nmodel may change an outcome at all — a payment frozen, a grant refused — for\nevery customer this organisation has, which is a governance act rather than a\ntuning one. Stating the appetite and the sample needs no admin.",
@@ -270,7 +270,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"review":0.01,"sample":0.001,"live":false}`),
 	})
-	zip.Describe("PUT /v1/risk/state/model", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/risk PUT /v1/risk/state/model", zip.Doc{
 		Description: "Puts one of your organisation's OWN PUBLISHED VALUES in force, by name —\nwhich is what an instant rollback is, what promoting a challenger is, and what\ninstalling the shape a search found is.\n\nIT TAKES AN ADDRESS AND NEVER STATE. The masses are read from your own store, so\nnothing about your model has to be held by whatever is making this call. That\ncloses the sharpest edge the previous shape had: a body of counters is something\na caller can COMPOSE, and a region filled until activity inside it reads as\nordinary is a model that has been shaped rather than learned. The engine's mass\ninvariant was the only thing standing between a composed body and the model; with\nan address there is no body to compose.\n\nIT ADOPTS THE SHAPE, NOT ONLY THE MASSES. A value records the model space its\nmasses were taken in, and a value whose space differs from the one in force\nREPLANTS your model into that space before restoring them. That is what makes\nPOST /v1/risk/search actionable: a search answers with the shape that fits your own\nhistory best and publishes it fitted, and its address is what you name here. Before\nthis, a winning shape was advice nobody could take — the adoption path refused every\nshape change, and a winner is a different shape by definition.\n\nWHAT ADOPTING A SEARCHED SHAPE COSTS, SAID PLAINLY: the value a search fits has\nlearned the window the search replayed and nothing older, so installing it trades\nhistory for fit. Your appetite is untouched — that is your policy record's, with its\nown versions — and so is the geometry, which stays your own.\n\nAn address your organisation has not published is NOT FOUND. That includes one\nanother organisation published, and it is not a lookup that failed: the store is\nper organisation and the address is a name, never an authority.",
 		Fields: map[string]string{
 			"riskAdoptIn.address":       "Address is one of YOUR organisation's own published values (GET\n/v1/risk/state reports them, and a search reports the one it fitted for you).\nAn address your organisation has not published is NOT FOUND — including one\nanother organisation published, because an address names a value and never\nauthorises reading it.",

@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/gateway/config", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/gateway GET /v1/gateway/config", zip.Doc{
 		Description: "Read returns the EFFECTIVE edge policy the caller is subject to: the platform CORS\nallowlist and pre-auth per-IP flood cap in force, plus the caller's own authenticated\nrate ceiling, edge-cache TTLs and accepted-method allowlist. A SuperAdmin may inspect\na specific tenant's effective policy with ?org=<slug>.",
 		Fields: map[string]string{
 			"Policy.cache_paths":   "CachePaths overrides CacheTTLSec per path PREFIX (key \"/v1/models\" → seconds).\nThe longest matching prefix wins.",
@@ -24,7 +24,7 @@ func init() {
 			"Policy.window_sec":    "WindowSec is the window PerIPRPM is counted over, in seconds. SuperAdmin-only.",
 		},
 	})
-	zip.Describe("GET /v1/gateway/traffic", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/gateway GET /v1/gateway/traffic", zip.Doc{
 		Description: "Traffic reports who is calling this organization's API right now: the request\ncount for the last minute split by AGENCY LANE — agent, human, bot, unknown —\nand the busiest callers behind it, each with its request count, its\nauthentication-failure count, how many distinct paths it touched, and any\nverdict currently held against it.\n\nThe lane split is the answer to the question a generic bot filter cannot\nanswer: which of this traffic is the customer's own automation and which is\nsomebody working through a list. It is computed from credentials we issued, not\nfrom the client's self-description, so a scraper cannot move itself into the\nagent lane by editing a header.\n\nA validated caller appears as a FINGERPRINT — a one-way, per-process digest. It\nis stable enough to recognise the same caller across a minute and cannot be\nturned back into a key, so this report is safe to read, screenshot and paste.\n\nIt also reports what the sensor's own ceilings are doing (strain, tracked,\nceiling, refused) and how many screens the scorer did not answer (unscored), so\na control that has stopped measuring or a judge that has stopped answering is a\nnumber here rather than a quiet day.\n\nScoped to the caller's own validated organization. A SuperAdmin may inspect a\nspecific tenant with ?org=<slug>, or the lane that has no tenant — every caller\nthe identity boundary could not validate — with an empty ?org=.",
 		Fields: map[string]string{
 			"TrafficCaller.action":     "Action is the verdict currently held against it, if any.",
@@ -50,7 +50,7 @@ func init() {
 			"TrafficView.window_sec":   "WindowSec is the span the counts cover, in seconds.",
 		},
 	})
-	zip.Describe("PUT /v1/gateway/config", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/gateway PUT /v1/gateway/config", zip.Doc{
 		Description: "Write updates one policy scope and returns the policy in force after the write.\nA body carrying any PLATFORM field (cors_origins, per_ip_rpm, window_sec) is a\nplatform write and requires SuperAdmin; otherwise it is a per-org write (org_rpm,\ncache_ttl_sec, cache_paths, methods) scoped to the caller's own org — or, for a\nSuperAdmin, the tenant named by ?org=<slug>. A body that sets nothing is a 400.\nThe abuse gate's mode is an OPERATOR field: setting it requires SuperAdmin,\nwhichever organization it lands on. updated_at and updated_by are\nserver-stamped; a client-supplied value is ignored.",
 		Fields: map[string]string{
 			"Policy.cache_paths":   "CachePaths overrides CacheTTLSec per path PREFIX (key \"/v1/models\" → seconds).\nThe longest matching prefix wins.",

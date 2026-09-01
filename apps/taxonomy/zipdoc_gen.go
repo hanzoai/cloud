@@ -9,21 +9,21 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/taxonomy/categories/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/taxonomy DELETE /v1/taxonomy/categories/:id", zip.Doc{
 		Description: "Removes one empty category. A category that still has taxa\nfiled under it is refused with 409 and a count: deleting the label off a group\nmust never silently take the products wearing it, and the alternative — orphan\nrows naming a category that no longer exists — is a catalogue that cannot be\nrendered. Move or delete its taxa first. An id no category holds is a 404.",
 		Fields: map[string]string{
 			"deleted.deleted": "Deleted is the id that no longer exists.",
 			"idIn.id":         "ID is the slug to act on, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/taxonomy/taxa/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/taxonomy DELETE /v1/taxonomy/taxa/:id", zip.Doc{
 		Description: "Removes one product from the catalogue. An id no taxon holds is a\n404. To take a product out of view without losing what was written about it, set\n`published` to false instead.",
 		Fields: map[string]string{
 			"deleted.deleted": "Deleted is the id that no longer exists.",
 			"idIn.id":         "ID is the slug to act on, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/taxonomy", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/taxonomy GET /v1/taxonomy", zip.Doc{
 		Description: "Read returns the product catalogue as this caller sees it: the PLATFORM\ncatalogue — Hanzo's own products, the part that is true for everyone — plus the\ncaller's own org's rows, every category in display order and each carrying the\nproducts filed under it in theirs. Another customer's rows are never in it. It\nis readable signed out, and a signed-out visitor gets the platform catalogue\nalone, which is what the marketing landing renders from.\n\nWhere the caller's org and the platform hold the same id, the caller's own row\nis the one served. That rule exists because ids are unique per ORG and not\nglobally — two customers may each have a \"crm\", and refusing the second would\ntell one of them the other exists — so a collision with the platform is possible\nby construction and something has to win deterministically. Yours does: your own\ncatalogue is the one you edited.\n\n`?brand=` narrows it the way a brand's own console does: only the categories\nthat brand admits, and within them only the taxa scoped to it. An unpublished\nrow is served only to whoever may edit it — a SuperAdmin for the platform's, an\norg admin for their own — so a product can be staged before anyone sees it\nwithout becoming invisible to the person staging it.",
 		Fields: map[string]string{
 			"Category.brands":     "Brands are the brands whose console shows this category. Absent means every\nbrand.",
@@ -49,7 +49,7 @@ func init() {
 			"readIn.brand":        "Brand returns only what that brand's console shows — the categories it\nadmits, and within them the taxa scoped to it. Empty returns everything.",
 		},
 	})
-	zip.Describe("PUT /v1/taxonomy/categories/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/taxonomy PUT /v1/taxonomy/categories/:id", zip.Doc{
 		Description: "Creates or replaces one category and returns it as stored. The id in\nthe URL is the one it is filed under whatever the body says, so a category can\nnever be written under a name it was not addressed by — which also makes create\nand replace the same act, and is why there is no POST beside this.\n\nPlatform SuperAdmin only: one catalogue serves every tenant, so an org admin who\ncould rename a category would rename it for all of them.",
 		Fields: map[string]string{
 			"Category.brands":    "Brands are the brands whose console shows this category. Absent means every\nbrand.",
@@ -79,7 +79,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"label":"Observe","summary":"Traces, metrics, logs and alerts.","order":6}`),
 	})
-	zip.Describe("PUT /v1/taxonomy/taxa/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/taxonomy PUT /v1/taxonomy/taxa/:id", zip.Doc{
 		Description: "Creates or replaces one product and returns it as stored. The id in the\nURL is the one it is filed under whatever the body says. The category must\nalready exist — a taxon naming a category that does not is refused with 400\nrather than stored where nothing can render it.\n\nA taxon opens exactly one way: `route` for a product the console renders\nitself, or `href` for one that genuinely lives at its own domain. Giving both,\nor neither, is refused.\n\nPlatform SuperAdmin only.",
 		Fields: map[string]string{
 			"Taxon.brands":        "Brands are the brands whose console shows this taxon. Absent means every\nbrand its category admits.",

@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/security/findings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/security GET /v1/security/findings", zip.Doc{
 		Description: "Is the org's findings — rule, severity, path, line, masked preview\nand fingerprint — newest first, across scans or within one.\n\nA minSeverity outside critical|high|medium|low is refused rather than quietly\nignored, so a filter typo cannot read as \"no findings\". Strictly org-scoped, and\na caller with no validated org is refused.",
 		Fields: map[string]string{
 			"findingFilter.limit":       "Limit caps the page.",
@@ -26,7 +26,7 @@ func init() {
 			"findingView.severity":      "Severity ranks the finding: critical, high, medium or low.",
 		},
 	})
-	zip.Describe("GET /v1/security/findings/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/security GET /v1/security/findings/:id", zip.Doc{
 		Description: "Returns a single finding: which rule fired, where (path and line),\nthe masked preview and the SHA-256 fingerprint of the secret — the raw secret is\nnot stored and cannot be read back.\n\nScoped to the caller's org, and a finding belonging to another org is the same\n404 as one that never existed.",
 		Fields: map[string]string{
 			"findingRef.id":           "ID is the finding the URL names.",
@@ -42,14 +42,14 @@ func init() {
 			"findingView.severity":    "Severity ranks the finding: critical, high, medium or low.",
 		},
 	})
-	zip.Describe("GET /v1/security/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/security GET /v1/security/health", zip.Doc{
 		Description: "Reports that the scanning subsystem is serving and how many\nsecret-detection rules the engine holds.\n\nIt has no external dependency — the answer is ok whenever the findings store\nopened — so it measures this process rather than anything downstream. It reads\nno tenant: a prober that sends no principal is answered, not refused.",
 		Fields: map[string]string{
 			"ruleset.rules":  "Rules is how many detection rules the engine holds.",
 			"ruleset.status": "Status is \"ok\" whenever the findings store opened.",
 		},
 	})
-	zip.Describe("GET /v1/security/rules", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/security GET /v1/security/rules", zip.Doc{
 		Description: "Is the secret-detection catalog the engine scans with.\n\nIt returns every rule a scan can fire — the id, name and severity a finding\ncites — so a caller can render or triage results without hard-coding the\ncatalog. It is the same for everyone and discloses nothing tenant-specific, so\nit carries no org scope.",
 		Fields: map[string]string{
 			"RuleView.description": "what kind of secret this rule recognises",
@@ -59,7 +59,7 @@ func init() {
 			"ruleList.data":        "Data is every rule a scan can fire, each with the id, name and severity a\nfinding cites.",
 		},
 	})
-	zip.Describe("GET /v1/security/scans", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/security GET /v1/security/scans", zip.Doc{
 		Description: "Is the org's scan history, newest first, each as the same summary the\nsubmission answered — files read, findings fired, tally by severity.\n\nStrictly org-scoped: a caller only ever sees its own scans, and one with no\nvalidated org is refused.",
 		Fields: map[string]string{
 			"scanList.data":      "Data is the caller org's scans, newest first.",
@@ -75,7 +75,7 @@ func init() {
 			"scanView.project":   "Project is the sub-scope the scan was filed under.",
 		},
 	})
-	zip.Describe("GET /v1/security/scans/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/security GET /v1/security/scans/:id", zip.Doc{
 		Description: "Returns one scan together with every finding on it, so the detail view\nis one round-trip rather than a list call per scan. The findings carry masked\npreviews and fingerprints, never secrets.\n\nScoped to the caller's org: a scan id belonging to another org is the same 404\nas an id that never existed, so a ruleset learns nothing about what exists\nelsewhere. No validated org is refused.",
 		Fields: map[string]string{
 			"findingView.createdAt":   "CreatedAt is when the finding was recorded, in Unix milliseconds.",
@@ -102,7 +102,7 @@ func init() {
 			"scanView.project":        "Project is the sub-scope the scan was filed under.",
 		},
 	})
-	zip.Describe("POST /v1/security/scans", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/security POST /v1/security/scans", zip.Doc{
 		Description: "Runs the detection engine over a batch of files and answers 201 with\nthe scan summary: how many files were read, how many findings fired, and the\ntally by severity.\n\nTHE SUBMITTED CONTENT IS NEVER STORED. It is scanned in memory; what persists is\nthe finding — its rule, its path and line, a MASKED preview (first and last\ncharacters kept, the middle starred) and the SHA-256 fingerprint of the raw\nsecret. The fingerprint is what makes the same secret recognisable across scans\nand after rotation without the secret ever being written down.\n\nIt requires a validated org, which scopes the stored scan and every finding on\nit; a caller with no org is refused. Bounded at 500 files and 8 MiB of total\ncontent per submission — split a larger tree across scans. One scan is one\nmetered unit, and the scan is recorded in the audit log with its tally, never\nwith its findings.",
 		Fields: map[string]string{
 			"scan.content":       "Content is the source to scan. It is NEVER stored: what persists is the\nfinding, with a masked preview and a fingerprint.",

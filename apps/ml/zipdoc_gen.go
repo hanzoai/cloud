@@ -9,17 +9,17 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/ml/models/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ml DELETE /v1/ml/models/:name", zip.Doc{
 		Description: "Deletes a deployed inference model. kserve owns the teardown: the\nInferenceService goes away and the serving deployment behind it follows, so the\nmodel stops answering predict calls. Answers 204, or 404 for a name the\ncaller's org does not own.",
 		Fields: map[string]string{
 			"mlRef.name": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
 		},
 		Example: json.RawMessage(`{"name":"sentiment"}`),
 	})
-	zip.Describe("GET /v1/ml/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ml GET /v1/ml/health", zip.Doc{
 		Description: "Is a REAL probe: it verifies the API server is reachable, that the\nsubsystem's CRDs are served, and — where the plane has one — that it holds the\nCAPACITY to run what it accepts. 200 only when everything is ok; 503 + the real\nreason otherwise (never status-theater).\n\n`capacity` names a cluster-scoped resource this plane needs at least ONE of, or\nis the zero GVR for a plane with no such fact. A served CRD is not capacity:\nkserve admits an InferenceService whose model format no ClusterServingRuntime\nsupports and simply never schedules it, so a probe that reads only \"is the CRD\nserved\" answers 200 while every deploy hangs. Purging the last runtime is a\nlegitimate operator act; doing it INVISIBLY is what this clause forbids.",
 	})
-	zip.Describe("GET /v1/ml/models", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ml GET /v1/ml/models", zip.Doc{
 		Description: "Lists the inference models deployed in the caller's org. Each entry\ncarries the model's name, when Kubernetes admitted it, and kserve's live status\n— the spec is on the single-model read. An org that has deployed nothing gets\nan empty list.",
 		Fields: map[string]string{
 			"mlResource.createdAt": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
@@ -29,7 +29,7 @@ func init() {
 			"mlResourceList.items": "Items is one entry per object, newest LAST (the Kubernetes list order).",
 		},
 	})
-	zip.Describe("GET /v1/ml/models/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ml GET /v1/ml/models/:name", zip.Doc{
 		Description: "Returns one deployed inference model. Its spec comes with it, and\nkserve's live status, which is where readiness and the serving address appear.\nA name the caller's org does not own answers 404, exactly as an unknown name\ndoes, so a probe learns nothing about another tenant's models.",
 		Fields: map[string]string{
 			"mlRef.name":           "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
@@ -40,7 +40,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"sentiment"}`),
 	})
-	zip.Describe("POST /v1/ml/models", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ml POST /v1/ml/models", zip.Doc{
 		Description: "Deploys one inference model for the caller's org, and answers 201\nwith the model as Kubernetes admitted it.\n\nThe `spec` is a kserve InferenceService spec, passed through unchanged — this\nplane owns the tenancy, the billing and the namespace, and kserve owns what a\nmodel IS. An unfunded org is refused BEFORE anything is created, so nobody runs\nfree GPU compute and nobody is charged for a resource that was never made.",
 		Fields: map[string]string{
 			"mlCreate.labels":      "Labels are extra labels to set on the object, merged UNDER the tenancy\nlabels this plane derives from the validated principal — so a label naming\nanother org's scope cannot displace the real one.",
@@ -53,7 +53,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"sentiment","spec":{"predictor":{"model":{"modelFormat":{"name":"sklearn"},"storageUri":"s3://models/sentiment"}}}}`),
 	})
-	zip.Describe("POST /v1/ml/models/:name/predict", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ml POST /v1/ml/models/:name/predict", zip.Doc{
 		Description: "Proxies the request body to the model's kserve v2 data plane. The v2\nmodel name defaults to the InferenceService name (kserve's single-model\nconvention) and may be overridden with ?model=. The predictor's status + body\nare returned verbatim so a model-side error surfaces honestly.",
 	})
 }

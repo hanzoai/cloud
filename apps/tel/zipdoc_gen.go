@@ -7,13 +7,13 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/tel/calls/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel DELETE /v1/tel/calls/:id", zip.Doc{
 		Description: "Ends a call this org placed. The holding is read for THIS org before the\ncarrier is asked, for the reason releaseNumber gives one surface up: an id\nbelonging to another tenant would otherwise be hung up by whoever guessed it.",
 	})
-	zip.Describe("DELETE /v1/tel/numbers/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel DELETE /v1/tel/numbers/:id", zip.Doc{
 		Description: "Checks the holding is THIS org's before it reaches the carrier.\nWithout that read, an id belonging to another tenant would be released by\nwhoever guessed it.",
 	})
-	zip.Describe("GET /v1/tel/calls", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel GET /v1/tel/calls", zip.Doc{
 		Description: "Lists the calls this org has placed or received, newest first. Like the\nmessage list beside it, these are our own records rather than the carrier's.",
 		Fields: map[string]string{
 			"Call.agent":    "Agent names the Hanzo assistant handling the call. Set means the call was\nanswered by that assistant rather than connected to a person.",
@@ -25,7 +25,7 @@ func init() {
 			"callList.data": "Data is this org's own calls, newest first — what this platform placed or\nreceived on its behalf, which is our record rather than the carrier's.",
 		},
 	})
-	zip.Describe("GET /v1/tel/messages", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel GET /v1/tel/messages", zip.Doc{
 		Description: "Lists the messages this org has sent or received, newest first. Records from\nour own store, not the carrier's — so it is what this platform did on the\norg's behalf, which is the set an audit or a bill has to agree with.",
 		Fields: map[string]string{
 			"SMS.from":         "From is the sending number in E.164, and must be one this org holds.",
@@ -37,7 +37,7 @@ func init() {
 			"messageList.data": "Data is this org's own messages, newest first — from our store rather than the\ncarrier's, so it is the set an audit or a bill has to agree with.",
 		},
 	})
-	zip.Describe("GET /v1/tel/numbers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel GET /v1/tel/numbers", zip.Doc{
 		Description: "Lists the phone numbers this org HOLDS — the ones it has bought and not\nreleased. Distinct from the availability search one path down\n(`/numbers/available`), which asks the carrier what could be bought: this\nanswers only from our own store, so it is what an org owns rather than what\nit could own.",
 		Fields: map[string]string{
 			"Number.capable":  "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",
@@ -51,7 +51,7 @@ func init() {
 			"numberList.data": "Data is the numbers, and which numbers depends on the route: a search answers\nwhat the carrier has available, a list answers what this org already holds.",
 		},
 	})
-	zip.Describe("GET /v1/tel/numbers/available", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel GET /v1/tel/numbers/available", zip.Doc{
 		Description: "Asks the carrier what is available to buy. Nothing is recorded —\na search is not a holding, and treating it as one is how inventory leaks.",
 		Fields: map[string]string{
 			"Number.capable":  "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",
@@ -65,7 +65,7 @@ func init() {
 			"numberList.data": "Data is the numbers, and which numbers depends on the route: a search answers\nwhat the carrier has available, a list answers what this org already holds.",
 		},
 	})
-	zip.Describe("GET /v1/tel/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel GET /v1/tel/summary", zip.Doc{
 		Description: "Counts what this org holds on the telephony plane: its numbers, its calls and\nits messages. The one read a dashboard makes before it asks for any list, so\nit answers three totals and no rows.",
 		Fields: map[string]string{
 			"summary.calls":    "Calls is how many calls this org has placed or received, over its whole\nhistory — a running total, not a window.",
@@ -73,7 +73,7 @@ func init() {
 			"summary.numbers":  "Numbers is how many numbers this org holds right now.",
 		},
 	})
-	zip.Describe("POST /v1/tel/calls", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel POST /v1/tel/calls", zip.Doc{
 		Description: "Dials. An `agent` names a Hanzo assistant to answer it; the call is\nrefused up front when no assistant plane is configured, because a call that\nconnects to silence has already cost the person who answered it.",
 		Fields: map[string]string{
 			"Call.agent":        "Agent names the Hanzo assistant handling the call. Set means the call was\nanswered by that assistant rather than connected to a person.",
@@ -89,7 +89,7 @@ func init() {
 			"callInput.webhook": "Webhook is a URL the carrier posts this call's events to as it progresses.\nEmpty means the call's outcome is only visible by reading it back.",
 		},
 	})
-	zip.Describe("POST /v1/tel/messages", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel POST /v1/tel/messages", zip.Doc{
 		Description: "Sends a message from one of this org's own numbers.\n\n`from` must be a number the org HOLDS, checked against the store rather than\ntaken on trust — a caller that could send from any number could impersonate\none, and the carrier would deliver it. `to` is required, and the body needs\ntext or media, because a message with neither is delivered as nothing and\nbilled as something.",
 		Fields: map[string]string{
 			"SMS.from":           "From is the sending number in E.164, and must be one this org holds.",
@@ -104,7 +104,7 @@ func init() {
 			"messageInput.to":    "To is the number to send to, in E.164.",
 		},
 	})
-	zip.Describe("POST /v1/tel/numbers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/tel POST /v1/tel/numbers", zip.Doc{
 		Description: "Provisions with the carrier FIRST and records second. The other order\nrecords a holding that may not exist, and a number the platform believes it owns\nbut cannot use is worse than one it failed to buy.",
 		Fields: map[string]string{
 			"Number.capable":  "Capable is what the number can carry: any of \"voice\", \"sms\", \"mms\", \"fax\". A\nnumber missing \"sms\" cannot send one no matter what this platform does.",

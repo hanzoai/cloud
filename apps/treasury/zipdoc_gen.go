@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/treasury", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury GET /v1/admin/treasury", zip.Doc{
 		Description: "Returns the whole treasury board for a SuperAdmin: the reserve\nfund report, the recent double-entry journal, and the Hanzo L1 anchor status of\nthe ledger root. ?limit= bounds the journal page.",
 		Fields: map[string]string{
 			"Currency.Code":                   "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
@@ -39,7 +39,7 @@ func init() {
 			"journalIn.limit":                 "Limit caps the journal entries returned. Out of range or unparseable takes the default.",
 		},
 	})
-	zip.Describe("GET /v1/treasury", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury GET /v1/treasury", zip.Doc{
 		Description: "Returns the reserve fund's health and the current revenue-share\npolicy for any validated caller. It is a TRANSPARENCY view — a partner or\nauthor can see that the pool backing their payouts is solvent — and NOT per-org\nmoney, which is the customer's own commerce balance at /v1/billing/balance. The\npolicy is read-only here; only a SuperAdmin sets it.",
 		Fields: map[string]string{
 			"TreasuryReport.accruedCents":     "lifetime revenue-share into the fund",
@@ -50,7 +50,7 @@ func init() {
 			"TreasuryReport.solventForPayout": "reserve > 0: at least some payout is backable",
 		},
 	})
-	zip.Describe("GET /v1/treasury/accounts", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury GET /v1/treasury/accounts", zip.Doc{
 		Description: "Returns the ledger accounts the caller may see, with their\nbalances. It is tenant-isolated SERVER-SIDE: an ordinary caller sees ONLY\naccounts under its own \"org:<tenant>:\" prefix, never house accounts and never\nanother tenant's. A SuperAdmin may widen with ?scope=house (the reserve,\nrevenue and payout house accounts) or ?org=<tenant> — the only way to cross the\ntenant boundary, and only for platform sudo. The answer is honestly empty until\na tenant has ledger postings.",
 		Fields: map[string]string{
 			"accountView.address":      "Address is the ledger account address (\"org:acme:wallet\", \"fund:reserve\", …).",
@@ -62,10 +62,10 @@ func init() {
 			"accountsOut.tenant":       "Tenant is the org whose accounts these are (empty for the house scope's own rows).",
 		},
 	})
-	zip.Describe("POST /treasury/reserve", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury POST /treasury/reserve", zip.Doc{
 		Description: "Returns the reserve fund's available balance — the pool that\nbacks every referral, affiliate and author payout. SuperAdmin only, re-checked\non this side against the principal that asked.\n\n(A named function, not the closure it replaced: zipdoc harvests the doc comment\nof the HANDLER, and a function literal has none, so this op used to register\nwith an empty description on every projection that reads one.)",
 	})
-	zip.Describe("POST /v1/admin/treasury/anchor", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury POST /v1/admin/treasury/anchor", zip.Doc{
 		Description: "Commits the current ledger root to Hanzo L1, making the books\ntamper-evident on chain, and returns the anchoring status. When the chain path\nis wired it signs and submits the anchor transaction and records it; when it is\nnot, it returns the root that WOULD be committed plus the exact remaining\nwiring step and records nothing false. A submit that fails still answers 200\nwith the anchor's own status set to \"error\" — the attempt is the product.\nSuperAdmin only.",
 		Fields: map[string]string{
 			"anchorData.anchor":        "Anchor is the Hanzo L1 anchoring status of the ledger root after this call.",
@@ -78,7 +78,7 @@ func init() {
 			"anchorStatus.synced":      "true when the last anchored root == the current root",
 		},
 	})
-	zip.Describe("POST /v1/admin/treasury/policy", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury POST /v1/admin/treasury/policy", zip.Doc{
 		Description: "Sets the revenue-share basis points a sweep accrues into the\nreserve fund and returns the stored policy. 0–10000; the change is audited.\nSuperAdmin only.",
 		Fields: map[string]string{
 			"policyData.policy":             "Policy is the revenue-share configuration as stored.",
@@ -89,7 +89,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"revenueShareBps":2000}`),
 	})
-	zip.Describe("POST /v1/admin/treasury/seed", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury POST /v1/admin/treasury/seed", zip.Doc{
 		Description: "Injects bootstrap capital into the reserve fund so backed payouts\ncan begin before the first revenue-share sweep, and returns the journal entry\nit wrote. A repeat of the same ref is at-most-once and reports created=false.\nSuperAdmin only.",
 		Fields: map[string]string{
 			"Currency.Code":           "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
@@ -112,7 +112,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"amountCents":500000,"memo":"founding capital","ref":"seed:2026-q3"}`),
 	})
-	zip.Describe("POST /v1/admin/treasury/sweep", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury POST /v1/admin/treasury/sweep", zip.Doc{
 		Description: "Posts the revenue-share accrual for one period — revenue into the\nreserve fund, at the current policy's basis points — and returns what it moved.\nIt is idempotent per period: a re-run of a period already swept accrues nothing\nand reports created=false. SuperAdmin only.",
 		Fields: map[string]string{
 			"sweepData.accruedCents":    "AccruedCents is the amount moved into the reserve fund.",
@@ -128,7 +128,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"period":"2026-07","revenueCents":100000}`),
 	})
-	zip.Describe("PUT /v1/admin/treasury/anchor/signer", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/treasury PUT /v1/admin/treasury/anchor/signer", zip.Doc{
 		Description: "Installs the reserve's threshold MPC wallet as the signer\nfor on-chain anchors, and returns its EVM address so an operator can fund it\nfor gas. It provisions-or-resolves the caller org's treasury wallet on the\ndeployed MPC ring and installs it, so every later anchor commits the ledger\nroot SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent — a\nrepeat resolves the same wallet, which is why the address is a PUT. SuperAdmin\nonly.",
 		Fields: map[string]string{
 			"signerData.boundAnchorSigner": "BoundAnchorSigner is the EVM address now signing anchors. Fund it for gas.",

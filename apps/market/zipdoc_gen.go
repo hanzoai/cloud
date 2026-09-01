@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/market/chains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/market GET /v1/market/chains", zip.Doc{
 		Description: "Answers every chain this deployment can read, what is deployed on each, and what\nits automated market maker amounts to.\n\nOne call. It reads the chain registry, then every chain's indexer for its figures\nand its most recent active day, all at once — where a client doing it itself makes\none registry request and two more per chain.\n\nTHE ROW IS THE UNIT OF TRUTH. Each carries its own reach, so one indexer being\nunreachable costs one row its figures and leaves the rest answered. A chain with no\nmarket maker deployed — the registry names no factory for it — answers `read` with\ntotals of nothing, which is a fact about that chain and is not the same as a chain\nnobody could ask.",
 		Fields: map[string]string{
 			"Day.count":      "Count is transactions in the day, where the table keeps one.",
@@ -26,7 +26,7 @@ func init() {
 			"Roster.reach":   "Reach is how far the read of the REGISTRY got. It governs the list: a\nregistry that did not answer yields no rows, and the reason it did not is\nhere rather than in an empty array a caller would read as \"no chains exist\".",
 		},
 	})
-	zip.Describe("GET /v1/market/pools", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/market GET /v1/market/pools", zip.Doc{
 		Description: "Answers the automated market makers on one chain: their two tokens, their fee tier,\nand what has moved through each.\n\nThe two price fields on a pool are the ratio its own reserves stand at, as the\nindexer computed them. They are not a price ON either token and not a mark: nothing\nhere derives one, ranks the pools, or names a route through them.\n\nA chain with no market maker deployed answers `read` with no pools. That is the\nchain's real condition, and it is deliberately not the same answer as an indexer\nthat could not be asked.",
 		Fields: map[string]string{
 			"Pool.at":          "At is the pool contract's address, lowercase.",
@@ -39,7 +39,7 @@ func init() {
 			"where.chain":      "Chain is the chain's slug — `cchain`, `zoo` — as `chains` reports it. It is\nthe indexer's word for the chain and NOT the chain id: `96369`, `C` and\n`c-chain` all name nothing.",
 		},
 	})
-	zip.Describe("GET /v1/market/survey", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/market GET /v1/market/survey", zip.Doc{
 		Description: "Answers which of the four settlement precompiles carry code on one chain.\n\nAn address with no code answers a call with empty data rather than an error, so\n\"this chain has no view precompile\" and \"this market was never opened\" reach a\ncaller as the same silence — and only the second is a fact about a market. This\nsays which it is, by asking the node for the code at each address.\n\nIt reads presence and nothing else. No market, no quote, no depth and no order is\nrequested here, and `eth_getCode` is the only method this operation ever sends.",
 		Fields: map[string]string{
 			"Precompile.code": "Code is whether the address carries any. False is an ANSWER — the node\nreplied and there is nothing deployed there — and is not the same as the read\nhaving failed, which the enclosing Reach reports instead.",
@@ -50,7 +50,7 @@ func init() {
 			"where.chain":     "Chain is the chain's slug — `cchain`, `zoo` — as `chains` reports it. It is\nthe indexer's word for the chain and NOT the chain id: `96369`, `C` and\n`c-chain` all name nothing.",
 		},
 	})
-	zip.Describe("GET /v1/market/token", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/market GET /v1/market/token", zip.Doc{
 		Description: "Answers one token's daily history — open, high, low, close, price and volume per\nUTC day, oldest first.\n\nEvery figure is the indexer's own arithmetic, passed through as the decimal string\nit computed. Nothing here rounds one, converts one, or fills a gap: a day the\nindexer holds no figure for arrives with that field absent, which says \"not\nindexed\" where a zero would say \"worth nothing\".",
 		Fields: map[string]string{
 			"Day.count":    "Count is transactions in the day, where the table keeps one.",
@@ -62,7 +62,7 @@ func init() {
 			"which.at":     "At is the token's contract address.",
 		},
 	})
-	zip.Describe("GET /v1/market/tokens", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/market GET /v1/market/tokens", zip.Doc{
 		Description: "Answers the tokens one chain's indexer has seen, with the decimals a caller needs\nto read any amount of one correctly.\n\nThis is what the indexer INGESTED, which is not the same as what exists on the\nchain: a token nothing has traded has no row here, and this is not a registry of\nwhat is permitted or listed.",
 		Fields: map[string]string{
 			"Reach.at":      "At is `read`, `unconfigured`, `unreachable` or `refused`.\n\nThe four values are written out here because this document cannot carry an\nenum, so the description IS the contract a client reads. Spelling the Go\nconstant names instead would name four identifiers no caller can see.",

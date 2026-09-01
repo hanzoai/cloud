@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/marketplace/listings/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/marketplace DELETE /v1/marketplace/listings/:id", zip.Doc{
 		Description: "Unpublish withdraws one of the caller org's listings from the marketplace and\nanswers 204. Only the publishing org can remove its own listing; an id that is\nunknown, or belongs to another org, is the same 404, so a probe learns nothing\nabout what exists. Removing a listing removes its price from per-call enforcement;\nit does not uninstall the tool for anyone who already installed it.",
 		Fields: map[string]string{
 			"listingRef.id": "ID is the listing to unpublish, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"lst_1"}`),
 	})
-	zip.Describe("GET /v1/marketplace", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/marketplace GET /v1/marketplace", zip.Doc{
 		Description: "Discover lists every tool and agent the caller can reach in their own org and\nproject, enriched with any public listing's title, category and price, and with\ninstalled=true on the ones already activated for that scope. It is the shop\nwindow: one read that answers what exists, what it costs and what is already on.",
 		Fields: map[string]string{
 			"Currency.Code":        "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
@@ -39,7 +39,7 @@ func init() {
 			"marketItem.title":     "Title is the shop-window name, painted over the registry Name from the\nCHEAPEST public listing for this tool — several orgs may list the same one,\nand the row shown is the one a buyer would pay. Absent when no org has listed\nthe tool publicly: that row is a plain capability, not an offer.",
 		},
 	})
-	zip.Describe("GET /v1/marketplace/listings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/marketplace GET /v1/marketplace/listings", zip.Doc{
 		Description: "Returns the listings the caller's own org has published — what this\norg is offering, not what it can buy. A publisher only ever sees its own rows.",
 		Fields: map[string]string{
 			"Currency.Code":        "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
@@ -60,10 +60,10 @@ func init() {
 			"listingPage.listings": "Listings is every listing this org has published, private ones included\n(Public says which are discoverable by others).",
 		},
 	})
-	zip.Describe("POST /market/price", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/marketplace POST /market/price", zip.Doc{
 		Description: "Price resolves what one resource costs and which wallet receives payment for it —\nthe listing store's answer, projected onto the internal plane for the process that\nenforces payment.\n\npriced=false means FREE, and it is an ANSWER: an unlisted tool, a listing with no\nprice, and any resource that is not a tool id all land there. A store failure is an\nERROR instead, because a caller must never read \"I could not look it up\" as \"it\ncosts nothing\".\n\nIt takes no tenant and reads none: the listings it answers from are the PUBLIC\nones, identical for every caller.\n\nThe recipient org and wallet come off the listing ROW — its publisher, and the\npayout wallet that publisher named — so they are on the reply and could not be on\nthe request. A buyer that could state either could buy at its own price or redirect\nthe credit.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /v1/marketplace/install", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/marketplace POST /v1/marketplace/install", zip.Doc{
 		Description: "Install activates one tool for the caller's own org and project. A marketplace\ninstall IS the tool plane's activation write — one store, one truth — so an\ninstalled capability is immediately dispatchable and a monetized one is priced\nfrom its listing at every call. The tool must resolve in the caller's scope, so\ninstalling something that does not exist is refused rather than recorded.",
 		Fields: map[string]string{
 			"installReq.tool":        "Tool is the registry name of the capability to activate (or deactivate) for\nthe caller's own org and project. Required.",
@@ -72,7 +72,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"tool":"summarize"}`),
 	})
-	zip.Describe("POST /v1/marketplace/listings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/marketplace POST /v1/marketplace/listings", zip.Doc{
 		Description: "Publish offers one tool on the marketplace, optionally monetized. The tool must\nalready resolve in the publisher's own scope, so a listing can never advertise a\ncapability that does not exist; a listing with a price must name the payout wallet\nthe x402 client settles to, so a monetized offer is never unpayable. The price is\nexact to 18 decimal places, so a per-call price below a cent is a real price and\nnot a rounded-away zero. The listing is owned by the publishing org, paid into a\nwallet of that same org, and answers 201 with the created row.",
 		Fields: map[string]string{
 			"Currency.Code":          "ISO-4217 alpha code or custom (\"USD\", \"HUSD\")",
@@ -101,7 +101,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"tool":"summarize","title":"Summarize","price":"0.0025","recipient":"wal_9f2","public":true}`),
 	})
-	zip.Describe("POST /v1/marketplace/uninstall", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/marketplace POST /v1/marketplace/uninstall", zip.Doc{
 		Description: "Uninstall deactivates one tool for the caller's own org and project, so it stops\nbeing dispatchable there. It is the exact inverse of install and touches the same\nactivation record; deactivating something that was never active is not an error.\nThe listing itself is untouched — this withdraws the caller's use of a capability,\nnot anyone's offer of it.",
 		Fields: map[string]string{
 			"installReq.tool":        "Tool is the registry name of the capability to activate (or deactivate) for\nthe caller's own org and project. Required.",

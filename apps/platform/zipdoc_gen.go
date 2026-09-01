@@ -7,14 +7,14 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/platform/projects/:project/apps/:app", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform DELETE /v1/platform/projects/:project/apps/:app", zip.Doc{
 		Description: "Deletes an application and tears down what it runs.\n\nIt removes the application record and tears down what it owns in the org's\ntenant namespace — its operator Service CR and its KMSSecret — then answers 204.\nAn app this org and project do not have is 404, never a silent success.\n\nTeardown is best-effort by design: a cluster that refuses or is unreachable does\nnot block the delete, so the record cannot be left orphaned behind a broken\ncluster; the failure is logged for operators and the orphan reaper reconciles\nit. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"appRef.app":     "App is the application's slug, from the path.",
 			"appRef.project": "Project is the project the application lives under, from the path.",
 		},
 	})
-	zip.Describe("DELETE /v1/platform/projects/:project/apps/:app/domains/:host", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform DELETE /v1/platform/projects/:project/apps/:app/domains/:host", zip.Doc{
 		Description: "Detaches a hostname and releases the claim.\n\nIt drops the host from the app's ingress and releases any custom claim on it, so\nthe name becomes claimable again — by this org or any other. Answers 204.\n\nThe default host is permanent and cannot be removed: that is 400, not 404. A host\nthat is neither attached nor claimed here is 404. Requires a validated principal;\n403 without one.",
 		Fields: map[string]string{
 			"domainRef.app":     "App is the application's slug, from the path.",
@@ -22,7 +22,7 @@ func init() {
 			"domainRef.project": "Project is the project the application lives under, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/platform/apps", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/apps", zip.Doc{
 		Description: "Answers what this organisation has declared, joined with what\nthe delivery plane has done about it.\n\nThe join is best-effort BY DESIGN and says so when it is missing: the\ndeclarations ARE the answer to \"what have I deployed\", so refusing the whole\nboard because the cluster is unreadable would lose the half that is readable.\nWhat must never happen is a silent null — an unreadable plane is reported as\n`cd.unavailable` carrying the reason, never as an app with no reconciliation.",
 		Fields: map[string]string{
 			"CDApp.automated":         "Automated is whether CD applies git without being asked. It is\ncd.automated in the values file, rendered by the ApplicationSet's\ntemplatePatch — false means the Application reports drift and nothing moves.",
@@ -53,7 +53,7 @@ func init() {
 			"declaredResp.org":        "Org is the directory read — the caller's own, or another when a SuperAdmin\nasked to act as it.",
 		},
 	})
-	zip.Describe("GET /v1/platform/apps/:app", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/apps/:app", zip.Doc{
 		Description: "Answers ONE declaration — what git says this app is, before the\ndelivery plane has had any say in it.",
 		Fields: map[string]string{
 			"Declaration.application": "Application is the CD Application name the generator mints: <org>-<name>.\nIt is the join key against /v1/platform/cd.",
@@ -72,7 +72,7 @@ func init() {
 			"declareEnv.public":       "Public marks a value that may be WRITTEN INTO GIT. Absent, it is false,\nand the value is sealed into KMS and referenced.\n\n★ THE DEFAULT IS SECRET, AND THE POLARITY IS THE WHOLE DESIGN. This lane's\noutput is a commit in a repository replicated to every clone, so a\nmisclassification is not a bug to fix later — it is a credential published\nforever. A heuristic classifier fails in both directions; what decides is\nwhich direction it fails IN. Seal-by-default makes the failure mode \"an\noperator cannot read back a config value\", which is a support ticket.\nClassify-by-shape made it \"a password is in git history\", which is an\nincident with no rollback.\n\nIt is also the only rule that needs no list. PGPASSWORD, *_PW, a\nsymbol-rich password, a KUBECONFIG, a base32 MFA seed — every one of them\nslipped a shape classifier, and each miss was a different reason. There is\nno reason left when the default is to seal.",
 		},
 	})
-	zip.Describe("GET /v1/platform/apps/:app/cd", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/apps/:app/cd", zip.Doc{
 		Description: "Answers ONE app's reconciliation alone — the poll a deploy\nconsole makes while it waits, without re-reading the whole inventory each time.",
 		Fields: map[string]string{
 			"CDApp.automated":    "Automated is whether CD applies git without being asked. It is\ncd.automated in the values file, rendered by the ApplicationSet's\ntemplatePatch — false means the Application reports drift and nothing moves.",
@@ -91,7 +91,7 @@ func init() {
 			"declarationRef.org": "Org names the organisation the declaration lives in, defaulting to the\ncaller's own and subject to the same SuperAdmin rule as the listing.",
 		},
 	})
-	zip.Describe("GET /v1/platform/builds", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/builds", zip.Doc{
 		Description: "Returns real build records for your org.\n\nIt lists the org's BuildKit build records — the git build step behind a deploy —\neach with the repo it built, the short commit, its status, when it started and\nhow long it took. These are real records or an honest empty list; a build appears\nhere because one ran, never because a page needed a row. Builds are created only\nby /deploy and the push-to-deploy hook. Requires a validated principal; 403\nwithout one.",
 		Fields: map[string]string{
 			"buildBoard.builds":  "Builds are the org's real BuildKit build records, newest first.",
@@ -103,7 +103,7 @@ func init() {
 			"buildRow.status":    "Status is the build's real state: queued, building, succeeded or failed.",
 		},
 	})
-	zip.Describe("GET /v1/platform/cd", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/cd", zip.Doc{
 		Description: "Answers every Application the delivery plane holds.\n\nScoped to the namespaces the caller's own validated org owns: the ROLE admits\nthe caller and the tenant boundary is applied inside, so an admin of one org\nnever observes another's.",
 		Fields: map[string]string{
 			"CDApp.automated":    "Automated is whether CD applies git without being asked. It is\ncd.automated in the values file, rendered by the ApplicationSet's\ntemplatePatch — false means the Application reports drift and nothing moves.",
@@ -120,10 +120,10 @@ func init() {
 			"CDApp.sync":         "Sync is CD's verdict on git-versus-cluster: Synced, OutOfSync, or Unknown.",
 		},
 	})
-	zip.Describe("GET /v1/platform/ci", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/ci", zip.Doc{
 		Description: "Is DECLARED AND NOT IMPLEMENTED, and answers so.\n\nThe forge's Actions surface needs a Forgejo API client, and this deployment\nhas none — the only outbound forge interaction anywhere in this binary is the\ngit CLI over https with a KMS-held token (pin.go). Returning an empty list\nwould be the estate's own worst bug shape: a surface that reports success and\ndoes nothing, indistinguishable from a forge with no runs. 501 names what is\nmissing instead.",
 	})
-	zip.Describe("GET /v1/platform/environments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/environments", zip.Doc{
 		Description: "Returns your deploy targets, and what is running on each.\n\nIt returns the org's environments — the distinct deploy targets its applications\nname, `production` for anything that names none — each aggregating the apps that\ntarget it, a rolled-up status and when it last changed.\n\nAn environment is DERIVED, not stored: there is nothing to create or delete here,\nand an environment exists exactly as long as an app points at it. Requires a\nvalidated principal; 403 without one.",
 		Fields: map[string]string{
 			"environmentBoard.environments": "Environments are the org's deploy targets, in first-seen order.",
@@ -135,7 +135,7 @@ func init() {
 			"environmentRow.updatedAt":      "UpdatedAt is when any of them last changed, RFC3339 UTC; empty when unset.",
 		},
 	})
-	zip.Describe("GET /v1/platform/fleet", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/fleet", zip.Doc{
 		Description: "Returns the platform's own service tier, and where it has drifted.\n\nIt returns the board for the services the PLATFORM itself runs — iam, kms,\ngateway and the rest — as `{apps, summary}`: per service its environment, health,\nphase, the image tag its CR DECLARES, the tag actually running, and the drift\nbetween them, plus a summary counting the board green, yellow and red.\n\nThis is not a customer surface. `/v1/platform/projects/:project/apps` is a\ntenant's apps; this is the tier those tenants run ON, which is why the two are\nnamed differently rather than sharing a prefix.\n\nAdmission is scoped at the SCAN, before any CR is read: a platform SuperAdmin\nobserves the whole fleet, an org admin observes only their own org's namespaces,\nand an org that owns none gets an empty board — a non-super caller never even\nlists another org's services. Narrow further with `env`, `health`, `org`, or\n`drift=1` for only what has drifted.\n\nIt degrades honestly rather than failing whole: a namespace that does not exist\nis skipped, and a running-state read the caller cannot make leaves the running\ntag empty — an unknown, never a guess — while the declared, health and phase\ncolumns still render.",
 		Fields: map[string]string{
 			"AppView.app":          "service / CR name, e.g. iam",
@@ -172,7 +172,7 @@ func init() {
 			"fleetSummary.total":   "Total is how many rows the board returned, after filtering.",
 		},
 	})
-	zip.Describe("GET /v1/platform/fleet/:app", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/fleet/:app", zip.Doc{
 		Description: "Returns one platform service, resolved to production by default.\n\nIt returns a single platform service by its CR name, with the same\ndeclared-versus-running and drift facts the board carries. The name must be a\nDNS-1123 label; anything else is 400.\n\nNamespaces are scanned in lifecycle order — main, then test, then dev — and the\nfirst match wins, so a bare name resolves to PRODUCTION. The scan covers only the\nnamespaces the caller is authorized for, so an org admin can never read a service\noutside their own org, and a name found in none of them is 404 rather than a leak.",
 		Fields: map[string]string{
 			"AppView.app":         "service / CR name, e.g. iam",
@@ -200,7 +200,7 @@ func init() {
 			"fleetRef.env":        "Env narrows the scan to one lifecycle env: main, test or dev. Omitted, the\nnamespaces are scanned in lifecycle order and the first match wins, so a\nbare name resolves to PRODUCTION.",
 		},
 	})
-	zip.Describe("GET /v1/platform/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/health", zip.Doc{
 		Description: "Reports whether this control plane can actually deploy anything.\n\nA real probe, not a status page. It answers 200 only when the metadata store is\nopen AND the cluster is genuinely reachable — proved by LISTING the operator App\nCRD, which settles reachability and CRD presence in one bounded call, and which\nis the exact question every deploy depends on. Anything else is 503 carrying the\nreal reason and whether the CRD was found.\n\nA constructed cluster client proves nothing — it is built from a kubeconfig, not\nfrom a reachable apiserver — so this deliberately spends a round trip rather than\nreporting `ok` while every deploy fails. Not admin-gated: liveness has to be\nprobe-able without a credential.",
 		Fields: map[string]string{
 			"readiness.crd":     "CRD is whether the operator App CRD was found, and is absent when no\ncluster client resolved and the question could not be asked.",
@@ -210,7 +210,7 @@ func init() {
 			"readiness.status":  "Status is \"ok\" when this plane can deploy, \"degraded\" when it cannot.",
 		},
 	})
-	zip.Describe("GET /v1/platform/pipelines", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/pipelines", zip.Doc{
 		Description: "Returns one build-and-deploy pipeline per app, with its latest run.\n\nIt returns one pipeline per application in the caller's org — its repo or image\nsource, its current status, and when its most recent deployment ran and how long\nit took. A pipeline is a PROJECTION of an app plus its newest deployment, not a\nseparate record: it comes into existence with the app and is triggered only\nthrough /deploy, never here. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"pipelineBoard.pipelines": "Pipelines are one per application in the caller's org.",
@@ -222,7 +222,7 @@ func init() {
 			"pipelineRow.status":      "Status is the latest deployment's status, or the app's when it has none.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects", zip.Doc{
 		Description: "Returns your org's projects, each with how many apps live under it.\n\nIt lists the caller org's projects with the number of platform applications in\neach. A project is IAM's resource — it is created and deleted at\n/v1/iam/projects, never here — so this is the ONE projection IAM cannot serve:\nthe project plus what the platform has put under it.\n\nRequires a validated principal; 403 without one, and the org comes from that\nvalidated identity rather than a request header. This is the console's first\nauthenticated read, so a project store that is not yet initialised degrades to\nan EMPTY list rather than a 500 — a new org genuinely has zero projects — and\nthe real cause is surfaced to operators instead of to the caller.",
 		Fields: map[string]string{
 			"projectView.applications": "Applications is how many platform apps this org has under the project,\ncounted per request. It is the one fact IAM cannot answer about a project.",
@@ -233,7 +233,7 @@ func init() {
 			"projectView.slug":         "Slug is the project's IAM name — half of the (org,name) identity, the\n`:project` path segment, and the scope key an app is filed under. It is the\nproject's address; Name is not.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects/:project", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects/:project", zip.Doc{
 		Description: "Returns one project and its app count.\n\nIt returns a single project of the caller's org with the number of platform\napplications under it. A project this org does not have is 404, which is also\nwhat another tenant's project looks like from here. Requires a validated\nprincipal; 403 without one.",
 		Fields: map[string]string{
 			"projectRef.project":       "Project is the project's name, from the path.",
@@ -245,7 +245,7 @@ func init() {
 			"projectView.slug":         "Slug is the project's IAM name — half of the (org,name) identity, the\n`:project` path segment, and the scope key an app is filed under. It is the\nproject's address; Name is not.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects/:project/apps", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects/:project/apps", zip.Doc{
 		Description: "Returns the applications in one project, with what the cluster says\nabout them.\n\nIt lists the caller org's applications under one project. Each row carries the\nstored record and, for an app that is live or deploying, the LIVE phase and\nhealth read from its operator Service CR; an app with sealed env also carries\nits secret-sync state. Those cluster reads are best-effort — an unreachable\ncluster leaves those fields empty and never blocks the listing.\n\nThe project must exist in IAM for this org, or the answer is 404; the `default`\nproject is implicit and always accepted, because it is part of what an org IS.\nRequires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"EnvVarJSON.key":              "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",
@@ -285,7 +285,7 @@ func init() {
 			"projectRef.project":          "Project is the project's name, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects/:project/apps/:app", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects/:project/apps/:app", zip.Doc{
 		Description: "Returns one application, with its live phase, health and secret sync.\n\nIt returns a single application of the caller's org together with what the\ncluster currently reports for it: the operator Service CR's phase and health,\nand whether its sealed env has synced. An app this org and project do not have\nis 404. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"EnvVarJSON.key":              "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",
@@ -326,7 +326,7 @@ func init() {
 			"imageView.tag":               "Tag is the tag to run: what the create declared, then RE-STAMPED on every\ntransition to live with the tag that actually went live. So after a deploy\nit names what is running, not what was asked for.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects/:project/apps/:app/deployments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects/:project/apps/:app/deployments", zip.Doc{
 		Description: "Returns an app's deployment history.\n\nIt lists every deployment recorded for one of the caller org's applications,\nnewest version first, each with its version, status, source, commit and image.\nFailed and superseded attempts are included — that is the point of a history.\nRequires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"appRef.app":                   "App is the application's slug, from the path.",
@@ -345,7 +345,7 @@ func init() {
 			"deploymentView.version":       "Version counts this app's deployments, from 1 and monotonically. It is what\nORDERS them: a deploy only goes live if no higher version already is, so a\nbuild that finishes late is superseded instead of overwriting a newer one.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects/:project/apps/:app/deployments/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects/:project/apps/:app/deployments/:id", zip.Doc{
 		Description: "Returns one deployment of one app.\n\nIt returns a single deployment by id, scoped to the named application of the\ncaller's org — so an id belonging to another app or another tenant is 404, not a\nread. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"deploymentRef.app":            "App is the application's slug, from the path.",
@@ -365,7 +365,7 @@ func init() {
 			"deploymentView.version":       "Version counts this app's deployments, from 1 and monotonically. It is what\nORDERS them: a deploy only goes live if no higher version already is, so a\nbuild that finishes late is superseded instead of overwriting a newer one.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects/:project/apps/:app/deployments/:id/logs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects/:project/apps/:app/deployments/:id/logs", zip.Doc{
 		Description: "Returns real logs for a deployment — the build's, then the app's.\n\nIt returns the deployment's recorded status timeline together with LIVE pod logs\npulled from the cluster: the build pod's output while a git build is running, and\nthe running app's output once it is deployed. The `source` field says which of\nthe two the body is — `build`, `app` or `none` — so a console can label the pane\nhonestly.\n\nIt never fabricates log content. When no pod exists yet, or the cluster is\nunreachable, it degrades to the recorded timeline and says so. Every cluster read\nis confined to the caller org's own namespaces and time-boxed. Requires a\nvalidated principal; 403 without one.",
 		Fields: map[string]string{
 			"deployLogs.deploymentId": "DeploymentID is the deployment these logs belong to.",
@@ -376,7 +376,7 @@ func init() {
 			"deploymentRef.project":   "Project is the project the application lives under, from the path.",
 		},
 	})
-	zip.Describe("GET /v1/platform/projects/:project/apps/:app/domains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/projects/:project/apps/:app/domains", zip.Doc{
 		Description: "Returns every hostname this app answers on.\n\nIt lists the app's hosts: the permanent default host it was born with, any\norg-subtree hosts attached to it, and every custom host claimed for it with its\nverification state and, while pending, the DNS challenge records to publish. Live\nendpoint status for each host is observed from the cluster. Requires a validated\nprincipal; 403 without one.",
 		Fields: map[string]string{
 			"Record.name":          "the record name the customer creates",
@@ -395,7 +395,7 @@ func init() {
 			"domainView.verified":  "Verified is whether ownership is settled — always true for a host the org\nstructurally owns.",
 		},
 	})
-	zip.Describe("GET /v1/platform/releases", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform GET /v1/platform/releases", zip.Doc{
 		Description: "Returns the versions that actually reached the cluster.\n\nIt lists the org's releases: the deployments that were genuinely applied to the\ncluster, with the app they belong to, their version, environment, status and when\nthey were released. A deployment that failed or is still building is NOT a\nrelease and is excluded — reaching the cluster is what makes one. Requires a\nvalidated principal; 403 without one.",
 		Fields: map[string]string{
 			"releaseBoard.releases":  "Releases are the deployments that genuinely reached the cluster.",
@@ -407,27 +407,27 @@ func init() {
 			"releaseRow.version":     "Version is the released image tag, or v<n> when the image carries none.",
 		},
 	})
-	zip.Describe("POST /platform/fleet", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/fleet", zip.Doc{
 		Fields: map[string]string{
 			"App.org":      "Org is which org OWNS this app. On a reply that is a property of the thing\ndescribed, not a claim by the caller — a cross-org observer has to see it.",
 			"App.registry": "Registry is the image repository the workload actually runs, which is what\nthe board's tier classification reads — a real property of the deployment,\nnever an operator-typed label.",
 		},
 	})
-	zip.Describe("POST /platform/push", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/push", zip.Doc{
 		Fields: map[string]string{
 			"PushIn.cloneUrl": "CloneURL is the canonical clone URL of the repo, which is the exact value an\nApplication's RepoURL carries, so the builder can resolve which app tracks it.",
 			"PushIn.commit":   "Commit is the new tip.",
 			"PushIn.ref":      "Ref is the FULL ref that moved — refs/heads/<b> or refs/tags/<t>. Tags reach\nthe builder too: releases are cut by tag.",
 		},
 	})
-	zip.Describe("POST /platform/release", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /platform/release", zip.Doc{
 		Fields: map[string]string{
 			"ReleaseIn.image":   "Image is the full registry ref; the tag MUST be clean semver (vX.Y.Z) and\nthe releaser refuses every mutable/sha/suffixed form.",
 			"ReleaseIn.service": "Service is the target CR metadata.name.",
 			"ReleaseIn.sha":     "SHA is the source commit, for provenance. Logged, never gated on.",
 		},
 	})
-	zip.Describe("POST /v1/platform/fleet/:app/deploy", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/fleet/:app/deploy", zip.Doc{
 		Description: "Rolls a platform service's pods, in a named environment.\n\nIt triggers a rolling restart of one platform service's Deployment by stamping a\nfresh restart annotation, and answers 202 with the app, the namespace, the\nenvironment and the timestamp. It restarts pods; it does NOT change the image — a\nversion change is the release path, not this.\n\nSuperAdmin ONLY, and deliberately narrower than the read gate beside it. The only\nnamespaces this board touches are the platform's own tier, so a restart here\nrecycles a SHARED service every tenant depends on. A brand-org admin is a\ncustomer-org admin, not a platform operator: observing the board is bounded and\naudited, and restarting production identity is not.\n\n`?env=main|test|dev` is REQUIRED — a bare call does not default to production,\nwhich is what closes the fat-finger and confused-deputy hazard — and any other\nvalue is 400. A service with no Deployment to restart in that environment is 404.",
 		Fields: map[string]string{
 			"restartRef.app":        "App is the service's CR name, from the path. It must be a DNS-1123 label.",
@@ -439,7 +439,7 @@ func init() {
 			"restarted.restartedAt": "RestartedAt is the timestamp stamped onto the pod template, RFC3339 UTC.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps", zip.Doc{
 		Description: "Creates an application from a git repo or a container image.\n\nIt registers a new application under one of the caller org's projects and\nanswers 201 with it. Creating does NOT deploy: the app lands in `draft` and\nnothing reaches the cluster until /deploy.\n\n`source` is `git` — which requires `repo.url` — or `image`, which requires\n`image.repository`; anything else is 400. A git app builds with zero-config\n`pack` by default and may opt into `dockerfile`; an image app never builds. The\nrepo URL and Dockerfile path are validated here against the SAME allowlist the\nprivileged build enforces, so an unsafe source is refused before it is ever\npersisted.\n\nThe `slug` is the app's identity in the cluster: given or derived from `name`,\nit must match `^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`, and a slug already used in\nthis project is 409. `replicas` and `storageGb` are clamped to the deployment's\nlimits rather than refused.\n\nEnv keys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A variable marked `secret: true`\nis SEALED into KMS and its plaintext is never written to the database — and if\nKMS is unavailable the create fails 503 rather than falling back to storing a\nsecret in the clear.\n\nThe app is seeded with its canonical default host, so it has a working HTTPS URL\nthe moment it deploys. A bare custom domain cannot be attached here — it has to\ngo through add-domain and DNS verification first. Requires a validated\nprincipal; 403 without one, and every cluster object it will later create lands\nin that org's own `tenant-<org>` namespace.",
 		Fields: map[string]string{
 			"EnvVarJSON.key":              "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",
@@ -497,7 +497,7 @@ func init() {
 			"imageView.tag":               "Tag is the tag to run: what the create declared, then RE-STAMPED on every\ntransition to live with the tag that actually went live. So after a deploy\nit names what is running, not what was asked for.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/deploy", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/deploy", zip.Doc{
 		Description: "Deploys the app — building it first if it comes from git.\n\nIt starts a new, monotonically versioned deployment of the app and answers 202\nwith the deployment record. A 202 is an ACCEPTED deployment, not a live one.\n\nAn IMAGE app deploys the tag you name (falling back to the app's tag, then\n`latest`) by writing its operator Service CR; the operator reconciles it to\nrunning. A GIT app launches an in-cluster BuildKit Job at `commit` — or the app's\nbranch — and comes back in `building`; the Service CR is applied later, by the\nreconciler, once the Job succeeds. The reconciler is restart-safe, so a build in\nflight survives a cloud restart.\n\nDeploys are bounded per org: over the concurrent-deploy cap is 429 and NOTHING is\nrecorded, so a rejected deploy leaves no phantom in the history. An unreachable\ncluster is 503 but still records an honest `error` deployment, because a deploy\nthat was attempted and failed must not be indistinguishable from one never made.\nEvery other failure is likewise recorded in its real terminal state.\n\nThis is metered work: a git build is billed to the org's ledger in wall-clock\nbuild minutes once the Job finishes, and the running deployment is billed for its\ncompute per tick for as long as it stays live. Requires a validated principal; 403\nwithout one, and everything is written into that org's own `tenant-<org>`\nnamespace.",
 		Fields: map[string]string{
 			"deployReq.app":                "App is the application's slug, from the path.",
@@ -518,7 +518,7 @@ func init() {
 			"deploymentView.version":       "Version counts this app's deployments, from 1 and monotonically. It is what\nORDERS them: a deploy only goes live if no higher version already is, so a\nbuild that finishes late is superseded instead of overwriting a newer one.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/domains", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/domains", zip.Doc{
 		Description: "Attaches a hostname — instantly if you already own it, otherwise with a\nDNS challenge.\n\nIt attaches `host` to the app, and which of two things happens depends on who\nowns the name. A host inside the caller org's own subtree is structurally owned,\nso it goes ACTIVE immediately and answers 201. A bring-your-own host is claimed\nas PENDING and answers the DNS challenge records to publish; it is NOT rendered\ninto the app's ingress until /verify passes.\n\nClaims are globally unique. A host already claimed by another organization is\n409, and so is one claimed by a different app in your own; re-adding this app's\nOWN claim is idempotent and answers its current state at 200. The default host is\nalways attached and re-adding it is 409. A host under the platform's shared apex\nthat is not the caller's own subtree is 403 — it belongs to whoever owns that\nsubtree and can never be grabbed through the custom path.\n\n`host` must be a valid DNS hostname; anything else is 400. Requires a validated\nprincipal; 403 without one.",
 		Fields: map[string]string{
 			"Record.name":          "the record name the customer creates",
@@ -538,7 +538,7 @@ func init() {
 			"domainView.verified":  "Verified is whether ownership is settled — always true for a host the org\nstructurally owns.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/domains/:host/verify", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/domains/:host/verify", zip.Doc{
 		Description: "Checks a custom domain's DNS and turns it on if it passes.\n\nIt runs the DNS challenge check for a pending custom host and, when it passes,\nmarks the host verified and renders it into the app's ingress so it starts\nserving.\n\nA check that RAN and did not pass is not an error: it answers 200 with the host\nstill pending and the reason in `detail`, so a console can show the operator what\nDNS is actually returning. An already-verified host answers as-is without\nre-checking. A host not claimed by this app is 404. Requires a validated\nprincipal; 403 without one.",
 		Fields: map[string]string{
 			"Record.name":          "the record name the customer creates",
@@ -558,7 +558,7 @@ func init() {
 			"domainView.verified":  "Verified is whether ownership is settled — always true for a host the org\nstructurally owns.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/preview", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/preview", zip.Doc{
 		Description: "Puts a branch on its own URL.\n\nIt deploys an already-built `image` to a per-branch preview and answers its URL,\nthe branch, the preview's slug and the deployment. The preview is a FIRST-CLASS\napplication named `<app>-<branch>` in the same project and tenant namespace, with\nits own default host — so it is completely isolated from production while reusing\nthe same deploy mechanic. Re-previewing a branch converges that same target in\nplace rather than stacking another one.\n\nIt carries NO environment variables, deliberately: a preview never inherits\nproduction's secrets. It also does not build — `image` is required and must\nalready exist, and `branch` defaults to the parent app's. A branch that does not\nresolve to a valid slug distinct from the parent's is 400. Requires a validated\nprincipal; 403 without one.",
 		Fields: map[string]string{
 			"deploymentView.applicationId": "ApplicationID is the app this deployed — the app's `id`, not its slug.",
@@ -583,7 +583,7 @@ func init() {
 			"previewView.url":              "URL is the preview's live HTTPS address.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/promote", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/promote", zip.Doc{
 		Description: "Promotes an already-built release to the app.\n\nIt redeploys an image that already exists — named either by `deploymentId`, which\npromotes that deployment's exact built image, or by `tag`, resolved the same way\na deploy resolves one. One of the two is required; neither is 400.\n\nPromotion never builds. A deployment that carries no built image cannot be\npromoted and is 400, and a deployment id outside this app is 404. It runs through\nthe same deploy core as everything else, so it takes a NEW version number and is\nsubject to the same per-org concurrency cap. Requires a validated principal; 403\nwithout one.",
 		Fields: map[string]string{
 			"deploymentView.applicationId": "ApplicationID is the app this deployed — the app's `id`, not its slug.",
@@ -604,7 +604,7 @@ func init() {
 			"promoteReq.tag":               "Tag promotes an image tag, resolved the same way a deploy resolves one.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/rollback", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/rollback", zip.Doc{
 		Description: "Goes back to the previous release.\n\nIt redeploys a prior image: the one named by `deploymentId`, or — with no body —\nthe newest earlier deployment that carries a real built image and did not error,\nskipping the release currently live. An app with nothing earlier to return to is\n400.\n\nA rollback is a deploy of an old image, not a rewind: it takes a NEW version\nnumber and appends to the history rather than erasing what came after. Both\nlookups are scoped to this app and org, so another tenant's image can never be\nrolled in. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"deploymentView.applicationId": "ApplicationID is the app this deployed — the app's `id`, not its slug.",
@@ -624,7 +624,7 @@ func init() {
 			"rollbackReq.project":          "Project is the project the application lives under, from the path.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/start", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/start", zip.Doc{
 		Description: "Starts a stopped app back up.\n\nIt scales the app's Service back to its configured replica count and marks it\nlive, answering the updated application. It does not redeploy: the image already\non the Service CR is what comes back.\n\nThe billing watermark is reset to now as part of starting, so the org is charged\nfor THIS live span and never for the gap the app spent stopped. An app with no\nService CR is 404, an unreachable cluster is 503, and a cluster that refuses the\nscale is 502. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"EnvVarJSON.key":              "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",
@@ -665,7 +665,7 @@ func init() {
 			"imageView.tag":               "Tag is the tag to run: what the create declared, then RE-STAMPED on every\ntransition to live with the tag that actually went live. So after a deploy\nit names what is running, not what was asked for.",
 		},
 	})
-	zip.Describe("POST /v1/platform/projects/:project/apps/:app/stop", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/projects/:project/apps/:app/stop", zip.Doc{
 		Description: "Stops an app without deleting it.\n\nIt scales the app's Service to zero replicas and marks it stopped, answering the\nupdated application. Nothing else is removed — the record, its env, its domains\nand its deployment history all survive, and /start brings it back at the same\nreplica count.\n\nAn app that is not deployed has no Service CR to scale and is 404. An\nunreachable cluster is 503 and a cluster that refuses the scale is 502. Because\nthe pods stop, so does the compute metering. Requires a validated principal; 403\nwithout one.",
 		Fields: map[string]string{
 			"EnvVarJSON.key":              "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",
@@ -706,7 +706,7 @@ func init() {
 			"imageView.tag":               "Tag is the tag to run: what the create declared, then RE-STAMPED on every\ntransition to live with the tag that actually went live. So after a deploy\nit names what is running, not what was asked for.",
 		},
 	})
-	zip.Describe("POST /v1/platform/run", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/run", zip.Doc{
 		Description: "Runs a container image and gives back a URL.\n\nThe one-call shortcut over project → app → deploy: give it a `name` and an\n`image` and it creates or updates an image-source application in your org's\nDEFAULT project, deploys it through the same operator Service-CR writer\neverything else uses, and answers its id, name, live URL, status and shape.\nRe-running the same name UPDATES it in place, so the call is idempotent by name.\n\nWhat it produces is a first-class application, not a special object: it is\nlistable, stoppable and redeployable through the /v1/platform routes like any\nother app.\n\n`minScale` is the replica floor. `maxScale` above it declares an autoscaling\nceiling; `maxScale: 0` means no autoscaler at all — a fixed run at the floor.\nBoth are clamped to the deployment's limits. `runtime` and `shape` are accepted\nfor the client contract and echoed back: the image is the runtime unit and sizing\nis the operator's default.\n\nIt is BILLING-GATED before it touches the cluster: a flat per-run fee is\nauthorized against the org's own prepaid balance first, so an org that cannot pay\nis refused without anything being created. An unreachable cluster is 503 — a run\nnever reports a URL it did not create. Secret env is sealed into KMS and fails\nclosed without it.\n\nRequires a validated principal; 403 without one. The org is resolved from that\nvalidated identity and is what both pays and owns the namespace — it is never\nread from the body.",
 		Fields: map[string]string{
 			"EnvVarJSON.key":    "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",
@@ -728,7 +728,7 @@ func init() {
 			"runView.url":       "URL is the run's live HTTPS address.",
 		},
 	})
-	zip.Describe("POST /v1/platform/runner", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform POST /v1/platform/runner", zip.Doc{
 		Description: "Triggers a native build — an image, or the binaries a repo declares.\n\nThe fabric's own build trigger, and what `hanzo build` and git-push-to-deploy\ncall. It answers 202 with the build job id: a queued build, not a pushed\nartifact.\n\nTwo lanes, and a build is exactly one of them. The IMAGE lane takes `repo` and\nthe output `image` and launches a BuildKit Job that pushes it. The ARTIFACT lane\ntakes `binaries` — the same recipe the repo's hanzo.yml declares — and publishes\nto object storage instead; it must carry no `image`, because a build produces\nbinaries or an image, never both.\n\nPRIVILEGED, and A BUILD BELONGS TO THE ORGANIZATION ITS CREDENTIAL NAMES. Two\ncredentials, never a third:\n\n  - one that NAMES an organization — a person who administers it (the `hanzo\n    build` path, so one IAM login authorizes a build with no separate build\n    token), or that organization's own machine identity (the pipeline path). The\n    build is attributed to that org and confined to what it owns.\n  - the shared build-callback token, compared in constant time. It names NO\n    organization, which is both why the fabric's own release can publish across\n    brands with it and why anything that CAN name one is read first.\n\nBoth are bounded by the owned-registry allowlist. The org path is bounded again,\nby the org: the image's registry namespace must be one that organization owns, so\nit publishes into its own brand and can never overwrite another's through the\nshared push credential. The same confinement applies to the artifact lane's repo\nowner. There is no request field naming an organization — the attribution is read\noff the credential, so there is nothing for a caller to write it with.\n\nThe output image is parsed and validated as a single well-formed OCI ref before\nany authorization decision reads it, so a crafted ref cannot smuggle a\nbuild-exporter attribute past the check.",
 		Fields: map[string]string{
 			"binarySpec.image":            "Image is the toolchain image the recipe runs in, a Go bookworm image by\ndefault. It is the one field the GitHub lane ignores: there the runner IS\nthe toolchain, and a cluster has to be told what a runner already is.",
@@ -760,7 +760,7 @@ func init() {
 			"runnerBuildResp.target":      "Target is the multi-stage build target, echoed back.",
 		},
 	})
-	zip.Describe("PUT /v1/platform/projects/:project/apps/:app/env", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/platform PUT /v1/platform/projects/:project/apps/:app/env", zip.Doc{
 		Description: "Replaces an app's environment variables.\n\nIt writes the app's whole environment set and answers the updated application.\nThis is the one post-create write path for env, and it REPLACES rather than\nmerges: a variable absent from the body is gone, and a secret dropped from the\nset leaves the app's Secret on its next deploy.\n\nKeys must match `^[A-Za-z_][A-Za-z0-9_]*$`. A value marked `secret: true` is\nsealed into KMS and blanked in the database, so plaintext is never persisted —\nand the write fails 503 if KMS is unavailable rather than storing one in the\nclear.\n\nThe rule worth knowing: this does not restart anything. Once the app has been\ndeployed the secret sync is re-declared immediately so the operator\nre-materialises the Secret, but RUNNING pods keep the environment they started\nwith until their next deploy or restart. Requires a validated principal; 403\nwithout one.",
 		Fields: map[string]string{
 			"EnvVarJSON.key":              "Key is the variable's name in the container, which must match\n`^[A-Za-z_][A-Za-z0-9_]*$`. For a sealed value it is also the last segment\nof the KMS ref, so it is what identifies the value across a round trip.",

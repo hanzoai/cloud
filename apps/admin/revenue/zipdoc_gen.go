@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/revenue", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/revenue GET /v1/admin/revenue", zip.Doc{
 		Description: "Is the fleet money board: total prepaid balances held, total realized spend,\nMRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend\ntrend from the usage ledger.\n\nORTHOGONAL to /v1/admin/finance, which is the COGS/margin view of what WE pay vendors.\nThis is the customer side: what each customer holds, spends and subscribes to.\n\narpu divides realized spend by PAYING customers, not by all of them — a fleet of free\nsignups must not deflate the number. A customer counts as paying when it has spend or\nMRR.\n\nAn org whose money did not read degrades to honest zeros and marks the commerce source\ndegraded in sources[], so a partial fleet read is visible instead of quietly low.",
 		Fields: map[string]string{
 			"RevenueCustomer.balanceCents":   "BalanceCents is the prepaid wallet the org still holds, in USD cents. Money not yet\nearned: it becomes revenue only as it is spent.",

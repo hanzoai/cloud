@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/trust/:kind/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust DELETE /v1/trust/:kind/:id", zip.Doc{
 		Description: "Removes one record from a section of your organization's trust centre. A\nrecord that is not there is a 404, never a silent success. A control that\nbelongs to the deployment's own inventory is removed by a commit, not by a\nrequest.",
 		Fields: map[string]string{
 			"dropped.deleted": "Deleted is always true; a record that was not there is a 404 instead.",
@@ -20,7 +20,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"kind":"faq","id":"where-is-data-held"}`),
 	})
-	zip.Describe("GET /v1/trust", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust", zip.Doc{
 		Description: "Reads YOUR organization's whole trust centre, including the addresses of your\nown gated documents. Same shape as the published endpoint; the difference is that\nthis one is resolved from your validated bearer and shows you your own\nartifacts.",
 		Fields: map[string]string{
 			"centre.controls":        "Controls is the control inventory, each entry naming what it asserts, the\nmechanism, where it is enforced, how it is verified and the clauses it maps\nto.",
@@ -74,7 +74,7 @@ func init() {
 			"trustTally.unverified":  "Unverified is how many rest on somebody having READ the source rather than\non a test or an audit row. Only a check that can FAIL counts as verified,\nand coverage counts those one rung weaker than they claim to be.",
 		},
 	})
-	zip.Describe("GET /v1/trust/controls", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/controls", zip.Doc{
 		Description: "Lists every control your organization publishes, with the counts.\n\nA control names what it asserts, the mechanism behind it, the repository and\nfile where that mechanism is enforced, how it is verified, and the framework\nclauses it maps to. Status is automated, partial or absent — and an absent one\nstill names the clause it would satisfy, which is a roadmap, while never\nmoving a coverage number.",
 		Fields: map[string]string{
 			"controlList.absent":     "Absent is how many the organization does not have. Each still names the\nclause it would satisfy, and none of them moves a coverage number.",
@@ -87,14 +87,14 @@ func init() {
 			"controlList.version":    "Version is the embedded inventory's version.",
 		},
 	})
-	zip.Describe("GET /v1/trust/controls/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/controls/:id", zip.Doc{
 		Description: "Reads one control by id.",
 		Fields: map[string]string{
 			"controlRef.id": "ID is the control's id, dotted lowercase — \"iam.pkce.s256\".",
 		},
 		Example: json.RawMessage(`{"id":"iam.pkce.s256"}`),
 	})
-	zip.Describe("GET /v1/trust/coverage", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/coverage", zip.Doc{
 		Description: "Reads coverage: per framework, how many clauses have an automated control\nbehind them, how many are partial, and how many have none — each carrying the\nunit it is counted in, because \"12 of 20\" is not a fact until you know what\nthe 20 are.\n\nNothing here is a verdict. There is no boolean, and a control that only a\nperson has read counts one rung weaker than it claims to be, because only a\ncheck that can FAIL is evidence.",
 		Fields: map[string]string{
 			"coverRow.automated":       "Automated is how many clauses have an automated control behind them that\nsomething can fail on behalf of.",
@@ -121,7 +121,7 @@ func init() {
 			"trustTally.unverified":    "Unverified is how many rest on somebody having READ the source rather than\non a test or an audit row. Only a check that can FAIL counts as verified,\nand coverage counts those one rung weaker than they claim to be.",
 		},
 	})
-	zip.Describe("GET /v1/trust/coverage/:framework", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/coverage/:framework", zip.Doc{
 		Description: "Reads one framework clause by clause: every clause the standard publishes,\nwhat covers it, and which controls stand behind it — so a coverage number can\nbe checked line by line rather than taken on trust.",
 		Fields: map[string]string{
 			"clauseCoverage.automated": "Automated is how many clauses have an automated control behind them that\nsomething can fail on behalf of.",
@@ -148,7 +148,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"framework":"soc2"}`),
 	})
-	zip.Describe("GET /v1/trust/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/documents", zip.Doc{
 		Description: "Lists your organization's documents. Because this is your own centre, a gated\nartifact carries its address here; through the published endpoint it does not.",
 		Fields: map[string]string{
 			"docRow.attested":          "Attested reports whether somebody OUTSIDE this organization put their name\nto it. Those are the artifacts a reviewer asks for, and they are released\nthrough a grant rather than published — there is no field that can say\notherwise.",
@@ -164,7 +164,7 @@ func init() {
 			"trustDocuments.documents": "Documents is the list; a gated entry carries no address.",
 		},
 	})
-	zip.Describe("GET /v1/trust/evidence", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/evidence", zip.Doc{
 		Description: "Reads the audit rows that stand behind one control, over a window.\n\nThe inventory decides what evidences what: a control names the audit actions\nthat are its trail, and this resolves the control id to those actions and\nreads them. So evidence cannot drift from the inventory, and it is scoped to\nyour own organization — the query carries no organization field for a caller\nto fill in.\n\nA control that nothing in the trail evidences says so plainly rather than\nanswering an empty page, because an empty page reads like a clean quarter. A\ndeployment with no audit store answers 501 and says the trail was not read,\nfor the same reason.",
 		Fields: map[string]string{
 			"evidenceQuery.control": "Control is the control id whose trail to read. Required.",
@@ -174,13 +174,13 @@ func init() {
 		},
 		Example: json.RawMessage(`{"control":"iam.refresh.rotation","from":"2026-01-01","limit":"50"}`),
 	})
-	zip.Describe("GET /v1/trust/faq", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/faq", zip.Doc{
 		Description: "Lists your knowledge base — the questions a reviewer asks, answered once.",
 		Fields: map[string]string{
 			"faqList.faq": "Faq is the questions and their answers.",
 		},
 	})
-	zip.Describe("GET /v1/trust/frameworks", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/frameworks", zip.Doc{
 		Description: "Lists the frameworks coverage is computed against, and how many clauses each\npublishes. That count is the denominator of every coverage number, which is\nwhat keeps an uncovered clause visible instead of dropping out of the\nfraction.",
 		Fields: map[string]string{
 			"frameworkList.frameworks": "Frameworks is each framework and how many clauses it publishes.",
@@ -193,16 +193,16 @@ func init() {
 			"frameworkRow.units":       "Units is Unit's plural, carried so a caller renders \"12 controls\" without\nhaving to pluralise a word it does not know.",
 		},
 	})
-	zip.Describe("GET /v1/trust/policies", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/policies", zip.Doc{
 		Description: "Lists your organization's published policies.",
 		Fields: map[string]string{
 			"policyList.policies": "Policies is the organization's published policy documents, each as the\ncentre holds it.",
 		},
 	})
-	zip.Describe("GET /v1/trust/profile", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/profile", zip.Doc{
 		Description: "Reads your organization's trust-centre profile — the name, tagline and\nsummary a visitor sees, whether the centre is published, and where to send\nsomebody who wants a gated document.",
 	})
-	zip.Describe("GET /v1/trust/published/:org", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/published/:org", zip.Doc{
 		Description: "Reads a published trust centre — the whole thing in one answer: the\norganization's profile, its control inventory, coverage computed against each\nframework's whole published clause list, its documents, subprocessors,\npolicies, knowledge base, updates and risk profile.\n\nThis is the PUBLIC endpoint and needs no credential, because a published trust\ncentre is a public document. It answers only for an organization that has\npublished one — an organization that has not is not found rather than empty,\nsince an empty centre and a centre nobody meant to show read the same and are\nnot the same thing.\n\nA gated document appears here with its title, its type and its date and NO\naddress: the listing says the artifact exists and that reading it takes a\ngrant. Nothing an independent auditor signed is ever released through this\nendpoint.",
 		Fields: map[string]string{
 			"centre.controls":        "Controls is the control inventory, each entry naming what it asserts, the\nmechanism, where it is enforced, how it is verified and the clauses it maps\nto.",
@@ -258,22 +258,22 @@ func init() {
 		},
 		Example: json.RawMessage(`{"org":"hanzo"}`),
 	})
-	zip.Describe("GET /v1/trust/risk", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/risk", zip.Doc{
 		Description: "Reads your risk profile — the label and value pairs describing what your\norganization handles and how.",
 	})
-	zip.Describe("GET /v1/trust/subprocessors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/subprocessors", zip.Doc{
 		Description: "Lists the third parties your organization sends data to, each naming what it\nis for.",
 		Fields: map[string]string{
 			"subprocessorList.subprocessors": "Subprocessors is the list, each naming at least what it is and what it is\nfor — a name alone says nothing.",
 		},
 	})
-	zip.Describe("GET /v1/trust/updates", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust GET /v1/trust/updates", zip.Doc{
 		Description: "Lists your trust-centre updates, newest as you ordered them.",
 		Fields: map[string]string{
 			"updateList.updates": "Updates is the entries, each carrying the date it describes.",
 		},
 	})
-	zip.Describe("PUT /v1/trust/:kind/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/trust PUT /v1/trust/:kind/:id", zip.Doc{
 		Description: "Writes one record into a section of YOUR organization's trust centre —\nprofile, control, document, subprocessor, policy, faq, update or risk.\n\nA control written here is held to exactly the rule a control committed to the\ndeployment's own inventory is held to, by the same validator: its prose may\nnot claim a certificate and may not name a framework (a framework belongs in\nthe mappings, where it arrives attached to a number), anything short of\nautomated must say what is missing, and a mapping to a clause no framework\ndeclares is refused rather than scored as nothing.\n\nA document defaults to GATED. An artifact an independent auditor signed — a\nSOC 2 report, an ISO certificate, a penetration test, an auditor letter —\ncannot be made public at all; it is released through a grant. A\nself-assessment can, because the organization is the one attesting it.\n\nThe deployment's OWN control inventory is governed in git and is not writable\nhere: naming one of its ids is a conflict, not an overwrite.",
 		Fields: map[string]string{
 			"sectionWrite.data": "Data is the record. What may be in it depends on the section, and every\nsection's required fields are validated: a control is held to the same rule\na committed one is, a subprocessor must say what it is for, an update must\ncarry the date it describes.",

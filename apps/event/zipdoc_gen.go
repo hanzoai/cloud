@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/event/errors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event GET /v1/event/errors", zip.Doc{
 		Description: "Errors returns the caller org's most recently captured errors, newest first. The\nerror-tracking read view over event.error — the plane table the write core's error\nfacts land in (errors are DELIBERATELY not on event.event) — each with its captured\nexception surfaced from the attributes map as a first-class field.\n\nThe org is the validated principal's — never a parameter — and this read requires a\nreal bearer, NEVER the write-only publishable key: pk- can attribute a write and can\nread nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.",
 		Fields: map[string]string{
 			"capturedError.distinctId":     "DistinctID is the person/visitor the error is attributed to. Omitted when the\nrow carries none.",
@@ -29,7 +29,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"limit":100}`),
 	})
-	zip.Describe("GET /v1/event/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event GET /v1/event/health", zip.Doc{
 		Description: "Health reports whether the event plane can take a write and the warehouse can\nanswer a read.\n\nIt reports the analytics subsystem's own liveness in BOTH directions: plane is\nthe event plane it WRITES (the bus and the JetStream stream every accepted\nevent is published to, both named in the report), and datastore is the\nwarehouse it READS, with each read lens's table reported as it is provisioned\n(the LLM usage ledger and the product-event table).\n\nEITHER ONE DOWN IS A 503, and the report says WHICH — they are probed\nindependently and never collapse into a single bit. This endpoint used to\nreport the read half only, and answered 200/ok while every POST /v1/event\nfailed on a stream that could not bind: a total ingest outage behind a green\nprobe. A readiness gate here now gates on the write path too.\n\nplane.ready IS A REAL PROBE and walks the ingest path itself — the same\nconnection and the same stream a publish uses — so it cannot answer ready while\na publish would 503. plane.reason carries the plane's own error text when it is\nfalse.\n\ndatastore IS NOT PROBED WITH A QUERY. It is the state of the process's own\nshared client — established, and not since closed — so a warehouse accepting\nconnections and failing reads still reports true. Degraded CARRIES the report\n(status, the failing half, reason) as its body rather than an error envelope,\nso a gate reads the cause off the same object it got at 200.\n\nA MISSING LENS TABLE IS NOT A FAILURE and never moves the status: a lens\nreported available:false answers honest-empty rather than erroring, so a fresh\ndeployment whose collector has not emitted yet is legitimately 200 with the\nproduct-event lens unavailable. The lens block is reported whenever the\nwarehouse is REACHABLE — including on a report degraded by the plane, where the\ntables genuinely were probed — and is absent only when the warehouse is not,\nhaving nothing to say about tables it could not reach.\n\nUnauthenticated on purpose — liveness has to be probe-able — and it reads NO\ntenant data: table existence and stream presence only, never a row and never an\nevent.",
 		Fields: map[string]string{
 			"healthLens.available":   "Available reports whether that table exists in the warehouse right now.",
@@ -52,7 +52,7 @@ func init() {
 			"loss.undecodable":       "Undecodable counts messages acked without landing because they did not parse.",
 		},
 	})
-	zip.Describe("GET /v1/event/insights/events", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event GET /v1/event/insights/events", zip.Doc{
 		Description: "Returns the caller org's most recent product events, newest first.\nThe console's raw-event view over event.event — the same table the capture endpoints\nfill — one row per stored event, with the row's attributes returned as the\nproperties object.\n\nThe org is the validated principal's — never a parameter — and a read requires a\nreal bearer, never the write-only publishable key. 403 without a validated bearer,\n503 when the warehouse is unreachable.",
 		Fields: map[string]string{
 			"eventList.data":          "Data is the events, newest first. Empty rather than absent when there are none.",
@@ -70,7 +70,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"limit":100}`),
 	})
-	zip.Describe("GET /v1/event/insights/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event GET /v1/event/insights/health", zip.Doc{
 		Description: "Reports that the unified insights surface is serving. It reads no\ntenant data and consults no dependency, so it answers 200 unconditionally and needs\nno principal — liveness must be probe-able. The warehouse-connectivity probe is a\ndifferent question and lives at GET /v1/event/health.",
 		Fields: map[string]string{
 			"insightsStatus.engine":  "Engine names the engine serving the surface: hanzo-analytics.",
@@ -78,7 +78,7 @@ func init() {
 			"insightsStatus.surface": "Surface is the path prefix this status covers: /v1/event/insights.",
 		},
 	})
-	zip.Describe("GET /v1/event/overview", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event GET /v1/event/overview", zip.Doc{
 		Description: "Overview returns the caller org's analytics KPIs for one time window. Three lenses\nover one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,\nspend, models, providers, errors) and is always real; web (pageviews, visitors,\nsessions) and commerce (orders, revenue, AOV) read the product-event table and\nreport available=false rather than fabricating zeros when it holds nothing yet.\n\nThe org is the validated principal's — never a parameter — so a caller can only\never read its own tenant. 403 without a validated bearer, 400 on an unknown range,\n503 when the warehouse is unreachable.",
 		Fields: map[string]string{
 			"CommerceOverview.aov":         "AOV is average order value — Revenue/Orders, rounded to two places. Zero when\nthere were no orders.",
@@ -119,7 +119,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":"7d"}`),
 	})
-	zip.Describe("GET /v1/event/timeseries", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event GET /v1/event/timeseries", zip.Doc{
 		Description: "Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.\nOne point per hour or per day — the bucket the window implies, 24h giving hours and\n7d/30d giving days — carrying requests, total tokens and spend in cents. Empty\nbuckets are filled with zeros so a client charts a continuous line.\n\nThe org is the validated principal's — never a parameter. 403 without a validated\nbearer, 400 on an unknown range, 503 when the warehouse is unreachable.",
 		Fields: map[string]string{
 			"Scope.org":             "Org is the IAM org slug the rows were read under: the validated principal's,\nresolved server-side.",
@@ -140,7 +140,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":"30d"}`),
 	})
-	zip.Describe("GET /v1/event/top", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event GET /v1/event/top", zip.Doc{
 		Description: "Top returns the caller org's ranked lenses for one window, five of them at once.\nmodels ranks LLM models by spend and is always real; products ranks commerce orders\nby revenue; topPages ranks requested paths, topReferrers the external referrer\ndomains (\"(direct)\" for a missing or same-origin one) and topSources the utm_source\ncampaigns (\"(none)\" when absent), each by pageviews. Every lens carries each row's\nshare of the in-window total, so a top-N honestly shows the long tail.\n\nThe four event lenses report available=false rather than fabricating zeros when the\nproduct-event table holds nothing yet. The org is the validated principal's — never\na parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the\nwarehouse is unreachable.",
 		Fields: map[string]string{
 			"Breakdown.available":    "Available is false when the product-event table could not be read.",
@@ -185,7 +185,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":"7d","limit":25}`),
 	})
-	zip.Describe("POST /event/capture", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/event POST /event/capture", zip.Doc{
 		Description: "Captures ONE occurrence onto the calling organisation's own event plane — the\nsame plane the HTTP endpoint fills and /v1/event/insights reads back, through the\nSAME write core.\n\nThe organisation is the CALLER's, minted from the plane principal and never\nfrom this body, which carries no field that could name one. A peer that states\nno principal writes nothing: an unidentified caller has no partition, and\ndefaulting one would be a shared store with a tenant anybody can reach.\n\nA name is REQUIRED and is refused rather than defaulted. Every other route into\nthis core has a server-chosen default name for the signal it carries (a page\nview, an error, a span); a peer's occurrence is a tracked act, and a tracked\nact with no name is unroutable by the plane's own rule — so the refusal is the\nnormalizer's, said at the boundary where the caller can still be told.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"EventCaptured.accepted": "Accepted is how many occurrences were admitted and published.",

@@ -9,56 +9,56 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/provisioning/datastore/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning DELETE /v1/provisioning/datastore/:name", zip.Doc{
 		Description: "Deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"warehouse"}`),
 	})
-	zip.Describe("DELETE /v1/provisioning/docdb/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning DELETE /v1/provisioning/docdb/:name", zip.Doc{
 		Description: "DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated FerretDB\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"sessions"}`),
 	})
-	zip.Describe("DELETE /v1/provisioning/kv/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning DELETE /v1/provisioning/kv/:name", zip.Doc{
 		Description: "DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to\nit back to Base BEFORE tearing down the org's dedicated Valkey instance, then\ndeletes the sealed credential and removes the metadata row. Answers 204 with\nno body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"sessions"}`),
 	})
-	zip.Describe("DELETE /v1/provisioning/s3/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning DELETE /v1/provisioning/s3/:name", zip.Doc{
 		Description: "Deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"uploads"}`),
 	})
-	zip.Describe("DELETE /v1/provisioning/search/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning DELETE /v1/provisioning/search/:name", zip.Doc{
 		Description: "Deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"products"}`),
 	})
-	zip.Describe("DELETE /v1/provisioning/sql/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning DELETE /v1/provisioning/sql/:name", zip.Doc{
 		Description: "DropSQL deprovisions one Hanzo SQL database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated Postgres\ninstance — never a live app pointed at a deleted backend — then deletes the\nsealed credential and removes the metadata row. Answers 204 with no body; a\nsecond call is a 404, not a second delete.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"orders"}`),
 	})
-	zip.Describe("DELETE /v1/provisioning/vector/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning DELETE /v1/provisioning/vector/:name", zip.Doc{
 		Description: "Deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
 		Fields: map[string]string{
 			"resourceRef.name": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
 		},
 		Example: json.RawMessage(`{"name":"embeddings"}`),
 	})
-	zip.Describe("GET /v1/admin/provisioning/vector/collections", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/admin/provisioning/vector/collections", zip.Doc{
 		Description: "Lists every collection in the deployment's vector store\nwith its size and geometry, across all tenants.\n\nPer-collection detail is best-effort — one collection that fails to describe\nitself keeps its name and defaults (dimension 0, cosine) rather than blanking\nthe whole answer — and an unreachable Qdrant answers 200 with an EMPTY list, so\nthe panel shows an honest empty state instead of an error.",
 		Fields: map[string]string{
 			"vectorCollection.createdAt":       "CreatedAt is the collection's creation time (RFC 3339); Qdrant does not\nreport one, so it is empty today.",
@@ -70,7 +70,7 @@ func init() {
 			"vectorCollectionList.collections": "Collections is one row per Qdrant collection, sorted by name. Empty — never\nabsent — when the vector service cannot be reached.",
 		},
 	})
-	zip.Describe("GET /v1/admin/provisioning/vector/stats", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/admin/provisioning/vector/stats", zip.Doc{
 		Description: "Totals the collections, vectors and storage across the whole\nvector store.\n\nEvery figure is summed from the same per-collection detail the collections\nlisting returns, so the two panels can never disagree. An unreachable Qdrant\nanswers 200 with all zeros rather than an error.",
 		Fields: map[string]string{
 			"vectorStats.totalCollections":  "TotalCollections is how many collections the store holds.",
@@ -78,7 +78,7 @@ func init() {
 			"vectorStats.totalVectors":      "TotalVectors is the sum of every collection's point count.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/datastore", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/datastore", zip.Doc{
 		Description: "Lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
@@ -90,7 +90,7 @@ func init() {
 			"provisionedSummary.status":    "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/datastore/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/datastore/:name", zip.Doc{
 		Description: "Returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
@@ -105,7 +105,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"warehouse"}`),
 	})
-	zip.Describe("GET /v1/provisioning/docdb", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/docdb", zip.Doc{
 		Description: "ListDocDB lists the caller org's Hanzo DocDB document databases. Each one is\na DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire\nprotocol, so the host is that instance's own in-cluster Service and the port\nis 27017.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
@@ -117,7 +117,7 @@ func init() {
 			"provisionedSummary.status":    "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/docdb/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/docdb/:name", zip.Doc{
 		Description: "GetDocDB returns one Hanzo DocDB database's metadata. It carries the\ndatabase's status, its instance address and the SCRAM user the instance was\nset up with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
@@ -132,7 +132,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"sessions"}`),
 	})
-	zip.Describe("GET /v1/provisioning/kv", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/kv", zip.Doc{
 		Description: "ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey\ninstance the org alone runs, so the host is that instance's own in-cluster\nService and the port is 6379.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
@@ -144,7 +144,7 @@ func init() {
 			"provisionedSummary.status":    "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/kv/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/kv/:name", zip.Doc{
 		Description: "GetKV returns one Hanzo KV store's metadata. It carries the store's status,\nits instance address and the Valkey user it authenticates as (\"default\", the\nonly user a requirepass instance has) — never the password. A still-booting\ninstance reads \"provisioning\", reconciled from the operator's live view.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
@@ -159,7 +159,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"sessions"}`),
 	})
-	zip.Describe("GET /v1/provisioning/s3", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/s3", zip.Doc{
 		Description: "Lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
@@ -171,7 +171,7 @@ func init() {
 			"provisionedSummary.status":    "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/s3/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/s3/:name", zip.Doc{
 		Description: "Returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
@@ -186,7 +186,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"uploads"}`),
 	})
-	zip.Describe("GET /v1/provisioning/search", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/search", zip.Doc{
 		Description: "Lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
@@ -198,7 +198,7 @@ func init() {
 			"provisionedSummary.status":    "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/search/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/search/:name", zip.Doc{
 		Description: "Returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
@@ -213,7 +213,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"products"}`),
 	})
-	zip.Describe("GET /v1/provisioning/sql", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/sql", zip.Doc{
 		Description: "ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED\nPostgreSQL instance the org alone runs, so the host is that instance's own\nin-cluster Service and the port is 5432.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
@@ -225,7 +225,7 @@ func init() {
 			"provisionedSummary.status":    "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/sql/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/sql/:name", zip.Doc{
 		Description: "GetSQL returns one Hanzo SQL database's metadata. It carries the database's\nstatus, its instance address and the admin user Postgres booted with — never\nthe password, which is returned once at create and otherwise lives only in\nHanzo KMS. A still-booting instance reads \"provisioning\", reconciled from the\noperator's live view rather than from the row.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
@@ -240,7 +240,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"orders"}`),
 	})
-	zip.Describe("GET /v1/provisioning/vector", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/vector", zip.Doc{
 		Description: "Lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
 		Fields: map[string]string{
 			"provisionedSummary.createdAt": "CreatedAt is when the resource was provisioned, in unix seconds.",
@@ -252,7 +252,7 @@ func init() {
 			"provisionedSummary.status":    "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
 		},
 	})
-	zip.Describe("GET /v1/provisioning/vector/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning GET /v1/provisioning/vector/:name", zip.Doc{
 		Description: "Returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
 		Fields: map[string]string{
 			"provisionedResource.database": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
@@ -267,7 +267,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"embeddings"}`),
 	})
-	zip.Describe("POST /v1/provisioning/datastore", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning POST /v1/provisioning/datastore", zip.Doc{
 		Description: "Launches your org's OWN Hanzo Datastore instance and answers\nwith its `datastore://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
 		Fields: map[string]string{
 			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
@@ -284,7 +284,7 @@ func init() {
 			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
 		},
 	})
-	zip.Describe("POST /v1/provisioning/docdb", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning POST /v1/provisioning/docdb", zip.Doc{
 		Description: "CreateDocDB launches your org's OWN document-database instance and answers with\nits `mongodb://` connection string. It speaks the MongoDB wire protocol, so\nexisting MongoDB drivers connect unchanged.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
 		Fields: map[string]string{
 			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
@@ -301,7 +301,7 @@ func init() {
 			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
 		},
 	})
-	zip.Describe("POST /v1/provisioning/kv", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning POST /v1/provisioning/kv", zip.Doc{
 		Description: "CreateKV launches your org's OWN key-value instance and answers with its `kv://`\nconnection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster this fails closed with 503 rather than handing back a\nshared one.",
 		Fields: map[string]string{
 			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
@@ -318,7 +318,7 @@ func init() {
 			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
 		},
 	})
-	zip.Describe("POST /v1/provisioning/s3", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning POST /v1/provisioning/s3", zip.Doc{
 		Description: "Creates an S3-compatible bucket inside the already-running shared\nobject store and answers with the endpoint that reaches it.",
 		Fields: map[string]string{
 			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
@@ -335,7 +335,7 @@ func init() {
 			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
 		},
 	})
-	zip.Describe("POST /v1/provisioning/search", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning POST /v1/provisioning/search", zip.Doc{
 		Description: "Creates a search index inside the already-running shared search\nbackend and answers with the endpoint that reaches it.",
 		Fields: map[string]string{
 			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
@@ -352,7 +352,7 @@ func init() {
 			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
 		},
 	})
-	zip.Describe("POST /v1/provisioning/sql", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning POST /v1/provisioning/sql", zip.Doc{
 		Description: "CreateSQL launches your org's OWN PostgreSQL instance and answers with its\n`postgres://` connection string.\n\nThe instance is yours alone — a deployment in your own tenant namespace, so its\nadmin credential is naturally scoped to you and no other tenant shares the\nprocess. Off-cluster, where there is no orchestrator to launch one, this fails\nclosed with 503 rather than handing back a shared one.",
 		Fields: map[string]string{
 			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
@@ -369,7 +369,7 @@ func init() {
 			"provisionResult.username":         "Username is the credential's user, for the kinds that mint one per resource.\nAbsent for a kind whose backend authenticates with a shared, out-of-band key.",
 		},
 	})
-	zip.Describe("POST /v1/provisioning/vector", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/provisioning POST /v1/provisioning/vector", zip.Doc{
 		Description: "Creates a vector collection inside the already-running shared\nvector backend and answers with the endpoint that reaches it.",
 		Fields: map[string]string{
 			"provisionRequest.instance":        "Instance binds a DEDICATED add-on to the app instance whose\n<instance>-addons Secret receives the <KIND>_URL (e.g. \"commerce\").\nOptional: empty means \"not instance-bound\" — the DSN is returned once and\nwired by the caller.",
