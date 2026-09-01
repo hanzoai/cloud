@@ -63,7 +63,7 @@ func planeQuery(ctx context.Context, in *plane.IndexQueryIn) (*plane.IndexQueryO
 	if err != nil {
 		return nil, err
 	}
-	rows, err := Query(ctx, org, in.UID, in.Q, in.Limit, in.Offset)
+	rows, err := Query(ctx, org, in.UID, in.Q, in.Users, in.Limit, in.Offset)
 	if err != nil {
 		return nil, err
 	}

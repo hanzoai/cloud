@@ -63,17 +63,6 @@ func Semantic(ctx context.Context, r SemanticReq) ([]Hit, error) {
 	return hits, nil
 }
 
-// Text is a knowledge document's text as the index embeds it — title, then the
-// body a page, memory or source carries — for a caller holding the document
-// itself (the lexical leg's rows) that must score it as the index saw it.
-func Text(doctype, title string, data map[string]any) string {
-	id, err := framework.ParseID(doctype)
-	if err != nil {
-		return title
-	}
-	return docText(id, title, data)
-}
-
 // SemanticReady reports whether the vector leg is configured (an embedding client
 // and a store endpoint). A deployment without one is DISABLED, which the surface
 // reports distinctly from DEGRADED — "never provisioned" and "provisioned and

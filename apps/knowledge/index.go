@@ -364,6 +364,23 @@ func ownerFilter(must []map[string]any, subject string) map[string]any {
 	}
 }
 
+// reset drops the org's collection and forgets it was ensured, so the next
+// write creates it again at the configured size. It is what a reindex does
+// first: a collection built at another dimension cannot be written to, and
+// points whose documents are gone have no other way out.
+func (x *indexer) reset(ctx context.Context, org string) error {
+	if !x.enabled() {
+		return nil
+	}
+	if err := x.qdrant(ctx, http.MethodDelete, "/collections/"+x.collection(org), nil, nil); err != nil && !isNotFound(err) {
+		return err
+	}
+	x.mu.Lock()
+	delete(x.ensuredOrgs, org)
+	x.mu.Unlock()
+	return nil
+}
+
 // ensureCollection creates the org's collection on first use with the configured
 // dims + Cosine distance, and indexes the payload keys it filters on. Idempotent
 // (a 200/409 both mean "exists"). If the collection already exists with a DIFFERENT

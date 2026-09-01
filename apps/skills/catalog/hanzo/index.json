@@ -4958,11 +4958,11 @@
       "sha256": "2ca49e669657318abb7d9b20232f4a65f976c1c301f1bc2bd154a2d3dccbb77d"
     },
     {
-      "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries..",
+      "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries., Returns the tail of one room's conversation, oldest first..",
       "name": "team_rooms",
       "path": "team_rooms/SKILL.md",
       "service": "team",
-      "sha256": "56376f38db58d0358f886eb717ff89175347787386d7a77692e362c9f17250e3"
+      "sha256": "25767295687eaee25ecea2c028508fb15a833b2726f74529ab2d494b130699ca"
     },
     {
       "description": "Read team transactor: Statistics returns the transactor's live sessions for the space the caller's credential names — the endpoint the front's space switcher and server panel poll on the transactor base., Open the space data-plane socket.",

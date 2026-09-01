@@ -121,6 +121,7 @@ func init() {
 			"IndexQueryIn.limit": "Limit bounds the page; Offset walks it.",
 			"IndexQueryIn.q":     "Q is the lexical query. Empty is a browse — every row, not none.",
 			"IndexQueryIn.uid":   "UID is the index within the org (catalog rows all live in one).",
+			"IndexQueryIn.users": "Users bounds rows by the user each was written with; absent reaches every\nrow. A caller asking on a person's behalf passes {\"\", theirs}: the rows\nwritten for everyone, and that person's own.",
 		},
 	})
 	zip.Describe("github.com/hanzoai/cloud/apps/index POST /index/reconcile", zip.Doc{

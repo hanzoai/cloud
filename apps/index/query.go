@@ -22,11 +22,38 @@ var ErrNotMounted = errors.New("index: not mounted")
 // validated principal; the store pins every row to it, so a caller can never read
 // another tenant's documents. An index that does not exist yields no rows rather
 // than an error: "nothing indexed yet" is an empty result, not a failure.
-func Query(ctx context.Context, org, uid, q string, limit, offset int) ([]json.RawMessage, error) {
+//
+// users bounds the rows by the `user` each was written with: nil reaches every
+// row, and a list reaches only rows whose user is in it — "" being the rows
+// written for everyone. A caller asking on a person's behalf passes {"", theirs}.
+func Query(ctx context.Context, org, uid, q string, users []string, limit, offset int) ([]json.RawMessage, error) {
 	if mounted == nil {
 		return nil, ErrNotMounted
 	}
-	return mounted.State.store.Search(ctx, org, uid, q, nil, limit, offset)
+	return mounted.State.store.Search(ctx, org, uid, q, users, limit, offset)
+}
+
+// Put writes one document into an index, creating the index on first use. It
+// is Reconcile for a single document: the write a subsystem makes from its own
+// save hook, so the lexical leg keeps step with the store without a full swap.
+func Put(ctx context.Context, org, uid, primaryKey string, doc map[string]any) error {
+	if mounted == nil {
+		return ErrNotMounted
+	}
+	s := mounted.State.store
+	if _, err := s.EnsureIndex(ctx, org, uid, primaryKey); err != nil {
+		return err
+	}
+	return s.Upsert(ctx, org, uid, primaryKey, []map[string]any{doc})
+}
+
+// Remove deletes documents from an index by primary key. Keys that are not there
+// are not an error: the caller's intent is "gone", and they are.
+func Remove(ctx context.Context, org, uid string, pks ...string) error {
+	if mounted == nil {
+		return ErrNotMounted
+	}
+	return mounted.State.store.Delete(ctx, org, uid, pks)
 }
 
 // Reconcile REPLACES one index's whole corpus in a single idempotent call: every

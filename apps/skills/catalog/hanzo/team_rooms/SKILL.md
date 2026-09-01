@@ -1,7 +1,7 @@
 ---
 name: team_rooms
 version: "8.0.0"
-description: "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries.."
+description: "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries., Returns the tail of one room's conversation, oldest first.."
 ---
 
 # Hanzo · TEAM · rooms
@@ -15,10 +15,19 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Endpoints
 
 - `GET https://api.hanzo.ai/v1/team/rooms` — Returns every room of the caller's org, across the spaces it owns, with the work facet each carries.
+- `GET https://api.hanzo.ai/v1/team/rooms/{id}/messages` — Returns the tail of one room's conversation, oldest first.
+
+## Parameters
+
+| Name | In | Required | Type | Description |
+|---|---|---|---|---|
+| `id` | path | yes | string | ID is the room, from the path. The URL is the authority. |
+| `space` | query | no | string | Space names the space holding the room, and is required for the reason the bind op requires it: a room id is unique within a space and not across the org, so searching every space for a match would make the answer depend on iteration order. |
 
 ## Response
 
 - `/v1/team/rooms` → `teamRooms` object with fields: `rooms`.
+- `/v1/team/rooms/{id}/messages` → `teamMessages` object with fields: `messages`.
 
 ## Example
 

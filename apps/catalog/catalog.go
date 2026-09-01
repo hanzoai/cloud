@@ -372,7 +372,7 @@ func read(ctx context.Context, org, q, scope string) ([]Entry, error) {
 // nothing, on a fleet where nothing was actually down.
 func lexical(ctx context.Context, org, q string) ([]json.RawMessage, error) {
 	if index.Ready() {
-		return index.Query(ctx, org, uid, q, scan, 0)
+		return index.Query(ctx, org, uid, q, nil, scan, 0)
 	}
 	// WHICH TENANT THE CALL IS MADE FOR, and why it is not For().
 	//

@@ -48,6 +48,13 @@ struct providerIn {
     Provider text @0
 }
 
+struct reindexOut {
+    Vectors i64 @0
+    Lexical i64 @8
+    Removed i64 @16
+    Failed  i64 @24
+}
+
 struct searchIn {
     Query    text       @0
     Limit    i64        @8
@@ -110,6 +117,15 @@ interface knowledge {
     # sync its own connection. A provider failure is reported honestly (502) and
     # recorded on the connector rather than silently swallowed.
     post_knowledge_connectors_by_provider_sync(req: providerIn) returns (rep: kbSyncOut)
+    # Rebuilds the caller org's retrieval from its documents: the vector
+    # collection is dropped and created again at the configured embedding size and
+    # every page, memory and source is embedded into it; the lexical index is
+    # reconciled to the same set. It is what an operator runs after the embedding
+    # model or its dimension changes, and what puts an org's retrieval right after
+    # a vector outage. It requires ORG ADMIN and runs inline: an org's knowledge is
+    # a few thousand documents, and the answer is the count.
+    # The request has no body. Response: {"vectors": 412, "lexical": 412, "removed": 3, "failed": 0}
+    post_knowledge_reindex() returns (rep: reindexOut)
     # Runs a semantic search over the caller org's own knowledge —
     # its wiki pages, its agent memories and everything its connectors have synced —
     # and returns the matching passages. This is the RAG entry point: an agent asks
@@ -122,7 +138,7 @@ interface knowledge {
 }
 
 # ---------------------------------------------------------------------
-# 8 op(s) here. What follows is what this schema does not carry.
+# 9 op(s) here. What follows is what this schema does not carry.
 #
 # opaque (5) — crosses, arrives without its name:
 #   catalogOut.Connectors  knowledge.catalogEntry (list element)

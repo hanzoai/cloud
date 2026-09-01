@@ -110,6 +110,10 @@ func pageOnTrash(ctx context.Context, ev *framework.Event) error {
 // in-tenant. A non-nil return is logged by the framework's after() wrapper — the
 // document is already persisted, so indexing is best-effort by design.
 func indexOnSave(ctx context.Context, ev *framework.Event) error {
+	if err := lexicalPut(ctx, ev.Org, ev.DocType, ev.Doc.Name, ev.Doc.Data); err != nil && !noLexical(err) {
+		ev.Logger.Warn("kb lexical index on save failed (write already landed)",
+			"doctype", ev.DocType, "name", ev.Doc.Name, "err", err)
+	}
 	title := str(ev.Doc.Data["title"])
 	return index().indexDoc(ctx, ev.Org, ev.DocType, ev.Doc.Name, title, ev.Doc.Data)
 }
@@ -120,6 +124,10 @@ func indexOnSave(ctx context.Context, ev *framework.Event) error {
 // harmless (search re-checks payload.org and the doc no longer exists to open),
 // whereas blocking the delete would be a real availability bug.
 func deindexOnTrash(ctx context.Context, ev *framework.Event) error {
+	if err := lexicalRemove(ctx, ev.Org, ev.DocType, ev.Doc.Name); err != nil && !noLexical(err) {
+		ev.Logger.Warn("kb lexical deindex on trash failed (delete proceeds)",
+			"doctype", ev.DocType, "name", ev.Doc.Name, "err", err)
+	}
 	if err := index().deindexDoc(ctx, ev.Org, ev.DocType, ev.Doc.Name); err != nil {
 		ev.Logger.Warn("kb deindex on trash failed (delete proceeds)",
 			"doctype", ev.DocType, "name", ev.Doc.Name, "err", err)
