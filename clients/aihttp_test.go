@@ -360,3 +360,57 @@ func TestAIHTTP_Models(t *testing.T) {
 		t.Errorf("auth: got %q want Bearer sk-test", gotAuth)
 	}
 }
+
+func TestAIHTTP_Rerank(t *testing.T) {
+	var gotPath, gotAuth string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		// Cohere order: best first — the client must put scores back by index.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list", "model": "zen-rerank",
+			"results": []map[string]any{
+				{"index": 2, "relevance_score": 0.9},
+				{"index": 0, "relevance_score": 0.4},
+				{"index": 1, "relevance_score": 0.1},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	ai := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash")
+	scores, err := ai.Rerank(context.Background(), &types.RerankRequest{
+		Model: "zen-rerank", Query: "q", Documents: []string{"a", "b", "c"}, Org: "acme",
+	})
+	if err != nil {
+		t.Fatalf("Rerank: %v", err)
+	}
+	if len(scores) != 3 || scores[0] != 0.4 || scores[1] != 0.1 || scores[2] != 0.9 {
+		t.Fatalf("scores by index: got %v want [0.4 0.1 0.9]", scores)
+	}
+	if gotPath != "/rerank" || gotAuth != "Bearer sk-test" {
+		t.Errorf("path/auth: got %q %q", gotPath, gotAuth)
+	}
+	if gotBody["model"] != "zen-rerank" || gotBody["query"] != "q" || gotBody["top_n"] != float64(3) {
+		t.Errorf("body: got %v", gotBody)
+	}
+	if empty, err := ai.Rerank(context.Background(), &types.RerankRequest{Model: "zen-rerank"}); err != nil || empty != nil {
+		t.Fatalf("empty documents: got %v, %v want nil, nil", empty, err)
+	}
+}
+
+func TestAIHTTP_RerankRefusesPartialAnswer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": []map[string]any{{"index": 0, "relevance_score": 1}}})
+	}))
+	defer srv.Close()
+	_, err := AIHTTPAt(srv.URL, "sk-test", "m").Rerank(context.Background(), &types.RerankRequest{
+		Model: "zen-rerank", Query: "q", Documents: []string{"a", "b"},
+	})
+	if err == nil {
+		t.Fatal("one score for two documents must be an error, not a zero for the missing one")
+	}
+}

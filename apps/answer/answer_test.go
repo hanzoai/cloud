@@ -433,6 +433,8 @@ func (f *loopAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*typ
 }
 func (f *loopAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
 
+func (f *loopAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 // streamAI is loopAI plus the optional types.StreamCompleter capability: the
 // synthesis reply arrives as real per-word deltas.
 type streamAI struct {
@@ -474,6 +476,8 @@ func (m *modelAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*ty
 	return nil, fmt.Errorf("model %q unavailable", req.Model)
 }
 func (m *modelAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
+
+func (m *modelAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
 
 // TestSynthesizeFallsOverToAvailableModel proves the availability fix: when the
 // primary model errors AND the first fallback returns an empty completion, the loop

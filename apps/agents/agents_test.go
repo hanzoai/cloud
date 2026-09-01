@@ -61,6 +61,8 @@ func (f *fakeAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, e
 	return nil, nil
 }
 
+func (f *fakeAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 func TestCreateGetListDelete(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

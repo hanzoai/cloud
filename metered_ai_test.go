@@ -18,9 +18,10 @@ import (
 // recordingAI is a transport stub that records the request it received (so a test
 // can assert the billing scope was forwarded) and returns a canned response.
 type recordingAI struct {
-	chatReq  *types.ChatRequest
-	embedReq *types.EmbedRequest
-	resp     *types.ChatResponse
+	chatReq   *types.ChatRequest
+	embedReq  *types.EmbedRequest
+	rerankReq *types.RerankRequest
+	resp      *types.ChatResponse
 }
 
 func (r *recordingAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
@@ -33,6 +34,11 @@ func (r *recordingAI) Embed(_ context.Context, req *types.EmbedRequest) ([][]flo
 	return [][]float32{{1, 2, 3}}, nil
 }
 
+func (r *recordingAI) Rerank(_ context.Context, req *types.RerankRequest) ([]float64, error) {
+	r.rerankReq = req
+	return []float64{0.5, 0.9}, nil
+}
+
 // listerAI ALSO implements types.ModelLister — the capability that must survive the
 // metering wrap so agents' model-catalog validation keeps working.
 type listerAI struct{}
@@ -41,6 +47,7 @@ func (listerAI) ChatCompletion(context.Context, *types.ChatRequest) (*types.Chat
 	return &types.ChatResponse{}, nil
 }
 func (listerAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
+func (listerAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
 func (listerAI) Models(context.Context) ([]string, error)                        { return []string{"m"}, nil }
 
 // passthroughMetered builds a meteredAI whose meter is not Enabled (no commerce
@@ -379,4 +386,25 @@ func serveCommerceOK(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("commerce stand-in never began listening at %s", addr)
+}
+
+// TestRerankCarriesScopeThroughTheMeter: the wrapper forwards the request it was
+// given — model, query, documents and billing scope — and hands back the
+// transport's scores unchanged, in the pass-through posture.
+func TestRerankCarriesScopeThroughTheMeter(t *testing.T) {
+	inner := &recordingAI{}
+	m := passthroughMetered(inner)
+	scores, err := m.Rerank(context.Background(), &types.RerankRequest{
+		Model: "zen-rerank", Query: "q", Documents: []string{"a", "b"}, Org: "acme", BillingOrg: "home", Project: "p",
+	})
+	if err != nil {
+		t.Fatalf("Rerank: %v", err)
+	}
+	if len(scores) != 2 || scores[1] != 0.9 {
+		t.Fatalf("scores: got %v", scores)
+	}
+	r := inner.rerankReq
+	if r == nil || r.Org != "acme" || r.BillingOrg != "home" || r.Project != "p" || r.Model != "zen-rerank" || len(r.Documents) != 2 {
+		t.Fatalf("request forwarded: %+v", r)
+	}
 }

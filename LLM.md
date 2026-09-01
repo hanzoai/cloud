@@ -7731,3 +7731,18 @@ federation) against the webhook's `comment.user.id`. `channelIdentity` asks it
 for provider `github`, caches the answer with `putUserLink`, and only then falls
 to the org's default subject or the link prompt. Both are org-bounded by the
 caller's context; neither takes an org argument.
+
+## Rerank: the fourth stage of /v1/search
+
+`AIClient.Rerank` sits beside `Embed`: the gateway's Cohere-shaped `/rerank`
+(`clients/aihttp.go`), metered on the same known-before-the-call estimate
+(`metered_ai.go`), served as `zen-rerank` (`CLOUD_RERANK_MODEL`). `/v1/search`
+runs it over the whole fused window before paging and reports it in `Backends`
+as `rerank` — `disabled` without a read-scope client (`deps.Embed`), `degraded`
+when the call fails (fused order stands), `ok` with the rows reordered by
+relevance and a `rerank` origin appended to each row's provenance. The text it
+scores is what each leg carried: `knowledge.Semantic` reads the document from
+the store (`Hit.Text`, never on the wire — the vector payload holds no body by
+design), the lexical row is scored through `knowledge.Text`, a code span through
+its snippet. Every `AIClient` fake stubs `Rerank`; adding a fake means adding
+that line.

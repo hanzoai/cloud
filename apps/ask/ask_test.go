@@ -59,6 +59,10 @@ func (r *recordingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float
 	return nil, nil
 }
 
+func (r *recordingAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) {
+	return nil, nil
+}
+
 // byOrg is a stand-in domain store: the figures each org holds. A peer built over it answers
 // for the org the CALLER was, which is what makes the isolation proof mean something.
 type byOrg map[string][]plane.Figure

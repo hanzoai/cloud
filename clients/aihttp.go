@@ -634,6 +634,80 @@ func (a *httpAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]float3
 	return out, nil
 }
 
+// Rerank scores documents against a query through the gateway's Cohere-shaped
+// /rerank, on the same transport, credential and span conventions as Embed. It
+// asks for every document (top_n = all) so the answer aligns with the input,
+// and refuses a response that does not cover the input rather than guessing.
+func (a *httpAI) Rerank(ctx context.Context, req *types.RerankRequest) ([]float64, error) {
+	if req == nil || len(req.Documents) == 0 {
+		return nil, nil
+	}
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		return nil, fmt.Errorf("cloud: rerank: empty model")
+	}
+	ctx, span := StartGenAISpan(ctx, "hanzo", "rerank", model, req.Org, req.Project)
+	defer span.End()
+	span.SetAttributes(attribute.Int("gen_ai.request.input_count", len(req.Documents)))
+
+	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
+	defer cancel()
+
+	body, _ := json.Marshal(map[string]any{
+		"model": model, "query": req.Query, "documents": req.Documents,
+		"top_n": len(req.Documents), "return_documents": false,
+	})
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/rerank", bytes.NewReader(body))
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+	hreq.Header.Set("Content-Type", "application/json")
+	if a.apiKey != "" {
+		hreq.Header.Set("Authorization", "Bearer "+a.apiKey)
+	}
+	resp, err := a.http.Do(hreq)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "rerank transport failed")
+		return nil, fmt.Errorf("cloud: rerank (model %q): %w", model, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode/100 != 2 {
+		span.SetStatus(codes.Error, "rerank non-2xx")
+		trunc := raw
+		if len(trunc) > 200 {
+			trunc = trunc[:200]
+		}
+		return nil, fmt.Errorf("cloud: rerank (model %q): status %d: %s", model, resp.StatusCode, string(trunc))
+	}
+	var decoded struct {
+		Results []struct {
+			Index int     `json:"index"`
+			Score float64 `json:"relevance_score"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, fmt.Errorf("cloud: rerank decode: %w", err)
+	}
+	scores := make([]float64, len(req.Documents))
+	seen := make([]bool, len(req.Documents))
+	for _, r := range decoded.Results {
+		if r.Index < 0 || r.Index >= len(scores) || seen[r.Index] {
+			return nil, fmt.Errorf("cloud: rerank: result index %d outside %d documents", r.Index, len(scores))
+		}
+		scores[r.Index], seen[r.Index] = r.Score, true
+	}
+	if len(decoded.Results) != len(scores) {
+		return nil, fmt.Errorf("cloud: rerank: %d scores for %d documents", len(decoded.Results), len(scores))
+	}
+	return scores, nil
+}
+
 // Models implements types.ModelLister: it returns the ids of the models this
 // gateway currently serves — the OpenAI-compatible GET /v1/models list (the same
 // served set the run path resolves a model against). The agents subsystem calls

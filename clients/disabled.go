@@ -74,6 +74,10 @@ func (disabledAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, 
 	return nil, &disabledErr{"ai"}
 }
 
+func (disabledAI) Rerank(_ context.Context, _ *types.RerankRequest) ([]float64, error) {
+	return nil, &disabledErr{"ai"}
+}
+
 type disabledO11y struct{}
 
 func (disabledO11y) Counter(_ string, _ ...string) types.Counter { return noopCounter{} }

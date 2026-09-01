@@ -47,6 +47,10 @@ func (s *scriptedAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, e
 	return nil, nil
 }
 
+func (s *scriptedAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) {
+	return nil, nil
+}
+
 func (s *scriptedAI) callCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
