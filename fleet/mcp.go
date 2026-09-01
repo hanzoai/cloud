@@ -330,7 +330,7 @@ func (d *Door) call(c *zip.Ctx, req message, at At, edge bool) error {
 	defer fasthttp.ReleaseRequest(hop)
 	c.Fiber().Request().CopyTo(hop)
 	hop.SetBody(msg)
-	ans := Ask(at, []string{app}, hop)[0]
+	ans := Ask(c.Context(), at, []string{app}, hop)[0]
 	if ans.Err != nil {
 		// A hop failure is MCP isError content, per the spec: the model reads "this
 		// tool is not available right now" and reacts, where a 503 body is a
