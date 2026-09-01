@@ -52,6 +52,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -62,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/apps/knowledge"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/search/rank"
+	"github.com/hanzoai/cloud/internal/environ"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -72,6 +74,7 @@ const (
 	BackendIndex  = "index"  // lexical, apps/index
 	BackendVector = "vector" // semantic, apps/knowledge → hanzoai/vector
 	BackendCode   = "code"   // the org's own repositories, apps/code
+	BackendRerank = "rerank" // the cross-encoder pass over the fused window, through the AI gateway
 )
 
 // Backend statuses — four DISTINCT operational facts, never collapsed:
@@ -127,8 +130,9 @@ type Request struct {
 // nothing.
 type Provenance struct {
 	// Backend is the leg that contributed this match: "index" (lexical), "vector"
-	// (semantic) or "code" (the org's repositories). It is the same name that leg
-	// reports itself under in Fusion.Backends, so a hit can be traced to a
+	// (semantic), "code" (the org's repositories) or "rerank" (the cross-encoder
+	// pass, whose Score is the relevance it assigned). It is the same name that
+	// leg reports itself under in Fusion.Backends, so a hit can be traced to a
 	// status.
 	Backend string `json:"backend"`
 	// Rank is this document's 1-based position in THAT leg's own result list,
@@ -186,6 +190,8 @@ type Hit struct {
 	// exactly why the hit outranks one a single leg found. Never empty on a
 	// returned hit.
 	Matched []Provenance `json:"matched"`
+	// text is what a reranker reads: the document as its leg carried it.
+	text string
 }
 
 // BackendStatus reports one leg's outcome. It is present for EVERY leg on EVERY
@@ -193,8 +199,8 @@ type Hit struct {
 // from absence.
 type BackendStatus struct {
 	// Name is which leg this reports: "index", the lexical store, "vector", the
-	// semantic one, or "code", the org's own repositories. Match.Backend uses the
-	// same three names.
+	// semantic one, "code", the org's own repositories, or "rerank", the
+	// relevance pass over the fused window. Match.Backend uses the same names.
 	Name string `json:"name"`
 	// Status is one of ok, degraded, disabled, skipped — four distinct operational
 	// facts that are never collapsed. It ran and answered; it is configured and
@@ -252,6 +258,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "search")
 	log = b.Log
+	ai = deps.Embed
 	zip.Post(z, "/v1/search", Query,
 		zip.WithOperationID("search"),
 		zip.WithSummary("Hybrid search over the org's own corpora"),
@@ -392,6 +399,32 @@ func ForOrg(ctx context.Context, org string, in *Request) (*Fusion, error) {
 	backends = append(backends, st)
 
 	fused := rank.Fuse(lists, window)
+
+	// ---- rerank ----
+	//
+	// Reciprocal-rank fusion orders by agreement between legs; a cross-encoder
+	// reads the query against each document's text and orders by relevance. It
+	// runs over the whole window before paging, for the same reason the legs are
+	// asked for the whole window. Without a client it is `disabled`, and a failed
+	// call leaves the fused order standing and says so — never a silent skip.
+	st = BackendStatus{Name: BackendRerank, Status: StatusSkipped}
+	switch {
+	case ai == nil:
+		st.Status = StatusDisabled
+	case len(fused) > 1:
+		t0 := time.Now()
+		ordered, err := rerank(ctx, org, in.Project, in.Query, fused, payload)
+		st.TookMS = time.Since(t0).Milliseconds()
+		if err != nil {
+			st.Status, st.Error = StatusDegraded, err.Error()
+			log.Warn("search leg failed", "backend", BackendRerank, "org", org, "err", err)
+		} else {
+			fused = ordered
+			st.Status, st.Hits = StatusOK, len(ordered)
+		}
+	}
+	backends = append(backends, st)
+
 	if in.Offset > 0 {
 		if in.Offset >= len(fused) {
 			fused = nil
@@ -473,6 +506,44 @@ func indexUID(uid string) string {
 	return defaultIndex
 }
 
+// ai is the read-scope inference client, the one knowledge embeds through; nil
+// in a deployment that has none, which the rerank stage reports as disabled.
+var ai cloud.AIClient
+
+// rerankModel is the served SKU the cross-encoder answers as.
+func rerankModel() string { return environ.Or("CLOUD_RERANK_MODEL", "zen-rerank") }
+
+// rerank scores every fused row's text against the query and returns the rows
+// in relevance order, each carrying the rerank as one more origin beside the
+// legs that found it. A row with no text is scored on its title, so a document
+// is never dropped for what a leg failed to carry.
+func rerank(ctx context.Context, org, project, query string, fused []rank.Fused, payload map[string]Hit) ([]rank.Fused, error) {
+	docs := make([]string, len(fused))
+	for i, f := range fused {
+		h := payload[f.Key]
+		docs[i] = h.text
+		if docs[i] == "" {
+			docs[i] = h.Title
+		}
+	}
+	scores, err := ai.Rerank(ctx, &cloud.RerankRequest{Model: rerankModel(), Query: query, Documents: docs, Org: org, Project: project})
+	if err != nil {
+		return nil, err
+	}
+	if len(scores) != len(fused) {
+		return nil, fmt.Errorf("rerank: %d scores for %d documents", len(scores), len(fused))
+	}
+	out := make([]rank.Fused, len(fused))
+	for i, f := range fused {
+		out[i] = rank.Fused{Key: f.Key, Score: scores[i], Origins: append([]rank.Origin(nil), f.Origins...)}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	for i := range out {
+		out[i].Origins = append(out[i].Origins, rank.Origin{Source: BackendRerank, Rank: i + 1, Score: out[i].Score})
+	}
+	return out, nil
+}
+
 // semanticList adapts vector hits to fusion input and records each hit's payload.
 // The Key is doctype+name — the document's identity in the KB store — so the same
 // document found by both legs fuses into ONE reinforced result rather than
@@ -487,6 +558,7 @@ func semanticList(hits []knowledge.Hit, payload map[string]Hit) rank.List {
 			payload[key] = Hit{
 				ID: h.Name, Corpus: "kb", DocType: h.DocType,
 				Title: h.Title, URL: h.URL, Project: h.Project,
+				text: h.Text,
 			}
 		}
 	}
@@ -517,6 +589,7 @@ func lexicalList(rows []json.RawMessage, payload map[string]Hit) rank.List {
 				Title:   firstString(d, "title", "name"),
 				URL:     firstString(d, "url"),
 				Project: firstString(d, "project"),
+				text:    knowledge.Text(doctype, firstString(d, "title"), d),
 			}
 		}
 	}
@@ -544,7 +617,7 @@ func codeList(spans []code.Span, payload map[string]Hit) rank.List {
 		l.Keys = append(l.Keys, key)
 		l.Scores = append(l.Scores, 0)
 		if _, seen := payload[key]; !seen {
-			payload[key] = Hit{ID: id, Corpus: BackendCode, DocType: sp.Kind, Title: title}
+			payload[key] = Hit{ID: id, Corpus: BackendCode, DocType: sp.Kind, Title: title, text: sp.Snippet}
 		}
 	}
 	return l

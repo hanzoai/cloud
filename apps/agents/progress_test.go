@@ -57,6 +57,10 @@ func (f *progressAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, e
 	return nil, nil
 }
 
+func (f *progressAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) {
+	return nil, nil
+}
+
 func (f *progressAI) count() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()

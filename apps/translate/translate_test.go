@@ -63,6 +63,8 @@ func (m *model) ChatCompletion(_ context.Context, req *cloud.ChatRequest) (*clou
 
 func (m *model) Embed(context.Context, *cloud.EmbedRequest) ([][]float32, error) { return nil, nil }
 
+func (m *model) Rerank(context.Context, *cloud.RerankRequest) ([]float64, error) { return nil, nil }
+
 func (m *model) count() (calls, texts int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

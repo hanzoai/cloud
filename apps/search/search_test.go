@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/search/rank"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -172,4 +174,89 @@ func TestLexicalListIdentity(t *testing.T) {
 	if payload["kb.page/runbook"].Title != "Runbook" {
 		t.Fatalf("payload not captured: %+v", payload)
 	}
+}
+
+// scoredAI answers a rerank with fixed relevance per document text, so a test can
+// say which document should win.
+type scoredAI struct {
+	by  map[string]float64
+	got *cloud.RerankRequest
+}
+
+func (s *scoredAI) ChatCompletion(context.Context, *cloud.ChatRequest) (*cloud.ChatResponse, error) {
+	return nil, nil
+}
+func (s *scoredAI) Embed(context.Context, *cloud.EmbedRequest) ([][]float32, error) { return nil, nil }
+func (s *scoredAI) Rerank(_ context.Context, req *cloud.RerankRequest) ([]float64, error) {
+	s.got = req
+	out := make([]float64, len(req.Documents))
+	for i, d := range req.Documents {
+		out[i] = s.by[d]
+	}
+	return out, nil
+}
+
+// TestRerankOrdersByRelevance: the fused order is by agreement between legs;
+// the rerank reorders by what the cross-encoder scored, scores the text a leg
+// carried (title when it carried none), and records itself as one more origin
+// without losing the legs that found each row.
+func TestRerankOrdersByRelevance(t *testing.T) {
+	fake := &scoredAI{by: map[string]float64{"body of two": 0.9, "One": 0.2, "snippet": 0.5}}
+	ai = fake
+	t.Cleanup(func() { ai = nil })
+
+	payload := map[string]Hit{
+		"kb.page/one": {ID: "one", Title: "One"},
+		"kb.page/two": {ID: "two", Title: "Two", text: "body of two"},
+		"code:r:f:1":  {ID: "r:f:1", Title: "f", text: "snippet"},
+	}
+	fused := []rank.Fused{
+		{Key: "kb.page/one", Score: 3, Origins: []rank.Origin{{Source: BackendIndex, Rank: 1}}},
+		{Key: "code:r:f:1", Score: 2, Origins: []rank.Origin{{Source: BackendCode, Rank: 1}}},
+		{Key: "kb.page/two", Score: 1, Origins: []rank.Origin{{Source: BackendVector, Rank: 1}}},
+	}
+	out, err := rerank(context.Background(), "acme", "p", "q", fused, payload)
+	if err != nil {
+		t.Fatalf("rerank: %v", err)
+	}
+	want := []string{"kb.page/two", "code:r:f:1", "kb.page/one"}
+	for i, k := range want {
+		if out[i].Key != k {
+			t.Fatalf("order: got %v want %v", keys(out), want)
+		}
+	}
+	if fake.got.Org != "acme" || fake.got.Project != "p" || fake.got.Query != "q" || fake.got.Model != "zen-rerank" {
+		t.Fatalf("request scope: %+v", fake.got)
+	}
+	top := out[0]
+	if top.Score != 0.9 || len(top.Origins) != 2 || top.Origins[0].Source != BackendVector || top.Origins[1] != (rank.Origin{Source: BackendRerank, Rank: 1, Score: 0.9}) {
+		t.Fatalf("origins kept and rerank appended: %+v", top)
+	}
+	if len(fused[0].Origins) != 1 {
+		t.Fatal("the fused input must not be written through")
+	}
+}
+
+// TestRerankIsReported: with no client the stage says disabled, in the same
+// status list as the legs, so a caller can see the order is fusion alone.
+func TestRerankIsReported(t *testing.T) {
+	app := mount(t)
+	_, out := post(t, app, "acme", Request{Query: "x", Mode: ModeText}, true)
+	for _, b := range out.Backends {
+		if b.Name == BackendRerank {
+			if b.Status != StatusDisabled {
+				t.Fatalf("no client: rerank must report disabled, got %+v", b)
+			}
+			return
+		}
+	}
+	t.Fatalf("rerank stage missing from backends: %+v", out.Backends)
+}
+
+func keys(fs []rank.Fused) []string {
+	out := make([]string, len(fs))
+	for i, f := range fs {
+		out[i] = f.Key
+	}
+	return out
 }

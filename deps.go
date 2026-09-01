@@ -237,6 +237,7 @@ type LicenseEntitlement = types.LicenseEntitlement
 type ChatRequest = types.ChatRequest
 type ChatResponse = types.ChatResponse
 type EmbedRequest = types.EmbedRequest
+type RerankRequest = types.RerankRequest
 type Counter = types.Counter
 type Timing = types.Timing
 type Span = types.Span

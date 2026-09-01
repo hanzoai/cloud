@@ -48,6 +48,10 @@ func (c *countingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float3
 	return nil, nil
 }
 
+func (c *countingAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) {
+	return nil, nil
+}
+
 // schedService builds a Service + scheduler with NO billing (gate allows) and the given
 // AI, seeded with the supplied agents. Returns the scheduler for direct tick().
 func schedService(t *testing.T, ai types.AIClient, seed ...Agent) *scheduler {

@@ -26,6 +26,8 @@ func (f *fakeAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, e
 	return nil, nil
 }
 
+func (f *fakeAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 // voucherBalanced asserts the voucher's normalized legs satisfy Σdebit == Σcredit.
 func voucherBalanced(t *testing.T, v Voucher) {
 	t.Helper()
