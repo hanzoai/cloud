@@ -36,7 +36,7 @@ func (s *session) searchFulltext(id int64, params []json.RawMessage) []byte {
 	if q == "" {
 		return s.result(id, map[string]any{"docs": []any{}, "total": 0})
 	}
-	res, err := search.ForOrg(context.Background(), s.org, &search.Request{Query: q, Limit: limit})
+	res, err := search.ForOrg(context.Background(), s.org, "", &search.Request{Query: q, Limit: limit})
 	if err != nil || res == nil {
 		return s.result(id, map[string]any{"docs": []any{}, "total": 0})
 	}
