@@ -4748,11 +4748,11 @@
       "sha256": "b7a1cf8a516458a580ab523024599b41ff3fbcd9260cb6120cb63e457f8c8616"
     },
     {
-      "description": "Read s3 buckets: Lists the caller org's own buckets., Lists one folder level of a bucket., Mints a presigned GET URL the caller downloads from DIRECTLY..",
+      "description": "Read s3 buckets: Lists the caller org's own buckets., Read one object's bytes, Lists one folder level of a bucket..",
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "93ac81831a26385430b933ceb56d9651b326089b757d733bfc5afa4cd4ff8765"
+      "sha256": "e4009322565ae0c7d28bd7801c0e9c6ffa37860144cedeed03b8f5b6752c7aaa"
     },
     {
       "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
