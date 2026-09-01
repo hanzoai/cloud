@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/valyala/fasthttp"
+	"github.com/zap-proto/zip"
 )
 
 // The two ceilings on one request, and they bound the WORK rather than only the
@@ -313,8 +314,14 @@ func literal(v any) string {
 // same resolution, the same pooled transport, the same copied request. The
 // caller's headers ride along, so the child answers as itself for whoever asked.
 func (g *Graph) send(f openapi.Field, path string, body []byte, from *fasthttp.Request) Answer {
+	// A co-resident subsystem is served in memory, the same short-circuit [ask]
+	// makes. This hop carries an arbitrary REST address rather than a typed op, so
+	// there is no zip.Here to reach for — but a serving app's own router is right
+	// here, and replaying the request against it is what the socket was doing.
+	local := zip.Serving(f.App)
+
 	addr, _, err := g.at(f.App)
-	if err != nil {
+	if err != nil && local == nil {
 		return Answer{App: f.App, Err: err}
 	}
 	r := fasthttp.AcquireRequest()
@@ -334,7 +341,14 @@ func (g *Graph) send(f openapi.Field, path string, body []byte, from *fasthttp.R
 	} else {
 		r.SetBody(nil)
 	}
-	if err := clientFor(addr).Do(r, resp); err != nil {
+	if local != nil {
+		here, err := serveHere(local, r)
+		if err != nil {
+			return Answer{App: f.App, Err: fmt.Errorf("%s here: %w", f.App, err)}
+		}
+		defer fasthttp.ReleaseResponse(here)
+		here.CopyTo(resp)
+	} else if err := clientFor(addr).Do(r, resp); err != nil {
 		return Answer{App: f.App, Err: fmt.Errorf("%s at %s: %w", f.App, addr, err)}
 	}
 	if code := resp.StatusCode(); code < 200 || code > 299 {
