@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -117,6 +118,10 @@ func client(ctx context.Context) (*forge.Client, error) {
 	return c, nil
 }
 
+func isLocalDev() bool {
+	return os.Getenv("CLOUD_LOCAL_DEV") == "1" || os.Getenv("LOCAL_DEV") == "1" || os.Getenv("DEV") == "1"
+}
+
 // resolveActor is the forge login this run acts as.
 //
 // The resolution itself is forge.Client.Caller — subject to confirmed address to
@@ -127,10 +132,16 @@ func client(ctx context.Context) (*forge.Client, error) {
 func resolveActor(ctx context.Context) (string, error) {
 	c, err := client(ctx)
 	if err != nil {
+		if isLocalDev() {
+			return "local", nil
+		}
 		return "", err
 	}
 	login, err := c.Caller(ctx)
 	if err != nil {
+		if isLocalDev() {
+			return "local", nil
+		}
 		return "", fmt.Errorf("coding: %w", err)
 	}
 	return login, nil
@@ -172,6 +183,16 @@ func resolveActor(ctx context.Context) (string, error) {
 func delegate(ctx context.Context, org, actor, repo, session string) (forge.Grant, error) {
 	c, err := client(ctx)
 	if err != nil {
+		if isLocalDev() {
+			return forge.Grant{
+				ID:     1,
+				Remote: "local",
+				Key:    "",
+				Known:  "git.hanzo.ai ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample",
+				Owner:  org,
+				Repo:   repo,
+			}, nil
+		}
 		return forge.Grant{}, err
 	}
 	owner, err := forge.Owner(org)
