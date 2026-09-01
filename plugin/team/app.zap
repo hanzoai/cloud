@@ -36,6 +36,29 @@ struct statsIn {
     Token text @0
 }
 
+struct teamMessage {
+    ID        text @0
+    Room      text @8
+    Author    text @16
+    Text      text @24
+    CreatedOn i64  @32
+}
+
+struct teamMessageRead {
+    ID    text @0
+    Space text @8
+}
+
+struct teamMessageWrite {
+    ID    text @0
+    Space text @8
+    Text  text @16
+}
+
+struct teamMessages {
+    Messages list<bytes> @0
+}
+
 struct teamRoom {
     ID       text       @0
     Space    text       @8
@@ -118,6 +141,11 @@ interface team {
     # by anything holding the document. Direct messages are included: a room between
     # two people is a room with no name, not a different kind of thing.
     get_team_rooms() returns (rep: teamRooms)
+    # Returns the tail of one room's conversation, oldest first.
+    # It reads the SAME Chunter documents the transactor serves, so a message typed
+    # in the Team client is here with no sync. A room the caller's org does not own
+    # answers 404 rather than 403, so a probe learns nothing about what exists.
+    get_team_rooms_by_id_messages(req: teamMessageRead) returns (rep: teamMessages)
     # SyncBots re-projects the caller org's agents as space members into EVERY
     # space of the org, and removes the ones whose agent is gone. It is
     # idempotent, and admin only: mutating a space's roster requires the
@@ -135,6 +163,12 @@ interface team {
     # path for each. A create that lands and a facet that does not is visible as a
     # room with default intent, which is the honest partial state.
     post_team_rooms(req: teamRoomNew) returns (rep: teamRoom)
+    # Says one thing in a room, as the caller.
+    # The write goes through the SAME applyTx path the Team client's own messages
+    # take and is broadcast to every connected client of the space, so a message
+    # sent here appears live in an open room rather than on the next reload. It
+    # answers the message as the store now HOLDS it.
+    post_team_rooms_by_id_messages(req: teamMessageWrite) returns (rep: teamMessage)
     # States what a room is for: its lifecycle intent, and what it is
     # about. It answers the room as it now stands.
     # The write is a platform MIXIN on the room document, applied through the
@@ -145,13 +179,14 @@ interface team {
 }
 
 # ---------------------------------------------------------------------
-# 9 op(s) here. What follows is what this schema does not carry.
+# 11 op(s) here. What follows is what this schema does not carry.
 #
 # blocked (3) — the op is absent; the field has no wire form:
 #   get_team_transactor_statistics  statsOut.Statistics  team.statsSessions  (reaches one)
 #   post_team_collaborator_rpc_by_documentid  collabRequest.Payload  team.collabPayload  (reaches one)
 #   post_team_collaborator_rpc_by_documentid  collabResult.Content  map[string]string  (map)
 #
-# opaque (2) — crosses, arrives without its name:
+# opaque (3) — crosses, arrives without its name:
 #   botRoster.Bots  team.botMember (list element)
+#   teamMessages.Messages  team.teamMessage (list element)
 #   teamRooms.Rooms  team.teamRoom (list element)

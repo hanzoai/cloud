@@ -601,6 +601,97 @@
         "x-tool": true
       }
     },
+    "/v1/team/rooms/{id}/messages": {
+      "get": {
+        "operationId": "get_team_rooms_by_id_messages",
+        "summary": "Returns the tail of one room's conversation, oldest first.",
+        "description": "Returns the tail of one room's conversation, oldest first.\n\nIt reads the SAME Chunter documents the transactor serves, so a message typed\nin the Team client is here with no sync. A room the caller's org does not own\nanswers 404 rather than 403, so a probe learns nothing about what exists.",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the room, from the path. The URL is the authority.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "space",
+            "in": "query",
+            "required": false,
+            "description": "Space names the space holding the room, and is required for the reason the\nbind op requires it: a room id is unique within a space and not across the\norg, so searching every space for a match would make the answer depend on\niteration order.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/teamMessages"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      },
+      "post": {
+        "operationId": "post_team_rooms_by_id_messages",
+        "summary": "Says one thing in a room, as the caller.",
+        "description": "Says one thing in a room, as the caller.\n\nThe write goes through the SAME applyTx path the Team client's own messages\ntake and is broadcast to every connected client of the space, so a message\nsent here appears live in an open room rather than on the next reload. It\nanswers the message as the store now HOLDS it.",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the room to say it in, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "space": "0e3c…",
+                "text": "deploying now"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/teamMessageWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/teamMessage"
+                }
+              }
+            },
+            "description": "created"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/team/transactor/statistics": {
       "get": {
         "operationId": "get_team_transactor_statistics",
@@ -856,6 +947,60 @@
           "userId": {
             "description": "UserID is the account the session is authenticated as.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "teamMessage": {
+        "properties": {
+          "author": {
+            "description": "Author is the team account uuid that wrote it. It is an ACCOUNT and not a\ndisplay name: what to call somebody is the roster's answer, and copying it\nonto every message is how the two come to disagree. An agent's messages\ncarry the account derived from its id, so the same field answers for both.",
+            "type": "string"
+          },
+          "createdOn": {
+            "description": "CreatedOn is unix MILLIseconds, which is what the platform stamps.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the message document's own id.",
+            "type": "string"
+          },
+          "room": {
+            "description": "Room is the room it was said in — the same id the room listing answers\nwith, so a caller holding a message can name its room without a second read.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is the message as PLAIN TEXT. The document stores markup; this is the\nsame `plainText` reduction the agent responder reads a prompt with, so a\ncaller never has to parse the client's markup to know what was said.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "teamMessageWrite": {
+        "properties": {
+          "id": {
+            "description": "ID is the room to say it in, from the path.",
+            "type": "string"
+          },
+          "space": {
+            "description": "Space names the space holding the room. Body-only: a query string may not\nredirect a write.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Text is what to say, as plain text. It is wrapped in the client's markup on\nthe way in, so a caller writes words rather than HTML.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "teamMessages": {
+        "properties": {
+          "messages": {
+            "description": "Messages are the room's, oldest first, at most `messageMax` of them.",
+            "items": {
+              "$ref": "#/components/schemas/teamMessage"
+            },
+            "type": "array"
           }
         },
         "type": "object"
