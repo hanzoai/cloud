@@ -1,0 +1,314 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Package ci mounts the CI fleet dashboard as a capability of this binary.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "ci"
+    }
+  ],
+  "paths": {
+    "/v1/ci/fleet": {
+      "get": {
+        "operationId": "get_ci_fleet",
+        "summary": "Compares what was written with what is running, one row per service along a single causal line: head, the commit on the branch; built, the image that commit produced; declared, the tag pinned in the universe repository; running, what the cluster serves.",
+        "description": "Compares what was written with what is running, one row per service\nalong a single causal line: head, the commit on the branch; built, the image\nthat commit produced; declared, the tag pinned in the universe repository;\nrunning, what the cluster serves. A service whose four values disagree names\nthe step that broke.",
+        "tags": [
+          "ci"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pipelines"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
+    "/v1/ci/runs": {
+      "get": {
+        "operationId": "get_ci_runs",
+        "summary": "Lists recent builds: the repo, the branch, the commit and how each run ended, newest first.",
+        "description": "Lists recent builds: the repo, the branch, the commit and how each run\nended, newest first. A run names a repo, a branch and an actor, so the list is\nnever wider than the caller — a SuperAdmin sees the fleet, an org member sees\nonly its own org.",
+        "tags": [
+          "ci"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Executions"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Artifact": {
+        "properties": {
+          "digest": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Check": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "job": {
+            "description": "Job is the job that decided State. A run reports one conclusion for\nhowever many jobs it holds, and the jobs are not interchangeable: the\npipeline fails at `gate` before it builds anything and at `receipt` after\nit has already built, pinned and proved the release live. Both read\n`failure` on the run, and only the first one means nothing shipped.",
+            "type": "string"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "state": {
+            "description": "State is success | failure | running | absent. `absent` is not a kind of\nfailure and is kept apart from one: a failing run is a build that ran and\nsaid no, while an absent run is Hanzo Git never having constructed a run\nfor the commit at all — a workflow it cannot parse or a reference it\ncannot resolve. There is no log to open for the second, so a page that\ndraws them the same sends you looking for one that does not exist.",
+            "type": "string"
+          },
+          "tested": {
+            "description": "Tested reports that the run's tests executed; Verdict reports that the run\nsaid anything about tests at all. They are separate because the interesting\ncase is a run that passed while its test step was skipped — a green build\nthat proved nothing — and that is invisible if the two are one flag.",
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Execution": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "conclusion": {
+            "type": "string"
+          },
+          "endedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status and Conclusion are BOTH required to know how a run went, and\nreading only one is wrong in a way that looks fine. Status answers\n\"is it over\" (queued | in_progress | completed); Conclusion answers\n\"how did it end\" and is empty until it is over. A view that buckets on\nStatus alone sees `completed` and cannot tell a pass from a failure, so\nit draws every finished run — successes and cancellations included — the\nsame way.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "workflow": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Executions": {
+        "properties": {
+          "fetchedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "orgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "repos": {
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/Execution"
+            },
+            "type": "array"
+          },
+          "sourceErr": {
+            "type": "string"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Pipeline": {
+        "properties": {
+          "behind": {
+            "description": "Behind counts commits after the one that last produced an image whose own\nbuild has FINISHED without producing one, and Since is when the oldest of\nthem landed. A commit still building is not counted, so a push in flight is\nnot drift and a service appears here only once something has actually\nstopped without shipping. How long that has stood is the number worth\nacting on; that it is true says nothing about whether anyone should move.",
+            "type": "integer"
+          },
+          "built": {
+            "$ref": "#/components/schemas/Artifact"
+          },
+          "declared": {
+            "$ref": "#/components/schemas/Artifact"
+          },
+          "drift": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head": {
+            "$ref": "#/components/schemas/Tip"
+          },
+          "image": {
+            "description": "ghcr.io/hanzoai/cloud",
+            "type": "string"
+          },
+          "name": {
+            "description": "cloud",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "hanzo",
+            "type": "string"
+          },
+          "org": {
+            "description": "Hanzo Git owner; empty when the repo is unresolved",
+            "type": "string"
+          },
+          "pinnedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "ready": {
+            "type": "integer"
+          },
+          "repo": {
+            "description": "hanzo-inc/cloud",
+            "type": "string"
+          },
+          "running": {
+            "$ref": "#/components/schemas/Artifact"
+          },
+          "since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "want": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Pipelines": {
+        "properties": {
+          "fetchedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "orgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/Pipeline"
+            },
+            "type": "array"
+          },
+          "sourceErr": {
+            "type": "string"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Tip": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "build": {
+            "$ref": "#/components/schemas/Check"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The caller's credential, sent as `Authorization: Bearer \u003ctoken\u003e`. It is either an access token minted by Hanzo IAM or an API key (pk-/sk-). X-Authorization, and HTTP Basic carrying the token as the password, are accepted spellings of the same header for clients that cannot set Authorization; a browser presents the session cookie instead. Every operation requires it unless it says `security: []`."
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
-  "paths": 1742,
-  "operations": 2408,
+  "paths": 1745,
+  "operations": 2412,
   "products": {
     "account": 10,
     "ad": 7,
@@ -25,6 +25,7 @@
     "captable": 31,
     "catalog": 1,
     "channels": 9,
+    "ci": 2,
     "cloudflare": 33,
     "code": 7,
     "commerce": 181,
@@ -109,7 +110,7 @@
     "sync": 6,
     "tasks": 10,
     "taxonomy": 5,
-    "team": 21,
+    "team": 23,
     "tel": 10,
     "template": 5,
     "todo": 13,
