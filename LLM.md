@@ -7716,18 +7716,3 @@ org's DEFAULT subject — `getUserLink(org, provider, "*")`, written by
 `linearClaim` for the claimer. GitHub writes no default (its claim is platform
 sudo), so an unlinked GitHub commenter gets the link prompt; a GitHub link leg
 is the follow-up.
-
-## Plane ops behind a chat turn: channels_agent, iam_federated
-
-Two lookups that a bridge outside the channels turn needs are on the plane, not
-env or a cross-app store read. `channels_agent` (`plane.ChannelsAgent`,
-`AgentForIn{Channel, Room}` → `AgentFor{Ref}`) answers which agent a room runs —
-the same `agentFor` the turn uses, org from the plane context — so Slack slash
-commands in integrations resolve exactly what a message would (`agentRefFor`).
-`iam_federated` (`plane.IAMFederated`, `FederatedIn{Provider, Subject}` →
-`Federated{User}`) resolves an org member from the identity a provider issued;
-GitHub only today, matching IAM's `User.GitHub` (numeric id, written at
-federation) against the webhook's `comment.user.id`. `channelIdentity` asks it
-for provider `github`, caches the answer with `putUserLink`, and only then falls
-to the org's default subject or the link prompt. Both are org-bounded by the
-caller's context; neither takes an org argument.

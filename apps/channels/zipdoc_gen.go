@@ -82,9 +82,6 @@ func init() {
 			"pairingView.sender":    "Sender is the transport-native user id waiting for access — the same\nidentity inbox messages carry. Approving mints a DM allow entry for exactly\nthis value and nothing wider: pairing never grants group access.",
 		},
 	})
-	zip.Describe("POST /channels/agent", zip.Doc{
-		Description: "Answers with the ref. The ORG is the caller's, from the plane\ncontext and never an argument, for the reason recent.go gives: an org a caller\ncould pass is an org whose bindings any caller could read.",
-	})
 	zip.Describe("POST /channels/ingest", zip.Doc{
 		Description: "Answers an adapter's event.\n\nThe org travels IN the request rather than coming from the caller's plane\nidentity, for the same reason AgentsRunOnBehalf does: the tenant is the one\nthat connected the workspace, which the adapter resolved from the signed\nteam/guild/chat id, and the adapter plugin's own identity is not it. Taken\nreports whether this inbox carries the transport — a fact worth returning,\nsince the silent version of that answer is the bug this endpoint replaces.",
 		Fields: map[string]string{
