@@ -66,7 +66,7 @@ var pkgOf = map[string]string{
 }
 
 // notApps are the plugin/ directories that are tools, not fleet subsystems: the
-// smoke prober, the three generators, and the KMS re-seal migration. They are exempt
+// smoke prober, the generators, and the KMS re-seal migration. They are exempt
 // from the bijection; everything ELSE under plugin/ must be a manifest app. (The
 // light host is cmd/cloud — the ONE thing under cmd/, never here.)
 var notApps = map[string]bool{
@@ -74,6 +74,7 @@ var notApps = map[string]bool{
 	"gen-app-cmds":      true,
 	"gen-fleet-catalog": true,
 	"gen-skills":        true,
+	"gen-mcp-catalog":   true,
 	"kmsreseal":         true,
 }
 
