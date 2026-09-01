@@ -23,6 +23,7 @@
 package network
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -68,6 +69,74 @@ type ztEdgeRouter struct {
 	NoTraversal       bool     `json:"noTraversal"`
 	Cost              int      `json:"cost"`
 	CreatedAt         string   `json:"createdAt"`
+}
+
+// ztIdentity mirrors the Edge Management API IdentityDetail (JSON subset). Its
+// enrollment carries the one-time token the controller minted at create, gone
+// once the device spends it.
+type ztIdentity struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	RoleAttributes []string `json:"roleAttributes"`
+	Enrollment     struct {
+		Ott *struct {
+			JWT       string `json:"jwt"`
+			ExpiresAt string `json:"expiresAt"`
+		} `json:"ott"`
+	} `json:"enrollment"`
+}
+
+// ztCreated is the controller's create envelope: the new resource's id at data.id.
+type ztCreated struct {
+	Data struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// ztOne is the controller's single-resource envelope.
+type ztOne[T any] struct {
+	Data T `json:"data"`
+}
+
+// ---- fabric naming (the write half's ONE convention) ----
+
+// A fabric name is global and a caller's name is per-org, so everything the
+// write half puts on the fabric carries the org as a dotted suffix: identity
+// "laptop" of org acme is "laptop.acme", service "k3s" is "k3s.acme", and the
+// service's DNS is its fabric name plus ".ziti". The fleet's dialer
+// (apps/fleet/ziti.go) strips that one suffix to get the fabric name back, and
+// nothing anywhere parses further.
+
+// ztDNSSuffix is what turns a fabric service name into the name the fabric's
+// DNS answers for it.
+const ztDNSSuffix = ".ziti"
+
+// scoped is the fabric spelling of an org's name — for identities, services,
+// and the role attributes a caller supplies (a role another tenant's policy
+// selects must not be claimable, so it is scoped exactly like a name).
+func scoped(name, org string) string { return name + "." + org }
+
+// short is the caller's spelling of a fabric name: the org suffix stripped when
+// present. A resource named outside this surface keeps its fabric name, which
+// is the honest answer.
+func short(name, org string) string { return strings.TrimSuffix(name, "."+org) }
+
+// label admits the names the write half will put on the fabric and into DNS: a
+// DNS label, lower-cased — so "<name>.<org>.ziti" is always well-formed and a
+// name can never forge or split the org suffix beside it.
+func label(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" || len(s) > 63 {
+		return "", fmt.Errorf("name must be 1-63 characters")
+	}
+	for i, r := range s {
+		ok := r >= 'a' && r <= 'z' || r >= '0' && r <= '9' ||
+			r == '-' && i > 0 && i < len(s)-1
+		if !ok {
+			return "", fmt.Errorf("name must be a DNS label: lowercase letters, digits and inner hyphens")
+		}
+	}
+	return s, nil
 }
 
 // ---- console view structs ----
@@ -148,6 +217,18 @@ func filterRouters(all []ztEdgeRouter, org string) []ztEdgeRouter {
 	for _, r := range all {
 		if hasRole(r.RoleAttributes, role) {
 			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// filterIdentities keeps only the org's identities (roleAttributes ∋ "org-<org>").
+func filterIdentities(all []ztIdentity, org string) []ztIdentity {
+	role := orgRole(org)
+	out := make([]ztIdentity, 0, len(all))
+	for _, id := range all {
+		if hasRole(id.RoleAttributes, role) {
+			out = append(out, id)
 		}
 	}
 	return out
@@ -241,3 +322,14 @@ func networkFromRouters(org string, routers []ztEdgeRouter) *networkView {
 // networkID is the stable, org-derived id for the org's overlay network — the key
 // the /v1/network/:id route addresses.
 func networkID(org string) string { return orgRolePrefix + org }
+
+// toIdentityView maps a ZT identity to the org's view of it: the name in the
+// caller's own spelling, the roles verbatim as the fabric holds them, and the
+// one-time enrollment only while the identity still has one.
+func toIdentityView(id ztIdentity, org string) *identityView {
+	v := &identityView{ID: id.ID, Name: short(id.Name, org), Roles: id.RoleAttributes}
+	if ott := id.Enrollment.Ott; ott != nil && ott.JWT != "" {
+		v.Enrollment = &enrollmentView{JWT: ott.JWT, ExpiresAt: ott.ExpiresAt}
+	}
+	return v
+}

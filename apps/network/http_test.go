@@ -2,9 +2,11 @@ package network
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,11 +26,43 @@ type fakeZT struct {
 	authCount    int
 	services     []map[string]any
 	routers      []map[string]any
+	identities   []map[string]any
+
+	// created is every write the controller accepted, in order, by resource path
+	// — the bodies exactly as cloud sent them, so a test can assert what was
+	// WRITTEN and not merely what came back. deleted is every id removed.
+	created map[string][]map[string]any
+	deleted []string
 
 	// list401Once makes the FIRST /services list answer 401 (a stale session), to
 	// exercise the client's re-auth-and-retry-once path.
 	list401Once bool
 	listCalls   int
+}
+
+// accept records one write as the controller saw it. A nil return means the
+// request was refused (no session, or an unreadable body) and answered already.
+func (f *fakeZT) accept(w http.ResponseWriter, r *http.Request, kind string) map[string]any {
+	if r.Header.Get(sessionHeader) == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return nil
+	}
+	var body map[string]any
+	if json.NewDecoder(r.Body).Decode(&body) != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return nil
+	}
+	if f.created == nil {
+		f.created = map[string][]map[string]any{}
+	}
+	f.created[kind] = append(f.created[kind], body)
+	return body
+}
+
+func writeCreated(w http.ResponseWriter, id string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": id}})
 }
 
 func writePage(w http.ResponseWriter, items []map[string]any) {
@@ -65,6 +99,22 @@ func (f *fakeZT) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc(mgmtBase+"/services", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body := f.accept(w, r, "services")
+			if body == nil {
+				return
+			}
+			id := fmt.Sprintf("svc-%d", len(f.created["services"]))
+			// A created service is thereafter listable, roles and all — which is
+			// how the identity route's "<service>-host" validation sees it.
+			f.services = append(f.services, map[string]any{
+				"id": id, "name": body["name"],
+				"roleAttributes":     body["roleAttributes"],
+				"encryptionRequired": body["encryptionRequired"],
+			})
+			writeCreated(w, id)
+			return
+		}
 		if r.Header.Get(sessionHeader) == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -76,6 +126,64 @@ func (f *fakeZT) server(t *testing.T) *httptest.Server {
 		}
 		f.listCalls++
 		writePage(w, f.services)
+	})
+
+	mux.HandleFunc(mgmtBase+"/identities", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			body := f.accept(w, r, "identities")
+			if body == nil {
+				return
+			}
+			id := fmt.Sprintf("ident-%d", len(f.created["identities"]))
+			f.identities = append(f.identities, map[string]any{
+				"id": id, "name": body["name"], "roleAttributes": body["roleAttributes"],
+				"enrollment": map[string]any{"ott": map[string]any{
+					"jwt":       "enroll-" + id,
+					"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339),
+				}},
+			})
+			writeCreated(w, id)
+			return
+		}
+		if r.Header.Get(sessionHeader) == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		writePage(w, f.identities)
+	})
+
+	mux.HandleFunc(mgmtBase+"/identities/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(sessionHeader) == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, mgmtBase+"/identities/")
+		idx := slices.IndexFunc(f.identities, func(m map[string]any) bool { return m["id"] == id })
+		if idx < 0 {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"code":"NOT_FOUND","message":"identity not found"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodDelete {
+			f.deleted = append(f.deleted, id)
+			f.identities = slices.Delete(f.identities, idx, idx+1)
+			_, _ = w.Write([]byte(`{"data":{}}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": f.identities[idx]})
+	})
+
+	mux.HandleFunc(mgmtBase+"/configs", func(w http.ResponseWriter, r *http.Request) {
+		if f.accept(w, r, "configs") != nil {
+			writeCreated(w, fmt.Sprintf("cfg-%d", len(f.created["configs"])))
+		}
+	})
+
+	mux.HandleFunc(mgmtBase+"/service-policies", func(w http.ResponseWriter, r *http.Request) {
+		if f.accept(w, r, "service-policies") != nil {
+			writeCreated(w, fmt.Sprintf("pol-%d", len(f.created["service-policies"])))
+		}
 	})
 
 	mux.HandleFunc(mgmtBase+"/edge-routers", func(w http.ResponseWriter, r *http.Request) {

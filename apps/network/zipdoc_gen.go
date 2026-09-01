@@ -7,7 +7,13 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/network", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/network DELETE /v1/network/identities/:id", zip.Doc{
+		Description: "Removes one of the org's fabric identities. The device's\ncredential stops authenticating and its enrollment, if unspent, stops\nenrolling.\n\nAn id belonging to another org — or to nothing — is 404 before any write\nreaches the controller: whether an identity exists is itself a cross-tenant\nfact, and a delete may only ever act on what the caller could list.",
+		Fields: map[string]string{
+			"identityRef.id": "ID is the identity id from the path. The URL is the addressing authority,\nso it binds from there whatever else the request carries.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/network GET /v1/network", zip.Doc{
 		Description: "Returns the caller's org overlay network on the Zero Trust fabric.\n\nThe org has at most ONE overlay, projected from the edge-routers tagged with its\n\"org-<org>\" role attribute: nodes is the real router count and status is\n\"connected\" once at least one router has dialed home, \"provisioning\" while none\nhas. An org with no routers gets an empty list, never a fabricated network.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list so the\nconsole's Networks page renders a clean empty state instead of an error.",
 		Fields: map[string]string{
 			"networkList.networks": "Networks holds the org's overlay network, or is empty when the org has no\nedge-routers on the fabric (no nodes → no network, never a fabricated one).",
@@ -17,7 +23,7 @@ func init() {
 			"networkView.status":   "Status is \"connected\" once at least one of the org's edge-routers is\nonline, else \"provisioning\" (routers exist but none has dialed home).",
 		},
 	})
-	zip.Describe("GET /v1/network/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/network GET /v1/network/:id", zip.Doc{
 		Description: "Returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
 		Fields: map[string]string{
 			"networkRef.id":      "ID is the network id from the path. The URL is the addressing authority, so\nit binds from there whatever else the request carries.",
@@ -27,7 +33,19 @@ func init() {
 			"networkView.status": "Status is \"connected\" once at least one of the org's edge-routers is\nonline, else \"provisioning\" (routers exist but none has dialed home).",
 		},
 	})
-	zip.Describe("GET /v1/network/routers", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/network GET /v1/network/identities", zip.Doc{
+		Description: "Returns the fabric identities the caller's org owns.\n\nOne row per identity tagged with the org's \"org-<org>\" role attribute — a\ndevice minted here, enrolled or not. An identity that has not yet enrolled\nstill carries its one-time enrollment, so a mislaid JWT is read again here\nrather than re-minted.\n\nA tenancy read over the full inventory, so like the mesh list it does NOT\ndegrade: an unconfigured deployment answers 503.",
+		Fields: map[string]string{
+			"enrollmentView.expiresAt": "ExpiresAt is when the un-used token lapses, RFC 3339.",
+			"enrollmentView.jwt":       "JWT is the one-time enrollment token the device presents ONCE to join the\nfabric (ziti edge enroll / ziti-edge-tunnel enroll). Spent or lapsed, it\nauthenticates nothing; this surface stores it nowhere.",
+			"identityList.identities":  "Identities is one row per fabric identity tagged with the caller's org role.",
+			"identityView.enrollment":  "Enrollment is present only while the identity holds an un-used one-time\ntoken — on create, and on a listed identity that has not yet enrolled, so\na mislaid JWT can be read again until it is spent or lapses.",
+			"identityView.id":          "ID is the identity's fabric id — the key DELETE addresses.",
+			"identityView.name":        "Name is the identity's name within the org.",
+			"identityView.roles":       "Roles are the identity's role attributes as the fabric holds them: the\norg's own \"org-<org>\" plus any org-scoped roles it was minted with.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/network GET /v1/network/routers", zip.Doc{
 		Description: "Returns the Zero Trust routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-<org>\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-<slug>\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
 		Fields: map[string]string{
 			"routerList.routers": "Routers is one row per ZT edge-router tagged with the caller's org role.",
@@ -37,7 +55,7 @@ func init() {
 			"routerView.status":  "Status is the controller's own health signal: \"online\" when connected,\n\"disabled\" when administratively disabled, \"offline\" otherwise.",
 		},
 	})
-	zip.Describe("GET /v1/network/services", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/network GET /v1/network/services", zip.Doc{
 		Description: "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-<org>\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
 		Fields: map[string]string{
 			"meshServiceList.services": "Services is one row per ZT edge service tagged with the caller's org role.",
@@ -45,6 +63,30 @@ func init() {
 			"meshView.mtls":            "Mtls is \"required\" when the service mandates end-to-end encryption, else\n\"enabled\" — the fabric mutually authenticates every link, so it is never\ntruly off.",
 			"meshView.service":         "Service is the edge service's name.",
 			"meshView.status":          "Status is \"active\": a listed service is a configured, dialable mesh entry.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/network POST /v1/network/identities", zip.Doc{
+		Description: "Mints a fabric identity for a device the caller's org brings.\n\nThe identity is created of type Device, tagged with the org's \"org-<org>\" role\nattribute plus any supplied roles — each scoped to the org, and a\n\"<service>-host\" role refused unless the org has published that service. The\nanswer carries the controller's one-time enrollment JWT: the device presents\nit once to join the fabric, and until it does the same token can be read back\noff GET /v1/network/identities.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
+		Fields: map[string]string{
+			"enrollmentView.expiresAt": "ExpiresAt is when the un-used token lapses, RFC 3339.",
+			"enrollmentView.jwt":       "JWT is the one-time enrollment token the device presents ONCE to join the\nfabric (ziti edge enroll / ziti-edge-tunnel enroll). Spent or lapsed, it\nauthenticates nothing; this surface stores it nowhere.",
+			"identityIn.name":          "Name is the device's name within the org — a DNS label. The fabric knows\nthe identity as \"<name>.<org>\"; every answer here uses the caller's name.",
+			"identityIn.roles":         "Roles are extra role attributes for the identity, each scoped to the\ncaller's org on the way in (\"k3s-host\" is written as \"k3s-host.<org>\") so\nno caller can claim an attribute another tenant's policy selects. A role\nof the form \"<service>-host\" makes this identity a HOST of that published\nservice — the bind policy from POST /v1/network/services selects exactly\nthat attribute — and is refused when the org has no such service.",
+			"identityView.enrollment":  "Enrollment is present only while the identity holds an un-used one-time\ntoken — on create, and on a listed identity that has not yet enrolled, so\na mislaid JWT can be read again until it is spent or lapses.",
+			"identityView.id":          "ID is the identity's fabric id — the key DELETE addresses.",
+			"identityView.name":        "Name is the identity's name within the org.",
+			"identityView.roles":       "Roles are the identity's role attributes as the fabric holds them: the\norg's own \"org-<org>\" plus any org-scoped roles it was minted with.",
+		},
+	})
+	zip.Describe("github.com/hanzoai/cloud/apps/network POST /v1/network/services", zip.Doc{
+		Description: "Puts a name on the org's overlay: a fabric service forwarding\nto host:port on whichever of the org's devices carries the \"<name>-host\"\nrole, dialable at \"<name>.<org>.ziti\" by any of the org's identities — and by\nthe cloud's own, which is what lets a BYO cluster's apiserver be attached to\nthe fleet with a \".ziti\" kubeconfig.\n\nAnswers 201 with the service and its DNS name. The objects behind it are\ncreated in dependency order and unwound on failure, so a half-published\nservice never lingers on the fabric.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
+		Fields: map[string]string{
+			"serviceIn.host":   "Host is where the HOSTING identity forwards a connection — an address the\nhost device itself can reach, \"127.0.0.1\" for a server on the device.",
+			"serviceIn.name":   "Name is the service's name within the org — a DNS label. The fabric knows\nthe service as \"<name>.<org>\" and answers for it at \"<name>.<org>.ziti\".",
+			"serviceIn.port":   "Port is the port beside Host, and the one the DNS name intercepts.",
+			"serviceView.dns":  "DNS is the name the fabric answers for this service — what a kubeconfig\nserver, or any client on the org's overlay, dials.",
+			"serviceView.id":   "ID is the fabric service's id.",
+			"serviceView.name": "Name is the service's name within the org.",
 		},
 	})
 }
