@@ -120,6 +120,14 @@ func baseGitEnv() []string {
 func baseConfig() []string {
 	return []string{
 		"credential.helper=",
+		// No background housekeeping, ever. A fetch or push runs `gc --auto`,
+		// which DETACHES and keeps writing into the repository after the command
+		// that triggered it returns — in a test that is RemoveAll racing a live
+		// writer (ENOTEMPTY on the transit dir), and in a pod it is I/O nothing
+		// accounted for. The transit repository is a cache; if it ever needs
+		// compaction, deleting it is the compaction.
+		"gc.auto=0",
+		"maintenance.auto=false",
 		"pack.threads=1",
 		"pack.windowMemory=64m",
 		"pack.deltaCacheSize=64m",
