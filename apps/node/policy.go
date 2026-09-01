@@ -39,11 +39,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net"
-	"net/netip"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -187,9 +184,6 @@ var platformDefaults = map[Platform][]string{
 	PlatformUnknown: unknownPlatformCommands,
 }
 
-// DangerousCommands lists the high-risk commands, off by default everywhere.
-func DangerousCommands() []string { return slices.Clone(dangerousCommands) }
-
 // IsDangerous reports whether a command is high risk.
 func IsDangerous(command string) bool {
 	return slices.Contains(dangerousCommands, strings.TrimSpace(command))
@@ -198,17 +192,6 @@ func IsDangerous(command string) bool {
 // IsHostExec reports whether a command runs a program on the node's machine.
 func IsHostExec(command string) bool {
 	return slices.Contains(systemRunCommands, strings.TrimSpace(command))
-}
-
-// PlatformCommands returns a platform's defaults, sorted.
-func PlatformCommands(p Platform) []string {
-	base, ok := platformDefaults[p]
-	if !ok {
-		base = platformDefaults[PlatformUnknown]
-	}
-	out := slices.Clone(base)
-	slices.Sort(out)
-	return slices.Compact(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -314,18 +297,6 @@ type Mode struct {
 	Deny []string
 }
 
-// Allowlist resolves the commands reachable on a platform under this mode,
-// sorted. Deny is applied last, so a denied command is denied however it got in.
-func Allowlist(p Platform, mode Mode) []string {
-	set := allowlistSet(p, mode)
-	out := make([]string, 0, len(set))
-	for cmd := range set {
-		out = append(out, cmd)
-	}
-	slices.Sort(out)
-	return out
-}
-
 func allowlistSet(p Platform, mode Mode) map[string]struct{} {
 	base, ok := platformDefaults[p]
 	if !ok {
@@ -419,36 +390,6 @@ var ErrAmbiguousAuthMode = errors.New(
 	"invalid config: gateway.auth.token and gateway.auth.password are both configured, " +
 		"but gateway.auth.mode is unset; set gateway.auth.mode to token or password")
 
-// RequiresTokenForInstall reports whether the node install flow must present a
-// gateway token. Only the two modes that explicitly move authentication
-// elsewhere are exempt; an unset or unrecognized mode requires the token.
-func RequiresTokenForInstall(mode AuthMode) bool {
-	switch mode {
-	case AuthNone, AuthTrustedProxy:
-		return false
-	default:
-		return true
-	}
-}
-
-// CheckAuthMode refuses a configuration that does not say how callers
-// authenticate.
-//
-// The TypeScript this ports had drifted to always returning "not ambiguous",
-// on the reasoning that a token is the only shared secret left; its own tests
-// still assert the opposite. Taking the safer reading: two configured secrets
-// with no declared mode is a config whose author has not decided, and guessing
-// on their behalf picks a credential nobody meant to be live.
-func CheckAuthMode(mode AuthMode, hasToken, hasPassword bool) error {
-	if strings.TrimSpace(string(mode)) != "" {
-		return nil
-	}
-	if hasToken && hasPassword {
-		return ErrAmbiguousAuthMode
-	}
-	return nil
-}
-
 // ---------------------------------------------------------------------------
 // Auth rate limiting
 // ---------------------------------------------------------------------------
@@ -467,206 +408,6 @@ const (
 	defaultWindow      = time.Minute
 	defaultLockout     = 5 * time.Minute
 )
-
-// RateLimitConfig configures a RateLimiter. The zero value is the default
-// policy: 10 attempts a minute, five minute lockout, loopback exempt.
-type RateLimitConfig struct {
-	MaxAttempts int
-	Window      time.Duration
-	Lockout     time.Duration
-	// RateLimitLoopback turns off the loopback exemption. It is phrased
-	// negatively so the zero value keeps a local CLI from locking itself out.
-	RateLimitLoopback bool
-	// Now is the injected clock. nil means time.Now.
-	Now func() time.Time
-}
-
-// RateLimitResult answers "may this client try again".
-type RateLimitResult struct {
-	Allow      bool
-	Remaining  int
-	RetryAfter time.Duration
-}
-
-type rateEntry struct {
-	attempts    []time.Time
-	lockedUntil time.Time
-}
-
-// RateLimiter is a sliding-window limiter for failed authentication attempts,
-// keyed by (scope, client ip).
-//
-// The org is deliberately NOT part of that key. Everywhere else in this package
-// the org is part of an identity; here the key is a budget, and a budget
-// partitioned by something the caller names is no budget at all — an attacker
-// would multiply their attempts by inventing org names.
-type RateLimiter struct {
-	mu           sync.Mutex
-	max          int
-	window       time.Duration
-	lockout      time.Duration
-	rateLoopback bool
-	now          func() time.Time
-	entries      map[string]*rateEntry
-}
-
-// NewRateLimiter builds a limiter. It owns no goroutine and no timer: call
-// Prune from whatever the process already schedules.
-func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
-	l := &RateLimiter{
-		max:          cfg.MaxAttempts,
-		window:       cfg.Window,
-		lockout:      cfg.Lockout,
-		rateLoopback: cfg.RateLimitLoopback,
-		now:          cfg.Now,
-		entries:      make(map[string]*rateEntry),
-	}
-	if l.max <= 0 {
-		l.max = defaultMaxAttempts
-	}
-	if l.window <= 0 {
-		l.window = defaultWindow
-	}
-	if l.lockout <= 0 {
-		l.lockout = defaultLockout
-	}
-	if l.now == nil {
-		l.now = time.Now
-	}
-	return l
-}
-
-// Check reports whether ip may attempt authentication in scope.
-func (l *RateLimiter) Check(ip, scope string) RateLimitResult {
-	key, canonical := l.key(ip, scope)
-	if l.exempt(canonical) {
-		return RateLimitResult{Allow: true, Remaining: l.max}
-	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	now := l.now()
-	entry := l.entries[key]
-	if entry == nil {
-		return RateLimitResult{Allow: true, Remaining: l.max}
-	}
-	if !entry.lockedUntil.IsZero() {
-		if now.Before(entry.lockedUntil) {
-			return RateLimitResult{Remaining: 0, RetryAfter: entry.lockedUntil.Sub(now)}
-		}
-		entry.lockedUntil = time.Time{}
-		entry.attempts = nil
-	}
-	entry.slide(now, l.window)
-	remaining := max(0, l.max-len(entry.attempts))
-	return RateLimitResult{Allow: remaining > 0, Remaining: remaining}
-}
-
-// RecordFailure counts one failed attempt.
-func (l *RateLimiter) RecordFailure(ip, scope string) {
-	key, canonical := l.key(ip, scope)
-	if l.exempt(canonical) {
-		return
-	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	now := l.now()
-	entry := l.entries[key]
-	if entry == nil {
-		entry = &rateEntry{}
-		l.entries[key] = entry
-	}
-	if !entry.lockedUntil.IsZero() && now.Before(entry.lockedUntil) {
-		return
-	}
-	entry.slide(now, l.window)
-	entry.attempts = append(entry.attempts, now)
-	if len(entry.attempts) >= l.max {
-		entry.lockedUntil = now.Add(l.lockout)
-	}
-}
-
-// Reset clears one (scope, ip) budget, e.g. after a successful login.
-func (l *RateLimiter) Reset(ip, scope string) {
-	key, _ := l.key(ip, scope)
-	l.mu.Lock()
-	delete(l.entries, key)
-	l.mu.Unlock()
-}
-
-// Size is the number of tracked budgets.
-func (l *RateLimiter) Size() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.entries)
-}
-
-// Prune drops budgets that no longer hold anything. A locked-out entry is kept
-// until its lockout expires, or pruning would release the lock.
-func (l *RateLimiter) Prune() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := l.now()
-	for key, entry := range l.entries {
-		if !entry.lockedUntil.IsZero() && now.Before(entry.lockedUntil) {
-			continue
-		}
-		entry.slide(now, l.window)
-		if len(entry.attempts) == 0 {
-			delete(l.entries, key)
-		}
-	}
-}
-
-func (e *rateEntry) slide(now time.Time, window time.Duration) {
-	cutoff := now.Add(-window)
-	kept := e.attempts[:0]
-	for _, ts := range e.attempts {
-		if ts.After(cutoff) {
-			kept = append(kept, ts)
-		}
-	}
-	e.attempts = kept
-}
-
-func (l *RateLimiter) key(ip, scope string) (key, canonical string) {
-	scope = strings.TrimSpace(scope)
-	if scope == "" {
-		scope = RateLimitScopeDefault
-	}
-	canonical = CanonicalClientIP(ip)
-	return scope + ":" + canonical, canonical
-}
-
-func (l *RateLimiter) exempt(canonical string) bool {
-	if l.rateLoopback {
-		return false
-	}
-	addr, err := netip.ParseAddr(canonical)
-	return err == nil && addr.IsLoopback()
-}
-
-// CanonicalClientIP reduces a client address to one representation, so that
-// 1.2.3.4 and ::ffff:1.2.3.4 spend the same budget. Anything unparseable
-// becomes "unknown" and shares one budget, which is the conservative choice.
-func CanonicalClientIP(ip string) string {
-	raw := strings.TrimSpace(ip)
-	if raw == "" {
-		return "unknown"
-	}
-	if addr, err := netip.ParseAddr(strings.Trim(raw, "[]")); err == nil {
-		return addr.Unmap().String()
-	}
-	if host, _, err := net.SplitHostPort(raw); err == nil {
-		if addr, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
-			return addr.Unmap().String()
-		}
-	}
-	return "unknown"
-}
 
 // ---------------------------------------------------------------------------
 // system.run: the forwarded parameters
@@ -1113,9 +854,6 @@ func validateCommandConsistency(argv []string, raw string) (string, Decision) {
 	}
 	return inferred, allowed()
 }
-
-// FormatExecCommand renders an argv the way an approval prompt shows it.
-func FormatExecCommand(argv []string) string { return formatExecCommand(argv) }
 
 func formatExecCommand(argv []string) string {
 	parts := make([]string, 0, len(argv))
