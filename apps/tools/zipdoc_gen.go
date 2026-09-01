@@ -193,6 +193,7 @@ func init() {
 			"Skill.id":                 "ID is the skill's id within the org. It is DERIVED from Name, so writing\nthe same name again revises that skill rather than adding another.",
 			"Skill.name":               "Name is the skill's name: one lowercase path segment (a-z0-9, _ or -).",
 			"Skill.org":                "Org is the org that authored the skill — the validated caller's, never a\nvalue the body supplied.",
+			"Skill.source":             "Source is the repository the skill was read from, \"<project>/<name>\" or\n\"<name>\"; empty for a skill written through the API. A push replaces every\nskill of its source at once, so a skill leaves when its file does.",
 			"authoredSkillList.skills": "Skills is every skill this org authored, each with its SKILL.md content.",
 		},
 	})
@@ -230,6 +231,9 @@ func init() {
 			"curateReq.official":     "Official overrides the derivation: setting it makes this answer FINAL, so\nno later sync re-derives over it. That is the difference between a default\nand a decision — the derivation can only tell that a domain-verified\npublisher serves the endpoint, not that the product is theirs.",
 		},
 		Example: json.RawMessage(`{"featured":true,"official":false}`),
+	})
+	zip.Describe("POST /tools/skills", zip.Doc{
+		Description: "Turns the files into skills and makes them the source's whole\ncontribution. The ORG is the caller's, from the plane context: a repository\ncan only ever write the skills of the org that holds it.",
 	})
 	zip.Describe("POST /v1/tools/call", zip.Doc{
 		Description: "Runs one of the caller's activated tools and answers with its output.\n\nThis is the endpoint onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 client or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
@@ -298,6 +302,7 @@ func init() {
 			"Skill.id":            "ID is the skill's id within the org. It is DERIVED from Name, so writing\nthe same name again revises that skill rather than adding another.",
 			"Skill.name":          "Name is the skill's name: one lowercase path segment (a-z0-9, _ or -).",
 			"Skill.org":           "Org is the org that authored the skill — the validated caller's, never a\nvalue the body supplied.",
+			"Skill.source":        "Source is the repository the skill was read from, \"<project>/<name>\" or\n\"<name>\"; empty for a skill written through the API. A push replaces every\nskill of its source at once, so a skill leaves when its file does.",
 			"skillIn.content":     "Content is the SKILL.md body. Required, at most 256 KiB.",
 			"skillIn.description": "Description is the one-line summary discovery shows for the skill.",
 			"skillIn.name":        "Name is the skill's id within the org: one lowercase path segment\n(a-z0-9, _ or -). Writing an existing name REVISES that skill.",

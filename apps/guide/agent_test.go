@@ -22,6 +22,8 @@ func (f *fakeAI) ChatCompletion(_ context.Context, req *cloud.ChatRequest) (*clo
 }
 func (f *fakeAI) Embed(context.Context, *cloud.EmbedRequest) ([][]float32, error) { return nil, nil }
 
+func (f *fakeAI) Rerank(context.Context, *cloud.RerankRequest) ([]float64, error) { return nil, nil }
+
 func collect() (func(event), *[]event) {
 	var evs []event
 	return func(e event) { evs = append(evs, e) }, &evs

@@ -140,7 +140,7 @@
             "type": "integer"
           },
           "name": {
-            "description": "Name is which leg this reports: \"index\", the lexical store, \"vector\", the\nsemantic one, or \"code\", the org's own repositories. Match.Backend uses the\nsame three names.",
+            "description": "Name is which leg this reports: \"index\", the lexical store, \"vector\", the\nsemantic one, \"code\", the org's own repositories, or \"rerank\", the\nrelevance pass over the fused window. Match.Backend uses the same names.",
             "type": "string"
           },
           "status": {
@@ -228,7 +228,7 @@
       "Provenance": {
         "properties": {
           "backend": {
-            "description": "Backend is the leg that contributed this match: \"index\" (lexical), \"vector\"\n(semantic) or \"code\" (the org's repositories). It is the same name that leg\nreports itself under in Fusion.Backends, so a hit can be traced to a\nstatus.",
+            "description": "Backend is the leg that contributed this match: \"index\" (lexical), \"vector\"\n(semantic), \"code\" (the org's repositories) or \"rerank\" (the cross-encoder\npass, whose Score is the relevance it assigned). It is the same name that\nleg reports itself under in Fusion.Backends, so a hit can be traced to a\nstatus.",
             "type": "string"
           },
           "rank": {

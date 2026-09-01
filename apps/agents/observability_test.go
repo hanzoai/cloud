@@ -460,6 +460,10 @@ func (r *runIDRecorder) Embed(context.Context, *types.EmbedRequest) ([][]float32
 	return nil, nil
 }
 
+func (r *runIDRecorder) Rerank(context.Context, *types.RerankRequest) ([]float64, error) {
+	return nil, nil
+}
+
 // TestToolSubsystemReadsTheNameNotAnIndex pins the derivation: the owner is a fact
 // the operation name already states, so it answers the same in a fused binary and
 // in a single-app plugin process — where a mount-index lookup would answer "" for

@@ -290,6 +290,17 @@ type EmbedRequest struct {
 	Project    string
 }
 
+// RerankRequest is one query against the documents to order. Org, BillingOrg
+// and Project scope it exactly as EmbedRequest does.
+type RerankRequest struct {
+	Model      string
+	Query      string
+	Documents  []string
+	Org        string
+	BillingOrg string
+	Project    string
+}
+
 // Counter / Timing / Span are the canonical o11y handles.
 type (
 	Counter interface{ Inc(n int64) }
@@ -418,6 +429,12 @@ type AIClient interface {
 	// side-channel key. The EmbedRequest carries the billing scope (Org/Project)
 	// exactly like ChatRequest; an empty Inputs slice returns (nil, nil).
 	Embed(ctx context.Context, req *EmbedRequest) ([][]float32, error)
+	// Rerank scores each document's relevance to the query, one float per
+	// document aligned by index, higher being more relevant — the gateway's
+	// /rerank, reached with the same credential and metered on the same path
+	// as Embed. Documents is what a cross-encoder reads, so a caller passes text,
+	// not ids; an empty Documents returns (nil, nil).
+	Rerank(ctx context.Context, req *RerankRequest) ([]float64, error)
 }
 
 // ModelLister is an OPTIONAL capability an AIClient may ALSO implement: it

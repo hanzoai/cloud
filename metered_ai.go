@@ -201,6 +201,27 @@ func (m *meteredAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]flo
 	return vecs, nil
 }
 
+// Rerank meters exactly as Embed does: the cost is the text sent, known before
+// the call, so the estimate is both the reservation and the charge.
+func (m *meteredAI) Rerank(ctx context.Context, req *types.RerankRequest) ([]float64, error) {
+	if req == nil || len(req.Documents) == 0 {
+		return m.inner.Rerank(ctx, req)
+	}
+	toks := EstTokens(append([]string{req.Query}, req.Documents...)...)
+	payer := account.PayerOf("", billedOrg(req.BillingOrg, req.Org))
+	h, err := m.reserve(ctx, payer, req.Project, toks)
+	if err != nil {
+		return nil, err
+	}
+	defer h.release()
+	scores, rerr := m.inner.Rerank(ctx, req)
+	if rerr != nil {
+		return scores, rerr
+	}
+	m.record(payer, req.Project, req.Model, metering.Usage{TotalTokens: toks}, toks, h)
+	return scores, nil
+}
+
 // named answers WHO an inference is for, on the request that travels.
 //
 // A request that STATES an actor keeps it, and that ordering is the whole rule: a

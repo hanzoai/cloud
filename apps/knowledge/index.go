@@ -254,6 +254,9 @@ type hit struct {
 	// when the indexed payload carries none, which is the normal case for pages and
 	// memories.
 	URL string `json:"url,omitempty"`
+	// Text is the document's text as the index embeds it, read from the store
+	// by Semantic for a reranker to score; it is never on the wire.
+	Text string `json:"-"`
 	// Score is the cosine similarity between the query's embedding and the
 	// document's, from -1 to 1, higher being closer — the collection is created
 	// with Cosine distance. Hits arrive ordered by it, descending. There is no

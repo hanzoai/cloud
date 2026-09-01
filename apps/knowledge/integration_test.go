@@ -61,6 +61,10 @@ func (f fakeAI) Embed(_ context.Context, req *cloud.EmbedRequest) ([][]float32, 
 	return out, nil
 }
 
+func (fakeAI) Rerank(_ context.Context, req *cloud.RerankRequest) ([]float64, error) {
+	return make([]float64, len(req.Documents)), nil
+}
+
 func newFakeVector(t *testing.T) *fakeVector {
 	t.Helper()
 	fv := &fakeVector{upserts: map[string][]map[string]any{}, embedDims: 8}

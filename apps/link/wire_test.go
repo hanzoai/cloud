@@ -28,6 +28,7 @@ func (f *fakeAI) ChatCompletion(ctx context.Context, _ *types.ChatRequest) (*typ
 	return f.resp, f.err
 }
 func (f *fakeAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
+func (f *fakeAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
 
 func TestCarrierRoundTrip(t *testing.T) {
 	ctx := WithAccount(WithCredential(context.Background(), Credential{Token: "sec"}), Account{"openai", "work"})

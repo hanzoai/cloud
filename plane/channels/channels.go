@@ -30,8 +30,16 @@ const App = "channels"
 // from source without the document drifting away from the program. See
 // plane_registry_test.go.
 var Ops = []string{
+	plane.ChannelsAgent,
 	plane.ChannelsIngest,
 	plane.ChannelsRecent,
+}
+
+// ChannelsAgent the agent that answers one room.
+//
+// Calls plane.ChannelsAgent on channels over the peer plane.
+func ChannelsAgent(ctx context.Context, in *plane.AgentForIn) (*plane.AgentFor, error) {
+	return plane.Ask[plane.AgentForIn, plane.AgentFor](ctx, App, plane.ChannelsAgent, in)
 }
 
 // ChannelsIngest take one authenticated inbound chat event from a platform adapter.

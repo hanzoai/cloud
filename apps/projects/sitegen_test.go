@@ -40,6 +40,8 @@ func (f *fakeAI) Embed(context.Context, *cloud.EmbedRequest) ([][]float32, error
 	return nil, nil
 }
 
+func (f *fakeAI) Rerank(context.Context, *cloud.RerankRequest) ([]float64, error) { return nil, nil }
+
 // manifest is a tiny helper to build a JSON manifest string for a fake model.
 func manifest(name string, files map[string]string) string {
 	var b strings.Builder

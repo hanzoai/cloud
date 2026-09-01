@@ -7716,3 +7716,47 @@ org's DEFAULT subject — `getUserLink(org, provider, "*")`, written by
 `linearClaim` for the claimer. GitHub writes no default (its claim is platform
 sudo), so an unlinked GitHub commenter gets the link prompt; a GitHub link leg
 is the follow-up.
+
+## Plane ops behind a chat turn: channels_agent, iam_federated
+
+Two lookups that a bridge outside the channels turn needs are on the plane, not
+env or a cross-app store read. `channels_agent` (`plane.ChannelsAgent`,
+`AgentForIn{Channel, Room}` → `AgentFor{Ref}`) answers which agent a room runs —
+the same `agentFor` the turn uses, org from the plane context — so Slack slash
+commands in integrations resolve exactly what a message would (`agentRefFor`).
+`iam_federated` (`plane.IAMFederated`, `FederatedIn{Provider, Subject}` →
+`Federated{User}`) resolves an org member from the identity a provider issued;
+GitHub only today, matching IAM's `User.GitHub` (numeric id, written at
+federation) against the webhook's `comment.user.id`. `channelIdentity` asks it
+for provider `github`, caches the answer with `putUserLink`, and only then falls
+to the org's default subject or the link prompt. Both are org-bounded by the
+caller's context; neither takes an org argument.
+
+## Rerank: the fourth stage of /v1/search
+
+`AIClient.Rerank` sits beside `Embed`: the gateway's Cohere-shaped `/rerank`
+(`clients/aihttp.go`), metered on the same known-before-the-call estimate
+(`metered_ai.go`), served as `zen-rerank` (`CLOUD_RERANK_MODEL`). `/v1/search`
+runs it over the whole fused window before paging and reports it in `Backends`
+as `rerank` — `disabled` without a read-scope client (`deps.Embed`), `degraded`
+when the call fails (fused order stands), `ok` with the rows reordered by
+relevance and a `rerank` origin appended to each row's provenance. The text it
+scores is what each leg carried: `knowledge.Semantic` reads the document from
+the store (`Hit.Text`, never on the wire — the vector payload holds no body by
+design), the lexical row is scored through `knowledge.Text`, a code span through
+its snippet. Every `AIClient` fake stubs `Rerank`; adding a fake means adding
+that line.
+
+## An org's skills are the SKILL.md files in its repositories
+
+`apps/git/skills_on_push.go` reads `.agents/skills/<name>/SKILL.md` from a
+default-branch push (bounded like the code index) and calls `plane.ToolsSkills`
+through the generated `plane/tools` client; `apps/tools/skills_repo.go` turns
+each file into a `Skill` (name = directory, description = frontmatter, content =
+the file) and `SkillStore.Replace` makes them the repository's whole contribution
+in one transaction — the `source` column ("<project>/<name>") is what a push
+replaces, and a hand-written skill has none. Nothing declares which repositories
+count: holding the files is the declaration; a later push wins a shared name.
+Cross-app calls go through `plane/<app>` clients (`go run ./plane/gen` after
+adding an op — set a new reactor aside for the first run, the generator loads
+every app), not hand-written `plane.Ask`.

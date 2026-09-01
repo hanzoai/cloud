@@ -43,6 +43,42 @@ func exposeMembers() {
 		seats,
 		zip.WithOperationID(plane.IAMSeats),
 		zip.WithSummary("The caller's org's billable people"))
+	zip.Post[plane.FederatedIn, plane.Federated](cloud.Plane(), "/iam/federated",
+		federated,
+		zip.WithOperationID(plane.IAMFederated),
+		zip.WithSummary("The caller's org member behind an external identity"))
+}
+
+// federated resolves a member of the caller's org from an identity another
+// provider issued. GitHub is the one provider today: IAM's federation writes the
+// numeric GitHub user id onto the user row at sign-in, and that is the id a
+// GitHub webhook carries — so the same value, and nothing a person typed,
+// decides who a comment runs as. The org is the caller's, and the query is
+// bounded to it, so an id that belongs to a person in another org resolves to
+// nobody here.
+func federated(ctx context.Context, in *plane.FederatedIn) (*plane.Federated, error) {
+	org := cloud.Who(ctx).Org
+	if org == "" {
+		return nil, zip.ErrUnauthorized("federated: no org on the call")
+	}
+	if in == nil || in.Subject == "" {
+		return nil, zip.ErrBadRequest("federated: provider and subject are required")
+	}
+	if in.Provider != "github" {
+		return nil, zip.ErrBadRequest("federated: only github is resolved here")
+	}
+	db := DB()
+	if db == nil {
+		return nil, fmt.Errorf("federated: identity store not open in the process that owns it")
+	}
+	rows, err := orm.TypedQuery[iamschema.User](db).Filter("Owner=", org).Filter("GitHub=", in.Subject).Limit(2).GetAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("federated: %w", err)
+	}
+	if len(rows) != 1 || rows[0].IsDeleted || rows[0].IsForbidden {
+		return &plane.Federated{}, nil
+	}
+	return &plane.Federated{User: rows[0].Id}, nil
 }
 
 // members lists the grants in one scope, each with the display name IAM holds for
