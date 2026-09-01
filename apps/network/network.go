@@ -22,10 +22,21 @@
 //
 // Surface (every route org-scoped by the validated principal; HIP-0026):
 //
-//	GET /v1/network           the org's ZT overlay network(s)  -> {networks:[networkView]}
-//	GET /v1/network/routers   the org's ZT edge-routers        -> {routers:[routerView]}
-//	GET /v1/network/services  the org's ZT edge services       -> {services:[meshView]}
-//	GET /v1/network/:id       one overlay network by id        -> networkView (404 if absent)
+//	GET    /v1/network                 the org's ZT overlay network(s)  -> {networks:[networkView]}
+//	GET    /v1/network/routers         the org's ZT edge-routers        -> {routers:[routerView]}
+//	GET    /v1/network/services        the org's ZT edge services       -> {services:[meshView]}
+//	POST   /v1/network/services        publish a service on the overlay -> {id,name,dns}
+//	GET    /v1/network/identities      the org's fabric identities      -> {identities:[identityView]}
+//	POST   /v1/network/identities      mint a device identity           -> identityView (with enrollment)
+//	DELETE /v1/network/identities/:id  remove a device identity
+//	GET    /v1/network/:id             one overlay network by id        -> networkView (404 if absent)
+//
+// THE WRITE HALF (identity.go, publish.go) is how a BYO device joins the org's
+// overlay: mint an identity, enroll the device with its one-time JWT, publish
+// the service it hosts, and the org — and the cloud's own fleet — dials it by
+// name. Every object written carries the same "org-<org>" attribute the read
+// half filters by, so what a tenant writes is exactly what that tenant can
+// later read, and nothing else.
 //
 // Networks maps to the fabric overview, its routers to the ZT edge-routers that ARE
 // that overlay's nodes, and Service Mesh to ZT edge services — the three ZT concepts
@@ -123,6 +134,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// has to be frozen by a test to keep them reachable.
 	zip.Get(g, "/routers", o.listRouters)
 	zip.Get(g, "/services", o.listServices)
+	zip.Post(g, "/services", o.publishService, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/identities", o.listIdentities)
+	zip.Post(g, "/identities", o.createIdentity, zip.WithStatus(http.StatusCreated))
+	zip.Delete(g, "/identities/:id", o.deleteIdentity)
 	zip.Get(g, "/:id", o.getNetwork)
 }
 
