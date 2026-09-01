@@ -396,6 +396,7 @@ documents: describe ## Write every generated document FROM SOURCE. Produces; ren
 	@out=$$($(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi OUT=$(ROOT)/private.yaml 2>&1) \
 	  || { echo "$$out"; echo "!! the compose refused; nothing was written"; exit 1; }
 	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-fleet-catalog . >/dev/null
+	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-mcp-catalog . >/dev/null
 	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-skills . >/dev/null
 
 # THE SET, NAMED ONCE. The gate judges these paths and the repair lane commits
@@ -474,3 +475,7 @@ check: documents ## Regenerate every document FROM SOURCE and fail on any diff. 
 	fi
 	@echo ">> openapi.yaml regenerated from source and unchanged — $$(grep -c '^  /' $(ROOT)/openapi.yaml) paths (the customer contract)"
 	@echo ">> private.yaml regenerated from source and unchanged — $$(grep -c '^  /' $(ROOT)/private.yaml) paths (everything the fleet serves)"
+
+.PHONY: mcp
+mcp: ## Project the agent surface onto every runtime that embeds it.
+	@cd $(ROOT) && GOWORK=off go run ./plugin/gen-mcp-catalog .
