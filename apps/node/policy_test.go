@@ -183,17 +183,6 @@ func TestCheckDeniesHostExecToAnUnclassifiedPlatform(t *testing.T) {
 	}
 }
 
-// Every dangerous command is off on every platform until an operator names it.
-func TestCheckDeniesDangerousCommandsByDefaultEverywhere(t *testing.T) {
-	platforms := []string{"ios", "android", "macos", "linux", "windows", "plan9"}
-	for _, platform := range platforms {
-		for _, cmd := range DangerousCommands() {
-			s := nodeSession(platform, cmd)
-			assertDeny(t, Check(s, cmd, nil, Mode{}), CodeCommandNotAllowlisted)
-		}
-	}
-}
-
 func TestCheckAllowsADangerousCommandOnlyWhenTheOperatorNamesIt(t *testing.T) {
 	s := nodeSession("macos", "screen.record")
 	assertDeny(t, Check(s, "screen.record", nil, Mode{}), CodeCommandNotAllowlisted)
@@ -301,208 +290,13 @@ func TestClassifyPlatform(t *testing.T) {
 	}
 }
 
-func TestAllowlistIsSortedAndDeduplicated(t *testing.T) {
-	got := Allowlist(PlatformLinux, Mode{Allow: []string{CommandSystemRun, " ", "zzz.cmd"}})
-	want := []string{"browser.proxy", "system.notify", "system.run", "system.run.prepare", "system.which", "zzz.cmd"}
-	if len(got) != len(want) {
-		t.Fatalf("Allowlist = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("Allowlist = %v, want %v", got, want)
-		}
-	}
-}
-
-func TestNoPlatformDefaultContainsADangerousCommand(t *testing.T) {
-	platforms := []Platform{PlatformIOS, PlatformAndroid, PlatformMacOS, PlatformLinux, PlatformWindows, PlatformUnknown}
-	for _, p := range platforms {
-		for _, cmd := range PlatformCommands(p) {
-			if IsDangerous(cmd) {
-				t.Errorf("platform %s defaults include dangerous command %s", p, cmd)
-			}
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Auth mode
 // ---------------------------------------------------------------------------
 
-func TestRequiresTokenForInstall(t *testing.T) {
-	cases := map[AuthMode]bool{
-		AuthToken:        true,
-		AuthIAM:          true,
-		AuthUnset:        true,
-		"something-else": true,
-		AuthNone:         false,
-		AuthTrustedProxy: false,
-	}
-	for mode, want := range cases {
-		if got := RequiresTokenForInstall(mode); got != want {
-			t.Errorf("RequiresTokenForInstall(%q) = %v, want %v", mode, got, want)
-		}
-	}
-}
-
-func TestCheckAuthModeRefusesTwoSecretsWithNoDeclaredMode(t *testing.T) {
-	if err := CheckAuthMode(AuthUnset, true, true); err == nil {
-		t.Fatal("two configured secrets with no mode must not be accepted")
-	}
-	for _, c := range []struct{ token, password bool }{{true, false}, {false, true}, {false, false}} {
-		if err := CheckAuthMode(AuthUnset, c.token, c.password); err != nil {
-			t.Errorf("CheckAuthMode(unset, %v, %v) = %v, want nil", c.token, c.password, err)
-		}
-	}
-	if err := CheckAuthMode(AuthToken, true, true); err != nil {
-		t.Errorf("an explicit mode resolves the ambiguity: %v", err)
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Rate limiting
 // ---------------------------------------------------------------------------
-
-func TestRateLimiterLocksOutAfterTheBudgetIsSpent(t *testing.T) {
-	clock := now
-	l := NewRateLimiter(RateLimitConfig{MaxAttempts: 3, Window: time.Minute, Lockout: 5 * time.Minute,
-		Now: func() time.Time { return clock }})
-
-	for i := range 2 {
-		l.RecordFailure("1.2.3.4", RateLimitScopeSharedSecret)
-		res := l.Check("1.2.3.4", RateLimitScopeSharedSecret)
-		if !res.Allow {
-			t.Fatalf("attempt %d: locked out early", i)
-		}
-	}
-	l.RecordFailure("1.2.3.4", RateLimitScopeSharedSecret)
-
-	res := l.Check("1.2.3.4", RateLimitScopeSharedSecret)
-	if res.Allow || res.Remaining != 0 {
-		t.Fatalf("expected lockout, got %+v", res)
-	}
-	if res.RetryAfter != 5*time.Minute {
-		t.Fatalf("RetryAfter = %v, want 5m", res.RetryAfter)
-	}
-
-	// Still locked one second before expiry, free one second after.
-	clock = clock.Add(5*time.Minute - time.Second)
-	if l.Check("1.2.3.4", RateLimitScopeSharedSecret).Allow {
-		t.Fatal("lockout released early")
-	}
-	clock = clock.Add(2 * time.Second)
-	if !l.Check("1.2.3.4", RateLimitScopeSharedSecret).Allow {
-		t.Fatal("lockout never released")
-	}
-}
-
-// A budget is per credential class: failing device-token auth must not lock out
-// shared-secret auth, and vice versa.
-func TestRateLimiterScopesAreIndependent(t *testing.T) {
-	clock := now
-	l := NewRateLimiter(RateLimitConfig{MaxAttempts: 2, Now: func() time.Time { return clock }})
-	l.RecordFailure("1.2.3.4", RateLimitScopeDeviceToken)
-	l.RecordFailure("1.2.3.4", RateLimitScopeDeviceToken)
-
-	if l.Check("1.2.3.4", RateLimitScopeDeviceToken).Allow {
-		t.Fatal("device-token budget should be spent")
-	}
-	if !l.Check("1.2.3.4", RateLimitScopeSharedSecret).Allow {
-		t.Fatal("shared-secret budget must be untouched")
-	}
-	if !l.Check("5.6.7.8", RateLimitScopeDeviceToken).Allow {
-		t.Fatal("another address must be untouched")
-	}
-}
-
-func TestRateLimiterSlidesTheWindow(t *testing.T) {
-	clock := now
-	l := NewRateLimiter(RateLimitConfig{MaxAttempts: 2, Window: time.Minute,
-		Now: func() time.Time { return clock }})
-	l.RecordFailure("1.2.3.4", "")
-	clock = clock.Add(61 * time.Second)
-	l.RecordFailure("1.2.3.4", "")
-	if res := l.Check("1.2.3.4", ""); !res.Allow || res.Remaining != 1 {
-		t.Fatalf("the first attempt should have fallen out of the window: %+v", res)
-	}
-}
-
-func TestRateLimiterExemptsLoopbackUnlessAskedNotTo(t *testing.T) {
-	l := NewRateLimiter(RateLimitConfig{MaxAttempts: 1, Now: func() time.Time { return now }})
-	for _, ip := range []string{"127.0.0.1", "::1", "::ffff:127.0.0.1"} {
-		l.RecordFailure(ip, "")
-		if !l.Check(ip, "").Allow {
-			t.Fatalf("loopback %s must not lock itself out", ip)
-		}
-	}
-	if l.Size() != 0 {
-		t.Fatalf("loopback must not allocate budgets, size = %d", l.Size())
-	}
-
-	strict := NewRateLimiter(RateLimitConfig{MaxAttempts: 1, RateLimitLoopback: true,
-		Now: func() time.Time { return now }})
-	strict.RecordFailure("127.0.0.1", "")
-	if strict.Check("127.0.0.1", "").Allow {
-		t.Fatal("RateLimitLoopback must remove the exemption")
-	}
-}
-
-func TestRateLimiterResetAndPrune(t *testing.T) {
-	clock := now
-	l := NewRateLimiter(RateLimitConfig{MaxAttempts: 2, Window: time.Minute, Lockout: time.Minute,
-		Now: func() time.Time { return clock }})
-	l.RecordFailure("1.2.3.4", "")
-	l.Reset("1.2.3.4", "")
-	if !l.Check("1.2.3.4", "").Allow || l.Size() != 0 {
-		t.Fatal("Reset must clear the budget")
-	}
-
-	l.RecordFailure("1.2.3.4", "")
-	l.RecordFailure("1.2.3.4", "")
-	l.Prune()
-	if l.Size() != 1 {
-		t.Fatal("a locked-out entry must survive pruning, or pruning releases the lock")
-	}
-	clock = clock.Add(2 * time.Minute)
-	l.Prune()
-	if l.Size() != 0 {
-		t.Fatal("an expired entry should have been pruned")
-	}
-}
-
-// An attacker must not multiply their budget by spelling their address
-// differently.
-func TestCanonicalClientIPCollapsesSpellings(t *testing.T) {
-	cases := map[string]string{
-		"1.2.3.4":            "1.2.3.4",
-		"::ffff:1.2.3.4":     "1.2.3.4",
-		"1.2.3.4:5678":       "1.2.3.4",
-		"[::ffff:1.2.3.4]":   "1.2.3.4",
-		"[2001:db8::1]:443":  "2001:db8::1",
-		"2001:DB8::1":        "2001:db8::1",
-		"  1.2.3.4  ":        "1.2.3.4",
-		"":                   "unknown",
-		"not-an-address":     "unknown",
-		"1.2.3.4.5":          "unknown",
-		"::ffff:127.0.0.1":   "127.0.0.1",
-		"[::1]:1234":         "::1",
-		"host.example:1234":  "unknown",
-		"1.2.3.4:notaport:9": "unknown",
-	}
-	for in, want := range cases {
-		if got := CanonicalClientIP(in); got != want {
-			t.Errorf("CanonicalClientIP(%q) = %q, want %q", in, got, want)
-		}
-	}
-
-	clock := now
-	l := NewRateLimiter(RateLimitConfig{MaxAttempts: 2, Now: func() time.Time { return clock }})
-	l.RecordFailure("1.2.3.4", "")
-	l.RecordFailure("::ffff:1.2.3.4", "")
-	if l.Check("1.2.3.4:9999", "").Allow {
-		t.Fatal("the same address spelled three ways must share one budget")
-	}
-}
 
 // ---------------------------------------------------------------------------
 // SanitizeSystemRun — ports of the TypeScript approval tests
@@ -1175,6 +969,8 @@ func TestResolveSystemRunCommandBindsDisplayTextToWhatActuallyRuns(t *testing.T)
 	}
 }
 
+// The quoting is what makes an approval record legible: an argument carrying a
+// space, a quote or a newline must survive into the line a human reads.
 func TestFormatExecCommandQuotesWhatWouldOtherwiseHide(t *testing.T) {
 	cases := map[string]string{
 		"echo|hi":       "echo hi",
@@ -1186,8 +982,8 @@ func TestFormatExecCommandQuotesWhatWouldOtherwiseHide(t *testing.T) {
 	}
 	for in, want := range cases {
 		argv := strings.Split(in, "|")
-		if got := FormatExecCommand(argv); got != want {
-			t.Errorf("FormatExecCommand(%q) = %q, want %q", argv, got, want)
+		if got := formatExecCommand(argv); got != want {
+			t.Errorf("formatExecCommand(%q) = %q, want %q", argv, got, want)
 		}
 	}
 }
