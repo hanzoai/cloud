@@ -81,6 +81,8 @@ func (s *scriptAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32,
 	return nil, nil
 }
 
+func (s *scriptAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 func toolDef(name string) types.ToolDef {
 	return types.ToolDef{Name: name, Description: "d", Schema: json.RawMessage(`{"type":"object"}`)}
 }

@@ -119,6 +119,8 @@ func (a longAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*type
 }
 func (a longAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
 
+func (a longAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 func meterOn(t *testing.T, url string, inner types.AIClient) *meteredAI {
 	t.Helper()
 	return &meteredAI{

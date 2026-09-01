@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cek"
@@ -43,6 +44,10 @@ type Skill struct {
 	Content string `json:"content"`
 	// CreatedAt is when the skill was last written, Unix seconds.
 	CreatedAt int64 `json:"createdAt"`
+	// Source is the repository the skill was read from, "<project>/<name>" or
+	// "<name>"; empty for a skill written through the API. A push replaces every
+	// skill of its source at once, so a skill leaves when its file does.
+	Source string `json:"source,omitempty"`
 }
 
 // SkillStore is the per-org registry of authored skills (one SQLite file, org
@@ -73,6 +78,13 @@ CREATE TABLE IF NOT EXISTS skills (
 		_ = db.Close()
 		return nil, fmt.Errorf("tools: skill migrate: %w", err)
 	}
+	// "duplicate column" is the migration having already run; every other error
+	// is real and refuses the open.
+	if _, err := db.Exec(`ALTER TABLE skills ADD COLUMN source TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		_ = db.Close()
+		return nil, fmt.Errorf("tools: skill migrate source: %w", err)
+	}
 	return s, nil
 }
 
@@ -96,21 +108,51 @@ func (s *SkillStore) Put(ctx context.Context, sk Skill) (Skill, error) {
 	}
 	sk.ID = sk.Name
 	sk.CreatedAt = time.Now().Unix()
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO skills (id, org, name, description, content, created_at) VALUES (?,?,?,?,?,?)
-		 ON CONFLICT(org, id) DO UPDATE SET
-		   name=excluded.name, description=excluded.description,
-		   content=excluded.content, created_at=excluded.created_at`,
-		sk.ID, sk.Org, sk.Name, sk.Description, sk.Content, sk.CreatedAt); err != nil {
+	if _, err := s.db.ExecContext(ctx, putSkillSQL,
+		sk.ID, sk.Org, sk.Name, sk.Description, sk.Content, sk.CreatedAt, sk.Source); err != nil {
 		return Skill{}, fmt.Errorf("tools: put skill: %w", err)
 	}
 	return sk, nil
 }
 
+const putSkillSQL = `INSERT INTO skills (id, org, name, description, content, created_at, source) VALUES (?,?,?,?,?,?,?)
+ ON CONFLICT(org, id) DO UPDATE SET
+   name=excluded.name, description=excluded.description,
+   content=excluded.content, created_at=excluded.created_at, source=excluded.source`
+
+// Replace makes skills the whole of what source contributes to org, in one
+// transaction: what the source held before and no longer sends is removed, and
+// each skill sent is written under the source. A skill of the same name from
+// another source is taken over, the way the tool registry lets a later writer
+// win a name. Every skill's Org and Source are set here, never trusted.
+func (s *SkillStore) Replace(ctx context.Context, org, source string, skills []Skill) error {
+	if org == "" || source == "" {
+		return fmt.Errorf("tools: skills: org and source are required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("tools: skills: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM skills WHERE org=? AND source=?`, org, source); err != nil {
+		return fmt.Errorf("tools: skills: clear source: %w", err)
+	}
+	now := time.Now().Unix()
+	for _, sk := range skills {
+		if sk.Name == "" {
+			return fmt.Errorf("tools: skills: empty name")
+		}
+		if _, err := tx.ExecContext(ctx, putSkillSQL, sk.Name, org, sk.Name, sk.Description, sk.Content, now, source); err != nil {
+			return fmt.Errorf("tools: skills: put %q: %w", sk.Name, err)
+		}
+	}
+	return tx.Commit()
+}
+
 // List returns the org's skills, name-sorted.
 func (s *SkillStore) List(ctx context.Context, org string) ([]Skill, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, org, name, description, content, created_at FROM skills
+		`SELECT id, org, name, description, content, created_at, source FROM skills
 		 WHERE org=? ORDER BY name`, org)
 	if err != nil {
 		return nil, fmt.Errorf("tools: list skills: %w", err)
@@ -119,7 +161,7 @@ func (s *SkillStore) List(ctx context.Context, org string) ([]Skill, error) {
 	out := []Skill{}
 	for rows.Next() {
 		var sk Skill
-		if err := rows.Scan(&sk.ID, &sk.Org, &sk.Name, &sk.Description, &sk.Content, &sk.CreatedAt); err != nil {
+		if err := rows.Scan(&sk.ID, &sk.Org, &sk.Name, &sk.Description, &sk.Content, &sk.CreatedAt, &sk.Source); err != nil {
 			return nil, fmt.Errorf("tools: scan skill: %w", err)
 		}
 		out = append(out, sk)

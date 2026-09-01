@@ -1063,8 +1063,8 @@ components:
         name:
           description: |-
             Name is which leg this reports: "index", the lexical store, "vector", the
-            semantic one, or "code", the org's own repositories. Match.Backend uses the
-            same three names.
+            semantic one, "code", the org's own repositories, or "rerank", the
+            relevance pass over the fused window. Match.Backend uses the same names.
           type: string
         status:
           description: |-
@@ -7876,8 +7876,9 @@ components:
         backend:
           description: |-
             Backend is the leg that contributed this match: "index" (lexical), "vector"
-            (semantic) or "code" (the org's repositories). It is the same name that leg
-            reports itself under in Fusion.Backends, so a hit can be traced to a
+            (semantic), "code" (the org's repositories) or "rerank" (the cross-encoder
+            pass, whose Score is the relevance it assigned). It is the same name that
+            leg reports itself under in Fusion.Backends, so a hit can be traced to a
             status.
           type: string
         rank:

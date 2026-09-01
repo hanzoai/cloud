@@ -28,6 +28,8 @@ func (c *catalogAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32
 	return nil, nil
 }
 
+func (c *catalogAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 // TestHTTPCreateModelValidation proves agent-create rejects a model outside the
 // gateway's served catalog with a clean 400 (instead of the customer's reported
 // run-time 502 for e.g. claude-sonnet-4-5), accepts a catalog model, and — when

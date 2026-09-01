@@ -75,6 +75,8 @@ func (s *scriptAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, err
 	return nil, nil
 }
 
+func (s *scriptAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 // nextPrompts returns just the decision prompts — the ones survey's next() sent.
 func (s *scriptAI) nextPrompts() []string {
 	var out []string

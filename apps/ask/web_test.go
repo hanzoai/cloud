@@ -29,6 +29,8 @@ func (f *webAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*type
 }
 func (f *webAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
 
+func (f *webAI) Rerank(context.Context, *types.RerankRequest) ([]float64, error) { return nil, nil }
+
 // noNetworkSearch points bing at a local server returning empty HTML, so the
 // engine's search resolves to zero sources instantly and the test never leaves
 // the machine.

@@ -52,6 +52,10 @@ func (r *recordingAI) Embed(context.Context, *cloud.EmbedRequest) ([][]float32, 
 	return nil, nil
 }
 
+func (r *recordingAI) Rerank(context.Context, *cloud.RerankRequest) ([]float64, error) {
+	return nil, nil
+}
+
 func (r *recordingAI) lastReq() *cloud.ChatRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
