@@ -146,6 +146,12 @@ var allowedRequestUses = map[string]string{
 		"through it alone would turn that live admin bucket into a 403. ONE function, which all 21 typed ops " +
 		"ask, delegating to the same principal.Acting the untyped create beside them uses; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no tenant to key on.",
+	"apps/knowledge/hooks.go": "subject — the caller's identity beyond the org: the token's subject, " +
+		"which decides whose OWNED documents a search reaches and whom a document may be claimed for " +
+		"(ownerOnSave). principal.OrgFrom gives the tenant; ownership needs the person.",
+	"apps/knowledge/reindex.go": "an identity gate reading more than the org: reindex rebuilds the " +
+		"org's whole retrieval, so it requires the org-admin or platform-sudo bit off the attested " +
+		"request, exactly as the chat plane's requireOrgAdmin does.",
 	"apps/channels/routes.go": "requireOrgAdmin — the mutation gate on the chat plane. Approving a " +
 		"pairing and editing a channel allowlist decide WHO may talk to the org's bots, so both take " +
 		"admin of the org: X-User-IsAdmin / X-User-IsOrgAdmin, two claims principal.OrgFrom does not " +
