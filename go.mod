@@ -53,6 +53,7 @@ require (
 	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zip v1.36.16
 	golang.org/x/term v0.45.0
+	hanzo.ai/ci v1.0.101
 	helm.sh/helm/v3 v3.21.3
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2

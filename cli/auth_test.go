@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -50,45 +51,57 @@ func TestCredsFromToken(t *testing.T) {
 	}
 }
 
-func TestPasswordGrant(t *testing.T) {
+func TestCodeLogin(t *testing.T) {
+	var challenge string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/iam/oauth/token" {
+		switch r.URL.Path {
+		case "/v1/iam/login":
+			var f map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&f)
+			if f["type"] != "code" || f["clientId"] != "hanzo-cli" || f["organization"] != "hanzo" ||
+				f["username"] != "z@hanzo.ai" || f["password"] != "pw" || f["codeChallengeMethod"] != "S256" || f["codeChallenge"] == "" {
+				t.Errorf("bad login form: %v", f)
+			}
+			challenge = f["codeChallenge"]
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": "the-code"})
+		case "/v1/iam/oauth/token":
+			_ = r.ParseForm()
+			sum := sha256.Sum256([]byte(r.Form.Get("code_verifier")))
+			if r.Form.Get("grant_type") != "authorization_code" || r.Form.Get("code") != "the-code" ||
+				r.Form.Get("client_id") != "hanzo-cli" || base64.RawURLEncoding.EncodeToString(sum[:]) != challenge {
+				t.Errorf("bad exchange: %v", r.Form)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  makeJWT(map[string]any{"email": "z@hanzo.ai"}),
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+				"refresh_token": "r",
+			})
+		default:
 			t.Errorf("path = %s", r.URL.Path)
 		}
-		_ = r.ParseForm()
-		if r.Form.Get("grant_type") != "password" || r.Form.Get("client_id") != "hanzo-console" ||
-			r.Form.Get("username") != "z@hanzo.ai" || r.Form.Get("password") != "pw" {
-			t.Errorf("bad form: %v", r.Form)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token":  makeJWT(map[string]any{"email": "z@hanzo.ai"}),
-			"token_type":    "Bearer",
-			"expires_in":    3600,
-			"refresh_token": "r",
-		})
 	}))
 	defer srv.Close()
 
-	c := newIAMClient(srv.URL, "hanzo-console")
-	tr, err := c.passwordGrant(context.Background(), "z@hanzo.ai", "pw", "openid")
+	c := newIAMClient(srv.URL, "hanzo-cli")
+	tr, err := c.codeLogin(context.Background(), "hanzo", "z@hanzo.ai", "pw", "openid")
 	if err != nil {
-		t.Fatalf("passwordGrant: %v", err)
+		t.Fatalf("codeLogin: %v", err)
 	}
 	if tr.AccessToken == "" || tr.RefreshToken != "r" {
 		t.Fatalf("token resp bad: %+v", tr)
 	}
 }
 
-func TestPasswordGrantError(t *testing.T) {
+func TestCodeLoginRefused(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(400)
-		_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant", "error_description": "bad password"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "msg": "invalid username or password"})
 	}))
 	defer srv.Close()
-	c := newIAMClient(srv.URL, "hanzo-console")
-	_, err := c.passwordGrant(context.Background(), "u", "p", "openid")
-	if err == nil || !strings.Contains(err.Error(), "invalid_grant") {
-		t.Fatalf("expected invalid_grant error, got %v", err)
+	c := newIAMClient(srv.URL, "hanzo-cli")
+	_, err := c.codeLogin(context.Background(), "hanzo", "u", "p", "openid")
+	if err == nil || !strings.Contains(err.Error(), "invalid username or password") {
+		t.Fatalf("expected the IdP's refusal, got %v", err)
 	}
 }
 
@@ -123,7 +136,11 @@ func runRoot(t *testing.T, stdin string, args ...string) (string, error) {
 
 func TestLoginCommandPasswordStdin(t *testing.T) {
 	sandbox(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/iam/login" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": "c0de"})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": makeJWT(map[string]any{"email": "z@hanzo.ai", "owner": "hanzo"}),
 			"token_type":   "Bearer", "expires_in": 3600,

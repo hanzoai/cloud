@@ -31,7 +31,7 @@ func init() {
 	zip.Describe("GET /v1/channels/agent", zip.Doc{
 		Description: "Returns which agent answers the caller org's channel: the default and\nevery room bound to another agent.",
 		Fields: map[string]string{
-			"channelAgentRef.channel": "Channel is the transport: discord, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
+			"channelAgentRef.channel": "Channel is the transport: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
 			"channelAgents.channel":   "Channel is the transport these bindings are for.",
 			"channelAgents.default":   "Default is the agent that answers any room without a binding of its own;\n\"hanzo\" when the org has never set one.",
 			"channelAgents.rooms":     "Rooms maps a platform room id to the agent that answers there.",
@@ -41,7 +41,7 @@ func init() {
 	zip.Describe("GET /v1/channels/allowlist", zip.Doc{
 		Description: "Returns the caller org's access policy for one channel: whether\nDMs are pairing-gated, allowlisted or open, whether group rooms are open,\nallowlisted or disabled, the config-managed DM and group allow entries, the\nsenders approved through PAIRING (read-only here), and the org's named access\ngroups. An unknown channel is a 404.",
 		Fields: map[string]string{
-			"allowlistRef.channel":       "Channel is the transport to read: discord, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
+			"allowlistRef.channel":       "Channel is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
 			"allowlistView.accessGroups": "AccessGroups is the org's named sender sets, as group name -> channel ->\nmember entries, held once for the whole org. A DM or Group entry written\n`accessGroup:<name>` admits any sender listed under that name for THIS\nchannel, or under the channel `*`, which is how one set covers every\ntransport at once. Replaced wholesale by the PUT.",
 			"allowlistView.dm":           "DM is the CONFIG-managed DM allow entries — the list PUT\n/v1/channels/allowlist owns and replaces wholesale. An entry matches a sender\neither EXACTLY, as the transport-native id inbox messages carry, or as\n`accessGroup:<name>` resolved through AccessGroups. A bare `*` admits\neveryone, but only while DMPolicy is \"open\": it is gate syntax, not an\nidentity, so under \"allowlist\" it matches nobody.",
 			"allowlistView.dmPolicy":     "DMPolicy decides every inbound DIRECT message, defaulting to \"pairing\" when\nthe org has never set one. \"pairing\": a sender with no entry is sent a\npairing code and the message is DROPPED — it never reaches the inbox — and\nthey are admitted only once an admin approves. \"allowlist\": only DM admits,\nand Paired senders are suspended, since a pairing grant counts under\n\"pairing\" alone. \"open\" is not unconditional either — it still requires `*`\nor a matching entry in DM.",
@@ -134,7 +134,7 @@ func init() {
 		Description: "Edits the caller org's access policy for one channel and answers\nthe policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.\nEvery field but `channel` is optional and applied only when provided: an empty\npolicy string leaves that policy alone, an absent or null list leaves that list\nalone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries\n— senders approved through pairing belong to the approval flow, so a policy\nedit can never revoke one. An unknown channel is a 404.",
 		Fields: map[string]string{
 			"allowlistPutIn.accessGroups": "AccessGroups REPLACES the org's named access groups, as\ngroup name -> channel -> entries. Absent or null leaves them alone.",
-			"allowlistPutIn.channel":      "Channel is the transport to edit: discord, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
+			"allowlistPutIn.channel":      "Channel is the transport to edit: discord, github, linear, slack, teams, telegram or whatsapp.\nRequired; an unknown value is a 404.",
 			"allowlistPutIn.dm":           "DM REPLACES the config-managed DM allow entries. Absent or null leaves them\nalone; an empty list clears them. It never touches senders approved through\npairing — a policy edit cannot revoke an approved pairing.",
 			"allowlistPutIn.dmPolicy":     "DMPolicy sets how direct messages are admitted: \"pairing\" (a person must be\napproved first), \"allowlist\" (only listed senders) or \"open\". Empty leaves\nit unchanged.",
 			"allowlistPutIn.group":        "Group REPLACES the config-managed group allow entries. Absent or null\nleaves them alone; an empty list clears them.",

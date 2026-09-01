@@ -321,6 +321,16 @@ func planeChatSend(ctx context.Context, in *plane.ChatSendIn) (*plane.ChatSendOu
 		return &plane.ChatSendOut{MessageID: id}, err
 	case "teams":
 		return &plane.ChatSendOut{}, SendTeams(ctx, in.Root, in.Room, in.Text)
+	case "github":
+		// The room is "owner/repo#N"; the reply is an issue comment posted with
+		// the installation's own token, so it appears as the App.
+		id, err := githubIssueComment(ctx, in.Org, in.Room, in.Text)
+		return &plane.ChatSendOut{MessageID: id}, err
+	case "linear":
+		// The room is the issue id; the reply is a comment posted with the key of
+		// the person who bound the organization (linearClaim), so it carries a name.
+		id, err := linearIssueComment(ctx, mounted, in.Org, in.Room, in.Text)
+		return &plane.ChatSendOut{MessageID: id}, err
 	case "telegram":
 		// THE ISOLATION ROOT for telegram, and it has to be asked here. There is
 		// ONE global bot token, so the chat→org bind is the only thing standing

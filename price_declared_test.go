@@ -110,6 +110,9 @@ var unpricedRoot = map[string]bool{
 	"o11y": true,
 	// An operator job: re-wraps KMS material under a new key and exits. No routes.
 	"kmsreseal": true,
+	// A GENERATOR: it writes the MCP catalogue at build time and exits. It serves
+	// no route, so there is no surface to price.
+	"gen-mcp-catalog": true,
 	// The deployment smoke prober. It CALLS surfaces; it serves none.
 	"smoke": true,
 	// The generator that scaffolds the other roots. It writes Price declarations;

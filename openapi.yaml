@@ -14030,7 +14030,7 @@ components:
           type: object
         channel:
           description: |-
-            Channel is the transport to edit: discord, slack, teams, telegram or whatsapp.
+            Channel is the transport to edit: discord, github, linear, slack, teams, telegram or whatsapp.
             Required; an unknown value is a 404.
           type: string
         dm:
@@ -69501,7 +69501,7 @@ paths:
   /v1/channels/{channel}/send:
     post:
       description: |-
-        Delivers text, attachments and actions to one room on a connected chat transport — discord, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the `messageId` it assigned and the Unix second it landed. An unknown channel is a 404.
+        Delivers text, attachments and actions to one room on a connected chat transport — discord, github, linear, slack, teams, telegram or whatsapp — and answers that transport's own receipt, the `messageId` it assigned and the Unix second it landed. An unknown channel is a 404.
 
         The body is the envelope's NARROW outbound projection: `room`, `text`, `attachments`, `actions`, `replyTo` and `idempotency`, and nothing else. Identity is not a field — the channel is the path segment and the sender is the caller's validated org — so a body carrying `sender`, `account` or `channel` is refused with 400 rather than having it silently dropped. `room.id` is required, and so is something to say: text, or at least one attachment.
 
@@ -69528,7 +69528,7 @@ paths:
       operationId: get_channels_agent
       parameters:
       - description: |-
-          Channel is the transport: discord, slack, teams, telegram or whatsapp.
+          Channel is the transport: discord, github, linear, slack, teams, telegram or whatsapp.
           Required; an unknown value is a 404.
         in: query
         name: channel
@@ -69598,7 +69598,7 @@ paths:
       operationId: get_channels_allowlist
       parameters:
       - description: |-
-          Channel is the transport to read: discord, slack, teams, telegram or whatsapp.
+          Channel is the transport to read: discord, github, linear, slack, teams, telegram or whatsapp.
           Required; an unknown value is a 404.
         example: slack
         in: query
