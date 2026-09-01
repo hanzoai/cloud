@@ -17,9 +17,10 @@ import (
 // `evals openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "eval",
-		Price: cloud.Free,
-		Use:   eval.Use,
+		Name:     "eval",
+		Price:    cloud.Free,
+		Use:      eval.Use,
+		Shutdown: cloud.CtxShutdown(eval.Shutdown),
 	}}, []string{"eval"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

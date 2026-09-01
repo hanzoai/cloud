@@ -18,9 +18,10 @@ import (
 // `pricing openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "pricing",
-		Price: cloud.Free,
-		Use:   pricing.Use,
+		Name:     "pricing",
+		Price:    cloud.Free,
+		Use:      pricing.Use,
+		Shutdown: pricing.Shutdown,
 		// This surface answers FIVE subtrees, not the one the /v1/<name>
 		// convention assumes — the catalog read plane, the self-service
 		// enablement plane and the two admin planes over the same overlay store.
