@@ -161,7 +161,7 @@ func TestPublishServiceWritesTheWholeShape(t *testing.T) {
 	if code != http.StatusCreated {
 		t.Fatalf("publish want 201, got %d (%s)", code, body)
 	}
-	var v serviceView
+	var v publishedView
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)
 	}
