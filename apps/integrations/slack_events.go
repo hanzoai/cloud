@@ -620,8 +620,10 @@ func slackPostResponseURL(ctx context.Context, responseURL, responseType, text s
 
 func slackSigningSecret() string { return strings.TrimSpace(os.Getenv("SLACK_SIGNING_SECRET")) }
 
-// Which agent answers is not a variable here at all: a slash command asks channels
-// for the room's binding (agentRefFor), the same row a mention is answered from.
+// SLACK_AGENT_REF is not read here any more, and it did not become an unset knob:
+// channelAgentRef("slack") reads the same variable for the chat turn, so the one
+// remaining path honours it and there is one implementation of the lookup rather
+// than a coding copy beside a chat copy that could disagree about the default.
 
 // slackReadBody returns the exact raw request body the HMAC must be computed over,
 // bounded to slackMaxBody. fiber's transport already bounds the body; this is the

@@ -387,13 +387,6 @@ const (
 	// looks like a lookup. The record was there the whole time.
 	ChannelsRecent = "channels_recent"
 
-	// ChannelsAgent names the agent that answers one room: the org's binding for
-	// the room, else its default for the transport, else the built-in. It exists
-	// so the bridges that answer OUTSIDE the channels turn — a slash command that
-	// must reply on its response_url — pick the agent the same way a mention
-	// does, from the same row, instead of from a deployment variable.
-	ChannelsAgent = "channels_agent"
-
 	// The x402 rail, across the process boundary. Four ops, because the four
 	// things a settlement needs live in four binaries: the RAIL is x402's, the
 	// PRICE is the marketplace's, the PAYEE is wallets', and the LEDGER is
@@ -607,14 +600,6 @@ const (
 	// IAM holds what decides it — who is a machine, who is disabled, and who holds
 	// a grant — and a subsystem computing its own would bill from a second roster.
 	IAMSeats = "iam_seats"
-
-	// IAMFederated resolves the caller's org member who signed in through an
-	// external identity — GitHub today — from that provider's own subject. It
-	// exists so a webhook that arrives with a GitHub user id can run a turn as
-	// the Hanzo person it belongs to, without a second sign-in and without
-	// trusting a mention to name its author. Absent means no member of THIS org
-	// carries that identity; it never reaches across tenants.
-	IAMFederated = "iam_federated"
 )
 
 // HostApp is the socket name the fleet router answers on. It is not an app —
@@ -1250,19 +1235,6 @@ type Member struct {
 	// Account is the team AccountUuid the subject resolved to — the identity the
 	// asking process attributes the person by, so it never derives one itself.
 	Account string `json:"account"`
-}
-
-// FederatedIn names an external identity: the provider ("github") and the
-// subject that provider issued (GitHub's numeric user id). The org is the
-// caller's, from the plane context.
-type FederatedIn struct {
-	Provider string `json:"provider" validate:"required"`
-	Subject  string `json:"subject" validate:"required"`
-}
-
-// Federated is the member it resolved to: the IAM user id, or "" for none.
-type Federated struct {
-	User string `json:"user"`
 }
 
 // SpacesIn names the person a space list is about. The ORG is absent for
@@ -2498,17 +2470,6 @@ type RunOnBehalfIn struct {
 // RecentIn asks for the last turns of one room. The ORG is the caller's, from
 // the plane context and never an argument — an org a caller could name is an org
 // whose conversations a caller could read.
-// AgentForIn names a room; the org is the caller's, from the plane context.
-type AgentForIn struct {
-	Channel string `json:"channel" validate:"required"`
-	Room    string `json:"room"`
-}
-
-// AgentFor is the agent ref that answers there.
-type AgentFor struct {
-	Ref string `json:"ref"`
-}
-
 type RecentIn struct {
 	// Channel is the transport (slack, discord, telegram) and Room the id within
 	// it. Both are required: a room id is only unique inside its transport.
