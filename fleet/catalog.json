@@ -6550,6 +6550,11 @@
    "read": true
   },
   {
+   "id": "get_team_rooms_by_id_messages",
+   "doc": "Returns the tail of one room's conversation, oldest first.\n\nIt reads the SAME Chunter documents the transactor serves, so a message typed\nin the Team client is here with no sync. A room the caller's org does not own\nanswers 404 rather than 403, so a probe learns nothing about what exists.",
+   "read": true
+  },
+  {
    "id": "get_team_transactor_statistics",
    "doc": "Statistics returns the transactor's live sessions for the space the caller's\ncredential names — the endpoint the front's space switcher and server panel\npoll on the transactor base. `token` carries the same two lanes the socket's path\nsegment does: a space UUID names the space and is authorized against the\nmembership rows, an HS256 space token names it in its signed claims.\nactiveSessions carries ONLY that one space, never another tenant's sessions.\nAn unverifiable credential, or one the caller is no member under, is 401.",
    "read": true
@@ -6565,6 +6570,10 @@
   {
    "id": "post_team_rooms",
    "doc": "Opens a named room and answers it as the store now holds it.\n\nIt writes through the SAME applyTx path the Team client uses, so a room opened\nhere is broadcast to every live client of the space and appears in an open\nsidebar without a reload — the same property listRooms rests on, read from the\nwrite side.\n\nTWO TRANSACTIONS, NOT ONE, when the request states a facet. The document and\nits mixin are separate writes in this model (bindRoom writes only the second),\nand composing them here rather than inventing a combined tx keeps one write\npath for each. A create that lands and a facet that does not is visible as a\nroom with default intent, which is the honest partial state."
+  },
+  {
+   "id": "post_team_rooms_by_id_messages",
+   "doc": "Says one thing in a room, as the caller.\n\nThe write goes through the SAME applyTx path the Team client's own messages\ntake and is broadcast to every connected client of the space, so a message\nsent here appears live in an open room rather than on the next reload. It\nanswers the message as the store now HOLDS it."
   },
   {
    "id": "put_team_rooms_by_id",
