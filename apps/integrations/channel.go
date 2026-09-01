@@ -285,7 +285,7 @@ func channelReply(s *cloud.Service[state], org string, in Inbound) (reply string
 	// the single message it used to send, which is the behaviour it replaces.
 	history := priorTurns(s, runCtx, org, in)
 	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](runCtx, "agents", plane.AgentsRunOnBehalf,
-		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: channelAgentRef(provider),
+		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: agentRefFor(runCtx, provider, in.Channel),
 			Input: text, Model: link.Model, History: history})
 	run := plane.RunOnBehalfOut{}
 	if out != nil {
@@ -331,9 +331,22 @@ func channelIdentity(s *cloud.Service[state], org, provider, externalID, user st
 	if linked {
 		return link, "", false
 	}
-	// An issue tracker has no sign-in leg of its own yet, so a turn there runs as
-	// the organization's default subject — the person who bound the account —
-	// when the commenter has not linked. Written by the claim, read here, and
+	// A GitHub commenter who signed in to Hanzo through GitHub is already known:
+	// IAM holds their GitHub user id, and the webhook carries the same id. Ask
+	// the org's identity store once, then keep the answer as an ordinary link so
+	// the next comment costs a KMS read and no plane hop.
+	if provider == "github" {
+		if sub := federatedSubject(s, org, provider, user); sub != "" {
+			link = userLink{Subject: sub}
+			if err := putUserLink(s, org, provider, user, link); err != nil {
+				s.Log.Warn("channel: cache federated link", "provider", provider, "org", org, "err", err)
+			}
+			return link, "", false
+		}
+	}
+	// An issue tracker has no sign-in leg of its own, so a turn there runs as the
+	// organization's default subject — the person who bound the account — when
+	// the commenter is not otherwise known. Written by the claim, read here, and
 	// absent on the chat transports, whose users link themselves.
 	if link, linked, err = getUserLink(s, org, provider, defaultSubjectKey); err == nil && linked {
 		return link, "", false
@@ -344,6 +357,24 @@ func channelIdentity(s *cloud.Service[state], org, provider, externalID, user st
 		return userLink{}, "Connect your Hanzo account to use @hanzo.", true
 	}
 	return userLink{}, "Connect your Hanzo account to use @hanzo: " + u, true
+}
+
+// federatedSubject asks IAM which member of org signed in through provider with
+// this subject. "" is the honest answer for none, an unreachable store, or a
+// caller with no org — the turn then falls to the org default or the link prompt.
+func federatedSubject(s *cloud.Service[state], org, provider, subject string) string {
+	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), 5*time.Second)
+	defer cancel()
+	out, err := plane.Ask[plane.FederatedIn, plane.Federated](ctx, "iam", plane.IAMFederated,
+		&plane.FederatedIn{Provider: provider, Subject: subject})
+	if err != nil {
+		s.Log.Warn("channel: federated lookup", "provider", provider, "org", org, "err", err)
+		return ""
+	}
+	if out == nil {
+		return ""
+	}
+	return strings.TrimSpace(out.User)
 }
 
 // linkURL builds the per-user "connect your Hanzo account" URL for a provider. Each
@@ -439,16 +470,18 @@ func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLi
 
 // ── config (env, read at call time — operator-injected from KMS) ────────────
 
-// channelAgentRef resolves the agent every @hanzo turn runs. Per-platform override
-// {PROVIDER}_AGENT_REF (e.g. SLACK_AGENT_REF) → shared BRIDGE_AGENT_REF → "hanzo".
-func channelAgentRef(provider string) string {
-	if v := strings.TrimSpace(os.Getenv(strings.ToUpper(provider) + "_AGENT_REF")); v != "" {
-		return v
+// agentRefFor asks channels which agent answers this room — the org's binding
+// for the room, else its default for the transport, else the built-in. One row
+// decides it for a slash command and for a mention alike. An unreachable
+// channels answers the built-in rather than refusing the turn: a binding is a
+// preference, and a person asked a question.
+func agentRefFor(ctx context.Context, provider, room string) string {
+	out, err := plane.Ask[plane.AgentForIn, plane.AgentFor](ctx, "channels", plane.ChannelsAgent,
+		&plane.AgentForIn{Channel: provider, Room: room})
+	if err != nil || out == nil || strings.TrimSpace(out.Ref) == "" {
+		return "hanzo"
 	}
-	if v := strings.TrimSpace(os.Getenv("BRIDGE_AGENT_REF")); v != "" {
-		return v
-	}
-	return "hanzo"
+	return out.Ref
 }
 
 func channelAgentConcurrency() int {
