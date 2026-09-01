@@ -4908,6 +4908,7 @@ components:
             call carrying a failed command — the HTTP status stays 200, because "the
             command failed" and "the call failed" are different facts and a caller has
             to be able to tell them apart.
+          format: int64
           type: integer
         stderr:
           description: |-
@@ -7415,6 +7416,14 @@ components:
             is an emulator running\non an interpreted CPU and never finishing its
             boot."
           type: string
+        cluster:
+          description: |-
+            Cluster names one of the org's ATTACHED clusters to run the lease on —
+            the fleet-local name a BYO cluster was registered under. Empty runs where
+            leases have always run, the home cluster. The named cluster must carry
+            the sandbox namespace and the gvisor runtime class; a name the org has
+            not attached is refused 404.
+          type: string
         id:
           description: |-
             ID names a sandbox to RESUME, and is the id an earlier lease answered with.
@@ -7445,6 +7454,7 @@ components:
           description: |-
             TTLSec bounds the lease in seconds. Unset takes the class default. Nothing
             runs forever, because a sandbox is somebody else's code on our nodes.
+          format: int64
           type: integer
       type: object
     Leased:
@@ -7455,6 +7465,11 @@ components:
             exec | dev | desktop | android. A request that named none leased an `exec`,
             so this is where a caller learns which kind of computer it is holding, and it
             is what Workdir below follows from.
+          type: string
+        cluster:
+          description: |-
+            Cluster is the attached cluster this sandbox runs on, when one was named.
+            Empty is the home cluster.
           type: string
         id:
           description: |-
@@ -10216,6 +10231,7 @@ components:
             A command that never reached an exit does not arrive here at all: a timeout
             or a stop cancels the channel, and that is an error on the call rather than a
             code of ours invented to fill this field.
+          format: int64
           type: integer
         stderr:
           description: |-
@@ -11770,6 +11786,7 @@ components:
           description: |-
             TimeoutSec bounds this ONE command, so a wedged program holds the caller for
             its own timeout rather than for the whole lease.
+          format: int64
           type: integer
       type: object
     RunPoint:
@@ -12059,6 +12076,13 @@ components:
             /mnt/data, no project, bounded per org), "dev" for a workspace bound to a
             project (workdir /work, single-attach), "desktop" for one with a screen.
           type: string
+        cluster:
+          description: |-
+            Cluster is the attached cluster this sandbox runs on — the fleet-local
+            name the lease named — or empty for the home cluster. Immutable for the
+            life of the lease, like the pod it locates: every later call into the
+            sandbox reads it to reach the right apiserver.
+          type: string
         connectedAt:
           description: |-
             ConnectedAt is when somebody was last known to have this sandbox's project
@@ -12069,9 +12093,11 @@ components:
             applies — see lifecycle.go.
 
             Zero means nobody has said so, which puts the sandbox on the short clock.
+          format: int64
           type: integer
         createdAt:
           description: CreatedAt is when the lease was first taken, Unix seconds.
+          format: int64
           type: integer
         error:
           description: |-
@@ -12084,6 +12110,7 @@ components:
             ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take
             the sandbox at any time; it is a deadline, not a guarantee of survival until
             then, since an idle sandbox goes sooner.
+          format: int64
           type: integer
         id:
           description: |-
@@ -12106,6 +12133,7 @@ components:
             LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads
             it: a sandbox idle past the idle window is reclaimed even inside its TTL,
             because an idle lease is capacity nobody is using.
+          format: int64
           type: integer
         org:
           description: |-
@@ -13282,6 +13310,7 @@ components:
           description: |-
             Stopped counts the commands that were still running and were interrupted.
             Zero says the sandbox was idle, not that the stop failed — see above.
+          format: int64
           type: integer
       type: object
     Store:
@@ -15956,6 +15985,7 @@ components:
             Bytes is how many bytes the file now holds. A write REPLACES the file, so this
             is its whole length and not an amount appended, and 0 is a legitimate answer:
             a WriteIn with no Data truncates the file to nothing.
+          format: int64
           type: integer
         path:
           description: |-
@@ -26102,6 +26132,18 @@ components:
             Usage is an optional usage snapshot, clamped and re-serialized to known
             fields; omitting it keeps the last good one.
       type: object
+    enrollmentView:
+      properties:
+        expiresAt:
+          description: ExpiresAt is when the un-used token lapses, RFC 3339.
+          type: string
+        jwt:
+          description: |-
+            JWT is the one-time enrollment token the device presents ONCE to join the
+            fabric (ziti edge enroll / ziti-edge-tunnel enroll). Spent or lapsed, it
+            authenticates nothing; this surface stores it nowhere.
+          type: string
+      type: object
     enrolment:
       properties:
         created:
@@ -26919,6 +26961,7 @@ components:
           type: string
         timeoutSec:
           description: TimeoutSec bounds the run in seconds. Zero takes the default.
+          format: int64
           type: integer
       type: object
     experimentList:
@@ -31786,6 +31829,56 @@ components:
             failed.
           type: integer
       type: object
+    identityIn:
+      properties:
+        name:
+          description: |-
+            Name is the device's name within the org — a DNS label. The fabric knows
+            the identity as "<name>.<org>"; every answer here uses the caller's name.
+          type: string
+        roles:
+          description: |-
+            Roles are extra role attributes for the identity, each scoped to the
+            caller's org on the way in ("k3s-host" is written as "k3s-host.<org>") so
+            no caller can claim an attribute another tenant's policy selects. A role
+            of the form "<service>-host" makes this identity a HOST of that published
+            service — the bind policy from POST /v1/network/services selects exactly
+            that attribute — and is refused when the org has no such service.
+          items:
+            type: string
+          type: array
+      type: object
+    identityList:
+      properties:
+        identities:
+          description: Identities is one row per fabric identity tagged with the caller's
+            org role.
+          items:
+            $ref: '#/components/schemas/identityView'
+          type: array
+      type: object
+    identityView:
+      properties:
+        enrollment:
+          $ref: '#/components/schemas/enrollmentView'
+          description: |-
+            Enrollment is present only while the identity holds an un-used one-time
+            token — on create, and on a listed identity that has not yet enrolled, so
+            a mislaid JWT can be read again until it is spent or lapses.
+        id:
+          description: ID is the identity's fabric id — the key DELETE addresses.
+          type: string
+        name:
+          description: Name is the identity's name within the org.
+          type: string
+        roles:
+          description: |-
+            Roles are the identity's role attributes as the fabric holds them: the
+            org's own "org-<org>" plus any org-scoped roles it was minted with.
+          items:
+            type: string
+          type: array
+      type: object
     imageOrigin:
       properties:
         repository:
@@ -33370,6 +33463,13 @@ components:
             "dev" for a workspace bound to a project, "desktop" for one with a screen.
             It decides the image, the working directory and the isolation.
           type: string
+        cluster:
+          description: |-
+            Cluster names one of the org's attached clusters to run the sandbox on —
+            the fleet-local name it was registered under. Empty runs on the home
+            cluster. The named cluster must carry the sandbox namespace and the
+            gvisor runtime class; a name the org has not attached is 404.
+          type: string
         image:
           description: |-
             Image overrides the image the class would pick. Honoured only for a caller
@@ -33391,6 +33491,7 @@ components:
           description: |-
             TTLSec is how long the lease runs before the reaper may take it, in
             seconds. Zero takes the class's own default.
+          format: int64
           type: integer
       type: object
     legalFiling:
@@ -34994,6 +35095,7 @@ components:
           type: string
         nodes:
           description: Nodes is how many edge-routers the org has on the fabric.
+          format: int64
           type: integer
         status:
           description: |-
@@ -50763,6 +50865,20 @@ components:
             number nobody can check, so every write requires it.
           type: string
       type: object
+    publishedView:
+      properties:
+        dns:
+          description: |-
+            DNS is the name the fabric answers for this service — what a kubeconfig
+            server, or any client on the org's overlay, dials.
+          type: string
+        id:
+          description: ID is the fabric service's id.
+          type: string
+        name:
+          description: Name is the service's name within the org.
+          type: string
+      type: object
     pullList:
       properties:
         data:
@@ -55777,6 +55893,23 @@ components:
           description: real invocation count in the bucket
           type: integer
       type: object
+    serviceIn:
+      properties:
+        host:
+          description: |-
+            Host is where the HOSTING identity forwards a connection — an address the
+            host device itself can reach, "127.0.0.1" for a server on the device.
+          type: string
+        name:
+          description: |-
+            Name is the service's name within the org — a DNS label. The fabric knows
+            the service as "<name>.<org>" and answers for it at "<name>.<org>.ziti".
+          type: string
+        port:
+          description: Port is the port beside Host, and the one the DNS name intercepts.
+          format: int64
+          type: integer
+      type: object
     serviceList:
       properties:
         services:
@@ -58412,6 +58545,7 @@ components:
       properties:
         expiresIn:
           description: ExpiresIn is how long the ticket is good for, in seconds.
+          format: int64
           type: integer
         ticket:
           description: |-
@@ -109444,6 +109578,93 @@ paths:
       x-app: network
       x-public: true
       x-tool: true
+  /v1/network/identities:
+    get:
+      description: |-
+        Returns the fabric identities the caller's org owns.
+
+        One row per identity tagged with the org's "org-<org>" role attribute — a
+        device minted here, enrolled or not. An identity that has not yet enrolled
+        still carries its one-time enrollment, so a mislaid JWT is read again here
+        rather than re-minted.
+
+        A tenancy read over the full inventory, so like the mesh list it does NOT
+        degrade: an unconfigured deployment answers 503.
+      operationId: get_network_identities
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/identityList'
+          description: ok
+      summary: Returns the fabric identities the caller's org owns.
+      tags:
+      - network
+      x-app: network
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Mints a fabric identity for a device the caller's org brings.
+
+        The identity is created of type Device, tagged with the org's "org-<org>" role
+        attribute plus any supplied roles — each scoped to the org, and a
+        "<service>-host" role refused unless the org has published that service. The
+        answer carries the controller's one-time enrollment JWT: the device presents
+        it once to join the fabric, and until it does the same token can be read back
+        off GET /v1/network/identities.
+
+        A write, so it does not degrade: an unconfigured deployment answers 503.
+      operationId: post_network_identities
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/identityIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/identityView'
+          description: created
+      summary: Mints a fabric identity for a device the caller's org brings.
+      tags:
+      - network
+      x-app: network
+      x-public: true
+      x-tool: true
+  /v1/network/identities/{id}:
+    delete:
+      description: |-
+        Removes one of the org's fabric identities. The device's
+        credential stops authenticating and its enrollment, if unspent, stops
+        enrolling.
+
+        An id belonging to another org — or to nothing — is 404 before any write
+        reaches the controller: whether an identity exists is itself a cross-tenant
+        fact, and a delete may only ever act on what the caller could list.
+      operationId: delete_network_identities_by_id
+      parameters:
+      - description: |-
+          ID is the identity id from the path. The URL is the addressing authority,
+          so it binds from there whatever else the request carries.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: Removes one of the org's fabric identities.
+      tags:
+      - network
+      x-app: network
+      x-public: true
+      x-tool: true
   /v1/network/routers:
     get:
       description: |-
@@ -109495,6 +109716,43 @@ paths:
                 $ref: '#/components/schemas/meshServiceList'
           description: ok
       summary: Returns the Zero Trust edge services the caller's org owns.
+      tags:
+      - network
+      x-app: network
+      x-public: true
+      x-tool: true
+    post:
+      description: |-
+        Puts a name on the org's overlay: a fabric service forwarding
+        to host:port on whichever of the org's devices carries the "<name>-host"
+        role, dialable at "<name>.<org>.ziti" by any of the org's identities — and by
+        the cloud's own, which is what lets a BYO cluster's apiserver be attached to
+        the fleet with a ".ziti" kubeconfig.
+
+        Answers 201 with the service and its DNS name. The objects behind it are
+        created in dependency order and unwound on failure, so a half-published
+        service never lingers on the fabric.
+
+        A write, so it does not degrade: an unconfigured deployment answers 503.
+      operationId: post_network_services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/serviceIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publishedView'
+          description: created
+      summary: 'Puts a name on the org''s overlay: a fabric service forwarding to
+        host:port on whichever of the org''s devices carries the "<name>-host" role,
+        dialable at "<name>.<org>.ziti" by any of the org''s identities — and by the
+        cloud''s own, which is what lets a BYO cluster''s apiserver be attached to
+        the fleet with a ".ziti" kubeconfig.'
       tags:
       - network
       x-app: network
