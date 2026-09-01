@@ -14,6 +14,9 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/plane"
+	agentsplane "github.com/hanzoai/cloud/plane/agents"
+	channelsplane "github.com/hanzoai/cloud/plane/channels"
+	iamplane "github.com/hanzoai/cloud/plane/iam"
 )
 
 // channel.go is the ONE ChatBridge core: the platform-agnostic @hanzo entry point
@@ -284,7 +287,7 @@ func channelReply(s *cloud.Service[state], org string, in Inbound) (reply string
 	// makes a worse answer; refusing to answer at all makes none. So this degrades to
 	// the single message it used to send, which is the behaviour it replaces.
 	history := priorTurns(s, runCtx, org, in)
-	out, rerr := plane.Ask[plane.RunOnBehalfIn, plane.RunOnBehalfOut](runCtx, "agents", plane.AgentsRunOnBehalf,
+	out, rerr := agentsplane.AgentsRunOnBehalf(runCtx,
 		&plane.RunOnBehalfIn{Org: org, Subject: link.Subject, Ref: agentRefFor(runCtx, provider, in.Channel),
 			Input: text, Model: link.Model, History: history})
 	run := plane.RunOnBehalfOut{}
@@ -365,7 +368,7 @@ func channelIdentity(s *cloud.Service[state], org, provider, externalID, user st
 func federatedSubject(s *cloud.Service[state], org, provider, subject string) string {
 	ctx, cancel := context.WithTimeout(cloud.For(context.Background(), org), 5*time.Second)
 	defer cancel()
-	out, err := plane.Ask[plane.FederatedIn, plane.Federated](ctx, "iam", plane.IAMFederated,
+	out, err := iamplane.IAMFederated(ctx,
 		&plane.FederatedIn{Provider: provider, Subject: subject})
 	if err != nil {
 		s.Log.Warn("channel: federated lookup", "provider", provider, "org", org, "err", err)
@@ -476,7 +479,7 @@ func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLi
 // channels answers the built-in rather than refusing the turn: a binding is a
 // preference, and a person asked a question.
 func agentRefFor(ctx context.Context, provider, room string) string {
-	out, err := plane.Ask[plane.AgentForIn, plane.AgentFor](ctx, "channels", plane.ChannelsAgent,
+	out, err := channelsplane.ChannelsAgent(ctx,
 		&plane.AgentForIn{Channel: provider, Room: room})
 	if err != nil || out == nil || strings.TrimSpace(out.Ref) == "" {
 		return "hanzo"
@@ -537,7 +540,7 @@ func recentTurns(ctx context.Context, provider, room string) []plane.Turn {
 	if room == "" {
 		return nil
 	}
-	out, err := plane.Ask[plane.RecentIn, plane.Recent](ctx, "channels", plane.ChannelsRecent,
+	out, err := channelsplane.ChannelsRecent(ctx,
 		&plane.RecentIn{Channel: provider, Room: room})
 	if err != nil || out == nil || len(out.Turns) == 0 {
 		return nil

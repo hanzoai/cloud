@@ -102,6 +102,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		audit:      deps.Audit,
 	}}
 	mounted = s
+	serveSkills()
 
 	routes(app, s)
 	b.Log.Info("tools plane mounted", "prefix", "/v1/tools", "brand", deps.Brand, "kms", deps.KMS != nil)

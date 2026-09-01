@@ -209,6 +209,12 @@ const (
 	// another.
 	TeamSpaces = "team_spaces"
 
+	// ToolsSkills replaces what one repository contributes to the caller's org's
+	// skills with the SKILL.md files just read from its default branch. The org's
+	// skills are the files in its repositories; a push that adds one adds it, a
+	// push that removes one removes it, and nothing is configured to make that so.
+	ToolsSkills = "tools_skills"
+
 	GitFiles   = "git_files"
 	GitImport  = "git_import"
 	GitInbound = "git_inbound"
@@ -1263,6 +1269,30 @@ type FederatedIn struct {
 // Federated is the member it resolved to: the IAM user id, or "" for none.
 type Federated struct {
 	User string `json:"user"`
+}
+
+// SkillFile is one SKILL.md as a repository holds it: the repo-relative Path,
+// ".agents/skills/<name>/SKILL.md", whose directory is the skill's name, and
+// the file's Content.
+type SkillFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+// SkillsIn names the repository ("<project>/<name>", or "<name>" for an
+// org-level repository) and carries every skill file its default branch holds.
+// Empty Files means the repository holds none now, and removes what it held.
+type SkillsIn struct {
+	Source string      `json:"source" validate:"required"`
+	Files  []SkillFile `json:"files"`
+}
+
+// Skills is what the repository contributes after the call, and the paths of
+// files it could not take as skills — a name that is not one path segment, an
+// empty body, or one over the size a skill may be.
+type Skills struct {
+	Count   int      `json:"count"`
+	Refused []string `json:"refused,omitempty"`
 }
 
 // SpacesIn names the person a space list is about. The ORG is absent for

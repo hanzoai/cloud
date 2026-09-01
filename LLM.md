@@ -7746,3 +7746,17 @@ the store (`Hit.Text`, never on the wire — the vector payload holds no body by
 design), the lexical row is scored through `knowledge.Text`, a code span through
 its snippet. Every `AIClient` fake stubs `Rerank`; adding a fake means adding
 that line.
+
+## An org's skills are the SKILL.md files in its repositories
+
+`apps/git/skills_on_push.go` reads `.agents/skills/<name>/SKILL.md` from a
+default-branch push (bounded like the code index) and calls `plane.ToolsSkills`
+through the generated `plane/tools` client; `apps/tools/skills_repo.go` turns
+each file into a `Skill` (name = directory, description = frontmatter, content =
+the file) and `SkillStore.Replace` makes them the repository's whole contribution
+in one transaction — the `source` column ("<project>/<name>") is what a push
+replaces, and a hand-written skill has none. Nothing declares which repositories
+count: holding the files is the declaration; a later push wins a shared name.
+Cross-app calls go through `plane/<app>` clients (`go run ./plane/gen` after
+adding an op — set a new reactor aside for the first run, the generator loads
+every app), not hand-written `plane.Ask`.

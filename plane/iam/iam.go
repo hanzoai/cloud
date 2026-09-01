@@ -32,6 +32,7 @@ const App = "iam"
 var Ops = []string{
 	plane.IAMApproval,
 	plane.IAMEmail,
+	plane.IAMFederated,
 	plane.IAMGrant,
 	plane.IAMMailable,
 	plane.IAMMembers,
@@ -52,6 +53,13 @@ func IAMApproval(ctx context.Context) (*plane.Approval, error) {
 // Calls plane.IAMEmail on iam over the peer plane.
 func IAMEmail(ctx context.Context) (*plane.Email, error) {
 	return plane.Ask[struct{}, plane.Email](ctx, App, plane.IAMEmail, &struct{}{})
+}
+
+// IAMFederated the caller's org member behind an external identity.
+//
+// Calls plane.IAMFederated on iam over the peer plane.
+func IAMFederated(ctx context.Context, in *plane.FederatedIn) (*plane.Federated, error) {
+	return plane.Ask[plane.FederatedIn, plane.Federated](ctx, App, plane.IAMFederated, in)
 }
 
 // IAMGrant record that a user may act in a scope of the caller's org.
