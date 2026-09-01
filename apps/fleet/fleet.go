@@ -27,6 +27,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -212,16 +213,48 @@ func (r *Registry) DynForOrg(org, project string) dynamic.Interface {
 	if dyn, ok := r.cache[key]; ok {
 		return dyn
 	}
-	raw, err := r.kms.Get(configRef(org, project, target.Name))
-	if err != nil || len(raw) == 0 {
+	cfg, err := r.RESTForOrgCluster(org, project, target.Name)
+	if err != nil {
 		return nil
 	}
-	dyn, _, err := dynFromKubeconfig(raw)
+	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		return nil
 	}
 	r.cache[key] = dyn
 	return dyn
+}
+
+// ErrNoCluster says the org+project shard holds no attached cluster by that
+// name. A sentinel rather than prose, so a caller can answer it as an absence
+// (a 404) and every other failure as the fault it is.
+var ErrNoCluster = errors.New("no such cluster")
+
+// RESTForOrgCluster returns the REST config that reaches ONE of the org+project's
+// registered clusters, by name: the kubeconfig unsealed from the org's KMS and
+// passed back through the same SafeRESTConfig gate that admitted it at attach.
+// It sits beside DynForOrg deliberately — that one answers "the org's default
+// compute", this one answers a caller that names the cluster (a sandbox leased
+// onto it), and both read the same index and the same sealed key.
+func (r *Registry) RESTForOrgCluster(org, project, name string) (*rest.Config, error) {
+	if !r.Enabled() {
+		return nil, ErrNoCluster
+	}
+	list, err := r.List(org, project)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.ContainsFunc(list, func(cl Cluster) bool { return cl.Name == name }) {
+		return nil, ErrNoCluster
+	}
+	raw, err := r.kms.Get(configRef(org, project, name))
+	if err != nil {
+		return nil, fmt.Errorf("unseal kubeconfig for %s: %w", name, err)
+	}
+	if len(raw) == 0 {
+		return nil, ErrNoCluster
+	}
+	return restFromKubeconfig(raw)
 }
 
 func (r *Registry) writeIndex(org, project string, list []Cluster) error {
@@ -269,12 +302,23 @@ func openKMS(brand string) *kms.Client {
 	return client
 }
 
-func dynFromKubeconfig(kubeconfig []byte) (dynamic.Interface, string, error) {
+// restFromKubeconfig is SafeRESTConfig plus the client identity every fleet
+// connection carries — one place, so the registry's consumers (attach
+// validation, DynForOrg, RESTForOrgCluster) cannot disagree about either.
+func restFromKubeconfig(kubeconfig []byte) (*rest.Config, error) {
 	restCfg, err := SafeRESTConfig(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	restCfg.UserAgent = "hanzo-cloud-fleet"
+	return restCfg, nil
+}
+
+func dynFromKubeconfig(kubeconfig []byte) (dynamic.Interface, string, error) {
+	restCfg, err := restFromKubeconfig(kubeconfig)
 	if err != nil {
 		return nil, "", err
 	}
-	restCfg.UserAgent = "hanzo-cloud-fleet"
 	dyn, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		return nil, "", err
@@ -309,7 +353,22 @@ func SafeRESTConfig(kubeconfig []byte) (*rest.Config, error) {
 	if err := guardHost(restCfg.Host); err != nil {
 		return nil, err
 	}
+	// A ".ziti" apiserver is a fabric service, not an address: the connection to
+	// it goes through the cloud's own fabric identity (ziti.go), and every other
+	// host keeps client-go's ordinary TCP dial.
+	if fabricHost(hostOf(restCfg.Host)) {
+		restCfg.Dial = fabricDial
+	}
 	return restCfg, nil
+}
+
+// hostOf extracts the hostname from an apiserver URL, empty when it has none.
+func hostOf(rawHost string) string {
+	u, err := url.Parse(strings.TrimSpace(rawHost))
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }
 
 // guardHost rejects an apiserver URL that is not https or resolves to a
@@ -323,6 +382,12 @@ func guardHost(rawHost string) error {
 	}
 	if u.Scheme != "https" {
 		return fmt.Errorf("cluster apiserver endpoint must be https")
+	}
+	// A host on the fabric's own namespace is accepted WITHOUT resolving: nothing
+	// resolves ".ziti", and the SSRF classes this guard refuses are addresses,
+	// which an authenticated overlay dial never touches (ziti.go).
+	if fabricHost(u.Hostname()) {
+		return nil
 	}
 	if os.Getenv(allowPrivateHostsEnv) != "" {
 		return nil

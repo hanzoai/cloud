@@ -227,33 +227,15 @@ func buildCustody(deps cloud.Deps, log luxlog.Logger) map[Kind]Custody {
 // loadMPCKey fetches the ring's MPC_INTERNAL_API_KEY bearer token from KMS by
 // the ref in CLOUD_WALLETS_MPC_API_KEY_REF. NEVER a plaintext env value. Empty
 // ref or a KMS error ⇒ nil ⇒ mpc/treasury fail closed.
-func loadMPCKey(deps cloud.Deps, log luxlog.Logger) []byte {
-	ref := strings.TrimSpace(os.Getenv(envMPCKeyRef))
-	if ref == "" || deps.KMS == nil {
-		return nil
-	}
-	key, err := deps.KMS.GetSecret(context.Background(), ref)
-	if err != nil {
-		log.Warn("wallets: mpc API key ref did not resolve from KMS", "ref", ref, "err", err)
-		return nil
-	}
-	return key
+func loadMPCKey(deps cloud.Deps, _ luxlog.Logger) []byte {
+	return deps.SecretFromEnv(context.Background(), envMPCKeyRef)
 }
 
 // loadSafeJWTSecret fetches the ring's MPC_JWT_SECRET (HS256) from KMS by the ref
 // in CLOUD_WALLETS_MPC_JWT_SECRET_REF. NEVER a plaintext env value. Empty ref or a
 // KMS error ⇒ nil ⇒ safe custody fail closed.
-func loadSafeJWTSecret(deps cloud.Deps, log luxlog.Logger) []byte {
-	ref := strings.TrimSpace(os.Getenv(envSafeJWTRef))
-	if ref == "" || deps.KMS == nil {
-		return nil
-	}
-	secret, err := deps.KMS.GetSecret(context.Background(), ref)
-	if err != nil {
-		log.Warn("wallets: mpc JWT secret ref did not resolve from KMS", "ref", ref, "err", err)
-		return nil
-	}
-	return secret
+func loadSafeJWTSecret(deps cloud.Deps, _ luxlog.Logger) []byte {
+	return deps.SecretFromEnv(context.Background(), envSafeJWTRef)
 }
 
 // custodyFor resolves the backend for a kind. Missing mpc/treasury ⇒ fail closed
