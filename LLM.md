@@ -4261,10 +4261,37 @@ semantic is identical — fail closed once armed, allow before.
 - **THE FLEET HAS ONE MCP DOOR: `POST /v1/mcp`, on the HOST, AND IT IS A QUERY.**
   The host serves it itself (`fleet.Mount` in `cmd/cloud`; zip's own endpoint is
   `Disabled` there so exactly one handler holds the address). A `tools/list`
-  forwards the CALLER's own message to every composed subsystem's own `/mcp` over
-  its private ZAP socket, in parallel, and unions the replies — so what the endpoint
-  carries is what the subsystems serve at that instant, and a subsystem whose tools
-  depend on the tenant answers for THIS caller out of its own rows. `zip.App.Start`
+  forwards the CALLER's own message to every composed subsystem in parallel and
+  unions the replies — so what the endpoint carries is what the subsystems serve at
+  that instant, and a subsystem whose tools depend on the tenant answers for THIS
+  caller out of its own rows.
+
+  **A SUBSYSTEM THIS PROCESS ALREADY SERVES IS REACHED IN MEMORY, NOT DIALED.**
+  `fleet.ask` asks `zip.Serving(name)` first and calls `App.MCP` — the native
+  `zapmcp.Handler`, a frame in and a frame out. Only a peer this process does not
+  serve goes over its private ZAP socket. Plugins are local children the host
+  lazy-starts, so a "peer" is routinely a handler in THIS process, and every
+  `tools/list` used to marshal a request into ZAP frames and push it through a
+  syscall to reach one. Measured (`fleet/hop_bench_internal_test.go`): **3665 ns
+  and 29 allocations here, against 20285 ns and 61 dialed** — 5.5x, per hop, times
+  every subsystem the deployment carries. It is the move `plane.Ask` has made since
+  zip v1.26.1 with `zip.Here`; the fleet's two hops were the ones that had not.
+
+  Identity differs per hop and neither re-derives it. The MCP hop has no request
+  behind its context, so the caller is read once with `CallerOf` and stated with
+  `WithCaller` — a STATED caller is what `CallerOf` answers where no request
+  stands. The graph's hop (`execute.go send`) carries an arbitrary REST address
+  rather than a typed op, so there is no `zip.Here` to reach for: it replays the
+  caller's own request against the serving app's router (`a.Fiber().Handler()`),
+  and the headers ride along untouched. `zip.Serving` is what makes that the SERVED
+  router rather than `App.Test`'s, which prepares an app of its own and can answer
+  for routes the served one lacks.
+
+  **A test for this passes for the wrong reason unless the dial is impossible.**
+  Point `At` at the app's real socket and it is green with the short-circuit
+  deleted, because both paths reach the same door. And testing the HELPER is not
+  testing the WIRING: the first pass drove `serveHere` directly and stayed green
+  with the `send()` short-circuit removed. `zip.App.Start`
   resolves a cold child, which is the same single-flighted path a prefix request
   takes, so the first list pays one start per app and nothing after it does.
   **A subsystem that does not answer is NAMED** in `result._meta["hanzo.ai/unavailable"]`,
