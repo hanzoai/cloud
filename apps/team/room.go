@@ -100,6 +100,10 @@ const bindMax = 32
 type roomBridge struct {
 	trans    *transServer
 	accounts *accountStore
+	// ident resolves a verified credential to the team account a WRITE is
+	// attributed to. The reads here scope by org alone; a message carries an
+	// author, and that is the one thing a caller may not choose. See message.go.
+	ident    *identity
 	degraded bool
 }
 

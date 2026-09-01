@@ -214,8 +214,11 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// The channel surface: the same Chunter rooms the transactor serves, readable
 	// without speaking the transactor protocol, plus the one write that says what
 	// a channel is for. See channel.go.
-	channels := &roomBridge{trans: trans, accounts: accounts, degraded: degraded}
+	channels := &roomBridge{trans: trans, accounts: accounts, ident: ident, degraded: degraded}
 	channels.register(app)
+	// The conversation itself, on the same rooms. Registered separately because a
+	// typed op's prose is lifted from the file its group is built in.
+	channels.registerMessages(app)
 
 	// Files plane: the space blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS client (deps.VFS) and org-scoped by the
