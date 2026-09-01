@@ -61,12 +61,24 @@ func build(b cloud.Base) (state, error) {
 
 // unconfigured answers every path with the reason, so a caller learns what is
 // missing rather than that the address does not exist.
+//
+// The reason is an error, which is to say arbitrary text: today's is a fixed
+// string, but a wrapped %w or a quoted path is the ordinary next edit to the
+// function that produces it, and pasting one between quotes writes a body that
+// will not parse. Marshalled, the body is a body whatever the error says.
 func unconfigured(cause error) http.Handler {
+	body, err := json.Marshal(map[string]any{
+		"status": http.StatusServiceUnavailable,
+		"title":  "Service Unavailable",
+		"detail": "ci is not configured: " + cause.Error(),
+	})
+	if err != nil { // a string map cannot fail to marshal; answer rather than panic
+		body = []byte(`{"status":503,"title":"Service Unavailable"}`)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"status":503,"title":"Service Unavailable",` +
-			`"detail":"ci is not configured: ` + cause.Error() + `"}`))
+		_, _ = w.Write(body)
 	})
 }
 
@@ -135,6 +147,15 @@ func call[T any](ctx context.Context, h http.Handler, path string) (*T, error) {
 	h.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
+		// The 503 above is this binary's own diagnostic and says WHICH piece of
+		// configuration is missing. Reporting the status alone threw away the
+		// only sentence that distinguishes "no CI_GIT_TOKEN" from "cannot reach
+		// the forge", which is the whole reason that handler answers instead of
+		// 404ing. A tenant-scoped answer is not at stake: nothing but this
+		// handler produces a non-200 here.
+		if detail := unconfiguredDetail(rec.Body.Bytes()); detail != "" {
+			return nil, fmt.Errorf("ci: %s answered %d: %s", path, rec.Code, detail)
+		}
 		return nil, fmt.Errorf("ci: %s answered %d", path, rec.Code)
 	}
 	var out T
@@ -164,4 +185,16 @@ func viewer(c *zip.Ctx) (string, bool) {
 		return "admin", true
 	}
 	return principal.Org(c)
+}
+
+// unconfiguredDetail reads back the sentence unconfigured wrote, and nothing
+// else: an answer this binary did not compose has no detail to report.
+func unconfiguredDetail(body []byte) string {
+	var out struct {
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return ""
+	}
+	return out.Detail
 }

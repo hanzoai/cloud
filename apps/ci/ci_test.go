@@ -1,6 +1,8 @@
 package ci
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -137,5 +139,57 @@ func TestViewer_RefusesOrgPastCanonicalBound(t *testing.T) {
 	org := strings.Repeat("c", principal.MaxOrgLen+1)
 	if got, ok := probeViewer(t, map[string]string{"X-User-Id": "u-1", "X-Org-Id": org}); ok {
 		t.Fatalf("viewer admitted an org past MaxOrgLen as %q", got)
+	}
+}
+
+// The fail-closed answer exists to say WHICH piece of configuration is missing.
+// Built by pasting an error between quotes it stopped being JSON as soon as the
+// error contained one — and an error is arbitrary text, so that is a property of
+// the next edit to the function that produces it, not of today's string.
+func TestTheUnconfiguredAnswerIsJSONWhateverTheErrorSays(t *testing.T) {
+	for _, cause := range []error{
+		errors.New("CI_GIT_TOKEN required"),
+		errors.New(`open "/etc/ci.env": no such file`),
+		errors.New("dial tcp\n\tgit.hanzo.ai:443: refused"),
+		errors.New(`{"not":"json"}` + "\\"),
+	} {
+		rec := httptest.NewRecorder()
+		unconfigured(cause).ServeHTTP(rec, httptest.NewRequest("GET", "/v1/ci/runs", nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("status %d, want 503", rec.Code)
+		}
+		var out struct {
+			Detail string `json:"detail"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Errorf("body is not JSON for %q: %v\n%s", cause, err, rec.Body.String())
+			continue
+		}
+		if !strings.Contains(out.Detail, cause.Error()) {
+			t.Errorf("detail lost the reason: %q", out.Detail)
+		}
+	}
+}
+
+// And the caller has to receive that sentence. Reporting the status alone threw
+// it away, so every misconfiguration read the same from the outside: the
+// handler's careful message was written to a recorder and dropped.
+func TestTheReasonSurvivesTheRoundTripToTheCaller(t *testing.T) {
+	want := "CI_GIT_TOKEN required (Hanzo Git API token)"
+	rec := httptest.NewRecorder()
+	unconfigured(errors.New(want)).ServeHTTP(rec, httptest.NewRequest("GET", "/v1/ci/runs", nil))
+
+	got := unconfiguredDetail(rec.Body.Bytes())
+	if !strings.Contains(got, want) {
+		t.Fatalf("the reason did not survive: %q", got)
+	}
+
+	// An answer this binary did not compose has no detail to report, and must
+	// not have one invented for it.
+	if d := unconfiguredDetail([]byte(`<html>502 Bad Gateway</html>`)); d != "" {
+		t.Errorf("a foreign body yielded a detail: %q", d)
+	}
+	if d := unconfiguredDetail(nil); d != "" {
+		t.Errorf("an empty body yielded a detail: %q", d)
 	}
 }
