@@ -45,12 +45,16 @@
 package fleet
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/valyala/fasthttp"
 	zaphttp "github.com/zap-proto/http"
+	zapmcp "github.com/zap-proto/mcp"
+	"github.com/zap-proto/zip"
 )
 
 // At resolves one app to the ENDPOINT it answers on — the address, and the path
@@ -99,14 +103,14 @@ type Answer struct {
 // Order is the order given — the manifest's mount order, which is the fleet's
 // routing order — so a caller that resolves a collision by taking the first
 // resolves it the way the router would.
-func Ask(at At, apps []string, req *fasthttp.Request) []Answer {
+func Ask(ctx context.Context, at At, apps []string, req *fasthttp.Request) []Answer {
 	out := make([]Answer, len(apps))
 	var wg sync.WaitGroup
 	for i, name := range apps {
 		wg.Add(1)
 		go func(i int, name string) {
 			defer wg.Done()
-			out[i] = ask(at, name, req)
+			out[i] = ask(ctx, at, name, req)
 		}(i, name)
 	}
 	wg.Wait()
@@ -119,7 +123,51 @@ func Ask(at At, apps []string, req *fasthttp.Request) []Answer {
 // The failure is returned, never logged-and-dropped. "This app would not start"
 // and "this app serves nothing" are different answers and the difference is the
 // whole point of this package.
-func ask(at At, name string, req *fasthttp.Request) Answer {
+func ask(ctx context.Context, at At, name string, req *fasthttp.Request) Answer {
+	// A PEER THIS PROCESS ALREADY SERVES IS REACHED IN MEMORY. zip.Serving is a
+	// fact about the process — something in this program bound that app's socket —
+	// so a co-resident subsystem costs no dial, no frame and no copy of the
+	// caller's request. It is the move plane.Ask already makes with zip.Here, and
+	// this hop was the one place in the fleet that did not make it: every
+	// tools/list marshalled a fasthttp request into ZAP frames and sent it down a
+	// unix socket to a handler in this very process.
+	//
+	// The door is App.MCP, which IS the native handler — a frame in, a frame out,
+	// no HTTP semantics to shed. The socket path reaches the SAME door; it just
+	// pays an encode, a syscall and a decode to get there.
+	if a := zip.Serving(name); a != nil {
+		return here(ctx, a, name, req)
+	}
+	return dial(at, name, req)
+}
+
+// here answers from the app in this process, with the caller stated rather than
+// forwarded.
+//
+// Identity is read ONCE, from the context the caller is being served on, and
+// stated with zip.WithCaller — so this reproduces what the socket path gets from
+// the request's headers without a second copy of which headers those are. A
+// STATED caller loses to a request's own headers, and there is no request behind
+// this context, so it is what CallerOf answers.
+func here(ctx context.Context, a *zip.App, name string, req *fasthttp.Request) Answer {
+	var f zapmcp.Frame
+	if err := json.Unmarshal(req.Body(), &f); err != nil {
+		return Answer{App: name, Err: fmt.Errorf("%s: %w", name, err)}
+	}
+	ans := a.MCP(zip.WithCaller(context.WithoutCancel(ctx), zip.CallerOf(ctx)), &f)
+	if ans == nil {
+		// A nil answer is a notification: nothing to say, and not a failure.
+		return Answer{App: name, Body: nil}
+	}
+	body, err := json.Marshal(ans)
+	if err != nil {
+		return Answer{App: name, Err: fmt.Errorf("%s: %w", name, err)}
+	}
+	return Answer{App: name, Body: body}
+}
+
+// dial is the hop to a peer this process does not serve.
+func dial(at At, name string, req *fasthttp.Request) Answer {
 	addr, path, err := at(name)
 	if err != nil {
 		return Answer{App: name, Err: err}

@@ -299,7 +299,7 @@ func (d *Door) descriptor(c *zip.Ctx, t named, at At) (json.RawMessage, bool) {
 	hop.Header.SetContentType("application/json")
 	hop.SetBody([]byte(`{"jsonrpc":"2.0","id":0,"method":"tools/list"}`))
 
-	ans := Ask(at, []string{t.app}, hop)[0]
+	ans := Ask(c.Context(), at, []string{t.app}, hop)[0]
 	if ans.Err != nil {
 		return nil, false
 	}
