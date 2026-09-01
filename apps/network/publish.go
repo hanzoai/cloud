@@ -47,8 +47,10 @@ type serviceIn struct {
 	Port int `json:"port"`
 }
 
-// serviceView is the service as published.
-type serviceView struct {
+// publishedView is the service as published. (Not "serviceView": the admin app
+// claims that name up to case, and a generator that PascalCases both reads one
+// class.)
+type publishedView struct {
 	// ID is the fabric service's id.
 	ID string `json:"id"`
 	// Name is the service's name within the org.
@@ -69,7 +71,7 @@ type serviceView struct {
 // service never lingers on the fabric.
 //
 // A write, so it does not degrade: an unconfigured deployment answers 503.
-func (o ops) publishService(ctx context.Context, in *serviceIn) (*serviceView, error) {
+func (o ops) publishService(ctx context.Context, in *serviceIn) (*publishedView, error) {
 	s := o.s
 	org, err := gate(s, ctx)
 	if err != nil {
@@ -157,7 +159,7 @@ func (o ops) publishService(ctx context.Context, in *serviceIn) (*serviceView, e
 		return nil, err
 	}
 
-	return &serviceView{ID: svcID, Name: name, DNS: dns}, nil
+	return &publishedView{ID: svcID, Name: name, DNS: dns}, nil
 }
 
 // orgService refuses a "<service>-host" role whose service the org does not

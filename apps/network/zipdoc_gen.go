@@ -81,12 +81,12 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/network POST /v1/network/services", zip.Doc{
 		Description: "Puts a name on the org's overlay: a fabric service forwarding\nto host:port on whichever of the org's devices carries the \"<name>-host\"\nrole, dialable at \"<name>.<org>.ziti\" by any of the org's identities — and by\nthe cloud's own, which is what lets a BYO cluster's apiserver be attached to\nthe fleet with a \".ziti\" kubeconfig.\n\nAnswers 201 with the service and its DNS name. The objects behind it are\ncreated in dependency order and unwound on failure, so a half-published\nservice never lingers on the fabric.\n\nA write, so it does not degrade: an unconfigured deployment answers 503.",
 		Fields: map[string]string{
-			"serviceIn.host":   "Host is where the HOSTING identity forwards a connection — an address the\nhost device itself can reach, \"127.0.0.1\" for a server on the device.",
-			"serviceIn.name":   "Name is the service's name within the org — a DNS label. The fabric knows\nthe service as \"<name>.<org>\" and answers for it at \"<name>.<org>.ziti\".",
-			"serviceIn.port":   "Port is the port beside Host, and the one the DNS name intercepts.",
-			"serviceView.dns":  "DNS is the name the fabric answers for this service — what a kubeconfig\nserver, or any client on the org's overlay, dials.",
-			"serviceView.id":   "ID is the fabric service's id.",
-			"serviceView.name": "Name is the service's name within the org.",
+			"publishedView.dns":  "DNS is the name the fabric answers for this service — what a kubeconfig\nserver, or any client on the org's overlay, dials.",
+			"publishedView.id":   "ID is the fabric service's id.",
+			"publishedView.name": "Name is the service's name within the org.",
+			"serviceIn.host":     "Host is where the HOSTING identity forwards a connection — an address the\nhost device itself can reach, \"127.0.0.1\" for a server on the device.",
+			"serviceIn.name":     "Name is the service's name within the org — a DNS label. The fabric knows\nthe service as \"<name>.<org>\" and answers for it at \"<name>.<org>.ziti\".",
+			"serviceIn.port":     "Port is the port beside Host, and the one the DNS name intercepts.",
 		},
 	})
 }
