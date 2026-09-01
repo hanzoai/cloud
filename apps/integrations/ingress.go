@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/plane"
+	channelsplane "github.com/hanzoai/cloud/plane/channels"
 	"github.com/zap-proto/zip"
 )
 
@@ -80,7 +81,7 @@ func emitIngress(ctx context.Context, s *cloud.Service[state], org string, in In
 		defer func() { _ = recover() }()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		out, err := plane.Ask[plane.ChannelsIngestIn, plane.ChannelsIngestOut](ctx, "channels", plane.ChannelsIngest,
+		out, err := channelsplane.ChannelsIngest(ctx,
 			ingestIn(org, in, replyRoot))
 		// SAID, not swallowed. The whole point of this client is that a dropped
 		// event used to be invisible; an unreachable inbox must not become the
