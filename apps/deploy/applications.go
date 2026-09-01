@@ -123,19 +123,6 @@ func deploymentContainerImages(dep *unstructured.Unstructured) []string {
 	return imgs
 }
 
-// repoFromImageRef splits `ghcr.io/hanzoai/iam:v1` → `ghcr.io/hanzoai/iam`; a
-// digest ref keeps the repo; a host:port segment is not read as a tag.
-func repoFromImageRef(ref string) string {
-	if at := strings.LastIndex(ref, "@"); at >= 0 {
-		ref = ref[:at]
-	}
-	slash := strings.LastIndex(ref, "/")
-	colon := strings.LastIndex(ref, ":")
-	if colon > slash {
-		return ref[:colon]
-	}
-	return ref
-}
 
 // tagFromImageRef splits `ghcr.io/hanzoai/iam:v1` → `v1`; a digest ref returns the
 // digest; a bare repo returns "".
