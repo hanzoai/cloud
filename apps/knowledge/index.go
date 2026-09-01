@@ -164,6 +164,9 @@ func docMeta(org, doctype, name, title string, data map[string]any) map[string]a
 	if u := str(data["url"]); u != "" {
 		m["url"] = u
 	}
+	if o := str(data["owner"]); o != "" {
+		m["owner"] = o
+	}
 	return m
 }
 
@@ -275,6 +278,10 @@ type searchReq struct {
 	limit    int
 	project  string   // optional scope filter
 	doctypes []string // optional restriction (default: all indexed doctypes)
+	// subject is the asking person, or "" for the org itself; it decides whose
+	// owned documents are in reach. Set by the caller from the validated
+	// principal, never from a client field.
+	subject string
 }
 
 // searchDoc runs a per-org semantic search: embed the query with the SAME model,
@@ -310,7 +317,7 @@ func (x *indexer) searchDoc(ctx context.Context, req searchReq) ([]hit, error) {
 		"vector":       vec,
 		"limit":        limit,
 		"with_payload": true,
-		"filter":       map[string]any{"must": must},
+		"filter":       ownerFilter(must, req.subject),
 	}
 	var resp struct {
 		Result []struct {
@@ -340,6 +347,21 @@ func (x *indexer) searchDoc(ctx context.Context, req searchReq) ([]hit, error) {
 		})
 	}
 	return out, nil
+}
+
+// ownerFilter is the reach of one asker over owned documents, on top of the
+// tenant clauses in must. The org itself (subject "") reaches only what has no
+// owner; a person reaches that and their own — a document owned by anyone else
+// is outside every filter but its owner's.
+func ownerFilter(must []map[string]any, subject string) map[string]any {
+	shared := map[string]any{"is_empty": map[string]any{"key": "owner"}}
+	if subject == "" {
+		return map[string]any{"must": append(must, shared)}
+	}
+	return map[string]any{
+		"must":   must,
+		"should": []map[string]any{shared, {"key": "owner", "match": map[string]any{"value": subject}}},
+	}
 }
 
 // ensureCollection creates the org's collection on first use with the configured
@@ -384,7 +406,7 @@ func (x *indexer) ensureCollection(ctx context.Context, org string) error {
 		}
 		// Index the payload keys we filter on (org/doctype/project/provider) so the
 		// filter is efficient. Best-effort — a missing index only slows a filter.
-		for _, key := range []string{"org", "doctype", "project", "provider"} {
+		for _, key := range []string{"org", "doctype", "project", "provider", "owner"} {
 			_ = x.qdrant(ctx, http.MethodPut, "/collections/"+col+"/index?wait=true",
 				map[string]any{"field_name": key, "field_schema": "keyword"}, nil)
 		}

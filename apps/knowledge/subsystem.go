@@ -151,6 +151,7 @@ func (o ops) search(ctx context.Context, in *searchIn) (*searchOut, error) {
 		limit:    in.Limit,
 		project:  strings.TrimSpace(in.Project),
 		doctypes: sanitizeDocTypes(in.DocTypes),
+		subject:  subject(ctx),
 	}
 	hits, err := index().searchDoc(ctx, req)
 	if err != nil {

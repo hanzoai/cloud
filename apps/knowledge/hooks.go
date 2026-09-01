@@ -2,8 +2,11 @@ package knowledge
 
 import (
 	"context"
+	"errors"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // hooks.go is the client between the framework DocType lifecycle and the ONE vector
@@ -37,6 +40,47 @@ func registerHooks() {
 	}
 	framework.RegisterHook(DTPage, framework.ActionAfterSave, pageAfterSave)
 	framework.RegisterHook(DTPage, framework.ActionOnTrash, pageOnTrash)
+	for _, dt := range []framework.ID{DTMemory, DTSource} {
+		framework.RegisterHook(dt, framework.ActionBeforeSave, ownerOnSave)
+	}
+}
+
+// ownerOnSave is the gate on a document's owner: a caller may claim a document
+// for themself or leave it the org's, never hand it to another member, and an
+// owner once set does not move. It is a before_save hook, so a refusal is the
+// write not happening.
+func ownerOnSave(ctx context.Context, ev *framework.Event) error {
+	want := str(ev.Doc.Data["owner"])
+	if ev.Prev != nil {
+		if had := str(ev.Prev.Data["owner"]); had != want {
+			return errOwnerFixed
+		}
+		return nil
+	}
+	if want != "" && want != subject(ctx) {
+		return errOwnerNotYou
+	}
+	return nil
+}
+
+var (
+	errOwnerNotYou = errors.New("kb: owner may only be yourself")
+	errOwnerFixed  = errors.New("kb: owner does not change once set")
+)
+
+// subject is the caller's identity as the validated principal states it — the
+// token's subject — or "" for a call with no person behind it, which owns
+// nothing and searches only what the org shares.
+func subject(ctx context.Context) string {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return ""
+	}
+	p, ok := principal.Minted(c)
+	if !ok {
+		return ""
+	}
+	return p.Subject
 }
 
 // pageAfterSave runs BOTH the vector index and the wikilink-edge reconciliation for

@@ -26,6 +26,9 @@ type SemanticReq struct {
 	Project  string
 	DocTypes []string
 	Limit    int
+	// Subject is the asking person as the validated principal names them, or ""
+	// for the org itself. It reaches the store's filter and nothing else.
+	Subject string
 }
 
 // Semantic runs the org-scoped vector leg. It returns an error (never a silent
@@ -39,6 +42,7 @@ func Semantic(ctx context.Context, r SemanticReq) ([]Hit, error) {
 		limit:    r.Limit,
 		project:  r.Project,
 		doctypes: sanitizeDocTypes(r.DocTypes),
+		subject:  r.Subject,
 	})
 	if err != nil {
 		return nil, err

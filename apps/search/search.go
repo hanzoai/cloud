@@ -285,7 +285,8 @@ func Query(ctx context.Context, in *Request) (*Fusion, error) {
 	if !ok {
 		return nil, zip.ErrForbidden("valid principal required")
 	}
-	return ForOrg(ctx, org, in)
+	p, _ := principal.Minted(c)
+	return ForOrg(ctx, org, p.Subject, in)
 }
 
 // ForOrg is the composition itself, for callers that have ALREADY established the
@@ -297,7 +298,10 @@ func Query(ctx context.Context, in *Request) (*Fusion, error) {
 // org MUST be a tenant the caller has authenticated. This function does not and
 // cannot check that; it is the caller's boundary, exactly as it is for every other
 // in-process store API in the codebase.
-func ForOrg(ctx context.Context, org string, in *Request) (*Fusion, error) {
+//
+// subject is the asking person, or "" for a caller that is the org itself; it
+// decides whose owned knowledge documents are in reach and nothing else.
+func ForOrg(ctx context.Context, org, subject string, in *Request) (*Fusion, error) {
 	if strings.TrimSpace(org) == "" {
 		return nil, zip.ErrForbidden("valid principal required")
 	}
@@ -356,7 +360,7 @@ func ForOrg(ctx context.Context, org string, in *Request) (*Fusion, error) {
 			t0 := time.Now()
 			hits, err := knowledge.Semantic(ctx, knowledge.SemanticReq{
 				Org: org, Query: in.Query, Project: in.Project,
-				DocTypes: in.DocTypes, Limit: window,
+				DocTypes: in.DocTypes, Limit: window, Subject: subject,
 			})
 			st.TookMS = time.Since(t0).Milliseconds()
 			if err != nil {

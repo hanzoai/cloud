@@ -7760,3 +7760,17 @@ count: holding the files is the declaration; a later push wins a shared name.
 Cross-app calls go through `plane/<app>` clients (`go run ./plane/gen` after
 adding an op — set a new reactor aside for the first run, the generator loads
 every app), not hand-written `plane.Ask`.
+
+## A knowledge document may belong to one person
+
+`kb.memory` and `kb.source` carry `owner`: empty is the org's, otherwise the
+subject of the member it belongs to. `ownerOnSave` (before_save) lets a caller
+claim a document only for themself and never moves an owner; `docMeta` copies
+the owner into the vector payload and `ownerFilter` bounds every search — the
+org itself (subject "") reaches only unowned points, a person reaches those and
+their own. The subject is read from the validated principal (`subject(ctx)`,
+`principal.Minted`) at `/v1/knowledge/search` and `/v1/search`
+(`search.ForOrg(ctx, org, subject, in)`); the Team transactor passes "". What is
+NOT here: a sync that pulls a person's own DMs through their connector —
+integrations holds that token and the plane hands no token to another app, so
+that sync has to be driven from integrations.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/internal/planetest"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -138,14 +139,19 @@ func (fv *fakeVector) handleUpsert(w http.ResponseWriter, r *http.Request, col s
 // request's org filter — the same scoping the real Qdrant applies — so the test
 // exercises the production filter path, not a bypass.
 func (fv *fakeVector) handleSearch(w http.ResponseWriter, r *http.Request, col string) {
+	type clause struct {
+		Key   string `json:"key"`
+		Match struct {
+			Value any `json:"value"`
+		} `json:"match"`
+		IsEmpty struct {
+			Key string `json:"key"`
+		} `json:"is_empty"`
+	}
 	var body struct {
 		Filter struct {
-			Must []struct {
-				Key   string `json:"key"`
-				Match struct {
-					Value any `json:"value"`
-				} `json:"match"`
-			} `json:"must"`
+			Must   []clause `json:"must"`
+			Should []clause `json:"should"`
 		} `json:"filter"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
@@ -155,11 +161,33 @@ func (fv *fakeVector) handleSearch(w http.ResponseWriter, r *http.Request, col s
 			wantOrg, _ = m.Match.Value.(string)
 		}
 	}
+	// The owner clauses, with Qdrant's meaning: an is_empty in must admits only
+	// unowned points; a should admits a point matching any one of its clauses.
+	reach := func(pl map[string]any) bool {
+		owner := str(pl["owner"])
+		for _, m := range body.Filter.Must {
+			if m.IsEmpty.Key == "owner" && owner != "" {
+				return false
+			}
+		}
+		if len(body.Filter.Should) == 0 {
+			return true
+		}
+		for _, c := range body.Filter.Should {
+			if c.IsEmpty.Key == "owner" && owner == "" {
+				return true
+			}
+			if c.Key == "owner" && c.Match.Value == owner {
+				return true
+			}
+		}
+		return false
+	}
 	fv.mu.Lock()
 	defer fv.mu.Unlock()
 	result := []map[string]any{}
 	for _, pl := range fv.upserts[col] {
-		if str(pl["org"]) == wantOrg {
+		if str(pl["org"]) == wantOrg && reach(pl) {
 			result = append(result, map[string]any{"score": 0.99, "payload": pl})
 		}
 	}
@@ -185,7 +213,18 @@ func resetIndexer(t *testing.T, base string) {
 // (routes says why): the program's composer owns it — serve.go in production — so
 // a test app owes the same install, else every org-scoped op answers 403 for a
 // reason no composed program has.
-func compose(app *zip.App) { app.Use(cloud.Bridge()) }
+func compose(app *zip.App) { app.Use(cloud.Bridge(), zip.Handler(asSubject)) }
+
+// asSubject is the test composer's stand-in for the identity middleware's one
+// job the header harness cannot do: mint a principal WITH a subject. In the
+// program the subject is a verified token's `sub`; here it is X-Test-Subject,
+// so a test can be two different people.
+func asSubject(c *zip.Ctx) error {
+	if sub := c.Header("X-Test-Subject"); sub != "" {
+		principal.Mint(c, principal.Principal{Org: c.Org(), User: c.User(), Subject: sub})
+	}
+	return c.Next()
+}
 
 func mountKB(t *testing.T) *zip.App {
 	t.Helper()
@@ -341,5 +380,80 @@ func TestMemoryIndexedSameStore(t *testing.T) {
 	fv.mu.Unlock()
 	if len(pts) != 1 || str(pts[0]["doctype"]) != DTMemory.String() {
 		t.Fatalf("memory not indexed into %s: %+v", colA, pts)
+	}
+}
+
+// as issues a request as one PERSON in org: the header principal plus a subject.
+func as(t *testing.T, app *zip.App, method, path, org, subject string, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = strings.NewReader(string(b))
+	}
+	hr := httptest.NewRequest(method, path, r)
+	if body != nil {
+		hr.Header.Set("Content-Type", "application/json")
+	}
+	hr.Header.Set("X-Org-Id", org)
+	hr.Header.Set("X-User-Id", "u_"+org)
+	hr.Header.Set("X-Test-Subject", subject)
+	resp, err := app.Test(hr)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, raw
+}
+
+// TestOwnedDocumentReachesItsOwnerAlone: a memory one person claims is found by
+// that person and by nobody else in the org — not the org's own search, not
+// another member's — while the org's documents stay in everyone's reach. It
+// also proves the claim itself is bounded: naming another person is refused.
+func TestOwnedDocumentReachesItsOwnerAlone(t *testing.T) {
+	fv := newFakeVector(t)
+	resetIndexer(t, fv.server.URL)
+	app := mountKB(t)
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/modules/kb/install", "A", nil); code != http.StatusOK {
+		t.Fatalf("install: %d %s", code, b)
+	}
+	shared := map[string]any{"title": "runbook", "content": "rotate the key monthly", "kind": "fact"}
+	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb.memory", "A", shared); code != http.StatusCreated {
+		t.Fatalf("org memory: %d %s", code, b)
+	}
+	mine := map[string]any{"title": "my note", "content": "my private draft", "kind": "note", "owner": "alice"}
+	if code, b := as(t, app, http.MethodPost, "/v1/framework/kb.memory", "A", "alice", mine); code != http.StatusCreated {
+		t.Fatalf("alice's memory: %d %s", code, b)
+	}
+	forged := map[string]any{"title": "planted", "content": "x", "kind": "note", "owner": "alice"}
+	if code, _ := as(t, app, http.MethodPost, "/v1/framework/kb.memory", "A", "bob", forged); code/100 == 2 {
+		t.Fatal("bob must not be able to write a document into alice's reach")
+	}
+	titles := func(raw []byte) map[string]bool {
+		var out struct {
+			Hits []struct {
+				Title string `json:"title"`
+			} `json:"hits"`
+		}
+		_ = json.Unmarshal(raw, &out)
+		m := map[string]bool{}
+		for _, h := range out.Hits {
+			m[h.Title] = true
+		}
+		return m
+	}
+	q := map[string]any{"query": "draft"}
+	_, raw := as(t, app, http.MethodPost, "/v1/knowledge/search", "A", "alice", q)
+	if got := titles(raw); !got["my note"] || !got["runbook"] {
+		t.Fatalf("alice sees her own and the org's: %v", got)
+	}
+	_, raw = as(t, app, http.MethodPost, "/v1/knowledge/search", "A", "bob", q)
+	if got := titles(raw); got["my note"] || !got["runbook"] {
+		t.Fatalf("bob sees the org's only: %v", got)
+	}
+	_, raw = req(t, app, http.MethodPost, "/v1/knowledge/search", "A", q)
+	if got := titles(raw); got["my note"] || !got["runbook"] {
+		t.Fatalf("the org itself sees the org's only: %v", got)
 	}
 }

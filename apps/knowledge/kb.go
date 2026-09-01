@@ -79,6 +79,15 @@ func DocTypes() []framework.DocType {
 	return []framework.DocType{page(), memory(), source(), connector(), link()}
 }
 
+// ownerField is the one field that makes a document a person's rather than the
+// org's: the subject of the member it belongs to, or empty for a document
+// everyone in the org may find. A hook (ownerOnSave) lets a caller name only
+// themself, and retrieval (searchDoc) returns a person's documents to that
+// person alone — the org's search and every other member's never see them.
+func ownerField() framework.DocField {
+	return framework.DocField{Fieldname: "owner", Fieldtype: framework.FieldData, Label: "Owner"}
+}
+
 // ---- knowledge DocTypes ----
 
 // page is a Notion-like wiki page. Slug-named (the document name IS the slug, so a
@@ -119,6 +128,7 @@ func memory() framework.DocType {
 			{Fieldname: "source", Fieldtype: framework.FieldData, Label: "Source", InListView: true},
 			{Fieldname: "tags", Fieldtype: framework.FieldData, Label: "Tags"},
 			{Fieldname: "project", Fieldtype: framework.FieldData, Label: "Project", InListView: true},
+			ownerField(),
 		},
 		Perms: kbPerms(),
 	}
@@ -143,6 +153,7 @@ func source() framework.DocType {
 			{Fieldname: "author", Fieldtype: framework.FieldData, Label: "Author"},
 			{Fieldname: "source_ts", Fieldtype: framework.FieldDatetime, Label: "Source Time"},
 			{Fieldname: "project", Fieldtype: framework.FieldData, Label: "Project", InListView: true},
+			ownerField(),
 		},
 		Perms: kbPerms(),
 	}
