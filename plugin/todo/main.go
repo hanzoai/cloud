@@ -17,9 +17,10 @@ import (
 // `todo openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "todo",
-		Price: cloud.Metered,
-		Use:   todo.Use,
+		Name:     "todo",
+		Price:    cloud.Metered,
+		Use:      todo.Use,
+		Shutdown: cloud.CtxShutdown(todo.Shutdown),
 	}}, []string{"todo"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

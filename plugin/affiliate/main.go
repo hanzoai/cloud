@@ -17,9 +17,10 @@ import (
 // `affiliates openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "affiliate",
-		Price: cloud.Free,
-		Use:   affiliate.Use,
+		Name:     "affiliate",
+		Price:    cloud.Free,
+		Use:      affiliate.Use,
+		Shutdown: cloud.CtxShutdown(affiliate.Shutdown),
 	}}, []string{"affiliate"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
