@@ -1,7 +1,7 @@
 // Package network mounts the Hanzo Cloud NETWORKING surface: the tenant's Hanzo
 // Zero Trust footprint — the overlay network, its routers and its services —
 // served as clean, org-scoped REST off the unified cloud binary and fronting the
-// Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric). It exists so
+// Hanzo Zero Trust controller (hanzoai/zt, an ZT-based fabric). It exists so
 // the console's Networks, Service Mesh and Routers pages read REAL per-org ZT state
 // from ONE place (api.hanzo.ai/v1/*) instead of rendering "not connected".
 //

@@ -165,7 +165,7 @@ func TestPublishServiceWritesTheWholeShape(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)
 	}
-	if v.Name != "k3s" || v.DNS != "k3s.acme.ziti" || v.ID == "" {
+	if v.Name != "k3s" || v.DNS != "k3s.acme.zt" || v.ID == "" {
 		t.Fatalf("service view mismatch: %+v", v)
 	}
 
@@ -184,7 +184,7 @@ func TestPublishServiceWritesTheWholeShape(t *testing.T) {
 		t.Fatalf("intercept config mismatch: %+v", cfgs[1])
 	}
 	interceptData, _ := cfgs[1]["data"].(map[string]any)
-	if addrs, _ := interceptData["addresses"].([]any); len(addrs) != 1 || addrs[0] != "k3s.acme.ziti" {
+	if addrs, _ := interceptData["addresses"].([]any); len(addrs) != 1 || addrs[0] != "k3s.acme.zt" {
 		t.Fatalf("intercept addresses mismatch: %+v", interceptData)
 	}
 

@@ -1,11 +1,11 @@
 // client.go is the ONE HTTP path from this subsystem to Hanzo Zero Trust — the
-// OpenZiti-based fabric controller (hanzoai/zt) at zt-controller.hanzo.svc. Every
+// ZT fabric controller (hanzoai/zt) at zt-controller.hanzo.svc. Every
 // handler in zt.go routes through this client, so the wire contract (base URL, the
-// Ziti Edge Management API base path, session auth, the {data,meta} / {error}
+// ZT management API base path, session auth, the {data,meta} / {error}
 // envelope, pagination, error mapping) lives once here and can never drift between
 // hand-rolled fetches.
 //
-// API. The controller exposes the OpenZiti Edge MANAGEMENT REST API under
+// API. The controller exposes the controller management REST API under
 // /edge/management/v1 (controller/webapis/versions.go: ManagementRestApiBaseUrlV1).
 // It is the admin surface — listing services and edge-routers, minting identities
 // and publishing services — as distinct from the per-identity Client API. We speak
@@ -15,13 +15,13 @@
 // AUTH (one rule). The controller authenticates a management caller with the
 // password method: POST /authenticate?method=password {username,password} returns a
 // session token, which every subsequent request carries in the `zt-session` header
-// (controller/api/cors.go: ZitiSession = "zt-session"). The username/password are
+// (controller/api/cors.go: "zt-session"). The username/password are
 // the KMS-injected service credential ZT_CLIENT_ID / ZT_CLIENT_SECRET — never
 // hard-coded, never logged. The token is cached until its expiry and transparently
 // re-minted (including a single retry when the controller rejects a stale token
 // with 401), so a handler never sees auth state.
 //
-// ENVELOPE. Ziti wraps a success as {data,meta} (data is the resource or list,
+// ENVELOPE. The controller wraps a success as {data,meta} (data is the resource or list,
 // meta.pagination drives paging) and a failure as {error:{code,message}} at a
 // non-2xx status. call() maps a non-2xx to that error honestly (never masking an
 // upstream failure as success) and returns the raw 2xx body for the typed decoders.
@@ -57,7 +57,7 @@ import (
 // paths (/services, /edge-routers, /authenticate) hang off this root.
 const mgmtBase = "/edge/management/v1"
 
-// sessionHeader is the Ziti management session header (controller/api/cors.go).
+// sessionHeader is the ZT management session header (controller/api/cors.go).
 const sessionHeader = "zt-session"
 
 // defaultBase is the in-cluster ZT controller. Overridable by ZT_CONTROLLER_URL
@@ -150,7 +150,7 @@ func newTransport() *http.Transport {
 
 // ---- envelopes ----
 
-// ztPage is Ziti's list envelope: a typed data array plus pagination meta that
+// ztPage is the controller's list envelope: a typed data array plus pagination meta that
 // drives paging. Parameterized so one pager serves every resource kind.
 type ztPage[T any] struct {
 	Data []T `json:"data"`
@@ -171,7 +171,7 @@ type ztAuth struct {
 	} `json:"data"`
 }
 
-// ztError is Ziti's failure envelope (non-2xx). The message is surfaced verbatim.
+// ztError is the controller's failure envelope (non-2xx). The message is surfaced verbatim.
 type ztError struct {
 	Error struct {
 		Code    string `json:"code"`
@@ -197,9 +197,9 @@ func (cl *client) ensureToken(ctx context.Context, force bool) (string, error) {
 }
 
 // authenticate performs the password-method login. Caller holds cl.mu. The
-// credential is sent in the JSON body per the Ziti Authenticate model and is never
+// credential is sent in the JSON body per the controller authenticate model and is never
 // logged. expiresAt pins the cache lifetime; absent/unparseable it defaults to a
-// conservative 20 minutes (the Ziti default session TTL).
+// conservative 20 minutes (the controller default session TTL).
 func (cl *client) authenticate(ctx context.Context) (string, error) {
 	body, _ := json.Marshal(map[string]string{"username": cl.user, "password": cl.secret})
 	u := cl.target + mgmtBase + "/authenticate?method=password"
@@ -240,7 +240,7 @@ func (cl *client) authenticate(ctx context.Context) (string, error) {
 // re-authenticates and retries ONCE when the controller rejects the session with
 // 401 (token expired mid-flight). query is appended as-is. Error mapping is
 // honest and customer-appropriate: an unreachable controller → 502, a non-2xx →
-// that status with Ziti's message.
+// that status with the controller's message.
 func (cl *client) call(ctx context.Context, method, path, query string, body any) ([]byte, error) {
 	var payload []byte
 	if body != nil {
@@ -332,7 +332,7 @@ func listAll[T any](cl *client, ctx context.Context, path string) ([]T, error) {
 	return out, nil
 }
 
-// ztErrMsg extracts Ziti's error message for an honest upstream error, falling
+// ztErrMsg extracts the controller's error message for an honest upstream error, falling
 // back to a bounded snippet of the raw body.
 func ztErrMsg(raw []byte) string {
 	var e ztError

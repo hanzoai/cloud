@@ -26140,7 +26140,7 @@ components:
         jwt:
           description: |-
             JWT is the one-time enrollment token the device presents ONCE to join the
-            fabric (ziti edge enroll / ziti-edge-tunnel enroll). Spent or lapsed, it
+            fabric (zt edge enroll / zt-edge-tunnel enroll). Spent or lapsed, it
             authenticates nothing; this surface stores it nowhere.
           type: string
       type: object
@@ -55903,7 +55903,7 @@ components:
         name:
           description: |-
             Name is the service's name within the org — a DNS label. The fabric knows
-            the service as "<name>.<org>" and answers for it at "<name>.<org>.ziti".
+            the service as "<name>.<org>" and answers for it at "<name>.<org>.zt".
           type: string
         port:
           description: Port is the port beside Host, and the one the DNS name intercepts.
@@ -109725,9 +109725,9 @@ paths:
       description: |-
         Puts a name on the org's overlay: a fabric service forwarding
         to host:port on whichever of the org's devices carries the "<name>-host"
-        role, dialable at "<name>.<org>.ziti" by any of the org's identities — and by
+        role, dialable at "<name>.<org>.zt" by any of the org's identities — and by
         the cloud's own, which is what lets a BYO cluster's apiserver be attached to
-        the fleet with a ".ziti" kubeconfig.
+        the fleet with a ".zt" kubeconfig.
 
         Answers 201 with the service and its DNS name. The objects behind it are
         created in dependency order and unwound on failure, so a half-published
@@ -109750,9 +109750,9 @@ paths:
           description: created
       summary: 'Puts a name on the org''s overlay: a fabric service forwarding to
         host:port on whichever of the org''s devices carries the "<name>-host" role,
-        dialable at "<name>.<org>.ziti" by any of the org''s identities — and by the
+        dialable at "<name>.<org>.zt" by any of the org''s identities — and by the
         cloud''s own, which is what lets a BYO cluster''s apiserver be attached to
-        the fleet with a ".ziti" kubeconfig.'
+        the fleet with a ".zt" kubeconfig.'
       tags:
       - network
       x-app: network
@@ -136964,7 +136964,7 @@ tags:
 - description: 'Package network mounts the Hanzo Cloud NETWORKING surface: the tenant''s
     Hanzo Zero Trust footprint — the overlay network, its routers and its services
     — served as clean, org-scoped REST off the unified cloud binary and fronting the
-    Hanzo Zero Trust controller (hanzoai/zt, an OpenZiti-based fabric).'
+    Hanzo Zero Trust controller (hanzoai/zt, an ZT-based fabric).'
   name: network
 - description: 'Package nodes is your machines: the ones you own, connected and ready
     to take a command.'

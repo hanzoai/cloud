@@ -353,8 +353,8 @@ func SafeRESTConfig(kubeconfig []byte) (*rest.Config, error) {
 	if err := guardHost(restCfg.Host); err != nil {
 		return nil, err
 	}
-	// A ".ziti" apiserver is a fabric service, not an address: the connection to
-	// it goes through the cloud's own fabric identity (ziti.go), and every other
+	// A ".zt" apiserver is a fabric service, not an address: the connection to
+	// it goes through the cloud's own fabric identity (zt.go), and every other
 	// host keeps client-go's ordinary TCP dial.
 	if fabricHost(hostOf(restCfg.Host)) {
 		restCfg.Dial = fabricDial
@@ -384,8 +384,8 @@ func guardHost(rawHost string) error {
 		return fmt.Errorf("cluster apiserver endpoint must be https")
 	}
 	// A host on the fabric's own namespace is accepted WITHOUT resolving: nothing
-	// resolves ".ziti", and the SSRF classes this guard refuses are addresses,
-	// which an authenticated overlay dial never touches (ziti.go).
+	// resolves ".zt", and the SSRF classes this guard refuses are addresses,
+	// which an authenticated overlay dial never touches (zt.go).
 	if fabricHost(u.Hostname()) {
 		return nil
 	}

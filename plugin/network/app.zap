@@ -122,9 +122,9 @@ interface network {
     post_network_identities(req: identityIn) returns (rep: identityView)
     # Puts a name on the org's overlay: a fabric service forwarding
     # to host:port on whichever of the org's devices carries the "<name>-host"
-    # role, dialable at "<name>.<org>.ziti" by any of the org's identities — and by
+    # role, dialable at "<name>.<org>.zt" by any of the org's identities — and by
     # the cloud's own, which is what lets a BYO cluster's apiserver be attached to
-    # the fleet with a ".ziti" kubeconfig.
+    # the fleet with a ".zt" kubeconfig.
     # Answers 201 with the service and its DNS name. The objects behind it are
     # created in dependency order and unwound on failure, so a half-published
     # service never lingers on the fabric.

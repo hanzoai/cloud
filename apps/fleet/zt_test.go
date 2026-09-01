@@ -10,18 +10,18 @@ import (
 	"testing"
 )
 
-// A ".ziti" apiserver is a fabric service name, not an address: the guard
+// A ".zt" apiserver is a fabric service name, not an address: the guard
 // accepts it without resolving it, and SafeRESTConfig hands exactly those hosts
 // the fabric dialer. Everything else keeps the ordinary dial and the ordinary
 // guard — a private IP is still refused, so the fabric suffix is not a way past
 // the SSRF gate for anything that is not actually on the fabric.
 func TestSafeRESTConfig_FabricHostDialsTheFabricAndOnlyIt(t *testing.T) {
-	cfg, err := SafeRESTConfig([]byte(kc("https://k3s.acme.ziti:6443", tokenUser)))
+	cfg, err := SafeRESTConfig([]byte(kc("https://k3s.acme.zt:6443", tokenUser)))
 	if err != nil {
-		t.Fatalf("a .ziti apiserver must be accepted without resolving, got %v", err)
+		t.Fatalf("a .zt apiserver must be accepted without resolving, got %v", err)
 	}
 	if cfg.Dial == nil {
-		t.Fatal("a .ziti apiserver must be dialed through the fabric, not TCP")
+		t.Fatal("a .zt apiserver must be dialed through the fabric, not TCP")
 	}
 
 	pub, err := SafeRESTConfig([]byte(kc("https://8.8.8.8:6443", tokenUser)))
@@ -38,12 +38,12 @@ func TestSafeRESTConfig_FabricHostDialsTheFabricAndOnlyIt(t *testing.T) {
 	// The suffix marks the fabric's namespace, not a spelling trick: a name that
 	// merely contains it somewhere is an ordinary host and resolves (here, fails
 	// to) like one.
-	if _, err := SafeRESTConfig([]byte(kc("https://ziti.example.invalid:6443", tokenUser))); err == nil {
+	if _, err := SafeRESTConfig([]byte(kc("https://zt.example.invalid:6443", tokenUser))); err == nil {
 		t.Fatal("a non-fabric host must still go through the resolving guard")
 	}
 	// And the fabric does not waive the credential-plugin rejection.
-	if _, err := SafeRESTConfig([]byte(kc("https://k3s.acme.ziti:6443", execUser))); err == nil {
-		t.Fatal("a .ziti apiserver must not waive the exec-plugin rejection")
+	if _, err := SafeRESTConfig([]byte(kc("https://k3s.acme.zt:6443", execUser))); err == nil {
+		t.Fatal("a .zt apiserver must not waive the exec-plugin rejection")
 	}
 }
 
@@ -52,7 +52,7 @@ func TestSafeRESTConfig_FabricHostDialsTheFabricAndOnlyIt(t *testing.T) {
 // error about a name nothing resolves.
 func TestFabricDialWithoutAnIdentitySaysSo(t *testing.T) {
 	t.Setenv(ztIdentityEnv, "")
-	if _, err := fabricDial(t.Context(), "tcp", "k3s.acme.ziti:6443"); err == nil {
+	if _, err := fabricDial(t.Context(), "tcp", "k3s.acme.zt:6443"); err == nil {
 		t.Fatalf("fabricDial with no %s must fail with the reason", ztIdentityEnv)
 	}
 }
