@@ -17,6 +17,9 @@ func init() {
 			"Email.verified": "Verified is whether the person proved the address. False is a real answer\nand callers must refuse on it, never treat it as \"probably fine\".",
 		},
 	})
+	zip.Describe("POST /iam/federated", zip.Doc{
+		Description: "Resolves a member of the caller's org from an identity another\nprovider issued. GitHub is the one provider today: IAM's federation writes the\nnumeric GitHub user id onto the user row at sign-in, and that is the id a\nGitHub webhook carries — so the same value, and nothing a person typed,\ndecides who a comment runs as. The org is the caller's, and the query is\nbounded to it, so an id that belongs to a person in another org resolves to\nnobody here.",
+	})
 	zip.Describe("POST /iam/grant", zip.Doc{
 		Description: "Records one membership in the caller's org, idempotently.",
 	})
