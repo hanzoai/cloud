@@ -199,6 +199,7 @@
           },
           "seq": {
             "description": "Seq is the record's position in the chain, 0-based and gapless. The Recorder\nassigns it under its own lock, so it is a true total order: seq n+1 was\nwritten after seq n, and a missing number is a missing record.",
+            "format": "uint64",
             "type": "integer"
           },
           "sourceIp": {
@@ -207,6 +208,7 @@
           },
           "status": {
             "description": "Status is the HTTP status the caller received. It is the outcome as the client\nsaw it, so a 200 carrying a domain refusal still reads 200 here.",
+            "format": "int64",
             "type": "integer"
           },
           "sub": {
@@ -243,6 +245,7 @@
           },
           "total": {
             "description": "Total is how many events match the filter, across all pages — what a pager\nneeds to size itself.",
+            "format": "int64",
             "type": "integer"
           }
         },

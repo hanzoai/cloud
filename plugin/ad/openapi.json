@@ -46,6 +46,7 @@
             "required": false,
             "description": "Limit caps how many campaigns come back: default 200, maximum 1000. A\nvalue that is not a positive integer reads as the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -272,10 +273,12 @@
           },
           "budget": {
             "description": "Budget is the campaign's authorized spend in MINOR units (cents). Negative\nclamps to 0. It is the org's stored plan: a Meta launch creates the campaign\nobject only, and the delivering budget lives on the ad set.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "description": "CreatedAt is when the campaign was first stored, in unix seconds. It never\nchanges, including across a full-replace update.",
+            "format": "int64",
             "type": "integer"
           },
           "externalId": {
@@ -300,6 +303,7 @@
           },
           "spend": {
             "description": "Spend is spend-to-date in MINOR units (cents), as last written through create\nor update. Negative clamps to 0. It is NOT read back from the network — that\nis a separate insights call — so 0 means nothing was recorded here, not that\nnothing was spent.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -308,6 +312,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the row was last written, in unix seconds — set by create,\nupdate and launch. Listings are ordered by it, newest first.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -317,18 +322,22 @@
         "properties": {
           "active": {
             "description": "Active is how many of those campaigns are in the active state.",
+            "format": "int64",
             "type": "integer"
           },
           "budget": {
             "description": "Budget is the summed budget of every campaign in the org, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "campaigns": {
             "description": "Campaigns is how many campaigns the org has, in every state.",
+            "format": "int64",
             "type": "integer"
           },
           "spend": {
             "description": "Spend is the summed spend of every campaign in the org, in cents.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -342,6 +351,7 @@
           },
           "budget": {
             "description": "Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -358,6 +368,7 @@
           },
           "spend": {
             "description": "Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -387,6 +398,7 @@
           },
           "budget": {
             "description": "Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -403,6 +415,7 @@
           },
           "spend": {
             "description": "Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {

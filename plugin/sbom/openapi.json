@@ -202,6 +202,7 @@
         "properties": {
           "componentCount": {
             "description": "ComponentCount is how many components the CycloneDX document yielded and this\ncall persisted.",
+            "format": "int64",
             "type": "integer"
           },
           "imageDigest": {
@@ -215,6 +216,7 @@
         "properties": {
           "componentCount": {
             "description": "ComponentCount is how many components this response carries — after the cap,\nso it matches components exactly rather than the image's true total.",
+            "format": "int64",
             "type": "integer"
           },
           "components": {

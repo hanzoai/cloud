@@ -261,6 +261,7 @@
           },
           "currentVersion": {
             "description": "CurrentVer is the version number served as current. It always equals\n`versions`: numbering is dense from 1, and deleting a prompt takes its whole\nhistory with it rather than leaving a gap.",
+            "format": "int64",
             "type": "integer"
           },
           "lastUpdatedAt": {
@@ -277,6 +278,7 @@
           },
           "versions": {
             "description": "Versions is how many revisions the prompt has, COUNTED in the store and\nuncapped — so it can exceed the 100 entries a list row or a detail response\ncarries. Note the type: here `versions` is a number, while on a list row it is\nthe list of version numbers.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -320,6 +322,7 @@
           },
           "version": {
             "description": "Version is the current version number, starting at 1 and incremented by one on\nevery create against an existing name.",
+            "format": "int64",
             "type": "integer"
           },
           "versionHistory": {
@@ -375,6 +378,7 @@
           "versions": {
             "description": "Versions lists every version NUMBER this prompt has, newest first, capped at\nthe last 100. The highest is the current one. (On a metrics row the same key\nis a count, not a list.)",
             "items": {
+              "format": "int64",
               "type": "integer"
             },
             "type": "array"
@@ -425,6 +429,7 @@
           },
           "version": {
             "description": "Version is this revision's number, 1 for the first. Numbers are dense and\nnever reused: deleting the prompt drops the whole history with it.",
+            "format": "int64",
             "type": "integer"
           }
         },

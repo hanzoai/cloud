@@ -277,6 +277,7 @@
           },
           "started": {
             "description": "Started is when the recording began, as the media server reports it: its\nown `started_at`, verbatim and unconverted. LiveKit's egress service sets\nthat field from UnixNano, and a conversion this side cannot check against\nthe running server would be a number that looks right and is wrong by a\nfactor of a billion. 0 means it has not started.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {

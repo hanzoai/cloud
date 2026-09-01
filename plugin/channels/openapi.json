@@ -544,6 +544,7 @@
           },
           "pendingPairing": {
             "description": "PendingPairing counts the org's UNEXPIRED pairing requests on this channel:\nexactly the rows GET /v1/channels/pairing returns for it, one per person\nwaiting on an admin. It never exceeds three — the pending cap per\n(org, channel) — and expired requests are not counted.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -565,6 +566,7 @@
         "properties": {
           "cursor": {
             "description": "Cursor is the row id to pass back as `since` for the next page. It is the\nlast message's id, or the requested cursor when the page is empty.",
+            "format": "int64",
             "type": "integer"
           },
           "messages": {
@@ -589,10 +591,12 @@
           },
           "createdAt": {
             "description": "CreatedAt is Unix SECONDS, stamped by the ingest goroutine when the message\nwas accepted — not the transport's own send time. Rows are dropped 30 days\nafter it.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
             "description": "ID is the store's row id, assigned on insert — SERVER-SET, and the cursor:\npass a page's last id back as `since`. It rises with arrival order but is\nnot contiguous, because one sequence is shared by every org in the store and\na caller reads only its own rows.",
+            "format": "int64",
             "type": "integer"
           },
           "replyTo": {
@@ -659,10 +663,12 @@
           },
           "createdAt": {
             "description": "CreatedAt is Unix SECONDS of FIRST contact: when the request was minted and\nthe code sent. Expiry is measured from here and from nowhere else.",
+            "format": "int64",
             "type": "integer"
           },
           "lastSeen": {
             "description": "LastSeen is Unix SECONDS of the MOST RECENT message from this sender while\nthe request has been pending. It moves as they keep writing, which is how an\nadmin tells a live request from an abandoned one — but it does not extend the\nhour and does not re-send the code, since one request sends exactly one chat\nreply.",
+            "format": "int64",
             "type": "integer"
           },
           "sender": {

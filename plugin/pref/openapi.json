@@ -64,6 +64,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the document was last written, unix seconds. Absent when\nnothing has been saved.",
+            "format": "int64",
             "type": "integer"
           }
         },

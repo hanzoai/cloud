@@ -1926,6 +1926,7 @@
           },
           "interval": {
             "description": "Interval is the seconds to wait before the next poll. Present only while\npending, and it may rise when the provider asks the client to slow down.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -1960,6 +1961,7 @@
           },
           "interval": {
             "description": "Interval is the seconds to wait between polls.",
+            "format": "int64",
             "type": "integer"
           },
           "userCode": {
@@ -1995,18 +1997,22 @@
         "properties": {
           "created": {
             "description": "Created is how many native issues this pass created.",
+            "format": "int64",
             "type": "integer"
           },
           "failed": {
             "description": "Failed is how many repos or issues errored; the pass continues past each.",
+            "format": "int64",
             "type": "integer"
           },
           "issues": {
             "description": "Issues is how many upstream issues were seen.",
+            "format": "int64",
             "type": "integer"
           },
           "repos": {
             "description": "Repos is how many granted repos were walked (archived/disabled are skipped).",
+            "format": "int64",
             "type": "integer"
           },
           "truncated": {
@@ -2015,6 +2021,7 @@
           },
           "updated": {
             "description": "Updated is how many existing native issues this pass refreshed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2113,6 +2120,7 @@
         "properties": {
           "queued": {
             "description": "Queued is how many repositories were handed to the background importer.",
+            "format": "int64",
             "type": "integer"
           },
           "repos": {
@@ -2397,6 +2405,7 @@
           },
           "stars": {
             "description": "Stars is GitHub's stargazers_count as the SEARCH INDEX held it when the\nquery ran — a snapshot, not a live count off the repository.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2406,6 +2415,7 @@
         "properties": {
           "count": {
             "description": "Count is how many hits Repos carries. It is that array's length, NOT\nGitHub's total_count, so it never exceeds limit and says nothing about how\nmany more repositories matched.",
+            "format": "int64",
             "type": "integer"
           },
           "repos": {
@@ -2422,6 +2432,7 @@
         "properties": {
           "limit": {
             "description": "Limit caps the answer; 0 takes the default and anything above the ceiling\nis clamped rather than refused.",
+            "format": "int64",
             "type": "integer"
           },
           "q": {
@@ -2497,14 +2508,17 @@
         "properties": {
           "created": {
             "description": "Created is how many native issues this pass created.",
+            "format": "int64",
             "type": "integer"
           },
           "failed": {
             "description": "Failed is how many issues errored; the pass continues past each.",
+            "format": "int64",
             "type": "integer"
           },
           "issues": {
             "description": "Issues is how many Linear issues were seen.",
+            "format": "int64",
             "type": "integer"
           },
           "truncated": {
@@ -2513,6 +2527,7 @@
           },
           "updated": {
             "description": "Updated is how many existing native issues this pass refreshed.",
+            "format": "int64",
             "type": "integer"
           }
         },

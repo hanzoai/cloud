@@ -237,14 +237,17 @@
         "properties": {
           "apiRateLimit": {
             "description": "APIRateLimit is requests per minute allowed against the REST /v1/world\nsurface. -1 means unlimited.",
+            "format": "int64",
             "type": "integer"
           },
           "maxAlerts": {
             "description": "MaxAlerts is how many saved OSINT alert rules the plan allows. -1 means\nunlimited.",
+            "format": "int64",
             "type": "integer"
           },
           "mcpRateLimit": {
             "description": "MCPRateLimit is requests per minute allowed against the MCP surface. -1\nmeans unlimited.",
+            "format": "int64",
             "type": "integer"
           },
           "modelApi": {

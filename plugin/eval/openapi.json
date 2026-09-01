@@ -36,6 +36,7 @@
             "required": false,
             "description": "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -179,6 +180,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -256,6 +258,7 @@
             "required": false,
             "description": "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -367,6 +370,7 @@
             "required": false,
             "description": "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -442,6 +446,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -555,6 +560,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -648,6 +654,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -714,14 +721,17 @@
         "properties": {
           "costCents": {
             "description": "what this bucket cost, in cents",
+            "format": "int64",
             "type": "integer"
           },
           "errors": {
             "description": "calls in this bucket that did not succeed",
+            "format": "int64",
             "type": "integer"
           },
           "generations": {
             "description": "model calls in this bucket",
+            "format": "int64",
             "type": "integer"
           },
           "t": {
@@ -730,6 +740,7 @@
           },
           "totalTokens": {
             "description": "tokens in this bucket",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -777,38 +788,47 @@
         "properties": {
           "completionTokens": {
             "description": "tokens the models answered with",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "what the window cost, in cents",
+            "format": "int64",
             "type": "integer"
           },
           "errors": {
             "description": "calls that did not succeed",
+            "format": "int64",
             "type": "integer"
           },
           "generations": {
             "description": "how many model calls the window holds",
+            "format": "int64",
             "type": "integer"
           },
           "models": {
             "description": "how many distinct models were called",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "tokens sent to the models",
+            "format": "int64",
             "type": "integer"
           },
           "successRate": {
             "description": "share of calls that succeeded, 0..1",
+            "format": "double",
             "type": "number"
           },
           "totalTokens": {
             "description": "prompt plus completion",
+            "format": "int64",
             "type": "integer"
           },
           "users": {
             "description": "how many distinct users called them",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -822,14 +842,17 @@
           },
           "p50Ms": {
             "description": "median latency over the window",
+            "format": "double",
             "type": "number"
           },
           "p95Ms": {
             "description": "95th-percentile latency",
+            "format": "double",
             "type": "number"
           },
           "p99Ms": {
             "description": "99th-percentile latency",
+            "format": "double",
             "type": "number"
           }
         },
@@ -839,22 +862,27 @@
         "properties": {
           "completionTokens": {
             "description": "tokens it answered with",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "what this model cost, in cents",
+            "format": "int64",
             "type": "integer"
           },
           "costPct": {
             "description": "share of total spend, 0..100",
+            "format": "double",
             "type": "number"
           },
           "errorRate": {
             "description": "share of its calls that failed, 0..1",
+            "format": "double",
             "type": "number"
           },
           "errors": {
             "description": "calls to it that did not succeed",
+            "format": "int64",
             "type": "integer"
           },
           "model": {
@@ -863,22 +891,27 @@
           },
           "modelCount": {
             "description": "\u003e0 only on the \"other\" fold",
+            "format": "int64",
             "type": "integer"
           },
           "p50Ms": {
             "description": "median latency, null when no spans carry it",
+            "format": "double",
             "type": "number"
           },
           "p95Ms": {
             "description": "95th-percentile latency, null when unknown",
+            "format": "double",
             "type": "number"
           },
           "p99Ms": {
             "description": "99th-percentile latency, null when unknown",
+            "format": "double",
             "type": "number"
           },
           "promptTokens": {
             "description": "tokens sent to it",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -887,10 +920,12 @@
           },
           "requests": {
             "description": "calls to this model in the window",
+            "format": "int64",
             "type": "integer"
           },
           "totalTokens": {
             "description": "prompt plus completion",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -943,6 +978,7 @@
           },
           "items": {
             "description": "Items is how many examples the set holds. It is filled only by the single\nread — a listing does not count, so it is absent there rather than zero.",
+            "format": "int64",
             "type": "integer"
           },
           "metadata": {
@@ -1082,6 +1118,7 @@
           },
           "score": {
             "description": "Score is the judge's grade.",
+            "format": "double",
             "type": "number"
           },
           "traceId": {
@@ -1156,6 +1193,7 @@
         "properties": {
           "avgScore": {
             "description": "AvgScore is the mean over the scored examples.",
+            "format": "double",
             "type": "number"
           },
           "createdAt": {
@@ -1168,6 +1206,7 @@
           },
           "items": {
             "description": "Items is how many examples were attempted.",
+            "format": "int64",
             "type": "integer"
           },
           "judgeModel": {
@@ -1184,6 +1223,7 @@
           },
           "scored": {
             "description": "Scored is how many produced a real score.",
+            "format": "int64",
             "type": "integer"
           },
           "updatedAt": {
@@ -1205,6 +1245,7 @@
           },
           "limit": {
             "description": "Limit caps how many examples this run scores. It defaults to 20, and\nanything above 100 falls back to that default.",
+            "format": "int64",
             "type": "integer"
           },
           "model": {
@@ -1226,6 +1267,7 @@
         "properties": {
           "avgScore": {
             "description": "AvgScore is the mean over the scored examples, 0 when none scored.",
+            "format": "double",
             "type": "number"
           },
           "dataset": {
@@ -1234,6 +1276,7 @@
           },
           "items": {
             "description": "Items is how many examples the run attempted.",
+            "format": "int64",
             "type": "integer"
           },
           "judgeModel": {
@@ -1257,6 +1300,7 @@
           },
           "scored": {
             "description": "Scored is how many produced a real score. It counts successes only, so a\npartial run is honest about what it achieved.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1301,10 +1345,12 @@
           },
           "maxValue": {
             "description": "MaxValue is the inclusive ceiling a NUMERIC score must stay under, finite.",
+            "format": "double",
             "type": "number"
           },
           "minValue": {
             "description": "MinValue is the inclusive floor a NUMERIC score must clear. It must be\nfinite and must not exceed MaxValue.",
+            "format": "double",
             "type": "number"
           },
           "name": {
@@ -1336,10 +1382,12 @@
           },
           "maxValue": {
             "description": "MaxValue is the inclusive ceiling a NUMERIC score must stay under, absent when unbounded.",
+            "format": "double",
             "type": "number"
           },
           "minValue": {
             "description": "MinValue is the inclusive floor a NUMERIC score must clear, absent when unbounded.",
+            "format": "double",
             "type": "number"
           },
           "name": {
@@ -1401,6 +1449,7 @@
           },
           "value": {
             "description": "Value is the numeric score, which must be finite: NaN and Inf are refused.\nA BOOLEAN score takes 0 or 1.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -1445,6 +1494,7 @@
           },
           "value": {
             "description": "Value is the numeric score; for BOOLEAN it is 0 or 1.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -1490,6 +1540,7 @@
           },
           "latencyMs": {
             "description": "LatencyMs is EndTime-StartTime in milliseconds, nil when the trace carries\nno timing (so the console renders \"—\", never a fabricated 0).",
+            "format": "double",
             "type": "number"
           },
           "model": {

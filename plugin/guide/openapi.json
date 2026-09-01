@@ -546,6 +546,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the run was recorded, as Unix seconds. The ledger is read\nnewest-first on this column.",
+            "format": "int64",
             "type": "integer"
           },
           "err": {
@@ -684,26 +685,32 @@
           },
           "orders": {
             "description": "Orders counts completed orders in the window — purchases, not carts started.",
+            "format": "int64",
             "type": "integer"
           },
           "pageviews": {
             "description": "Pageviews counts page events in the window, one per view rather than per\nperson, so a single visitor reading ten pages counts ten.",
+            "format": "int64",
             "type": "integer"
           },
           "revenue": {
             "description": "Revenue is the sum of the amounts those orders reported, in whatever currency\nthe beacon stamped on them (major units, e.g. 49.5 for $49.50) — NOT cents,\nand not converted to a single currency. Contrast revenueCents on the profile,\nwhich is the money of record.",
+            "format": "double",
             "type": "number"
           },
           "signups": {
             "description": "Signups counts completed signups in the window, the step where an anonymous\nvisitor becomes somebody with an account.",
+            "format": "int64",
             "type": "integer"
           },
           "visitors": {
             "description": "Visitors is the number of DISTINCT people seen in the window, counted by the\nbeacon's distinct id — so it is unique visitors, not sessions and not views.",
+            "format": "int64",
             "type": "integer"
           },
           "windowDays": {
             "description": "WindowDays is the length of the trailing window every count covers, so a\nreader knows whether 40 signups is a month or a day.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -801,6 +808,7 @@
           },
           "n": {
             "description": "1..64, the hexagram number + canonical order",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -838,6 +846,7 @@
           },
           "order": {
             "description": "Order places the phase in the journey, ascending. Ties fall back to\nauthoring order, and an omitted order sorts as 0 — ahead of everything.",
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -903,10 +912,12 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when this revision was written, as Unix seconds — the \"who\nchanged the playbook, and when\" half of the audit trail.",
+            "format": "int64",
             "type": "integer"
           },
           "version": {
             "description": "Version is the store's own revision counter for that brand, starting at 1 for\nthe seeded playbook and incrementing on every edit. Nothing is overwritten, so\nthe highest number is the live one and every lower number is still readable.\nIt is not the playbook's authored `version` string.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -944,22 +955,27 @@
         "properties": {
           "principles": {
             "description": "Principles is how many spine archetypes the playbook carries (64 in the\nshipped corpus).",
+            "format": "int64",
             "type": "integer"
           },
           "sections": {
             "description": "Sections is how many phases the journey has.",
+            "format": "int64",
             "type": "integer"
           },
           "steps": {
             "description": "Steps is how many checklist items the playbook holds, DISABLED ONES INCLUDED\n— this counts the authored document, not the journey an org runs, so it is\nnormally larger than the `total` on a progress view.",
+            "format": "int64",
             "type": "integer"
           },
           "strategies": {
             "description": "Strategies is how many tactics the corpus holds, again counting disabled ones.",
+            "format": "int64",
             "type": "integer"
           },
           "templates": {
             "description": "Templates is how many reusable prompts the playbook carries.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -997,6 +1013,7 @@
           },
           "version": {
             "description": "Version is the active stored version number (1 is the seed). Each edit\nappends a new one; nothing is ever overwritten.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1035,6 +1052,7 @@
         "properties": {
           "count": {
             "description": "Count is how many tactics survived every filter.",
+            "format": "int64",
             "type": "integer"
           },
           "stage": {
@@ -1108,10 +1126,12 @@
           },
           "records": {
             "description": "Records is how many business records the org holds — the volume that tells a\nreal book of customers from an empty account. It feeds the `customers`\nsignal, which crosses at a threshold rather than at one row.",
+            "format": "int64",
             "type": "integer"
           },
           "revenueCents": {
             "description": "RevenueCents is the org's money OF RECORD — what its books say, in whole\ncents, never a float and never a display string. This is the number the\nscaling stage is decided on; funnel.revenue is the beacon's separate,\nunreconciled view of the same business. Zero when the org has none, and also\nzero when the books could not be read, which is why the `revenue` signal\nbeside it is the thing to trust.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1141,6 +1161,7 @@
         "properties": {
           "done": {
             "description": "Done counts steps that are FINISHED — done and skipped alike, since a step\nthe org deliberately passed over is not still owed. It therefore rises when\nsomebody skips, which is the intended reading of a checklist.",
+            "format": "int64",
             "type": "integer"
           },
           "next": {
@@ -1149,10 +1170,12 @@
           },
           "percent": {
             "description": "Percent is done/total as a whole number 0-100, rounded, so a caller renders\na bar without recomputing it. Total zero reads as 0.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is how many steps this org's journey holds — the ENABLED steps of the\nplaybook, so it shrinks when an operator disables one and does not match the\nauthored step count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1319,6 +1342,7 @@
           },
           "unlocks": {
             "description": "Unlocks is how many downstream steps completing this one immediately makes\navailable (its leverage) — the primary ranking key.",
+            "format": "int64",
             "type": "integer"
           }
         },

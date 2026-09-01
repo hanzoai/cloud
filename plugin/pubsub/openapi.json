@@ -116,6 +116,7 @@
           },
           "seq": {
             "description": "Seq is the message's sequence in that stream.",
+            "format": "uint64",
             "type": "integer"
           },
           "stream": {
@@ -143,6 +144,7 @@
           },
           "seq": {
             "description": "Seq is the message's stream sequence — fetched messages only.",
+            "format": "uint64",
             "type": "integer"
           },
           "subject": {
@@ -195,6 +197,7 @@
           },
           "timeoutMs": {
             "description": "TimeoutMs bounds the wait for a reply. 0 or less means the default of\n5000; anything above 30000 is clamped to 30000.",
+            "format": "int64",
             "type": "integer"
           }
         },

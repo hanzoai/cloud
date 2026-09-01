@@ -94,6 +94,7 @@
             "type": "string"
           },
           "number": {
+            "format": "int64",
             "type": "integer"
           },
           "state": {
@@ -132,9 +133,11 @@
             "type": "string"
           },
           "id": {
+            "format": "int64",
             "type": "integer"
           },
           "number": {
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -179,6 +182,7 @@
             "type": "array"
           },
           "repos": {
+            "format": "int64",
             "type": "integer"
           },
           "runs": {
@@ -200,6 +204,7 @@
         "properties": {
           "behind": {
             "description": "Behind counts commits after the one that last produced an image whose own\nbuild has FINISHED without producing one, and Since is when the oldest of\nthem landed. A commit still building is not counted, so a push in flight is\nnot drift and a service appears here only once something has actually\nstopped without shipping. How long that has stood is the number worth\nacting on; that it is true says nothing about whether anyone should move.",
+            "format": "int64",
             "type": "integer"
           },
           "built": {
@@ -238,6 +243,7 @@
             "type": "string"
           },
           "ready": {
+            "format": "int64",
             "type": "integer"
           },
           "repo": {
@@ -252,6 +258,7 @@
             "type": "string"
           },
           "want": {
+            "format": "int64",
             "type": "integer"
           }
         },

@@ -385,6 +385,7 @@
           },
           "items": {
             "description": "how many items it holds, when the set is fixed",
+            "format": "int64",
             "type": "integer"
           },
           "native": {
@@ -435,6 +436,7 @@
           },
           "score": {
             "description": "Score is the reported aggregate, as a percentage.",
+            "format": "double",
             "type": "number"
           },
           "source": {
@@ -448,26 +450,32 @@
         "properties": {
           "ciHigh": {
             "description": "CIHigh is the upper bound of that interval. Wilson rather than the normal\napproximation because the normal one produces bounds past 100 exactly where\nbenchmark scores live — at 194/198 that is the top of the board, not a\ncorner case.",
+            "format": "double",
             "type": "number"
           },
           "ciLow": {
             "description": "CILow and CIHigh are the 95% Wilson interval on Measured, in percent. They\nare what makes the score comparable: at n=198 a 98% carries roughly ±2\npoints, so most differences at the top of a board are not distinguishable\nand a bare number implies a precision it does not have. Absent when there\nis no measurement.",
+            "format": "double",
             "type": "number"
           },
           "claims": {
             "description": "Claims is how many independent claims exist for this model on this\nbenchmark. More than one means several sources reported it.",
+            "format": "int64",
             "type": "integer"
           },
           "gap": {
             "description": "published − measured (the arena signal)",
+            "format": "double",
             "type": "number"
           },
           "mean": {
             "description": "Mean is the unweighted average of every claim, which answers a different\nquestion from Published: what the field says on average, rather than what\nthe vendor says about itself. With one claim the two are equal.",
+            "format": "double",
             "type": "number"
           },
           "measured": {
             "description": "hanzo-measured accuracy % (nil if unrun)",
+            "format": "double",
             "type": "number"
           },
           "measuredAt": {
@@ -481,6 +489,7 @@
           },
           "n": {
             "description": "coverage — NEVER compare across different n",
+            "format": "int64",
             "type": "integer"
           },
           "protocol": {
@@ -489,6 +498,7 @@
           },
           "published": {
             "description": "provider-claimed % (nil if none)",
+            "format": "double",
             "type": "number"
           },
           "run": {
@@ -497,6 +507,7 @@
           },
           "spread": {
             "description": "Spread is the distance between the highest and lowest of them, nil when\nthere is only one. It is the disagreement AMONG sources, which a single\nPublished number cannot show — signal in the same way the\npublished-minus-measured gap is.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -517,6 +528,7 @@
           },
           "trend": {
             "description": "Trend is the change from the first run to the last, absent when there has\nonly been one. It answers the question a list of points makes you compute.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -545,6 +557,7 @@
           },
           "panel": {
             "description": "fan-out width (\u003e=1)",
+            "format": "int64",
             "type": "integer"
           },
           "rank": {
@@ -566,10 +579,12 @@
           },
           "delta": {
             "description": "Delta is the change in score from the previous run for this model, absent\non the first. It is the number the whole surface exists to make visible.",
+            "format": "double",
             "type": "number"
           },
           "n": {
             "description": "N is how many items the run covered. Two runs are only comparable at the\nsame n, which is why it travels with every point rather than being assumed.",
+            "format": "int64",
             "type": "integer"
           },
           "run": {
@@ -578,6 +593,7 @@
           },
           "score": {
             "description": "Score is accuracy over the items this run covered, as a percentage.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -622,6 +638,7 @@
           },
           "total": {
             "description": "Total is how many rows Data holds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -638,6 +655,7 @@
           },
           "total": {
             "description": "Total is how many rows Data holds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -658,6 +676,7 @@
           },
           "total": {
             "description": "Total is how many models Data holds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -687,6 +706,7 @@
           },
           "a_correct": {
             "description": "ACorrect is how many of those common items A got right.",
+            "format": "int64",
             "type": "integer"
           },
           "b": {
@@ -695,6 +715,7 @@
           },
           "b_correct": {
             "description": "BCorrect is how many of those common items B got right.",
+            "format": "int64",
             "type": "integer"
           },
           "benchmark": {
@@ -703,22 +724,27 @@
           },
           "mcnemar_p": {
             "description": "McnemarP is the two-sided exact binomial p on the discordant pairs. It is 1\nwhen nothing is discordant, which is \"no evidence of a difference\", not an\nerror.",
+            "format": "double",
             "type": "number"
           },
           "n_common": {
             "description": "NCommon is how many items BOTH arms completed. It is the denominator, and\nthe reason this comparison is valid where a raw accuracy difference is not.",
+            "format": "int64",
             "type": "integer"
           },
           "net_a_minus_b": {
             "description": "NetAMinusB is the two rescue counts subtracted — A's advantage in items.",
+            "format": "int64",
             "type": "integer"
           },
           "rescue_a_over_b": {
             "description": "RescueAOverB is how many items A got right and B got wrong.",
+            "format": "int64",
             "type": "integer"
           },
           "rescue_b_over_a": {
             "description": "RescueBOverA is how many items B got right and A got wrong.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -777,6 +803,7 @@
           },
           "score": {
             "description": "Score is the reported aggregate, as a percentage.",
+            "format": "double",
             "type": "number"
           },
           "source": {
@@ -806,6 +833,7 @@
         "properties": {
           "recorded": {
             "description": "Recorded is how many rows were written.",
+            "format": "int64",
             "type": "integer"
           },
           "rejected": {
@@ -822,6 +850,7 @@
         "properties": {
           "attempts": {
             "description": "Attempts is how many times to try each item; the harness's default applies\nwhen it is omitted.",
+            "format": "int64",
             "type": "integer"
           },
           "benchmarks": {

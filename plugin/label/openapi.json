@@ -79,6 +79,7 @@
             "required": false,
             "description": "Limit caps the page. Out of range takes the plane's own bound.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -163,6 +164,7 @@
             "required": false,
             "description": "Horizon is the maturity horizon in days the coverage is measured under.\nUnstated takes 120. It also moves the default window, which ends where\nmaturity begins.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -329,10 +331,12 @@
           },
           "disposed": {
             "description": "Disposed is how many whole records were removed. Records are disposed of\nwhole, never redacted: a partially-erased compliance record is one nobody\ncan attest to.",
+            "format": "int64",
             "type": "integer"
           },
           "held": {
             "description": "Held is how many records inside the boundary were kept under litigation\nhold.",
+            "format": "int64",
             "type": "integer"
           },
           "oldest": {
@@ -341,14 +345,17 @@
           },
           "remaining": {
             "description": "Remaining is how many disposable records are still older than the\nboundary. A sweep is bounded per call, so a non-zero value here means call\nagain rather than that something failed.",
+            "format": "int64",
             "type": "integer"
           },
           "restored": {
             "description": "Restored is how many records this sweep had already removed from the derived\ncolumnar copy and then did NOT dispose of, because a litigation hold arrived\nbetween the identify and the delete — and which were therefore written back\nto the derived copy before this answered.\n\nIt is a NAMED state and not a silent repair. The copy is swept before the\nrecord so nothing is orphaned in the warehouse, which means a record the\ndelete declines to remove is one the warehouse has already lost, with its\nseq behind the delivery cursor and no retry that can reach it. Non-zero here\nsays the collision happened and was repaired; a non-zero that keeps\nrecurring says retention and hold are racing on the same records, which is\nworth an operator's attention rather than a debug line.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total and Oldest describe what the tenant still holds afterwards, so a\ndisposal that removed nothing is distinguishable from a tenant that had\nnothing.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -374,10 +381,12 @@
         "properties": {
           "changed": {
             "description": "Changed is how many records moved into that state. A record already in it\nis not counted and is not an error: the op is idempotent, so a retry after\na network failure is safe.",
+            "format": "int64",
             "type": "integer"
           },
           "held": {
             "description": "Held is how many records this tenant is now holding, at any age. Retention\nnever disposes of one.",
+            "format": "int64",
             "type": "integer"
           },
           "hold": {
@@ -386,6 +395,7 @@
           },
           "missing": {
             "description": "Missing is how many of the named ids this tenant does not hold. It is\nreported rather than refused, so a sweep over a list that includes disposed\nrecords still places every hold it can — but it is REPORTED, because a hold\nthat silently did nothing is a compliance control that lies.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -395,18 +405,22 @@
         "properties": {
           "contested": {
             "description": "Contested is how many matured events have two visible assertions that\ndisagree. It is the number that says whether the precedence rule is\nload-bearing or decorative, and it is the one to watch after wiring a new\nsource.",
+            "format": "int64",
             "type": "integer"
           },
           "events": {
             "description": "Events is how many DISTINCT judged events those assertions name, keyed on\n(kind, subject, at). It counts only events something was ASSERTED about: what\nshare of the whole event stream carries a label is a question about the\nfeature plane's denominator and is not answerable here. Matured + Unmatured is\nEvents.",
+            "format": "int64",
             "type": "integer"
           },
           "explore": {
             "description": "Explore is the share of judged events whose winning assertion came from\nthe below-the-line sample. A blocked transaction never produces a\nchargeback, so a training set with no exploration in it is a description of\nthe incumbent block list rather than of the world — and a champion measured\non it is measured on whether it agrees with the incumbent.",
+            "format": "double",
             "type": "number"
           },
           "facts": {
             "description": "Facts is how many assertions the window holds; Events is how many distinct\njudged events they cover. The two differ by exactly the corroboration and\nthe conflict in the plane.",
+            "format": "int64",
             "type": "integer"
           },
           "from": {
@@ -415,22 +429,27 @@
           },
           "horizon": {
             "description": "Horizon is the maturity horizon these counts were measured under, IN DAYS —\nthe caller's, or 120. It decides Matured (an event is matured when its `at`\nplus this many days is not after now), it sets each event's own as-of and so\nwhich assertions were visible to it, and when the caller bounds nothing it\nalso places the default window's end.",
+            "format": "int64",
             "type": "integer"
           },
           "judged": {
             "description": "Judged is how many MATURED events resolve, at their own as-of, to\nsomething other than unjudged.",
+            "format": "int64",
             "type": "integer"
           },
           "matured": {
             "description": "Matured is how many of those events have aged past the horizon and may\ntherefore be admitted to a supervised set at all. It counts every matured\nevent, judged or not — it is the DENOMINATOR an operator divides Judged by,\nand a denominator that excluded the unjudged would read 1.0 on a plane with\none label in it.",
+            "format": "int64",
             "type": "integer"
           },
           "pending": {
             "description": "Pending is how many of this tenant's assertions the DERIVED columnar copy is\nnot known to hold yet. Every count above is folded from the record, so they\nare right regardless — but a materialiser that joins in the warehouse while\nthis is non-zero is joining against an incomplete answer key, and a missing\nfraud label is indistinguishable from an honest customer. It is reported at\nthe training gate because that is where somebody is deciding whether the\nground truth is good enough to fit on. Counted under a cap, so it saturates\nrather than costing a full scan on every read.",
+            "format": "int64",
             "type": "integer"
           },
           "productive": {
             "description": "Productive is how many matured events resolve, at their own as-of, to a\nWINNING assertion of `productive` — the event led somewhere: escalated,\nreported, charged back. It is the positive class a supervised fit would train\non, and a near-zero count is the number that says the fit is not worth\nrunning.",
+            "format": "int64",
             "type": "integer"
           },
           "sources": {
@@ -446,14 +465,17 @@
           },
           "unlabelled": {
             "description": "Unlabelled is how many MATURED events had no assertion knowable by their\nown as-of — including every assertion that arrived after that instant. It\nis the field that says WHY judged is low: a tenant whose ground truth was\nfiled long after the events it judges reads matured=n, judged=0,\nunlabelled=n, which is diagnosable, rather than a bare zero, which is not.",
+            "format": "int64",
             "type": "integer"
           },
           "unmatured": {
             "description": "Unmatured is how many events in the window have NOT aged past the horizon.\nThey are not unlabelled — they are not yet askable, and a supervised set\nmust exclude them rather than treat them as negatives. Matured + Unmatured\nis Events.",
+            "format": "int64",
             "type": "integer"
           },
           "unproductive": {
             "description": "Unproductive is every OTHER judged event: the winner claimed `unproductive`,\njudged not suspicious. Productive + Unproductive is Judged exactly, because a\nwinner of the explicit unjudged is counted in neither — it is a matured event\nsomebody looked at and could not conclude about, and rolling it into the\nnegatives would hand a model a claim nobody made.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -484,6 +506,7 @@
           },
           "confidence": {
             "description": "Confidence in [0,1]. A processor chargeback is 1; an analyst's hunch is\nnot. It breaks a tie WITHIN a precedence rank and can never lift a weak\nsource above a strong one — otherwise every caller would send 1.\n\nA litigation hold is NOT a field here. It is a fact about the record and\nnot about the world, so it is not part of what was asserted, it is not in\nthe content digest, and it has its own op — which is also the only way one\ncan be released. Carried here it was silently a no-op on any record that\nalready existed: the digest was the same, the insert was ignored, and the\ncaller was told `duplicate` while the hold it asked for was never placed.",
+            "format": "double",
             "type": "number"
           },
           "disposition": {
@@ -529,6 +552,7 @@
         "properties": {
           "duplicate": {
             "description": "Duplicate is how many members this tenant already held, byte for byte. The\nidempotency key is the assertion's CONTENT digest — kind, subject, at, seen,\ndisposition, source, evidence, the asserting identity and confidence, folded\nin length-prefixed — so a webhook redelivering one chargeback is a duplicate\nand costs nothing, while an assertion differing in ANY of those fields is a\nDIFFERENT assertion and is recorded beside the first. Nothing was written and\nnothing was overwritten; it is an outcome, never an error. The asserting\nidentity is in the digest, so the same claim filed by a second credential is\ntwo assertions and not a redelivery.",
+            "format": "int64",
             "type": "integer"
           },
           "mirror": {
@@ -537,14 +561,17 @@
           },
           "pending": {
             "description": "Pending is how many assertions the derived copy is still to take. Every\nwrite attempt carries the backlog forward as well as its own batch, so a\nwarehouse that was unreachable closes its gap on the next write rather than\nleaving a hole in a training join nothing would report. It is counted under\na cap and saturates there: zero means caught up, and a large number means a\nbacklog to work through rather than an inventory to reconcile.",
+            "format": "int64",
             "type": "integer"
           },
           "recorded": {
             "description": "Recorded is how many members became a NEW row in the tenant's record.\nRecorded + Duplicate + Refused is exactly the number of labels sent, so a\ncaller reconciling a webhook delivery can do it on the counts alone.",
+            "format": "int64",
             "type": "integer"
           },
           "refused": {
             "description": "Refused is how many members failed admission and were NOT recorded. Refusal\nis per member and never discards the rest of the batch: an empty or\nover-512-byte subject or evidence, a kind, disposition or source outside the\nclosed vocabulary, an `at` or `seen` that is not RFC 3339, a `seen` before the\n`at` it judges, either instant more than five minutes past the server clock,\nor a confidence outside [0,1]. Results names which member and why, so the\nrefused ones are exactly the ones to fix and resend.",
+            "format": "int64",
             "type": "integer"
           },
           "results": {
@@ -569,6 +596,7 @@
           },
           "confidence": {
             "description": "Confidence is the filer's own confidence in [0,1] — 1 for a processor\nchargeback, less for an analyst's hunch. Zero is the ordinary value for a\nfiler that stated none, and it means the weakest tie-break there is rather\nthan \"unknown\". It breaks a tie only WITHIN one precedence rank and can never\nlift a weak source above a strong one.",
+            "format": "double",
             "type": "number"
           },
           "disposition": {
@@ -656,6 +684,7 @@
           },
           "retention": {
             "description": "Retention is the platform floor in days: no tenant may dispose of a label\nyounger than this, because a label can be the input to an adverse action.",
+            "format": "int64",
             "type": "integer"
           },
           "rule": {
@@ -672,6 +701,7 @@
         "properties": {
           "count": {
             "description": "Count is how many this page holds. It is not a total: a total over an\nunbounded append-only log is a full scan of a single-writer file.",
+            "format": "int64",
             "type": "integer"
           },
           "labels": {
@@ -688,6 +718,7 @@
         "properties": {
           "horizon": {
             "description": "Horizon is how many days an event must age before it may be resolved at\nall, and it is the whole of the no-leakage rule. 120 for the payment lane\n(past the Visa and Mastercard dispute windows), 14 for signup abuse.\nUnstated takes 120.",
+            "format": "int64",
             "type": "integer"
           },
           "now": {
@@ -708,6 +739,7 @@
         "properties": {
           "horizon": {
             "description": "Horizon is the maturity horizon this answer was computed under, IN DAYS — the\ncaller's, or 120 when it stated none. Each event's as-of is its own `at` plus\nthis many days, and that as-of is what decides which assertions were visible\nto it; an event whose as-of falls after Now is not resolved at all and is\ncounted in Unmatured instead.",
+            "format": "int64",
             "type": "integer"
           },
           "labels": {
@@ -723,10 +755,12 @@
           },
           "unlabelled": {
             "description": "Unlabelled is how many matured events had no assertion knowable by their\nown as-of. That is the ordinary state of most traffic and it is reported\nrather than answered as unproductive: manufacturing negatives is how a\nfraud model comes to describe the incumbent block list.",
+            "format": "int64",
             "type": "integer"
           },
           "unmatured": {
             "description": "Unmatured is how many named events had not aged past the horizon. They are\nnot unlabelled — they are not yet ASKABLE, and a supervised training set\nmust exclude them rather than treat them as negatives.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -748,6 +782,7 @@
           },
           "confidence": {
             "description": "Confidence is the winning assertion's own confidence in [0,1], zero when its\nfiler stated none. It is reported because it is a term of the rule that picked\nthe winner, and it is the weakest term but one: it breaks a tie inside one\nrank and never lifts a weak source above a strong one.",
+            "format": "double",
             "type": "number"
           },
           "conflicts": {
@@ -792,6 +827,7 @@
         "properties": {
           "facts": {
             "description": "Facts is how many assertions this source filed; Won is how many judged\nevents it was the assertion in force for. A source with many facts and few\nwins is one that is being outranked, which is worth knowing before\nconcluding it is wired correctly.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {
@@ -800,6 +836,7 @@
           },
           "won": {
             "description": "Won is how many JUDGED events this source's assertion was the one IN FORCE\nfor, at that event's own as-of — it beat every other visible claim under the\nprecedence rule. Summed over the sources it is Judged. Read against Facts it\nis the ratio that matters: many filed and few won is a source being outranked,\nnot a source that is broken, and one source winning nearly everything is a\nplane that looks labelled because one noisy filer dominates it.",
+            "format": "int64",
             "type": "integer"
           }
         },

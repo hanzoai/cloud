@@ -54,6 +54,7 @@
             "required": false,
             "description": "Since bounds the feed to artifacts recorded at or after this unix second.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -366,6 +367,7 @@
           },
           "ts": {
             "description": "TS is when the attempt was measured, unix SECONDS. Display-only: a\nserver-assigned append clock, not this, decides which version is canonical.\n0 means the producer sent none.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -379,6 +381,7 @@
           },
           "cost_usd": {
             "description": "CostUSD is what the run cost in US DOLLARS (not cents), as the producer\nreports it. It is summed as-is into the per-project and per-kind totals.",
+            "format": "double",
             "type": "number"
           },
           "endpoint": {
@@ -417,10 +420,12 @@
           },
           "n": {
             "description": "N is the sample size behind Value — items scored, or exposures for an A/B\narm.",
+            "format": "int64",
             "type": "integer"
           },
           "n_total": {
             "description": "NTotal is the denominator the producer reports N against — the size of the\nset N was drawn from. The plane derives neither from the other, so a\nproducer that reports only N leaves this 0.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {
@@ -453,10 +458,12 @@
           },
           "ts": {
             "description": "TS is when the run was measured, unix SECONDS. It is display-only and it\ndoes NOT decide supersession — a server-assigned append clock does, so a\nlive correction that sends no ts still supersedes a backfill that stamped\none. 0 means the producer sent none.",
+            "format": "int64",
             "type": "integer"
           },
           "value": {
             "description": "Value is the measurement, in whatever unit Metric names. It is NEVER\nnormalized: one producer files accuracy as 0.81 and another as 94.3 and\nboth are stored as sent, so compare values only within one (subject, task,\nmetric).",
+            "format": "double",
             "type": "number"
           },
           "visibility": {
@@ -518,10 +525,12 @@
         "properties": {
           "cost_usd": {
             "description": "CostUSD is US DOLLARS (not cents) summed over those same runs.",
+            "format": "double",
             "type": "number"
           },
           "experiments": {
             "description": "Experiments counts the canonical answered runs of this kind — the same\npredicate as the headline count, sliced.",
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -535,26 +544,32 @@
         "properties": {
           "attempts": {
             "description": "Attempts counts the CANONICAL answered attempts, one per (benchmark, item,\nmodel).",
+            "format": "int64",
             "type": "integer"
           },
           "attempts_retained": {
             "description": "AttemptsRetained counts every attempt version held, on the same terms as\nExperimentsRetained.",
+            "format": "int64",
             "type": "integer"
           },
           "benchmarks": {
             "description": "Benchmarks is how many DISTINCT benchmarks those same attempts cover.",
+            "format": "int64",
             "type": "integer"
           },
           "cost_usd": {
             "description": "CostUSD is US DOLLARS (not cents) summed over the canonical answered runs,\nso it is what the deduped view cost and not what the history cost.",
+            "format": "double",
             "type": "number"
           },
           "experiments": {
             "description": "Experiments counts the CANONICAL answered runs: one per stable id, the\nlatest non-retracted version, faulted and failed left out.",
+            "format": "int64",
             "type": "integer"
           },
           "experiments_retained": {
             "description": "ExperimentsRetained counts every run version the store holds for the\nproject — superseded and retracted included. Retained is always ≥\ncanonical, and the gap is history rather than loss.",
+            "format": "int64",
             "type": "integer"
           },
           "kinds": {
@@ -566,6 +581,7 @@
           },
           "models": {
             "description": "Models is how many DISTINCT models appear across the canonical answered\nattempts.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {
@@ -622,6 +638,7 @@
           },
           "ts": {
             "description": "TS is when the artifact was recorded, unix SECONDS, as the caller gives it\n— it is what the feed sorts newest-first on and what ?since= is compared\nagainst. 0 leaves the run unordered against timestamped siblings.",
+            "format": "int64",
             "type": "integer"
           },
           "visibility": {
@@ -635,14 +652,17 @@
         "properties": {
           "attempts": {
             "description": "Attempts counts the CANONICAL answered attempts, one per (benchmark, item,\nmodel).",
+            "format": "int64",
             "type": "integer"
           },
           "attempts_retained": {
             "description": "AttemptsRetained counts every attempt version held, on the same terms as\nExperimentsRetained.",
+            "format": "int64",
             "type": "integer"
           },
           "benchmarks": {
             "description": "Benchmarks is how many DISTINCT benchmarks those same attempts cover.",
+            "format": "int64",
             "type": "integer"
           },
           "by_kind": {
@@ -654,18 +674,22 @@
           },
           "cost_usd": {
             "description": "CostUSD is US DOLLARS (not cents) summed over the canonical answered runs.",
+            "format": "double",
             "type": "number"
           },
           "experiments": {
             "description": "Experiments counts the CANONICAL answered runs: one per stable id, the\nlatest non-retracted version, faulted and failed left out.",
+            "format": "int64",
             "type": "integer"
           },
           "experiments_retained": {
             "description": "ExperimentsRetained counts every run version held — superseded and\nretracted included. Retained is always ≥ canonical, and the gap is history\nrather than loss, which is why both travel together.",
+            "format": "int64",
             "type": "integer"
           },
           "models": {
             "description": "Models is how many DISTINCT models appear across the canonical answered\nattempts.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {
@@ -674,6 +698,7 @@
           },
           "projects": {
             "description": "Projects is how many DISTINCT projects the counted evidence spans, so it is\n1 whenever Project narrows to one.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -711,6 +736,7 @@
           },
           "total": {
             "description": "Total is len(data).",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -727,6 +753,7 @@
           },
           "total": {
             "description": "Total is len(data) — the rows in this answer, not the store's history.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -736,6 +763,7 @@
         "properties": {
           "updated": {
             "description": "Updated is the number of records the grant applied to. Zero is a 404, never a silent no-op.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -745,26 +773,32 @@
         "properties": {
           "attempts_ingested": {
             "description": "AttemptsIngested is how many attempt versions this call appended.",
+            "format": "int64",
             "type": "integer"
           },
           "attempts_retained": {
             "description": "AttemptsRetained is the full versioned attempt history the store now holds.",
+            "format": "int64",
             "type": "integer"
           },
           "canonical_attempts": {
             "description": "CanonicalAttempts is the deduped attempt count the store now holds.",
+            "format": "int64",
             "type": "integer"
           },
           "canonical_experiments": {
             "description": "CanonicalExperiments is the deduped experiment count the store now holds.",
+            "format": "int64",
             "type": "integer"
           },
           "experiments_ingested": {
             "description": "ExperimentsIngested is how many experiment versions this call appended.",
+            "format": "int64",
             "type": "integer"
           },
           "experiments_retained": {
             "description": "ExperimentsRetained is the full versioned experiment history the store now holds.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {
@@ -789,6 +823,7 @@
           },
           "total": {
             "description": "Total is len(data).",
+            "format": "int64",
             "type": "integer"
           }
         },

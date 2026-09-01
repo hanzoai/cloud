@@ -1421,26 +1421,32 @@
         "properties": {
           "accounts": {
             "description": "Accounts is how many linked accounts the total folds.",
+            "format": "int64",
             "type": "integer"
           },
           "completionTokens": {
             "description": "CompletionTokens is the total completion-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is the total cost in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the total prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is the total request count the gateway routed.",
+            "format": "int64",
             "type": "integer"
           },
           "totalTokens": {
             "description": "TotalTokens is the total token count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1467,12 +1473,14 @@
             "type": "string"
           },
           "periodSpentCents": {
+            "format": "int64",
             "type": "integer"
           },
           "project": {
             "type": "string"
           },
           "rateLimitRpm": {
+            "format": "int64",
             "type": "integer"
           },
           "resetsAt": {
@@ -1482,9 +1490,11 @@
             "type": "string"
           },
           "softPct": {
+            "format": "int64",
             "type": "integer"
           },
           "threshold": {
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -1517,18 +1527,21 @@
             "type": "string"
           },
           "rateLimitRpm": {
+            "format": "int64",
             "type": "integer"
           },
           "service": {
             "type": "string"
           },
           "softPct": {
+            "format": "int64",
             "type": "integer"
           },
           "subject": {
             "type": "string"
           },
           "threshold": {
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -1549,18 +1562,21 @@
             "type": "string"
           },
           "rateLimitRpm": {
+            "format": "int64",
             "type": "integer"
           },
           "service": {
             "type": "string"
           },
           "softPct": {
+            "format": "int64",
             "type": "integer"
           },
           "subject": {
             "type": "string"
           },
           "threshold": {
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -1572,6 +1588,7 @@
       "AutoRecharge": {
         "properties": {
           "amountCents": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -1590,6 +1607,7 @@
             "type": "string"
           },
           "thresholdCents": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1598,6 +1616,7 @@
       "AutoRechargeEdit": {
         "properties": {
           "amountCents": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -1607,6 +1626,7 @@
             "type": "boolean"
           },
           "thresholdCents": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1642,18 +1662,22 @@
       "BillingInvoice": {
         "properties": {
           "amountDue": {
+            "format": "int64",
             "type": "integer"
           },
           "amountPaid": {
+            "format": "int64",
             "type": "integer"
           },
           "attemptCount": {
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "type": "string"
           },
           "creditApplied": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -1663,6 +1687,7 @@
             "type": "string"
           },
           "discount": {
+            "format": "int64",
             "type": "integer"
           },
           "dueDate": {
@@ -1679,6 +1704,7 @@
             "type": "array"
           },
           "number": {
+            "format": "int64",
             "type": "integer"
           },
           "numberStr": {
@@ -1706,9 +1732,11 @@
             "type": "string"
           },
           "subtotal": {
+            "format": "int64",
             "type": "integer"
           },
           "tax": {
+            "format": "int64",
             "type": "integer"
           },
           "updatedAt": {
@@ -1729,15 +1757,18 @@
             "type": "boolean"
           },
           "capCents": {
+            "format": "int64",
             "type": "integer"
           },
           "reason": {
             "type": "string"
           },
           "spentCents": {
+            "format": "int64",
             "type": "integer"
           },
           "warnPct": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1747,6 +1778,7 @@
         "properties": {
           "balanceCents": {
             "description": "BalanceCents is the subject's balance AFTER the charge settled, in cents, so\na caller does not have to re-read to show the new number.",
+            "format": "int64",
             "type": "integer"
           },
           "processorRef": {
@@ -1772,14 +1804,17 @@
         "properties": {
           "balanceUsedCents": {
             "description": "BalanceUsedCents is how much was covered by prepaid balance.",
+            "format": "int64",
             "type": "integer"
           },
           "cardChargedCents": {
             "description": "CardChargedCents is how much was charged to the card on file.",
+            "format": "int64",
             "type": "integer"
           },
           "creditUsedCents": {
             "description": "CreditUsedCents is how much was covered by credit grants.",
+            "format": "int64",
             "type": "integer"
           },
           "invoice": {
@@ -1818,6 +1853,7 @@
       "CreditEntry": {
         "properties": {
           "available": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -1832,6 +1868,7 @@
             "type": "boolean"
           },
           "amountCents": {
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -1853,9 +1890,11 @@
             "type": "string"
           },
           "priority": {
+            "format": "int64",
             "type": "integer"
           },
           "remainingCents": {
+            "format": "int64",
             "type": "integer"
           },
           "tags": {
@@ -1873,6 +1912,7 @@
       "CreditGrants": {
         "properties": {
           "count": {
+            "format": "int64",
             "type": "integer"
           },
           "grants": {
@@ -1964,10 +2004,12 @@
         "properties": {
           "amountDueCents": {
             "description": "AmountDueCents is what remains collectible.",
+            "format": "int64",
             "type": "integer"
           },
           "amountPaidCents": {
             "description": "AmountPaidCents is what has been collected so far.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -2007,6 +2049,7 @@
           },
           "subtotalCents": {
             "description": "SubtotalCents is the sum of the lines.",
+            "format": "int64",
             "type": "integer"
           },
           "userId": {
@@ -2020,6 +2063,7 @@
         "properties": {
           "amount": {
             "description": "Amount is the line total in whole cents (250000 is $2,500.00).",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -2028,10 +2072,12 @@
           },
           "quantity": {
             "description": "Quantity is the number of units, when the line is metered. Optional.",
+            "format": "int64",
             "type": "integer"
           },
           "unitPrice": {
             "description": "UnitPrice is the per-unit price in cents, when the line is metered. Optional.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2040,6 +2086,7 @@
       "InvoiceLineItem": {
         "properties": {
           "amount": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -2068,12 +2115,14 @@
             "type": "string"
           },
           "quantity": {
+            "format": "int64",
             "type": "integer"
           },
           "type": {
             "type": "string"
           },
           "unitPrice": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2082,6 +2131,7 @@
       "Invoices": {
         "properties": {
           "count": {
+            "format": "int64",
             "type": "integer"
           },
           "invoices": {
@@ -2141,6 +2191,7 @@
       "Payout": {
         "properties": {
           "amount": {
+            "format": "int64",
             "type": "integer"
           },
           "arrivalDate": {
@@ -2208,10 +2259,12 @@
         "properties": {
           "charged": {
             "description": "Charged is how many of them were actually charged. It is at most Orgs, and\nthe difference is orgs whose balance was already above their threshold.",
+            "format": "int64",
             "type": "integer"
           },
           "orgs": {
             "description": "Orgs is how many orgs the sweep considered — every org with auto-recharge\narmed, whether or not it needed charging.",
+            "format": "int64",
             "type": "integer"
           },
           "results": {
@@ -2227,9 +2280,11 @@
       "Recharged": {
         "properties": {
           "amountCents": {
+            "format": "int64",
             "type": "integer"
           },
           "balanceCents": {
+            "format": "int64",
             "type": "integer"
           },
           "charged": {
@@ -2256,6 +2311,7 @@
             "$ref": "#/components/schemas/RollupBalance"
           },
           "consumedCents": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -2265,6 +2321,7 @@
             "$ref": "#/components/schemas/RollupAllotment"
           },
           "overageCents": {
+            "format": "int64",
             "type": "integer"
           },
           "period": {
@@ -2288,15 +2345,19 @@
       "RollupAllotment": {
         "properties": {
           "consumedCents": {
+            "format": "int64",
             "type": "integer"
           },
           "grantedCents": {
+            "format": "int64",
             "type": "integer"
           },
           "monthlyCents": {
+            "format": "int64",
             "type": "integer"
           },
           "remainingCents": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2305,12 +2366,15 @@
       "RollupBalance": {
         "properties": {
           "availableCents": {
+            "format": "int64",
             "type": "integer"
           },
           "balanceCents": {
+            "format": "int64",
             "type": "integer"
           },
           "holdsCents": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2328,10 +2392,12 @@
           },
           "completionTokens": {
             "description": "CompletionTokens is the routed completion-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is the routed cost in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -2340,6 +2406,7 @@
           },
           "promptTokens": {
             "description": "PromptTokens is the routed prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -2348,10 +2415,12 @@
           },
           "requests": {
             "description": "Requests is how many requests the gateway routed through this account.",
+            "format": "int64",
             "type": "integer"
           },
           "totalTokens": {
             "description": "TotalTokens is the routed total token count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2385,6 +2454,7 @@
           },
           "mrrCents": {
             "description": "MRRCents is what this subscription contributes per month — commerce's own\nfigure, interval-normalized and multiplied by its seats, so no reader\nre-derives it from price and interval.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -2397,6 +2467,7 @@
             "type": "string"
           },
           "quantity": {
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -2432,6 +2503,7 @@
             "type": "string"
           },
           "price": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2453,6 +2525,7 @@
         "properties": {
           "count": {
             "description": "Count is the row count beside the rows, which is the shape this address\nhas always answered with.",
+            "format": "int64",
             "type": "integer"
           },
           "subscriptions": {
@@ -2487,18 +2560,22 @@
       "TierBalance": {
         "properties": {
           "creditsRemaining": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
             "type": "string"
           },
           "dailyRemaining": {
+            "format": "int64",
             "type": "integer"
           },
           "effectiveAvailable": {
+            "format": "int64",
             "type": "integer"
           },
           "prepaidAvailable": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2513,12 +2590,14 @@
             "type": "array"
           },
           "dailyCreditsCents": {
+            "format": "int64",
             "type": "integer"
           },
           "displayName": {
             "type": "string"
           },
           "maxAgents": {
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -2534,6 +2613,7 @@
       "Transaction": {
         "properties": {
           "amount": {
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -2564,6 +2644,7 @@
       "Transactions": {
         "properties": {
           "count": {
+            "format": "int64",
             "type": "integer"
           },
           "transactions": {
@@ -2581,9 +2662,11 @@
       "Window": {
         "properties": {
           "limit": {
+            "format": "int64",
             "type": "integer"
           },
           "remaining": {
+            "format": "int64",
             "type": "integer"
           },
           "resets": {
@@ -2593,6 +2676,7 @@
             "type": "string"
           },
           "used": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2654,6 +2738,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is what the payer intends to send, for the record. Optional —\nthe credit is what actually arrives, never what was announced.",
+            "format": "int64",
             "type": "integer"
           },
           "chain": {
@@ -2673,9 +2758,11 @@
             "type": "string"
           },
           "balanceCents": {
+            "format": "int64",
             "type": "integer"
           },
           "cents": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -2697,6 +2784,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is how much to charge, in cents of Currency. Required.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {

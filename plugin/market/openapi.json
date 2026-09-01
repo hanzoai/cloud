@@ -208,10 +208,12 @@
           },
           "count": {
             "description": "Count is transactions in the day, where the table keeps one.",
+            "format": "int64",
             "type": "integer"
           },
           "date": {
             "description": "Date is the day's start, unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "high": {
@@ -238,12 +240,14 @@
       "Figures": {
         "properties": {
           "count": {
+            "format": "int64",
             "type": "integer"
           },
           "locked": {
             "type": "string"
           },
           "pools": {
+            "format": "int64",
             "type": "integer"
           },
           "volume": {
@@ -303,6 +307,7 @@
           },
           "id": {
             "description": "ID is the EVM chain id, which is what a wallet must agree with.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -330,10 +335,12 @@
             "type": "string"
           },
           "count": {
+            "format": "int64",
             "type": "integer"
           },
           "fee": {
             "description": "Fee is the pool's tier in hundredths of a basis point — 3000 is 0.3%. It is\nthe integer the contract stores, unconverted, so nothing here rounds a rate.",
+            "format": "int64",
             "type": "integer"
           },
           "locked": {
@@ -452,6 +459,7 @@
             "type": "string"
           },
           "decimals": {
+            "format": "int64",
             "type": "integer"
           },
           "name": {

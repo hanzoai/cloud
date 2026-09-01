@@ -220,6 +220,7 @@
             "required": false,
             "description": "Limit caps how many attempts come back: default 50, maximum 200. A value\nthat is not a positive integer reads as the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 100
@@ -328,6 +329,7 @@
         "properties": {
           "attempt": {
             "description": "Attempt is which try this row is, starting at 1. The ladder waits 1s, then 5s,\nthen 25s before the next one.",
+            "format": "int64",
             "type": "integer"
           },
           "created": {
@@ -340,6 +342,7 @@
           },
           "durationMs": {
             "description": "DurationMs is how long this attempt took end to end, in MILLISECONDS.",
+            "format": "int64",
             "type": "integer"
           },
           "endpoint": {
@@ -352,6 +355,7 @@
           },
           "httpStatus": {
             "description": "HTTPStatus is what the subscriber answered. ZERO means it never answered — a\nrefused connection, a DNS failure or a timeout — which is why a zero here is\nnot a 200.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -373,6 +377,7 @@
           },
           "deliveries7d": {
             "description": "Deliveries7d is how many deliveries SETTLED in the trailing 7 days — the\nattempts that ended ok or failed, so a delivery still retrying is in neither\ncounter yet. It is counted from the log at read time rather than stored, and\nit is filled only on a list or a get; a create answers 0 because there is no\nhistory, which is why it is never omitted.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -388,6 +393,7 @@
           },
           "failures7d": {
             "description": "Failures7d is how many of those settled as failed — the subscriber never\naccepted it and no further attempt will be made. It is the numerator to\nDeliveries7d, over the same window.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -473,6 +479,7 @@
           },
           "durationMs": {
             "description": "DurationMs is how long the single attempt took, in MILLISECONDS.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -481,6 +488,7 @@
           },
           "httpStatus": {
             "description": "HTTPStatus is what the subscriber answered, or 0 if it never answered.",
+            "format": "int64",
             "type": "integer"
           }
         },

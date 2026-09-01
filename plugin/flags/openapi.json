@@ -86,6 +86,7 @@
             "required": false,
             "description": "Limit caps the rows returned. 1–500; anything else takes the default 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -352,6 +353,7 @@
           },
           "id": {
             "description": "ID is the log's own sequence number, rising with each entry. The log is\nserved newest-first, which is this descending.",
+            "format": "int64",
             "type": "integer"
           },
           "key": {
@@ -380,6 +382,7 @@
           },
           "version": {
             "description": "Version is 1 when the key was created and rises by one on every overwrite.\nIt counts writes, not content changes: re-storing an identical document\nbumps it.",
+            "format": "int64",
             "type": "integer"
           }
         },

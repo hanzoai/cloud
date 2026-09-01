@@ -641,6 +641,7 @@
             "required": false,
             "description": "Limit bounds the page; 0 or less means the default of 200.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -651,6 +652,7 @@
             "required": false,
             "description": "Offset skips that many rows.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -710,6 +712,7 @@
             "required": false,
             "description": "Limit bounds how many formations are scanned; 0 or less means the default of 200.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -835,6 +838,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is what this line costs.",
+            "format": "int64",
             "type": "integer"
           },
           "asOf": {
@@ -908,6 +912,7 @@
         "properties": {
           "at": {
             "description": "At is the unix second the filing record was written.",
+            "format": "int64",
             "type": "integer"
           },
           "note": {
@@ -962,6 +967,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is the unix second the formation was opened.",
+            "format": "int64",
             "type": "integer"
           },
           "documentIds": {
@@ -1035,6 +1041,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is the unix second of the most recent write to the formation.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1052,6 +1059,7 @@
           },
           "equityBps": {
             "description": "EquityBps is the founder's ownership in basis points, 0–10000 (1% == 100 bps,\nso 10000 is the whole company). The founders' shares seed the cap-table genesis.",
+            "format": "int64",
             "type": "integer"
           },
           "kycRef": {
@@ -1073,14 +1081,17 @@
         "properties": {
           "at": {
             "description": "At is the unix second the genesis root was computed.",
+            "format": "int64",
             "type": "integer"
           },
           "block": {
             "description": "Block is the L1 block the anchoring transaction landed in. Set only once the\nreceipt has been read; absent otherwise.",
+            "format": "uint64",
             "type": "integer"
           },
           "chainId": {
             "description": "ChainID is the EVM chain the root is committed to — the Hanzo L1 by default.",
+            "format": "int64",
             "type": "integer"
           },
           "note": {
@@ -1106,6 +1117,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is the unix second the formation was opened.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -1126,6 +1138,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is the unix second of the most recent write to the formation, and\nthe key the register sorts on (newest activity first).",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1160,10 +1173,12 @@
           },
           "preMoneyValuation": {
             "description": "PreMoneyValuation is the valuation the round prices off, before the new money.",
+            "format": "double",
             "type": "number"
           },
           "pricePerShare": {
             "description": "PricePerShare is the per-share price of a priced round.",
+            "format": "double",
             "type": "number"
           },
           "roundType": {
@@ -1176,6 +1191,7 @@
           },
           "targetAmount": {
             "description": "TargetAmount is the amount the round is raising, recorded verbatim on the\ncanonical cap table's rounds.create contract.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -1202,6 +1218,7 @@
           },
           "dueNowCents": {
             "description": "DueNowCents is what is charged to begin: every non-recurring line.",
+            "format": "int64",
             "type": "integer"
           },
           "jurisdiction": {
@@ -1221,6 +1238,7 @@
           },
           "recurringCents": {
             "description": "RecurringCents is what repeats, and Recurring says how often.",
+            "format": "int64",
             "type": "integer"
           },
           "structure": {
@@ -1373,10 +1391,12 @@
           },
           "rows": {
             "description": "Rows is how many rows were read from the sheet, header included.",
+            "format": "int64",
             "type": "integer"
           },
           "stakeholdersImported": {
             "description": "StakeholdersImported is how many stakeholders the cap table accepted.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1399,6 +1419,7 @@
           },
           "ingested": {
             "description": "Ingested is how many files this call put in the data room.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1462,6 +1483,7 @@
         "properties": {
           "byStage": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "ByStage counts formations per stage, keyed by the stage name.",
@@ -1469,6 +1491,7 @@
           },
           "total": {
             "description": "Total is every formation in the register.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1478,6 +1501,7 @@
         "properties": {
           "count": {
             "description": "Count is how many rows this page holds.",
+            "format": "int64",
             "type": "integer"
           },
           "formations": {
@@ -1489,10 +1513,12 @@
           },
           "limit": {
             "description": "Limit is the page size that was applied.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is the offset that was applied.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1502,6 +1528,7 @@
         "properties": {
           "count": {
             "description": "Count is how many founders are waiting.",
+            "format": "int64",
             "type": "integer"
           },
           "queue": {
@@ -1621,6 +1648,7 @@
           },
           "since": {
             "description": "Since is when the formation was last touched, as a unix second.",
+            "format": "int64",
             "type": "integer"
           }
         },

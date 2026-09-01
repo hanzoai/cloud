@@ -973,6 +973,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when this state was last written, in SECONDS since the Unix\nepoch (not milliseconds). Absent on a row no operator has touched, which is\nthe same thing as having no row at all.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1039,6 +1040,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when an operator last set this item's state, in SECONDS since\nthe Unix epoch (not milliseconds).",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1132,6 +1134,7 @@
           },
           "total": {
             "description": "Total is how many models this answer carries — recounted over the visible\nset, not the catalog's own total.",
+            "format": "int64",
             "type": "integer"
           },
           "updated": {

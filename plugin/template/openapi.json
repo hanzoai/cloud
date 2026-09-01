@@ -231,6 +231,7 @@
           },
           "rating": {
             "description": "Rating is public-gallery curation, on the same terms as Tier: catalog-only,\nnever accepted from a request, absent on a customer's own kit.",
+            "format": "double",
             "type": "number"
           },
           "slug": {
@@ -243,6 +244,7 @@
           },
           "tier": {
             "description": "Tier is public-gallery curation, carried verbatim from the embedded catalog.\nNo request can set it — neither write body has the field and neither builds a\nkit carrying one — so it is absent on every customer-published kit.",
+            "format": "int64",
             "type": "integer"
           },
           "title": {
