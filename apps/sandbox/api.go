@@ -62,6 +62,10 @@ type Spec struct {
 	// runtime.go, where Kubernetes is spoken.
 	Runtime string
 	TTLSec  int
+	// Cluster names one of the org's ATTACHED clusters to run the lease on,
+	// empty for the home cluster. Resolved through the fleet registry before
+	// anything is built, so an unknown name refuses with nothing behind it.
+	Cluster string
 }
 
 // Cmd is one command to run inside a sandbox. Argv is the honest form; Command is
@@ -185,6 +189,17 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 		return Sandbox{}, zip.ErrBadRequest("project required for class " + class)
 	}
 
+	// THE CLUSTER, before anything is built or billed. A lease may name one of
+	// the org's ATTACHED clusters and run there; empty is the home cluster,
+	// exactly as every lease has always run. Resolving here is what makes an
+	// unknown name a clean 404 and a cluster without the gvisor floor a clean
+	// refusal — with no row, no PVC and no charge behind either.
+	cluster := strings.ToLower(strings.TrimSpace(spec.Cluster))
+	rt, err := s.State.rt.at(ctx, org, cluster)
+	if err != nil {
+		return Sandbox{}, err
+	}
+
 	// One live sandbox per (org, project), and the refusal is deliberate: the
 	// project volume is single-attach, so a second concurrent sandbox would either
 	// fail to attach or silently get a cold empty disk. "Silently cold" is the worse
@@ -301,8 +316,8 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	}
 	now := time.Now().Unix()
 	m := Sandbox{
-		ID: id, Org: org, Kind: KindSandbox, Class: class, Project: project,
-		Image: cmp.Or(strings.TrimSpace(spec.Image), s.State.rt.imageFor(class, super)),
+		ID: id, Org: org, Kind: KindSandbox, Class: class, Project: project, Cluster: cluster,
+		Image: cmp.Or(strings.TrimSpace(spec.Image), rt.imageFor(class, super)),
 		Pod:   podName(id), Status: "pending",
 		// The runtime meter's two facts, both settled HERE because both are facts
 		// about the act that took the lease. Payer is the wallet this lease was
@@ -327,7 +342,7 @@ func Lease(s *Service, ctx context.Context, org, ledger string, super bool, bear
 	// runtime and can only have another must be able to see which it got, or the
 	// two are indistinguishable from the outside and a comparison between them
 	// measures nothing.
-	m.Runtime, err = s.State.rt.runtimeFor(m, spec.Runtime, s.State.rt.preference(ctx))
+	m.Runtime, err = rt.runtimeFor(m, spec.Runtime, rt.preference(ctx))
 	if err != nil {
 		return Sandbox{}, zip.ErrBadRequest(err.Error())
 	}

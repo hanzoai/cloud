@@ -74,6 +74,11 @@ type Sandbox struct {
 	// dev sandbox keeps its work across leases through it; an exec sandbox has
 	// none and loses everything outside /mnt/data when the lease ends.
 	Volume string `json:"volume,omitempty"`
+	// Cluster is the attached cluster this sandbox runs on — the fleet-local
+	// name the lease named — or empty for the home cluster. Immutable for the
+	// life of the lease, like the pod it locates: every later call into the
+	// sandbox reads it to reach the right apiserver.
+	Cluster string `json:"cluster,omitempty"`
 	// Error is why the sandbox could not come up, in plain words. Present only
 	// with status "error", and it is the field to read rather than inferring a
 	// cause from the absence of a pod.
@@ -140,6 +145,7 @@ CREATE TABLE IF NOT EXISTS sandbox (
   pod          TEXT NOT NULL DEFAULT '',
   runtime      TEXT NOT NULL DEFAULT '',
   volume       TEXT NOT NULL DEFAULT '',
+  cluster      TEXT NOT NULL DEFAULT '',
   error        TEXT NOT NULL DEFAULT '',
   created_at   INTEGER NOT NULL,
   last_used_at INTEGER NOT NULL,
@@ -184,6 +190,10 @@ CREATE INDEX IF NOT EXISTS ix_machines_org_status  ON sandbox(org, status);
 			return fmt.Errorf("migrate runtime meter columns: %w", err)
 		}
 	}
+	if _, err := s.db.Exec(`ALTER TABLE sandbox ADD COLUMN cluster TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate cluster column: %w", err)
+	}
 	return nil
 }
 
@@ -191,14 +201,14 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) Put(ctx context.Context, m Sandbox) error {
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at,payer,metered_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+INSERT INTO sandbox (id,org,kind,class,project,status,image,pod,runtime,volume,cluster,error,created_at,last_used_at,connected_at,expires_at,payer,metered_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   status=excluded.status, image=excluded.image, pod=excluded.pod, runtime=excluded.runtime,
   volume=excluded.volume,
   error=excluded.error, last_used_at=excluded.last_used_at, expires_at=excluded.expires_at`,
 		m.ID, m.Org, m.Kind, m.Class, m.Project, m.Status, m.Image, m.Pod, m.Runtime, m.Volume,
-		m.Error, m.CreatedAt, m.LastUsedAt, m.ConnectedAt, m.ExpiresAt, m.Payer, m.MeteredAt)
+		m.Cluster, m.Error, m.CreatedAt, m.LastUsedAt, m.ConnectedAt, m.ExpiresAt, m.Payer, m.MeteredAt)
 	return err
 }
 
@@ -239,7 +249,7 @@ func (s *Store) List(ctx context.Context, org, project, status string) ([]Sandbo
 	for rows.Next() {
 		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
+			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Cluster, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
 			&m.ExpiresAt, &m.Payer, &m.MeteredAt); err != nil {
 			return nil, err
 		}
@@ -376,7 +386,7 @@ func (s *Store) rows(ctx context.Context, where string, args ...any) ([]Sandbox,
 	for rows.Next() {
 		var m Sandbox
 		if err := rows.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
+			&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Cluster, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
 			&m.ExpiresAt, &m.Payer, &m.MeteredAt); err != nil {
 			return nil, err
 		}
@@ -411,12 +421,12 @@ func (s *Store) Delete(ctx context.Context, org, id string) error {
 	return err
 }
 
-const selectCols = `SELECT id,org,kind,class,project,status,image,pod,runtime,volume,error,created_at,last_used_at,connected_at,expires_at,payer,metered_at FROM sandbox`
+const selectCols = `SELECT id,org,kind,class,project,status,image,pod,runtime,volume,cluster,error,created_at,last_used_at,connected_at,expires_at,payer,metered_at FROM sandbox`
 
 func scanMachine(row *sql.Row) (Sandbox, error) {
 	var m Sandbox
 	err := row.Scan(&m.ID, &m.Org, &m.Kind, &m.Class, &m.Project, &m.Status,
-		&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
+		&m.Image, &m.Pod, &m.Runtime, &m.Volume, &m.Cluster, &m.Error, &m.CreatedAt, &m.LastUsedAt, &m.ConnectedAt,
 		&m.ExpiresAt, &m.Payer, &m.MeteredAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sandbox{}, errNotFound

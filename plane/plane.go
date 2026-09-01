@@ -2659,6 +2659,12 @@ type LeaseIn struct {
 	// TTLSec bounds the lease in seconds. Unset takes the class default. Nothing
 	// runs forever, because a sandbox is somebody else's code on our nodes.
 	TTLSec int `json:"ttlSec,omitempty"`
+	// Cluster names one of the org's ATTACHED clusters to run the lease on —
+	// the fleet-local name a BYO cluster was registered under. Empty runs where
+	// leases have always run, the home cluster. The named cluster must carry
+	// the sandbox namespace and the gvisor runtime class; a name the org has
+	// not attached is refused 404.
+	Cluster string `json:"cluster,omitempty"`
 }
 
 // Leased is the sandbox a lease got.
@@ -2700,6 +2706,9 @@ type Leased struct {
 	// (the artifact directory the code tool tells the model to write to). A path
 	// that climbs above it is refused rather than rewritten.
 	Workdir string `json:"workdir"`
+	// Cluster is the attached cluster this sandbox runs on, when one was named.
+	// Empty is the home cluster.
+	Cluster string `json:"cluster,omitempty"`
 }
 
 // RunIn runs one command in a sandbox. Argv is the honest form; Command is the
