@@ -46,12 +46,11 @@ BASE="http://127.0.0.1:${HTTP_PORT}"
 # secret and password exist only inside this data dir, which is deleted on exit.
 ORG=hanzo
 OTHER_ORG=acme
-# Minted per run, like the two credentials below, and for the same reason: a
-# password written into a file is a password on every disk that file reaches and
-# in every copy of this repository's history, forever, for an instance whose data
-# directory is deleted on exit. It is printed once at the end instead — that is
-# where a human reads it, and it exists nowhere else.
-PASSWORD="${PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -d '=+/')!aA1}"
+# The estate's seed-superuser credential, so a person and a local chat client sign
+# in to what this booted with the value they already know. The two credentials
+# below stay minted: nothing outside this script presents them. A caller that
+# wants its own sets PASSWORD. The upsert route argon2id-hashes it server-side.
+PASSWORD="${PASSWORD:-REDACTED}"
 CLIENT_ID=hanzo-console
 # Fresh per run, unless the caller already has one. BOOT_ONLY leaves the instance
 # up for somebody else to talk to, and talking to it needs the credential it was
