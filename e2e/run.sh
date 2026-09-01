@@ -169,6 +169,12 @@ export IAM_SERVICE_TOKEN="$SERVICE_TOKEN"
 # every org-scoped route answers "org scope required" — a 403 that reads exactly
 # like a product bug.
 export CLOUD_JWKS_URL="$BASE/v1/iam/.well-known/jwks"
+# The same discovery, for the ai plugin, which is a separate module with its own
+# validator: it reads IAM_ENDPOINT (then IAM_ISSUER) and refuses to guess a trust
+# anchor, so with neither set it skips JWKS entirely and parses an empty
+# certificate — every completion answers 401 "iam: not valid PEM", which reads as
+# a key fault and is a missing address.
+export IAM_ENDPOINT="$BASE"
 export E2E_CLIENT_SECRET="$CLIENT_SECRET"        # ${VAR} substitution in init_data.json
 export E2E_REDIRECT_URI="$BASE/auth/callback"
 
