@@ -6309,7 +6309,6 @@ have a store" is the union of the open set and the disk — `OrgStore.Has`, whic
 **Still outside the envelope:** `tasks/<org>/<namespace>.db`. `hanzoai/tasks`'s
 `EmbedConfig` has no key field, so that is an upstream change.
 
-## Inter-app calls: typed ops, ZAP over UDS
 
 **One app calls another with a typed op — the same op the REST route, the OpenAPI
 document, the MCP tool list and the CLI are all projected from.** `plane.go` is the
