@@ -39,6 +39,7 @@
             "required": false,
             "description": "Limit caps the journal entries returned. Out of range or unparseable takes the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -292,6 +293,7 @@
             "description": "the entry's magnitude (display; postings hold the signed truth)"
           },
           "createdAt": {
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -334,9 +336,11 @@
       "SharePolicy": {
         "properties": {
           "revenueShareBps": {
+            "format": "int64",
             "type": "integer"
           },
           "updatedAt": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -346,10 +350,12 @@
         "properties": {
           "accruedCents": {
             "description": "lifetime revenue-share into the fund",
+            "format": "int64",
             "type": "integer"
           },
           "byProgramCents": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "program → lifetime paid",
@@ -357,6 +363,7 @@
           },
           "paidCents": {
             "description": "lifetime backed payouts out of the fund",
+            "format": "int64",
             "type": "integer"
           },
           "policy": {
@@ -365,6 +372,7 @@
           },
           "reserveCents": {
             "description": "fund:reserve balance (available now)",
+            "format": "int64",
             "type": "integer"
           },
           "solventForPayout": {
@@ -382,6 +390,7 @@
           },
           "balanceCents": {
             "description": "BalanceCents is that account's signed balance in minor units.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -473,6 +482,7 @@
       "anchorStatus": {
         "properties": {
           "chainId": {
+            "format": "int64",
             "type": "integer"
           },
           "contract": {
@@ -483,12 +493,15 @@
             "type": "string"
           },
           "entryCount": {
+            "format": "int64",
             "type": "integer"
           },
           "lastAt": {
+            "format": "int64",
             "type": "integer"
           },
           "lastBlock": {
+            "format": "uint64",
             "type": "integer"
           },
           "lastRoot": {
@@ -548,6 +561,7 @@
         "properties": {
           "revenueShareBps": {
             "description": "RevenueShareBps is the share of net platform revenue a sweep accrues into the\nreserve fund, in basis points. 0–10000; 2000 (20%) is the platform default.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -565,6 +579,7 @@
           },
           "reserveCents": {
             "description": "ReserveCents is the fund balance after the injection.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -591,6 +606,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is the capital to inject, in minor units. Must be \u003e 0.",
+            "format": "int64",
             "type": "integer"
           },
           "memo": {
@@ -612,6 +628,7 @@
           },
           "chainId": {
             "description": "ChainID is the EVM chain the signer is bound for.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -642,6 +659,7 @@
         "properties": {
           "accruedCents": {
             "description": "AccruedCents is the amount moved into the reserve fund.",
+            "format": "int64",
             "type": "integer"
           },
           "created": {
@@ -654,10 +672,12 @@
           },
           "reserveCents": {
             "description": "ReserveCents is the fund balance after the accrual.",
+            "format": "int64",
             "type": "integer"
           },
           "revenueCents": {
             "description": "RevenueCents is the revenue the share was computed from.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -688,6 +708,7 @@
           },
           "revenueCents": {
             "description": "RevenueCents is the net platform revenue measured for the period, in minor units. Must be \u003e= 0.",
+            "format": "int64",
             "type": "integer"
           }
         },

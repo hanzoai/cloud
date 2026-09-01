@@ -186,6 +186,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the referral was recorded, as a Unix timestamp.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -194,6 +195,7 @@
           },
           "qualifiedAt": {
             "description": "QualifiedAt is when the referee first made metered spend, as a Unix\ntimestamp; 0 while still pending.",
+            "format": "int64",
             "type": "integer"
           },
           "refereeOrg": {
@@ -215,14 +217,17 @@
         "properties": {
           "qualified": {
             "description": "Qualified is how many referees have made metered spend.",
+            "format": "int64",
             "type": "integer"
           },
           "signup": {
             "description": "Signup is how many are recorded but not yet qualified.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is every referral in the directory.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -249,6 +254,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the referral was first recorded, as a Unix timestamp.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -266,6 +272,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the referral was recorded, as a Unix timestamp.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -274,6 +281,7 @@
           },
           "qualifiedAt": {
             "description": "QualifiedAt is when the referee first made metered spend, as a Unix\ntimestamp; 0 while the referral is still pending.",
+            "format": "int64",
             "type": "integer"
           },
           "referee": {
@@ -315,14 +323,17 @@
         "properties": {
           "qualified": {
             "description": "Qualified is how many referees have made metered spend.",
+            "format": "int64",
             "type": "integer"
           },
           "signup": {
             "description": "Signup is how many referees have signed up but not yet spent.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is every referral this org has made.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -349,10 +360,12 @@
         "properties": {
           "qualified": {
             "description": "Qualified is how many of those referrals qualified on this pass.",
+            "format": "int64",
             "type": "integer"
           },
           "swept": {
             "description": "Swept is how many pending referrals were checked.",
+            "format": "int64",
             "type": "integer"
           }
         },

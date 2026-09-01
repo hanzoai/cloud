@@ -116,6 +116,7 @@
         "properties": {
           "cache_paths": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "CachePaths overrides CacheTTLSec per path PREFIX (key \"/v1/models\" → seconds).\nThe longest matching prefix wins.",
@@ -123,6 +124,7 @@
           },
           "cache_ttl_sec": {
             "description": "CacheTTLSec is the org's default edge-cache TTL for its responses, in seconds;\n0 means no caching. Unset inherits the platform default.",
+            "format": "int64",
             "type": "integer"
           },
           "cors_origins": {
@@ -145,14 +147,17 @@
           },
           "org_rpm": {
             "description": "OrgRPM is the org's OWN authenticated rate ceiling, requests per minute, as\nScopeRateLimit enforces it. Unset inherits the platform default, then the\nstatic boot default.",
+            "format": "int64",
             "type": "integer"
           },
           "per_ip_rpm": {
             "description": "PerIPRPM is the PLATFORM-scope pre-auth flood cap: requests EdgeRateLimit\nadmits per WindowSec from one client IP. SuperAdmin-only, same reason.",
+            "format": "int64",
             "type": "integer"
           },
           "updated_at": {
             "description": "UpdatedAt is the unix second this policy row was last written. Server-stamped;\na client-supplied value is ignored.",
+            "format": "int64",
             "type": "integer"
           },
           "updated_by": {
@@ -161,6 +166,7 @@
           },
           "window_sec": {
             "description": "WindowSec is the window PerIPRPM is counted over, in seconds. SuperAdmin-only.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -178,14 +184,17 @@
           },
           "failures": {
             "description": "Failures is how many ended 401 or 403.",
+            "format": "int64",
             "type": "integer"
           },
           "held_until": {
             "description": "HeldUntil is when the held verdict lapses, unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "paths": {
             "description": "Paths is the approximate number of distinct paths it touched (max 64).",
+            "format": "int64",
             "type": "integer"
           },
           "reason": {
@@ -194,6 +203,7 @@
           },
           "requests": {
             "description": "Requests is its request count in the window.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -203,6 +213,7 @@
         "properties": {
           "blind": {
             "description": "Blind is how many requests in the window carried no identity to attribute\nthem to — no validated credential and no client address. Non-zero on a\npublic plane means the client address is not reaching this process (a TCP\nload balancer with no PROXY protocol in front of it, typically), so this\nscope's callers cannot be told apart and nothing can be held against them.",
+            "format": "int64",
             "type": "integer"
           },
           "callers": {
@@ -214,14 +225,17 @@
           },
           "ceiling": {
             "description": "Ceiling is the most callers this scope may hold at once.",
+            "format": "int64",
             "type": "integer"
           },
           "denied": {
             "description": "Denied is how many of them the gate refused.",
+            "format": "int64",
             "type": "integer"
           },
           "lanes": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "Lanes is the request count per lane — agent, human, bot, unknown. This is\nthe split that separates a customer's automation from a scraper.",
@@ -237,14 +251,17 @@
           },
           "refused": {
             "description": "Refused is how many callers this scope's ceilings turned away in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is how many requests this scope made in the window.",
+            "format": "int64",
             "type": "integer"
           },
           "screens": {
             "description": "Screens is how many of them were put to the scorer — the billable unit of\nthe risk product. Counted from the first request, whatever the SKU costs.",
+            "format": "int64",
             "type": "integer"
           },
           "strain": {
@@ -253,14 +270,17 @@
           },
           "tracked": {
             "description": "Tracked is how many callers this scope holds state for right now, and\nCeiling is the most it may hold. Tracked == Ceiling is the fact a bound\nthat binds cannot hide.",
+            "format": "int64",
             "type": "integer"
           },
           "unscored": {
             "description": "Unscored is how many of those screens got NO answer — the scorer was absent,\nstuck, slow, erroring or silent. An unanswered screen allows ordinary\ntraffic, so this is the number that separates \"a quiet day\" from \"the judge\nstopped answering and nothing said so\".",
+            "format": "int64",
             "type": "integer"
           },
           "window_sec": {
             "description": "WindowSec is the span the counts cover, in seconds.",
+            "format": "int64",
             "type": "integer"
           }
         },

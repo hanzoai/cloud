@@ -1686,6 +1686,7 @@
             "type": "string"
           },
           "replicas": {
+            "format": "int64",
             "type": "integer"
           },
           "repository": {
@@ -1791,6 +1792,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the app was created, unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "currentDeploymentId": {
@@ -1853,6 +1855,7 @@
           },
           "port": {
             "description": "Port is the container port traffic is sent to. 8080 when the create asked\nfor none, or for one outside 1–65535.",
+            "format": "int64",
             "type": "integer"
           },
           "projectId": {
@@ -1861,6 +1864,7 @@
           },
           "replicas": {
             "description": "Replicas is how many copies the CR declares. It is CLAMPED to the\ndeployment's ceiling rather than refused, so it can be below what was asked.",
+            "format": "int64",
             "type": "integer"
           },
           "repo": {
@@ -1889,10 +1893,12 @@
           },
           "storageGb": {
             "description": "StorageGB is the persistent volume size in GiB. Absent means stateless —\nno volume at all — and it is clamped like Replicas.",
+            "format": "int64",
             "type": "integer"
           },
           "updatedAt": {
             "description": "UpdatedAt is when it last changed, unix seconds. Every lifecycle transition\nmoves it, so it tracks deploys as well as edits.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2028,6 +2034,7 @@
           },
           "port": {
             "description": "Port is the container port the app listens on.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {
@@ -2036,6 +2043,7 @@
           },
           "replicas": {
             "description": "Replicas is how many copies to run; clamped to the deployment's limit\nrather than refused.",
+            "format": "int64",
             "type": "integer"
           },
           "repo": {
@@ -2052,6 +2060,7 @@
           },
           "storageGb": {
             "description": "StorageGB is the persistent volume size in GiB; absent means stateless.\nClamped to the deployment's limit rather than refused.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2111,6 +2120,7 @@
             "type": "string"
           },
           "replicas": {
+            "format": "int64",
             "type": "integer"
           },
           "repository": {
@@ -2194,6 +2204,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the attempt was recorded, unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -2222,10 +2233,12 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is its last transition, unix seconds — so for a terminal\ndeployment it is when it reached that state.",
+            "format": "int64",
             "type": "integer"
           },
           "version": {
             "description": "Version counts this app's deployments, from 1 and monotonically. It is what\nORDERS them: a deploy only goes live if no higher version already is, so a\nbuild that finishes late is superseded instead of overwriting a newer one.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2235,6 +2248,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is the unix second the custom claim was made.",
+            "format": "int64",
             "type": "integer"
           },
           "detail": {
@@ -2295,14 +2309,17 @@
         "properties": {
           "ok": {
             "description": "OK is how many rows run what they declare.",
+            "format": "int64",
             "type": "integer"
           },
           "red": {
             "description": "Red is how many have drifted badly.",
+            "format": "int64",
             "type": "integer"
           },
           "yellow": {
             "description": "Yellow is how many have drifted within tolerance.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2360,6 +2377,7 @@
           },
           "total": {
             "description": "Total is how many rows the board returned, after filtering.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2508,10 +2526,12 @@
         "properties": {
           "applications": {
             "description": "Applications is how many platform apps this org has under the project,\ncounted per request. It is the one fact IAM cannot answer about a project.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "description": "CreatedAt is IAM's creation time as unix seconds. 0 when IAM's timestamp is\nabsent or unparseable — never a fabricated time.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -2730,6 +2750,7 @@
           },
           "gpu": {
             "description": "GPU is how many GPUs the run asks for; a negative value is 400.",
+            "format": "int64",
             "type": "integer"
           },
           "image": {
@@ -2738,10 +2759,12 @@
           },
           "maxScale": {
             "description": "MaxScale above the floor declares an autoscaling ceiling; 0 means no\nautoscaler at all — a fixed run at the floor.",
+            "format": "int64",
             "type": "integer"
           },
           "minScale": {
             "description": "MinScale is the replica floor, clamped to the deployment's limit.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -2750,6 +2773,7 @@
           },
           "port": {
             "description": "Port is the container port the run listens on.",
+            "format": "int64",
             "type": "integer"
           },
           "runtime": {

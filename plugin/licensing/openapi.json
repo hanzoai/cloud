@@ -509,6 +509,7 @@
           },
           "ttl_seconds": {
             "description": "TTLSeconds requests a token lifetime in seconds. It is clamped to the\ndeployment maximum AND to the entitlement's own expiry — a token never\noutlives the subscription that paid for it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -525,6 +526,7 @@
           },
           "exp": {
             "description": "Exp is the token's expiry, Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "features": {
@@ -597,6 +599,7 @@
           },
           "schema": {
             "description": "Schema is the license payload schema version this key signs.",
+            "format": "uint8",
             "type": "integer"
           },
           "token_format": {
@@ -625,6 +628,7 @@
             "type": "string"
           },
           "created_at": {
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -694,6 +698,7 @@
       "licensing.RevocationEntry": {
         "properties": {
           "at": {
+            "format": "int64",
             "type": "integer"
           },
           "by": {
@@ -769,6 +774,7 @@
           },
           "exp": {
             "description": "Exp is the token's expiry, Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "features": {

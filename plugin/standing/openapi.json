@@ -62,6 +62,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is what it costs each period.",
+            "format": "int64",
             "type": "integer"
           },
           "asOf": {
@@ -126,6 +127,7 @@
           },
           "yearlyCents": {
             "description": "YearlyCents is what the entity owes every year, all obligations summed.",
+            "format": "int64",
             "type": "integer"
           }
         },

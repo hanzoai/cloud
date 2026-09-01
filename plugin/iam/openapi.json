@@ -1858,6 +1858,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3393,6 +3394,7 @@
             "required": false,
             "description": "P is the 1-indexed page to return. Paging takes both p and pageSize —\nleave either out, or send something that is not a number, and the whole\nlist comes back.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -3402,6 +3404,7 @@
             "required": false,
             "description": "Size is how many accounts a page holds.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -4167,6 +4170,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -4175,6 +4179,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -5016,9 +5021,11 @@
             "type": "string"
           },
           "codeResendTimeout": {
+            "format": "int64",
             "type": "integer"
           },
           "cookieExpireInHours": {
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -5095,12 +5102,15 @@
             "type": "string"
           },
           "expireInHours": {
+            "format": "double",
             "type": "number"
           },
           "failedSigninFrozenTime": {
+            "format": "int64",
             "type": "integer"
           },
           "failedSigninLimit": {
+            "format": "int64",
             "type": "integer"
           },
           "favicon": {
@@ -5128,6 +5138,7 @@
             "type": "string"
           },
           "formOffset": {
+            "format": "int64",
             "type": "integer"
           },
           "formSideHtml": {
@@ -5164,6 +5175,7 @@
             "type": "string"
           },
           "order": {
+            "format": "int64",
             "type": "integer"
           },
           "orgChoiceMode": {
@@ -5200,6 +5212,7 @@
             "type": "array"
           },
           "refreshExpireInHours": {
+            "format": "double",
             "type": "number"
           },
           "samlAttributes": {
@@ -5365,6 +5378,7 @@
             "type": "string"
           },
           "statusCode": {
+            "format": "int64",
             "type": "integer"
           },
           "updatedAt": {
@@ -5389,9 +5403,11 @@
             "type": "string"
           },
           "price": {
+            "format": "double",
             "type": "number"
           },
           "quantity": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -5409,6 +5425,7 @@
             "type": "string"
           },
           "bitSize": {
+            "format": "int64",
             "type": "integer"
           },
           "certificate": {
@@ -5434,6 +5451,7 @@
             "type": "string"
           },
           "expireInYears": {
+            "format": "int64",
             "type": "integer"
           },
           "expireTime": {
@@ -5504,6 +5522,7 @@
             "type": "string"
           },
           "balanceCredit": {
+            "format": "double",
             "type": "number"
           },
           "balanceCurrency": {
@@ -5553,9 +5572,11 @@
             "type": "boolean"
           },
           "failedSigninFrozenTime": {
+            "format": "int64",
             "type": "integer"
           },
           "failedSigninLimit": {
+            "format": "int64",
             "type": "integer"
           },
           "favicon": {
@@ -5571,6 +5592,7 @@
             "type": "string"
           },
           "initScore": {
+            "format": "int64",
             "type": "integer"
           },
           "ipRestriction": {
@@ -5628,6 +5650,7 @@
             "type": "array"
           },
           "mfaRememberInHours": {
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -5640,12 +5663,14 @@
             "type": "array"
           },
           "orgBalance": {
+            "format": "double",
             "type": "number"
           },
           "owner": {
             "type": "string"
           },
           "passwordExpireDays": {
+            "format": "int64",
             "type": "integer"
           },
           "passwordObfuscatorKey": {
@@ -5686,6 +5711,7 @@
             "type": "boolean"
           },
           "userBalance": {
+            "format": "double",
             "type": "number"
           },
           "userNavItems": {
@@ -5784,6 +5810,7 @@
         "properties": {
           "faceIdData": {
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
@@ -5836,6 +5863,7 @@
             "type": "string"
           },
           "statusCode": {
+            "format": "int64",
             "type": "integer"
           },
           "user": {
@@ -5887,6 +5915,7 @@
             "type": "string"
           },
           "quota": {
+            "format": "int64",
             "type": "integer"
           },
           "signupGroup": {
@@ -5903,6 +5932,7 @@
             "type": "string"
           },
           "usedCount": {
+            "format": "int64",
             "type": "integer"
           },
           "username": {
@@ -6027,6 +6057,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -6105,6 +6136,7 @@
             "type": "boolean"
           },
           "mfaRememberInHours": {
+            "format": "int64",
             "type": "integer"
           },
           "mfaType": {
@@ -6132,6 +6164,7 @@
             "type": "string"
           },
           "balanceCredit": {
+            "format": "double",
             "type": "number"
           },
           "balanceCurrency": {
@@ -6181,10 +6214,12 @@
             "type": "boolean"
           },
           "failedSigninFrozenTime": {
+            "format": "int64",
             "type": "integer"
           },
           "failedSigninLimit": {
             "description": "Per-organization signin throttle. Zero means \"inherit the application\ndefault\"; a non-zero value overrides it. Safe bounds are clamped by the\nresource service before persistence.",
+            "format": "int64",
             "type": "integer"
           },
           "favicon": {
@@ -6201,6 +6236,7 @@
             "type": "string"
           },
           "initScore": {
+            "format": "int64",
             "type": "integer"
           },
           "ipRestriction": {
@@ -6258,6 +6294,7 @@
             "type": "array"
           },
           "mfaRememberInHours": {
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -6271,12 +6308,14 @@
           },
           "orgBalance": {
             "description": "Balance fields are read-only mirrors; authoritative balances live in\nCommerce (billing.hanzo.ai). Carried for field-complete v1 parity.",
+            "format": "double",
             "type": "number"
           },
           "owner": {
             "type": "string"
           },
           "passwordExpireDays": {
+            "format": "int64",
             "type": "integer"
           },
           "passwordObfuscatorKey": {
@@ -6317,6 +6356,7 @@
             "type": "boolean"
           },
           "userBalance": {
+            "format": "double",
             "type": "number"
           },
           "userNavItems": {
@@ -6609,6 +6649,7 @@
             "type": "string"
           },
           "port": {
+            "format": "int64",
             "type": "integer"
           },
           "providerUrl": {
@@ -7018,6 +7059,7 @@
       "iam.ThemeData": {
         "properties": {
           "borderRadius": {
+            "format": "int64",
             "type": "integer"
           },
           "colorPrimary": {
@@ -7056,6 +7098,7 @@
             "type": "string"
           },
           "codeExpireIn": {
+            "format": "int64",
             "type": "integer"
           },
           "codeIsUsed": {
@@ -7072,6 +7115,7 @@
             "type": "boolean"
           },
           "expiresIn": {
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -7102,6 +7146,7 @@
             "type": "boolean"
           },
           "refreshExpireIn": {
+            "format": "int64",
             "type": "integer"
           },
           "refreshFamily": {
@@ -7163,6 +7208,7 @@
             "type": "string"
           },
           "balanceCredit": {
+            "format": "double",
             "type": "number"
           },
           "balanceCurrency": {
@@ -7212,9 +7258,11 @@
             "type": "boolean"
           },
           "failedSigninFrozenTime": {
+            "format": "int64",
             "type": "integer"
           },
           "failedSigninLimit": {
+            "format": "int64",
             "type": "integer"
           },
           "favicon": {
@@ -7230,6 +7278,7 @@
             "type": "string"
           },
           "initScore": {
+            "format": "int64",
             "type": "integer"
           },
           "ipRestriction": {
@@ -7287,6 +7336,7 @@
             "type": "array"
           },
           "mfaRememberInHours": {
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -7299,12 +7349,14 @@
             "type": "array"
           },
           "orgBalance": {
+            "format": "double",
             "type": "number"
           },
           "owner": {
             "type": "string"
           },
           "passwordExpireDays": {
+            "format": "int64",
             "type": "integer"
           },
           "passwordObfuscatorKey": {
@@ -7345,6 +7397,7 @@
             "type": "boolean"
           },
           "userBalance": {
+            "format": "double",
             "type": "number"
           },
           "userNavItems": {
@@ -7464,9 +7517,11 @@
           },
           "balance": {
             "description": "Balance mirrors v1 for lossless migration but is authoritative in\nCommerce (billing.hanzo.ai), not here — do not write it from IAM.",
+            "format": "double",
             "type": "number"
           },
           "balanceCredit": {
+            "format": "double",
             "type": "number"
           },
           "balanceCurrency": {
@@ -7692,6 +7747,7 @@
             "type": "string"
           },
           "karma": {
+            "format": "int64",
             "type": "integer"
           },
           "kwai": {
@@ -7866,6 +7922,7 @@
             "type": "string"
           },
           "ranking": {
+            "format": "int64",
             "type": "integer"
           },
           "realName": {
@@ -7890,12 +7947,14 @@
             "type": "string"
           },
           "score": {
+            "format": "int64",
             "type": "integer"
           },
           "shopify": {
             "type": "string"
           },
           "signinWrongTimes": {
+            "format": "int64",
             "type": "integer"
           },
           "signupApplication": {
@@ -8053,6 +8112,7 @@
             "type": "string"
           },
           "signCount": {
+            "format": "uint32",
             "type": "integer"
           },
           "transport": {
@@ -8157,9 +8217,11 @@
       "iam.bulk": {
         "properties": {
           "maxOperations": {
+            "format": "int64",
             "type": "integer"
           },
           "maxPayloadSize": {
+            "format": "int64",
             "type": "integer"
           },
           "supported": {
@@ -8185,6 +8247,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -8231,6 +8294,7 @@
       "iam.filter": {
         "properties": {
           "maxResults": {
+            "format": "int64",
             "type": "integer"
           },
           "supported": {
@@ -8280,6 +8344,7 @@
             "type": "string"
           },
           "quota": {
+            "format": "int64",
             "type": "integer"
           },
           "signupGroup": {
@@ -8292,6 +8357,7 @@
             "type": "string"
           },
           "usedCount": {
+            "format": "int64",
             "type": "integer"
           },
           "username": {
@@ -8309,6 +8375,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -8334,6 +8401,7 @@
             "type": "array"
           },
           "itemsPerPage": {
+            "format": "int64",
             "type": "integer"
           },
           "schemas": {
@@ -8343,9 +8411,11 @@
             "type": "array"
           },
           "startIndex": {
+            "format": "int64",
             "type": "integer"
           },
           "totalResults": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -8512,6 +8582,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -8545,6 +8616,7 @@
           },
           "expireInHours": {
             "description": "ExpireInHours and RefreshExpireInHours are the application's token\nlifetimes. They are the ONLY declarative way to say that a refresh token\nmust OUTLIVE its access token: with neither stated, oidc.refreshTTL clamps\nthe refresh lifetime to the access lifetime, so the refresh_token grant the\nregistration advertises expires at the same instant as the token it was\nmeant to renew and can never be exercised. `hanzo-cli` sat in exactly that\nstate — a browser re-login every hour, and a live refresh returning 401.\n\nPOINTERS, for the same reason as IsShared: a plain float would read as 0 on\nevery reconcile that says nothing and reset a deliberate lifetime back to\nthe default. Nil means \"not stated, leave it\".",
+            "format": "double",
             "type": "number"
           },
           "grantTypes": {
@@ -8574,6 +8646,7 @@
             "type": "array"
           },
           "refreshExpireInHours": {
+            "format": "double",
             "type": "number"
           }
         },
@@ -8660,6 +8733,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -8732,6 +8806,7 @@
             "type": "array"
           },
           "total": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -8775,6 +8850,7 @@
       "iam.users.ListOutput": {
         "properties": {
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "users": {
@@ -8854,6 +8930,7 @@
       "iam.workspaces.ListOutput": {
         "properties": {
           "total": {
+            "format": "int64",
             "type": "integer"
           },
           "workspaces": {

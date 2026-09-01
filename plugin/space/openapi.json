@@ -471,6 +471,7 @@
           },
           "total": {
             "description": "Total is how many drives came back. The listing is BOUNDED, so it is what\ncame back and not a count of what the space holds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -488,6 +489,7 @@
           },
           "modifiedAt": {
             "description": "ModifiedAt is when the file was last written, in unix seconds, and 0 for a\nfolder.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -496,6 +498,7 @@
           },
           "size": {
             "description": "Size is the file's size in bytes, and 0 for a folder.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -524,6 +527,7 @@
           },
           "total": {
             "description": "Total is how many entries came back. The listing is BOUNDED, so a drive with\nmore files than the cap answers the cap and this says so — it is not a count\nof what the drive holds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -533,6 +537,7 @@
         "properties": {
           "expiresIn": {
             "description": "Expiry is how many seconds the URL stays valid. A presigned URL has no\nserver-side revocation, so this IS its revocation window.",
+            "format": "int64",
             "type": "integer"
           },
           "file": {
@@ -588,6 +593,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the space was made, in unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -608,6 +614,7 @@
           },
           "total": {
             "description": "Total is how many spaces this org has. It equals len(spaces): the listing is\nnot paged, because one bucket per (org, space) keeps an org's count small by\nconstruction, which is the whole reason a drive is a prefix and not a bucket.",
+            "format": "int64",
             "type": "integer"
           }
         },

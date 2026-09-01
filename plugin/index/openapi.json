@@ -615,6 +615,7 @@
             "in": "path",
             "required": true,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -670,6 +671,7 @@
           },
           "numberOfDocuments": {
             "description": "NumberOfDocuments is how many documents this org holds in that index.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -679,10 +681,12 @@
         "properties": {
           "limit": {
             "description": "Limit is how many documents this page could hold.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is where this page starts.",
+            "format": "int64",
             "type": "integer"
           },
           "results": {
@@ -692,6 +696,7 @@
           },
           "total": {
             "description": "Total is how many documents the index holds altogether.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -713,6 +718,7 @@
           },
           "taskUid": {
             "description": "TaskUID identifies the task for a client that polls it. Polling resolves\nimmediately.",
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -747,6 +753,7 @@
         "properties": {
           "estimatedTotalHits": {
             "description": "EstimatedTotalHits is the dialect's name for the match count. Every hit is\nmaterialised here, so for this page it is exact rather than estimated.",
+            "format": "int64",
             "type": "integer"
           },
           "hits": {
@@ -756,14 +763,17 @@
           },
           "limit": {
             "description": "Limit is how many hits this page could hold.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is where this page starts.",
+            "format": "int64",
             "type": "integer"
           },
           "processingTimeMs": {
             "description": "ProcessingTimeMs is how long the query took, in milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "query": {
@@ -777,10 +787,12 @@
         "properties": {
           "limit": {
             "description": "Limit is how many rows this page could hold.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is where this page starts.",
+            "format": "int64",
             "type": "integer"
           },
           "results": {
@@ -792,6 +804,7 @@
           },
           "total": {
             "description": "Total is how many indexes the org holds altogether.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -817,10 +830,12 @@
           },
           "limit": {
             "description": "Limit is how many hits to return. Absent means 20; the ceiling is 1000.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is where to start. Absent means 0.",
+            "format": "int64",
             "type": "integer"
           },
           "q": {
@@ -846,6 +861,7 @@
         "properties": {
           "databaseSize": {
             "description": "DatabaseSize is the org's total document count across its indexes. It is a\ncount, not bytes: the store is shared by every tenant, so a byte figure\nwould either be the whole file (another tenant's size) or a fiction.",
+            "format": "int64",
             "type": "integer"
           },
           "indexes": {
@@ -882,6 +898,7 @@
           },
           "uid": {
             "description": "UID echoes the task id that was asked about.",
+            "format": "int64",
             "type": "integer"
           }
         },

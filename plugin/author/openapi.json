@@ -39,6 +39,7 @@
             "required": false,
             "description": "Limit bounds the page. 0 or less means the default of 500; anything above\n1000 is clamped to 1000.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -445,18 +446,22 @@
         "properties": {
           "accruedCents": {
             "description": "AccruedCents is lifetime royalty accrued, in integer USD cents: the sum of\nevery latched accrual (spend × shareBps / 10000). It only ever rises — a\npayout is recorded against paidCents and never reduces this.",
+            "format": "int64",
             "type": "integer"
           },
           "approvedAt": {
             "description": "ApprovedAt is unix seconds of the first approval, and 0 means never approved —\nwhich is also \"has never been able to accrue\". Re-approving to renegotiate the\nshare leaves it at the original date.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds at the FIRST connect. Re-connecting re-links the\nlogin and leaves this alone, so it dates the enrolment, not the latest link.",
+            "format": "int64",
             "type": "integer"
           },
           "deployCount": {
             "description": "DeployCount is how many attribution edges point at this author — one per\n(repository, project, deploying org), so re-deploying the same project adds\nnone. It includes self-deploys, which are recorded for provenance and excluded\nfrom accrual, so it measures reach, not the earning set.",
+            "format": "int64",
             "type": "integer"
           },
           "githubLogin": {
@@ -473,18 +478,22 @@
           },
           "paidCents": {
             "description": "PaidCents is lifetime royalty RECORDED as paid, in integer USD cents. It rises\nthe moment a payout reserves against pending — recording, not settling; a human\nmoves the money out of band — and falls back only when a payout is voided.",
+            "format": "int64",
             "type": "integer"
           },
           "pendingCents": {
             "description": "PendingCents is what a payout may still draw against — accrued − paid, floored\nat zero. It is derived for each response, never stored, and it is the exact\nfigure the atomic payout guard refuses to exceed.",
+            "format": "int64",
             "type": "integer"
           },
           "repoCount": {
             "description": "RepoCount is how many of this author's repository claims are VERIFIED, counted\nfor this response in one GROUP BY over the whole table rather than a query per\nrow. The single-author replies from approve, suspend and payout report 0: they\ncarry the mutated row, not a re-listing.",
+            "format": "int64",
             "type": "integer"
           },
           "shareBps": {
             "description": "ShareBps is the royalty rate accrual applies, in basis points of a deploying\norg's metered spend for the period: 2000 (the platform default) is 20%, 10000\nwould be the entire spend. The platform keeps 10000 − shareBps. Changing it\nnever rewrites history — each ledger row keeps the rate it was written with.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -493,6 +502,7 @@
           },
           "suspendedAt": {
             "description": "SuspendedAt is unix seconds of the most recent suspension. 0 means the author\nis not suspended: either never was, or was and has since been approved again,\nwhich clears this back to 0.",
+            "format": "int64",
             "type": "integer"
           },
           "verified": {
@@ -543,6 +553,7 @@
           },
           "shareBps": {
             "description": "ShareBps overrides this author's royalty share, in basis points (0–10000).\n0 keeps the platform default. A share change never rewrites history: existing\nledger rows keep the share that was applied when they were written.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -561,30 +572,37 @@
         "properties": {
           "accruedCents": {
             "description": "AccruedCents is the page's lifetime royalty accrued, in integer USD cents.",
+            "format": "int64",
             "type": "integer"
           },
           "approved": {
             "description": "Approved is how many are admitted and accruing.",
+            "format": "int64",
             "type": "integer"
           },
           "connected": {
             "description": "Connected is how many of those are enrolled but not yet admitted to earning.",
+            "format": "int64",
             "type": "integer"
           },
           "paidCents": {
             "description": "PaidCents is what has been RECORDED as paid across the page, in integer USD\ncents. Recorded, not settled: the money leaves in a human's hands.",
+            "format": "int64",
             "type": "integer"
           },
           "pendingCents": {
             "description": "PendingCents is what the platform still owes across the page, in integer USD\ncents — the sum of each author's own accrued − paid, each floored at zero.",
+            "format": "int64",
             "type": "integer"
           },
           "suspended": {
             "description": "Suspended is how many have been stopped from accruing further. An author holds\nexactly one status, so the three buckets never overlap and connected +\napproved + suspended = total.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is how many author records this response actually carried. The roll-up\nis folded over the SAME page as authors — newest first, bounded by limit\n(default 500, ceiling 1000) — so on a program larger than the page it\nsummarizes that page, not the fleet.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -598,6 +616,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds when the claim was first recorded. It equals\nverifiedAt on the first proof and then stays put while verifiedAt moves, so the\npair reads as \"claimed since / last proven\".",
+            "format": "int64",
             "type": "integer"
           },
           "method": {
@@ -614,6 +633,7 @@
           },
           "verifiedAt": {
             "description": "VerifiedAt is unix seconds of the most recent successful proof. Re-verifying\nrefreshes it, and the method beside it, in place.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -715,6 +735,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the edge was first recorded, in unix seconds. Absent when\nnothing was recorded.",
+            "format": "int64",
             "type": "integer"
           },
           "deployId": {
@@ -765,6 +786,7 @@
           },
           "shareBps": {
             "description": "ShareBps is this author's royalty share in basis points of the spend their\ndeployed work generates.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -798,6 +820,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds when the owner claim was first recorded — equal to\nverifiedAt on the first proof, then fixed while verifiedAt moves.",
+            "format": "int64",
             "type": "integer"
           },
           "method": {
@@ -814,6 +837,7 @@
           },
           "verifiedAt": {
             "description": "VerifiedAt is unix seconds of the most recent successful proof of the owner;\nre-verifying refreshes it, and the method beside it, in place.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -836,6 +860,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is how much to pay, in cents. Must be positive and can never\nexceed the author's pending royalty (accrued minus paid).",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -874,10 +899,12 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is the amount RESERVED against pending royalty, in integer USD\ncents, always positive. The reservation is atomic and can never exceed\naccrued − paid, so this is owed money moved out of pending — not money moved.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds when the payout was RECORDED — the moment the amount\nleft pending, not the moment a human moved the money.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -907,10 +934,12 @@
         "properties": {
           "accrued": {
             "description": "Accrued is how many new royalty accruals it latched.",
+            "format": "int64",
             "type": "integer"
           },
           "swept": {
             "description": "Swept is how many (author, deploying org) pairs the sweep examined.",
+            "format": "int64",
             "type": "integer"
           }
         },

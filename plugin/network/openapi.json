@@ -188,6 +188,7 @@
           },
           "nodes": {
             "description": "Nodes is how many edge-routers the org has on the fabric.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {

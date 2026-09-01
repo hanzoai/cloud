@@ -820,6 +820,7 @@
    "get_knowledge_connectors_catalog",
    "get_knowledge_graph",
    "post_knowledge_connectors_by_provider_sync",
+   "post_knowledge_reindex",
    "post_knowledge_search"
   ]
  },

@@ -285,6 +285,7 @@
         "properties": {
           "alpha": {
             "description": "the two-tailed threshold significance was judged at",
+            "format": "double",
             "type": "number"
           },
           "experiment": {
@@ -293,6 +294,7 @@
           },
           "exposedTotal": {
             "description": "subjects enrolled across every arm",
+            "format": "int64",
             "type": "integer"
           },
           "metric": {
@@ -328,6 +330,7 @@
           },
           "weight": {
             "description": "its share of the rollout; the arms sum to 100",
+            "format": "double",
             "type": "number"
           }
         },
@@ -341,22 +344,27 @@
           },
           "converted": {
             "description": "of those, how many fired the metric event",
+            "format": "int64",
             "type": "integer"
           },
           "exposed": {
             "description": "subjects the arm enrolled — the denominator",
+            "format": "int64",
             "type": "integer"
           },
           "lift": {
             "description": "relative to control: (rate-ctrl)/ctrl",
+            "format": "double",
             "type": "number"
           },
           "pValue": {
             "description": "two-tailed p vs control",
+            "format": "double",
             "type": "number"
           },
           "rate": {
             "description": "converted over exposed",
+            "format": "double",
             "type": "number"
           },
           "significant": {
@@ -369,6 +377,7 @@
           },
           "z": {
             "description": "two-proportion z vs control",
+            "format": "double",
             "type": "number"
           }
         },
@@ -442,10 +451,12 @@
         "properties": {
           "alpha": {
             "description": "Alpha overrides the 0.05 two-tailed significance threshold when it lies\nstrictly between 0 and 1; anything else leaves the default in place.",
+            "format": "double",
             "type": "number"
           },
           "days": {
             "description": "Days is how far back to read when no start is given: 1 to 365, 30 by\ndefault. A value outside that range leaves the default in place.",
+            "format": "int64",
             "type": "integer"
           },
           "end": {
@@ -551,6 +562,7 @@
           },
           "total": {
             "description": "Total is how many rows Data holds.",
+            "format": "int64",
             "type": "integer"
           }
         },

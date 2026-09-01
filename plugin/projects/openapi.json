@@ -1203,6 +1203,7 @@
         "properties": {
           "bytes": {
             "description": "Bytes is their total size in bytes.",
+            "format": "int64",
             "type": "integer"
           },
           "commit": {
@@ -1211,6 +1212,7 @@
           },
           "files": {
             "description": "Files is how many objects CI published.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1333,6 +1335,7 @@
           },
           "bytes": {
             "description": "Bytes is their total size in bytes.",
+            "format": "int64",
             "type": "integer"
           },
           "commit": {
@@ -1341,10 +1344,12 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the deployment was queued, as Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "files": {
             "description": "Files is how many objects the deployment published.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1377,6 +1382,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when it last changed state, as Unix seconds — so the gap between\nthe two is how long the build took.",
+            "format": "int64",
             "type": "integer"
           },
           "upload": {
@@ -1385,6 +1391,7 @@
           },
           "version": {
             "description": "Version counts deployments of this project from 1, so the history reads as an\nordered sequence rather than by timestamp. It is per project, not global.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1394,6 +1401,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the host was claimed, as Unix seconds — not when it went live.",
+            "format": "int64",
             "type": "integer"
           },
           "detail": {
@@ -1519,6 +1527,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the project was created, as Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "currentDeploymentId": {
@@ -1555,6 +1564,7 @@
           },
           "lastPurgeAt": {
             "description": "LastPurgeAt is when the edge cache was last cleared, as Unix seconds, so a\nconsole can say how fresh what readers see actually is. Absent means never.",
+            "format": "int64",
             "type": "integer"
           },
           "license": {
@@ -1602,6 +1612,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the project's own record last changed, as Unix seconds. A\ndeploy is not an edit of the project, so this does not move on every publish.",
+            "format": "int64",
             "type": "integer"
           },
           "upstream": {
@@ -1636,14 +1647,17 @@
           },
           "bytes": {
             "description": "Bytes is their total size in bytes.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "description": "CreatedAt is when the release was cut, as Unix seconds — not when it was last\nactivated.",
+            "format": "int64",
             "type": "integer"
           },
           "objects": {
             "description": "Objects is how many files the release holds.",
+            "format": "int64",
             "type": "integer"
           },
           "releaseId": {
@@ -1698,6 +1712,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the project last changed, as Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "url": {
@@ -1816,6 +1831,7 @@
         "properties": {
           "expiresAt": {
             "description": "ExpiresAt is when the grant stops being accepted, as Unix seconds. It is\nshort-lived by design and is handed out ONCE, on the response that queues the\ndeployment — a later read of that deployment does not carry it, so a grant\ncannot be fetched again after the build it was minted for.",
+            "format": "int64",
             "type": "integer"
           },
           "fields": {
@@ -1827,6 +1843,7 @@
           },
           "maxBytes": {
             "description": "MaxBytes bounds ONE object, not the upload as a whole.",
+            "format": "int64",
             "type": "integer"
           },
           "prefix": {

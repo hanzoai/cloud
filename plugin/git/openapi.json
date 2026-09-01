@@ -437,6 +437,7 @@
             "required": false,
             "description": "Limit caps the page. Anything not positive means 50; the cap is 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 2
@@ -886,6 +887,7 @@
             "required": true,
             "description": "Number is the proposal's per-repo number, from the :number path segment.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 4
@@ -932,6 +934,7 @@
             "required": true,
             "description": "Number is the proposal's per-repo number, from the :number path segment.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 4
@@ -1842,6 +1845,7 @@
           },
           "size": {
             "description": "Size is the file's byte length in the repo, whatever was returned below.",
+            "format": "int64",
             "type": "integer"
           },
           "truncated": {
@@ -1929,6 +1933,7 @@
           },
           "size": {
             "description": "Size is the file's byte length in the repo.",
+            "format": "int64",
             "type": "integer"
           },
           "truncated": {
@@ -1966,6 +1971,7 @@
           },
           "sizeBytes": {
             "description": "SizeBytes is the size measured AFTER the repack — usually smaller, since\nrepacking drops the packs it supersedes.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2157,6 +2163,7 @@
           },
           "number": {
             "description": "Number is the proposal's per-repo handle, dense from 1.",
+            "format": "int64",
             "type": "integer"
           },
           "repo": {
@@ -2369,6 +2376,7 @@
           },
           "sizeBytes": {
             "description": "SizeBytes is the repo's measured on-disk size, re-measured on create, after\neach push, and after a gc. This is the number billing meters.",
+            "format": "int64",
             "type": "integer"
           },
           "sshUrl": {
@@ -2458,6 +2466,7 @@
           },
           "size": {
             "description": "Size is the file's byte length; 0 for a directory.",
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -2491,6 +2500,7 @@
           },
           "sizeBytes": {
             "description": "SizeBytes is the repo's on-disk size at its last measurement.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2511,6 +2521,7 @@
           },
           "totalBytes": {
             "description": "TotalBytes is the sum over Repos — the org's whole git footprint.",
+            "format": "int64",
             "type": "integer"
           }
         },

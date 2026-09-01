@@ -71,6 +71,7 @@
             "required": false,
             "description": "Limit caps how many assertions come back. Absent, zero, or anything above\nthe walk ceiling is the ceiling.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -262,6 +263,7 @@
             "required": false,
             "description": "Limit caps how many assertions come back. Absent, zero, or anything above\nthe walk ceiling is the ceiling.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -324,6 +326,7 @@
         "properties": {
           "duplicate": {
             "description": "Duplicate is how many members this plane already held. A redelivery\ncollides on its content address and is counted here, not refused: it is\nthe success a retrying caller depends on.",
+            "format": "int64",
             "type": "integer"
           },
           "reasons": {
@@ -335,10 +338,12 @@
           },
           "recorded": {
             "description": "Recorded is how many members became new rows.",
+            "format": "int64",
             "type": "integer"
           },
           "refused": {
             "description": "Refused is how many members were turned away on arrival, before the store\nwas touched — a missing entity, a timestamp that is not RFC 3339, a\nconfidence outside [0,1]. The rest of the batch was still recorded.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -352,6 +357,7 @@
           },
           "confidence": {
             "description": "Confidence in [0,1]. A tie-breaker within the order, never a substitute\nfor it. Absent is 0, the weakest an assertion can be.",
+            "format": "double",
             "type": "number"
           },
           "entity": {
@@ -393,6 +399,7 @@
           },
           "depth": {
             "description": "Depth is how many hops. Absent is one.",
+            "format": "int64",
             "type": "integer"
           },
           "direction": {
@@ -417,10 +424,12 @@
         "properties": {
           "bound": {
             "description": "Bound is the ceiling this walk was held to, the same for every caller, so\nTruncated can be read against a number rather than guessed at.",
+            "format": "int64",
             "type": "integer"
           },
           "depth": {
             "description": "Depth is the deepest hop count actually reached. It is at most the depth\nasked for, and smaller when the walk ran out of edges first.",
+            "format": "int64",
             "type": "integer"
           },
           "entities": {
@@ -548,6 +557,7 @@
         "properties": {
           "bound": {
             "description": "Bound is the ceiling on one walk.",
+            "format": "int64",
             "type": "integer"
           },
           "relations": {
@@ -579,6 +589,7 @@
           },
           "confidence": {
             "description": "Confidence in [0,1] as the asserter gave it; absent is 0. It breaks a tie\nbetween two assertions equally knowable and decides nothing else.",
+            "format": "double",
             "type": "number"
           },
           "entity": {

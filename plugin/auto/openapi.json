@@ -114,6 +114,7 @@
             "required": false,
             "description": "Limit bounds the page (default 200, maximum 1000).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -444,6 +445,7 @@
             "required": false,
             "description": "Limit bounds the page (default 200, maximum 1000).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -565,6 +567,7 @@
             "required": false,
             "description": "Limit bounds the page (default 200, maximum 1000).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -648,6 +651,7 @@
       "Catalog": {
         "properties": {
           "connectorCount": {
+            "format": "int64",
             "type": "integer"
           },
           "connectors": {
@@ -757,6 +761,7 @@
       "Flow": {
         "properties": {
           "created": {
+            "format": "int64",
             "type": "integer"
           },
           "externalId": {
@@ -780,6 +785,7 @@
             "type": "string"
           },
           "updated": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -815,9 +821,11 @@
       "FlowRun": {
         "properties": {
           "created": {
+            "format": "int64",
             "type": "integer"
           },
           "finishTime": {
+            "format": "int64",
             "type": "integer"
           },
           "flowId": {
@@ -830,12 +838,14 @@
             "type": "string"
           },
           "startTime": {
+            "format": "int64",
             "type": "integer"
           },
           "status": {
             "type": "string"
           },
           "updated": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -871,6 +881,7 @@
       "FlowVersion": {
         "properties": {
           "created": {
+            "format": "int64",
             "type": "integer"
           },
           "displayName": {
@@ -892,6 +903,7 @@
             "$ref": "#/components/schemas/FlowTrigger"
           },
           "updated": {
+            "format": "int64",
             "type": "integer"
           },
           "valid": {
@@ -1022,6 +1034,7 @@
         "properties": {
           "created": {
             "description": "Created and Updated are unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "externalId": {
@@ -1052,6 +1065,7 @@
             "type": "string"
           },
           "updated": {
+            "format": "int64",
             "type": "integer"
           },
           "version": {

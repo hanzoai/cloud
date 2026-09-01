@@ -261,6 +261,7 @@
             "in": "query",
             "required": false,
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -398,6 +399,7 @@
           },
           "monthly": {
             "description": "Monthly is the recurring rental in the MINOR unit of Currency (cents for USD),\nexactly as the carrier quoted it. It is a price, not a charge: nothing is billed\nby this field.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -542,14 +544,17 @@
         "properties": {
           "calls": {
             "description": "Calls is how many calls this org has placed or received, over its whole\nhistory — a running total, not a window.",
+            "format": "int64",
             "type": "integer"
           },
           "messages": {
             "description": "Messages is the same running total for messages.",
+            "format": "int64",
             "type": "integer"
           },
           "numbers": {
             "description": "Numbers is how many numbers this org holds right now.",
+            "format": "int64",
             "type": "integer"
           }
         },

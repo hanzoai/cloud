@@ -645,6 +645,7 @@
         "properties": {
           "exitCode": {
             "description": "ExitCode is the command's own exit status. A non-zero one is a SUCCESSFUL\ncall carrying a failed command — the HTTP status stays 200, because \"the\ncommand failed\" and \"the call failed\" are different facts and a caller has\nto be able to tell them apart.",
+            "format": "int64",
             "type": "integer"
           },
           "stderr": {
@@ -678,6 +679,7 @@
           },
           "ttlSec": {
             "description": "TTLSec bounds the lease in seconds. Unset takes the class default. Nothing\nruns forever, because a sandbox is somebody else's code on our nodes.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -725,6 +727,7 @@
         "properties": {
           "exitCode": {
             "description": "ExitCode is the PROGRAM's own status — 0 succeeded, anything else is what it\nreturned, and a Command runs under `sh -c` so its shell's conventions apply.\nA command that never reached an exit does not arrive here at all: a timeout\nor a stop cancels the channel, and that is an error on the call rather than a\ncode of ours invented to fill this field.",
+            "format": "int64",
             "type": "integer"
           },
           "stderr": {
@@ -776,6 +779,7 @@
           },
           "timeoutSec": {
             "description": "TimeoutSec bounds this ONE command, so a wedged program holds the caller for\nits own timeout rather than for the whole lease.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -789,10 +793,12 @@
           },
           "connectedAt": {
             "description": "ConnectedAt is when somebody was last known to have this sandbox's project\nOPEN, Unix seconds. It is a fact with an EXPIRY rather than a flag: a\nwatcher restamps it every beat of its stream, and it goes stale on its own\nwhen the stream dies, so nothing has to be turned off by a process that may\nnot be there any more. The reaper reads it to choose WHICH idle allowance\napplies — see lifecycle.go.\n\nZero means nobody has said so, which puts the sandbox on the short clock.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "description": "CreatedAt is when the lease was first taken, Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -801,6 +807,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is when the lease ends, Unix seconds. Past it the reaper may take\nthe sandbox at any time; it is a deadline, not a guarantee of survival until\nthen, since an idle sandbox goes sooner.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -817,6 +824,7 @@
           },
           "lastUsedAt": {
             "description": "LastUsedAt is when the sandbox last did work, Unix seconds. The reaper reads\nit: a sandbox idle past the idle window is reclaimed even inside its TTL,\nbecause an idle lease is capacity nobody is using.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {
@@ -855,6 +863,7 @@
         "properties": {
           "stopped": {
             "description": "Stopped counts the commands that were still running and were interrupted.\nZero says the sandbox was idle, not that the stop failed — see above.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -882,6 +891,7 @@
         "properties": {
           "bytes": {
             "description": "Bytes is how many bytes the file now holds. A write REPLACES the file, so this\nis its whole length and not an amount appended, and 0 is a legitimate answer:\na WriteIn with no Data truncates the file to nothing.",
+            "format": "int64",
             "type": "integer"
           },
           "path": {
@@ -918,6 +928,7 @@
           },
           "timeoutSec": {
             "description": "TimeoutSec bounds the run in seconds. Zero takes the default.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -943,6 +954,7 @@
           },
           "ttlSec": {
             "description": "TTLSec is how long the lease runs before the reaper may take it, in\nseconds. Zero takes the class's own default.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -964,6 +976,7 @@
         "properties": {
           "expiresIn": {
             "description": "ExpiresIn is how long the ticket is good for, in seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "ticket": {

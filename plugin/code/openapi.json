@@ -277,6 +277,7 @@
             "required": false,
             "description": "Limit caps how many spans come back: default 20, maximum 100. A value that\nis not a positive integer reads as the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 20
@@ -365,6 +366,7 @@
         "properties": {
           "endLine": {
             "description": "EndLine is its last line, inclusive.",
+            "format": "int64",
             "type": "integer"
           },
           "file": {
@@ -373,6 +375,7 @@
           },
           "line": {
             "description": "Line is the first line of the cited region, 1-based.",
+            "format": "int64",
             "type": "integer"
           },
           "repo": {
@@ -390,6 +393,7 @@
         "properties": {
           "budgetTokens": {
             "description": "BudgetTokens is the ceiling the caller asked for. Packing stops under it, so\nthis is a bound and not a target.",
+            "format": "int64",
             "type": "integer"
           },
           "query": {
@@ -409,6 +413,7 @@
           },
           "usedTokens": {
             "description": "UsedTokens is what the returned spans actually cost, by the same estimate the\npacker used (roughly one token per four characters — an estimate, not a\ntokenizer's count, so size a real window with headroom).",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -418,6 +423,7 @@
         "properties": {
           "endLine": {
             "description": "EndLine is the last line of the span, inclusive. It equals Line for a\none-line span rather than being zero or absent.",
+            "format": "int64",
             "type": "integer"
           },
           "file": {
@@ -430,6 +436,7 @@
           },
           "line": {
             "description": "Line is where the span starts, 1-based, as an editor counts.",
+            "format": "int64",
             "type": "integer"
           },
           "repo": {
@@ -442,6 +449,7 @@
           },
           "score": {
             "description": "Score ranks this span against the OTHERS IN THE SAME RESPONSE and means\nnothing across responses or between tiers: the hybrid tier's number is a\nreciprocal-rank fusion sum (Σ 1/(60+rank), so tenths at best), the symbol\ntier's is a descending position count, and the text and semantic tiers pass\nthrough bm25 and cosine. Compare within a list; never threshold on it.",
+            "format": "double",
             "type": "number"
           },
           "snippet": {
@@ -471,6 +479,7 @@
           },
           "symbols": {
             "description": "Symbols is how many top-level declarations the file defines. A file with none\nis still listed: the file set is the authority here and the counts decorate it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -493,6 +502,7 @@
         "properties": {
           "budgetTokens": {
             "description": "BudgetTokens caps the bundle's size. Clamped to [256, 32000]; 0 or absent\nuses 4000.",
+            "format": "int64",
             "type": "integer"
           },
           "query": {
@@ -564,18 +574,22 @@
         "properties": {
           "chunks": {
             "description": "Chunks is how many AST-boundary chunks the repo holds after this pass.",
+            "format": "int64",
             "type": "integer"
           },
           "files": {
             "description": "Files is how many files the repo holds after this pass.",
+            "format": "int64",
             "type": "integer"
           },
           "indexed": {
             "description": "Indexed is how many files were parsed and written on this pass.",
+            "format": "int64",
             "type": "integer"
           },
           "pruned": {
             "description": "Pruned is how many stored files were deleted because prune was set and they\nwere absent from the request.",
+            "format": "int64",
             "type": "integer"
           },
           "repo": {
@@ -588,14 +602,17 @@
           },
           "skipped": {
             "description": "Skipped is how many files were unchanged by content hash and left alone.",
+            "format": "int64",
             "type": "integer"
           },
           "symbols": {
             "description": "Symbols is how many symbol definitions the repo holds after this pass.",
+            "format": "int64",
             "type": "integer"
           },
           "vectors": {
             "description": "Vectors is how many of those chunks carry an embedding.",
+            "format": "int64",
             "type": "integer"
           }
         },

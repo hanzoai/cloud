@@ -806,6 +806,7 @@
         "properties": {
           "projected": {
             "description": "Projected is how many roster entries the reconcile touched.",
+            "format": "int64",
             "type": "integer"
           },
           "synced": {
@@ -888,10 +889,12 @@
           },
           "guestLimit": {
             "description": "GuestLimit is the plan's team.guests cap, when the plan carries one.",
+            "format": "int64",
             "type": "integer"
           },
           "guests": {
             "description": "Guests is how many of those seats are guests.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -900,6 +903,7 @@
           },
           "seats": {
             "description": "Seats is the org's distinct active human members.",
+            "format": "int64",
             "type": "integer"
           },
           "upgradeUrl": {
@@ -959,6 +963,7 @@
           },
           "createdOn": {
             "description": "CreatedOn is unix MILLIseconds, which is what the platform stamps.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
