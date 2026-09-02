@@ -1,6 +1,7 @@
 package world
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"errors"
 	"net/http"
@@ -425,8 +426,8 @@ func toPipelineView(org, project string, p Pipeline, isDefault bool) pipelineVie
 			Sources:  orEmptySlice(p.Filters.Sources),
 		},
 		Default:   isDefault,
-		CreatedAt: rfc3339(p.CreatedAt),
-		UpdatedAt: rfc3339(p.UpdatedAt),
+		CreatedAt: stamp.Unix(p.CreatedAt),
+		UpdatedAt: stamp.Unix(p.UpdatedAt),
 	}
 }
 
@@ -456,11 +457,4 @@ func orEmptySlice(xs []string) []string {
 		return []string{}
 	}
 	return xs
-}
-
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }

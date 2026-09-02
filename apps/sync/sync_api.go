@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"net/http"
@@ -154,7 +155,7 @@ func syncToView(v Sync) syncView {
 		Source:    endpointView{Connector: v.Source.Connector, Provider: v.Source.Provider, Locator: v.Source.Locator},
 		Target:    endpointView{Connector: v.Target.Connector, Provider: v.Target.Provider, Locator: v.Target.Locator},
 		Direction: v.Direction, Trigger: v.Trigger, Actor: v.Actor,
-		CreatedAt: rfc3339(v.CreatedAt), UpdatedAt: rfc3339(v.UpdatedAt),
+		CreatedAt: stamp.Unix(v.CreatedAt), UpdatedAt: stamp.Unix(v.UpdatedAt),
 	}
 }
 
@@ -519,12 +520,4 @@ func spawnReconcile(store *store, sy Sync) {
 		defer cancel()
 		runOne(ctx, store, sy, Event{Provider: sy.Source.Provider, Org: sy.Org, Manual: true})
 	}()
-}
-
-// rfc3339 formats a unix time as RFC3339 UTC ("" for 0).
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }

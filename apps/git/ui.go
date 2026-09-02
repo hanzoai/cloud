@@ -24,6 +24,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
 	"fmt"
@@ -244,7 +245,7 @@ func uiHome(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, r := range repos {
 		rows = append(rows, repoRow{Name: r.Name, Description: r.Description,
 			DefaultBranch: cmp.Or(strings.TrimSpace(r.DefaultBranch), defaultBranchName),
-			Size:          humanBytes(r.SizeBytes), Updated: rfc3339(r.UpdatedAt)})
+			Size:          humanBytes(r.SizeBytes), Updated: stamp.Unix(r.UpdatedAt)})
 	}
 	return render(c, uiBase, http.StatusOK, "Repositories", homeTmpl, homeData{Base: uiBase, Org: o, Repos: rows})
 }

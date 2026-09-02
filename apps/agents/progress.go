@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -169,9 +170,9 @@ func progressOf(x Session) sessionProgress {
 	switch x.Status {
 	case StatusDone:
 		full := 100
-		return sessionProgress{Pct: &full, Phase: phaseDone, At: rfc3339(x.EndedAt)}
+		return sessionProgress{Pct: &full, Phase: phaseDone, At: stamp.Unix(x.EndedAt)}
 	case StatusError:
-		return sessionProgress{Phase: StatusError, At: rfc3339(x.EndedAt)}
+		return sessionProgress{Phase: StatusError, At: stamp.Unix(x.EndedAt)}
 	}
 	if x.ProgressAt == 0 || x.ProgressPhase == "" {
 		return sessionProgress{Phase: phaseUnknown}
@@ -179,7 +180,7 @@ func progressOf(x Session) sessionProgress {
 	v := sessionProgress{
 		Phase:     x.ProgressPhase,
 		Activity:  x.ProgressActivity,
-		At:        rfc3339(x.ProgressAt),
+		At:        stamp.Unix(x.ProgressAt),
 		Estimated: x.ProgressEstimated,
 	}
 	if x.ProgressPct >= 0 {

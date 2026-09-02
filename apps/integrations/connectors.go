@@ -30,6 +30,7 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"errors"
 	"net/http"
@@ -303,8 +304,8 @@ func connViewFor(conn Connection) connView {
 		Account:     conn.AccountLabel,
 		ExternalID:  conn.ExternalID,
 		Scopes:      nonNil(conn.Scopes),
-		ExpiresAt:   rfc3339(conn.ExpiresAt),
-		ConnectedAt: rfc3339(conn.ConnectedAt),
+		ExpiresAt:   stamp.Unix(conn.ExpiresAt),
+		ConnectedAt: stamp.Unix(conn.ConnectedAt),
 	}
 }
 
@@ -423,7 +424,7 @@ func (o ops) startDevice(ctx context.Context, in *deviceStartIn) (*deviceStartOu
 		UserCode:  ds.UserCode,
 		VerifyURL: ds.VerifyURL,
 		Interval:  g.Interval,
-		ExpiresAt: rfc3339(g.ExpiresAt),
+		ExpiresAt: stamp.Unix(g.ExpiresAt),
 	}, nil
 }
 
@@ -639,7 +640,7 @@ func (o ops) tokenConn(ctx context.Context, in *connectorRef) (*connectorTokenOu
 		Token:     string(tok),
 		Provider:  p.ID,
 		Label:     label,
-		ExpiresAt: rfc3339(conn.ExpiresAt),
+		ExpiresAt: stamp.Unix(conn.ExpiresAt),
 	}, nil
 }
 

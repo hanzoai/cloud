@@ -1,6 +1,7 @@
 package link
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -227,13 +228,6 @@ type deviceView struct {
 	ActiveSessions int `json:"activeSessions"`
 }
 
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
-}
-
 func toLinkView(l Link) linkView {
 	var u json.RawMessage
 	if l.Usage != "" {
@@ -242,8 +236,8 @@ func toLinkView(l Link) linkView {
 	return linkView{
 		ID: l.ID, User: l.User, Machine: l.Machine, Host: l.Host, OS: l.OS,
 		Provider: l.Provider, Account: l.Account, Plan: l.Plan, Kind: l.Kind,
-		Billing: BillingMode(l.Kind), Status: l.Status, LastSeen: rfc3339(l.LastSeen),
-		Usage: u, CreatedAt: rfc3339(l.CreatedAt), UpdatedAt: rfc3339(l.UpdatedAt),
+		Billing: BillingMode(l.Kind), Status: l.Status, LastSeen: stamp.Unix(l.LastSeen),
+		Usage: u, CreatedAt: stamp.Unix(l.CreatedAt), UpdatedAt: stamp.Unix(l.UpdatedAt),
 	}
 }
 
@@ -255,7 +249,7 @@ func devicesOf(links []Link) []deviceView {
 	for _, l := range links {
 		d, ok := byMachine[l.Machine]
 		if !ok {
-			d = &deviceView{Machine: l.Machine, Host: l.Host, OS: l.OS, LastSeen: rfc3339(l.LastSeen)}
+			d = &deviceView{Machine: l.Machine, Host: l.Host, OS: l.OS, LastSeen: stamp.Unix(l.LastSeen)}
 			byMachine[l.Machine] = d
 			order = append(order, l.Machine)
 		}
@@ -480,7 +474,7 @@ func (o ops) deviceDetail(ctx context.Context, in *machineRef) (*deviceView, err
 	if len(accounts) == 0 {
 		return nil, zip.ErrNotFound("device not found")
 	}
-	d := deviceView{Machine: machine, Host: accounts[0].Host, OS: accounts[0].OS, LastSeen: rfc3339(accounts[0].LastSeen)}
+	d := deviceView{Machine: machine, Host: accounts[0].Host, OS: accounts[0].OS, LastSeen: stamp.Unix(accounts[0].LastSeen)}
 	for _, a := range accounts {
 		d.Accounts = append(d.Accounts, toLinkView(a))
 	}

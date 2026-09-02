@@ -49,6 +49,7 @@
 package eval
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -1423,7 +1424,7 @@ func (s *service) listRuns(ctx context.Context, in *runFilter) (*runs, error) {
 		out = append(out, runRecord{
 			Dataset: r.Dataset, RunName: r.Name, Model: r.Model, JudgeModel: r.JudgeModel,
 			Items: r.Items, Scored: r.Scored, AvgScore: r.AvgScore,
-			CreatedAt: rfc3339(r.CreatedAt), UpdatedAt: rfc3339(r.UpdatedAt),
+			CreatedAt: stamp.Unix(r.CreatedAt), UpdatedAt: stamp.Unix(r.UpdatedAt),
 		})
 	}
 	return &runs{Data: out}, nil
@@ -1434,7 +1435,7 @@ func (s *service) listRuns(ctx context.Context, in *runFilter) (*runs, error) {
 func toDatasetView(d Dataset, items int) datasetView {
 	return datasetView{
 		Name: d.Name, Description: d.Description, Metadata: decodeMeta(d.Metadata), Items: items,
-		CreatedAt: rfc3339(d.CreatedAt), UpdatedAt: rfc3339(d.UpdatedAt),
+		CreatedAt: stamp.Unix(d.CreatedAt), UpdatedAt: stamp.Unix(d.UpdatedAt),
 	}
 }
 
@@ -1442,21 +1443,21 @@ func toItemView(it DatasetItem) itemView {
 	return itemView{
 		ID: it.ID, Dataset: it.Dataset, Input: decodeAny(it.Input), Expected: decodeAny(it.Expected),
 		Metadata: decodeMeta(it.Metadata), Status: it.Status,
-		CreatedAt: rfc3339(it.CreatedAt), UpdatedAt: rfc3339(it.UpdatedAt),
+		CreatedAt: stamp.Unix(it.CreatedAt), UpdatedAt: stamp.Unix(it.UpdatedAt),
 	}
 }
 
 func toEvaluatorView(e Evaluator) evaluatorView {
 	return evaluatorView{
 		Name: e.Name, Model: e.Model, Criteria: e.Criteria, ScoreName: e.ScoreName,
-		CreatedAt: rfc3339(e.CreatedAt), UpdatedAt: rfc3339(e.UpdatedAt),
+		CreatedAt: stamp.Unix(e.CreatedAt), UpdatedAt: stamp.Unix(e.UpdatedAt),
 	}
 }
 
 func toScoreConfigView(c ScoreConfig) scoreConfigView {
 	return scoreConfigView{
 		Name: c.Name, DataType: c.DataType, MinValue: c.MinValue, MaxValue: c.MaxValue,
-		Categories: c.Categories, CreatedAt: rfc3339(c.CreatedAt), UpdatedAt: rfc3339(c.UpdatedAt),
+		Categories: c.Categories, CreatedAt: stamp.Unix(c.CreatedAt), UpdatedAt: stamp.Unix(c.UpdatedAt),
 	}
 }
 
@@ -1628,11 +1629,4 @@ func genUUID() string {
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
-}
-
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }

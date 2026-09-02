@@ -1,6 +1,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"net/http"
 	"net/url"
@@ -99,7 +100,7 @@ type childRef struct {
 func subscriptionToView(v Subscription) subscriptionView {
 	return subscriptionView{
 		ID: v.ID, Repo: v.Repo, Channel: v.Channel,
-		Events: splitEvents(v.Events), CreatedAt: rfc3339(v.CreatedAt),
+		Events: splitEvents(v.Events), CreatedAt: stamp.Unix(v.CreatedAt),
 	}
 }
 
@@ -229,7 +230,7 @@ type mirrorList struct {
 }
 
 func mirrorToView(v MirrorTarget) mirrorTargetView {
-	return mirrorTargetView{ID: v.ID, Repo: v.Repo, Host: v.Host, URL: v.URL, CreatedAt: rfc3339(v.CreatedAt)}
+	return mirrorTargetView{ID: v.ID, Repo: v.Repo, Host: v.Host, URL: v.URL, CreatedAt: stamp.Unix(v.CreatedAt)}
 }
 
 // addMirror registers a downstream remote the repo's advanced refs are pushed to

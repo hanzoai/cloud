@@ -1,6 +1,7 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"fmt"
 	"net/http"
@@ -207,7 +208,7 @@ func toQueueView(q annQueue) annQueueView {
 	}
 	return annQueueView{
 		ID: q.ID, Name: q.Name, Description: q.Description, ScoreConfigIDs: ids,
-		CreatedAt: rfc3339Unix(q.CreatedAt), UpdatedAt: rfc3339Unix(q.UpdatedAt),
+		CreatedAt: stamp.Unix(q.CreatedAt), UpdatedAt: stamp.Unix(q.UpdatedAt),
 	}
 }
 
@@ -215,7 +216,7 @@ func toItemView(it annItem) annItemView {
 	v := annItemView{
 		ID: it.ID, QueueID: it.QueueID, ObjectType: it.ObjectType, ObjectID: it.ObjectID,
 		Status: it.Status, Assignee: it.Assignee,
-		CreatedAt: rfc3339Unix(it.CreatedAt), UpdatedAt: rfc3339Unix(it.UpdatedAt),
+		CreatedAt: stamp.Unix(it.CreatedAt), UpdatedAt: stamp.Unix(it.UpdatedAt),
 	}
 	switch it.ObjectType {
 	case objectTrace:
@@ -226,7 +227,7 @@ func toItemView(it annItem) annItemView {
 		v.SessionID = it.ObjectID
 	}
 	if it.CompletedAt > 0 {
-		v.CompletedAt = rfc3339Unix(it.CompletedAt)
+		v.CompletedAt = stamp.Unix(it.CompletedAt)
 	}
 	return v
 }
@@ -746,11 +747,4 @@ func pageLimit(rawPage, rawLimit int) (page, limit int) {
 		limit = annMaxLimit
 	}
 	return page, limit
-}
-
-func rfc3339Unix(sec int64) string {
-	if sec <= 0 {
-		return ""
-	}
-	return time.Unix(sec, 0).UTC().Format(time.RFC3339)
 }

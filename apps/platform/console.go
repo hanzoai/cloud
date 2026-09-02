@@ -29,13 +29,13 @@
 package platform
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/internal/shorten"
@@ -209,7 +209,7 @@ func (o ops) listEnvironments(ctx context.Context, _ *cloud.Unit) (*environmentB
 			Type:      classifyEnvType(env),
 			Status:    envStatus(g.anyLive, g.anyError, len(g.services)),
 			Services:  g.services,
-			UpdatedAt: rfc3339(g.updated),
+			UpdatedAt: stamp.Unix(g.updated),
 		})
 	}
 	return &environmentBoard{Environments: out}, nil
@@ -256,7 +256,7 @@ func (o ops) listPipelines(ctx context.Context, _ *cloud.Unit) (*pipelineBoard, 
 		}
 		if d, has := latest[a.ID]; has {
 			v.Status = d.Status
-			v.LastRun = rfc3339(d.CreatedAt)
+			v.LastRun = stamp.Unix(d.CreatedAt)
 			v.Duration = runDuration(d.Status, d.CreatedAt, d.UpdatedAt)
 		}
 		out = append(out, v)
@@ -309,7 +309,7 @@ func (o ops) listBuilds(ctx context.Context, _ *cloud.Unit) (*buildBoard, error)
 			Repo:      repo,
 			Commit:    commit,
 			Status:    b.Status,
-			StartedAt: rfc3339(b.CreatedAt),
+			StartedAt: stamp.Unix(b.CreatedAt),
 			Duration:  buildDuration(b.Status, b.CreatedAt, b.UpdatedAt),
 		})
 	}
@@ -356,7 +356,7 @@ func (o ops) listReleases(ctx context.Context, _ *cloud.Unit) (*releaseBoard, er
 			Version:     releaseVersion(d),
 			Environment: env,
 			Status:      d.Status,
-			ReleasedAt:  rfc3339(d.UpdatedAt),
+			ReleasedAt:  stamp.Unix(d.UpdatedAt),
 		})
 	}
 	return &releaseBoard{Releases: out}, nil
@@ -459,15 +459,6 @@ func runDuration(status string, start, end int64) string {
 // shortCommit trims a git ref/sha to a compact display token.
 func shortCommit(ref string) string {
 	return shorten.To(strings.TrimSpace(ref), 12)
-}
-
-// rfc3339 renders a unix timestamp as an RFC3339 string (what the FE's
-// `new Date(...)` parses); empty when unset so the FE shows "—".
-func rfc3339(ts int64) string {
-	if ts <= 0 {
-		return ""
-	}
-	return time.Unix(ts, 0).UTC().Format(time.RFC3339)
 }
 
 // humanDuration formats a positive second count compactly ("12s", "3m4s",
