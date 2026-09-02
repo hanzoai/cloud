@@ -7,10 +7,10 @@ package integrations
 // Each subsystem is a separate process (a plugin is a process; see apps/plugin),
 // and this subsystem alone holds the org's Slack bot token in memory — TokenFor
 // reads THIS process's `mounted` connection store. A peer plugin that wants to
-// post to Slack (o11y paging an alert) therefore cannot call SendSlack in-process
-// and cannot read a package global across the process boundary: it asks THIS
-// process over the ZAP unix socket, exactly as x402 asks commerce to move money.
-// The op runs here, so SendSlack sees the real token store.
+// post to Slack (o11y paging an alert) therefore cannot send in-process and cannot
+// read a package global across the process boundary: it asks THIS process over the
+// ZAP unix socket, exactly as x402 asks commerce to move money. The op runs here,
+// so the send sees the real token store.
 
 import (
 	"context"

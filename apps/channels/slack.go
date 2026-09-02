@@ -10,8 +10,8 @@ import (
 )
 
 // slack.go is the Slack transport: envelope normalization from the ingress
-// client and egress through the ONE existing chat.postMessage path
-// (integrations.SendSlack).
+// client and egress through the ONE existing chat.postMessage path, reached over
+// the plane (integrations.SendSlackAt).
 
 // slackDoor is the send path; tests spy it, prod never repoints.
 var slackDoor = func(ctx context.Context, org, channel, threadTS, text string) error {
@@ -51,7 +51,7 @@ func slackNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 }
 
 // slackEgress posts via the org's OWN custodied bot token. Tenancy fails
-// closed inside SendSlack via TokenFor(org, "slack"): no per-org token, no
+// closed inside SendSlackAt via TokenFor(org, "slack"): no per-org token, no
 // send — channels never sees a token, so no extra binding gate is needed.
 func slackEgress(ctx context.Context, _ *cloud.Service[state], org string, m Message) (Delivery, error) {
 	if err := slackDoor(ctx, org, m.Room.ID, m.ReplyTo, renderText(m)); err != nil {
