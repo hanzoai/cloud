@@ -80,42 +80,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Event is the canonical analytics event — the entire ingest contract in five
-// fields. Only these are first-class; everything else a caller wants to record
-// travels in Properties (the scrubber runs over it downstream, same as every
-// event). The tenant is NOT a field: it is resolved server-side from IAM, so a
-// caller can only ever write into its OWN org's partition.
-type Event struct {
-	Event      string         `json:"event"`      // event name (required; empty ⇒ dropped as unroutable)
-	Type       string         `json:"type"`       // canonical kind: pageview | error | identify | group | event (default)
-	DistinctID string         `json:"distinctId"` // the person/visitor id the caller owns
-	Time       string         `json:"time"`       // optional RFC3339; clamped to server-now on skew/absent
-	Properties map[string]any `json:"properties"` // everything non-core
-}
-
-// toCapture adapts the canonical Event onto the internal CaptureEvent the write
-// core consumes. No $-property is promoted to a column here — every non-core
-// field the caller sent stays in Properties.
-//
-// TYPE IS CARRIED, and it has to be. The kind is half of what the ANONYMOUS lane
-// admits on (publicKinds, public.go — the other half is the closed autocapture
-// name): canonicalType maps an empty Type to "event", which is NOT an allowlisted
-// kind, so an Event that cannot say "pageview" and does not name an autocaptured
-// interaction is dropped — with a 200 receipt — every single time. That made two of the
-// three shapes this endpoint PUBLISHES (openapi.OneOf{Event, []Event, CaptureBatch})
-// totally lossy without a credential while the third worked, which is a document that
-// lies to any SDK generated from it. One wire, three spellings, ONE meaning: whatever
-// CaptureBatch can express, the bare object and the bare array express too.
-func (e Event) toCapture() CaptureEvent {
-	return CaptureEvent{
-		Event:      e.Event,
-		Type:       e.Type,
-		DistinctID: e.DistinctID,
-		Timestamp:  e.Time,
-		Properties: e.Properties,
-	}
-}
-
 // admission is a RESOLVED credential: the org it names and the capability it carries.
 // Capability is a property of the CREDENTIAL, which is why it lives here and not on an
 // endpoint — an endpoint still cannot ask for anything. Two levels, because the
@@ -238,30 +202,6 @@ func firstNonWS(body []byte) int {
 	return len(body)
 }
 
-// decodeEvents decodes a body as the canonical Event wire: Event | []Event. The
-// first non-space byte decides: '[' ⇒ the array batch, anything else ⇒ a single
-// Event. An empty body yields no events (an honest empty receipt, not an error).
-// Pure over the raw bytes; it is the canonical-Event sub-decoder inside decodeIngest
-// (which additionally accepts the CaptureBatch envelope).
-func decodeEvents(body []byte) ([]Event, error) {
-	i := firstNonWS(body)
-	if i >= len(body) {
-		return nil, nil
-	}
-	if body[i] == '[' {
-		var evs []Event
-		if err := json.Unmarshal(body, &evs); err != nil {
-			return nil, err
-		}
-		return evs, nil
-	}
-	var e Event
-	if err := json.Unmarshal(body, &e); err != nil {
-		return nil, err
-	}
-	return []Event{e}, nil
-}
-
 // decodeIngest is the ONE wire-tolerant decoder of the canonical endpoint. It accepts
 // EVERY shape a Hanzo surface emits and yields the SAME []CaptureEvent the write
 // core consumes:
@@ -308,15 +248,7 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 	if isTeamArray(body, i) {
 		return decodeTeam(body)
 	}
-	evs, err := decodeEvents(body)
-	if err != nil {
-		return nil, err
-	}
-	caps := make([]CaptureEvent, len(evs))
-	for j, e := range evs {
-		caps[j] = e.toCapture()
-	}
-	return caps, nil
+	return decodeBare(body)
 }
 
 // isInsightsWire reports whether an OBJECT body speaks the PostHog wire, which
@@ -881,7 +813,7 @@ var doors = []door{
 // what @hanzo/event does.
 // insightsBody rides here because the endpoint accepts it: one path, four shapes. Leaving
 // it out would publish an ingest API that silently accepts a wire it does not document.
-var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}, insightsBody{}}
+var canonicalWire = openapi.OneOf{CaptureEvent{}, []CaptureEvent{}, CaptureBatch{}, insightsBody{}}
 
 // declare publishes what every ingest endpoint ACCEPTS, RETURNS and MEANS. These
 // endpoints cannot be typed ops (typed_wire_test.go names each one's wire fact), and an
@@ -994,4 +926,35 @@ const sentryWire = "\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relaye
 // presented-but-unresolvable ⇒ 403; nothing ⇒ the anonymous projection.
 func (d door) ingest(_ *cloud.Service[state], c *zip.Ctx) error {
 	return handle(c, d.decode, d.source)
+}
+
+// decodeBare decodes the canonical wire's two unwrapped spellings — one event, or
+// an array of them — as the SAME shape the wrapped {batch:[…]} carries.
+//
+// IT IS THE SAME TYPE ON PURPOSE. A narrower twin stood here, with five of
+// CaptureEvent's eighteen fields and `time` where the batch says `timestamp`, and
+// json drops what it cannot name: a caller sending a session id and a url read a
+// 200 receipt saying one event was accepted and found neither in the warehouse.
+// Three spellings of one wire have to mean one thing, or the document lies to
+// every SDK generated from it.
+func decodeBare(body []byte) ([]CaptureEvent, error) {
+	i := firstNonWS(body)
+	// An empty or whitespace-only body is NO events, not a malformed one: the
+	// receipt then honestly totals zero rather than refusing a beacon that said
+	// nothing.
+	if i >= len(body) {
+		return nil, nil
+	}
+	if body[i] == '[' {
+		var evs []CaptureEvent
+		if err := json.Unmarshal(body, &evs); err != nil {
+			return nil, err
+		}
+		return evs, nil
+	}
+	var e CaptureEvent
+	if err := json.Unmarshal(body, &e); err != nil {
+		return nil, err
+	}
+	return []CaptureEvent{e}, nil
 }

@@ -15,8 +15,8 @@ import (
 
 // ── decodeEvents: Event | []Event (single + batch) ──────────────────────────
 
-func TestDecodeEvents_Single(t *testing.T) {
-	evs, err := decodeEvents([]byte(`{"event":"signup","distinctId":"u1","properties":{"plan":"pro"}}`))
+func TestDecodeBare_Single(t *testing.T) {
+	evs, err := decodeBare([]byte(`{"event":"signup","distinctId":"u1","properties":{"plan":"pro"}}`))
 	if err != nil {
 		t.Fatalf("decode single: %v", err)
 	}
@@ -31,8 +31,8 @@ func TestDecodeEvents_Single(t *testing.T) {
 	}
 }
 
-func TestDecodeEvents_Batch(t *testing.T) {
-	evs, err := decodeEvents([]byte(`[{"event":"a","distinctId":"d"},{"event":"b","distinctId":"d"}]`))
+func TestDecodeBare_Batch(t *testing.T) {
+	evs, err := decodeBare([]byte(`[{"event":"a","distinctId":"d"},{"event":"b","distinctId":"d"}]`))
 	if err != nil {
 		t.Fatalf("decode batch: %v", err)
 	}
@@ -41,9 +41,9 @@ func TestDecodeEvents_Batch(t *testing.T) {
 	}
 }
 
-func TestDecodeEvents_BatchLeadingWhitespace(t *testing.T) {
+func TestDecodeBare_BatchLeadingWhitespace(t *testing.T) {
 	// The array is detected past leading whitespace, not only at byte 0.
-	evs, err := decodeEvents([]byte("  \n\t [{\"event\":\"a\"}]"))
+	evs, err := decodeBare([]byte("  \n\t [{\"event\":\"a\"}]"))
 	if err != nil {
 		t.Fatalf("decode ws-batch: %v", err)
 	}
@@ -52,56 +52,28 @@ func TestDecodeEvents_BatchLeadingWhitespace(t *testing.T) {
 	}
 }
 
-func TestDecodeEvents_EmptyIsNoEvents(t *testing.T) {
+func TestDecodeBare_EmptyIsNoEvents(t *testing.T) {
 	// Empty / whitespace-only body ⇒ zero events, NOT an error (honest empty receipt).
 	for _, b := range []string{"", "   ", "\n\t"} {
-		evs, err := decodeEvents([]byte(b))
+		evs, err := decodeBare([]byte(b))
 		if err != nil || len(evs) != 0 {
 			t.Fatalf("empty %q ⇒ evs=%v err=%v", b, evs, err)
 		}
 	}
 }
 
-func TestDecodeEvents_Malformed(t *testing.T) {
+func TestDecodeBare_Malformed(t *testing.T) {
 	for _, b := range []string{`{"event":`, `[{"event":"a"},`, `not json`} {
-		if _, err := decodeEvents([]byte(b)); err == nil {
+		if _, err := decodeBare([]byte(b)); err == nil {
 			t.Fatalf("malformed %q want error, got nil", b)
 		}
 	}
 }
 
-// ── adapter → Event/CaptureEvent normalization ──────────────────────────────
-
-// TestEventToCapture: the canonical Event maps onto CaptureEvent with ONLY the
-// four core fields promoted; Type is left empty (⇒ "event") and everything else
-// stays in Properties (nothing is lifted to a column).
-func TestEventToCapture(t *testing.T) {
-	e := Event{
-		Event:      "purchase",
-		DistinctID: "u9",
-		Time:       "2026-07-18T00:00:00Z",
-		Properties: map[string]any{"amount": 42, "$current_url": "https://x/y"},
-	}
-	ce := e.toCapture()
-	if ce.Event != "purchase" || ce.DistinctID != "u9" || ce.Timestamp != "2026-07-18T00:00:00Z" {
-		t.Fatalf("core fields = %+v", ce)
-	}
-	if ce.Type != "" {
-		t.Fatalf("Type must be empty (⇒ canonicalType event), got %q", ce.Type)
-	}
-	if ce.URL != "" {
-		t.Fatalf("no $-property is promoted to a column on the canonical wire; URL=%q", ce.URL)
-	}
-	// non-core stays in properties
-	if ce.Properties["amount"] != 42 || ce.Properties["$current_url"] != "https://x/y" {
-		t.Fatalf("properties passthrough = %v", ce.Properties)
-	}
-}
-
-// TestEventNormalizeThroughCore: a canonical Event, adapted and normalized, yields
+// TestEventNormalizeThroughCore: a canonical event, normalized, yields
 // a fact stamped with the SERVER org and the resolved event name.
 func TestEventNormalizeThroughCore(t *testing.T) {
-	f, ok := normalize("acme", time.Now(), Event{Event: "signup", DistinctID: "u1"}.toCapture())
+	f, ok := normalize("acme", time.Now(), CaptureEvent{Event: "signup", DistinctID: "u1"})
 	if !ok {
 		t.Fatal("want routable")
 	}

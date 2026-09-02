@@ -4979,20 +4979,6 @@ components:
       - status
       - msg
       type: object
-    Event:
-      properties:
-        distinctId:
-          type: string
-        event:
-          type: string
-        properties:
-          additionalProperties: {}
-          type: object
-        time:
-          type: string
-        type:
-          type: string
-      type: object
     ExampleQuestion:
       properties:
         image:
@@ -94771,9 +94757,9 @@ paths:
           application/json:
             schema:
               oneOf:
-              - $ref: '#/components/schemas/Event'
+              - $ref: '#/components/schemas/CaptureEvent'
               - items:
-                  $ref: '#/components/schemas/Event'
+                  $ref: '#/components/schemas/CaptureEvent'
                 type: array
               - $ref: '#/components/schemas/CaptureBatch'
               - $ref: '#/components/schemas/insightsBody'

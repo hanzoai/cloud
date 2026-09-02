@@ -188,8 +188,9 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // Register (the fleet ships 1,627 bare properties for exactly this reason), and this
 // ledger must shrink when it comes rather than quietly outlive the limitation.
 var proseless = map[string]bool{
-	// The canonical ingest wire: Event | []Event | {batch:[…]}.
-	"Event": true, "CaptureBatch": true, "CaptureEvent": true, "UTM": true, "Exception": true,
+	// The canonical ingest wire, in its three spellings: one event, an array of
+	// them, or {batch:[…]} — all the same shape.
+	"CaptureBatch": true, "CaptureEvent": true, "UTM": true, "Exception": true,
 	// The signal BODIES and the structured stack, nested inside those same ingest
 	// shapes and reaching the document through the same Register client. Their fields
 	// carry doc comments in Go — reflection simply cannot see them, which is the one
