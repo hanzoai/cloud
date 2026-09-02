@@ -16,12 +16,12 @@
 // It is BOUND to the validated principal (X-User-Id + X-Org-Id) so a token minted
 // for one identity cannot authorize a change as another, and it EXPIRES after TTL.
 //
-// THE KEY IS SHARED, AND THAT IS A DEPLOYMENT FACT. One address MINTS a token and
-// every process that serves a change VERIFIES one, each of them its own process. A
-// MAC verifies against the key that wrote it, so they hold ONE key or no token ever
-// verifies. That key is KeyEnv, from KMS, on the pod — a child inherits the host's
-// environment whole, so one value reaches every process. [Shared] is how a process
-// asks at boot whether it holds it, before a request can find out the hard way.
+// THE KEY NO LONGER HAS TO BE SHARED. cloud.Intended admits a cookie-authenticated
+// change on Sec-Fetch-Site, which the browser states on the request and script cannot
+// set, so nothing outside this package reads a token and no two processes have to
+// agree on a key. A process holding KeyEnv mints against it; one without mints
+// against a random key of its own and checks only what it minted. Both are correct,
+// because the token is no longer what admits the change.
 package attest
 
 import (
@@ -66,14 +66,6 @@ const (
 // was to stop needing agreement rather than to distribute the value more carefully.
 const KeyEnv = "CONSOLE_CSRF_KEY"
 
-// Shared is nil when this process holds the key every other process holds, and
-// otherwise says why it does not. A PURE READ of the environment, so it can be
-// asked whenever and asking cannot change the answer.
-func Shared() error {
-	_, err := decodeKey()
-	return err
-}
-
 func decodeKey() ([]byte, error) {
 	raw := strings.TrimSpace(os.Getenv(KeyEnv))
 	if raw == "" {
@@ -88,8 +80,8 @@ func decodeKey() ([]byte, error) {
 	return nil, fmt.Errorf("%s is set but does not decode to 32 bytes of hex or base64", KeyEnv)
 }
 
-// Key mints and checks tokens. Two processes holding different keys accept none
-// of each other's, which is the whole reason [Shared] is asked at boot.
+// Key mints and checks tokens. Two processes holding different keys accept none of
+// each other's, which stopped mattering when the change stopped depending on the token.
 type Key [32]byte
 
 // The process-wide key, resolved once: a token is minted and checked by several
@@ -100,9 +92,9 @@ var (
 	held Key
 )
 
-// Process returns the key this process holds — the shared one when there is one,
-// else a random key it alone holds. Which of the two is a BOOT question, answered
-// by [Shared] before a request ever arrives.
+// Process returns the key this process holds — the one from KeyEnv when it is set,
+// else a random key it alone holds. Which of the two it is no longer changes what
+// the process admits.
 func Process() Key {
 	once.Do(func() {
 		if k, err := decodeKey(); err == nil {
