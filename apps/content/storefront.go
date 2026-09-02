@@ -117,20 +117,6 @@ type StorefrontResult struct {
 	ImageURL string `json:"imageUrl,omitempty"`
 }
 
-// notConfiguredStorefront is the fail-closed default — used only when a deployment
-// explicitly disables the edge (or in tests). The real edge (commerceStorefront) is
-// wired at Mount and fail-closes per-call when the service token is absent, exactly
-// like the social Distributor; so a production mount always carries the real edge.
-type notConfiguredStorefront struct{}
-
-func (notConfiguredStorefront) Publish(context.Context, string, StorefrontRequest) (StorefrontResult, error) {
-	return StorefrontResult{}, errNotConfigured
-}
-
-func (notConfiguredStorefront) ProductExists(context.Context, string, string) (bool, error) {
-	return false, errNotConfigured
-}
-
 // commerceStorefront is the REAL Storefront over the Hanzo Commerce store API. It opens
 // no store; the catalog state is commerce's. base is deployment config (in-process when
 // commerce is co-resident, else the standalone URL); token is the admin S2S bearer,
@@ -224,37 +210,6 @@ func (s commerceStorefront) ProductExists(ctx context.Context, org, handle strin
 	default:
 		return false, fmt.Errorf("%w: product lookup %d", errUpstream, status)
 	}
-}
-
-// currentStore resolves the org’s default store id via GET /v1/commerce/store/current (the same
-// endpoint the admin dashboard uses). The org is pinned by the X-Org-Id header behind
-// the admin service token, so the resolved store is always the caller's own.
-func (s commerceStorefront) currentStore(ctx context.Context, org, token string) (string, error) {
-	status, raw, err := s.do(ctx, http.MethodGet, "/v1/commerce/store/current", org, token, nil)
-	if err != nil {
-		return "", err
-	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		return "", errNotConfigured
-	}
-	if status < 200 || status >= 300 {
-		return "", fmt.Errorf("%w: store/current %d", errUpstream, status)
-	}
-	var out struct {
-		Store struct {
-			ID string `json:"id"`
-		} `json:"store"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return "", fmt.Errorf("%w: decode store/current: %v", errUpstream, err)
-	}
-	id := strings.TrimSpace(out.Store.ID)
-	if id == "" || id == "default" {
-		// No real store provisioned for this org yet — nothing to attach the image to.
-		// Fail-closed (not a 5xx): the org must have a commerce store first.
-		return "", errNotConfigured
-	}
-	return id, nil
 }
 
 // do performs one S2S commerce request: admin bearer + X-Org-Id (commerce trusts the

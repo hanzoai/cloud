@@ -72,7 +72,7 @@ type Cluster struct {
 }
 
 // Registry is the KMS-backed BYO-cluster store. A nil KMS (unconfigured) makes it
-// disabled: Register fails closed (never plaintext) and DynForOrg/List no-op.
+// disabled: Register fails closed (never plaintext) and List no-ops.
 type Registry struct {
 	kms *kms.Client
 	log luxlog.Logger
@@ -190,41 +190,6 @@ func (r *Registry) Deregister(org, project, name string) (bool, error) {
 	return true, nil
 }
 
-// DynForOrg returns the k8s client the org+project's workloads should target: its
-// default registered cluster (KMS-loaded, cached) or nil when the shard has none
-// (the caller then falls back to the home in-cluster client). This is the ONE
-// federation client.
-func (r *Registry) DynForOrg(org, project string) dynamic.Interface {
-	if !r.Enabled() {
-		return nil
-	}
-	list, err := r.List(org, project)
-	if err != nil || len(list) == 0 {
-		return nil
-	}
-	target := list[0]
-	for _, cl := range list {
-		if cl.Default {
-			target = cl
-			break
-		}
-	}
-	key := scopeRef(org, project) + "/" + target.Name
-	if dyn, ok := r.cache[key]; ok {
-		return dyn
-	}
-	cfg, err := r.RESTForOrgCluster(org, project, target.Name)
-	if err != nil {
-		return nil
-	}
-	dyn, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return nil
-	}
-	r.cache[key] = dyn
-	return dyn
-}
-
 // ErrNoCluster says the org+project shard holds no attached cluster by that
 // name. A sentinel rather than prose, so a caller can answer it as an absence
 // (a 404) and every other failure as the fault it is.
@@ -233,9 +198,8 @@ var ErrNoCluster = errors.New("no such cluster")
 // RESTForOrgCluster returns the REST config that reaches ONE of the org+project's
 // registered clusters, by name: the kubeconfig unsealed from the org's KMS and
 // passed back through the same SafeRESTConfig gate that admitted it at attach.
-// It sits beside DynForOrg deliberately — that one answers "the org's default
-// compute", this one answers a caller that names the cluster (a sandbox leased
-// onto it), and both read the same index and the same sealed key.
+// The caller names the cluster (a sandbox leased onto it) rather than taking the
+// org's default, and it reads the same index and the same sealed key.
 func (r *Registry) RESTForOrgCluster(org, project, name string) (*rest.Config, error) {
 	if !r.Enabled() {
 		return nil, ErrNoCluster
@@ -304,7 +268,7 @@ func openKMS(brand string) *kms.Client {
 
 // restFromKubeconfig is SafeRESTConfig plus the client identity every fleet
 // connection carries — one place, so the registry's consumers (attach
-// validation, DynForOrg, RESTForOrgCluster) cannot disagree about either.
+// validation, RESTForOrgCluster) cannot disagree about either.
 func restFromKubeconfig(kubeconfig []byte) (*rest.Config, error) {
 	restCfg, err := SafeRESTConfig(kubeconfig)
 	if err != nil {
