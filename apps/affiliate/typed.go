@@ -35,9 +35,6 @@ import (
 // handlers reached it through cloud.Handle.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op whose whole input is its URL and its principal.
-type noInput struct{}
-
 // sudo reports whether the caller is a validated platform SuperAdmin
 // (X-User-IsAdmin, set only for a verified SuperAdmin after SanitizeIdentity) —
 // the gate every /v1/admin route here fails closed on. False off the HTTP path:

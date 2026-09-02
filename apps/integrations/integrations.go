@@ -1078,7 +1078,7 @@ func snapshotRegistry() map[string]*Provider {
 // surface) are omitted; the two planes are disjoint.
 //
 // Response: {"providers":[{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":true,"connection":{"account":"Acme","externalId":"T0231","scopes":["chat:write"],"connectedAt":"2026-07-01T10:00:00Z"}}]}
-func (o ops) list(ctx context.Context, _ *noArgs) (*listOut, error) {
+func (o ops) list(ctx context.Context, _ *cloud.Unit) (*listOut, error) {
 	org, err := authed(ctx, principalRequired)
 	if err != nil {
 		return nil, err

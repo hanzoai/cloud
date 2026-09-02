@@ -169,7 +169,7 @@ func exposePublish() {
 // a caller that could name the org would be publishing into another tenant's
 // repos — and an anonymous caller is refused. A named handler, not a closure, so
 // zipdoc can lift this prose into the registry.
-func planePublish(ctx context.Context, ev *plane.Visibility) (*struct{}, error) {
+func planePublish(ctx context.Context, ev *plane.Visibility) (*cloud.Unit, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrForbidden("git publish: org required")

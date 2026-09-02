@@ -60,7 +60,7 @@ func exposeRoster() {
 // nil handle is a boot-order fault, and an empty roster would read as "this org has
 // nobody" — an announcement that silently reaches no one is worse than one that
 // refuses out loud.
-func mailable(ctx context.Context, _ *struct{}) (*plane.Roster, error) {
+func mailable(ctx context.Context, _ *cloud.Unit) (*plane.Roster, error) {
 	org := cloud.Who(ctx).Org
 	if org == "" {
 		return nil, zip.ErrUnauthorized("roster: no org on the call")

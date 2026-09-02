@@ -56,16 +56,6 @@ import (
 // only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op that takes nothing off the wire — it is addressed
-// entirely by the caller's validated principal.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name, so a defined type here would publish
-// "200 with a body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // requireBody replays, at the point in the sequence the raw handler reached it,
 // the refusal c.Bind has always answered: these writes take a JSON body, and a
 // request with none — or with a content type this service does not parse — is a
@@ -213,7 +203,7 @@ type campaignSummary struct {
 // The channel list is the deployment's honest capability, not a wish: a kind
 // missing from it is one a launch will record as "unavailable" rather than fail
 // on.
-func (o ops) summary(ctx context.Context, _ *noInput) (*campaignSummary, error) {
+func (o ops) summary(ctx context.Context, _ *cloud.Unit) (*campaignSummary, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -371,7 +361,7 @@ func (o ops) update(ctx context.Context, in *campaignUpdate) (*campaignRecord, e
 // It deletes the RECORD, not the executions: a campaign whose channels are live
 // on a provider should be paused first, or those executions keep running with
 // nothing here to report them.
-func (o ops) del(ctx context.Context, in *campaignRef) (*noContent, error) {
+func (o ops) del(ctx context.Context, in *campaignRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

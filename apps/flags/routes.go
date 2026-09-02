@@ -146,10 +146,6 @@ func callerOf(ctx context.Context) (caller, error) {
 
 // ── inputs and outputs ──────────────────────────────────────────────────────
 
-// noInput is the In of an op that takes nothing off the wire. ONE of these for
-// the whole package.
-type noInput struct{}
-
 // healthOut is the engine's liveness answer.
 type healthOut struct {
 	// OK is true whenever the flag engine is serving.
@@ -251,7 +247,7 @@ func (in putDefIn) MarshalJSON() ([]byte, error) {
 // be probe-able without a token.
 //
 // Response: {"ok": true, "engine": "hanzo-flags"}
-func (o ops) health(context.Context, *noInput) (*healthOut, error) {
+func (o ops) health(context.Context, *cloud.Unit) (*healthOut, error) {
 	return &healthOut{OK: true, Engine: "hanzo-flags"}, nil
 }
 
@@ -294,7 +290,7 @@ func (o ops) evaluate(ctx context.Context, in *evaluateIn) (*json.RawMessage, er
 
 // ListFlagDefinitions returns every flag definition in the caller's (org,
 // project) store, by key, with its version and who last changed it.
-func (o ops) listDefs(ctx context.Context, _ *noInput) (*defsOut, error) {
+func (o ops) listDefs(ctx context.Context, _ *cloud.Unit) (*defsOut, error) {
 	cl, err := callerOf(ctx)
 	if err != nil {
 		return nil, err

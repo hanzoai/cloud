@@ -63,7 +63,7 @@ type payouts []plane.Payout
 // org field on the wire and none on the input.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) accounts(ctx context.Context, _ *noInput) (*accountsView, error) {
+func (o ops) accounts(ctx context.Context, _ *cloud.Unit) (*accountsView, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ type accountRef struct {
 // beyond the tenant the caller already is, and no query can widen it.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) payouts(ctx context.Context, _ *noInput) (*payouts, error) {
+func (o ops) payouts(ctx context.Context, _ *cloud.Unit) (*payouts, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err

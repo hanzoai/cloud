@@ -84,7 +84,7 @@ func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 func callPaid(t *testing.T, s *cloud.Service[state], org string, hErr error) (status int, ran *int32) {
 	t.Helper()
 	var calls int32
-	h := fare.Paid(s, func(ctx context.Context, _ *noInput) (*struct{}, error) {
+	h := fare.Paid(s, func(ctx context.Context, _ *cloud.Unit) (*struct{}, error) {
 		atomic.AddInt32(&calls, 1)
 		if _, err := fare.Org(ctx); err != nil {
 			t.Error("an operation ran with no org — admission hands the tenant down")

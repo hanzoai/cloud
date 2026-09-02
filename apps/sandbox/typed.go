@@ -179,7 +179,7 @@ type endIn struct {
 //
 // `?purge=1` additionally removes the record, so the sandbox stops being listed
 // at all rather than being listed as ended.
-func (o ops) del(ctx context.Context, in *endIn) (*struct{}, error) {
+func (o ops) del(ctx context.Context, in *endIn) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

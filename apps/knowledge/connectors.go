@@ -365,7 +365,7 @@ type kbConnectorsOut struct {
 // org's store. A provider that is configured for the deployment but not yet
 // connected appears as disconnected, so the console can offer a Connect button.
 // No secret is ever returned.
-func (o ops) listConnectors(ctx context.Context, _ *noInput) (*kbConnectorsOut, error) {
+func (o ops) listConnectors(ctx context.Context, _ *cloud.Unit) (*kbConnectorsOut, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

@@ -102,7 +102,7 @@ type vectorStats struct {
 // itself keeps its name and defaults (dimension 0, cosine) rather than blanking
 // the whole answer — and an unreachable Qdrant answers 200 with an EMPTY list, so
 // the panel shows an honest empty state instead of an error.
-func (o ops) adminVectorCollections(ctx context.Context, _ *noInput) (*vectorCollectionList, error) {
+func (o ops) adminVectorCollections(ctx context.Context, _ *cloud.Unit) (*vectorCollectionList, error) {
 	if err := operatorOf(ctx); err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (o ops) adminVectorCollections(ctx context.Context, _ *noInput) (*vectorCol
 // Every figure is summed from the same per-collection detail the collections
 // listing returns, so the two panels can never disagree. An unreachable Qdrant
 // answers 200 with all zeros rather than an error.
-func (o ops) adminVectorStats(ctx context.Context, _ *noInput) (*vectorStats, error) {
+func (o ops) adminVectorStats(ctx context.Context, _ *cloud.Unit) (*vectorStats, error) {
 	if err := operatorOf(ctx); err != nil {
 		return nil, err
 	}

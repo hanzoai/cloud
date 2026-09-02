@@ -208,7 +208,7 @@ type teamRoomBind struct {
 // two people is a room with no name, not a different kind of thing.
 //
 // Example: {"rooms": [{"id": "6543", "name": "bugfix-1010", "life": "bound", "bindings": ["repo:hanzoai/cloud"]}]}
-func (b *roomBridge) listRooms(ctx context.Context, _ *none) (*teamRooms, error) {
+func (b *roomBridge) listRooms(ctx context.Context, _ *cloud.Unit) (*teamRooms, error) {
 	if b.degraded {
 		return nil, unavailable()
 	}

@@ -13,6 +13,7 @@
 package knowledge
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"sort"
 
@@ -76,7 +77,7 @@ type catalogOut struct {
 // principal is still required. It is metadata only: no secret is ever returned.
 //
 // Response: {"connectors": [{"provider": "github", "displayName": "GitHub", "description": "Repositories, READMEs, and issues.", "kind": "native", "configured": true}]}
-func (o ops) listCatalog(ctx context.Context, _ *noInput) (*catalogOut, error) {
+func (o ops) listCatalog(ctx context.Context, _ *cloud.Unit) (*catalogOut, error) {
 	// A valid principal is required (the catalog is only served to authenticated
 	// callers), though the catalog content itself is org-independent.
 	if _, err := principal.Acting(ctx); err != nil {

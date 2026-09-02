@@ -22,6 +22,7 @@
 package account
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -79,7 +80,7 @@ func cleanAppearance(in appearance) appearance {
 // A transient IAM read failure reports the empty preference rather than a 5xx, so
 // a surface applies its published default and never error-toasts on load — the
 // same fail-soft the key read uses.
-func (o ops) getAppearance(ctx context.Context, _ *noInput) (*appearance, error) {
+func (o ops) getAppearance(ctx context.Context, _ *cloud.Unit) (*appearance, error) {
 	cr, c, err := o.requestCaller(ctx, reads, unscoped, "read your appearance")
 	if err != nil {
 		return nil, err

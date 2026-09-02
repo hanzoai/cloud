@@ -556,7 +556,7 @@ type RedeemResult struct {
 // The promos are fleet-wide, not per-org — only the counters move.
 //
 // Response: {"data": [{"promo": {"code": "first1000", "percentOff": 90, "maxRedemptions": 1000, "active": true}, "redeemed": 137, "remaining": 863}]}
-func (o ops) listPromos(ctx context.Context, _ *struct{}) (*PromoList, error) {
+func (o ops) listPromos(ctx context.Context, _ *cloud.Unit) (*PromoList, error) {
 	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}

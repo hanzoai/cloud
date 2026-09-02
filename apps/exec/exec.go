@@ -711,18 +711,6 @@ func listFiles(ctx context.Context, in *sessionRef) (*listings, error) {
 	return &out, nil
 }
 
-// noInput is the In of an operation that reads nothing off the wire. NAMED, and
-// empty: hasRequestBody skips an input with no field the URL does not already
-// carry, so it publishes no request body — which is the honest document for a
-// route that takes no argument.
-type noInput struct{}
-
-// noContent is the Out of an operation that sends no body at all. An ALIAS for the
-// unnamed empty struct rather than a definition, because zip publishes a response
-// SCHEMA only for an Out whose type has a NAME — a defined type here would
-// document a body this route has never sent.
-type noContent = struct{}
-
 // programmatic answers 501 — this deployment does not serve programmatic tool calling.
 //
 // That sentence is the SUMMARY every projection shows, so it says what a caller
@@ -765,7 +753,7 @@ type noContent = struct{}
 // middleware. Uniformity is the whole property: every path into this subsystem
 // reads the admission marker, so there is no operation anybody has to remember is
 // the exception.
-func programmatic(ctx context.Context, _ *noInput) (*noContent, error) {
+func programmatic(ctx context.Context, _ *cloud.Unit) (*cloud.Unit, error) {
 	if _, err := tenantOf(ctx); err != nil {
 		return nil, err
 	}

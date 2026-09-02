@@ -10,6 +10,7 @@
 package leaderboard
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"net/http"
 	"regexp"
@@ -67,7 +68,7 @@ type optinView struct {
 // GetOptin returns the caller's own public-listing preference and their org's,
 // each with whether the caller may change it. Public listing is opt-in and private
 // by default, so a fresh caller reads listed=false for both.
-func (o boardOps) getOptin(ctx context.Context, _ *noInput) (*optinView, error) {
+func (o boardOps) getOptin(ctx context.Context, _ *cloud.Unit) (*optinView, error) {
 	org, err := tenantOf(ctx, "sign in to manage leaderboard visibility")
 	if err != nil {
 		return nil, err

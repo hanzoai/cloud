@@ -163,7 +163,7 @@ func buildSuggestions(s *cloud.Service[state], ctx context.Context, org string) 
 // best-effort AI narrative over exactly those quests and numbers is included when
 // an AI plane is wired. READ-ONLY: it advises and never runs a step — the only
 // executing path is POST /v1/guide/steps/{id}/do.
-func (o ops) suggest(ctx context.Context, _ *noInput) (*suggestResponse, error) {
+func (o ops) suggest(ctx context.Context, _ *cloud.Unit) (*suggestResponse, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

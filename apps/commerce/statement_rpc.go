@@ -122,7 +122,7 @@ func planeMembers(ctx context.Context, in *plane.HoldersIn) (*plane.Holders, err
 // never list another's.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planePayouts(ctx context.Context, _ *struct{}) (*plane.Payouts, error) {
+func planePayouts(ctx context.Context, _ *cloud.Unit) (*plane.Payouts, error) {
 	org, err := orgOf(ctx, "payouts")
 	if err != nil {
 		return nil, err

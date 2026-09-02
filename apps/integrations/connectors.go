@@ -332,7 +332,7 @@ type connectorProviderView struct {
 // surface another user's connector, and no secret is in the view.
 //
 // Response: {"connectors":[{"id":"openai:default","provider":"openai","label":"default","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T11:00:00Z","connectedAt":"2026-07-01T10:00:00Z"}]}
-func (o ops) connectors(ctx context.Context, _ *noArgs) (*connectorsOut, error) {
+func (o ops) connectors(ctx context.Context, _ *cloud.Unit) (*connectorsOut, error) {
 	org, user, err := caller(ctx)
 	if err != nil {
 		return nil, err
@@ -353,7 +353,7 @@ func (o ops) connectors(ctx context.Context, _ *noArgs) (*connectorsOut, error) 
 // — Mount asserts at least one), never from a parallel kind enum.
 //
 // Response: {"providers":[{"id":"openai","name":"OpenAI","description":"Use your own OpenAI account.","category":"AI","scopes":["api"],"methods":["device","token"]}]}
-func (o ops) connectorProviders(ctx context.Context, _ *noArgs) (*connectorProvidersOut, error) {
+func (o ops) connectorProviders(ctx context.Context, _ *cloud.Unit) (*connectorProvidersOut, error) {
 	if _, _, err := caller(ctx); err != nil {
 		return nil, err
 	}

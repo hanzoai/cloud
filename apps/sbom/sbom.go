@@ -443,7 +443,7 @@ type SbomHealth struct {
 // Health is a pure liveness probe: the service is up; datastore reflects whether
 // the datastore store is connected. Not JWT-gated, always 200 (a disconnected
 // datastore is degraded-but-alive; the data endpoints report that as 503).
-func (o ops) health(_ context.Context, _ *noArgs) (*SbomHealth, error) {
+func (o ops) health(_ context.Context, _ *cloud.Unit) (*SbomHealth, error) {
 	return &SbomHealth{
 		Datastore: datastore.Ready(),
 		Service:   "sbom",
@@ -451,6 +451,3 @@ func (o ops) health(_ context.Context, _ *noArgs) (*SbomHealth, error) {
 		Table:     sbomTable,
 	}, nil
 }
-
-// noArgs is the input of an op that takes none: no body, no query, no path param.
-type noArgs struct{}

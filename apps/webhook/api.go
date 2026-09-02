@@ -210,15 +210,6 @@ type deliveryList struct {
 	Data []DeliveryRow `json:"data"`
 }
 
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name.
-type noContent = struct{}
-
-// noInput is the In of an op addressed entirely by the caller's own validated
-// principal: it takes nothing off the wire.
-type noInput struct{}
-
 // tenant resolves the caller's org for a TYPED op — the VALIDATED org
 // cloud.Bridge parked on the context, 401 otherwise. It is the same gate
 // apps/notify applies and the same decision principal.Org makes (a validated
@@ -261,7 +252,7 @@ func (s *state) storeFor(org string) (*store, error) {
 // are redacted here — a secret leaves the server only on create and on rotate.
 // The listing is physically org-scoped, so another tenant's endpoints are not
 // reachable from this route at all.
-func (o ops) listEndpoints(ctx context.Context, _ *noInput) (*endpointList, error) {
+func (o ops) listEndpoints(ctx context.Context, _ *cloud.Unit) (*endpointList, error) {
 	org, err := tenant(ctx)
 	if err != nil {
 		return nil, err
@@ -406,7 +397,7 @@ func (o ops) updateEndpoint(ctx context.Context, in *updateEndpointIn) (*Endpoin
 // reads as not found.
 //
 // Example: {"id": "wh_9f8c1d2e"}
-func (o ops) deleteEndpoint(ctx context.Context, in *endpointRef) (*noContent, error) {
+func (o ops) deleteEndpoint(ctx context.Context, in *endpointRef) (*cloud.Unit, error) {
 	org, err := tenant(ctx)
 	if err != nil {
 		return nil, err

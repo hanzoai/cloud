@@ -97,7 +97,7 @@ func registerEngineRoutes(app cloud.Router, s *cloud.Service[state]) {
 // is why the op reads no request body at all. A deployment with the engine
 // switched off, or with no usable cluster config, answers 503; a failure to
 // start, render or sync is a 502.
-func (o ops) reconcile(ctx context.Context, _ *noInput) (*reconcileReport, error) {
+func (o ops) reconcile(ctx context.Context, _ *cloud.Unit) (*reconcileReport, error) {
 	if _, err := superAdminOf(ctx); err != nil {
 		return nil, err
 	}

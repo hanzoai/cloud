@@ -178,9 +178,6 @@ type StatusSummary struct {
 	CheckedAt string `json:"checked_at"`
 }
 
-// noArgs is the empty input of a read that takes nothing.
-type noArgs struct{}
-
 // mountSummary registers the public status face. It is a TYPED op so the one
 // registry every projection reads (OpenAPI, MCP, the CLI) carries it — this is a
 // published contract other people's clients call, and a raw route would be
@@ -208,7 +205,7 @@ func mountSummary(a *zip.App, deps cloud.Deps) {
 // fine" are different answers and only one of them is true.
 //
 // Example: {}
-func handleSummary(ctx context.Context, _ *noArgs) (*StatusSummary, error) {
+func handleSummary(ctx context.Context, _ *cloud.Unit) (*StatusSummary, error) {
 	brandID := deploymentBrand
 	c, hasReq := cloud.Request(ctx)
 	if hasReq {

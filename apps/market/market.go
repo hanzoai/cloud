@@ -126,9 +126,6 @@ func init() {
 // cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noArgs is the input of a read the URL fully addresses.
-type noArgs struct{}
-
 // where names which chain to read.
 type where struct {
 	// Chain is the chain's slug — `cchain`, `zoo` — as `chains` reports it. It is
@@ -176,7 +173,7 @@ type Roster struct {
 // market maker deployed — the registry names no factory for it — answers `read` with
 // totals of nothing, which is a fact about that chain and is not the same as a chain
 // nobody could ask.
-func (o ops) chains(ctx context.Context, _ *noArgs) (*Roster, error) {
+func (o ops) chains(ctx context.Context, _ *cloud.Unit) (*Roster, error) {
 	s := &o.s.State
 	if s.base == "" {
 		return &Roster{Reach: unconfigured()}, nil

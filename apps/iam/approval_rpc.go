@@ -49,7 +49,7 @@ func exposeApproval() {
 // wave through exactly the callers least entitled to it. The error path is
 // admission's documented fail-open, which is a decision it makes knowingly about
 // an IAM it could not reach — not one this handler makes for it silently.
-func approval(ctx context.Context, _ *struct{}) (*plane.Approval, error) {
+func approval(ctx context.Context, _ *cloud.Unit) (*plane.Approval, error) {
 	who := cloud.Who(ctx)
 	if who.User == "" {
 		return nil, zip.ErrUnauthorized("approval: no subject on the call")

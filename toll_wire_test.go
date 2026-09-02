@@ -42,7 +42,7 @@ import (
 // too: it answers at the program's addresses, in its document, on its MCP door
 // and at its call plane.
 func shapes(r cloud.Router) []string {
-	h := func(context.Context, *none) (*ok, error) { return &ok{OK: true}, nil }
+	h := func(context.Context, *cloud.Unit) (*ok, error) { return &ok{OK: true}, nil }
 	zapp := cloud.ZipApp(r)
 
 	zip.Post(r, "/v1/probe/router", h, zip.WithOperationID("on_router"))
@@ -190,7 +190,7 @@ func TestTheProgramArmsItsRule(t *testing.T) {
 
 	app := cloud.App("probe", &cloud.Config{Brand: "hanzo"},
 		cloud.Deps{Metering: led.Client(t)}, nil)
-	free := func(ctx context.Context, _ *none) (*ok, error) { return &ok{OK: true}, nil }
+	free := func(ctx context.Context, _ *cloud.Unit) (*ok, error) { return &ok{OK: true}, nil }
 	if err := mountAll(t, app, []cloud.Plugin{
 		{Name: "probe", Price: 500, Use: func(r cloud.Router, _ cloud.Deps) error {
 			zip.Post(r, "/v1/probe/run", free, zip.WithOperationID("probe_run"))
@@ -252,7 +252,7 @@ func refusal(answer string) bool {
 // up, and once with one declared at a PRICED address, which does not.
 func TestTheInternalPlaneIsOutsideThePricedSurface(t *testing.T) {
 	t.Setenv(zip.RuntimeDirEnv, planetest.Dir(t))
-	free := func(ctx context.Context, _ *none) (*ok, error) { return &ok{OK: true}, nil }
+	free := func(ctx context.Context, _ *cloud.Unit) (*ok, error) { return &ok{OK: true}, nil }
 
 	cloud.ResetPlane()
 	t.Cleanup(cloud.ResetPlane)

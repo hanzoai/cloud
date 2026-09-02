@@ -227,7 +227,7 @@ func planeSubscribe(ctx context.Context, in *plane.SaleIn) (*plane.Sold, error) 
 // reader tells "nobody was below threshold" from "the sweep never ran".
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeRecharge(ctx context.Context, _ *struct{}) (*plane.Recharge, error) {
+func planeRecharge(ctx context.Context, _ *cloud.Unit) (*plane.Recharge, error) {
 	run, err := commercebilling.RunAutoRecharge(ctx, kmsFrom(ctx), eventsFrom(ctx))
 	if err != nil {
 		return nil, zip.Errorf(500, "failed to list organizations")
@@ -321,7 +321,7 @@ func saleFault(err error) error {
 // difference between never having set one and having turned one off.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeAutoRecharge(ctx context.Context, _ *struct{}) (*plane.AutoRecharge, error) {
+func planeAutoRecharge(ctx context.Context, _ *cloud.Unit) (*plane.AutoRecharge, error) {
 	org, err := orgOf(ctx, "auto-recharge")
 	if err != nil {
 		return nil, err

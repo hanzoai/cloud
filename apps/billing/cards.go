@@ -177,7 +177,7 @@ func retryKey(c *zip.Ctx) string { return strings.TrimSpace(c.Header("X-Idempote
 // never-configured from deliberately-off.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) autoRecharge(ctx context.Context, _ *noInput) (*plane.AutoRecharge, error) {
+func (o ops) autoRecharge(ctx context.Context, _ *cloud.Unit) (*plane.AutoRecharge, error) {
 	org, _, err := payer(ctx)
 	if err != nil {
 		return nil, err

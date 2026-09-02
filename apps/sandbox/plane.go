@@ -272,7 +272,7 @@ func planeWrite(ctx context.Context, in *plane.WriteIn) (*plane.Wrote, error) {
 
 // planeEnd ends the caller's sandbox lease: the pod goes, and the volume goes only
 // when the caller asked for that too.
-func planeEnd(ctx context.Context, in *plane.EndIn) (*struct{}, error) {
+func planeEnd(ctx context.Context, in *plane.EndIn) (*cloud.Unit, error) {
 	s, org, err := live(ctx)
 	if err != nil {
 		return nil, err

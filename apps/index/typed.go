@@ -193,10 +193,6 @@ func (o ops) accepted(uid, typ string) *indexEnqueued {
 
 // ---- models ----------------------------------------------------------------
 
-// noInput is the In of an op addressed entirely by the caller's principal: the
-// org IS the address and there is nothing to bind off the wire.
-type noInput struct{}
-
 // indexHealth is the dialect's health object: one word, and the only one a
 // Meilisearch client checks before it will use a server at all.
 type indexHealth struct {
@@ -446,7 +442,7 @@ type indexTaskAt struct {
 // Meilisearch client probes this before it will use a server at all and a
 // cheerful 200 over a broken volume turns "search is down" into "nothing
 // matched". It requires no principal and reads no tenant data.
-func (o ops) health(ctx context.Context, _ *noInput) (*indexHealth, error) {
+func (o ops) health(ctx context.Context, _ *cloud.Unit) (*indexHealth, error) {
 	if err := o.s.State.store.Ping(ctx); err != nil {
 		return &indexHealth{Status: "unavailable"}, nil
 	}
@@ -459,7 +455,7 @@ func (o ops) health(ctx context.Context, _ *noInput) (*indexHealth, error) {
 // implementation rather than a Meilisearch build, so a client that logs the
 // version records which server answered instead of implying a release of
 // software this is not. It requires no principal and reads no tenant data.
-func (o ops) version(_ context.Context, _ *noInput) (*indexVersion, error) {
+func (o ops) version(_ context.Context, _ *cloud.Unit) (*indexVersion, error) {
 	return &indexVersion{CommitDate: "", CommitSha: "hanzo-cloud", PkgVersion: Version}, nil
 }
 
@@ -473,7 +469,7 @@ func (o ops) version(_ context.Context, _ *noInput) (*indexVersion, error) {
 // client-supplied header, so this counts the caller's own documents and no
 // other tenant's. Without a validated principal the answer is 403 carrying the
 // dialect's `invalid_api_key` body.
-func (o ops) stats(ctx context.Context, _ *noInput) (*indexStats, error) {
+func (o ops) stats(ctx context.Context, _ *cloud.Unit) (*indexStats, error) {
 	org, err := o.org(ctx)
 	if err != nil {
 		return nil, err
@@ -502,7 +498,7 @@ func (o ops) stats(ctx context.Context, _ *noInput) (*indexStats, error) {
 // client-supplied header, and two orgs may both hold an index named "messages"
 // without either seeing the other. Without a validated principal the answer is
 // 403 carrying the dialect's `invalid_api_key` body.
-func (o ops) listIndexes(ctx context.Context, _ *noInput) (*indexList, error) {
+func (o ops) listIndexes(ctx context.Context, _ *cloud.Unit) (*indexList, error) {
 	org, err := o.org(ctx)
 	if err != nil {
 		return nil, err

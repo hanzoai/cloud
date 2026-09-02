@@ -18,6 +18,7 @@ package exec
 // apps/git/typed_wire_test.go, which is the one form of this gate.
 
 import (
+	"github.com/hanzoai/cloud"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -233,7 +234,7 @@ func TestProgrammaticRefusesEveryBody(t *testing.T) {
 // it: a context that carries neither a validated principal nor exec's admission
 // marker is refused before anything else is decided.
 func TestTheStubIsShutToACallerWithNoCredential(t *testing.T) {
-	_, err := programmatic(t.Context(), &noInput{})
+	_, err := programmatic(t.Context(), &cloud.Unit{})
 	if err == nil {
 		t.Fatal("the stub answered a context with no principal and no admission marker")
 	}
@@ -246,7 +247,7 @@ func TestTheStubIsShutToACallerWithNoCredential(t *testing.T) {
 			"told 501 about a protocol it was never admitted to ask about", he.Status)
 	}
 	// And an admitted one reaches the refusal the address is for.
-	if _, err := programmatic(admit(t.Context()), &noInput{}); err == nil {
+	if _, err := programmatic(admit(t.Context()), &cloud.Unit{}); err == nil {
 		t.Fatal("an admitted caller got no refusal at all")
 	} else if asHTTPError(err, &he); he.Status != http.StatusNotImplemented {
 		t.Errorf("admitted status = %d, want 501", he.Status)

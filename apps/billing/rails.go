@@ -46,7 +46,7 @@ func mountRails(app cloud.Router, o ops) {
 // them means try again later.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) cryptoOptions(ctx context.Context, _ *noInput) (*plane.CryptoOptions, error) {
+func (o ops) cryptoOptions(ctx context.Context, _ *cloud.Unit) (*plane.CryptoOptions, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
@@ -136,7 +136,7 @@ type depositRef struct {
 // because nobody can wire to three fields out of five.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) wire(ctx context.Context, _ *noInput) (*plane.WireInstructions, error) {
+func (o ops) wire(ctx context.Context, _ *cloud.Unit) (*plane.WireInstructions, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err

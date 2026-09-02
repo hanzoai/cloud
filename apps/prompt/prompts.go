@@ -234,16 +234,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 // form cmd/zipdoc can lift prose from.
 type promptOps struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it takes
-// nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an ALIAS
-// for the unnamed empty struct, not a definition: zip keys the response on 204 only
-// when the Out type has no name, so a defined type here would publish "200 with a
-// body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // promptRef addresses one prompt by name. The name is the path segment: the URL is
 // the addressing authority, so it binds from there whatever else arrives.
 type promptRef struct {
@@ -348,7 +338,7 @@ func (o promptOps) create(ctx context.Context, in *promptReq) (*promptDetail, er
 // List returns the caller org's prompt library as one row per prompt: its name,
 // type, every version number it has, its taxonomy and when it last changed. The
 // template bodies are deliberately absent — fetch one prompt to read its text.
-func (o promptOps) list(ctx context.Context, _ *noInput) (*promptList, error) {
+func (o promptOps) list(ctx context.Context, _ *cloud.Unit) (*promptList, error) {
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -402,7 +392,7 @@ func (o promptOps) get(ctx context.Context, in *promptRef) (*promptDetail, error
 // 404 an unknown name gives. There is no undo: the version history goes with it.
 //
 // Example: {"name": "greeting"}
-func (o promptOps) del(ctx context.Context, in *promptRef) (*noContent, error) {
+func (o promptOps) del(ctx context.Context, in *promptRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -443,7 +433,7 @@ type metricRow struct {
 // Metrics returns real per-prompt statistics for the caller's org: how many versions
 // each prompt has, which one is current, and when it was created and last changed.
 // Every number is counted from the store — nothing here is estimated or fabricated.
-func (o promptOps) metrics(ctx context.Context, _ *noInput) (*metricList, error) {
+func (o promptOps) metrics(ctx context.Context, _ *cloud.Unit) (*metricList, error) {
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {

@@ -236,7 +236,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 func TestTheWildcardAddress(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	g := app.Group("/v1/probe")
-	zip.Get(g, "/secrets/+", func(context.Context, *noInput) (*kmsSecret, error) {
+	zip.Get(g, "/secrets/+", func(context.Context, *cloud.Unit) (*kmsSecret, error) {
 		return &kmsSecret{}, nil
 	})
 	var captured []string

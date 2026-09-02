@@ -596,7 +596,7 @@ type projectList []projectView
 // authenticated read, so a project store that is not yet initialised degrades to
 // an EMPTY list rather than a 500 — a new org genuinely has zero projects — and
 // the real cause is surfaced to operators instead of to the caller.
-func (o ops) listProjects(ctx context.Context, _ *noInput) (*projectList, error) {
+func (o ops) listProjects(ctx context.Context, _ *cloud.Unit) (*projectList, error) {
 	_, org, err := o.caller(ctx)
 	if err != nil {
 		return nil, err
@@ -967,7 +967,7 @@ func (o ops) getApp(ctx context.Context, in *appRef) (*appView, error) {
 // not block the delete, so the record cannot be left orphaned behind a broken
 // cluster; the failure is logged for operators and the orphan reaper reconciles
 // it. Requires a validated principal; 403 without one.
-func (o ops) deleteApp(ctx context.Context, in *appRef) (*noContent, error) {
+func (o ops) deleteApp(ctx context.Context, in *appRef) (*cloud.Unit, error) {
 	s := o.s
 	_, org, err := o.caller(ctx)
 	if err != nil {
@@ -1108,7 +1108,7 @@ func (r *readiness) StatusCode() int {
 // from a reachable apiserver — so this deliberately spends a round trip rather than
 // reporting `ok` while every deploy fails. Not admin-gated: liveness has to be
 // probe-able without a credential.
-func (o ops) health(ctx context.Context, _ *noInput) (*readiness, error) {
+func (o ops) health(ctx context.Context, _ *cloud.Unit) (*readiness, error) {
 	s := o.s
 	res := readiness{Service: "platform", Status: "ok", K8s: s.State.k8s.dyn != nil}
 	if s.State.k8s.dyn == nil {

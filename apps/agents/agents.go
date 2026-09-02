@@ -819,7 +819,7 @@ func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, er
 
 // ListAgents returns every agent defined in the caller's org, each with the
 // number of runs recorded against it.
-func (o agentOps) list(ctx context.Context, _ *noInput) (*agentList, error) {
+func (o agentOps) list(ctx context.Context, _ *cloud.Unit) (*agentList, error) {
 	s := o.s
 	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
@@ -1050,7 +1050,7 @@ func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, er
 // DeleteAgent removes an agent and every run recorded against it. Answers 204.
 //
 // Example: {"ref": "helper"}
-func (o agentOps) del(ctx context.Context, in *agentRef) (*noContent, error) {
+func (o agentOps) del(ctx context.Context, in *agentRef) (*cloud.Unit, error) {
 	s := o.s
 	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {
@@ -1720,7 +1720,7 @@ func metricsWindow(raw string) (rng string, buckets int, step time.Duration) {
 // recorded run is an invoked (ok) or failed (error) event; each agent's own
 // create/update timestamps are created/updated events. Merged, newest first,
 // capped. Nothing is invented — an org with no agents and no runs gets [].
-func (o agentOps) activity(ctx context.Context, _ *noInput) (*activityFeed, error) {
+func (o agentOps) activity(ctx context.Context, _ *cloud.Unit) (*activityFeed, error) {
 	s := o.s
 	sto, org, err := tenantStore(ctx, &s.State)
 	if err != nil {

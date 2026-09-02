@@ -60,12 +60,6 @@ type ops struct{ s *cloud.Service[state] }
 
 // ---- the shapes the ops take ----
 
-// noInput is the In of an op that takes nothing off the wire — no body, no query,
-// no path segment. Its whole input is the caller's validated principal, which is
-// never an In field: an In field is caller-supplied, so a tenant key read from one
-// would be a cross-tenant read the caller asserted for itself.
-type noInput struct{}
-
 // rowRef addresses one stored row. The id is the path segment, and the URL is the
 // addressing authority — it binds from there whatever else the request carries.
 type rowRef struct {
@@ -255,7 +249,7 @@ type socialSummary struct {
 // summary returns four counts for the caller's org: total posts, how many are
 // scheduled, how many have published, and how many accounts are connected. It is
 // the dashboard roll-up, computed over the org's own rows in one read.
-func (o ops) summary(ctx context.Context, _ *noInput) (*socialSummary, error) {
+func (o ops) summary(ctx context.Context, _ *cloud.Unit) (*socialSummary, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -275,7 +269,7 @@ func (o ops) summary(ctx context.Context, _ *noInput) (*socialSummary, error) {
 // networks — it answers "can I connect this today", which is what a connect
 // affordance and a pre-cutover checklist both need. It says nothing about whether
 // the caller has connected an account; that is the accounts listing.
-func (o ops) providers(ctx context.Context, _ *noInput) (*socialProviders, error) {
+func (o ops) providers(ctx context.Context, _ *cloud.Unit) (*socialProviders, error) {
 	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
@@ -368,7 +362,7 @@ func (o ops) updateAccount(ctx context.Context, in *socialAccountWrite) (*social
 // It removes the account record only. Posts that already published through it keep
 // their published state and their recorded external ids — this does not retract
 // anything from the network.
-func (o ops) deleteAccount(ctx context.Context, in *rowRef) (*struct{}, error) {
+func (o ops) deleteAccount(ctx context.Context, in *rowRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -483,7 +477,7 @@ func (o ops) updatePost(ctx context.Context, in *socialPostWrite) (*socialPost, 
 //
 // It deletes the record here only. A post that has already published is not
 // retracted from the network by deleting it.
-func (o ops) deletePost(ctx context.Context, in *rowRef) (*struct{}, error) {
+func (o ops) deletePost(ctx context.Context, in *rowRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

@@ -73,11 +73,6 @@ type ops struct{ s *cloud.Service[state] }
 // the plane, reached through pubsub.Bus.
 type state struct{}
 
-// noContent is the Out of an op that answers 204 with an empty body. An ALIAS
-// for the unnamed empty struct, not a definition: zip keys the response on 204
-// only when the Out type has no name.
-type noContent = struct{}
-
 // Mount registers the surface. There is nothing to start.
 func Use(app cloud.Router, deps cloud.Deps) error {
 	// A typed op is a route PLUS a registry entry, and the registry lives on
@@ -273,7 +268,7 @@ func bucketOf(ctx context.Context, org, name string) (jetstream.KeyValue, error)
 // DeleteBucket removes one bucket of the caller's org — every key and every
 // revision with it — and answers 204 with no body. 404 when the org has no
 // bucket of that name.
-func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*noContent, error) {
+func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*cloud.Unit, error) {
 	org, err := pubsub.Org(ctx)
 	if err != nil {
 		return nil, err
@@ -353,7 +348,7 @@ func (o ops) put(ctx context.Context, in *kvWrite) (*kvAck, error) {
 // Delete removes one key — a delete marker in the key's history, so watchers
 // see it and Get answers 404 — and answers 204 with no body. 404 when the
 // bucket does not exist.
-func (o ops) del(ctx context.Context, in *keyRef) (*noContent, error) {
+func (o ops) del(ctx context.Context, in *keyRef) (*cloud.Unit, error) {
 	org, err := pubsub.Org(ctx)
 	if err != nil {
 		return nil, err

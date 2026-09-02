@@ -356,7 +356,7 @@ func (o ops) getAudience(ctx context.Context, in *AudienceRef) (*Audience, error
 // deletes the saved filter only — no customer, event or enrollment is touched.
 //
 // Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
-func (o ops) deleteAudience(ctx context.Context, in *AudienceRef) (*struct{}, error) {
+func (o ops) deleteAudience(ctx context.Context, in *AudienceRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

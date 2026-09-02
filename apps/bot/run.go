@@ -187,9 +187,6 @@ type stopBotIn struct {
 	RunID string `json:"runId" url:"runId"`
 }
 
-// noArgs is the input of an op that takes none: no body, no query, no path param.
-type noArgs struct{}
-
 // Mount registers the whole /v1/bot surface: the run control plane, then the
 // relay. Order matters and specificity does not decide it for us — the run family
 // is static leaves and the relay is a greedy wildcard, so the wildcard goes last
@@ -297,7 +294,7 @@ func mountRuns(app cloud.Router, s *cloud.Service[executor]) {
 // it returns in the same change that can prove a bot boots — a runtime-side launch
 // operation first (TS, cross-repo), with the entitlement gate and the meter beside
 // it.
-func (o runOps) run(context.Context, *noArgs) (*struct{}, error) {
+func (o runOps) run(context.Context, *cloud.Unit) (*cloud.Unit, error) {
 	return nil, zip.Errorf(http.StatusNotImplemented,
 		"launching a bot is not implemented: the bot runtime exposes no launch operation, so cloud cannot start one")
 }
@@ -310,7 +307,7 @@ func (o runOps) run(context.Context, *noArgs) (*struct{}, error) {
 // runs. A runtime that cannot answer is an error, not an empty list: [] would tell
 // the caller "your org has no runs", which is a different claim from "we could not
 // ask", and the difference is the whole reason this endpoint exists.
-func (o runOps) list(ctx context.Context, _ *noArgs) (*BotRuns, error) {
+func (o runOps) list(ctx context.Context, _ *cloud.Unit) (*BotRuns, error) {
 	// principal.OrgFrom parks nothing unless the request carried a VALIDATED
 	// principal, so this single check is both gates the raw handler spelled out: a
 	// bare, forgeable X-Org-Id (the direct-to-pod path) never reaches here.

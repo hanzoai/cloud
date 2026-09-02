@@ -575,7 +575,7 @@ func provision(s *cloud.Service[state], ctx context.Context, store *Store, r Rep
 //		"cloneUrl": "https://api.hanzo.ai/v1/git/acme/widgets.git",
 //		"sshUrl": "git@git.hanzo.ai:acme/widgets.git", "sizeBytes": 4096,
 //		"createdAt": "2026-07-01T10:00:00Z"}]}
-func (o ops) listRepos(ctx context.Context, _ *noInput) (*repoList, error) {
+func (o ops) listRepos(ctx context.Context, _ *cloud.Unit) (*repoList, error) {
 	t, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err
@@ -614,7 +614,7 @@ func (o ops) getRepo(ctx context.Context, in *repoRef) (*repoView, error) {
 // is a 404, not a second delete.
 //
 // Example: {"name": "widgets"}
-func (o ops) deleteRepo(ctx context.Context, in *repoRef) (*noContent, error) {
+func (o ops) deleteRepo(ctx context.Context, in *repoRef) (*cloud.Unit, error) {
 	t, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err
@@ -662,7 +662,7 @@ type usageView struct {
 //	Response: {"org": "acme", "totalBytes": 12288,
 //		"repos": [{"name": "widgets", "sizeBytes": 4096},
 //			{"name": "site", "project": "web", "sizeBytes": 8192}]}
-func (o ops) usage(ctx context.Context, _ *noInput) (*usageView, error) {
+func (o ops) usage(ctx context.Context, _ *cloud.Unit) (*usageView, error) {
 	t, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err

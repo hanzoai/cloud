@@ -105,10 +105,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 // bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's own validated
-// principal: it takes nothing off the wire.
-type noInput struct{}
-
 // requireOrgAdmin is the mutation gate, and it is the ONE reason this package
 // reaches for the REQUEST. Approving a pairing or editing an allowlist decides
 // who may talk to the org's bots, so it takes admin of the org — which is
@@ -366,7 +362,7 @@ func askConnection(ctx context.Context, provider string) plane.Connection {
 // which are different problems with different fixes. Each entry carries the
 // connection behind it, so the answer to "why can I not post?" is in the same
 // response as the channel that cannot post.
-func (o ops) list(ctx context.Context, _ *noInput) (*chatChannels, error) {
+func (o ops) list(ctx context.Context, _ *cloud.Unit) (*chatChannels, error) {
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {
@@ -492,7 +488,7 @@ type pairingQueue struct {
 // "pairing" and who is not allowed yet. Each row carries the CODE an org admin
 // passes to POST /v1/channels/pairing/approve. Expired requests are not
 // returned. Codes are capability strings: they are shown here, and never logged.
-func (o ops) pairingList(ctx context.Context, _ *noInput) (*pairingQueue, error) {
+func (o ops) pairingList(ctx context.Context, _ *cloud.Unit) (*pairingQueue, error) {
 	s := o.s
 	org, err := principal.Acting(ctx)
 	if err != nil {

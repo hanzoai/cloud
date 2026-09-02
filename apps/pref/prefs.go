@@ -170,9 +170,6 @@ func routes(app cloud.Router, s *service) {
 // form cmd/zipdoc can lift prose from, so ops are methods and not closures.
 type prefsOps struct{ s *service }
 
-// noInput is the input of an op the URL fully addresses.
-type noInput struct{}
-
 // Shutdown releases the prefs store. Idempotent.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {
@@ -233,7 +230,7 @@ func (s *service) subjectFrom(ctx context.Context) (string, bool) {
 // SuperAdmin, because the subject is built from the validated credential and is the
 // mandatory predicate on the read. A caller who has never saved anything gets an
 // empty document at 200, never a 404, so the user menu always renders.
-func (o prefsOps) getPrefs(ctx context.Context, _ *noInput) (*prefsView, error) {
+func (o prefsOps) getPrefs(ctx context.Context, _ *cloud.Unit) (*prefsView, error) {
 	s := o.s
 	subject, ok := s.subjectFrom(ctx)
 	if !ok {

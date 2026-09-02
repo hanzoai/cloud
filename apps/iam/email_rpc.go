@@ -47,7 +47,7 @@ func exposeEmail() {
 // has not confirmed their address" is about a person, and "this principal is not
 // a person" is about the credential — and a caller that ever wants to tell them
 // apart should not have to guess which one it got.
-func email(ctx context.Context, _ *struct{}) (*plane.Email, error) {
+func email(ctx context.Context, _ *cloud.Unit) (*plane.Email, error) {
 	who := cloud.Who(ctx)
 	if who.User == "" {
 		return nil, zip.ErrUnauthorized("email: no subject on the call")

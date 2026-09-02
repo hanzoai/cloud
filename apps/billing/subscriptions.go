@@ -38,7 +38,7 @@ func mountSubscriptions(app cloud.Router, o ops) {
 // plan is an answer.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) subscriptions(ctx context.Context, _ *noInput) (*plane.Subscriptions, error) {
+func (o ops) subscriptions(ctx context.Context, _ *cloud.Unit) (*plane.Subscriptions, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err

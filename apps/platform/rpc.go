@@ -44,7 +44,7 @@ import (
 // board never shows a denial as an empty estate.
 func exposeFleet(s *cloud.Service[fleetState]) {
 	zip.Post[struct{}, plane.Fleet](cloud.Plane(), "/platform/fleet",
-		func(ctx context.Context, _ *struct{}) (*plane.Fleet, error) {
+		func(ctx context.Context, _ *cloud.Unit) (*plane.Fleet, error) {
 			// The input carries nothing and there is nothing for it to carry: every
 			// fact that decides WHICH namespaces are observed comes from the caller,
 			// so there is no field a caller could name a scope in.

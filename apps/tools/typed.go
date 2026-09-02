@@ -55,16 +55,6 @@ import (
 // applications of listBySource.
 type toolOps struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name, so a defined type here would publish
-// "200 with a body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // projectOf is principal.Project for a typed op: the org's sub-scope, from the
 // server-minted X-Project-Id. It needs the REQUEST because principal.OrgFrom
 // carries the org alone. Off the HTTP path it answers the default project, which

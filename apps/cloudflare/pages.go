@@ -8,6 +8,7 @@ package cloudflare
 // responses relay verbatim (no field loss).
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -113,10 +114,6 @@ type PagesProjectCreate struct {
 
 // ── handlers ────────────────────────────────────────────────────────────────────
 
-// noInput is the In of an op addressed entirely by the caller's principal: it takes
-// nothing off the wire.
-type noInput struct{}
-
 // projectRef addresses one Pages project by name, from the path.
 type projectRef struct {
 	// Project is the Pages project name.
@@ -124,7 +121,7 @@ type projectRef struct {
 }
 
 // PagesList lists the org's Cloudflare Pages projects. Any org member may read.
-func (o ops) pagesList(ctx context.Context, _ *noInput) (*cfResult, error) {
+func (o ops) pagesList(ctx context.Context, _ *cloud.Unit) (*cfResult, error) {
 	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
 		return nil, err
