@@ -214,8 +214,21 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// The channel surface: the same Chunter rooms the transactor serves, readable
 	// without speaking the transactor protocol, plus the one write that says what
 	// a channel is for. See channel.go.
-	channels := &roomBridge{trans: trans, accounts: accounts, ident: ident, degraded: degraded}
+	// The cross-org directory of published rooms (HIP-1327). It belongs to no
+	// org, so it opens in the system namespace beside the account store. A
+	// failure is LOGGED rather than fatal: discovery is worth having and is not
+	// worth taking the subsystem down for, and every method on it is nil-safe.
+	pub, err := openPublicIndex(root)
+	if err != nil {
+		log.Warn("open public index", "err", err)
+		pub = nil
+	}
+
+	channels := &roomBridge{trans: trans, accounts: accounts, ident: ident, public: pub, degraded: degraded}
 	channels.register(app)
+	// The directory read, registered separately because a typed op's prose is
+	// lifted from the file its group is built in.
+	channels.registerPublic(app)
 	// The conversation itself, on the same rooms. Registered separately because a
 	// typed op's prose is lifted from the file its group is built in.
 	channels.registerMessages(app)

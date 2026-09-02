@@ -485,6 +485,60 @@
         "x-public": true
       }
     },
+    "/v1/team/public": {
+      "get": {
+        "operationId": "get_team_public",
+        "summary": "Lists the rooms orgs have published, across every org.",
+        "description": "Lists the rooms orgs have published, across every org.\n\nIt is NOT part of GET /rooms, and the separation is the point: that address\nanswers the CALLER'S rooms, so folding these in would put strangers' channels\nin somebody's own sidebar.\n\nIt reads the directory and never a tenant's store. Every field it can answer\nwith is one an org published by making a room public, so there is nothing here\nto scope by org — a directory only its own org can read is not a directory.\nAn authenticated principal is still required, because an anonymous crawler is\nnot who this is for.",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Q matches a room's name or its topic.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "description": "Org narrows to one org's published rooms.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the page, 50 when unstated and 200 at most. An unparseable\nvalue reads as unstated rather than as zero — zero pages is not an answer\nanybody asked for.",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/publicRooms"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        },
+        "x-public": true,
+        "x-tool": true
+      }
+    },
     "/v1/team/rooms": {
       "get": {
         "operationId": "get_team_rooms",
@@ -806,6 +860,7 @@
         "properties": {
           "projected": {
             "description": "Projected is how many roster entries the reconcile touched.",
+            "format": "int64",
             "type": "integer"
           },
           "synced": {
@@ -880,6 +935,41 @@
         },
         "type": "object"
       },
+      "listed": {
+        "properties": {
+          "members": {
+            "description": "Members counts the room, and never names anybody in it.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is what a person sees, without the sigil a client draws.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org owns the room. It is also what a caller filters by to browse one org.",
+            "type": "string"
+          },
+          "room": {
+            "description": "Room addresses it in the owning store — what a join is called with.",
+            "type": "string"
+          },
+          "space": {
+            "description": "Space is where the room lives inside that org.",
+            "type": "string"
+          },
+          "topic": {
+            "description": "Topic is the room's one-line subject, empty when it has none.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is when this row was last written, unix seconds.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "planInfo": {
         "properties": {
           "active": {
@@ -888,10 +978,12 @@
           },
           "guestLimit": {
             "description": "GuestLimit is the plan's team.guests cap, when the plan carries one.",
+            "format": "int64",
             "type": "integer"
           },
           "guests": {
             "description": "Guests is how many of those seats are guests.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -900,11 +992,24 @@
           },
           "seats": {
             "description": "Seats is the org's distinct active human members.",
+            "format": "int64",
             "type": "integer"
           },
           "upgradeUrl": {
             "description": "UpgradeURL is where the page sends a caller who wants a bigger plan.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "publicRooms": {
+        "properties": {
+          "rooms": {
+            "description": "Rooms is every published room the query matched, newest-written first.",
+            "items": {
+              "$ref": "#/components/schemas/listed"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -959,6 +1064,7 @@
           },
           "createdOn": {
             "description": "CreatedOn is unix MILLIseconds, which is what the platform stamps.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {

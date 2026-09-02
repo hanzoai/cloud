@@ -103,7 +103,10 @@ type roomBridge struct {
 	// ident resolves a verified credential to the team account a WRITE is
 	// attributed to. The reads here scope by org alone; a message carries an
 	// author, and that is the one thing a caller may not choose. See message.go.
-	ident    *identity
+	ident *identity
+	// public is the cross-org directory (public.go). A room is published to it
+	// when it is opened public; a private one is never written there at all.
+	public   *publicIndex
 	degraded bool
 }
 
@@ -539,6 +542,13 @@ func (b *roomBridge) openRoom(ctx context.Context, in *teamRoomNew) (*teamRoom, 
 		return nil, zip.Errorf(http.StatusBadGateway, "team: room after open: %v", err)
 	}
 	v := roomOf(ws, after)
+	// A public room becomes findable from outside this org (HIP-1327). A private
+	// one is never written to the directory at all. Best-effort: the room IS
+	// open, and failing the create because a projection row did not land would
+	// lose the thing that matters in order to keep the index tidy.
+	if !in.Private {
+		b.publishRoom(org, ws, id, name, topic, len(members))
+	}
 	return &v, nil
 }
 
