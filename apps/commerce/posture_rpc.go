@@ -58,7 +58,7 @@ func exposePosture() {
 // a card that vaults and then cannot be charged.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeSettings(ctx context.Context, _ *struct{}) (*plane.PaymentConfig, error) {
+func planeSettings(ctx context.Context, _ *cloud.Unit) (*plane.PaymentConfig, error) {
 	org, err := orgOf(ctx, "settings")
 	if err != nil {
 		return nil, err

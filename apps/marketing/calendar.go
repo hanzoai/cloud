@@ -430,7 +430,7 @@ func (o ops) updateCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 // retracted from the network it went out on.
 //
 // Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
-func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*struct{}, error) {
+func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

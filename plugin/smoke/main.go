@@ -123,7 +123,7 @@ func main() {
 	base := flag.String("base", environ.Or("SMOKE_BASE_URL", ""), "base URL of the cloud API (e.g. http://127.0.0.1:8000)")
 	token := flag.String("token", environ.Or("SMOKE_TOKEN", ""), "bearer token for the authenticated matrix (optional)")
 	strict := flag.Bool("strict", environ.Or("SMOKE_STRICT", "") != "", "require authed reads to be 2xx with a token (fails on 401/403)")
-	timeoutSec := flag.Int("timeout", envInt("SMOKE_TIMEOUT", 15), "per-request timeout in seconds")
+	timeoutSec := flag.Int("timeout", environ.Int("SMOKE_TIMEOUT", 15), "per-request timeout in seconds")
 	flag.Parse()
 
 	if strings.TrimSpace(*base) == "" {
@@ -279,16 +279,6 @@ func report(results []result, baseURL string, hasToken, strict bool) {
 	} else {
 		fmt.Println("SMOKE PASS: every core subsystem returned a working code (no 402-on-read, no 5xx)")
 	}
-}
-
-func envInt(k string, def int) int {
-	if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-		var n int
-		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
-			return n
-		}
-	}
-	return def
 }
 
 // degradedPlanes asks /v1/health which subsystems mounted fail-closed. An empty

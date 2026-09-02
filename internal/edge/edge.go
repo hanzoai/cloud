@@ -23,28 +23,14 @@
 package edge
 
 import (
-	"os"
-	"strconv"
-	"strings"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // ReadBufferSize is the header ceiling. Above fiber's 4 KiB default so a
 // multi-domain SSO session (Domain=.hanzo.ai cookies on every subdomain) does
 // not 431 at the public edge. Env GATEWAY_READ_BUFFER_SIZE.
-func ReadBufferSize() int { return envInt("GATEWAY_READ_BUFFER_SIZE", 32768) }
+func ReadBufferSize() int { return environ.Int("GATEWAY_READ_BUFFER_SIZE", 32768) }
 
 // BodyLimit is the maximum request body a public edge accepts, in bytes.
 // Env GATEWAY_BODY_LIMIT.
-func BodyLimit() int { return envInt("GATEWAY_BODY_LIMIT", 16<<20) }
-
-func envInt(key string, dflt int) int {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return dflt
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n <= 0 {
-		return dflt
-	}
-	return n
-}
+func BodyLimit() int { return environ.Int("GATEWAY_BODY_LIMIT", 16<<20) }

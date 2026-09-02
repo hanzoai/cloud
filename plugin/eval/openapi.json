@@ -109,15 +109,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/none"
-                }
-              }
-            },
-            "description": "ok"
+          "204": {
+            "description": "no content"
           }
         },
         "x-public": true,
@@ -1183,10 +1176,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "none": {
-        "properties": {},
         "type": "object"
       },
       "runRecord": {

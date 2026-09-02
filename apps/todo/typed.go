@@ -29,10 +29,6 @@ import (
 // also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op that takes nothing off the wire — it is addressed
-// entirely by the caller's validated principal.
-type noInput struct{}
-
 // projectList is one org's todo projects, newest first. Empty is an empty
 // JSON array, never null.
 type projectList []todoProject

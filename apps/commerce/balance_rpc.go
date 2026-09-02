@@ -152,7 +152,7 @@ func exposeUsage() {
 // the flatten, a wire type promising precision the value had already lost.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeUsage(ctx context.Context, _ *struct{}) (*plane.UsageRows, error) {
+func planeUsage(ctx context.Context, _ *cloud.Unit) (*plane.UsageRows, error) {
 	org, err := callerOrg(ctx, "usage")
 	if err != nil {
 		return nil, err

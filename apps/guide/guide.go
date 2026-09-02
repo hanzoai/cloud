@@ -147,10 +147,6 @@ func seedBlueprints(ctx context.Context, store *BlueprintStore) (int, error) {
 // (o.overview), which is also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire.
-type noInput struct{}
-
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
 // zipdoc_gen.go, which is the ONLY way that prose reaches the published document
 // and the MCP tool list — Go drops comments at compile time. Run by `make describe`.
@@ -614,7 +610,7 @@ func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overvi
 // progress with the next step to take, and the org's analytics funnel folded in.
 // Auto-detect runs first, so a step the org has already completed elsewhere reads
 // done without anyone marking it.
-func (o ops) overview(ctx context.Context, _ *noInput) (*overviewView, error) {
+func (o ops) overview(ctx context.Context, _ *cloud.Unit) (*overviewView, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -646,7 +642,7 @@ type analyticsView struct {
 // what the funnel is doing, and the next-best action to move its weakest stage. An
 // unreachable or silent warehouse answers available=false, never a fabricated
 // number.
-func (o ops) analytics(ctx context.Context, _ *noInput) (*analyticsView, error) {
+func (o ops) analytics(ctx context.Context, _ *cloud.Unit) (*analyticsView, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -685,7 +681,7 @@ type profileResponse struct {
 // runs a billable effect, never targets another org. Org-scoped on the validated
 // principal; fail-closed without one. It PRODUCES the profile and classifies the
 // stage; it decides NO recommendation (that is a later surface).
-func (o ops) profile(ctx context.Context, _ *noInput) (*profileResponse, error) {
+func (o ops) profile(ctx context.Context, _ *cloud.Unit) (*profileResponse, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -719,7 +715,7 @@ type curriculumView struct {
 // GetCurriculum returns the journey the caller's org is actually running, and
 // whether it comes from the org's OWN override (custom) or from the platform
 // default — the brand blueprint, else the embedded fixture.
-func (o ops) getCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
+func (o ops) getCurriculum(ctx context.Context, _ *cloud.Unit) (*curriculumView, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -767,7 +763,7 @@ func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 // DeleteCurriculum clears the caller org's curriculum override and returns the
 // journey it falls back to — the brand blueprint, else the embedded fixture.
 // Clearing an org that never set one is a no-op that answers the same default.
-func (o ops) deleteCurriculum(ctx context.Context, _ *noInput) (*curriculumView, error) {
+func (o ops) deleteCurriculum(ctx context.Context, _ *cloud.Unit) (*curriculumView, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -795,7 +791,7 @@ type actionsView struct {
 // first: every "do it for me" tool call, the arguments it ran with, its result and
 // whether it succeeded. It is the audit-visible record of what the agent did on
 // the org's behalf, and the backing state for the "acted" auto-detect signal.
-func (o ops) listActions(ctx context.Context, _ *noInput) (*actionsView, error) {
+func (o ops) listActions(ctx context.Context, _ *cloud.Unit) (*actionsView, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

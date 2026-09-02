@@ -216,7 +216,7 @@ func TestTypedReadsFailClosedWithoutAPrincipal(t *testing.T) {
 func TestTypedReadsRefuseOffTheHTTPPath(t *testing.T) {
 	s, _ := newTestService(t, "sql")
 	o := ops{s}
-	if _, err := o.listSQL(t.Context(), &noInput{}); err == nil {
+	if _, err := o.listSQL(t.Context(), &cloud.Unit{}); err == nil {
 		t.Error("listSQL with no request answered instead of refusing")
 	}
 	if _, err := o.getSQL(t.Context(), &resourceRef{Name: "orders"}); err == nil {

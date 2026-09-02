@@ -149,10 +149,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) error {
 // also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's own validated
-// principal: it takes nothing off the wire.
-type noInput struct{}
-
 // actor is the AUDIT SUBJECT for a typed op: the validated user id the
 // tamper-evident trail attributes a wallet action to. It is X-User-Id, which
 // principal.OrgFrom does not carry, so this is one of the two facts this package
@@ -422,7 +418,7 @@ func (o ops) createAccount(ctx context.Context, in *createAccountIn) (*WalletAcc
 
 // listAccounts returns the caller org's wallet accounts, newest first. Accounts
 // are physically org-scoped, so another tenant's are not reachable from here.
-func (o ops) listAccounts(ctx context.Context, _ *noInput) (*accountList, error) {
+func (o ops) listAccounts(ctx context.Context, _ *cloud.Unit) (*accountList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

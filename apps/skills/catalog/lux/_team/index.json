@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.lux.network/v1/mcp"
   },
-  "skill_count": 7,
+  "skill_count": 8,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at lux.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -45,6 +45,13 @@
       "path": "team_files/SKILL.md",
       "service": "team",
       "sha256": "f7f4677021fb025316314df3ba664bdc9f09f80ac5bef34012e4cecc75cc1fba"
+    },
+    {
+      "description": "Read team public: Lists the rooms orgs have published, across every org..",
+      "name": "team_public",
+      "path": "team_public/SKILL.md",
+      "service": "team",
+      "sha256": "c95b7ffaf2dd79b860851c034d02afeda17835b739dc9c4bcf38073bb52e52c2"
     },
     {
       "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries., Returns the tail of one room's conversation, oldest first..",

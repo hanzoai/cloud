@@ -308,7 +308,7 @@ type githubInstallationsOut struct {
 // never the question.
 //
 // Response: {"installations":[{"login":"hanzoai","type":"Organization","connected":true,"htmlUrl":"https://github.com/hanzoai","grant":"all"}],"installUrl":"https://github.com/apps/hanzo/installations/new"}
-func (o ops) githubInstallations(ctx context.Context, _ *noArgs) (*githubInstallationsOut, error) {
+func (o ops) githubInstallations(ctx context.Context, _ *cloud.Unit) (*githubInstallationsOut, error) {
 	org, err := authed(ctx, principalRequired)
 	if err != nil {
 		return nil, err
@@ -603,7 +603,7 @@ type githubReposOut struct {
 // polls it to watch an import flip a repo to imported.
 //
 // Response: {"repos":[{"name":"widgets","fullName":"acme/widgets","private":true,"defaultBranch":"main","imported":true,"syncStatus":"synced","lastSyncedAt":"2026-07-01T10:00:00Z","htmlUrl":"https://github.com/acme/widgets"}]}
-func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error) {
+func (o ops) githubRepos(ctx context.Context, _ *cloud.Unit) (*githubReposOut, error) {
 	org, err := authed(ctx, principalRequired)
 	if err != nil {
 		return nil, err

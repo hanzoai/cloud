@@ -65,7 +65,7 @@ func init() {
 // against another is a card that saves and then cannot be used.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) settings(ctx context.Context, _ *noInput) (*plane.PaymentConfig, error) {
+func (o ops) settings(ctx context.Context, _ *cloud.Unit) (*plane.PaymentConfig, error) {
 	org, err := principalOrg(ctx)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (o ops) settings(ctx context.Context, _ *noInput) (*plane.PaymentConfig, er
 // anywhere to find.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) tier(ctx context.Context, _ *noInput) (*plane.Tier, error) {
+func (o ops) tier(ctx context.Context, _ *cloud.Unit) (*plane.Tier, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (o ops) tier(ctx context.Context, _ *noInput) (*plane.Tier, error) {
 // number anyone holds, and a reader that formed it would be inventing a balance.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) rollup(ctx context.Context, _ *noInput) (*plane.Rollup, error) {
+func (o ops) rollup(ctx context.Context, _ *cloud.Unit) (*plane.Rollup, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err

@@ -32,6 +32,16 @@ struct planInfo {
     UpgradeURL text @40
 }
 
+struct publicQuery {
+    Q     text @0
+    Org   text @8
+    Limit i64  @16
+}
+
+struct publicRooms {
+    Rooms list<bytes> @0
+}
+
 struct statsIn {
     Token text @0
 }
@@ -134,6 +144,16 @@ interface team {
     # Person reference the roster addresses it by. An agents subsystem that is not
     # mounted answers an empty list, never an error.
     get_team_bots() returns (rep: botRoster)
+    # Lists the rooms orgs have published, across every org.
+    # It is NOT part of GET /rooms, and the separation is the point: that address
+    # answers the CALLER'S rooms, so folding these in would put strangers' channels
+    # in somebody's own sidebar.
+    # It reads the directory and never a tenant's store. Every field it can answer
+    # with is one an org published by making a room public, so there is nothing here
+    # to scope by org — a directory only its own org can read is not a directory.
+    # An authenticated principal is still required, because an anonymous crawler is
+    # not who this is for.
+    get_team_public(req: publicQuery) returns (rep: publicRooms)
     # Returns every room of the caller's org, across the spaces
     # it owns, with the work facet each carries.
     # It reads the SAME Chunter documents the transactor serves, so a room opened
@@ -179,14 +199,15 @@ interface team {
 }
 
 # ---------------------------------------------------------------------
-# 11 op(s) here. What follows is what this schema does not carry.
+# 12 op(s) here. What follows is what this schema does not carry.
 #
 # blocked (3) — the op is absent; the field has no wire form:
 #   get_team_transactor_statistics  statsOut.Statistics  team.statsSessions  (reaches one)
 #   post_team_collaborator_rpc_by_documentid  collabRequest.Payload  team.collabPayload  (reaches one)
 #   post_team_collaborator_rpc_by_documentid  collabResult.Content  map[string]string  (map)
 #
-# opaque (3) — crosses, arrives without its name:
+# opaque (4) — crosses, arrives without its name:
 #   botRoster.Bots  team.botMember (list element)
+#   publicRooms.Rooms  team.listed (list element)
 #   teamMessages.Messages  team.teamMessage (list element)
 #   teamRooms.Rooms  team.teamRoom (list element)

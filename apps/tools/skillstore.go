@@ -7,9 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 )
 
 // Org-authored skills.
@@ -59,11 +57,10 @@ type SkillStore struct {
 
 // OpenSkillStore opens (and migrates) the authored-skill store under dir.
 func OpenSkillStore(dir string) (*SkillStore, error) {
-	db, err := cek.Open(namespace.System(), "tools-skills", dir)
+	db, err := sqlpool.Open("tools-skills", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open skill store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &SkillStore{db: db}
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS skills (

@@ -161,7 +161,7 @@ type releaseBoard struct {
 // An environment is DERIVED, not stored: there is nothing to create or delete here,
 // and an environment exists exactly as long as an app points at it. Requires a
 // validated principal; 403 without one.
-func (o ops) listEnvironments(ctx context.Context, _ *noInput) (*environmentBoard, error) {
+func (o ops) listEnvironments(ctx context.Context, _ *cloud.Unit) (*environmentBoard, error) {
 	s := o.s
 	_, org, err := o.caller(ctx)
 	if err != nil {
@@ -224,7 +224,7 @@ func (o ops) listEnvironments(ctx context.Context, _ *noInput) (*environmentBoar
 // it took. A pipeline is a PROJECTION of an app plus its newest deployment, not a
 // separate record: it comes into existence with the app and is triggered only
 // through /deploy, never here. Requires a validated principal; 403 without one.
-func (o ops) listPipelines(ctx context.Context, _ *noInput) (*pipelineBoard, error) {
+func (o ops) listPipelines(ctx context.Context, _ *cloud.Unit) (*pipelineBoard, error) {
 	s := o.s
 	_, org, err := o.caller(ctx)
 	if err != nil {
@@ -274,7 +274,7 @@ func (o ops) listPipelines(ctx context.Context, _ *noInput) (*pipelineBoard, err
 // here because one ran, never because a page needed a row. Builds are created only
 // by /deploy and the push-to-deploy hook. Requires a validated principal; 403
 // without one.
-func (o ops) listBuilds(ctx context.Context, _ *noInput) (*buildBoard, error) {
+func (o ops) listBuilds(ctx context.Context, _ *cloud.Unit) (*buildBoard, error) {
 	s := o.s
 	_, org, err := o.caller(ctx)
 	if err != nil {
@@ -325,7 +325,7 @@ func (o ops) listBuilds(ctx context.Context, _ *noInput) (*buildBoard, error) {
 // they were released. A deployment that failed or is still building is NOT a
 // release and is excluded — reaching the cluster is what makes one. Requires a
 // validated principal; 403 without one.
-func (o ops) listReleases(ctx context.Context, _ *noInput) (*releaseBoard, error) {
+func (o ops) listReleases(ctx context.Context, _ *cloud.Unit) (*releaseBoard, error) {
 	s := o.s
 	_, org, err := o.caller(ctx)
 	if err != nil {

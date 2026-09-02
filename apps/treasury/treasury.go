@@ -245,7 +245,7 @@ type ops struct{ s *cloud.Service[state] }
 // (A named function, not the closure it replaced: zipdoc harvests the doc comment
 // of the HANDLER, and a function literal has none, so this op used to register
 // with an empty description on every projection that reads one.)
-func planeReserve(ctx context.Context, _ *struct{}) (*plane.Reserved, error) {
+func planeReserve(ctx context.Context, _ *cloud.Unit) (*plane.Reserved, error) {
 	if !cloud.Who(ctx).Admin {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
@@ -260,10 +260,6 @@ func planeReserve(ctx context.Context, _ *struct{}) (*plane.Reserved, error) {
 	}
 	return &plane.Reserved{Amount: plane.Amount(money.FromUSD(cents))}, nil
 }
-
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
 
 // admin is the request the SuperAdmin surface runs on. A typed op receives a
 // context and nothing else, so the platform-sudo bit and the caller's org — both
@@ -285,7 +281,7 @@ func admin(ctx context.Context) (*zip.Ctx, error) {
 // author can see that the pool backing their payouts is solvent — and NOT per-org
 // money, which is the customer's own commerce balance at /v1/billing/balance. The
 // policy is read-only here; only a SuperAdmin sets it.
-func (o ops) myTreasury(ctx context.Context, _ *noInput) (*ledger.TreasuryReport, error) {
+func (o ops) myTreasury(ctx context.Context, _ *cloud.Unit) (*ledger.TreasuryReport, error) {
 	if _, ok := principal.OrgFrom(ctx); !ok {
 		return nil, zip.ErrForbidden("sign in to view the treasury")
 	}
@@ -335,9 +331,9 @@ type accountsOut struct {
 // a tenant has ledger postings.
 func (o ops) myAccounts(ctx context.Context, in *accountsIn) (*accountsOut, error) {
 	c, hasReq := cloud.Request(ctx)
-	tenant, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view accounts")
+	tenant, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	prefix := "org:" + tenant + ":"
 	scope := "org"

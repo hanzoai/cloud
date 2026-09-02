@@ -1,9 +1,9 @@
 package company
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -91,21 +91,6 @@ type Options struct {
 	AgentOfRecord bool `json:"agentOfRecord,omitempty"`
 }
 
-// envCents reads an ops-configured amount. Absent and malformed are the same
-// answer — not configured — because a fee that parses as zero because someone
-// typed "$149" would file a company for free and look deliberate.
-func envCents(key string) (int64, bool) {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n < 0 {
-		return 0, false
-	}
-	return n, true
-}
-
 // StateFee is a jurisdiction's filing fee AND the receipt for where it came from.
 type StateFee struct {
 	// AmountCents is what that state charges to file.
@@ -140,7 +125,7 @@ var stateFees = map[Jurisdiction][]StateFee{
 // this deployment was told is not a figure anyone here checked — saying otherwise
 // would launder a local value as a verified one.
 func stateFee(s Structure, j Jurisdiction) (StateFee, bool) {
-	if n, ok := envCents("CLOUD_COMPANY_STATE_FEE_CENTS_" + strings.ToUpper(string(j))); ok {
+	if n, ok := environ.Cents("CLOUD_COMPANY_STATE_FEE_CENTS_" + strings.ToUpper(string(j))); ok {
 		return StateFee{AmountCents: n, Source: "deployment override", AsOf: ""}, true
 	}
 	rows, ok := stateFees[j]
@@ -181,7 +166,7 @@ func (f StateFee) Stale(now time.Time) bool {
 
 // agentFeeCents is what we charge to be the agent of record, per year.
 func agentFeeCents() int64 {
-	if n, ok := envCents("CLOUD_COMPANY_AGENT_FEE_CENTS"); ok {
+	if n, ok := environ.Cents("CLOUD_COMPANY_AGENT_FEE_CENTS"); ok {
 		return n
 	}
 	return defaultAgentFeeCents
@@ -189,7 +174,7 @@ func agentFeeCents() int64 {
 
 // expeditedEINFeeCents is what we charge to prioritise the EIN.
 func expeditedEINFeeCents() int64 {
-	if n, ok := envCents("CLOUD_COMPANY_EXPEDITED_EIN_FEE_CENTS"); ok {
+	if n, ok := environ.Cents("CLOUD_COMPANY_EXPEDITED_EIN_FEE_CENTS"); ok {
 		return n
 	}
 	return defaultExpeditedEINFeeCents

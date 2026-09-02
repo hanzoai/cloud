@@ -245,16 +245,6 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 // — also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name, so a defined type here would publish
-// "200 with a body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // kitRef addresses one starter kit. The slug is the path segment: the URL is the
 // addressing authority, so it binds from there whatever a body says.
 type kitRef struct {
@@ -360,7 +350,7 @@ func (in replaceKitIn) kit() StarterKit {
 // org's own private kits. No request field can widen the scope: the org comes
 // from the validated principal, so an anonymous or cross-org caller structurally
 // sees the public catalog only.
-func (o ops) browse(ctx context.Context, _ *noInput) (*kitList, error) {
+func (o ops) browse(ctx context.Context, _ *cloud.Unit) (*kitList, error) {
 	cat, err := catalog()
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "templates: %v", err)
@@ -416,7 +406,7 @@ func (o ops) replace(ctx context.Context, in *replaceKitIn) (*StarterKit, error)
 // 404, never a delete: the DELETE binds org.
 //
 // Example: {"slug": "acme-portal"}
-func (o ops) remove(ctx context.Context, in *kitRef) (*noContent, error) {
+func (o ops) remove(ctx context.Context, in *kitRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

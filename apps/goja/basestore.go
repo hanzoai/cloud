@@ -1,13 +1,12 @@
 package goja
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"container/list"
 	"context"
 	"database/sql"
 	"encoding/base32"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -111,8 +110,8 @@ func newStores(name, dataDir, schema string, onOpen func(context.Context, string
 		dataDir: dataDir,
 		schema:  schema,
 		onOpen:  onOpen,
-		maxOpen: envInt("CLOUD_GOJABASE_MAX_DBS", defaultMaxOpen),
-		idleTTL: time.Duration(envInt("CLOUD_GOJABASE_IDLE_TTL_SEC", int(defaultIdleTTL/time.Second))) * time.Second,
+		maxOpen: environ.Int("CLOUD_GOJABASE_MAX_DBS", defaultMaxOpen),
+		idleTTL: time.Duration(environ.Int("CLOUD_GOJABASE_IDLE_TTL_SEC", int(defaultIdleTTL/time.Second))) * time.Second,
 		m:       make(map[namespace.Namespace]*entry),
 		lru:     list.New(),
 	}
@@ -260,18 +259,4 @@ func (s *stores) closeAll() error {
 	s.m = make(map[namespace.Namespace]*entry)
 	s.lru.Init()
 	return firstErr
-}
-
-// envInt reads a positive int env override, falling back to dflt when unset or
-// unparseable (a malformed override can never silently zero a pool bound).
-func envInt(key string, dflt int) int {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return dflt
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 1 {
-		return dflt
-	}
-	return n
 }

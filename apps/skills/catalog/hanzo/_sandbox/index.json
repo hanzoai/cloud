@@ -23,7 +23,7 @@
       "name": "sandbox_sandbox",
       "path": "sandbox_sandbox/SKILL.md",
       "service": "sandbox",
-      "sha256": "6fa552bcf94a66e412bf5b1e3e09ce41b4de18dc0e09e79ed3ad4ba72351a1ff"
+      "sha256": "194860766c1dfe19a998469da0fdcb10334c63d30051971f12393c2d51a44321"
     },
     {
       "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",

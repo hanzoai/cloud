@@ -79,12 +79,6 @@ type state struct {
 // with nothing to read.
 type ops struct{ *cloud.Service[state] }
 
-// noArgs is the input of an op that takes nothing — a collection read scoped
-// entirely by the validated principal. It is one type because "no input" is one
-// thing, and it never reaches the spec: a bodyless method's In is projected only
-// as its query parameters, and this has none.
-type noArgs struct{}
-
 // scope is the two facts every op here opens with: the REQUEST behind the typed
 // context and the VALIDATED tenant org.
 //
@@ -424,7 +418,7 @@ type machineList struct {
 // wedged upstream must not hide the machines the other sources can see.
 //
 // Response: {"machines":[{"id":"web-1","name":"Web 1","region":"sfo3","type":"s-2vcpu-4gb","status":"running","provider":"digitalocean","publicIp":"1.2.3.4","vcpu":2,"mem":"4 GB"}]}
-func (o ops) listMachines(ctx context.Context, _ *noArgs) (*machineList, error) {
+func (o ops) listMachines(ctx context.Context, _ *cloud.Unit) (*machineList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -475,14 +469,14 @@ func (o ops) getMachine(ctx context.Context, in *machineRef) (*machineView, erro
 // The catalog is GLOBAL — identical for every tenant — so no owner is forwarded
 // upstream. It is still org-gated, because a catalog is a map of what this
 // deployment can spend money in and an anonymous caller has no business reading it.
-func (o ops) regions(ctx context.Context, _ *noArgs) (*catalogList, error) {
+func (o ops) regions(ctx context.Context, _ *cloud.Unit) (*catalogList, error) {
 	return o.catalog(ctx, "/v1/regions")
 }
 
 // Sizes lists the machine sizes available to launch, with their specifications.
 //
 // Global and org-gated, exactly as the region catalog is, and for the same reasons.
-func (o ops) sizes(ctx context.Context, _ *noArgs) (*catalogList, error) {
+func (o ops) sizes(ctx context.Context, _ *cloud.Unit) (*catalogList, error) {
 	return o.catalog(ctx, "/v1/sizes")
 }
 
@@ -642,7 +636,7 @@ func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toMachineView(wrap.Machine))
 }
 
-// Every delete here answers 204 and returns *struct{} to say so: zip writes 204
+// Every delete here answers 204 and returns *cloud.Unit to say so: zip writes 204
 // for a nil Out, and an ANONYMOUS struct has no name for the spec to $ref — which
 // is what makes the document state "204 no content" instead of promising a body.
 // (This paragraph is deliberately NOT part of the doc comment below: zipdoc lifts
@@ -668,7 +662,7 @@ func pool(org, name string) string {
 // deleteMachine terminates one of the caller org's machines. Visor takes the
 // machine identity as owner+name, and the owner is the validated principal, so a
 // caller can only ever terminate its own tenant's machine. Answers 204.
-func (o ops) deleteMachine(ctx context.Context, in *machineRef) (*struct{}, error) {
+func (o ops) deleteMachine(ctx context.Context, in *machineRef) (*cloud.Unit, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -709,7 +703,7 @@ type gpuAlertList struct {
 // none — an honest omission the console renders as "—", never a fabricated 0.
 //
 // Response: {"gpus":[{"id":"gpu-1#0","name":"gpu-1","model":"H100","region":"nyc2","status":"running","machine":"gpu-1","provider":"digitalocean"}]}
-func (o ops) listGPUs(ctx context.Context, _ *noArgs) (*gpuList, error) {
+func (o ops) listGPUs(ctx context.Context, _ *cloud.Unit) (*gpuList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -734,7 +728,7 @@ func (o ops) listGPUs(ctx context.Context, _ *noArgs) (*gpuList, error) {
 // "no alerts", the same discipline the rest of the surface follows.
 //
 // Response: {"alerts":[]}
-func (o ops) gpuAlerts(ctx context.Context, _ *noArgs) (*gpuAlertList, error) {
+func (o ops) gpuAlerts(ctx context.Context, _ *cloud.Unit) (*gpuAlertList, error) {
 	if _, _, err := scope(ctx); err != nil {
 		return nil, err
 	}
@@ -762,7 +756,7 @@ type clusterList struct {
 // page that shows what it can.
 //
 // Response: {"clusters":[{"doksClusterId":"cl-1","name":"prod","status":"running","nodePools":[{"poolId":"p-1","name":"gpu","size":"gpu-h100x8-640gb","count":2}],"nodeSize":"gpu-h100x8-640gb","nodeCount":2,"kind":"managed"}]}
-func (o ops) listClusters(ctx context.Context, _ *noArgs) (*clusterList, error) {
+func (o ops) listClusters(ctx context.Context, _ *cloud.Unit) (*clusterList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -896,7 +890,7 @@ type poolRef struct {
 // deletePool removes a node pool from one of the caller org's clusters. The owner
 // scopes the delete to the caller's tenant; provider+clusterId drive the
 // provider-side removal. Answers 204.
-func (o ops) deletePool(ctx context.Context, in *poolRef) (*struct{}, error) {
+func (o ops) deletePool(ctx context.Context, in *poolRef) (*cloud.Unit, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err

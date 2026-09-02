@@ -33,15 +33,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// none/ok are the smallest typed op there is. A TYPED op is the point: it
-// registers through OpScope rather than through a route method, which is the
-// path that dropped the prefix and the reason a group's node is empty.
-type none struct{}
 type ok struct {
 	OK bool `json:"ok"`
 }
 
-func okOp(context.Context, *none) (*ok, error) { return &ok{OK: true}, nil }
+func okOp(context.Context, *cloud.Unit) (*ok, error) { return &ok{OK: true}, nil }
 
 // patterns is the COMPOSED route table — what the program will actually answer,
 // asked of the program rather than of the registrations that built it.

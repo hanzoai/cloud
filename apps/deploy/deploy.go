@@ -393,7 +393,7 @@ func (h *deployHealth) StatusCode() int {
 // and never the underlying error, because the route is unauthenticated — liveness
 // must be probe-able without a token — and a raw client error can disclose the
 // apiserver address or an RBAC detail. That detail is logged server-side instead.
-func (o ops) health(ctx context.Context, _ *noInput) (*deployHealth, error) {
+func (o ops) health(ctx context.Context, _ *cloud.Unit) (*deployHealth, error) {
 	yes, no := true, false
 	if o.s.State.dyn == nil {
 		o.s.Log.Warn("deploy health: kubernetes client unavailable", "err", o.s.State.initErr)

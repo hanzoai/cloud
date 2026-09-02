@@ -37,7 +37,7 @@ func mountAlerts(app cloud.Router, o ops) {
 		zip.WithStatus(http.StatusCreated))
 	zip.Patch(zapp, "/v1/billing/alerts/:id", o.amendAlert)
 	// Registered on the app rather than beside its siblings because it answers
-	// commerce's own 204: a typed op declaring `*struct{}` writes the empty body
+	// commerce's own 204: a typed op declaring `*cloud.Unit` writes the empty body
 	// this address has always written, and the prose the document carries for it
 	// is declared below rather than lifted off the handler.
 	zip.Delete(cloud.ZipApp(app), "/v1/billing/alerts/:id", o.dropAlert)
@@ -102,7 +102,7 @@ type caps []plane.Alert
 // again, so a surface can say "resets on" without a second call.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) alerts(ctx context.Context, _ *noInput) (*caps, error) {
+func (o ops) alerts(ctx context.Context, _ *cloud.Unit) (*caps, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err

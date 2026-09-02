@@ -1,6 +1,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"errors"
 	"net/http"
@@ -106,7 +107,7 @@ type keyRef struct {
 //	Response: {"data": [{"id": "gitkey_4a1b", "title": "laptop",
 //		"publicKey": "ssh-ed25519 AAAAC3Nz…", "fingerprint": "SHA256:9pQ…",
 //		"createdAt": "2026-07-01T10:00:00Z"}]}
-func (o ops) listKeys(ctx context.Context, _ *noInput) (*keyList, error) {
+func (o ops) listKeys(ctx context.Context, _ *cloud.Unit) (*keyList, error) {
 	t, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err
@@ -127,7 +128,7 @@ func (o ops) listKeys(ctx context.Context, _ *noInput) (*keyList, error) {
 // with no body. Once removed the key no longer authenticates any SSH git access.
 //
 // Example: {"id": "gitkey_4a1b"}
-func (o ops) deleteKey(ctx context.Context, in *keyRef) (*noContent, error) {
+func (o ops) deleteKey(ctx context.Context, in *keyRef) (*cloud.Unit, error) {
 	t, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err

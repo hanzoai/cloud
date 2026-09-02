@@ -342,10 +342,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // second place for the same binding to be got wrong.
 type readOps struct{ s *cloud.Service[state] }
 
-// noArgs is the In of an op that takes nothing off the wire at all. ONE of these for
-// the package: an op with no input has no input to describe twice.
-type noArgs struct{}
-
 // windowQuery is the [start,end) window the warehouse lenses read from the URL. It
 // is the SAME grammar hanzoai/types.ParseWindow gives the console, so analytics and
 // the Overview module cannot disagree about what "7d" means.
@@ -832,7 +828,7 @@ func (r *healthReport) StatusCode() int {
 // Unauthenticated on purpose — liveness has to be probe-able — and it reads NO
 // tenant data: table existence and stream presence only, never a row and never an
 // event.
-func (o readOps) health(ctx context.Context, _ *noArgs) (*healthReport, error) {
+func (o readOps) health(ctx context.Context, _ *cloud.Unit) (*healthReport, error) {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 

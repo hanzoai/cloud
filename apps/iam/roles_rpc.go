@@ -39,7 +39,7 @@ func exposeRoles() {
 // It fails closed on a store that is not open: this process owns the store, so a
 // nil handle is a boot-order fault, and an empty set would read as a member with
 // no grants — a refusal the caller would blame on their own permissions.
-func roles(ctx context.Context, _ *struct{}) (*plane.Roles, error) {
+func roles(ctx context.Context, _ *cloud.Unit) (*plane.Roles, error) {
 	who := cloud.Who(ctx)
 	if who.Org == "" || who.User == "" {
 		return nil, zip.ErrUnauthorized("roles: no caller on the call")

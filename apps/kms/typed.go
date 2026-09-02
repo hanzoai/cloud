@@ -108,10 +108,6 @@ func (o ops) admit(ctx context.Context, need cloud.Scope) (string, error) {
 
 // ---- models ----------------------------------------------------------------
 
-// noInput is the In of an op that takes nothing off the wire at all: the health
-// probe and the console's pre-login config are addressed by their path alone.
-type noInput struct{}
-
 // kmsHealth is the broker's readiness report — its configuration state, and
 // nothing about any tenant or any key.
 type kmsHealth struct {
@@ -295,7 +291,7 @@ type kmsRef struct {
 // Not token-gated, because the platform must be able to probe it without a
 // credential. It reports the broker's configuration state only; no secret, no
 // key material and no tenant name appears in it.
-func (o ops) health(_ context.Context, _ *noInput) (*kmsHealth, error) {
+func (o ops) health(_ context.Context, _ *cloud.Unit) (*kmsHealth, error) {
 	out := &kmsHealth{Service: "kms", Status: "ok"}
 	if o.s.State.kms == nil {
 		out.Status, out.Ready = "degraded", false
@@ -323,7 +319,7 @@ func (o ops) health(_ context.Context, _ *noInput) (*kmsHealth, error) {
 // under this subsystem's own namespace rather than under an admin prefix, so a
 // gateway that admin-gates the admin routes cannot break the console's
 // legitimate pre-login fetch.
-func (o ops) config(_ context.Context, _ *noInput) (*kmsConfig, error) {
+func (o ops) config(_ context.Context, _ *cloud.Unit) (*kmsConfig, error) {
 	return &kmsConfig{
 		APIBase:   prefix,
 		Brand:     o.s.State.brand,

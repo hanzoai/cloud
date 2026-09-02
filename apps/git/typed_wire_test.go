@@ -1,6 +1,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud"
 	"bytes"
 	"context"
 	"io"
@@ -522,7 +523,7 @@ func probeApp(t *testing.T) *zip.App {
 // — delete the untypedByDesign entry and this test with it.
 func TestATypedTombstoneWouldRefuseABodyItAnswersToday(t *testing.T) {
 	app := probeApp(t)
-	zip.Post(app.Group("/v1/probe"), "/webhook", func(context.Context, *noInput) (*noContent, error) {
+	zip.Post(app.Group("/v1/probe"), "/webhook", func(context.Context, *cloud.Unit) (*cloud.Unit, error) {
 		return nil, zip.Errorf(http.StatusGone, "gone")
 	})
 
@@ -580,7 +581,7 @@ func TestTheHTMLPagesCannotBeTypedOps(t *testing.T) {
 	type page struct {
 		HTML string `json:"html"`
 	}
-	zip.Get(app.Group("/v1/probe"), "/:org/:repo/tree/*", func(context.Context, *noInput) (*page, error) {
+	zip.Get(app.Group("/v1/probe"), "/:org/:repo/tree/*", func(context.Context, *cloud.Unit) (*page, error) {
 		return &page{HTML: "<!doctype html><title>tree</title>"}, nil
 	})
 
@@ -608,7 +609,7 @@ func TestTheHTMLPagesCannotBeTypedOps(t *testing.T) {
 // op in the fleet is unpublishable and this app publishes nothing at all.
 func TestTheWildcardNoLongerRefusesTheDocument(t *testing.T) {
 	app := probeApp(t)
-	zip.Get(app.Group("/v1/probe"), "/:org/:repo/tree/*", func(context.Context, *noInput) (*noContent, error) {
+	zip.Get(app.Group("/v1/probe"), "/:org/:repo/tree/*", func(context.Context, *cloud.Unit) (*cloud.Unit, error) {
 		return nil, nil
 	})
 	doc, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})

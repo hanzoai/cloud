@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -67,7 +68,7 @@ var starterCatalog = sync.OnceValues(func() ([]CatalogEntry, error) {
 // explicitly imports a starter, which is an ordinary POST /v1/prompt. Entries that
 // would fail the create guards are dropped, so everything offered here can actually
 // be imported.
-func (o promptOps) catalog(_ context.Context, _ *noInput) (*catalogList, error) {
+func (o promptOps) catalog(_ context.Context, _ *cloud.Unit) (*catalogList, error) {
 	entries, err := starterCatalog()
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)

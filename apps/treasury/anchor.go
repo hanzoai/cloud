@@ -185,7 +185,7 @@ func (a *anchorer) status(ctx context.Context, b rooted) anchorStatus {
 // wiring step and records nothing false. A submit that fails still answers 200
 // with the anchor's own status set to "error" — the attempt is the product.
 // SuperAdmin only.
-func (o ops) adminAnchor(ctx context.Context, _ *noInput) (*anchorOut, error) {
+func (o ops) adminAnchor(ctx context.Context, _ *cloud.Unit) (*anchorOut, error) {
 	if _, err := admin(ctx); err != nil {
 		return nil, err
 	}

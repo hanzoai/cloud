@@ -261,9 +261,9 @@ type myReferrals struct {
 // O(1) reverse lookup; it carries no money, no referral state and no other tenant.
 func (o referralOps) mine(ctx context.Context, _ *noIn) (*myReferrals, error) {
 	s := o.s
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view referrals")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	code, err := s.State.store.EnsureCode(ctx, org)
@@ -354,9 +354,9 @@ func (o referralOps) claim(ctx context.Context, body *claimRequest) (*claimView,
 		return nil, err
 	}
 	s := o.s
-	refereeOrg, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to claim a referral")
+	refereeOrg, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	code := normalizeCode(body.Code)
 	if code == "" {

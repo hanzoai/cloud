@@ -401,7 +401,7 @@ type trustDesk struct {
 // org that has never opened a centre reads back an empty one rather than an error,
 // because having no trust centre is an ordinary state and this is the read that
 // tells you so.
-func (o ops) readDesk(ctx context.Context, _ *noInput) (*trustDesk, error) {
+func (o ops) readDesk(ctx context.Context, _ *cloud.Unit) (*trustDesk, error) {
 	org, err := manage(ctx)
 	if err != nil {
 		return nil, err
@@ -997,7 +997,7 @@ type trustRosters struct {
 //
 // It counts and does not read: no item, request, address or grant of any org's
 // crosses into the answer.
-func (o ops) roster(ctx context.Context, _ *noInput) (*trustRosters, error) {
+func (o ops) roster(ctx context.Context, _ *cloud.Unit) (*trustRosters, error) {
 	if !sudo(ctx) {
 		return nil, zip.ErrForbidden("SuperAdmin required")
 	}

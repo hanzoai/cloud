@@ -24,6 +24,7 @@
 package deploy
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"sort"
 
@@ -175,7 +176,7 @@ type GitOpsPlane struct {
 // with no tenant dimension. This view observes CD and never drives it — the sync
 // policy is automated with self-heal, and the actionable verb an operator has is
 // the per-application reconcile at POST /v1/deploy/applications/{name}/sync.
-func (o ops) gitops(ctx context.Context, _ *noInput) (*GitOpsPlane, error) {
+func (o ops) gitops(ctx context.Context, _ *cloud.Unit) (*GitOpsPlane, error) {
 	if _, err := superAdminOf(ctx); err != nil {
 		return nil, err
 	}

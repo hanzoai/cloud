@@ -161,7 +161,7 @@ func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
 // It is TENANT-SCOPED and reads the SAME App CRs the applications list reads: a
 // platform SuperAdmin counts the whole fleet, a validated org member counts only
 // its own org's applications, anyone else is refused.
-func (o ops) clusters(ctx context.Context, _ *noInput) (*argoClusterList, error) {
+func (o ops) clusters(ctx context.Context, _ *cloud.Unit) (*argoClusterList, error) {
 	sc, err := scopeOf(ctx)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (o ops) clusters(ctx context.Context, _ *noInput) (*argoClusterList, error)
 // permissive synthesized project per distinct project name the App CRs declare.
 // A project named "default" is always present, because that is what an App CR
 // carrying no project label projects to.
-func (o ops) projects(ctx context.Context, _ *noInput) (*argoProjectList, error) {
+func (o ops) projects(ctx context.Context, _ *cloud.Unit) (*argoProjectList, error) {
 	sc, err := scopeOf(ctx)
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ type consoleSettings struct {
 // not implement — status badges, Dex connectors, config-management plugins,
 // kustomize versions, the exec terminal, apps-in-any-namespace, the hydrator,
 // sync-with-replace — is reported off. Platform SuperAdmin only.
-func (o ops) settings(ctx context.Context, _ *noInput) (*consoleSettings, error) {
+func (o ops) settings(ctx context.Context, _ *cloud.Unit) (*consoleSettings, error) {
 	if _, err := superAdminOf(ctx); err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ type sessionUser struct {
 // here gates on, minted from a validated principal whose org is the reserved admin
 // org — so a validated-but-not-SuperAdmin caller is reported as NOT signed in,
 // which is the truth as this console defines it: they cannot use it.
-func (o ops) userinfo(ctx context.Context, _ *noInput) (*sessionUser, error) {
+func (o ops) userinfo(ctx context.Context, _ *cloud.Unit) (*sessionUser, error) {
 	user, superAdmin := consoleUser(ctx)
 	if !superAdmin {
 		return &sessionUser{LoggedIn: false, LoginURL: loginPath}, nil
@@ -422,7 +422,7 @@ type versionMessage struct {
 // Version names the projection, BuildDate is the moment this response was
 // generated, and Compiler/Platform/GoVersion are the constants the SPA tolerates
 // rather than facts about this process. Platform SuperAdmin only.
-func (o ops) version(ctx context.Context, _ *noInput) (*versionMessage, error) {
+func (o ops) version(ctx context.Context, _ *cloud.Unit) (*versionMessage, error) {
 	if _, err := superAdminOf(ctx); err != nil {
 		return nil, err
 	}
@@ -451,7 +451,7 @@ func dashCanI(s *cloud.Service[state], c *zip.Ctx) error {
 // validated org member reads only its own org's tenant namespace and only the App
 // CRs labelled with its org, and anyone else is refused. A cross-tenant CR is
 // never projected into an answer.
-func (o ops) listApplications(ctx context.Context, _ *noInput) (*argoAppList, error) {
+func (o ops) listApplications(ctx context.Context, _ *cloud.Unit) (*argoAppList, error) {
 	sc, err := scopeOf(ctx)
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -107,7 +107,7 @@ func With(token, zoneID string, log luxlog.Logger) *Edge {
 		client:  &http.Client{Timeout: 10 * time.Second},
 		log:     log.New("component", "cf-purge"),
 		window:  envDuration("CLOUD_EDGE_PURGE_WINDOW", 10*time.Second),
-		ceiling: envInt("CLOUD_EDGE_PURGE_PER_MINUTE", 120),
+		ceiling: environ.Int("CLOUD_EDGE_PURGE_PER_MINUTE", 120),
 		pending: make(map[string]*purgeState),
 	}
 }
@@ -116,15 +116,6 @@ func envDuration(key string, def time.Duration) time.Duration {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			return d
-		}
-	}
-	return def
-}
-
-func envInt(key string, def int) int {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
 		}
 	}
 	return def

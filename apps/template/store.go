@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (see the same
 	// blank import in apps/projects/store.go for why it must not be modernc).
@@ -36,11 +34,10 @@ var errConflict = errors.New("templates: slug taken")
 type Store struct{ db *sql.DB }
 
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "templates", dir)
+	db, err := sqlpool.Open("templates", dir)
 	if err != nil {
-		return nil, fmt.Errorf("templates: open store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS org_templates (
   org        TEXT NOT NULL,

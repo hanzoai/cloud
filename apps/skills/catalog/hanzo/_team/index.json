@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 7,
+  "skill_count": 8,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at hanzo.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -45,6 +45,13 @@
       "path": "team_files/SKILL.md",
       "service": "team",
       "sha256": "2ca49e669657318abb7d9b20232f4a65f976c1c301f1bc2bd154a2d3dccbb77d"
+    },
+    {
+      "description": "Read team public: Lists the rooms orgs have published, across every org..",
+      "name": "team_public",
+      "path": "team_public/SKILL.md",
+      "service": "team",
+      "sha256": "236cfd9479f7a421a8ba3602f74cb5a0c187eb8c34506a33c64879aab8650380"
     },
     {
       "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries., Returns the tail of one room's conversation, oldest first..",

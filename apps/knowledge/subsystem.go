@@ -99,10 +99,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/import", cloud.Handle(s, importVault)) // Obsidian/Notion/Roam/Evernote import
 }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
-
 // searchIn is the POST /v1/knowledge/search request. There is NO org field — the org is
 // the validated tenant, so a client can never search another org's knowledge by
 // asking.

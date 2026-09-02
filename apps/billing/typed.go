@@ -38,9 +38,6 @@ import (
 // handlers reach it through cloud.Handle.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op whose whole input is its URL and its principal.
-type noInput struct{}
-
 // payer resolves the caller of a finance read: the validated org (the ledger)
 // and the wallet subject within it. The org comes off the context; the subject
 // needs the request, because the payer rides headers (X-User-Name, the signed
@@ -79,9 +76,9 @@ func payer(ctx context.Context) (org, subject string, err error) {
 // resolved, exactly as the raw handler relied on — and it needs the request
 // because the org alone does not carry it.
 func caller(ctx context.Context) (org, user string, err error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", "", zip.ErrUnauthorized("sign in to view billing")
+	org, err = principal.Acting(ctx)
+	if err != nil {
+		return "", "", err
 	}
 	c, ok := cloud.Request(ctx)
 	if !ok {
@@ -208,7 +205,7 @@ type alertRef struct {
 // Removing a cap RAISES what the org may spend, so it takes the same authority
 // setting one does. The caps that remain still bind: this drops one, never the
 // whole policy.
-func (o ops) dropAlert(ctx context.Context, in *alertRef) (*struct{}, error) {
+func (o ops) dropAlert(ctx context.Context, in *alertRef) (*cloud.Unit, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -240,7 +237,7 @@ func (o ops) dropAlert(ctx context.Context, in *alertRef) (*struct{}, error) {
 // The answer explains a sweep that charged nobody as readily as one that
 // charged: it names how many orgs were considered and how many needed charging,
 // with a row each.
-func (o ops) rechargeAll(ctx context.Context, _ *noInput) (*plane.Recharge, error) {
+func (o ops) rechargeAll(ctx context.Context, _ *cloud.Unit) (*plane.Recharge, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}

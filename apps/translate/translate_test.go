@@ -392,8 +392,8 @@ func TestPrincipalRequired(t *testing.T) {
 		{http.MethodGet, "/v1/translate/memory"},
 		{http.MethodPut, "/v1/translate/memory"},
 	} {
-		if code, _ := call(t, app, tc.method, tc.path, "", Request{Text: "x", Target: "es"}); code != http.StatusUnauthorized {
-			t.Errorf("%s %s with no principal = %d, want 401", tc.method, tc.path, code)
+		if code, _ := call(t, app, tc.method, tc.path, "", Request{Text: "x", Target: "es"}); code != http.StatusForbidden {
+			t.Errorf("%s %s with no principal = %d, want 403", tc.method, tc.path, code)
 		}
 	}
 }

@@ -38,9 +38,7 @@ import (
 	// and the name below. github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver
 	// it opens through; importing modernc directly instead would double-register
 	// "sqlite" under CGO and panic at init. Blank import registers the driver.
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -125,11 +123,10 @@ type CheckpointFunc func(cp Checkpoint)
 // single-writer discipline pricing/provisioning use, here doubling as the chain's
 // serialization guarantee.
 func Open(dir, subsystem string, mirror Mirror) (*Recorder, error) {
-	db, err := cek.Open(namespace.System(), subsystem, dir)
+	db, err := sqlpool.Open(subsystem, dir)
 	if err != nil {
-		return nil, fmt.Errorf("audit: open %s: %w", subsystem, err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	r := &Recorder{db: db, name: subsystem, dir: dir, mirror: mirror}
 	if err := r.migrate(); err != nil {
 		_ = db.Close()

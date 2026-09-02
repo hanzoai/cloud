@@ -213,7 +213,7 @@ func ghIssues(ctx context.Context, token, fullName string) ([]ghIssue, error) {
 		Body        string    `json:"body"`
 		HTMLURL     string    `json:"html_url"`
 		UpdatedAt   string    `json:"updated_at"`
-		PullRequest *struct{} `json:"pull_request"`
+		PullRequest *cloud.Unit `json:"pull_request"`
 		User        struct {
 			Login string `json:"login"`
 		} `json:"user"`

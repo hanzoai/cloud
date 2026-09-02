@@ -38,9 +38,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cek" // opens the policy DB encrypted at rest; a leaf pkg, no import cycle.
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite" // the ONE "sqlite" driver.
 )
 
@@ -235,11 +233,10 @@ func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 	}
 	// The policy table is the DEPLOYMENT's, keyed by org rather than split per org,
 	// so it lives in the system namespace.
-	db, err := cek.Open(namespace.System(), "gateway", dataDir)
+	db, err := sqlpool.Open("gateway", dataDir)
 	if err != nil {
-		return s, fmt.Errorf("edge: open: %w", err)
+		return s, err
 	}
-	sqlpool.Single(db)
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS policy (
 		org        TEXT PRIMARY KEY,
 		doc        TEXT NOT NULL DEFAULT '{}',

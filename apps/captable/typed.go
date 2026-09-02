@@ -72,11 +72,6 @@ import (
 // method value — also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire. The cap-table reads are org-scoped collections, so
-// the org IS the address and there is no parameter to bind.
-type noInput struct{}
-
 // bundleMessage is the human sentence in a bundle envelope, for the Error() string
 // an off-HTTP caller sees. A validation failure appends its list, because "Validation
 // failed" alone tells a caller nothing. A body that is not an envelope falls back to
@@ -160,7 +155,7 @@ type captableCompany struct {
 // GetCompany returns the caller org's cap-table company record. The row is
 // seeded when the tenant's store first opens, so it always exists; its name and
 // incorporation details are set with PUT /v1/captable/company.
-func (o ops) getCompany(ctx context.Context, _ *noInput) (*captableCompany, error) {
+func (o ops) getCompany(ctx context.Context, _ *cloud.Unit) (*captableCompany, error) {
 	var out captableCompany
 	if err := o.call(ctx, "company.get", nil, &out); err != nil {
 		return nil, err
@@ -211,7 +206,7 @@ type captableStakeholders []captableStakeholder
 // ListStakeholders returns the caller org's stakeholders, newest first. The
 // response is a bare JSON array, not an envelope. Each row carries the holder's
 // contact and address fields alongside the company's name.
-func (o ops) listStakeholders(ctx context.Context, _ *noInput) (*captableStakeholders, error) {
+func (o ops) listStakeholders(ctx context.Context, _ *cloud.Unit) (*captableStakeholders, error) {
 	var out captableStakeholders
 	if err := o.call(ctx, "stakeholders.list", nil, &out); err != nil {
 		return nil, err
@@ -261,7 +256,7 @@ type captableShareClasses []captableShareClass
 // ListShareClasses returns the caller org's share classes, in creation order. A
 // share class is what a certificate is issued in, and every class the company
 // has authorized appears. The response is a bare JSON array, not an envelope.
-func (o ops) listShareClasses(ctx context.Context, _ *noInput) (*captableShareClasses, error) {
+func (o ops) listShareClasses(ctx context.Context, _ *cloud.Unit) (*captableShareClasses, error) {
 	var out captableShareClasses
 	if err := o.call(ctx, "shareClasses.list", nil, &out); err != nil {
 		return nil, err
@@ -303,7 +298,7 @@ type captableEquityPlans struct {
 // ListEquityPlans returns the caller org's equity plans, newest first. An equity
 // plan is an option pool: a reserve of shares, drawn from one share class, that
 // option grants are written against.
-func (o ops) listEquityPlans(ctx context.Context, _ *noInput) (*captableEquityPlans, error) {
+func (o ops) listEquityPlans(ctx context.Context, _ *cloud.Unit) (*captableEquityPlans, error) {
 	var out captableEquityPlans
 	if err := o.call(ctx, "equityPlans.list", nil, &out); err != nil {
 		return nil, err
@@ -352,7 +347,7 @@ type captableShares struct {
 // ListShares returns the caller org's share certificates, newest first. Each row
 // is joined to its holder and its share class, so a certificate names who holds
 // it and what class it is in without a second call.
-func (o ops) listShares(ctx context.Context, _ *noInput) (*captableShares, error) {
+func (o ops) listShares(ctx context.Context, _ *cloud.Unit) (*captableShares, error) {
 	var out captableShares
 	if err := o.call(ctx, "shares.list", nil, &out); err != nil {
 		return nil, err
@@ -404,7 +399,7 @@ type captableOptions struct {
 // ListOptions returns the caller org's option grants, newest first. Each row is
 // joined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED
 // or CANCELLED are listed here but do not dilute the cap table.
-func (o ops) listOptions(ctx context.Context, _ *noInput) (*captableOptions, error) {
+func (o ops) listOptions(ctx context.Context, _ *cloud.Unit) (*captableOptions, error) {
 	var out captableOptions
 	if err := o.call(ctx, "options.list", nil, &out); err != nil {
 		return nil, err
@@ -451,7 +446,7 @@ type captableSafes struct {
 // ListSafes returns the caller org's SAFEs, newest first. A SAFE is a simple
 // agreement for future equity: its capital sits OUTSIDE issued equity until it
 // converts, so it is not part of the share counts.
-func (o ops) listSafes(ctx context.Context, _ *noInput) (*captableSafes, error) {
+func (o ops) listSafes(ctx context.Context, _ *cloud.Unit) (*captableSafes, error) {
 	var out captableSafes
 	if err := o.call(ctx, "safes.list", nil, &out); err != nil {
 		return nil, err
@@ -496,7 +491,7 @@ type captableNotes struct {
 // ListConvertibles returns the caller org's convertible notes, newest first. A
 // note's principal sits OUTSIDE issued equity until it converts, so it is not
 // part of the share counts.
-func (o ops) listConvertibles(ctx context.Context, _ *noInput) (*captableNotes, error) {
+func (o ops) listConvertibles(ctx context.Context, _ *cloud.Unit) (*captableNotes, error) {
 	var out captableNotes
 	if err := o.call(ctx, "convertibles.list", nil, &out); err != nil {
 		return nil, err
@@ -541,7 +536,7 @@ type captableRounds struct {
 // ListRounds returns the caller org's fundraising rounds, newest first. A round
 // groups a fundraising event; a PRICED round also carries the share class and
 // price per share it issues at.
-func (o ops) listRounds(ctx context.Context, _ *noInput) (*captableRounds, error) {
+func (o ops) listRounds(ctx context.Context, _ *cloud.Unit) (*captableRounds, error) {
 	var out captableRounds
 	if err := o.call(ctx, "rounds.list", nil, &out); err != nil {
 		return nil, err
@@ -634,7 +629,7 @@ type captableInvestments struct {
 // ListInvestments returns the caller org's investments, newest first. It spans
 // every round, so it is the flat ledger of cheques written into the company,
 // each naming its investor and the round it went into.
-func (o ops) listInvestments(ctx context.Context, _ *noInput) (*captableInvestments, error) {
+func (o ops) listInvestments(ctx context.Context, _ *cloud.Unit) (*captableInvestments, error) {
 	var out captableInvestments
 	if err := o.call(ctx, "rounds.investments.list", nil, &out); err != nil {
 		return nil, err
@@ -749,7 +744,7 @@ type captableSummary struct {
 // converted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and
 // CANCELLED grants are excluded, so equity issued through an exercised option is
 // never counted twice.
-func (o ops) getSummary(ctx context.Context, _ *noInput) (*captableSummary, error) {
+func (o ops) getSummary(ctx context.Context, _ *cloud.Unit) (*captableSummary, error) {
 	var out captableSummary
 	if err := o.call(ctx, "captable", nil, &out); err != nil {
 		return nil, err

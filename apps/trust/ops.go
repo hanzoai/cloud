@@ -44,10 +44,6 @@ type ops struct{ s *cloud.Service[state] }
 
 // ---- inputs ----
 
-// noInput is the In of an op that takes nothing off the wire. Its tenant comes
-// from the context, never from a field.
-type noInput struct{}
-
 // orgRef addresses one organization's PUBLISHED trust centre. This is the one
 // place an org arrives from the request, and it is not an authority claim: a
 // published trust centre is a public document addressed by a public name, the
@@ -446,14 +442,14 @@ func (o ops) published(ctx context.Context, in *orgRef) (*centre, error) {
 // own gated documents. Same shape as the published endpoint; the difference is that
 // this one is resolved from your validated bearer and shows you your own
 // artifacts.
-func (o ops) center(ctx context.Context, _ *noInput) (*centre, error) {
+func (o ops) center(ctx context.Context, _ *cloud.Unit) (*centre, error) {
 	return mine[centre](ctx, o, "center", nil)
 }
 
 // Reads your organization's trust-centre profile — the name, tagline and
 // summary a visitor sees, whether the centre is published, and where to send
 // somebody who wants a gated document.
-func (o ops) profile(ctx context.Context, _ *noInput) (*json.RawMessage, error) {
+func (o ops) profile(ctx context.Context, _ *cloud.Unit) (*json.RawMessage, error) {
 	return mine[json.RawMessage](ctx, o, "profile.get", nil)
 }
 
@@ -464,7 +460,7 @@ func (o ops) profile(ctx context.Context, _ *noInput) (*json.RawMessage, error) 
 // clauses it maps to. Status is automated, partial or absent — and an absent one
 // still names the clause it would satisfy, which is a roadmap, while never
 // moving a coverage number.
-func (o ops) listControls(ctx context.Context, _ *noInput) (*controlList, error) {
+func (o ops) listControls(ctx context.Context, _ *cloud.Unit) (*controlList, error) {
 	return mine[controlList](ctx, o, "controls.list", nil)
 }
 
@@ -479,7 +475,7 @@ func (o ops) getControl(ctx context.Context, in *controlRef) (*json.RawMessage, 
 // publishes. That count is the denominator of every coverage number, which is
 // what keeps an uncovered clause visible instead of dropping out of the
 // fraction.
-func (o ops) listFrameworks(ctx context.Context, _ *noInput) (*frameworkList, error) {
+func (o ops) listFrameworks(ctx context.Context, _ *cloud.Unit) (*frameworkList, error) {
 	return mine[frameworkList](ctx, o, "frameworks.list", nil)
 }
 
@@ -491,7 +487,7 @@ func (o ops) listFrameworks(ctx context.Context, _ *noInput) (*frameworkList, er
 // Nothing here is a verdict. There is no boolean, and a control that only a
 // person has read counts one rung weaker than it claims to be, because only a
 // check that can FAIL is evidence.
-func (o ops) coverage(ctx context.Context, _ *noInput) (*trustCoverage, error) {
+func (o ops) coverage(ctx context.Context, _ *cloud.Unit) (*trustCoverage, error) {
 	return mine[trustCoverage](ctx, o, "coverage.list", nil)
 }
 
@@ -506,34 +502,34 @@ func (o ops) frameworkCoverage(ctx context.Context, in *frameworkRef) (*clauseCo
 
 // Lists your organization's documents. Because this is your own centre, a gated
 // artifact carries its address here; through the published endpoint it does not.
-func (o ops) listDocuments(ctx context.Context, _ *noInput) (*trustDocuments, error) {
+func (o ops) listDocuments(ctx context.Context, _ *cloud.Unit) (*trustDocuments, error) {
 	return mine[trustDocuments](ctx, o, "documents.list", nil)
 }
 
 // Lists the third parties your organization sends data to, each naming what it
 // is for.
-func (o ops) listSubprocessors(ctx context.Context, _ *noInput) (*subprocessorList, error) {
+func (o ops) listSubprocessors(ctx context.Context, _ *cloud.Unit) (*subprocessorList, error) {
 	return mine[subprocessorList](ctx, o, "subprocessors.list", nil)
 }
 
 // Lists your organization's published policies.
-func (o ops) listPolicies(ctx context.Context, _ *noInput) (*policyList, error) {
+func (o ops) listPolicies(ctx context.Context, _ *cloud.Unit) (*policyList, error) {
 	return mine[policyList](ctx, o, "policies.list", nil)
 }
 
 // Lists your knowledge base — the questions a reviewer asks, answered once.
-func (o ops) listFaq(ctx context.Context, _ *noInput) (*faqList, error) {
+func (o ops) listFaq(ctx context.Context, _ *cloud.Unit) (*faqList, error) {
 	return mine[faqList](ctx, o, "faq.list", nil)
 }
 
 // Lists your trust-centre updates, newest as you ordered them.
-func (o ops) listUpdates(ctx context.Context, _ *noInput) (*updateList, error) {
+func (o ops) listUpdates(ctx context.Context, _ *cloud.Unit) (*updateList, error) {
 	return mine[updateList](ctx, o, "updates.list", nil)
 }
 
 // Reads your risk profile — the label and value pairs describing what your
 // organization handles and how.
-func (o ops) risk(ctx context.Context, _ *noInput) (*json.RawMessage, error) {
+func (o ops) risk(ctx context.Context, _ *cloud.Unit) (*json.RawMessage, error) {
 	return mine[json.RawMessage](ctx, o, "risk.get", nil)
 }
 
@@ -610,18 +606,18 @@ func (o ops) remove(ctx context.Context, in *sectionRef) (*dropped, error) {
 // principal's and is never an In field: an In field is caller-supplied, so a
 // tenant read from one is a cross-tenant read the caller asserted for itself.
 func mine[T any](ctx context.Context, o ops, route string, params map[string]string) (*T, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrUnauthorized("sign in to read your trust centre")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return as[T](ctx, o, org, route, params)
 }
 
 // mineBody is mine with a decoded request body.
 func mineBody[T any](ctx context.Context, o ops, route string, params map[string]string, body any) (*T, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrUnauthorized("sign in to write to your trust centre")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return dispatch[T](ctx, o, org, route, params, body)
 }

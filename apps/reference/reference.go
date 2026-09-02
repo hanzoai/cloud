@@ -725,7 +725,7 @@ type ReferenceSetsOut struct {
 // component, or it names a source we hold no licence for.
 //
 // Example: {}
-func (o ops) sets(ctx context.Context, _ *struct{}) (*ReferenceSetsOut, error) {
+func (o ops) sets(ctx context.Context, _ *cloud.Unit) (*ReferenceSetsOut, error) {
 	own, err := o.held(ctx)
 	if err != nil {
 		return nil, err

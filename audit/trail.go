@@ -34,7 +34,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 	sqlitedrv "github.com/hanzoai/sqlite"
@@ -190,12 +189,11 @@ func (r *Recorder) verifyChain(ctx context.Context, name string) Integrity {
 		return unread("not read: this build links no SQLCipher codec, so opening a chain another process holds would seal a private copy over it; only " + r.name + " is readable here")
 	}
 
-	db, err := cek.Open(namespace.System(), name, r.dir)
+	db, err := sqlpool.Open(name, r.dir)
 	if err != nil {
 		return unread(err.Error())
 	}
 	defer func() { _ = db.Close() }()
-	sqlpool.Single(db)
 
 	// A chain whose file vanished between enumeration and here is RE-CREATED empty by
 	// Open (it creates what it names), and an empty file has no audit_log — so the

@@ -101,7 +101,7 @@ func TestRegistryNeverLeaksTheUpstream(t *testing.T) {
 func TestUnauthenticatedReadsNothing(t *testing.T) {
 	o := ops{s: svc(chainAt("http://127.0.0.1:1"))}
 	ctx := context.Background() // no principal
-	if _, err := o.listChains(ctx, &noInput{}); err == nil {
+	if _, err := o.listChains(ctx, &cloud.Unit{}); err == nil {
 		t.Fatal("listChains answered an anonymous caller")
 	}
 	if _, err := o.rpc(ctx, &rpcIn{Chain: "lux", Method: "eth_blockNumber"}); err == nil {

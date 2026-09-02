@@ -115,7 +115,7 @@ func (h *s3Health) StatusCode() int {
 // they are not. It is deliberately NOT gated — liveness has to be probe-able
 // without a token — so it is the one operation here that names no bucket and
 // bills nothing.
-func (o ops) health(_ context.Context, _ *noInput) (*s3Health, error) {
+func (o ops) health(_ context.Context, _ *cloud.Unit) (*s3Health, error) {
 	r := &s3Health{Service: "s3", Status: "ok"}
 	if !o.s.State.admin.Configured() {
 		r.Status, r.Ready = "degraded", false
@@ -126,10 +126,6 @@ func (o ops) health(_ context.Context, _ *noInput) (*s3Health, error) {
 	r.Presign = o.s.State.admin.PresignConfigured()
 	return r, nil
 }
-
-// noInput is the In of an op that takes nothing off the wire. Its whole input is
-// the caller's validated principal, or in health's case nothing at all.
-type noInput struct{}
 
 // ── buckets ─────────────────────────────────────────────────────────────────
 
@@ -156,7 +152,7 @@ type bucketList struct {
 // Billed per call: the balance is checked BEFORE anything is touched, so an
 // unfunded org is refused with nothing done, and the debit lands only once the
 // work has succeeded.
-func (o ops) listBuckets(ctx context.Context, _ *noInput) (*bucketList, error) {
+func (o ops) listBuckets(ctx context.Context, _ *cloud.Unit) (*bucketList, error) {
 	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
@@ -241,7 +237,7 @@ type bucketRef struct {
 // Billed per call: the balance is checked BEFORE anything is touched, so an
 // unfunded org is refused with nothing deleted, and the debit lands only once the
 // bucket is gone.
-func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*struct{}, error) {
+func (o ops) deleteBucket(ctx context.Context, in *bucketRef) (*cloud.Unit, error) {
 	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err
@@ -485,7 +481,7 @@ func (o ops) presignDownload(ctx context.Context, in *objectRef) (*presignRespon
 // Billed per call: the balance is checked BEFORE anything is touched, so an
 // unfunded org is refused with nothing deleted, and the debit lands only once the
 // object is gone.
-func (o ops) deleteObject(ctx context.Context, in *objectRef) (*struct{}, error) {
+func (o ops) deleteObject(ctx context.Context, in *objectRef) (*cloud.Unit, error) {
 	org, err := fare.Org(ctx)
 	if err != nil {
 		return nil, err

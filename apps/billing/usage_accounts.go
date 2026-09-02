@@ -17,6 +17,7 @@ package billing
 // siblings stay raw.
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"net/http"
 
@@ -49,7 +50,7 @@ func (accounts) ResponseHeaders() map[string]string { return noStore() }
 // 401 without a validated principal. Where the linked-account plane is not
 // resident the answer is an honest 501 — never an empty breakdown, which would
 // read as no usage.
-func (o ops) usageAccounts(ctx context.Context, _ *noInput) (*accounts, error) {
+func (o ops) usageAccounts(ctx context.Context, _ *cloud.Unit) (*accounts, error) {
 	org, user, err := caller(ctx)
 	if err != nil {
 		return nil, err

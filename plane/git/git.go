@@ -14,6 +14,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 
 	"github.com/hanzoai/cloud/plane"
@@ -78,7 +79,7 @@ func GitMirror(ctx context.Context, in *plane.MirrorIn) (*plane.Mirrored, error)
 // GitPublish reconcile a project's repo visibility.
 //
 // Calls plane.GitPublish on git over the peer plane.
-func GitPublish(ctx context.Context, in *plane.Visibility) (*struct{}, error) {
+func GitPublish(ctx context.Context, in *plane.Visibility) (*cloud.Unit, error) {
 	return plane.Ask[plane.Visibility, struct{}](ctx, App, plane.GitPublish, in)
 }
 

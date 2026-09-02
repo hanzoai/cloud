@@ -27,6 +27,7 @@ package event
 // scaling ingest is scaling replicas, no handler changes.
 
 import (
+	"github.com/hanzoai/cloud"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -225,7 +226,7 @@ type insightsStatus struct {
 // tenant data and consults no dependency, so it answers 200 unconditionally and needs
 // no principal — liveness must be probe-able. The warehouse-connectivity probe is a
 // different question and lives at GET /v1/event/health.
-func (o readOps) insightsHealth(ctx context.Context, _ *noArgs) (*insightsStatus, error) {
+func (o readOps) insightsHealth(ctx context.Context, _ *cloud.Unit) (*insightsStatus, error) {
 	return &insightsStatus{OK: true, Engine: "hanzo-analytics", Surface: "/v1/event/insights"}, nil
 }
 

@@ -309,10 +309,6 @@ func requireStage(f *Formation, allowed ...Stage) error {
 	return zip.Errorf(http.StatusConflict, "action not available at stage %q", f.Stage)
 }
 
-// noInput is the In of an op that takes nothing off the wire — it is addressed
-// entirely by the caller's validated principal.
-type noInput struct{}
-
 // formationView is a formation plus the machine's out-edges, for the UI to render
 // "what's next". It is what every action on the formation answers with.
 type formationView struct {
@@ -387,7 +383,7 @@ func (o ops) begin(ctx context.Context, in *beginIn) (*formationView, error) {
 
 // Get returns the caller org's formation and the stages reachable from it, or 404
 // when the org has not begun one.
-func (o ops) get(ctx context.Context, _ *noInput) (*formationView, error) {
+func (o ops) get(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
 	f, _, err := load(ctx, o.s)
 	if err != nil {
 		return nil, err
@@ -520,7 +516,7 @@ type kycStartOut struct {
 // inquiry time is clamped back to pending, so the payment gate can never open
 // here. A terminal status arrives only from POST /v1/company/kyc/refresh (the
 // provider) or POST /v1/company/kyc/decision (a Hanzo platform reviewer).
-func (o ops) startKYC(ctx context.Context, _ *noInput) (*kycStartOut, error) {
+func (o ops) startKYC(ctx context.Context, _ *cloud.Unit) (*kycStartOut, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -575,7 +571,7 @@ type kycRefreshOut struct {
 // It NEVER trusts a client-asserted status — the status comes from the PROVIDER —
 // so a client cannot force a pass here, and an already-passing founder (e.g. a
 // reviewer confirmation) is left untouched.
-func (o ops) kycRefresh(ctx context.Context, _ *noInput) (*kycRefreshOut, error) {
+func (o ops) kycRefresh(ctx context.Context, _ *cloud.Unit) (*kycRefreshOut, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -691,7 +687,7 @@ func (o ops) kycDecision(ctx context.Context, in *decisionIn) (*formationView, e
 // short-circuit, so a caller the machine is about to refuse is never charged.
 // That ordering is why the gate cannot lift into middleware, where it would run
 // first. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.
-func (o ops) pay(ctx context.Context, _ *noInput) (*formationView, error) {
+func (o ops) pay(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -738,7 +734,7 @@ func (o ops) pay(ctx context.Context, _ *noInput) (*formationView, error) {
 //
 // With no filing partner wired the filing is recorded honestly as "manual" — no
 // filing id is fabricated. Available only at the documents stage.
-func (o ops) generateDocuments(ctx context.Context, _ *noInput) (*formationView, error) {
+func (o ops) generateDocuments(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -789,7 +785,7 @@ type esignOut struct {
 // RequestEsign sends the generated formation documents for signature by every
 // founder and records the provider's reference on the formation. Available only
 // at the esign stage.
-func (o ops) requestEsign(ctx context.Context, _ *noInput) (*esignOut, error) {
+func (o ops) requestEsign(ctx context.Context, _ *cloud.Unit) (*esignOut, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -870,7 +866,7 @@ func (o ops) completeEsign(ctx context.Context, in *esignCompleteIn) (*formation
 // would double-issue founder share certificates. The root is persisted even when
 // the on-chain submit fails, because the root is the tamper-evident witness and
 // must not be recomputed on retry. Available only at the genesis stage.
-func (o ops) recordGenesis(ctx context.Context, _ *noInput) (*formationView, error) {
+func (o ops) recordGenesis(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
@@ -960,7 +956,7 @@ func (o ops) advance(ctx context.Context, in *advanceIn) (*formationView, error)
 // Skip marks the org as already incorporated and moves it onto the import path,
 // so an existing company brings its documents and cap table in instead of forming
 // a new entity. Available only at the structure stage.
-func (o ops) skip(ctx context.Context, _ *noInput) (*formationView, error) {
+func (o ops) skip(ctx context.Context, _ *cloud.Unit) (*formationView, error) {
 	if err := account.CSRF(ctx); err != nil {
 		return nil, err
 	}
