@@ -39,18 +39,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ---- who is asking ------------------------------------------------------------
-
-// sudo reports platform sudo: the caller is a member of the reserved admin org.
-// This is the ONE cross-tenant scope and the same predicate every other subsystem
-// asks — an org's own isAdmin is a different, org-scoped fact, and reading it here
-// would hand every customer admin the platform's roster.
-//
-// Fail-closed off the HTTP path: with no request there is no verified claim to
-// read, so the internal plane and the MCP server get the refusal rather than a
-// default.
-func sudo(ctx context.Context) bool { return cloud.AuthorityIn(ctx).Super }
-
 // orgAdmin reports that the caller may change what their OWN org releases. A
 // SuperAdmin also passes — while acting in an org, they are that org's admin too —
 // and passing here grants nothing beyond the tenant the bearer already named.
@@ -998,8 +986,8 @@ type trustRosters struct {
 // It counts and does not read: no item, request, address or grant of any org's
 // crosses into the answer.
 func (o ops) roster(ctx context.Context, _ *cloud.Unit) (*trustRosters, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	rows, err := o.s.State.index.centers()
 	if err != nil {

@@ -237,7 +237,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	//
 	// The two SuperAdmin-only and the six org-scoped ops each ask their own gate,
 	// because a typed op is also an MCP tool and an internal-plane op and both
-	// invoke it with no route to hang middleware on. `sudoGate` on the platform
+	// invoke it with no route to hang middleware on. `cloud.Gate(cloud.Super)` on the platform
 	// group is the routed endpoint's first refusal, so a non-SuperAdmin sending an
 	// unparseable body is told about authority rather than about JSON.
 	zip.Get(g, "/trust", o.readDesk)
@@ -254,7 +254,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// app it was called on, so the one installed above reaches nothing here — and
 	// without it the op would find no request, read no attested SuperAdmin, and
 	// refuse the very caller it is for.
-	platform := app.Group("/v1/admin/dataroom", sudoGate)
+	platform := app.Group("/v1/admin/dataroom", cloud.Gate(cloud.Super))
 	platform.Use(cloud.Bridge())
 	platform.Use(held())
 	zip.Get(platform, "/trust", o.roster)

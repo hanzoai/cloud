@@ -49,7 +49,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
@@ -491,18 +490,6 @@ func normal(tier, attester string) (string, string) {
 		return "gated", "self"
 	}
 	return "public", "self"
-}
-
-// sudoGate is the platform group's first refusal, so a caller who is not a
-// SuperAdmin is told about authority before the typed decoder has read a byte of
-// their body. The op asks the same question again — the group covers the routed
-// path, while the MCP server and the internal plane invoke an op with no route at
-// all — so this is the first of two answers, never the only one.
-func sudoGate(c *zip.Ctx) error {
-	if principal.IsSuperAdmin(c) {
-		return c.Next()
-	}
-	return zip.ErrForbidden("SuperAdmin required")
 }
 
 // trustFile streams a PUBLIC item's bytes to anyone. Untyped because the answer is

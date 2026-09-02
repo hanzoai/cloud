@@ -129,6 +129,23 @@ func Guard(s Scope, h zip.Handler) zip.Handler {
 	}
 }
 
+// Gate is Guard as GROUP middleware: the same rule, applied to everything
+// registered behind it rather than to one handler.
+//
+// It is the third form of one gate and the last one needed — Guard wraps a
+// handler, Refusal is the line a typed op writes because there is no handler to
+// wrap, and this Nexts. Five subsystems had written their own group gate, and
+// each spelled the refusal itself, so the sentence a caller reads depended on
+// which door it knocked at.
+func Gate(s Scope) zip.Handler {
+	return func(c *zip.Ctx) error {
+		if !s.Admits(AuthorityOf(c)) {
+			return s.Refusal()
+		}
+		return c.Next()
+	}
+}
+
 // Refusal is the 403 this scope answers an inadmissible caller with, and Guard's
 // own answer. It exists because a TYPED op cannot be guarded by wrapping:
 // zip.Get[In, Out] takes a handler that receives a context and its decoded In, so

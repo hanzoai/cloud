@@ -195,19 +195,6 @@ func isSafeMethod(m string) bool {
 	return m == http.MethodGet || m == http.MethodHead
 }
 
-// sudo is the SuperAdmin fact, read where every way into an operation passes: its
-// own preamble. cloud.AuthorityIn is the ONE extraction and it fails closed off the
-// HTTP path.
-//
-// The two admin ops ask this rather than relying on requireAdmin below, and the
-// difference is the whole of what a route is. A typed op and its route's handler
-// are two fields of one registry entry; zip wraps the handler, so requireAdmin runs
-// for REST and for nothing else — while MCP, the call plane and the graph invoke
-// the op directly with the caller already authenticated. Without this, any
-// signed-in caller reached the cross-tenant attribution directory and the
-// platform-wide sweep by name.
-func sudo(ctx context.Context) bool { return cloud.AuthorityIn(ctx).Super }
-
 // requireAdmin is the same fact on the ROUTE, and it stays for the ORDER it gives:
 // a non-admin sending a body that will not parse is answered 403, never the
 // decoder's 400, exactly where the untyped handlers had it. It is not what makes
@@ -440,8 +427,8 @@ type adminBonusesEnvelope struct {
 // referrers, conversion) is a different surface, GET /v1/admin/affiliate/referrals,
 // owned by the affiliates subsystem over the shared attribution spine.
 func (o referralOps) adminList(ctx context.Context, in *adminListIn) (*adminBonusesEnvelope, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	s := o.s
 	rows, err := s.State.store.ListAll(ctx, adminLimitOf(in.Limit))
@@ -496,8 +483,8 @@ type sweepEnvelope struct {
 //
 // It reads nothing from the caller — the counters it returns are the whole result.
 func (o referralOps) adminSweep(ctx context.Context, _ *noIn) (*sweepEnvelope, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	s := o.s
 	pending, err := s.State.store.ListPending(ctx, "", sweepLimit)

@@ -645,8 +645,8 @@ type rateSet struct {
 //
 // Example: {"rateBps": 2500}
 func (o ops) adminSetRate(ctx context.Context, in *rateSet) (*affiliateOut, error) {
-	if !sudo(ctx) {
-		return nil, zip.ErrForbidden("SuperAdmin required")
+	if !cloud.Super.Admits(cloud.AuthorityIn(ctx)) {
+		return nil, cloud.Super.Refusal()
 	}
 	if err := requireBody(ctx); err != nil {
 		return nil, err
