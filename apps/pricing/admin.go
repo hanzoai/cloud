@@ -128,9 +128,12 @@ func (o ops) adminCatalog(ctx context.Context, _ *pricingNoInput) (*adminCatalog
 		return nil, zip.Errorf(http.StatusInternalServerError, "overlay read failed")
 	}
 	// The catalog shape is tenant-independent and the gate above already proved
-	// the caller is an admin, so the org is empty and isAdmin true: nothing hidden.
+	// the caller is an admin, so the org is empty and isAdmin true: the ORG rule
+	// hides nothing here. The credential limit still applies — it belongs to the
+	// key rather than to the holder, and this is the surface where a key that
+	// reaches everything does the most.
 	return &adminCatalogOut{
-		Models:    VisibleCatalog(mp.Models, snap, "", true),
+		Models:    Reachable(VisibleCatalog(mp.Models, snap, "", true), callerGrant(ctx)),
 		Providers: VisibleProviders(pwrap.Providers, snap, "", true),
 		Updated:   mp.Updated,
 	}, nil

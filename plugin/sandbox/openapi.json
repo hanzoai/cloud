@@ -665,6 +665,10 @@
             "description": "Class is what KIND of computer to lease, and the set is closed:\n\n\texec     a throwaway one that keeps nothing. Seconds to minutes.\n\tdev      a coding one, with the project's own disk attached. Hours.\n\tdesktop  a dev one that also has a screen.\n\tandroid  a desktop with a phone running on that screen.\n\nEmpty leases an `exec`, which is the right answer for running a program and\nthe wrong one for working on a repository, because it keeps nothing.\n\nAn `android` needs a node that can virtualise a CPU, so it is the one class\na deployment may not be able to place. Where the fleet has none, the lease\nsucceeds and the pod stays Pending naming the device it is waiting for —\nwhich is the honest answer, because the alternative is an emulator running\non an interpreted CPU and never finishing its boot.",
             "type": "string"
           },
+          "cluster": {
+            "description": "Cluster names one of the org's ATTACHED clusters to run the lease on —\nthe fleet-local name a BYO cluster was registered under. Empty runs where\nleases have always run, the home cluster. The named cluster must carry\nthe sandbox namespace and the gvisor runtime class; a name the org has\nnot attached is refused 404.",
+            "type": "string"
+          },
           "id": {
             "description": "ID names a sandbox to RESUME, and is the id an earlier lease answered with.\nEmpty asks for a new one. A caller that holds an id and omits it does not get\na second view of the same computer, it gets a second computer.",
             "type": "string"
@@ -689,6 +693,10 @@
         "properties": {
           "class": {
             "description": "Class is what was actually leased, from the closed set LeaseIn.Class names:\nexec | dev | desktop | android. A request that named none leased an `exec`,\nso this is where a caller learns which kind of computer it is holding, and it\nis what Workdir below follows from.",
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster is the attached cluster this sandbox runs on, when one was named.\nEmpty is the home cluster.",
             "type": "string"
           },
           "id": {
@@ -789,6 +797,10 @@
         "properties": {
           "class": {
             "description": "Class is what the sandbox is FOR, and it decides the image, the working\ndirectory and the isolation: \"exec\" for a code-interpreter call (workdir\n/mnt/data, no project, bounded per org), \"dev\" for a workspace bound to a\nproject (workdir /work, single-attach), \"desktop\" for one with a screen.",
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster is the attached cluster this sandbox runs on — the fleet-local\nname the lease named — or empty for the home cluster. Immutable for the\nlife of the lease, like the pod it locates: every later call into the\nsandbox reads it to reach the right apiserver.",
             "type": "string"
           },
           "connectedAt": {
@@ -938,6 +950,10 @@
         "properties": {
           "class": {
             "description": "Class is what the sandbox is FOR: \"exec\" for a code-interpreter call,\n\"dev\" for a workspace bound to a project, \"desktop\" for one with a screen.\nIt decides the image, the working directory and the isolation.",
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster names one of the org's attached clusters to run the sandbox on —\nthe fleet-local name it was registered under. Empty runs on the home\ncluster. The named cluster must carry the sandbox namespace and the\ngvisor runtime class; a name the org has not attached is 404.",
             "type": "string"
           },
           "image": {

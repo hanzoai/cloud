@@ -39,8 +39,6 @@ var (
 	// member is signed in and NOT platform sudo — the case that separates
 	// cloud.Super from "any validated principal".
 	member = map[string]string{"X-User-Id": "dave", "X-Org-Id": "acme"}
-	// orgAdmin administers its OWN org: it writes acme's rows and nothing else.
-	orgAdmin = map[string]string{"X-User-Id": "dave", "X-Org-Id": "acme", "X-User-IsOrgAdmin": "true"}
 	// Two tenants, to prove the boundary between them rather than assert it.
 	adminA  = map[string]string{"X-User-Id": "ann", "X-Org-Id": "acme", "X-User-IsOrgAdmin": "true"}
 	memberA = map[string]string{"X-User-Id": "al", "X-Org-Id": "acme"}

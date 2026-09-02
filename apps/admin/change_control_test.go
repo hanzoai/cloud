@@ -2,7 +2,6 @@ package admin
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -185,26 +184,6 @@ func seamApp(t *testing.T) *zip.App {
 		t.Fatalf("account: %v", err)
 	}
 	return app
-}
-
-func mintToken(t *testing.T, app *zip.App) string {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/v1/account/csrf", nil)
-	req.Header.Set("X-User-Id", "u-1")
-	req.Header.Set("X-Org-Id", "acme")
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("GET /v1/account/csrf: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	b, _ := io.ReadAll(resp.Body)
-	var r struct {
-		Token string `json:"csrfToken"`
-	}
-	if err := json.Unmarshal(b, &r); err != nil || r.Token == "" {
-		t.Fatalf("no token minted: %s", b)
-	}
-	return r.Token
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────

@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -45,7 +44,7 @@ import (
 // ISOLATION BAR: a workspace's events reach ONLY the org that connected that Slack
 // team. The org comes ONLY from OrgForExternalID("slack", team_id) — never a payload
 // field — and team_id is trustworthy only because the whole payload is HMAC-verified
-// with SLACK_SIGNING_SECRET first. The reply uses THAT org's bot token (TokenFor);
+// against the signing secret first. The reply uses THAT org's bot token (TokenFor);
 // the run is THAT org's agent on behalf of THAT org's linked user.
 //
 // MOUNT HANDOFF (registered in integrations.go's routes(); this file deliberately
@@ -93,7 +92,7 @@ func slackBridgeReady(s *cloud.Service[state]) {
 // sandbox when the model picks that tool.
 func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
-	secret := slackSigningSecret()
+	secret := slackSigningSecret(s)
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
 	}
@@ -191,7 +190,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 // asynchronously via the command's response_url on the channel.
 func slackCommands(s *cloud.Service[state], c *zip.Ctx) error {
 	slackBridgeReady(s)
-	secret := slackSigningSecret()
+	secret := slackSigningSecret(s)
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
 	}
@@ -520,15 +519,6 @@ func slackChatUpdate(ctx context.Context, botToken, channel, ts, text string) (s
 	})
 }
 
-// slackPostThread posts to a channel, threaded under threadTS when non-empty.
-func slackPostThread(ctx context.Context, botToken, channel, threadTS, text string) error {
-	fields := map[string]any{"channel": channel, "text": text}
-	if threadTS != "" {
-		fields["thread_ts"] = threadTS
-	}
-	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
-}
-
 // slackPostEphemeral posts a message visible ONLY to `user` in `channel` — used
 // for the account-link prompt so a link URL is NEVER shown to a whole channel.
 func slackPostEphemeral(ctx context.Context, botToken, channel, user, text string) error {
@@ -549,21 +539,6 @@ func PostSlackBlocks(ctx context.Context, botToken, channel, text string, blocks
 	fields := map[string]any{"channel": channel, "text": text}
 	if len(blocks) > 0 {
 		fields["blocks"] = blocks
-	}
-	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
-}
-
-// PostSlackBlocksThread posts a Block Kit message threaded under threadTS (when
-// non-empty) via the shared chat.postMessage path — the same path PostSlackBlocks
-// uses, plus in-thread delivery so a coding result lands under the triggering
-// @hanzo message.
-func PostSlackBlocksThread(ctx context.Context, botToken, channel, threadTS, text string, blocks []any) error {
-	fields := map[string]any{"channel": channel, "text": text}
-	if len(blocks) > 0 {
-		fields["blocks"] = blocks
-	}
-	if threadTS != "" {
-		fields["thread_ts"] = threadTS
 	}
 	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
 }
@@ -616,9 +591,21 @@ func slackPostResponseURL(ctx context.Context, responseURL, responseType, text s
 	return nil
 }
 
-// ── config (env, read at call time — operator-injected from KMS) ────────────
+// ── config ─────────────────────────────────────────────────────────────────
 
-func slackSigningSecret() string { return strings.TrimSpace(os.Getenv("SLACK_SIGNING_SECRET")) }
+// slackSigningSecret resolves the Slack signing secret from KMS by the ref in
+// SLACK_SIGNING_SECRET_REF.
+//
+// The env used to carry the secret itself, projected into a k8s Secret and
+// mounted here — which puts a decrypted value in etcd, in a volume and in this
+// process's environment, readable by anything that can read the pod. Now the
+// env carries only the reference and the value is fetched when it is needed.
+//
+// Unset or unresolvable yields "", which both callers already answer with a 503:
+// Slack verification fails closed rather than accepting an unverified body.
+func slackSigningSecret(s *cloud.Service[state]) string {
+	return string(s.SecretFromEnv(context.Background(), "SLACK_SIGNING_SECRET_REF"))
+}
 
 // Which agent answers is not a variable here at all: a slash command asks channels
 // for the room's binding (agentRefFor), the same row a mention is answered from.

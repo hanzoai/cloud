@@ -17,13 +17,29 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// metricsIngest holds the native metrics receiver for the process life: write-only
-// (a deliberate keepalive; nothing reads it), mirroring embeddedRuntime.
-var metricsIngest *zapmetricreceiver.Receiver
+// metricsIngest is the native metrics receiver, and metricsBuffer coalesces the
+// batches it delivers. Both are held for the process life because a shutdown has
+// to reach them: the listener stops, and what the buffer still holds is written
+// rather than dropped.
+var (
+	metricsIngest *zapmetricreceiver.Receiver
+	metricsBuffer *metricBuffer
+)
 
-// metricsBuffer coalesces batches for metricsIngest; held for the process life
-// alongside it so a shutdown can flush what is still pending.
-var metricsBuffer *metricBuffer
+// stopNativeMetricsIngest stops the listener and then flushes what the buffer
+// holds, in that order — closing first would flush and then be handed batches the
+// receiver was still delivering. Both references are cleared with them, so a
+// second shutdown is a no-op like every other step in ShutdownO11y.
+func stopNativeMetricsIngest() {
+	if metricsIngest != nil {
+		metricsIngest.Stop()
+		metricsIngest = nil
+	}
+	if metricsBuffer != nil {
+		metricsBuffer.Close()
+		metricsBuffer = nil
+	}
+}
 
 // startNativeMetricsIngest starts o11y-native datastore metrics ingest in-process:
 // a ZAP metric receiver that decodes MsgMetricBatch and writes each batch to the

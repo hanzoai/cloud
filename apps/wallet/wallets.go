@@ -57,7 +57,7 @@ type state struct {
 }
 
 // live is the process singleton the finance client resolves. nil when the
-// subsystem is not linked/enabled, which makes WalletForLedgerAccount a no-op.
+// subsystem is not linked/enabled, and every reader treats that as absent.
 var live *cloud.Service[state]
 
 // Use composes the wallets surface onto app per HIP-0106. Complex flavour: it
@@ -227,33 +227,15 @@ func buildCustody(deps cloud.Deps, log luxlog.Logger) map[Kind]Custody {
 // loadMPCKey fetches the ring's MPC_INTERNAL_API_KEY bearer token from KMS by
 // the ref in CLOUD_WALLETS_MPC_API_KEY_REF. NEVER a plaintext env value. Empty
 // ref or a KMS error ⇒ nil ⇒ mpc/treasury fail closed.
-func loadMPCKey(deps cloud.Deps, log luxlog.Logger) []byte {
-	ref := strings.TrimSpace(os.Getenv(envMPCKeyRef))
-	if ref == "" || deps.KMS == nil {
-		return nil
-	}
-	key, err := deps.KMS.GetSecret(context.Background(), ref)
-	if err != nil {
-		log.Warn("wallets: mpc API key ref did not resolve from KMS", "ref", ref, "err", err)
-		return nil
-	}
-	return key
+func loadMPCKey(deps cloud.Deps, _ luxlog.Logger) []byte {
+	return deps.SecretFromEnv(context.Background(), envMPCKeyRef)
 }
 
 // loadSafeJWTSecret fetches the ring's MPC_JWT_SECRET (HS256) from KMS by the ref
 // in CLOUD_WALLETS_MPC_JWT_SECRET_REF. NEVER a plaintext env value. Empty ref or a
 // KMS error ⇒ nil ⇒ safe custody fail closed.
-func loadSafeJWTSecret(deps cloud.Deps, log luxlog.Logger) []byte {
-	ref := strings.TrimSpace(os.Getenv(envSafeJWTRef))
-	if ref == "" || deps.KMS == nil {
-		return nil
-	}
-	secret, err := deps.KMS.GetSecret(context.Background(), ref)
-	if err != nil {
-		log.Warn("wallets: mpc JWT secret ref did not resolve from KMS", "ref", ref, "err", err)
-		return nil
-	}
-	return secret
+func loadSafeJWTSecret(deps cloud.Deps, _ luxlog.Logger) []byte {
+	return deps.SecretFromEnv(context.Background(), envSafeJWTRef)
 }
 
 // custodyFor resolves the backend for a kind. Missing mpc/treasury ⇒ fail closed
@@ -743,23 +725,6 @@ func (o ops) proposeTransaction(ctx context.Context, in *safeTxIn) (*safeProposa
 		SafeTxHash:  res.SafeTxHash,
 		WalletID:    w.ID,
 	}, nil
-}
-
-// ── finance client (client ONLY — no live wiring, does NOT touch treasury) ────────
-
-// WalletForLedgerAccount resolves the on-chain wallet bound to a finance ledger
-// account — the client by which the treasury reserve signer BECOMES an MPC treasury
-// wallet later. Pure lookup; ("",false) when absent/unbound. Does NOT modify treasury.
-func WalletForLedgerAccount(ctx context.Context, org, ledgerAccount string) (address string, ok bool) {
-	s := live
-	if s == nil || strings.TrimSpace(org) == "" || strings.TrimSpace(ledgerAccount) == "" {
-		return "", false
-	}
-	w, found, err := s.State.store.walletForFinanceAccount(ctx, org, ledgerAccount)
-	if err != nil || !found {
-		return "", false
-	}
-	return w.Address, true
 }
 
 // PaymentTarget is a wallet resolved for RECEIVING a payment: its on-chain address

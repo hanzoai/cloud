@@ -11,7 +11,7 @@ package entitlement
 // both cost money:
 //
 //   - ASKED but never GRANTABLE — CheckEntitlement resolves cleanly and answers
-//     Active:false for EVERY org on EVERY tier, so the licence leg of RequireProduct is
+//     Active:false for EVERY org on EVERY tier, so the licence leg of the paywall is
 //     dead and the product is CLOSED to everyone the wallet leg does not carry. A
 //     customer who bought the top tier is refused what they bought.
 //   - GRANTABLE but never ASKED — a tier sells a product no gate consults, so the grant
@@ -140,7 +140,7 @@ func TestEveryProductCloudAsksAboutCanBeGranted(t *testing.T) {
 		"  ASKED   apps/entitlement/require.go appProducts = %v\n"+
 		"  GRANTED @hanzo/plans entitlements[\"licensing.product_ids\"]:%s\n\n"+
 		"For each dead product CheckEntitlement resolves cleanly and answers Active:false for\n"+
-		"EVERY org on EVERY tier, enterprise included. RequireProduct then admits only on the\n"+
+		"EVERY org on EVERY tier, enterprise included. The paywall then admits only on the\n"+
 		"wallet leg (cloud.Stand: LicenceNone + readable zero balance = Unpaid = 402), and\n"+
 		"GET /v1/entitlement reports the app LOCKED to every customer unconditionally — the\n"+
 		"projection consults no kill switch.\n\n"+

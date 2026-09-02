@@ -152,15 +152,6 @@ func newCountingStudio(t *testing.T, submitStatus int) *countingStudio {
 
 func (s *countingStudio) submitCount() int64 { return s.submits.Load() }
 
-// graphImage pulls the LoadImage source (node "6") out of a captured graph.
-func graphImage(t *testing.T, g map[string]any) string {
-	t.Helper()
-	n, _ := g["6"].(map[string]any)
-	in, _ := n["inputs"].(map[string]any)
-	src, _ := in["image"].(string)
-	return src
-}
-
 // ════════════════════════════════════════════════════════════════════════════════
 // VECTOR 1 — BILLING (money safety)
 // ════════════════════════════════════════════════════════════════════════════════

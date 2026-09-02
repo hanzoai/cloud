@@ -3729,6 +3729,10 @@
  ],
  "network": [
   {
+   "id": "delete_network_identities_by_id",
+   "doc": "Removes one of the org's fabric identities. The device's\ncredential stops authenticating and its enrollment, if unspent, stops\nenrolling.\n\nAn id belonging to another org — or to nothing — is 404 before any write\nreaches the controller: whether an identity exists is itself a cross-tenant\nfact, and a delete may only ever act on what the caller could list."
+  },
+  {
    "id": "get_network",
    "doc": "Returns the caller's org overlay network on the Zero Trust fabric.\n\nThe org has at most ONE overlay, projected from the edge-routers tagged with its\n\"org-\u003corg\u003e\" role attribute: nodes is the real router count and status is\n\"connected\" once at least one router has dialed home, \"provisioning\" while none\nhas. An org with no routers gets an empty list, never a fabricated network.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list so the\nconsole's Networks page renders a clean empty state instead of an error.",
    "read": true
@@ -3736,6 +3740,11 @@
   {
    "id": "get_network_by_id",
    "doc": "Returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
+   "read": true
+  },
+  {
+   "id": "get_network_identities",
+   "doc": "Returns the fabric identities the caller's org owns.\n\nOne row per identity tagged with the org's \"org-\u003corg\u003e\" role attribute — a\ndevice minted here, enrolled or not. An identity that has not yet enrolled\nstill carries its one-time enrollment, so a mislaid JWT is read again here\nrather than re-minted.\n\nA tenancy read over the full inventory, so like the mesh list it does NOT\ndegrade: an unconfigured deployment answers 503.",
    "read": true
   },
   {
@@ -3747,6 +3756,14 @@
    "id": "get_network_services",
    "doc": "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-\u003corg\u003e\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and router reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
    "read": true
+  },
+  {
+   "id": "post_network_identities",
+   "doc": "Mints a fabric identity for a device the caller's org brings.\n\nThe identity is created of type Device, tagged with the org's \"org-\u003corg\u003e\" role\nattribute plus any supplied roles — each scoped to the org, and a\n\"\u003cservice\u003e-host\" role refused unless the org has published that service. The\nanswer carries the controller's one-time enrollment JWT: the device presents\nit once to join the fabric, and until it does the same token can be read back\noff GET /v1/network/identities.\n\nA write, so it does not degrade: an unconfigured deployment answers 503."
+  },
+  {
+   "id": "post_network_services",
+   "doc": "Puts a name on the org's overlay: a fabric service forwarding\nto host:port on whichever of the org's devices carries the \"\u003cname\u003e-host\"\nrole, dialable at \"\u003cname\u003e.\u003corg\u003e.zt\" by any of the org's identities — and by\nthe cloud's own, which is what lets a BYO cluster's apiserver be attached to\nthe fleet with a \".zt\" kubeconfig.\n\nAnswers 201 with the service and its DNS name. The objects behind it are\ncreated in dependency order and unwound on failure, so a half-published\nservice never lingers on the fabric.\n\nA write, so it does not degrade: an unconfigured deployment answers 503."
   }
  ],
  "node": [

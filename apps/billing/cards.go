@@ -31,16 +31,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// topupBody is what a top-up caller sends. It names no subject: the wallet is
-// the caller's own, resolved from its credential, so there is no field a charge
-// could be steered through.
-type topupBody struct {
-	SourceID    string `json:"sourceId,omitempty"`
-	MethodID    string `json:"paymentMethodId,omitempty"`
-	AmountCents int64  `json:"amountCents"`
-	Currency    string `json:"currency,omitempty"`
-}
-
 // mountCards registers the card endpoints and the sweep. Called from routes.
 func mountCards(app cloud.Router, o ops) {
 	zapp := cloud.ZipApp(app)

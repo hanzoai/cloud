@@ -7,7 +7,8 @@ package org
 
 // handoff_test.go is the money/state-safety proof for the WHOLE composition: HRW
 // election (who) + CASFencer monotone lease round (fencing) + replica.FencedStore
-// admission (store) + idem exactly-once (dedup), exercised as real pods sharing ONE
+// admission (store) + the charge key's own primary key (dedup), exercised as real
+// pods sharing ONE
 // object store, each with its own local SQLite. It answers, directly, the four
 // hazards: (a) partition minority, (b) rolling-upgrade handoff, (c) duplicate
 // request, (d) a deposed writer that keeps running.
@@ -17,20 +18,18 @@ package org
 //	takeover : Acquire the lease (fail closed if not the elected owner), then
 //	           CarryForward-seal the org DB to the lease round, hydrating the latest
 //	           durable snapshot (so we serve on committed state).
-//	serve    : apply the request via idem.Once (exactly-once in the local DB), then
+//	serve    : apply the request once (the charges primary key refuses a second), then
 //	           SHIP the snapshot fenced at the lease round. A request is ACKED only
 //	           if the fenced ship lands; a fenced ship (ErrStaleRound) means we were
 //	           deposed — the request is NOT acked and the caller retries elsewhere.
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"testing"
 
-	"github.com/hanzoai/cloud/internal/idem"
 	"github.com/hanzoai/ha"
 	"github.com/hanzoai/vfs/replica"
 )
@@ -95,15 +94,18 @@ func (p *pod) takeover(ctx context.Context, orgID, dbKey string) (ha.Lease, erro
 // returns acked=false with a nil error: the pod was deposed and correctly does not
 // acknowledge.
 func (p *pod) serve(ctx context.Context, dbKey, reqKey, amount string, round uint64) (acked, applied bool, err error) {
-	_, applied, err = idem.Once(ctx, p.local.DB(), reqKey, round, func(ctx context.Context, tx *sql.Tx) ([]byte, error) {
-		if _, e := tx.ExecContext(ctx, `INSERT INTO charges(req, amount) VALUES(?, ?)`, reqKey, amount); e != nil {
-			return nil, e
-		}
-		return []byte("ok:" + amount), nil
-	})
-	if err != nil && !errors.Is(err, idem.ErrAlreadyApplied) {
-		return false, applied, err
+	// The charges table's primary key IS the dedup: a second charge for the same
+	// request cannot land, so a replay inserts nothing and reports applied=false.
+	res, err := p.local.DB().ExecContext(ctx,
+		`INSERT INTO charges(req, amount) VALUES(?, ?) ON CONFLICT(req) DO NOTHING`, reqKey, amount)
+	if err != nil {
+		return false, false, err
 	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, false, err
+	}
+	applied = n > 0
 	// Ship-before-ack: re-ship the current snapshot (fresh apply OR dedup replay)
 	// and only acknowledge if the fenced store admits our round.
 	snap, e := p.local.Snapshot(ctx)

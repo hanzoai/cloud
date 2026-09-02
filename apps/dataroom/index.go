@@ -99,16 +99,6 @@ func (x *linkIndex) resolve(slug string) (string, bool, error) {
 	return org, true, nil
 }
 
-// slugOf answers the org's own public address, or "" when it has not published.
-func (x *linkIndex) slugOf(org string) (string, error) {
-	var slug string
-	err := x.db.QueryRow(`SELECT slug FROM trust_index WHERE org=?`, org).Scan(&slug)
-	if err == sql.ErrNoRows {
-		return "", nil
-	}
-	return slug, err
-}
-
 // centers lists every published trust center, address and owner. This is the ONE
 // cross-tenant read in the subsystem and the only caller is the platform roster,
 // which is refused to anyone who is not a SuperAdmin.

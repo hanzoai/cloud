@@ -42,8 +42,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The In/Out shapes /v1/agents/sessions would use, mirroring the real handlers
-// (sessions.go: idParam(c) + principal.Org(c)).
+// The In/Out shapes /v1/agents/sessions would use, mirroring the real handlers:
+// the session id off the path plus principal.Org(c).
 type sessionKey struct {
 	ID string `json:"id"`
 }

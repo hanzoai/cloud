@@ -244,7 +244,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		store: store,
 		sec:   openSecrets(deps.Brand, b.Log),
-		reg:   newRegistry(),
+		reg:   newRegistry(deps),
 		orch:  newOrchestrator(),
 	}}
 	mounted = s

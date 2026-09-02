@@ -191,12 +191,12 @@ func planeLease(ctx context.Context, in *plane.LeaseIn) (*plane.Leased, error) {
 	// identity in the pod that nobody presented. So a plane lease starts without a
 	// session, and the empty string says so rather than a flag saying it twice.
 	m, err := Lease(s, ctx, org, principal.LedgerFrom(ctx), cloud.Who(ctx).Admin, "", Spec{ID: in.ID, Class: in.Class,
-		Project: in.Project, Runtime: in.Runtime, TTLSec: in.TTLSec})
+		Project: in.Project, Runtime: in.Runtime, TTLSec: in.TTLSec, Cluster: in.Cluster})
 	if err != nil {
 		return nil, err
 	}
 	return &plane.Leased{ID: m.ID, Class: m.Class, Runtime: m.Runtime, Status: m.Status,
-		Workdir: workdirFor(m.Class)}, nil
+		Workdir: workdirFor(m.Class), Cluster: m.Cluster}, nil
 }
 
 // planeRun runs one command inside the caller's sandbox and answers its exit code,

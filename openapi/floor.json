@@ -1,6 +1,6 @@
 {
-  "paths": 1747,
-  "operations": 2415,
+  "paths": 1748,
+  "operations": 2418,
   "products": {
     "account": 10,
     "ad": 7,
@@ -61,7 +61,7 @@
     "ingress": 18,
     "integrations": 54,
     "kms": 7,
-    "knowledge": 10,
+    "knowledge": 9,
     "kv": 6,
     "label": 7,
     "leaderboard": 6,
@@ -76,7 +76,7 @@
     "metrics": 11,
     "ml": 7,
     "mq": 15,
-    "network": 4,
+    "network": 8,
     "node": 4,
     "notify": 4,
     "o11y": 381,

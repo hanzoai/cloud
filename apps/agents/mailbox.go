@@ -126,13 +126,6 @@ func newMailbox() *mailbox {
 	}
 }
 
-// InFlight returns how many routed runs an org has live (offered, not yet finished).
-func (m *mailbox) InFlight(org string) int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.inflight[org])
-}
-
 // routedMailbox is the ONE process-wide rendezvous, shared by the coding
 // delivery activity (Offer/Await) and the machine-facing HTTP surface
 // (Claim/Report). One mailbox, one way.

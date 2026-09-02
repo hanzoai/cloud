@@ -17,9 +17,10 @@ import (
 // `provisioning openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "provisioning",
-		Price: cloud.Metered,
-		Use:   provisioning.Use,
+		Name:     "provisioning",
+		Price:    cloud.Metered,
+		Use:      provisioning.Use,
+		Shutdown: provisioning.Shutdown,
 	}}, []string{"provisioning"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

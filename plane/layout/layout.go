@@ -66,23 +66,6 @@ const (
 	List
 )
 
-// name is the .zap spelling of each kind, which is what a schema emitter writes.
-var name = [...]string{
-	Bool: "bool", Int8: "i8", Int16: "i16", Int32: "i32", Int64: "i64",
-	Uint8: "u8", Uint16: "u16", Uint32: "u32", Uint64: "u64",
-	Float32: "f32", Float64: "f64", Text: "text", Bytes: "bytes",
-	Fixed: "bytes_fixed", Struct: "struct", List: "list",
-}
-
-// String is the kind's .zap spelling. Fixed renders bytes_fixed without its
-// length, which the field carries (see [Field.N]).
-func (k Kind) String() string {
-	if int(k) < len(name) && name[k] != "" {
-		return name[k]
-	}
-	return "kind(" + strconv.Itoa(int(k)) + ")"
-}
-
 // Field is one slot: where it sits, how wide it is, and what it holds.
 type Field struct {
 	Name   string // the Go field name

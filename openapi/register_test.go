@@ -20,7 +20,6 @@ type widgetReq struct {
 	Nested    struct {
 		URL string `json:"url"`
 	} `json:"nested"`
-	hidden  string // unexported: must NOT appear in the schema
 	Skipped string `json:"-"` // explicitly excluded
 }
 

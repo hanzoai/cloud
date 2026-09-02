@@ -12,7 +12,7 @@ package main
 //
 // Both halves are real here: a real host with a real lazy plugin, a real child
 // PROCESS (this test binary, re-execed), the real start endpoint, and the real
-// cloud.Peer on the caller's side. The only thing stubbed is what the child serves,
+// cloud.Ask on the caller's side. The only thing stubbed is what the child serves,
 // because what it serves is not what is under test — that it is RUNNING is.
 
 import (

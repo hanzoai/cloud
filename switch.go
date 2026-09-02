@@ -6,28 +6,25 @@ import "sync/atomic"
 //
 // clients/flags owns evaluation and imports THIS package (cloud.Deps, Handle,
 // OrgStore, …). serve.go mounts the edge middleware and therefore imports
-// routers. So the root package can never import flags — and without a client, no
-// filter mounted from serve.go can read a switch at all. That is not a
-// theoretical gap: the `paywall_enforced` switch was registered in the cockpit
-// and governed only clients/entitlement.RequireProduct, a leaf free to import
-// flags, while the paywall serve.go actually mounts stayed env-gated. Flipping
-// the switch in admin.hanzo.ai changed nothing.
+// routers. So the root package can never import flags, and without a client no
+// filter mounted from serve.go could read a switch at all — a switch the cockpit
+// shows but the gate cannot see is worse than no switch.
 //
 // The client inverts at the direction the dependency already runs: flags calls
 // SetSwitchReader on mount, the root package calls Switch. One function in, one
 // function out, no new import in either direction.
 
 // SwitchPaywallEnforced gates the subscription paywall. The key lives here so the
-// registry entry (clients/entitlements), the evaluator (clients/flags) and the
-// edge (serve.go) all name the same string — a switch whose readers disagree
-// about its key is worse than no switch.
+// registry entry (apps/entitlement), the evaluator (apps/flags) and the reader
+// (SpendGate) all name the same string — a switch whose readers disagree about its
+// key is worse than no switch.
 const SwitchPaywallEnforced = "paywall_enforced"
 
 // SwitchPaywallStrict is the posture on an UNRESOLVABLE standing. OFF (the
 // default) = availability: an authority we cannot reach never refuses a customer.
 // ON = revenue: an unresolvable standing refuses. It lives beside its sibling for
-// the same reason — SpendGate (this package) and RequireProduct (clients/
-// entitlements, which also REGISTERS it) must name one string.
+// the same reason: SpendGate reads both and apps/entitlement registers both, so the
+// two sides must name one string.
 const SwitchPaywallStrict = "paywall_strict"
 
 // switchReader is the flag engine's Bool, installed by clients/flags.Use.

@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
+
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/shorten"
 	s3 "github.com/hanzos3/go"
@@ -47,10 +49,10 @@ type Provisioner interface {
 // dedicated-instance strategy (dedicated.go, dedicatedEngines) — each org owns
 // its instance — and are deliberately absent here: create() routes a dedicated
 // kind before consulting reg.
-func newRegistry() map[string]Provisioner {
+func newRegistry(deps cloud.Deps) map[string]Provisioner {
 	return map[string]Provisioner{
-		"vector": newQdrant(),
-		"search": newMeili(),
+		"vector": newQdrant(deps),
+		"search": newMeili(deps),
 		"s3":     newS3(),
 	}
 }
@@ -59,7 +61,7 @@ var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // ----- Qdrant (vector) ------------------------------------------------------
 // env: CLOUD_VECTOR_ADMIN_URL (default http://vector.hanzo.svc:6333),
-//      CLOUD_VECTOR_ADMIN_KEY, CLOUD_VECTOR_DEFAULT_DIM (1536), CLOUD_VECTOR_DISTANCE (Cosine)
+//      CLOUD_VECTOR_ADMIN_KEY_REF (KMS ref, not the key), CLOUD_VECTOR_DEFAULT_DIM (1536), CLOUD_VECTOR_DISTANCE (Cosine)
 //
 // Qdrant has no per-collection credential; auth is the cluster api-key. The
 // collection is created with a default unnamed vector config (size+distance).
@@ -73,12 +75,12 @@ type qdrantProvisioner struct {
 	distance string
 }
 
-func newQdrant() *qdrantProvisioner {
+func newQdrant(deps cloud.Deps) *qdrantProvisioner {
 	base := strings.TrimRight(environ.Or("CLOUD_VECTOR_ADMIN_URL", "http://vector.hanzo.svc:6333"), "/")
 	host, port := hostPortFromURL(base, 6333)
 	return &qdrantProvisioner{
 		base:     base,
-		key:      os.Getenv("CLOUD_VECTOR_ADMIN_KEY"),
+		key:      string(deps.SecretFromEnv(context.Background(), "CLOUD_VECTOR_ADMIN_KEY_REF")),
 		host:     host,
 		port:     port,
 		dim:      atoiEnv("CLOUD_VECTOR_DEFAULT_DIM", 1536),
@@ -144,10 +146,10 @@ type meiliProvisioner struct {
 	port int
 }
 
-func newMeili() *meiliProvisioner {
+func newMeili(deps cloud.Deps) *meiliProvisioner {
 	base := strings.TrimRight(environ.Or("CLOUD_SEARCH_ADMIN_URL", "http://search.hanzo.svc:7700"), "/")
 	host, port := hostPortFromURL(base, 7700)
-	return &meiliProvisioner{base: base, key: os.Getenv("CLOUD_SEARCH_ADMIN_KEY"), host: host, port: port}
+	return &meiliProvisioner{base: base, key: string(deps.SecretFromEnv(context.Background(), "CLOUD_SEARCH_ADMIN_KEY_REF")), host: host, port: port}
 }
 
 func (p *meiliProvisioner) headers() map[string]string {

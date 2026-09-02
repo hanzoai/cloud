@@ -27,6 +27,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -71,7 +72,7 @@ type Cluster struct {
 }
 
 // Registry is the KMS-backed BYO-cluster store. A nil KMS (unconfigured) makes it
-// disabled: Register fails closed (never plaintext) and DynForOrg/List no-op.
+// disabled: Register fails closed (never plaintext) and List no-ops.
 type Registry struct {
 	kms *kms.Client
 	log luxlog.Logger
@@ -189,39 +190,35 @@ func (r *Registry) Deregister(org, project, name string) (bool, error) {
 	return true, nil
 }
 
-// DynForOrg returns the k8s client the org+project's workloads should target: its
-// default registered cluster (KMS-loaded, cached) or nil when the shard has none
-// (the caller then falls back to the home in-cluster client). This is the ONE
-// federation client.
-func (r *Registry) DynForOrg(org, project string) dynamic.Interface {
+// ErrNoCluster says the org+project shard holds no attached cluster by that
+// name. A sentinel rather than prose, so a caller can answer it as an absence
+// (a 404) and every other failure as the fault it is.
+var ErrNoCluster = errors.New("no such cluster")
+
+// RESTForOrgCluster returns the REST config that reaches ONE of the org+project's
+// registered clusters, by name: the kubeconfig unsealed from the org's KMS and
+// passed back through the same SafeRESTConfig gate that admitted it at attach.
+// The caller names the cluster (a sandbox leased onto it) rather than taking the
+// org's default, and it reads the same index and the same sealed key.
+func (r *Registry) RESTForOrgCluster(org, project, name string) (*rest.Config, error) {
 	if !r.Enabled() {
-		return nil
+		return nil, ErrNoCluster
 	}
 	list, err := r.List(org, project)
-	if err != nil || len(list) == 0 {
-		return nil
-	}
-	target := list[0]
-	for _, cl := range list {
-		if cl.Default {
-			target = cl
-			break
-		}
-	}
-	key := scopeRef(org, project) + "/" + target.Name
-	if dyn, ok := r.cache[key]; ok {
-		return dyn
-	}
-	raw, err := r.kms.Get(configRef(org, project, target.Name))
-	if err != nil || len(raw) == 0 {
-		return nil
-	}
-	dyn, _, err := dynFromKubeconfig(raw)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	r.cache[key] = dyn
-	return dyn
+	if !slices.ContainsFunc(list, func(cl Cluster) bool { return cl.Name == name }) {
+		return nil, ErrNoCluster
+	}
+	raw, err := r.kms.Get(configRef(org, project, name))
+	if err != nil {
+		return nil, fmt.Errorf("unseal kubeconfig for %s: %w", name, err)
+	}
+	if len(raw) == 0 {
+		return nil, ErrNoCluster
+	}
+	return restFromKubeconfig(raw)
 }
 
 func (r *Registry) writeIndex(org, project string, list []Cluster) error {
@@ -269,12 +266,23 @@ func openKMS(brand string) *kms.Client {
 	return client
 }
 
-func dynFromKubeconfig(kubeconfig []byte) (dynamic.Interface, string, error) {
+// restFromKubeconfig is SafeRESTConfig plus the client identity every fleet
+// connection carries — one place, so the registry's consumers (attach
+// validation, RESTForOrgCluster) cannot disagree about either.
+func restFromKubeconfig(kubeconfig []byte) (*rest.Config, error) {
 	restCfg, err := SafeRESTConfig(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	restCfg.UserAgent = "hanzo-cloud-fleet"
+	return restCfg, nil
+}
+
+func dynFromKubeconfig(kubeconfig []byte) (dynamic.Interface, string, error) {
+	restCfg, err := restFromKubeconfig(kubeconfig)
 	if err != nil {
 		return nil, "", err
 	}
-	restCfg.UserAgent = "hanzo-cloud-fleet"
 	dyn, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		return nil, "", err
@@ -309,7 +317,22 @@ func SafeRESTConfig(kubeconfig []byte) (*rest.Config, error) {
 	if err := guardHost(restCfg.Host); err != nil {
 		return nil, err
 	}
+	// A ".zt" apiserver is a fabric service, not an address: the connection to
+	// it goes through the cloud's own fabric identity (zt.go), and every other
+	// host keeps client-go's ordinary TCP dial.
+	if fabricHost(hostOf(restCfg.Host)) {
+		restCfg.Dial = fabricDial
+	}
 	return restCfg, nil
+}
+
+// hostOf extracts the hostname from an apiserver URL, empty when it has none.
+func hostOf(rawHost string) string {
+	u, err := url.Parse(strings.TrimSpace(rawHost))
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }
 
 // guardHost rejects an apiserver URL that is not https or resolves to a
@@ -323,6 +346,12 @@ func guardHost(rawHost string) error {
 	}
 	if u.Scheme != "https" {
 		return fmt.Errorf("cluster apiserver endpoint must be https")
+	}
+	// A host on the fabric's own namespace is accepted WITHOUT resolving: nothing
+	// resolves ".zt", and the SSRF classes this guard refuses are addresses,
+	// which an authenticated overlay dial never touches (zt.go).
+	if fabricHost(u.Hostname()) {
+		return nil
 	}
 	if os.Getenv(allowPrivateHostsEnv) != "" {
 		return nil

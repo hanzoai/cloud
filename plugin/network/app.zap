@@ -4,6 +4,26 @@
 
 package network
 
+struct identityIn {
+    Name  text       @0
+    Roles list<text> @8
+}
+
+struct identityList {
+    Identities list<bytes> @0
+}
+
+struct identityRef {
+    ID text @0
+}
+
+struct identityView {
+    ID         text       @0
+    Name       text       @8
+    Roles      list<text> @16
+    Enrollment bytes      @24
+}
+
 struct meshServiceList {
     Services list<bytes> @0
 }
@@ -23,11 +43,30 @@ struct networkView {
     Nodes  i64  @24
 }
 
+struct publishedView {
+    ID   text @0
+    Name text @8
+    DNS  text @16
+}
+
 struct routerList {
     Routers list<bytes> @0
 }
 
+struct serviceIn {
+    Name text @0
+    Host text @8
+    Port i64  @16
+}
+
 interface network {
+    # Removes one of the org's fabric identities. The device's
+    # credential stops authenticating and its enrollment, if unspent, stops
+    # enrolling.
+    # An id belonging to another org — or to nothing — is 404 before any write
+    # reaches the controller: whether an identity exists is itself a cross-tenant
+    # fact, and a delete may only ever act on what the caller could list.
+    delete_network_identities_by_id(req: identityRef)
     # Returns the caller's org overlay network on the Zero Trust fabric.
     # The org has at most ONE overlay, projected from the edge-routers tagged with its
     # "org-<org>" role attribute: nodes is the real router count and status is
@@ -44,6 +83,14 @@ interface network {
     # edge-routers is 404 too, for the same reason the list is empty: there is no
     # overlay until something is on it.
     get_network_by_id(req: networkRef) returns (rep: networkView)
+    # Returns the fabric identities the caller's org owns.
+    # One row per identity tagged with the org's "org-<org>" role attribute — a
+    # device minted here, enrolled or not. An identity that has not yet enrolled
+    # still carries its one-time enrollment, so a mislaid JWT is read again here
+    # rather than re-minted.
+    # A tenancy read over the full inventory, so like the mesh list it does NOT
+    # degrade: an unconfigured deployment answers 503.
+    get_network_identities() returns (rep: identityList)
     # Returns the Zero Trust routers the caller's org owns.
     # One row per real ZT edge-router tagged with the org's "org-<org>" role attribute,
     # carrying the controller's own health signal: "online" when connected, "disabled"
@@ -64,12 +111,33 @@ interface network {
     # status, so a mesh page never renders "no services" for a fabric it simply could
     # not read.
     get_network_services() returns (rep: meshServiceList)
+    # Mints a fabric identity for a device the caller's org brings.
+    # The identity is created of type Device, tagged with the org's "org-<org>" role
+    # attribute plus any supplied roles — each scoped to the org, and a
+    # "<service>-host" role refused unless the org has published that service. The
+    # answer carries the controller's one-time enrollment JWT: the device presents
+    # it once to join the fabric, and until it does the same token can be read back
+    # off GET /v1/network/identities.
+    # A write, so it does not degrade: an unconfigured deployment answers 503.
+    post_network_identities(req: identityIn) returns (rep: identityView)
+    # Puts a name on the org's overlay: a fabric service forwarding
+    # to host:port on whichever of the org's devices carries the "<name>-host"
+    # role, dialable at "<name>.<org>.zt" by any of the org's identities — and by
+    # the cloud's own, which is what lets a BYO cluster's apiserver be attached to
+    # the fleet with a ".zt" kubeconfig.
+    # Answers 201 with the service and its DNS name. The objects behind it are
+    # created in dependency order and unwound on failure, so a half-published
+    # service never lingers on the fabric.
+    # A write, so it does not degrade: an unconfigured deployment answers 503.
+    post_network_services(req: serviceIn) returns (rep: publishedView)
 }
 
 # ---------------------------------------------------------------------
-# 4 op(s) here. What follows is what this schema does not carry.
+# 8 op(s) here. What follows is what this schema does not carry.
 #
-# opaque (3) — crosses, arrives without its name:
+# opaque (5) — crosses, arrives without its name:
+#   identityList.Identities  network.identityView (list element)
+#   identityView.Enrollment  network.enrollmentView
 #   meshServiceList.Services  network.meshView (list element)
 #   networkList.Networks  network.networkView (list element)
 #   routerList.Routers  network.routerView (list element)

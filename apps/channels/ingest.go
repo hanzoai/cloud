@@ -36,11 +36,11 @@ func ingest(ctx context.Context, ev plane.ChannelsIngestIn) {
 	if !ok {
 		return
 	}
-	// Identity is NOT resolved here. integrations.LinkedSubject is a Go call
-	// gated on that package's `mounted` global, and integrations is a different
-	// process — it answered "not mounted" every time and left UserID empty while
-	// looking best-effort. The turn below resolves the asker properly, over the
-	// plane, where the answer can actually cross.
+	// Identity is NOT resolved here. A Go call into integrations is gated on that
+	// package's `mounted` global, and integrations is a different process, so it
+	// would answer "not mounted" every time and leave UserID empty while looking
+	// best-effort. The turn below resolves the asker over the plane, where the
+	// answer can actually cross.
 	now := time.Now().Unix()
 	// Gate BEFORE any write (C1-F4): a channel_route row is a send capability,
 	// so a blocked sender must not mint one.

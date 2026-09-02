@@ -406,13 +406,3 @@ func mountForge(t *testing.T) *zip.App {
 func basic() string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+forgeToken))
 }
-
-// forceInto force-pushes a work tree's tip onto ref, bypassing every rule this
-// package follows. It exists to prove that a test's divergence is REAL: the same
-// setup that this client refuses is one a '+' would have overwritten, so the
-// refusal is doing work rather than describing a scenario that could not lose
-// anything anyway.
-func forceInto(t *testing.T, w *tree, url, ref string) {
-	t.Helper()
-	git(t, w.dir, "push", "--quiet", "--force", url, "HEAD:"+ref)
-}

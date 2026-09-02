@@ -34,11 +34,8 @@ import (
 	"go/parser"
 	"go/token"
 	"net/http"
-	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	luxlog "github.com/luxfi/log"
@@ -71,12 +68,6 @@ var creditDoors = []string{
 	"/billing/topup",
 	"/billing/subscribe",
 }
-
-// screenIsAValue anchors the structural check below to the REAL screen. The check
-// works over identifiers, so a rename of the type or of its resolver would silently
-// empty the set it reads and leave it green over nothing; this line stops compiling
-// first, which is the only kind of anchor an AST test can have.
-var screenIsAValue screen = riskGate(luxlog.New("guard"))
 
 // screenType is the screen's own type name, which is what makes an identifier in the
 // source recognisable AS the screen. Held to the real one by [screenIsAValue].
@@ -554,14 +545,6 @@ func isolate(t *testing.T) {
 	t.Cleanup(func() { cloud.SetRiskScorer(nil) })
 }
 
-// refs mints a distinct gateway payment id per settlement, which is what a real
-// processor does and what the accrual depends on: distinct money must carry distinct
-// keys or the record deduplicates real payments away.
-func refs(prefix string) func() string {
-	var n atomic.Int64
-	return func() string { return prefix + strconv.FormatInt(n.Add(1), 10) }
-}
-
 func payApp(t *testing.T) *zip.App {
 	t.Helper()
 	isolate(t)
@@ -578,24 +561,4 @@ func browserDoor(app *zip.App, s screen, ref func() string) {
 		return c.Bytes(http.StatusOK,
 			[]byte(`{"transactionId":"txn_b","status":"ok","processorRef":"`+ref()+`"}`))
 	}))
-}
-
-// pay posts the credit endpoint's own body to an endpoint, as a validated customer. The
-// body is [gateBody] — the SAME bytes the browser endpoint is driven with — because
-// PaymentIn and commerce's top-up request declare the amount and the currency under the
-// same names, which is exactly why one signal reader serves both.
-func pay(t *testing.T, app *zip.App, door string) (int, string) {
-	t.Helper()
-	r := httptest.NewRequest(http.MethodPost, door, strings.NewReader(gateBody))
-	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("X-Org-Id", gateOrg)
-	r.Header.Set("X-User-Id", gateUser)
-	resp, err := app.Test(r)
-	if err != nil {
-		t.Fatalf("post %s: %v", door, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	b := make([]byte, 4096)
-	n, _ := resp.Body.Read(b)
-	return resp.StatusCode, string(b[:n])
 }

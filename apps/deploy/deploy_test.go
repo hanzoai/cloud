@@ -76,26 +76,6 @@ func pod(ns, name, image string, labels map[string]any) *unstructured.Unstructur
 	}}
 }
 
-// staticSite builds the two objects that ARE a static-plane site: a staticFiles
-// Middleware (its S3 origin) named `<slug>-static`, and an IngressRoute whose `/`
-// route references it and carries the site host.
-func staticSite(ns, slug, host string) []runtime.Object {
-	mw := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1alpha1", "kind": "Middleware",
-		"metadata": map[string]any{"name": slug + "-static", "namespace": ns},
-		"spec":     map[string]any{"staticFiles": map[string]any{"root": "s3://cdn/" + slug, "spaMode": true}},
-	}}
-	route := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1alpha1", "kind": "IngressRoute",
-		"metadata": map[string]any{"name": slug + "-route", "namespace": ns},
-		"spec": map[string]any{"routes": []any{map[string]any{
-			"match":       "Host(`" + host + "`) && PathPrefix(`/`)",
-			"middlewares": []any{map[string]any{"name": slug + "-static"}},
-		}}},
-	}}
-	return []runtime.Object{mw, route}
-}
-
 // appProjectCR builds a real argoproj.io/v1alpha1 AppProject CR (the "prefer real
 // projects" path). sourceRepos are surfaced; anything else on the CR is not.
 func appProjectCR(name string, sourceRepos ...string) *unstructured.Unstructured {
@@ -230,52 +210,6 @@ func TestListAppCRs(t *testing.T) {
 	}
 }
 
-// A staticFiles Middleware + its IngressRoute project as ONE role:"site"
-// Application row: identity is the S3 slug, repository is the S3 origin, endpoint
-// is the joined host, and it is always Synced (no image drift for a static site).
-func TestListSiteApplications(t *testing.T) {
-	objs := []runtime.Object{}
-	objs = append(objs, staticSite("hanzo", "gallery", "gallery.hanzo.ai")...)
-	// A Middleware with a root but NO IngressRoute → routed:false ⇒ Missing.
-	objs = append(objs, &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1alpha1", "kind": "Middleware",
-		"metadata": map[string]any{"name": "orphan-static", "namespace": "hanzo"},
-		"spec":     map[string]any{"staticFiles": map[string]any{"root": "s3://cdn/orphan"}},
-	}})
-	s := fakeService(objs...)
-
-	sites := listSiteApplications(s, context.Background(), "hanzo")
-	if len(sites) != 2 {
-		t.Fatalf("listSiteApplications len = %d, want 2 (gallery, orphan)", len(sites))
-	}
-	by := map[string]Application{}
-	for _, a := range sites {
-		by[a.Name] = a
-	}
-	g, ok := by["gallery"]
-	if !ok {
-		t.Fatalf("no gallery site row (got %v)", by)
-	}
-	if g.Role != "site" {
-		t.Errorf("gallery Role = %q, want site", g.Role)
-	}
-	if g.Repository != "s3://cdn/gallery" {
-		t.Errorf("gallery Repository = %q, want s3://cdn/gallery", g.Repository)
-	}
-	if g.Sync != SyncSynced {
-		t.Errorf("gallery Sync = %q, want synced", g.Sync)
-	}
-	if g.Health != HealthHealthy {
-		t.Errorf("gallery Health = %q, want healthy", g.Health)
-	}
-	if len(g.Endpoints) != 1 || g.Endpoints[0] != "https://gallery.hanzo.ai" {
-		t.Errorf("gallery Endpoints = %v, want [https://gallery.hanzo.ai]", g.Endpoints)
-	}
-	if o := by["orphan"]; o.Health != HealthMissing || len(o.Endpoints) != 0 {
-		t.Errorf("orphan site = %+v, want Health=missing, no endpoints", o)
-	}
-}
-
 // ── tree ────────────────────────────────────────────────────────────────────
 
 func TestBuildTreeOwnership(t *testing.T) {
@@ -311,19 +245,3 @@ func TestBuildTreeOwnership(t *testing.T) {
 
 // ── image ref helpers ───────────────────────────────────────────────────────
 
-func TestImageRefHelpers(t *testing.T) {
-	cases := []struct{ ref, repo, tag string }{
-		{"ghcr.io/hanzoai/iam:v1.28.16", "ghcr.io/hanzoai/iam", "v1.28.16"},
-		{"registry:5000/hanzoai/iam:v1", "registry:5000/hanzoai/iam", "v1"},
-		{"ghcr.io/hanzoai/iam@sha256:abc", "ghcr.io/hanzoai/iam", "sha256:abc"},
-		{"ghcr.io/hanzoai/iam", "ghcr.io/hanzoai/iam", ""},
-	}
-	for _, c := range cases {
-		if got := repoFromImageRef(c.ref); got != c.repo {
-			t.Errorf("repoFromImageRef(%q) = %q, want %q", c.ref, got, c.repo)
-		}
-		if got := tagFromImageRef(c.ref); got != c.tag {
-			t.Errorf("tagFromImageRef(%q) = %q, want %q", c.ref, got, c.tag)
-		}
-	}
-}

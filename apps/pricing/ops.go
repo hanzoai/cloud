@@ -134,6 +134,21 @@ func callerIsAdmin(ctx context.Context) bool {
 	return false
 }
 
+// callerGrant is what the credential this request arrived on may reach — the
+// second half of the rule cloud/grant.go states, read off the boundary's own
+// attestation so a request cannot state its own limit.
+//
+// Nil off the HTTP path and nil for a session, both of which Reachable passes
+// through untouched. That is the same open default cloud.GrantOf answers with,
+// and it fails closed for nothing: the org rule and the scope gate have already
+// run by the time a catalog is narrowed.
+func callerGrant(ctx context.Context) cloud.Grant {
+	if c, ok := cloud.Request(ctx); ok {
+		return cloud.GrantOf(c)
+	}
+	return nil
+}
+
 // dispatchErr turns a non-200 answer from the @hanzo/pricing bundle into the
 // error a typed op returns: the bundle's OWN status, carrying the bundle's own
 // message. The raw handlers wrote that body through verbatim; an op states it as

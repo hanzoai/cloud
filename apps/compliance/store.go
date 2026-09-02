@@ -187,21 +187,6 @@ func (s *Store) GetCheck(ctx context.Context, org, id string) (Check, error) {
 	return chk, nil
 }
 
-// GetCheckByRef finds a check by its provider reference within the org — the lookup a
-// provider webhook (correlated by provider ref) needs. Org-scoped so a webhook for
-// one tenant can never touch another's record.
-func (s *Store) GetCheckByRef(ctx context.Context, org, providerRef string) (Check, error) {
-	chk, err := s.scanCheck(s.db.QueryRowContext(ctx,
-		`SELECT `+checkCols+` FROM compliance_check WHERE org=? AND provider_ref=?`, org, providerRef))
-	if errors.Is(err, sql.ErrNoRows) {
-		return Check{}, errNotFound
-	}
-	if err != nil {
-		return Check{}, fmt.Errorf("get check by ref: %w", err)
-	}
-	return chk, nil
-}
-
 // GetCheckByProviderRef finds a check by its provider reference across ALL orgs — the
 // lookup a SIGNATURE-authenticated provider webhook needs, since an external provider
 // carries no validated org. The provider reference is a cryptographically-unique
