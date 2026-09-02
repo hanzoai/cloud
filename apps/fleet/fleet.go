@@ -24,6 +24,7 @@
 package fleet
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -31,7 +32,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -232,8 +232,8 @@ func (r *Registry) writeIndex(org, project string, list []Cluster) error {
 // --- helpers ---
 
 func openKMS(brand string) *kms.Client {
-	nodesCSV := strings.TrimSpace(os.Getenv("CLOUD_KMS_NODES"))
-	pass := os.Getenv("CLOUD_KMS_PASSPHRASE")
+	nodesCSV := environ.Or("CLOUD_KMS_NODES", "")
+	pass := environ.Or("CLOUD_KMS_PASSPHRASE", "")
 	if nodesCSV == "" || pass == "" {
 		return nil
 	}
@@ -243,9 +243,9 @@ func openKMS(brand string) *kms.Client {
 			nodes = append(nodes, t)
 		}
 	}
-	org := cmp.Or(strings.TrimSpace(os.Getenv("CLOUD_KMS_ORG")), brand, "hanzo")
+	org := cmp.Or(environ.Or("CLOUD_KMS_ORG", ""), brand, "hanzo")
 	threshold := len(nodes)
-	if v := os.Getenv("CLOUD_KMS_THRESHOLD"); v != "" {
+	if v := environ.Or("CLOUD_KMS_THRESHOLD", ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= len(nodes) {
 			threshold = n
 		}
@@ -353,7 +353,7 @@ func guardHost(rawHost string) error {
 	if fabricHost(u.Hostname()) {
 		return nil
 	}
-	if os.Getenv(allowPrivateHostsEnv) != "" {
+	if environ.Or(allowPrivateHostsEnv, "") != "" {
 		return nil
 	}
 	host := u.Hostname()

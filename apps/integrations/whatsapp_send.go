@@ -1,12 +1,12 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -17,7 +17,7 @@ import (
 // test or a staging tenant cannot end up verifying against one host and sending
 // to another.
 func whatsappOrigin() string {
-	if v := strings.TrimSpace(os.Getenv("WHATSAPP_API_BASE")); v != "" {
+	if v := environ.Or("WHATSAPP_API_BASE", ""); v != "" {
 		return v
 	}
 	return "https://graph.facebook.com"
@@ -124,4 +124,4 @@ func SendWhatsApp(ctx context.Context, org, to, replyTo, text string) (string, e
 
 // whatsappVerifyToken is the string Meta echoes back when a webhook is first
 // subscribed. It is a shared secret, not a credential for anything else.
-func whatsappVerifyToken() string { return os.Getenv("WHATSAPP_VERIFY_TOKEN") }
+func whatsappVerifyToken() string { return environ.Or("WHATSAPP_VERIFY_TOKEN", "") }

@@ -27,10 +27,10 @@
 package fleet
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"sync"
 
@@ -52,7 +52,7 @@ func fabricHost(host string) bool {
 // identity file is deployment configuration, so a deployment without it answers
 // every fabric dial the same way rather than probing the filesystem per dial.
 var fabric = sync.OnceValues(func() (zt.Context, error) {
-	path := strings.TrimSpace(os.Getenv(ztIdentityEnv))
+	path := environ.Or(ztIdentityEnv, "")
 	if path == "" {
 		return nil, fmt.Errorf("dialing a %s apiserver requires %s (an enrolled fabric identity)", ztSuffix, ztIdentityEnv)
 	}

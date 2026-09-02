@@ -1,12 +1,12 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -314,7 +314,7 @@ func githubMentionInbound(ev githubIssueEvent) (Inbound, bool) {
 	if ev.Action != "created" || ev.Comment.ID == 0 || ev.Comment.User.Type == "Bot" {
 		return Inbound{}, false
 	}
-	slug := strings.TrimSpace(os.Getenv(githubAppSlugEnv))
+	slug := environ.Or(githubAppSlugEnv, "")
 	if slug == "" {
 		return Inbound{}, false
 	}

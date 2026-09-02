@@ -37,11 +37,11 @@
 package web3
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -91,7 +91,7 @@ func Shutdown() error { return nil }
 // registry: an operator who wrote the variable meant to configure chains, and
 // finding out at the first request is worse than finding out at boot.
 func build(b cloud.Base) (state, error) {
-	chains, err := parseChains(os.Getenv(envChains))
+	chains, err := parseChains(environ.Or(envChains, ""))
 	if err != nil {
 		return state{}, fmt.Errorf("%s: %w", envChains, err)
 	}

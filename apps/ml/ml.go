@@ -48,6 +48,7 @@
 package ml
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"fmt"
@@ -617,7 +618,7 @@ func newDynamic() (dynamic.Interface, error) {
 		if err != nil {
 			return nil, fmt.Errorf("no in-cluster config and no kubeconfig: %w", err)
 		}
-	} else if tokenFile := strings.TrimSpace(os.Getenv(mlTokenFileEnv)); tokenFile != "" {
+	} else if tokenFile := environ.Or(mlTokenFileEnv, ""); tokenFile != "" {
 		// Re-scope the in-cluster client to the mounted cloud-ml token: keep the
 		// API server host + CA discovered in-cluster, swap ONLY the identity.
 		// Fail closed if the configured token is missing — never silently fall

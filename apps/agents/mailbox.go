@@ -1,10 +1,9 @@
 package agents
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"os"
 	"strconv"
-	"strings"
 	"sync"
 
 	luxlog "github.com/luxfi/log"
@@ -157,7 +156,7 @@ func assertSingleReplica(log luxlog.Logger) {
 		return
 	}
 	replicas := 1
-	if v := strings.TrimSpace(os.Getenv("CLOUD_REPLICAS")); v != "" {
+	if v := environ.Or("CLOUD_REPLICAS", ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			replicas = n
 		}

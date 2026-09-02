@@ -37,12 +37,12 @@ package integrations
 // a client's X account is an org-admin action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -86,8 +86,8 @@ func init() {
 
 func xCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(xClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(xClientSecretEnv)),
+		ClientID:     environ.Or(xClientIDEnv, ""),
+		ClientSecret: environ.Or(xClientSecretEnv, ""),
 	}
 }
 

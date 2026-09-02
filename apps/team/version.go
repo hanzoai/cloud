@@ -11,7 +11,7 @@ package team
 // way.
 
 import (
-	"os"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 	"strings"
 )
@@ -25,7 +25,7 @@ const defaultModelVersion = "0.6.0"
 // modelVersion is the MODEL version string (e.g. "0.6.0"), overridable via
 // MODEL_VERSION.
 func modelVersion() string {
-	if v := os.Getenv("MODEL_VERSION"); v != "" {
+	if v := environ.Or("MODEL_VERSION", ""); v != "" {
 		return v
 	}
 	return defaultModelVersion

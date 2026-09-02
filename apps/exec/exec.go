@@ -56,6 +56,7 @@
 package exec
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"crypto/subtle"
@@ -63,7 +64,6 @@ import (
 	"maps"
 	"mime"
 	"net/http"
-	"os"
 	"path"
 	"slices"
 	"sort"
@@ -782,7 +782,7 @@ func readFull(r interface{ Read([]byte) (int, error) }, b []byte) (int, error) {
 
 // apiKey is the shared service key the chat server presents on X-API-Key. It is
 // KMS-sourced and synced into the pod env as CODE_EXEC_API_KEY.
-func apiKey() string { return strings.TrimSpace(os.Getenv("CODE_EXEC_API_KEY")) }
+func apiKey() string { return environ.Or("CODE_EXEC_API_KEY", "") }
 
 // checkKey enforces the shared service key in constant time. Unset ⇒ 503 (fail
 // closed, never open); wrong ⇒ 401.

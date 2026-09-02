@@ -39,6 +39,7 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -47,7 +48,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -494,7 +494,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 			store:      store,
 			kms:        kc,
 			consoleURL: consoleURL(),
-			stateKey:   resolveStateKey(os.Getenv(stateKeyEnv), b.Log),
+			stateKey:   resolveStateKey(environ.Or(stateKeyEnv, ""), b.Log),
 			providers:  providers,
 			flight:     &flight{m: map[string]*hold{}},
 		},
@@ -1887,7 +1887,7 @@ func callbackPath(provider string) string { return "/v1/integrations/" + provide
 
 // consoleURL resolves the console origin the callback redirects back to.
 func consoleURL() string {
-	if v := strings.TrimSpace(os.Getenv(consoleURLEnv)); v != "" {
+	if v := environ.Or(consoleURLEnv, ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultConsoleURL

@@ -2,7 +2,6 @@ package provisioning
 
 import (
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 
@@ -38,8 +37,8 @@ type secrets struct {
 func openSecrets(brand string, log luxlog.Logger) *secrets {
 	s := &secrets{log: log}
 
-	nodesCSV := os.Getenv("CLOUD_KMS_NODES")
-	pass := os.Getenv("CLOUD_KMS_PASSPHRASE")
+	nodesCSV := environ.Or("CLOUD_KMS_NODES", "")
+	pass := environ.Or("CLOUD_KMS_PASSPHRASE", "")
 	if strings.TrimSpace(nodesCSV) == "" || pass == "" {
 		log.Warn("provisioning KMS degraded: set CLOUD_KMS_NODES + CLOUD_KMS_PASSPHRASE to persist secrets; passwords are returned once on create and not stored")
 		return s
@@ -58,7 +57,7 @@ func openSecrets(brand string, log luxlog.Logger) *secrets {
 	}
 
 	threshold := len(nodes)
-	if v := os.Getenv("CLOUD_KMS_THRESHOLD"); v != "" {
+	if v := environ.Or("CLOUD_KMS_THRESHOLD", ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= len(nodes) {
 			threshold = n
 		}

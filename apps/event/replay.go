@@ -62,10 +62,10 @@
 package event
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -299,7 +299,7 @@ const replayBrokersEnv = "CLOUD_REPLAY_BROKERS"
 const defaultReplayBrokers = "kafka:9092"
 
 func replayBrokers() []string {
-	raw := strings.TrimSpace(os.Getenv(replayBrokersEnv))
+	raw := environ.Or(replayBrokersEnv, "")
 	if raw == "" {
 		raw = defaultReplayBrokers
 	}

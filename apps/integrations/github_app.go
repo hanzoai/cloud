@@ -1,12 +1,12 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,7 +35,7 @@ import (
 // via GITHUB_API_URL). A package var so a test can point the App-JWT + installation
 // calls at a mock server; never mutated in production.
 var githubAPIBase = func() string {
-	if v := strings.TrimSpace(os.Getenv("GITHUB_API_URL")); v != "" {
+	if v := environ.Or("GITHUB_API_URL", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://api.github.com"
@@ -65,8 +65,8 @@ var ghApp = &ghAppState{tokens: map[int64]cachedInstallToken{}}
 // Fails closed when the App is not configured. The build fingerprint includes the
 // API base so a test that repoints githubAPIBase rebuilds (and drops stale tokens).
 func (g *ghAppState) transport() (*ghinstallation.AppsTransport, error) {
-	appID := strings.TrimSpace(os.Getenv(githubAppIDEnv))
-	pem := strings.TrimSpace(os.Getenv(githubAppKeyEnv))
+	appID := environ.Or(githubAppIDEnv, "")
+	pem := environ.Or(githubAppKeyEnv, "")
 	if appID == "" || pem == "" {
 		return nil, fmt.Errorf("github app not configured: set %s and %s", githubAppIDEnv, githubAppKeyEnv)
 	}
@@ -500,7 +500,7 @@ func (o ops) githubClaim(ctx context.Context, in *githubClaimIn) (*githubClaimOu
 // public slug is the one piece a deployment configures; without it the console
 // still renders the list and simply offers no "add" link.
 func githubInstallURL() string {
-	slug := strings.TrimSpace(os.Getenv("GITHUB_APP_SLUG"))
+	slug := environ.Or("GITHUB_APP_SLUG", "")
 	if slug == "" {
 		return ""
 	}
@@ -860,7 +860,7 @@ var importSem = make(chan struct{}, importConcurrency())
 
 func importConcurrency() int {
 	n := 4
-	if v := strings.TrimSpace(os.Getenv("GITHUB_IMPORT_CONCURRENCY")); v != "" {
+	if v := environ.Or("GITHUB_IMPORT_CONCURRENCY", ""); v != "" {
 		if p, err := strconv.Atoi(v); err == nil && p >= 1 {
 			n = p
 		}

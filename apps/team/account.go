@@ -10,6 +10,7 @@ package team
 // net/http — it is an external hop to hanzo.id.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"crypto/rand"
@@ -20,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -1204,7 +1204,7 @@ func sessionAudience(cfg config) map[string]bool {
 	if id := strings.TrimSpace(cfg.iamClientID); id != "" {
 		out[id] = true
 	}
-	for a := range strings.SplitSeq(os.Getenv("TEAM_IAM_AUDIENCES"), ",") {
+	for a := range strings.SplitSeq(environ.Or("TEAM_IAM_AUDIENCES", ""), ",") {
 		if a = strings.TrimSpace(a); a != "" {
 			out[a] = true
 		}

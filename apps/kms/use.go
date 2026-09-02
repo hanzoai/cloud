@@ -28,10 +28,10 @@
 package kms
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -90,7 +90,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// Prefer, in order: an explicit override (CLOUD_KMS_IAM_TOKEN_URL), the in-cluster
 	// IAM service base (IAM_URL — already wired to http://iam.hanzo.svc for JWKS), then
 	// the public issuer as a last resort (single-process / no split-horizon deploys).
-	tokenURL := strings.TrimSpace(os.Getenv("CLOUD_KMS_IAM_TOKEN_URL"))
+	tokenURL := environ.Or("CLOUD_KMS_IAM_TOKEN_URL", "")
 	if tokenURL == "" {
 		if base := cloud.IAMBaseURL(deps.IAMIssuer); base != "" {
 			tokenURL = base + "/v1/iam/oauth/token"

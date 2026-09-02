@@ -18,6 +18,7 @@ package wallet
 // those Kinds fail closed with ErrMPCNotConfigured.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -25,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -77,7 +77,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	custody := buildCustody(deps, log)
-	def := Kind(strings.TrimSpace(os.Getenv(envDefaultCustody)))
+	def := Kind(environ.Or(envDefaultCustody, ""))
 	if def == "" {
 		def = KindKMS
 	}
@@ -192,7 +192,7 @@ func buildCustody(deps cloud.Deps, log luxlog.Logger) map[Kind]Custody {
 	} else {
 		log.Warn("wallets: deps.KMS is nil; kms custody unavailable")
 	}
-	nodes := splitNodes(os.Getenv(envMPCAddr))
+	nodes := splitNodes(environ.Or(envMPCAddr, ""))
 	if len(nodes) == 0 {
 		return m // mpc/treasury fail closed (ErrMPCNotConfigured)
 	}
@@ -209,7 +209,7 @@ func buildCustody(deps cloud.Deps, log luxlog.Logger) map[Kind]Custody {
 	// Safe smart-wallet custody additionally needs the ring PRODUCT API (:8081)
 	// AND the HS256 MPC_JWT_SECRET (resolved from KMS). Absent either, KindSafe is
 	// not offered (custodyFor fails it closed) while mpc/treasury stay available.
-	if safeBase := strings.TrimSpace(os.Getenv(envSafeAPIAddr)); safeBase != "" {
+	if safeBase := environ.Or(envSafeAPIAddr, ""); safeBase != "" {
 		if secret := loadSafeJWTSecret(deps, log); len(secret) > 0 {
 			m[KindSafe] = safeCustody{mpc: client, safe: newSafeClient(safeBase, secret)}
 			log.Info("wallets: safe custody configured", "api", safeBase)

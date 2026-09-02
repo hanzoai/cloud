@@ -1,6 +1,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -9,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -425,7 +425,7 @@ func mirrorCredential(host string) string {
 	if name == "" {
 		return ""
 	}
-	return strings.TrimSpace(os.Getenv(mirrorTokenStem + "_" + envHost(name)))
+	return environ.Or(mirrorTokenStem + "_" + envHost(name), "")
 }
 
 // envHost renders a hostname as the tail of an environment-variable name: upper
@@ -454,7 +454,7 @@ func envHost(host string) string {
 // overrides for a deployment that mirrors to additional external hosts; the local
 // host must never be added.
 func mirrorOutHostAllowed(host string) bool {
-	if v := strings.TrimSpace(os.Getenv(mirrorOutAllowHostsEnv)); v != "" {
+	if v := environ.Or(mirrorOutAllowHostsEnv, ""); v != "" {
 		return hostInList(host, mirrorOutAllowHostsEnv)
 	}
 	host = strings.ToLower(host)
@@ -479,7 +479,7 @@ func hostInList(host, envName string) bool {
 	if host == "" {
 		return false
 	}
-	for h := range strings.SplitSeq(os.Getenv(envName), ",") {
+	for h := range strings.SplitSeq(environ.Or(envName, ""), ",") {
 		if strings.ToLower(strings.TrimSpace(h)) == host {
 			return true
 		}

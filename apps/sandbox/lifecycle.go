@@ -44,7 +44,7 @@ package sandbox
 // here.
 
 import (
-	"os"
+	"github.com/hanzoai/cloud/internal/environ"
 	"time"
 
 	"github.com/hanzoai/cloud/plane"
@@ -113,7 +113,7 @@ func newClocks() clocks {
 }
 
 func envDur(key string, def time.Duration) time.Duration {
-	return time.Duration(atoiOr(os.Getenv(key), int(def/time.Second))) * time.Second
+	return time.Duration(atoiOr(environ.Or(key, ""), int(def/time.Second))) * time.Second
 }
 
 // watched reports whether somebody currently has this sandbox's project open.

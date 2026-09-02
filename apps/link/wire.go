@@ -14,9 +14,9 @@ package link
 // exactly how route.go shipped the redundancy POLICY and deferred EXECUTION.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +30,7 @@ import (
 // policyFromEnv reads the cycle policy (LINK_ROUTER_POLICY), defaulting to the
 // route.go redundancy order.
 func policyFromEnv() Policy {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("LINK_ROUTER_POLICY"))) {
+	switch strings.ToLower(environ.Or("LINK_ROUTER_POLICY", "")) {
 	case "most-remaining", "mostremaining", "headroom":
 		return PolicyMostRemaining
 	case "round-robin", "roundrobin", "rr":
@@ -43,7 +43,7 @@ func policyFromEnv() Policy {
 // cooldownFromEnv reads the post-429 per-account cooldown (LINK_ROUTER_COOLDOWN),
 // defaulting to 60s.
 func cooldownFromEnv() time.Duration {
-	if s := strings.TrimSpace(os.Getenv("LINK_ROUTER_COOLDOWN")); s != "" {
+	if s := environ.Or("LINK_ROUTER_COOLDOWN", ""); s != "" {
 		if d, err := time.ParseDuration(s); err == nil && d > 0 {
 			return d
 		}
@@ -57,7 +57,7 @@ func cooldownFromEnv() time.Duration {
 // api key pays the provider directly, and Hanzo invents no charge until an operator
 // sets the fee. Usage is metered regardless.
 func feeFromEnv() Pricer {
-	s := strings.TrimSpace(os.Getenv("LINK_BYO_FEE_UUSD_PER_1K"))
+	s := environ.Or("LINK_BYO_FEE_UUSD_PER_1K", "")
 	if s == "" {
 		return ZeroPrice
 	}

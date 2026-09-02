@@ -1,6 +1,7 @@
 package content
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -88,7 +88,7 @@ func newDistributor() Distributor {
 // socialBaseURL resolves the hanzoai/social base URL from env, trimming a trailing
 // slash so path joins are clean.
 func socialBaseURL() string {
-	if v := strings.TrimSpace(os.Getenv(socialURLEnv)); v != "" {
+	if v := environ.Or(socialURLEnv, ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultSocialURL

@@ -31,6 +31,7 @@
 package visor
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"cmp"
 	"encoding/json"
@@ -38,7 +39,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -66,14 +66,14 @@ const defaultBase = "http://visor.hanzo.svc:19000"
 const maxBody = 8 << 20
 
 func visorBase() string {
-	if v := strings.TrimSpace(os.Getenv("VISOR_URL")); v != "" {
+	if v := environ.Or("VISOR_URL", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultBase
 }
 
-func serviceClientID() string     { return strings.TrimSpace(os.Getenv("VISOR_CLIENT_ID")) }
-func serviceClientSecret() string { return strings.TrimSpace(os.Getenv("VISOR_CLIENT_SECRET")) }
+func serviceClientID() string     { return environ.Or("VISOR_CLIENT_ID", "") }
+func serviceClientSecret() string { return environ.Or("VISOR_CLIENT_SECRET", "") }
 
 // client is the tenant-scoped Visor HTTP client. target has no trailing slash.
 type client struct {

@@ -34,12 +34,12 @@
 package agents
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
 	mrand "math/rand/v2"
 	"net/http"
-	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -1814,7 +1814,7 @@ func validateLifecycle(mode, schedule string) (string, string, error) {
 // env override, falling back to the default. A non-positive/invalid override is
 // ignored so a typo can never remove the cap.
 func longRunningCap() int {
-	if v := strings.TrimSpace(os.Getenv(longRunningCapEnv)); v != "" {
+	if v := environ.Or(longRunningCapEnv, ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}

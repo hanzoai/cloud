@@ -32,6 +32,7 @@
 package plugin
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
@@ -75,7 +76,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		audit:   deps.Audit,
 		members: liveMembers(deps),
 		self:    self(),
-		origin:  strings.TrimRight(os.Getenv(OriginEnv), "/"),
+		origin:  strings.TrimRight(environ.Or(OriginEnv, ""), "/"),
 		log:     luxlog.Default().New("subsystem", "plugins"),
 	}
 	Routes(z, o)
@@ -409,7 +410,7 @@ func (o *ops) known(name string) error {
 // router reads, so a host names itself the same way everywhere.
 func self() string {
 	for _, k := range []string{"CLOUD_POD_NAME", "POD_NAME"} {
-		if v := os.Getenv(k); v != "" {
+		if v := environ.Or(k, ""); v != "" {
 			return v
 		}
 	}

@@ -34,8 +34,7 @@ package websearch
 // evicted, so a long-running host cannot grow one query at a time.
 
 import (
-	"os"
-	"strings"
+	"github.com/hanzoai/cloud/internal/environ"
 	"sync"
 	"time"
 )
@@ -45,7 +44,7 @@ import (
 // re-ask the parts that overlap, short enough that the web is allowed to change
 // within a session. WEBSEARCH_CACHE_TTL overrides; 0 disables the cache.
 func cacheTTL() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("WEBSEARCH_CACHE_TTL")); v != "" {
+	if v := environ.Or("WEBSEARCH_CACHE_TTL", ""); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
 		}

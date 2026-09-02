@@ -1,9 +1,9 @@
 package treasury
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/hex"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,16 +61,16 @@ type anchorRecord struct {
 
 func newAnchorer(deps cloud.Deps, log luxlog.Logger) *anchorer {
 	chainID := int64(defaultHanzoChainID)
-	if v := strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_CHAIN_ID")); v != "" {
+	if v := environ.Or("TREASURY_ANCHOR_CHAIN_ID", ""); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			chainID = n
 		}
 	}
 	a := &anchorer{
-		rpcURL:    strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_RPC_URL")),
+		rpcURL:    environ.Or("TREASURY_ANCHOR_RPC_URL", ""),
 		chainID:   chainID,
-		contract:  strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_CONTRACT")),
-		signerRef: strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_SIGNER_KMS_REF")),
+		contract:  environ.Or("TREASURY_ANCHOR_CONTRACT", ""),
+		signerRef: environ.Or("TREASURY_ANCHOR_SIGNER_KMS_REF", ""),
 		kms:       deps.KMS,
 		dataDir:   deps.DataDir,
 		log:       log,

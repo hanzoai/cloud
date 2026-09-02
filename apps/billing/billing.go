@@ -48,12 +48,12 @@
 package billing
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -136,7 +136,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 // build constructs the billing state: the commerce S2S proxy from its env
 // (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env).
 func build(b cloud.Base) (state, error) {
-	cp := newCommerceProxy(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	cp := newCommerceProxy(transport.BaseURL(environ.Or("CLOUD_COMMERCE_HTTP_URL", "")), environ.Or("COMMERCE_SERVICE_TOKEN", ""))
 	b.Log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", cp.configured())
 	return state{commerce: cp}, nil
 }

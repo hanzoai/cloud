@@ -757,7 +757,7 @@ func genID() string {
 }
 
 func boolEnv(key string) bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	v := strings.ToLower(environ.Or(key, ""))
 	return v == "true" || v == "1"
 }
 

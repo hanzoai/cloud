@@ -36,7 +36,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"time"
 
@@ -69,7 +68,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	b := protocol.NewBroker(protocol.Config{
 		Addr:        net.JoinHostPort("", strconv.Itoa(port)),
 		PubSubURL:   pubsub.URL(),
-		PubSubCreds: os.Getenv("CLOUD_AMQP_PUBSUB_CREDS"),
+		PubSubCreds: environ.Or("CLOUD_AMQP_PUBSUB_CREDS", ""),
 		Product:     "hanzo-cloud",
 		Version:     cloud.Version,
 	})

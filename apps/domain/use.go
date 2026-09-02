@@ -1,12 +1,12 @@
 package domain
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -54,7 +54,7 @@ func buildState(b cloud.Base) (state, error) {
 	}
 	biller := &meterBiller{rm: b.Bill}
 	zones := &hanzodnsZones{
-		base: strings.TrimRight(strings.TrimSpace(os.Getenv("HANZO_DNS_URL")), "/"),
+		base: strings.TrimRight(environ.Or("HANZO_DNS_URL", ""), "/"),
 		ns:   cfg.Nameservers,
 		http: &http.Client{Timeout: 10 * time.Second},
 		log:  b.Log,
@@ -114,7 +114,7 @@ func configFromEnv() Config {
 }
 
 func floatEnv(key string, def float64) float64 {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
 		}
@@ -123,7 +123,7 @@ func floatEnv(key string, def float64) float64 {
 }
 
 func intEnv(key string, def int64) int64 {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
@@ -132,7 +132,7 @@ func intEnv(key string, def int64) int64 {
 }
 
 func nsEnv(key string, def []string) []string {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		parts := strings.Split(v, ",")
 		out := make([]string, 0, len(parts))
 		for _, p := range parts {

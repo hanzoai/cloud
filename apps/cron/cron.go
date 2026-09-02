@@ -35,9 +35,9 @@
 package cron
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -71,7 +71,7 @@ const (
 // admin org of the one multi-brand cloud deployment (white-label hosts are
 // hostnames of it, not separate clouds).
 func org() string {
-	if v := os.Getenv("CRON_ORG"); v != "" {
+	if v := environ.Or("CRON_ORG", ""); v != "" {
 		return v
 	}
 	return "hanzo"

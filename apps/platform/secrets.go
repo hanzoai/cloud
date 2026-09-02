@@ -45,7 +45,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -342,7 +341,7 @@ func newKMSOrgIdentity(kms cloud.KMSClient, iamIssuer, brand string) tenantKMSId
 		return nil
 	}
 	id := &kmsOrgIdentity{kms: kms}
-	token := strings.TrimSpace(os.Getenv("IAM_SERVICE_TOKEN"))
+	token := environ.Or("IAM_SERVICE_TOKEN", "")
 	if base := cloud.IAMBaseURL(iamIssuer); base != "" && token != "" {
 		id.mint = &identityMinter{
 			upsertURL:    base + "/v1/iam/admin/applications/upsert",

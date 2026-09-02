@@ -1,10 +1,9 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"fmt"
 	"net/url"
-	"os"
-	"strings"
 )
 
 // GitHub is a GitHub *App* provider on the SAME registry as Slack/Google/GitLab.
@@ -70,7 +69,7 @@ const (
 // unused (the App install flow is not OAuth); the slug builds the install URL.
 func githubCreds() OAuthConfig {
 	return OAuthConfig{
-		Extra: map[string]string{githubSlugKey: strings.TrimSpace(os.Getenv(githubAppSlugEnv))},
+		Extra: map[string]string{githubSlugKey: environ.Or(githubAppSlugEnv, "")},
 	}
 }
 
@@ -80,9 +79,9 @@ func githubCreds() OAuthConfig {
 // so its absence does not hide the Connect card — inbound sync simply fails closed
 // until it lands.
 func githubConfigured() bool {
-	return strings.TrimSpace(os.Getenv(githubAppSlugEnv)) != "" &&
-		strings.TrimSpace(os.Getenv(githubAppIDEnv)) != "" &&
-		strings.TrimSpace(os.Getenv(githubAppKeyEnv)) != ""
+	return environ.Or(githubAppSlugEnv, "") != "" &&
+		environ.Or(githubAppIDEnv, "") != "" &&
+		environ.Or(githubAppKeyEnv, "") != ""
 }
 
 // githubAuthorize builds the App installation URL:

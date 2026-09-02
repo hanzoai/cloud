@@ -25,13 +25,13 @@
 package help
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -79,7 +79,7 @@ func build(b cloud.Base) (state, error) {
 // explicit override wins; otherwise it follows the deployment brand. Empty leaves
 // the plane fail-closed.
 func publicOrg(brand string) string {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_HELP_PUBLIC_ORG")); v != "" {
+	if v := environ.Or("CLOUD_HELP_PUBLIC_ORG", ""); v != "" {
 		return v
 	}
 	return strings.TrimSpace(brand)

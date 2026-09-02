@@ -15,10 +15,10 @@ package integrations
 // an org-admin action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -63,8 +63,8 @@ func init() {
 
 func microsoftCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(microsoftClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(microsoftClientSecretEnv)),
+		ClientID:     environ.Or(microsoftClientIDEnv, ""),
+		ClientSecret: environ.Or(microsoftClientSecretEnv, ""),
 	}
 }
 

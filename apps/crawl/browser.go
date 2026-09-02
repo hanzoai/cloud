@@ -19,6 +19,7 @@ package crawl
 // have into an error.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -28,7 +29,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -83,7 +83,7 @@ const browserMaxBody = 64 << 20
 // dials, so the two agree on where the browser lives without a shared constant
 // across repos.
 func browserEndpoint() string {
-	if v := strings.TrimSpace(os.Getenv("CRAWL_URL")); v != "" {
+	if v := environ.Or("CRAWL_URL", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "http://crawl.hanzo.svc:11235"
@@ -220,7 +220,7 @@ func browse(ctx context.Context, raw string) (*Page, error) {
 	// already well reported — the request returns a non-2xx, escalate() keeps the
 	// static Page, and websearch counts the engine blind. One boundary, one
 	// refusal, read in one place.
-	if tok := strings.TrimSpace(os.Getenv("CRAWL_API_TOKEN")); tok != "" {
+	if tok := environ.Or("CRAWL_API_TOKEN", ""); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 

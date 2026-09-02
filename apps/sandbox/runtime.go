@@ -35,7 +35,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -237,8 +236,8 @@ func newRuntime() *runtime {
 		brand:        environ.Or("CLOUD_BRAND", cloud.DefaultBrand),
 		image:        environ.Or("SANDBOX_IMAGE_REPO", "oci.hanzo.ai/hanzoai/sandbox"),
 		tag:          environ.Or("SANDBOX_IMAGE_TAG", ""),
-		startTimeout: time.Duration(atoiOr(os.Getenv("SANDBOX_START_TIMEOUT_SEC"), 120)) * time.Second,
-		execTimeout:  time.Duration(atoiOr(os.Getenv("SANDBOX_EXEC_TIMEOUT_SEC"), 900)) * time.Second,
+		startTimeout: time.Duration(atoiOr(environ.Or("SANDBOX_START_TIMEOUT_SEC", ""), 120)) * time.Second,
+		execTimeout:  time.Duration(atoiOr(environ.Or("SANDBOX_EXEC_TIMEOUT_SEC", ""), 900)) * time.Second,
 	}
 	// THE NAMESPACE IS CHECKED BEFORE ANYTHING ELSE IS BUILT. A sandbox namespace
 	// whose name is a system namespace is not a misconfiguration to warn about — it
@@ -458,7 +457,7 @@ func (r *runtime) imageFor(class string, super bool) string {
 // same shape of bug as a tag that looks pinned and is not, which is what this
 // function exists to end.
 func (r *runtime) digestFor(class string) string {
-	return strings.TrimSpace(os.Getenv("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class)))
+	return environ.Or("SANDBOX_IMAGE_DIGEST_" + strings.ToUpper(class), "")
 }
 
 // runtimes are the isolation boundaries we run, and for each the TWO facts that

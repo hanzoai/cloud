@@ -11,10 +11,10 @@ package integrations
 // AdRoll account is an org-admin action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -49,8 +49,8 @@ func init() {
 
 func adrollCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(adrollClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(adrollClientSecretEnv)),
+		ClientID:     environ.Or(adrollClientIDEnv, ""),
+		ClientSecret: environ.Or(adrollClientSecretEnv, ""),
 	}
 }
 

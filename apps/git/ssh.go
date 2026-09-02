@@ -1,6 +1,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -72,7 +73,7 @@ const shutdownGrace = 5 * time.Second
 // else it is derived from the deployment domain (api.hanzo.ai → git.hanzo.ai);
 // else "git.hanzo.ai".
 func gitSSHHost(domain string) string {
-	if h := strings.TrimSpace(os.Getenv("GIT_SSH_HOST")); h != "" {
+	if h := environ.Or("GIT_SSH_HOST", ""); h != "" {
 		return h
 	}
 	return defaultSSHHost(domain)
@@ -102,12 +103,12 @@ func defaultSSHHost(domain string) string {
 // persisted 0600 on first boot. The listen address is GIT_SSH_ADDR
 // (default :2222 — real :22 is fronted by a k8s TCP LoadBalancer).
 func sshConfig(deps cloud.Deps, gitRoot string) sshConf {
-	addr := strings.TrimSpace(os.Getenv("GIT_SSH_ADDR"))
+	addr := environ.Or("GIT_SSH_ADDR", "")
 	if addr == "" {
 		addr = ":2222"
 	}
 	var pemKey []byte
-	if p := strings.TrimSpace(os.Getenv("GIT_SSH_HOST_KEY")); p != "" {
+	if p := environ.Or("GIT_SSH_HOST_KEY", ""); p != "" {
 		pemKey = []byte(p)
 	}
 	return sshConf{

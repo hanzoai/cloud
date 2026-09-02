@@ -14,10 +14,10 @@ package integrations
 // action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -57,8 +57,8 @@ func init() {
 
 func linkedinCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(linkedinClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(linkedinClientSecretEnv)),
+		ClientID:     environ.Or(linkedinClientIDEnv, ""),
+		ClientSecret: environ.Or(linkedinClientSecretEnv, ""),
 	}
 }
 

@@ -33,7 +33,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud/internal/environ"
@@ -41,7 +40,7 @@ import (
 
 // mojeekKey is the API key, KMS-sourced onto the env like every other secret
 // this process reads. Empty means the scrape answers, which is a working answer.
-func mojeekKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_MOJEEK_KEY")) }
+func mojeekKey() string { return environ.Or("WEBSEARCH_MOJEEK_KEY", "") }
 
 func mojeekAPIURL() string {
 	return environ.Or("WEBSEARCH_MOJEEK_API_URL", "https://api.mojeek.com/search")

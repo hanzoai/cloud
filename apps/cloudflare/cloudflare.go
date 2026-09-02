@@ -41,6 +41,7 @@
 package cloudflare
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -49,7 +50,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -86,7 +86,7 @@ var connectionFor = integrations.ConnectionFor
 // default is the real Cloudflare API. (Same knob hanzodns uses, so a test harness
 // points both planes at one stub.)
 func cfAPIBase() string {
-	if v := strings.TrimSpace(os.Getenv("CLOUDFLARE_API_BASE")); v != "" {
+	if v := environ.Or("CLOUDFLARE_API_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://api.cloudflare.com/client/v4"

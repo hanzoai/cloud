@@ -41,6 +41,7 @@
 package flow
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -48,7 +49,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -65,7 +65,7 @@ import (
 const defaultUpstream = "http://flow.hanzo.svc.cluster.local:7860"
 
 func upstream() string {
-	if v := strings.TrimSpace(os.Getenv("FLOW_UPSTREAM")); v != "" {
+	if v := environ.Or("FLOW_UPSTREAM", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultUpstream
@@ -77,7 +77,7 @@ func upstream() string {
 // a valid dev posture: an AUTO_LOGIN flow accepts keyless calls, and a locked
 // one answers 401/403 which this subsystem reports as 503 (misconfiguration,
 // not caller auth).
-func key() string { return strings.TrimSpace(os.Getenv("FLOW_API_KEY")) }
+func key() string { return environ.Or("FLOW_API_KEY", "") }
 
 const (
 	// timeout bounds a metadata call (projects, workflows, run records).

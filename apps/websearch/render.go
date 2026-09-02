@@ -52,12 +52,12 @@ package websearch
 // warning: noise where outcome.go is trying to keep a signal.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -68,7 +68,7 @@ import (
 // apps/crawl/browser.go, and the same env, because it is the SAME service — two
 // homes for one address is how one of them goes stale.
 func crawlURL() string {
-	if v := strings.TrimSpace(os.Getenv("CRAWL_URL")); v != "" {
+	if v := environ.Or("CRAWL_URL", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "http://crawl.hanzo.svc:11235"
@@ -79,7 +79,7 @@ func crawlURL() string {
 // waits, so it is short: past this the zero result stands and the answer is
 // whatever the other engines returned.
 func renderTimeout() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("WEBSEARCH_RENDER_TIMEOUT")); v != "" {
+	if v := environ.Or("WEBSEARCH_RENDER_TIMEOUT", ""); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
 		}
@@ -103,7 +103,7 @@ func renderTimeout() time.Duration {
 // endpoint changing a second subsystem's answers without anyone naming it. So it
 // is named. Production names it in universe beside WEBSEARCH_ENGINES.
 func renderEnabled() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("WEBSEARCH_RENDER")), "on")
+	return strings.EqualFold(environ.Or("WEBSEARCH_RENDER", ""), "on")
 }
 
 // renderedResults asks the browser for the engine's page and parses it with that
@@ -170,7 +170,7 @@ func renderPage(ctx context.Context, target string) (string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	// Required by the service, and the same KMS-sourced token apps/crawl sends —
 	// one service, one credential, read from one env.
-	if tok := strings.TrimSpace(os.Getenv("CRAWL_API_TOKEN")); tok != "" {
+	if tok := environ.Or("CRAWL_API_TOKEN", ""); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 

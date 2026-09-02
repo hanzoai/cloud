@@ -1,10 +1,9 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
-	"strings"
 )
 
 // Telegram is the token-in-env chat provider: ONE Hanzo bot (created with
@@ -43,9 +42,9 @@ const (
 	telegramBotUsernameEnv   = "TELEGRAM_BOT_USERNAME"
 )
 
-func telegramBotToken() string      { return strings.TrimSpace(os.Getenv(telegramBotTokenEnv)) }
-func telegramWebhookSecret() string { return strings.TrimSpace(os.Getenv(telegramWebhookSecretEnv)) }
-func telegramBotUsername() string   { return strings.TrimSpace(os.Getenv(telegramBotUsernameEnv)) }
+func telegramBotToken() string      { return environ.Or(telegramBotTokenEnv, "") }
+func telegramWebhookSecret() string { return environ.Or(telegramWebhookSecretEnv, "") }
+func telegramBotUsername() string   { return environ.Or(telegramBotUsernameEnv, "") }
 
 // telegramConfigured lights the card up as soon as the bot token lands. The webhook
 // additionally requires TELEGRAM_WEBHOOK_SECRET (fails closed 503 without it) and

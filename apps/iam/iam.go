@@ -97,13 +97,13 @@ package iam
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	luxlog "github.com/luxfi/log"
 
@@ -195,7 +195,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// thirteen-entry blob duplicated in two deployment files, so a new brand was
 	// three edits away from minting under another brand's issuer. An operator who
 	// pins one still wins.
-	if os.Getenv("IAM_ISSUER_MAP") == "" {
+	if environ.Or("IAM_ISSUER_MAP", "") == "" {
 		if b, err := json.Marshal(brand.IssuerByHost()); err == nil {
 			_ = os.Setenv("IAM_ISSUER_MAP", string(b))
 		}
@@ -404,7 +404,7 @@ func openStore(dir string) (orm.DB, *sql.DB, error) {
 	// whether this deployment may run more than one replica. Spelling the test
 	// twice is how the boot check and the opener come to disagree about which
 	// backends are local.
-	backend := strings.TrimSpace(os.Getenv(cloud.IAMStoreEnv))
+	backend := environ.Or(cloud.IAMStoreEnv, "")
 
 	if cloud.IAMStoreShared(backend) {
 		// NO PATH TO CHECK, and the invariant below still has to hold. The file
@@ -466,7 +466,7 @@ func paths(deps cloud.Deps) (dir, initDataPath string) {
 		dir = "."
 	}
 
-	initDataPath = os.Getenv("initDataFile")
+	initDataPath = environ.Or("initDataFile", "")
 	if initDataPath == "" {
 		initDataPath = "init_data.json"
 	}

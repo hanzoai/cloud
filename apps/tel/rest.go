@@ -1,6 +1,7 @@
 package tel
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -35,8 +35,8 @@ type restCarrier struct {
 // it is configured for none. Nil is a valid state — a brand may run the surface
 // with only the stub, and mount refuses individual calls rather than the process.
 func carrierFromEnv() Carrier {
-	base := strings.TrimRight(os.Getenv("TEL_CARRIER_BASE"), "/")
-	key := os.Getenv("TEL_CARRIER_KEY")
+	base := strings.TrimRight(environ.Or("TEL_CARRIER_BASE", ""), "/")
+	key := environ.Or("TEL_CARRIER_KEY", "")
 	if base == "" || key == "" {
 		return nil
 	}

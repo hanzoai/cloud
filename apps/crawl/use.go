@@ -1,12 +1,12 @@
 package crawl
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	luxlog "github.com/luxfi/log"
@@ -106,7 +106,7 @@ type crawlDocument struct {
 // The name still says WEBSEARCH because that is the key that is minted and mounted
 // today; renaming a live credential is its own coordinated change, and doing it
 // inside this one would put a rename in the path of a fix.
-func serviceKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_API_KEY")) }
+func serviceKey() string { return environ.Or("WEBSEARCH_API_KEY", "") }
 
 // Go drops comments at compile time, so cmd/zipdoc is the ONLY path from the
 // handler's prose to the published document, the SDKs and the MCP tool

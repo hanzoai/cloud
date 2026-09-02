@@ -26,6 +26,7 @@ package books
 // exactly once. This file does NOT edit bank.go.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"cmp"
 	"context"
@@ -33,7 +34,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -83,7 +83,7 @@ func (c *plaidConn) envOf(name string) string {
 	if c.env != nil {
 		return c.env(name)
 	}
-	return os.Getenv(name)
+	return environ.Or(name, "")
 }
 
 func (c *plaidConn) kmsClient() cloud.KMSClient {

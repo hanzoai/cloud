@@ -1,6 +1,7 @@
 package content
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"cmp"
 	"context"
@@ -12,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -98,7 +98,7 @@ const defaultStudioURL = "http://studio:8188"
 // in-cluster service so an in-cluster deployment renders with zero config.
 func studioURLFromEnv() string {
 	for _, k := range []string{"CONTENT_STUDIO_URL", "STUDIO_URL"} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		if v := environ.Or(k, ""); v != "" {
 			return v
 		}
 	}
@@ -554,7 +554,7 @@ func sourceHostAllowed(host string) bool {
 	if slices.Contains(defaultSourceHosts, host) {
 		return true
 	}
-	if extra := strings.TrimSpace(os.Getenv(srcHostEnv)); extra != "" {
+	if extra := environ.Or(srcHostEnv, ""); extra != "" {
 		for h := range strings.SplitSeq(extra, ",") {
 			if host == strings.ToLower(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(h), "."))) {
 				return true
@@ -643,7 +643,7 @@ func pathSeg(s string) string {
 
 // envDurationSec reads an integer-seconds env var into a Duration, defaulting to dflt.
 func envDurationSec(key string, dflt time.Duration) time.Duration {
-	v := strings.TrimSpace(os.Getenv(key))
+	v := environ.Or(key, "")
 	if v == "" {
 		return dflt
 	}

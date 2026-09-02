@@ -12,6 +12,7 @@ package integrations
 // client id is baked in — no operator app creds exist for this flow.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -20,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -34,7 +34,7 @@ const (
 // openaiBase reads OPENAI_AUTH_BASE at call time (httptest client), defaulting
 // to the production auth origin.
 func openaiBase() string {
-	if v := strings.TrimSpace(os.Getenv("OPENAI_AUTH_BASE")); v != "" {
+	if v := environ.Or("OPENAI_AUTH_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://auth.openai.com"

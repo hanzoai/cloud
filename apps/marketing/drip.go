@@ -3,10 +3,10 @@
 package marketing
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -59,7 +59,7 @@ var (
 // visibility). The sweep itself is platform-wide and sends org-scoped; this only
 // picks where the ONE schedule record is stored.
 func dripOrg() string {
-	if v := os.Getenv("MARKETING_CRON_ORG"); v != "" {
+	if v := environ.Or("MARKETING_CRON_ORG", ""); v != "" {
 		return v
 	}
 	return "hanzo"

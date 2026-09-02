@@ -71,13 +71,13 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -291,8 +291,8 @@ var egressChain = configuredEgresses
 // counted as one that was.
 func configuredEgresses() []egress {
 	var out []egress
-	if channel := strings.TrimSpace(os.Getenv(alertsSlackChannelEnv)); channel != "" {
-		org := strings.TrimSpace(os.Getenv(alertsSlackOrgEnv))
+	if channel := environ.Or(alertsSlackChannelEnv, ""); channel != "" {
+		org := environ.Or(alertsSlackOrgEnv, "")
 		if org == "" {
 			org = defaultAlertsOrg
 		}
@@ -300,7 +300,7 @@ func configuredEgresses() []egress {
 			return slackSend(ctx, org, channel, text)
 		}})
 	}
-	if url := strings.TrimSpace(os.Getenv(alertsWebhookEnv)); url != "" {
+	if url := environ.Or(alertsWebhookEnv, ""); url != "" {
 		out = append(out, egress{name: "webhook", send: func(ctx context.Context, text string) error {
 			return webhookSend(ctx, url, text)
 		}})

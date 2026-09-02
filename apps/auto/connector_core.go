@@ -1,6 +1,7 @@
 package auto
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"syscall"
 	"time"
@@ -106,7 +106,7 @@ const (
 var ssrfDialer = &net.Dialer{
 	Timeout: 10 * time.Second,
 	Control: func(network, address string, _ syscall.RawConn) error {
-		if os.Getenv(httpAllowPrivateEnv) == "1" {
+		if environ.Or(httpAllowPrivateEnv, "") == "1" {
 			return nil
 		}
 		host, _, err := net.SplitHostPort(address)

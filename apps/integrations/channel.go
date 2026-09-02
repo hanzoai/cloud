@@ -1,11 +1,11 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -488,7 +488,7 @@ func agentRefFor(ctx context.Context, provider, room string) string {
 }
 
 func channelAgentConcurrency() int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("BRIDGE_AGENT_CONCURRENCY"))); err == nil && v > 0 {
+	if v, err := strconv.Atoi(environ.Or("BRIDGE_AGENT_CONCURRENCY", "")); err == nil && v > 0 {
 		return v
 	}
 	return channelDefaultConcurrency
@@ -498,7 +498,7 @@ func channelAgentConcurrency() int {
 // (availability isolation) — a fraction of the global pool. Override
 // BRIDGE_AGENT_ORG_CONCURRENCY; clamped to the global cap in newOrgLimiter.
 func channelOrgConcurrency() int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("BRIDGE_AGENT_ORG_CONCURRENCY"))); err == nil && v > 0 {
+	if v, err := strconv.Atoi(environ.Or("BRIDGE_AGENT_ORG_CONCURRENCY", "")); err == nil && v > 0 {
 		return v
 	}
 	return channelDefaultOrgConcurrency

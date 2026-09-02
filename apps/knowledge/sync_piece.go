@@ -21,13 +21,13 @@
 package knowledge
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -39,7 +39,7 @@ import (
 // lane calls its on-demand piece-run endpoint to pull a long-tail connector's records.
 // Overridable via AUTO_UPSTREAM (shared with the /v1/auto proxy subsystem's default).
 func autoUpstream() string {
-	if v := strings.TrimSpace(os.Getenv("AUTO_UPSTREAM")); v != "" {
+	if v := environ.Or("AUTO_UPSTREAM", ""); v != "" {
 		return v
 	}
 	return "http://auto.hanzo.svc.cluster.local:80"
@@ -52,7 +52,7 @@ func autoUpstream() string {
 // forge that a presence-only X-Org-Id check would leave open. Both sides read the SAME
 // value from KMS (auto-secrets/PIECES_RUNNER_SECRET). Absent here, pieceSync fails
 // closed (an empty header can't match the engine's non-empty secret).
-func pieceRunSecret() string { return strings.TrimSpace(os.Getenv("PIECES_RUNNER_SECRET")) }
+func pieceRunSecret() string { return environ.Or("PIECES_RUNNER_SECRET", "") }
 
 // pieceConnector declares how ONE long-tail provider pulls through a piece: which
 // activepieces piece + action to run, the props to send, how to shape the OAuth token

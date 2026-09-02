@@ -1,12 +1,12 @@
 package auto
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -58,8 +58,8 @@ func init() {
 }
 
 func runWaitlistAward(ctx context.Context, rc RunContext) (any, error) {
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv(waitlistURLEnv)), "/")
-	secret := strings.TrimSpace(os.Getenv(waitlistSecretEnv))
+	base := strings.TrimRight(environ.Or(waitlistURLEnv, ""), "/")
+	secret := environ.Or(waitlistSecretEnv, "")
 	if base == "" || secret == "" {
 		return nil, fmt.Errorf("waitlist award not configured: set %s and %s", waitlistURLEnv, waitlistSecretEnv)
 	}

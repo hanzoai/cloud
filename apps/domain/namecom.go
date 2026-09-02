@@ -3,8 +3,6 @@ package domain
 import (
 	"context"
 	"errors"
-	"os"
-	"strings"
 
 	"github.com/hanzoai/cloud/apps/domain/namecom"
 	"github.com/hanzoai/cloud/internal/environ"
@@ -31,8 +29,8 @@ func newNamecom() *namecomRegistrar {
 	env := environ.Or("NAMECOM_ENV", "test")
 	return &namecomRegistrar{
 		c: namecom.New(
-			strings.TrimSpace(os.Getenv("NAMECOM_USER")),
-			strings.TrimSpace(os.Getenv("NAMECOM_TOKEN")),
+			environ.Or("NAMECOM_USER", ""),
+			environ.Or("NAMECOM_TOKEN", ""),
 			env, nil,
 		),
 		env: env,

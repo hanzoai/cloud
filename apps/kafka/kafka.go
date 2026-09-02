@@ -30,7 +30,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	luxlog "github.com/luxfi/log"
@@ -64,7 +63,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	cfg := &types.Configuration{
 		PubSubUrl:      pubsub.URL(),
-		PubSubCredFile: os.Getenv("CLOUD_KAFKA_PUBSUB_CREDS"),
+		PubSubCredFile: environ.Or("CLOUD_KAFKA_PUBSUB_CREDS", ""),
 		BrokerHost:     environ.Or("CLOUD_KAFKA_HOST", "cloud"),
 		BrokerPort:     port,
 		AdminPort:      adminPort,

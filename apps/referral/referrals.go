@@ -42,11 +42,11 @@
 package referral
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -683,7 +683,7 @@ func mustJSON(v any) json.RawMessage {
 // override); else the brand's public host; else hanzo.ai. White-label by brand so
 // a Lux/Zoo deployment mints its OWN link, never hanzo.ai.
 func linkBase(deps cloud.Deps) string {
-	if v := strings.TrimSpace(os.Getenv("REFERRAL_LINK_BASE")); v != "" {
+	if v := environ.Or("REFERRAL_LINK_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {

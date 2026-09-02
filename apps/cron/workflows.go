@@ -3,12 +3,12 @@
 package cron
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -122,7 +122,7 @@ func PokeActivity(ctx context.Context, in EntryInput) (PokeResult, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if p.BearerEnv != "" {
-		tok := os.Getenv(p.BearerEnv)
+		tok := environ.Or(p.BearerEnv, "")
 		if tok == "" {
 			return PokeResult{}, fmt.Errorf("poke %q: bearer env %s is empty", in.Name, p.BearerEnv)
 		}

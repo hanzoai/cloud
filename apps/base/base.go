@@ -63,6 +63,7 @@
 package base
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net/http"
@@ -136,7 +137,7 @@ func appConfig(dir, org string) baseapp.Config {
 }
 
 func embedEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(embedEnv))) {
+	switch strings.ToLower(environ.Or(embedEnv, "")) {
 	case "1", "true", "yes":
 		return true
 	default:
@@ -221,7 +222,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	// Pin Base's router prefix to /v1/base (its documented multi-app knob) unless
 	// the operator already set one. Read once, applied to EVERY app built below.
-	if strings.TrimRight(os.Getenv("BASE_API_PREFIX"), "/") == "" {
+	if strings.TrimRight(environ.Or("BASE_API_PREFIX", ""), "/") == "" {
 		if err := os.Setenv("BASE_API_PREFIX", apiPrefix); err != nil {
 			return fmt.Errorf("base.Use:  set BASE_API_PREFIX: %w", err)
 		}
@@ -285,7 +286,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 
 	log.Info("base app embedded",
 		"waitlist", "/v1/waitlist/*", "hosting", "/v1/base/*",
-		"prefix", os.Getenv("BASE_API_PREFIX"), "brand", deps.Brand, "env", deps.Env)
+		"prefix", environ.Or("BASE_API_PREFIX", ""), "brand", deps.Brand, "env", deps.Env)
 	return nil
 }
 
@@ -293,7 +294,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 const publicHostEnv = "CLOUD_BASE_PUBLIC_HOST"
 
 func publicHostEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(publicHostEnv))) {
+	switch strings.ToLower(environ.Or(publicHostEnv, "")) {
 	case "1", "true", "yes":
 		return true
 	default:

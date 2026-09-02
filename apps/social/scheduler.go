@@ -1,9 +1,8 @@
 package social
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"os"
-	"strings"
 	"time"
 
 	luxlog "github.com/luxfi/log"
@@ -36,7 +35,7 @@ const (
 // schedulerInterval resolves the sweep cadence from env. "0"/"off"/"false" disables; an
 // unparseable value disables (fail-safe — never silently pick a surprising cadence).
 func schedulerInterval(log luxlog.Logger) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(schedulerIntervalEnv))
+	raw := environ.Or(schedulerIntervalEnv, "")
 	switch raw {
 	case "":
 		return defaultSchedulerInterval

@@ -53,10 +53,9 @@ package agents
 // that otherwise never stops.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/account"
@@ -133,7 +132,7 @@ func newClocks() clocks {
 }
 
 func envSecs(key string, def time.Duration) time.Duration {
-	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key))); err == nil && n > 0 {
+	if n, err := strconv.Atoi(environ.Or(key, "")); err == nil && n > 0 {
 		return time.Duration(n) * time.Second
 	}
 	return def

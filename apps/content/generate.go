@@ -1,11 +1,11 @@
 package content
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -90,7 +90,7 @@ func newGenerator(deps cloud.Deps, b cloud.Base) Generator {
 		vfs:    deps.VFS,
 		bill:   b.Bill,
 		studio: newStudioClient(studioURLFromEnv()),
-		model:  strings.TrimSpace(os.Getenv("CONTENT_COPY_MODEL")),
+		model:  environ.Or("CONTENT_COPY_MODEL", ""),
 		env:    b.Env,
 		log:    b.Log,
 	}

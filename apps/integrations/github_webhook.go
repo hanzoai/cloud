@@ -1,13 +1,13 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -85,7 +85,7 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(body) > githubMaxWebhookBody {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "payload too large")
 	}
-	secret := strings.TrimSpace(os.Getenv(githubWebhookSecretEnv))
+	secret := environ.Or(githubWebhookSecretEnv, "")
 	if !verifyGitHubSignature(secret, c.Header("X-Hub-Signature-256"), body) {
 		return zip.Errorf(http.StatusUnauthorized, "invalid signature")
 	}

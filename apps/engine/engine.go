@@ -46,13 +46,13 @@
 package engine
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -82,7 +82,7 @@ import (
 const defaultUpstream = "http://engine.hanzo.svc.cluster.local:36900"
 
 func upstream() string {
-	if v := strings.TrimSpace(os.Getenv("ENGINE_UPSTREAM")); v != "" {
+	if v := environ.Or("ENGINE_UPSTREAM", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return defaultUpstream
@@ -94,7 +94,7 @@ func upstream() string {
 // dev posture: a bare `hanzo-engine serve` enforces no credential, and a locked
 // deployment answers 401/403 which this subsystem reports as 503
 // (misconfiguration, not caller auth).
-func key() string { return strings.TrimSpace(os.Getenv("ENGINE_API_KEY")) }
+func key() string { return environ.Or("ENGINE_API_KEY", "") }
 
 const (
 	// timeout bounds one management call. Every op here is metadata — model

@@ -1,6 +1,7 @@
 package destination
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -410,7 +410,7 @@ func Shutdown() error {
 
 // fanoutEnabled reports whether the analytics fan-out is on (default ON).
 func fanoutEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(publicFanoutEnv))) {
+	switch strings.ToLower(environ.Or(publicFanoutEnv, "")) {
 	case "0", "false", "no", "off":
 		return false
 	default:

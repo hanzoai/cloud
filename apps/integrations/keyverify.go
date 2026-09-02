@@ -10,13 +10,13 @@ package integrations
 // non-2xx stores nothing, and no error ever carries the credential value.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -77,7 +77,7 @@ type keySpec struct {
 // envBase returns a trimmed, slash-normalized origin override from env, or "".
 // It is the ONE httptest/operator client every origin builder consults first.
 func envBase(key string) string {
-	return strings.TrimRight(strings.TrimSpace(os.Getenv(key)), "/")
+	return strings.TrimRight(environ.Or(key, ""), "/")
 }
 
 // constOrigin returns a fixed origin, overridable via env (the httptest client),

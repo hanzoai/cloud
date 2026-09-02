@@ -19,13 +19,13 @@ package admin
 // passthrough).
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -65,8 +65,8 @@ type baseInstance struct {
 }
 
 func baseAdminConfig() (base, token string, ok bool) {
-	base = strings.TrimRight(strings.TrimSpace(os.Getenv(baseAdminURLEnv)), "/")
-	token = strings.TrimSpace(os.Getenv(baseAdminTokenEnv))
+	base = strings.TrimRight(environ.Or(baseAdminURLEnv, ""), "/")
+	token = environ.Or(baseAdminTokenEnv, "")
 	return base, token, base != ""
 }
 

@@ -46,7 +46,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -82,8 +81,8 @@ func pkgHost() string  { return env("REGISTRY_PKG", defaultPkg) }
 // realm the registry's own 401 challenge advertises — never logged, never
 // echoed. Empty is a valid dev posture against an auth-less registry.
 func credential() (string, string) {
-	return strings.TrimSpace(os.Getenv("REGISTRY_CLIENT_ID")),
-		strings.TrimSpace(os.Getenv("REGISTRY_CLIENT_SECRET"))
+	return environ.Or("REGISTRY_CLIENT_ID", ""),
+		environ.Or("REGISTRY_CLIENT_SECRET", "")
 }
 
 const (

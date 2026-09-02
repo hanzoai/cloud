@@ -8,7 +8,6 @@ package answer
 
 import (
 	"github.com/hanzoai/cloud/internal/environ"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -212,7 +211,7 @@ func synthModels(reqModel string, m mode, def string) []string {
 // envModel returns the first non-empty, trimmed environment value among keys.
 func envModel(keys ...string) string {
 	for _, k := range keys {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+		if v := environ.Or(k, ""); v != "" {
 			return v
 		}
 	}

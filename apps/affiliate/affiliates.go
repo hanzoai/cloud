@@ -51,12 +51,12 @@
 package affiliate
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -1581,10 +1581,10 @@ func mustJSON(v any) json.RawMessage {
 // public host; else hanzo.ai. White-label by brand so a Lux/Zoo deployment mints
 // its OWN link, never hanzo.ai.
 func linkBase(deps cloud.Deps) string {
-	if v := strings.TrimSpace(os.Getenv("AFFILIATE_LINK_BASE")); v != "" {
+	if v := environ.Or("AFFILIATE_LINK_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
-	if v := strings.TrimSpace(os.Getenv("REFERRAL_LINK_BASE")); v != "" {
+	if v := environ.Or("REFERRAL_LINK_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {

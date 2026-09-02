@@ -92,13 +92,13 @@
 package websearch
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	luxlog "github.com/luxfi/log"
@@ -113,7 +113,7 @@ import (
 
 // apiKey is the shared service key the chat server presents (firecrawl Bearer /
 // searxng X-API-Key). KMS-sourced, synced as WEBSEARCH_API_KEY.
-func apiKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_API_KEY")) }
+func apiKey() string { return environ.Or("WEBSEARCH_API_KEY", "") }
 
 // ── SearXNG-shaped search: native keyless meta-search, in-process ────────────
 // search.go's metaSearch runs the enabled keyless engines and returns the exact

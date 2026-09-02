@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -115,7 +115,7 @@ const apiPathSegment = "api"
 var slackHTTP = &http.Client{Timeout: 15 * time.Second}
 
 func slackScopes() []string {
-	if raw := strings.TrimSpace(os.Getenv(slackScopesEnv)); raw != "" {
+	if raw := environ.Or(slackScopesEnv, ""); raw != "" {
 		parts := strings.Split(raw, ",")
 		out := make([]string, 0, len(parts))
 		for _, p := range parts {
@@ -132,8 +132,8 @@ func slackScopes() []string {
 
 func slackCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(slackClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(slackClientSecretEnv)),
+		ClientID:     environ.Or(slackClientIDEnv, ""),
+		ClientSecret: environ.Or(slackClientSecretEnv, ""),
 	}
 }
 

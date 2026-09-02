@@ -31,7 +31,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -920,9 +919,9 @@ func payErr(code, msg string) map[string]any {
 
 func configFromEnv() Config {
 	return Config{
-		Asset:         strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET")),
-		AssetName:     strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_NAME")),
-		AssetVersion:  strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_VERSION")),
+		Asset:         environ.Or("CLOUD_X402_ASSET", ""),
+		AssetName:     environ.Or("CLOUD_X402_ASSET_NAME", ""),
+		AssetVersion:  environ.Or("CLOUD_X402_ASSET_VERSION", ""),
 		AssetDecimals: environ.Int("CLOUD_X402_ASSET_DECIMALS", DefaultAssetDecimals),
 		Network:       environ.Or("CLOUD_X402_NETWORK", DefaultNetwork),
 		MaxTimeout:    int64(environ.Int("CLOUD_X402_MAX_TIMEOUT_SECONDS", DefaultMaxTimeoutSeconds)),

@@ -51,11 +51,11 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 
 	luxlog "github.com/luxfi/log"
@@ -221,7 +221,7 @@ func init() {
 const defaultUpstream = "http://o11y.hanzo.svc.cluster.local:80"
 
 func upstream() string {
-	if v := strings.TrimSpace(os.Getenv("O11Y_UPSTREAM")); v != "" {
+	if v := environ.Or("O11Y_UPSTREAM", ""); v != "" {
 		return v
 	}
 	return defaultUpstream

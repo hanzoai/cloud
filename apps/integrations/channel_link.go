@@ -1,13 +1,13 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -78,16 +78,16 @@ type channelTokenSet struct {
 // oidcBase resolves the hanzo.id OIDC surface: {IAM_ENDPOINT}/v1/iam (default
 // https://hanzo.id). Shared with the Slack link (same IAM host).
 func oidcBase() string {
-	ep := strings.TrimSpace(os.Getenv("IAM_ENDPOINT"))
+	ep := environ.Or("IAM_ENDPOINT", "")
 	if ep == "" {
 		ep = "https://hanzo.id"
 	}
 	return strings.TrimRight(ep, "/") + "/v1/iam"
 }
 
-func linkIAMClientID() string { return strings.TrimSpace(os.Getenv("BRIDGE_LINK_IAM_CLIENT_ID")) }
+func linkIAMClientID() string { return environ.Or("BRIDGE_LINK_IAM_CLIENT_ID", "") }
 func linkIAMClientSecret() string {
-	return strings.TrimSpace(os.Getenv("BRIDGE_LINK_IAM_CLIENT_SECRET"))
+	return environ.Or("BRIDGE_LINK_IAM_CLIENT_SECRET", "")
 }
 
 // oidcConfigured reports whether the shared hanzo.id confidential client is present.

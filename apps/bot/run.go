@@ -56,12 +56,12 @@
 package bot
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -389,7 +389,7 @@ func sessionURL(s *cloud.Service[executor], runID string) string {
 // gatewayBase resolves the browser-facing bot VNC gateway base (no trailing slash)
 // from CLOUD_BOT_GATEWAY_URL, falling back to the public default.
 func gatewayBase() string {
-	base := strings.TrimSpace(os.Getenv(gatewayURLEnv))
+	base := environ.Or(gatewayURLEnv, "")
 	if base == "" {
 		base = defaultGatewayURL
 	}
