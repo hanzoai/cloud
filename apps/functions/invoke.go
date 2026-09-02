@@ -1,6 +1,7 @@
 package functions
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"errors"
 	"net/http"
@@ -236,7 +237,7 @@ func (o ops) invoke(ctx context.Context, in *invokeReq) (*invocationView, error)
 	}
 	return &invocationView{
 		ID: iv.ID, Code: iv.StatusCode, Status: iv.Status, Method: iv.Method,
-		Time: rfc3339(iv.CreatedAt), DurationMs: iv.DurationMs,
+		Time: stamp.Unix(iv.CreatedAt), DurationMs: iv.DurationMs,
 		reply: code,
 	}, nil
 }

@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -233,7 +234,7 @@ func toLastEventView(e Event) *lastEventView {
 	if len(p) > lastEventPreviewCap {
 		p = p[:lastEventPreviewCap]
 	}
-	return &lastEventView{Seq: e.Seq, Kind: e.Kind, Actor: e.Actor, Preview: p, At: rfc3339(e.CreatedAt)}
+	return &lastEventView{Seq: e.Seq, Kind: e.Kind, Actor: e.Actor, Preview: p, At: stamp.Unix(e.CreatedAt)}
 }
 
 type eventView struct {
@@ -310,8 +311,8 @@ func toSessionView(x Session, events, children int) sessionView {
 		Room:    x.Room,
 		Project: x.Project, Published: x.Published,
 		Events: events, Children: children,
-		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
-		CreatedAt: rfc3339(x.CreatedAt), UpdatedAt: rfc3339(x.UpdatedAt),
+		StartedAt: stamp.Unix(x.StartedAt), EndedAt: stamp.Unix(x.EndedAt),
+		CreatedAt: stamp.Unix(x.CreatedAt), UpdatedAt: stamp.Unix(x.UpdatedAt),
 		Progress: progressOf(x),
 	}
 }
@@ -323,7 +324,7 @@ func toEventView(e Event) eventView {
 	}
 	return eventView{
 		ID: e.ID, SessionID: e.SessionID, Seq: e.Seq, Kind: e.Kind, Actor: e.Actor,
-		Payload: p, CreatedAt: rfc3339(e.CreatedAt),
+		Payload: p, CreatedAt: stamp.Unix(e.CreatedAt),
 	}
 }
 

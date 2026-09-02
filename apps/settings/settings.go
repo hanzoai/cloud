@@ -33,6 +33,7 @@
 package settings
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -322,8 +323,8 @@ func toSettingsView(st Settings) settingsView {
 		Product:    st.Product,
 		Config:     cfg,
 		SecretKeys: keys,
-		UpdatedAt:  rfc3339(st.UpdatedAt),
-		CreatedAt:  rfc3339(st.CreatedAt),
+		UpdatedAt:  stamp.Unix(st.UpdatedAt),
+		CreatedAt:  stamp.Unix(st.CreatedAt),
 	}
 }
 
@@ -362,11 +363,4 @@ func addStr(xs []string, x string) []string {
 		return xs
 	}
 	return append(xs, x)
-}
-
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }

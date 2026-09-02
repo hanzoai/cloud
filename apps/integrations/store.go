@@ -746,11 +746,3 @@ func decodeScopes(s string) []string {
 	}
 	return out
 }
-
-// rfc3339 renders a unix timestamp as RFC3339 UTC (empty for 0).
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
-}

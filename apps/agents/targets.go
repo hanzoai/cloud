@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"database/sql"
 	"errors"
@@ -546,7 +547,7 @@ func toTargetView(t Target, load TargetLoad) targetView {
 		ID: t.ID, Label: t.Label, Kind: t.Kind, Status: t.EffectiveStatus(time.Now()),
 		Capacity: t.Capacity, Host: t.Host,
 		Sessions: load.Sessions, Running: load.Running,
-		CreatedAt: rfc3339(t.CreatedAt), UpdatedAt: rfc3339(t.UpdatedAt),
+		CreatedAt: stamp.Unix(t.CreatedAt), UpdatedAt: stamp.Unix(t.UpdatedAt),
 	}
 	if !t.Spec.IsZero() {
 		spec := t.Spec
@@ -558,7 +559,7 @@ func toTargetView(t Target, load TargetLoad) targetView {
 		v.Metrics = &m
 	}
 	if t.MetricsAt > 0 {
-		v.MetricsAt = rfc3339(t.MetricsAt)
+		v.MetricsAt = stamp.Unix(t.MetricsAt)
 	}
 	return v
 }

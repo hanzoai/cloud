@@ -20,6 +20,7 @@
 package prompt
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"fmt"
 	"net/http"
@@ -128,13 +129,6 @@ type versionView struct {
 	CreatedAt string `json:"createdAt"`
 }
 
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
-}
-
 func versionNums(vs []Version) []int {
 	out := make([]int, 0, len(vs))
 	for _, v := range vs {
@@ -146,19 +140,19 @@ func versionNums(vs []Version) []int {
 func toMeta(p Prompt, versions []int) promptMeta {
 	return promptMeta{
 		Name: p.Name, Type: p.Type, Versions: versions,
-		Labels: nonNil(p.Labels), Tags: nonNil(p.Tags), LastUpdatedAt: rfc3339(p.UpdatedAt),
+		Labels: nonNil(p.Labels), Tags: nonNil(p.Tags), LastUpdatedAt: stamp.Unix(p.UpdatedAt),
 	}
 }
 
 func toDetail(p Prompt, vs []Version) promptDetail {
 	hist := make([]versionView, 0, len(vs))
 	for _, v := range vs {
-		hist = append(hist, versionView{Version: v.Version, Type: v.Type, CreatedAt: rfc3339(v.CreatedAt)})
+		hist = append(hist, versionView{Version: v.Version, Type: v.Type, CreatedAt: stamp.Unix(v.CreatedAt)})
 	}
 	return promptDetail{
 		Name: p.Name, Type: p.Type, Prompt: p.Content, Version: p.Version,
 		Labels: nonNil(p.Labels), Tags: nonNil(p.Tags), Versions: hist,
-		CreatedAt: rfc3339(p.CreatedAt), UpdatedAt: rfc3339(p.UpdatedAt),
+		CreatedAt: stamp.Unix(p.CreatedAt), UpdatedAt: stamp.Unix(p.UpdatedAt),
 	}
 }
 
@@ -451,7 +445,7 @@ func (o promptOps) metrics(ctx context.Context, _ *cloud.Unit) (*metricList, err
 		}
 		out = append(out, metricRow{
 			Name: p.Name, Type: p.Type, Versions: n, CurrentVer: p.Version,
-			CreatedAt: rfc3339(p.CreatedAt), LastUpdatedAt: rfc3339(p.UpdatedAt),
+			CreatedAt: stamp.Unix(p.CreatedAt), LastUpdatedAt: stamp.Unix(p.UpdatedAt),
 		})
 	}
 	return &metricList{Data: out}, nil

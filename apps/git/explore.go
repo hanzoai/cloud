@@ -12,6 +12,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
 	"os"
@@ -83,7 +84,7 @@ func allPublicRepos(s *cloud.Service[state], ctx context.Context, query string) 
 			rows = append(rows, exploreRow{
 				Org: org, Name: r.Name, Description: r.Description,
 				DefaultBranch: cmp.Or(strings.TrimSpace(r.DefaultBranch), defaultBranchName),
-				Size:          humanBytes(r.SizeBytes), Updated: rfc3339(r.UpdatedAt),
+				Size:          humanBytes(r.SizeBytes), Updated: stamp.Unix(r.UpdatedAt),
 			})
 		}
 	}

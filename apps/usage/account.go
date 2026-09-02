@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"fmt"
 	"sort"
@@ -132,20 +133,13 @@ type usageWindowView struct {
 func toSampleView(x Sample) usageWindowView {
 	return usageWindowView{
 		Lane: x.Lane, Window: x.Window, WindowMinutes: x.WindowMinutes,
-		WindowStart: rfc3339Of(x.WindowStart), ResetsAt: rfc3339Of(x.ResetsAt),
+		WindowStart: stamp.At(x.WindowStart), ResetsAt: stamp.At(x.ResetsAt),
 		UsedPct: x.UsedPct, Confidence: x.Confidence, Synthetic: x.Synthetic,
 		Requests: x.Requests, InputTokens: x.InputTokens, OutputTokens: x.OutputTokens,
 		TotalTokens: x.TotalTokens, CachedInputTokens: x.CachedInputTokens,
 		CostCents: x.CostCents, CostLimitCents: x.CostLimitCents, Currency: x.Currency,
 		Account: x.Account, Plan: x.Plan, Machine: x.Machine,
 	}
-}
-
-func rfc3339Of(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
 }
 
 // TotalView is one row of the account-usage board (the summary's `accounts.rows`).
@@ -533,7 +527,7 @@ func (o ops) samples(ctx context.Context, in *usageSamplesQuery) (*dashResp, err
 	from, to := w.Start, w.End
 	out := dashResp{
 		Provider: provider, Account: acct, Range: w.Label,
-		From: rfc3339Of(from), To: rfc3339Of(to),
+		From: stamp.At(from), To: stamp.At(to),
 		Source: SourceAccount, Scope: ScopeUser,
 		Current: []usageWindowView{}, Windows: []usageWindowView{},
 	}

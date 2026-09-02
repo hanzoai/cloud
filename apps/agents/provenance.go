@@ -28,6 +28,7 @@ package agents
 // referenced BY NAME, so a truthful transcript has nothing to redact.
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -328,7 +329,7 @@ func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error)
 	v := buildView{
 		Org: org, Project: project, Session: x.ID, Title: x.Title, Agent: x.Agent,
 		Status: x.Status, Repo: x.Repo,
-		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
+		StartedAt: stamp.Unix(x.StartedAt), EndedAt: stamp.Unix(x.EndedAt),
 		Turns:  make([]buildTurn, 0, len(evs)),
 		Verify: "git log --format='" + ProvenanceLogFormat + "' --notes=" + NotesRef,
 	}
@@ -342,7 +343,7 @@ func (o sessionOps) build(ctx context.Context, in *buildRef) (*buildView, error)
 		}
 		v.Turns = append(v.Turns, buildTurn{
 			Seq: e.Seq, Kind: e.Kind, Actor: e.Actor, Body: b.Text,
-			Commit: b.Commit, Subject: b.Subject, At: rfc3339(e.CreatedAt),
+			Commit: b.Commit, Subject: b.Subject, At: stamp.Unix(e.CreatedAt),
 		})
 	}
 	return &v, nil
@@ -461,7 +462,7 @@ func (o sessionOps) builds(ctx context.Context, in *buildsQuery) (*buildList, er
 		out = append(out, buildSummary{
 			Org: x.Org, Project: x.Project, Session: x.ID, Title: x.Title,
 			Agent: x.Agent, Status: x.Status, Repo: x.Repo, Turns: n,
-			StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
+			StartedAt: stamp.Unix(x.StartedAt), EndedAt: stamp.Unix(x.EndedAt),
 		})
 	}
 	return &buildList{Builds: out}, nil

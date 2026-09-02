@@ -1,6 +1,7 @@
 package link
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -112,20 +113,13 @@ type readingView struct {
 func toSampleView(x Sample) readingView {
 	return readingView{
 		Lane: x.Lane, Window: x.Window, WindowMinutes: x.WindowMinutes,
-		WindowStart: rfc3339Of(x.WindowStart), ResetsAt: rfc3339Of(x.ResetsAt),
+		WindowStart: stamp.At(x.WindowStart), ResetsAt: stamp.At(x.ResetsAt),
 		UsedPct: x.UsedPct, Confidence: x.Confidence, Synthetic: x.Synthetic,
 		Requests: x.Requests, InputTokens: x.InputTokens, OutputTokens: x.OutputTokens,
 		TotalTokens: x.TotalTokens, CachedInputTokens: x.CachedInputTokens,
 		CostCents: x.CostCents, CostLimitCents: x.CostLimitCents, Currency: x.Currency,
 		Account: x.Account, Plan: x.Plan, Machine: x.Machine,
 	}
-}
-
-func rfc3339Of(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
 }
 
 // totalView is one row of the global view. Source and scope are what keep the board
@@ -445,12 +439,12 @@ func snapshotOf(group []Sample) string {
 	// Percents: the freshest instance of each lane class.
 	if s, ok := freshest(group, Window6h); ok {
 		u.SessionPct = clampPct(s.UsedPct)
-		u.ResetsAt = rfc3339Of(s.ResetsAt)
+		u.ResetsAt = stamp.At(s.ResetsAt)
 	}
 	if w, ok := freshest(group, WindowWeek); ok {
 		u.WeeklyPct = clampPct(w.UsedPct)
 		if u.ResetsAt == "" {
-			u.ResetsAt = rfc3339Of(w.ResetsAt)
+			u.ResetsAt = stamp.At(w.ResetsAt)
 		}
 	}
 	// Counters + money: the widest single lane, never a mix.
@@ -465,7 +459,7 @@ func snapshotOf(group []Sample) string {
 	u.SpendCents = widest.CostCents
 	u.Currency = widest.Currency
 	u.Confidence = widest.Confidence
-	u.UpdatedAt = rfc3339Of(time.Now())
+	u.UpdatedAt = stamp.At(time.Now())
 	b, err := json.Marshal(u)
 	if err != nil {
 		return ""
@@ -571,7 +565,7 @@ func (o ops) usageDash(ctx context.Context, in *dashIn) (*boardResp, error) {
 	}
 	out := &boardResp{
 		Provider: provider, Account: acct, Range: rangeLabel,
-		From: rfc3339Of(from), To: rfc3339Of(to),
+		From: stamp.At(from), To: stamp.At(to),
 		Source: SourceAccount, Scope: ScopeUser,
 		Current: []readingView{}, Windows: []readingView{},
 	}
@@ -684,7 +678,7 @@ func (o ops) usageSummary(ctx context.Context, in *summaryIn) (*summaryResp, err
 		rangeLabel = Range24h
 	}
 	out := &summaryResp{
-		Range: rangeLabel, From: rfc3339Of(from), To: rfc3339Of(to), Rows: []totalView{},
+		Range: rangeLabel, From: stamp.At(from), To: stamp.At(to), Rows: []totalView{},
 		Account: sourceState{Scope: ScopeUser, Source: accountUsageTable,
 			Note: "your own linked accounts, metered from each provider's own login; plan consumption, not a Hanzo charge"},
 		Hanzo: sourceState{Scope: ScopeOrg, Source: cloudUsageTable,

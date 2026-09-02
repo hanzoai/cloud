@@ -43,6 +43,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"errors"
 	"fmt"
@@ -145,13 +146,6 @@ type repoList struct {
 	Data []repoView `json:"data"`
 }
 
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
-}
-
 // cloneURL is the HTTPS remote for a repo. An org-level repo keeps the
 // two-segment path it has always had; a project-scoped one names its project as
 // the middle segment, because `git clone` sends no headers and the URL is the
@@ -187,7 +181,7 @@ func toView(s *cloud.Service[state], r Repo, branches []string, head string) rep
 		DefaultBranch: r.DefaultBranch, Public: r.Public, Branches: branches, Head: head,
 		CloneURL:  cloneURL(s, r.Org, r.Project, r.Name),
 		SSHURL:    sshURL(s, r.Org, r.Project, r.Name),
-		SizeBytes: r.SizeBytes, CreatedAt: rfc3339(r.CreatedAt), UpdatedAt: rfc3339(r.UpdatedAt),
+		SizeBytes: r.SizeBytes, CreatedAt: stamp.Unix(r.CreatedAt), UpdatedAt: stamp.Unix(r.UpdatedAt),
 	}
 }
 

@@ -39,6 +39,7 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/rand"
@@ -1524,7 +1525,7 @@ func providerViewFor(s *cloud.Service[state], ctx context.Context, org string, p
 			Account:     conn.AccountLabel,
 			ExternalID:  conn.ExternalID,
 			Scopes:      nonNil(conn.Scopes),
-			ConnectedAt: rfc3339(conn.ConnectedAt),
+			ConnectedAt: stamp.Unix(conn.ConnectedAt),
 		}
 	}
 	return v, nil

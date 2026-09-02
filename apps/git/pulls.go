@@ -20,6 +20,7 @@ package git
 // revisions and never touches a plumbing.Hash.
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
 	"errors"
@@ -112,7 +113,7 @@ func pullToView(v Pull) pullView {
 		Number: v.Number, Repo: v.Repo, Title: v.Title, Body: v.Body,
 		Head: v.Head, Base: v.Base, State: v.State, Author: v.Author,
 		MergedRev: v.MergedRev,
-		CreatedAt: rfc3339(v.CreatedAt), UpdatedAt: rfc3339(v.UpdatedAt),
+		CreatedAt: stamp.Unix(v.CreatedAt), UpdatedAt: stamp.Unix(v.UpdatedAt),
 	}
 }
 

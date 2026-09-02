@@ -29,6 +29,7 @@
 package functions
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"cmp"
 	"context"
 	"fmt"
@@ -165,13 +166,6 @@ type functionDetail struct {
 	Secrets []string `json:"secrets"`
 }
 
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
-}
-
 func endpointFor(name string) string { return "/v1/functions/" + name + "/invoke" }
 
 // toView maps a Function to the ServerlessFunction shape, folding in the REAL
@@ -182,7 +176,7 @@ func toView(s *cloud.Service[state], f Function, st InvStats) functionView {
 		Name: f.Name, Namespace: f.Namespace, Environment: f.Runtime, Status: f.Status,
 		Image: f.Image, Endpoint: endpointFor(f.Name), EnvCount: len(f.EnvNames),
 		TimeoutSec: f.TimeoutSec, MemoryLimit: f.MemoryLimit, Target: f.Target,
-		CreatedAt: rfc3339(f.CreatedAt), LastDeployedAt: rfc3339(f.LastDeployAt),
+		CreatedAt: stamp.Unix(f.CreatedAt), LastDeployedAt: stamp.Unix(f.LastDeployAt),
 	}
 	if st.Count > 0 {
 		inv := st.Count
@@ -692,7 +686,7 @@ func toInvViews(invs []Invocation) []invocationView {
 	for _, iv := range invs {
 		out = append(out, invocationView{
 			ID: iv.ID, Code: iv.StatusCode, Status: iv.Status, Method: iv.Method,
-			Time: rfc3339(iv.CreatedAt), DurationMs: iv.DurationMs,
+			Time: stamp.Unix(iv.CreatedAt), DurationMs: iv.DurationMs,
 		})
 	}
 	return out

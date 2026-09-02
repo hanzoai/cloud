@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
@@ -643,7 +644,7 @@ func (o ops) githubRepos(ctx context.Context, _ *cloud.Unit) (*githubReposOut, e
 				v.SyncStatus = "conflict"
 			}
 			if st.LastSyncedAt > 0 {
-				v.LastSyncedAt = rfc3339(st.LastSyncedAt)
+				v.LastSyncedAt = stamp.Unix(st.LastSyncedAt)
 			}
 		}
 		out = append(out, v)

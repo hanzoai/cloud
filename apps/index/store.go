@@ -1,6 +1,7 @@
 package index
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -227,7 +228,7 @@ func (s *Store) Indexes(ctx context.Context, org string) ([]Index, []int, error)
 			return nil, nil, fmt.Errorf("index: scan index: %w", err)
 		}
 		_ = json.Unmarshal([]byte(filt), &idx.FilterableAttributes)
-		idx.CreatedAt, idx.UpdatedAt = rfc3339(created), rfc3339(upded)
+		idx.CreatedAt, idx.UpdatedAt = stamp.Unix(created), stamp.Unix(upded)
 		out, counts = append(out, idx), append(counts, n)
 	}
 	return out, counts, rows.Err()
@@ -251,8 +252,8 @@ func (s *Store) Index(ctx context.Context, org, uid string) (Index, error) {
 		return Index{}, fmt.Errorf("index: read index: %w", err)
 	}
 	_ = json.Unmarshal([]byte(filt), &idx.FilterableAttributes)
-	idx.CreatedAt = rfc3339(created)
-	idx.UpdatedAt = rfc3339(upded)
+	idx.CreatedAt = stamp.Unix(created)
+	idx.UpdatedAt = stamp.Unix(upded)
 	return idx, nil
 }
 
@@ -639,10 +640,6 @@ func userFilter(s string) []string {
 	}
 	return out
 }
-
-// ---- helpers --------------------------------------------------------------
-
-func rfc3339(unix int64) string { return time.Unix(unix, 0).UTC().Format(time.RFC3339) }
 
 // stringify renders a JSON scalar as the text used for a primary key, the user
 // filter, or the search index. Numbers keep their exact decimal form so an

@@ -34,6 +34,7 @@
 package agents
 
 import (
+	"github.com/hanzoai/cloud/internal/stamp"
 	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
@@ -418,13 +419,6 @@ type activityView struct {
 	At      string `json:"at"` // RFC3339 UTC
 }
 
-func rfc3339(unix int64) string {
-	if unix == 0 {
-		return ""
-	}
-	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
-}
-
 // toView projects a stored agent onto the wire. Model goes out through
 // cloud.ZenModel: writes already normalize, so in steady state this changes
 // nothing — it is the backstop that keeps a row written before the normalization
@@ -437,7 +431,7 @@ func toView(a Agent, runs int) agentView {
 		ComputeRef: a.ComputeRef, ServiceAccountID: a.ServiceAccountID,
 		Avatar: a.Avatar, Emoji: a.Emoji,
 		Runs:      runs,
-		CreatedAt: rfc3339(a.CreatedAt), UpdatedAt: rfc3339(a.UpdatedAt),
+		CreatedAt: stamp.Unix(a.CreatedAt), UpdatedAt: stamp.Unix(a.UpdatedAt),
 	}
 }
 
@@ -447,7 +441,7 @@ func toView(a Agent, runs int) agentView {
 func toRunView(r Run) agentRunView {
 	return agentRunView{
 		ID: r.ID, Status: r.Status, Model: cloud.ZenModel(r.Model), Input: r.Input, Output: r.Output,
-		Error: r.Error, DurationMs: r.DurationMs, CreatedAt: rfc3339(r.CreatedAt),
+		Error: r.Error, DurationMs: r.DurationMs, CreatedAt: stamp.Unix(r.CreatedAt),
 		Agent: r.AgentName, Actor: r.Actor, TraceID: r.TraceID,
 		PromptTokens: r.PromptTokens, CompletionTokens: r.CompletionTokens, ToolCalls: r.ToolCalls,
 	}
@@ -1741,12 +1735,12 @@ func (o agentOps) activity(ctx context.Context, _ *cloud.Unit) (*activityFeed, e
 		if r.Status == "error" {
 			kind, msg = "failed", trimMsg(r.Error)
 		}
-		evs = append(evs, activityView{ID: r.ID, Kind: kind, Agent: r.AgentName, Message: msg, At: rfc3339(r.CreatedAt)})
+		evs = append(evs, activityView{ID: r.ID, Kind: kind, Agent: r.AgentName, Message: msg, At: stamp.Unix(r.CreatedAt)})
 	}
 	for _, a := range rows {
-		evs = append(evs, activityView{ID: a.ID + ":created", Kind: "created", Agent: a.Name, Message: "Agent created", At: rfc3339(a.CreatedAt)})
+		evs = append(evs, activityView{ID: a.ID + ":created", Kind: "created", Agent: a.Name, Message: "Agent created", At: stamp.Unix(a.CreatedAt)})
 		if a.UpdatedAt > a.CreatedAt {
-			evs = append(evs, activityView{ID: a.ID + ":updated", Kind: "updated", Agent: a.Name, Message: "Configuration updated", At: rfc3339(a.UpdatedAt)})
+			evs = append(evs, activityView{ID: a.ID + ":updated", Kind: "updated", Agent: a.Name, Message: "Configuration updated", At: stamp.Unix(a.UpdatedAt)})
 		}
 	}
 	// Newest first. rfc3339 is UTC ("Z"), so lexical order == chronological.
