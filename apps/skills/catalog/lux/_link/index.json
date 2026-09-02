@@ -16,28 +16,28 @@
       "name": "link_devices",
       "path": "link_devices/SKILL.md",
       "service": "link",
-      "sha256": "fb15d896c950fda84138e405f2df52acf1c18a1e2de28a6cef2dec3b30b4ce54"
+      "sha256": "4a93c4236a6d528a8f1d0502eaa5b24f54a68fef26d413f487c3ae92a6bc49f0"
     },
     {
       "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
       "name": "link_link",
       "path": "link_link/SKILL.md",
       "service": "link",
-      "sha256": "812fb2b9966b380b0163bb18217208acecc7f8862ad8e4bd8b0b17257f564e5f"
+      "sha256": "92eb2ee00a4226480274dc335ad324234c2a42e65f4cc2463455fd857a2fb8a4"
     },
     {
       "description": "Read link route: Gets the failover order across your linked accounts..",
       "name": "link_route",
       "path": "link_route/SKILL.md",
       "service": "link",
-      "sha256": "27e213768b633767e0464555cb31af670686eed4667a8176fbc5985d56381ad9"
+      "sha256": "a0416cb29a96a5213ee6dcba084c6b7d80c129a05a38f52fcf20ee0c0dd9401f"
     },
     {
       "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Lux spend side by side..",
       "name": "link_usage",
       "path": "link_usage/SKILL.md",
       "service": "link",
-      "sha256": "3923a2e6e18fb395961a42999baa4ea8aae5cef60d286c46c32466b419db994a"
+      "sha256": "57641a2f8b13a3c24738214cee45ad0f0838d100469fd4079491f816e68600a3"
     }
   ],
   "spec_version": "8.0.0"

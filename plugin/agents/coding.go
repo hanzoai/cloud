@@ -67,7 +67,7 @@ func mountAgents(app cloud.Router, deps cloud.Deps) error {
 	if err := agentsMount(app, deps); err != nil {
 		return err
 	}
-	codingDoor(cloud.ZipApp(app))
+	codingEndpoint(cloud.ZipApp(app))
 
 	// SAY WHETHER THE FORGE HOST KEY IS CONFIGURED, once, here.
 	//
@@ -124,12 +124,12 @@ func shutdownAgents(ctx context.Context) error {
 	return agents.Shutdown(ctx)
 }
 
-// codingDoor is the one registration of the coding op in this program. It is its
+// codingEndpoint is the one registration of the coding op in this program. It is its
 // own function so a test can stand the real endpoint up on a socket and be
 // DOWNSTREAM of the registration rather than beside it — a harness that rebuilt
 // the route by hand would stay green through exactly the mutation that matters,
 // and this op's reachability is now the only way a chat turn gets to a sandbox.
-func codingDoor(app *zip.App) {
+func codingEndpoint(app *zip.App) {
 	zip.Post[plane.CodingStartIn, plane.CodingStarted](app, "/v1/agents/coding", startCoding,
 		zip.WithStatus(http.StatusAccepted),
 		zip.WithSummary("Start one autonomous coding run against a repo in the caller's org"))

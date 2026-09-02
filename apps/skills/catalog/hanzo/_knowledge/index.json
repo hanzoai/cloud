@@ -16,14 +16,14 @@
       "name": "knowledge_connectors",
       "path": "knowledge_connectors/SKILL.md",
       "service": "knowledge",
-      "sha256": "6ea6ab637b4047b95a798ac348e3bd7bfd0864e85533f2d982ebd31eb9d5906b"
+      "sha256": "7206efbf6ff930edc09380f2b6aab9e7d928f90f22339c05a04c5be2be172abf"
     },
     {
       "description": "Read knowledge graph: Returns the caller org's knowledge as a node/edge graph shaped for a force-directed renderer: pages, memories and synced sources as nodes; the page parent tree, the wikilinks between pages, and each source's connector provenance as edges..",
       "name": "knowledge_graph",
       "path": "knowledge_graph/SKILL.md",
       "service": "knowledge",
-      "sha256": "0a913b1845c4f84fc2eda22e572ff4dd0945cffc0c1e812ce76906c9b8384cf6"
+      "sha256": "9a69d633e180d83408048888f6aa77f07cc5897b7888fe33a768c56343214721"
     }
   ],
   "spec_version": "8.0.0"

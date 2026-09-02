@@ -9,7 +9,7 @@ package principal
 // tool. websearch refused `sign in to search the web` for a request that reached
 // the plugin WITH org=hanzo and user=hanzo/z@hanzo.ai on it, because tools/call
 // invokes an op directly (zip here.go) — no route, so no middleware, so nothing
-// parked the slot. The gate had been moved into the handler so that "every door
+// parked the slot. The gate had been moved into the handler so that "every endpoint
 // reaches it", and it was unsatisfiable on the one endpoint that motivated the move.
 
 import (

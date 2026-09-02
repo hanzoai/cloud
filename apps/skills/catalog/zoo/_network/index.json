@@ -16,28 +16,28 @@
       "name": "network_identities",
       "path": "network_identities/SKILL.md",
       "service": "network",
-      "sha256": "70fb4f0918820d2525768f9dc439cda6f78e00a3d6e130cbbe41d74bae9cb950"
+      "sha256": "f73b3fc3b952feda37c2e803b9da809bba948570f78fd34aee615278fde317e7"
     },
     {
       "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
       "name": "network_network",
       "path": "network_network/SKILL.md",
       "service": "network",
-      "sha256": "d99555badea10fb498422cc285c48a20d60cf0c472c38e1c7ac375aa5a925dc8"
+      "sha256": "6877601862e149530a4e43a1e71dc053032e9d25f0417413cd5a58f1a92251a8"
     },
     {
       "description": "Read network routers: Returns the Zero Trust routers the caller's org owns..",
       "name": "network_routers",
       "path": "network_routers/SKILL.md",
       "service": "network",
-      "sha256": "9412504b23852c9449676e1a9ffa1f8dc3d276af01650ad909daa414a822f249"
+      "sha256": "438f169305322742ec8439a396dd902ab20743a41d9ff79eba6d1c03eef3cfff"
     },
     {
       "description": "Read network services: Returns the Zero Trust edge services the caller's org owns..",
       "name": "network_services",
       "path": "network_services/SKILL.md",
       "service": "network",
-      "sha256": "b616298401de56806c33041f83c7539026328c0e3907b2044250d870c9c81338"
+      "sha256": "884eb04cff34d3c824da87fccdb752325ccbc1e10a3ea7ecb351255a9f9787b9"
     }
   ],
   "spec_version": "8.0.0"

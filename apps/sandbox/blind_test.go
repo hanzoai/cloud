@@ -68,7 +68,7 @@ func TestBlind_HidesTheGatewayToken(t *testing.T) {
 
 // BOTH PATHS. The result returned to the caller and the narration are separate
 // paths out of this process, and a secret must not survive either.
-func TestBlind_HidesBothDoors(t *testing.T) {
+func TestBlind_HidesBothEndpoints(t *testing.T) {
 	b := newBlinder([]string{pem})
 	line := secretLines(t, pem)[0]
 	r := b.result(ExecResult{Stdout: "key is " + line, Stderr: "also " + line})

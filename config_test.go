@@ -53,7 +53,7 @@ func TestEnabled_EmptyListMountsEverything(t *testing.T) {
 //
 // Asserted rather than remembered: a default is exactly the value nobody sets,
 // which makes it the value nobody notices changing back.
-func TestListenDefaults_AreLoopbackExceptTheFrontDoor(t *testing.T) {
+func TestListenDefaults_AreLoopbackExceptTheEdge(t *testing.T) {
 	for _, k := range []string{"CLOUD_LISTEN", "CLOUD_ZAP_LISTEN", "CLOUD_HEALTH_LISTEN"} {
 		t.Setenv(k, "")
 	}

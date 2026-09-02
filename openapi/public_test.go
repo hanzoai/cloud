@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/manifest/door"
+	"github.com/hanzoai/cloud/manifest/mcp"
 	"github.com/zap-proto/zip"
 )
 
@@ -55,7 +55,7 @@ func TestACustomerOperationIsPublicByItsAddress(t *testing.T) {
 
 // A relay publishes whatever grows behind it and names nothing a client can
 // call; it stays internal whatever product it sits under.
-func TestARelayDoorIsNotPublic(t *testing.T) {
+func TestARelayEndpointIsNotPublic(t *testing.T) {
 	op := &Operation{OperationID: "get_v1_tasks_wildcard1"}
 	if audience("/v1/tasks/{wildcard1}", op) {
 		t.Fatal("a {wildcardN} address came back public")
@@ -144,10 +144,10 @@ func TestPublishRefusesADanglingReference(t *testing.T) {
 }
 
 // The agent MCP endpoint is the fleet's: core projects it with its prose and
-// bodies, Door knows it, it is public, and an app describing itself never carries it.
-func TestTheAgentDoorIsTheFleetsAndNoApps(t *testing.T) {
-	if !Door(door.Path) {
-		t.Fatal("the agent MCP endpoint is not a Door")
+// bodies, MCP knows it, it is public, and an app describing itself never carries it.
+func TestTheAgentEndpointIsTheFleetsAndNoApps(t *testing.T) {
+	if !Host(mcp.Path) {
+		t.Fatal("the agent MCP endpoint is not a MCP")
 	}
 	app := newApp()
 	app.Get("/v1/widgets", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
@@ -155,14 +155,14 @@ func TestTheAgentDoorIsTheFleetsAndNoApps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, carried := own.Paths[door.Path]; carried {
+	if _, carried := own.Paths[mcp.Path]; carried {
 		t.Fatal("an app's own document carries the agent MCP endpoint")
 	}
 	c, err := core()
 	if err != nil {
 		t.Fatal(err)
 	}
-	op := c.Doc.Paths[door.Path]["post"]
+	op := c.Doc.Paths[mcp.Path]["post"]
 	if op == nil {
 		t.Fatal("core did not project the agent MCP endpoint")
 	}

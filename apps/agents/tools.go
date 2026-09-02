@@ -36,12 +36,12 @@ package agents
 // fleet's composed agent MCP server (fleet/mcp.go), which asks every app what it
 // serves right now, merges the union, and forwards a call to the app that listed
 // the name. It is what api.hanzo.ai/v1/mcp is. So there is one tool surface in
-// this fleet and an agent reads THAT one — door.go is the client, over the
+// this fleet and an agent reads THAT one — fleet.go is the client, over the
 // host's own socket, and it is the plane a real deployment uses.
 //
 // registryTools stays as what this process's own registry says, which is the
 // whole answer exactly where this process is the whole fleet: a single-app
-// binary, a dev box, a test. doorTools falls back to it there and nowhere else,
+// binary, a dev box, a test. fleetTools falls back to it there and nowhere else,
 // on the one signal that means it — nothing listening on the router's socket.
 //
 // The degradation that remains is an OUTAGE, and it is visible: every run's step
@@ -145,7 +145,7 @@ func callableTools(a Agent) []string {
 // per-DEPLOYMENT, not per-run — and it is deliberately narrow: names, prose,
 // schemas, and one call that takes raw JSON in and returns text out. Nothing in
 // it is a map, which is what let the same shape cross a process boundary
-// unchanged (door.go) rather than being redesigned at the client.
+// unchanged (fleet.go) rather than being redesigned at the client.
 type toolPlane interface {
 	// catalog resolves the tool NAMES an agent declares into definitions the
 	// model can be offered. A name that resolves to nothing is simply absent —
@@ -158,10 +158,10 @@ type toolPlane interface {
 
 // runTools is the tool plane a run uses: the fleet's own agent MCP server, which
 // answers with this process's registry wherever this process IS the fleet
-// (door.go). A package var so a test can substitute a deterministic one; there
+// (fleet.go). A package var so a test can substitute a deterministic one; there
 // is no exported setter, because which plane answers is a property of the
 // deployment and not something a caller may choose.
-var runTools toolPlane = doorTools{}
+var runTools toolPlane = fleetTools{}
 
 // registryTools is the tool plane read IN THIS PROCESS: tools.Default(), the same
 // registry POST /v1/tools/call dispatches through, with the same activation gate,

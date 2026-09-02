@@ -16,28 +16,28 @@
       "name": "meet_call",
       "path": "meet_call/SKILL.md",
       "service": "meet",
-      "sha256": "dd4fd9a06599480ebd77f3aa41c6f65595f292fcc27b7bba5bc44861fbb21e2a"
+      "sha256": "af563266fac523d6b074b0a72ea05e3164cda887d73bb52735b698ef17975715"
     },
     {
       "description": "Read meet health: Health reports whether the office can mint join tokens..",
       "name": "meet_health",
       "path": "meet_health/SKILL.md",
       "service": "meet",
-      "sha256": "8ee89c1054925cc2b5ec8a6dc83c38407a783bf2bb40e23810e8a7f8074a9dea"
+      "sha256": "06c91bb1d9483326ea9282621a3d1b001434dfd2ba6ee343c2a17c00333c8148"
     },
     {
       "description": "Read meet record: What is being recorded in a room, and where the file goes.",
       "name": "meet_record",
       "path": "meet_record/SKILL.md",
       "service": "meet",
-      "sha256": "e007386e40e7b61512e894a8e14aaedbc5cbe2b1b16d3732afac4952dab5d294"
+      "sha256": "8375b3242f7c8cbfba94271e2fa0d25c27e07b445c4bfee7f8de8f78c2b3c783"
     },
     {
       "description": "Read meet session: What this caller may open a room in.",
       "name": "meet_session",
       "path": "meet_session/SKILL.md",
       "service": "meet",
-      "sha256": "45a7feae2f4fdd13605fefb463fe7cca12cfe42d27e3534fdcf2b0682c99ac1f"
+      "sha256": "00bfdeac93ef9c8b5002b19d8be378eee2f79a400dafa83bfb58a15275ef8a28"
     }
   ],
   "spec_version": "8.0.0"

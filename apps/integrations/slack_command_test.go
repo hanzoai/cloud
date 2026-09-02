@@ -164,7 +164,7 @@ func TestResolve_NoRegistryIsProse(t *testing.T) {
 // It skips rather than fails when the document will not compose. That failure is
 // real and it is openapi/compose_test.go's to report; repeating it here would say
 // nothing new and would redden this package for another app's duplicate id.
-func TestNames_TheFleetHasNoBackDoor(t *testing.T) {
+func TestNames_TheFleetHasNoBypass(t *testing.T) {
 	cmds, err := commandRegistry()
 	if err != nil {
 		t.Skipf("the fleet document does not compose on this tree (openapi/compose_test.go owns that): %v", err)

@@ -16,14 +16,14 @@
       "name": "ad_campaigns",
       "path": "ad_campaigns/SKILL.md",
       "service": "ad",
-      "sha256": "860ad01a3b5238bc3d752d89c4dfaff21b69b2895ca22c50a213aa2ca10b96da"
+      "sha256": "390bec0a6be43802e9315e4d516d33c4fc4649e4ab2eda74ed6ab25321a4b2d2"
     },
     {
       "description": "Read ad summary: Rolls the caller org's ad campaigns up into four numbers: how many campaigns exist, how many are active, and the summed budget and spend across all of them..",
       "name": "ad_summary",
       "path": "ad_summary/SKILL.md",
       "service": "ad",
-      "sha256": "a0172e42979ce45a8efc4c9719a6749808e089e4db19fd9e226673bb502a7466"
+      "sha256": "471ead340ba1cdf447bae3ad99cfd28ba6a902601fdaab27d5566eda5b38fd9c"
     }
   ],
   "spec_version": "8.0.0"

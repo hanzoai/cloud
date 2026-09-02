@@ -45,7 +45,7 @@ import (
 // (fleet/surface.go), and it is the only gate there is. If a rename ran first, an
 // operation whose route says `post_v1_iam_users` would be offered up as something
 // whose words no longer trip clause 2 — a credential-minting operation projected
-// because it was renamed politely. So [Door.gather] refuses the CHILD's own name,
+// because it was renamed politely. So [MCP.gather] refuses the CHILD's own name,
 // exactly as it always did, and [offer] runs over what survives. The refused set
 // is therefore identical by construction and not by luck: the gate's input never
 // changed. fleet/verbs_test.go asserts that over the fleet's whole corpus.
@@ -59,13 +59,13 @@ import (
 // back must be exact. [offer] guarantees it by REFUSING to rename rather than by
 // guessing: a phrase that two operations would share, or that collides with some
 // operation's own id, is not used and both keep their ids. The MCP server then
-// holds published-name → id beside its tool → app routing (see [Door.alias]),
+// holds published-name → id beside its tool → app routing (see [MCP.alias]),
 // which is the same kind of fact with the same lifetime — written by every
 // gather, read by call and describe, remembered no longer than the routing table
 // it rides with.
 //
 // An operation's own id keeps working, and that is not a compatibility shim: it
-// is forced. [Door.describe] hands back the OWNING subsystem's descriptor bytes
+// is forced. [MCP.describe] hands back the OWNING subsystem's descriptor bytes
 // verbatim, and those bytes carry the child's own name — so a model that reads a
 // descriptor and calls what it saw must be right.
 
@@ -271,7 +271,7 @@ func singular(w string) string {
 // `post_v1_agents` in a different subsystem.
 //
 // This runs over the SURVIVORS. Everything [refuse] withheld is already gone
-// (see [Door.gather]), so no phrase can name a refused operation and no refused
+// (see [MCP.gather]), so no phrase can name a refused operation and no refused
 // operation can be reached by naming one.
 func offer(all []named) {
 	ids := make(map[string]string, len(all))
@@ -300,7 +300,7 @@ const summaryMax = 120
 // enum: the first sentence of the first paragraph, unwrapped, clipped on a word.
 //
 // The prose is already there — it is the doc comment zip's generator lifts into
-// the descriptor, the same bytes [Door.describe] hands back whole — so this is a
+// the descriptor, the same bytes [MCP.describe] hands back whole — so this is a
 // projection of what the fleet wrote about itself, never a second description
 // that could disagree with the first.
 func summary(doc string) string {

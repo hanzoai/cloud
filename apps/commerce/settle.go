@@ -316,7 +316,7 @@ func (s screen) settle(ctx context.Context, p payment, ref, id string) error {
 		return s.uncredited(p, ref, "the deposit failed: %v", err)
 	}
 	s.lg.Info("a settled card payment credited the spendable ledger",
-		"door", p.door, "via", p.via, "org", p.org,
+		"door", p.path, "via", p.via, "org", p.org,
 		"ledger", p.ledger, "subject", p.subject,
 		"cents", got.cents, "currency", cur, "test", got.test,
 		"settlement", ref, "receipt", id, "entry", entry)
@@ -375,7 +375,7 @@ func (s screen) reconcile(p payment, ref string, terminal bool, why string) erro
 			"and refund the charge with the processor"
 	}
 	s.lg.Error("RECONCILE: a card payment settled and the spendable balance was NOT credited",
-		"door", p.door, "via", p.via, "org", p.org,
+		"door", p.path, "via", p.via, "org", p.org,
 		"ledger", p.ledger, "subject", p.subject,
 		"settlement", ref, "terminal", terminal, "why", why, "recovery", recovery)
 	answer := "the charge settled but crediting your balance failed — contact support"

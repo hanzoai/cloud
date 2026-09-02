@@ -16,21 +16,21 @@
       "name": "prompt_catalog",
       "path": "prompt_catalog/SKILL.md",
       "service": "prompt",
-      "sha256": "758789699755c7bc3a9e0ebee822507ef417475bf310ec7660a97003673dc397"
+      "sha256": "e1e97e11df7203f30ce2c240d3f7fd0f4e4cbe7d4451f08e8a1c4a7d46c3019a"
     },
     {
       "description": "Read prompt metrics: Metrics returns real per-prompt statistics for the caller's org: how many versions each prompt has, which one is current, and when it was created and last changed..",
       "name": "prompt_metrics",
       "path": "prompt_metrics/SKILL.md",
       "service": "prompt",
-      "sha256": "14e4ff18d8b395fa83b58828d61676bd677f9c22a30f1d5b20bc6e5508f635a8"
+      "sha256": "bb6cbd365ab487166f07afcd9838a48cd2b718d8801971b688836dd574479456"
     },
     {
       "description": "Read prompt prompt: List returns the caller org's prompt library as one row per prompt: its name, type, every version number it has, its taxonomy and when it last changed., Get returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version i",
       "name": "prompt_prompt",
       "path": "prompt_prompt/SKILL.md",
       "service": "prompt",
-      "sha256": "087b0dd7fe9e0bcd76b88a40a43cb2a4472b92e07e506853af32b6c9fc3088d7"
+      "sha256": "e63252d2ce43d168b3e4dfd664ae5d5aa2910c476ce710261038d3a4e814ab2e"
     }
   ],
   "spec_version": "8.0.0"

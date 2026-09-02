@@ -16,14 +16,14 @@
       "name": "videos_content",
       "path": "videos_content/SKILL.md",
       "service": "videos",
-      "sha256": "c4474c2e9d64caa2964d9999aafce0d48fc34c4c6fcc622eef3255a3787d226b"
+      "sha256": "0f81abf45e29d5c5237719faf0b97125f98ba753e7bf6473d96f0ed6cdb9cb46"
     },
     {
       "description": "Read videos videos: Implements GET /v1/videos/{id} — poll a job's status..",
       "name": "videos_videos",
       "path": "videos_videos/SKILL.md",
       "service": "videos",
-      "sha256": "c9ef1286cda8e8c73d1883eaaddfbbc066bf3528e1dd60d811e74685f3c87b38"
+      "sha256": "ac824f9049b5e3a6da74067cabf5b19fb93e1fe2177195a35d513e4f9163f9b2"
     }
   ],
   "spec_version": "8.0.0"

@@ -16,35 +16,35 @@
       "name": "channels_agent",
       "path": "channels_agent/SKILL.md",
       "service": "channels",
-      "sha256": "94da275c5ae160c3b336b9879800bad4ba6365032ce5f10a75ddf81555cd1f01"
+      "sha256": "429a0071093e5a4d0270e28c9280bbfdf09e63b33bfc352f67b96674332e57c9"
     },
     {
       "description": "Read channels allowlist: Returns the caller org's access policy for one channel: whether DMs are pairing-gated, allowlisted or open, whether group rooms are open, allowlisted or disabled, the config-managed DM and group allow entries, the senders approved through PAIRING (read-on",
       "name": "channels_allowlist",
       "path": "channels_allowlist/SKILL.md",
       "service": "channels",
-      "sha256": "3d1118f52818f5d6c88f1828c6ffe9720251c74c6843d3bebf1ec48584f75adc"
+      "sha256": "91764f1b439ffa0769ecf803b63ce2a221639f8c5bb980d02fe3775c990a1c50"
     },
     {
       "description": "Read channels channels: Reports every chat channel this org can send through, and whether it can send through it right now..",
       "name": "channels_channels",
       "path": "channels_channels/SKILL.md",
       "service": "channels",
-      "sha256": "722bd541a02790215543b8eaeb4474eb0de4a90296f56a0c46d61d9efca79b4e"
+      "sha256": "03b3842fb78b3a96b8bb892daf3788ed5019110aa1776e12697f540154409c54"
     },
     {
       "description": "Read channels inbox: Returns the messages people have sent to the caller org's connected chat bots, oldest first, in the portable envelope shape every transport normalises into..",
       "name": "channels_inbox",
       "path": "channels_inbox/SKILL.md",
       "service": "channels",
-      "sha256": "01b650dd085179c8fb9c35d23f36b2966a4bfb7d87ab2ee9ac8fe1f38e9b5ea9"
+      "sha256": "1cbf830fa817b89d85346415765db9e6e489dfeb4e27f4522d4b321d95c00d50"
     },
     {
       "description": "Read channels pairing: Returns the pairing requests waiting for the caller org to approve — one per person who messaged a connected bot on a channel whose DM policy is \"pairing\" and who is not allowed yet..",
       "name": "channels_pairing",
       "path": "channels_pairing/SKILL.md",
       "service": "channels",
-      "sha256": "9f31ced3571b99d6693f4617767c43e3954ab783ec194648e43a125abb9195d4"
+      "sha256": "4c1b397ef5ff3a3973e882ef022e1e6f0084a8419e9a2f63205ca7389447fad2"
     }
   ],
   "spec_version": "8.0.0"

@@ -16,14 +16,14 @@
       "name": "dns_health",
       "path": "dns_health/SKILL.md",
       "service": "dns",
-      "sha256": "677cc15e6108368544d9443fc00085b80d4844d698fac011f78d24ab804f76c8"
+      "sha256": "53eaae9e0a47eaf701ec84c7618ea94677eaa0e34180d95fdf9906ae512da2aa"
     },
     {
       "description": "Read dns zones: List your org's DNS zones, Read one DNS zone, List a zone's DNS records.",
       "name": "dns_zones",
       "path": "dns_zones/SKILL.md",
       "service": "dns",
-      "sha256": "870ee9c676b681c7e3f474337f01473e0a1d755db95fd8fe2c58c1eb6a6c8df5"
+      "sha256": "a1eaeb6b143a0f90754981189566297667cc06a9796e41f163a463fd142e68e0"
     }
   ],
   "spec_version": "8.0.0"

@@ -16,28 +16,28 @@
       "name": "framework_doctypes",
       "path": "framework_doctypes/SKILL.md",
       "service": "framework",
-      "sha256": "c77fc48e401045d608fc6e8b9dbdb9d02f52e86e1abca29ceebc08d2a6194a11"
+      "sha256": "3ddc5e7420b8f87f6b41f8011aace6768b240ba590353e1098d22121a9a44cd3"
     },
     {
       "description": "Read framework framework: Returns the caller org's documents of one DocType, filtered, ordered and projected by the query., Returns one document by name, with Password fields redacted..",
       "name": "framework_framework",
       "path": "framework_framework/SKILL.md",
       "service": "framework",
-      "sha256": "09f1d495b9b486edcbbdca3546cc807b9c16b55ef8982d072729ed4cf9bc7659"
+      "sha256": "8f41e3997068fe48c30ef873516b64d04e09ea0846190f5b4a8e9cfb9842beb6"
     },
     {
       "description": "Read framework modules: Returns every app lane compiled into this deployment and the DocTypes each one installs., Returns one app lane's install state for the caller's org: the DocTypes the lane declares, and which of them already exist in the org..",
       "name": "framework_modules",
       "path": "framework_modules/SKILL.md",
       "service": "framework",
-      "sha256": "bf5fd52b27ee8ebdea3de3d48fd2d71f1bf4a564e42df23e54201e4fc44bfa7d"
+      "sha256": "810ed45b2ffd5fc562025f043783e1a37e54cd6f4f4625d4056f5af9fe397986"
     },
     {
       "description": "Read framework summary: Reports how much of the DocType surface the caller's org uses: how many DocTypes it has defined, and how many documents exist across them..",
       "name": "framework_summary",
       "path": "framework_summary/SKILL.md",
       "service": "framework",
-      "sha256": "888025bfb11ff2f046d80eee78891efcae745d7728a47b48244dd5d1a8f33af6"
+      "sha256": "70b72a1124399c928e0c612096eeb886b568b29a33d98b96a3eab6cfbf6fa9f2"
     }
   ],
   "spec_version": "8.0.0"

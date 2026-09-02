@@ -140,7 +140,7 @@ func TestSitesConfigIsNotResolvedHere(t *testing.T) {
 // was repaired. The Source is polled now and mounts EMPTY, answering 503 until a
 // poll fills it, so the positive act is mounting it UNCONDITIONALLY. The property
 // is the same one: the console never decides whether the API serves.
-func TestAnUnreadableConsoleDoesNotStopTheFrontDoor(t *testing.T) {
+func TestAnUnreadableConsoleDoesNotStopTheEdge(t *testing.T) {
 	src, err := os.ReadFile("main.go")
 	if err != nil {
 		t.Fatalf("read main.go: %v", err)

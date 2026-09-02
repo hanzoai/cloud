@@ -16,28 +16,28 @@
       "name": "engine_model",
       "path": "engine_model/SKILL.md",
       "service": "engine",
-      "sha256": "07f694b797e306b97a8b74e9f1a79df279d6bd7c265ebc1a8f5ca6ab5be538d9"
+      "sha256": "8cda1546effb220825713c39c06091067a936a3a3fafc7bc861dfb5481cfe2c5"
     },
     {
       "description": "Read engine models: List the models the serving runtime holds, with each one's load state.",
       "name": "engine_models",
       "path": "engine_models/SKILL.md",
       "service": "engine",
-      "sha256": "f0dfd815c54218f50a78fecb7d411d55b9608eb488e3927844217ec0d91cbb12"
+      "sha256": "a2ab96a2a58b3f1aafe7b0bc2467b9d8c25cb9c7088ded2e462a164b160fca22"
     },
     {
       "description": "Read engine status: Whether the serving runtime is reachable, and which build it runs.",
       "name": "engine_status",
       "path": "engine_status/SKILL.md",
       "service": "engine",
-      "sha256": "ef43bc86aeec8f62302e30ed386e4fe15d193567f8eb36f1c65d6d9ec1917a17"
+      "sha256": "7787d7bf916aca31cec8aea2d0c6da1f7f146e621d3f929745e281bd97e3dcd6"
     },
     {
       "description": "Read engine system: The serving host's own inventory: devices, memory and build capabilities.",
       "name": "engine_system",
       "path": "engine_system/SKILL.md",
       "service": "engine",
-      "sha256": "b3650e4dba0e2d7c891fc778c59cc033a8a7fd23f7f97b616c6d7558e5e23086"
+      "sha256": "2b05614d301e85eee848444c6ab6849cfd10ec613f895d8c27d973b8659f501b"
     }
   ],
   "spec_version": "8.0.0"

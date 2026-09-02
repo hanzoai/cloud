@@ -93,7 +93,7 @@ func TestIAMKeysCache(t *testing.T) {
 // resolved to nothing at all: the ingest path a pk- exists for could never attribute
 // a beacon to its tenant. A publishable key that resolves to nobody is a publishable
 // key that does not work, which is the other half of why no surface used one.
-func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyDoor(t *testing.T) {
+func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyEndpoint(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
@@ -127,7 +127,7 @@ func TestOrgForKey_PublishableResolvesThroughTheOrgOnlyDoor(t *testing.T) {
 // The two endpoints answer different questions, so a secret key must NOT be sent to
 // the org-only one (it would learn an org for a credential whose whole point is that
 // it names a user), and a publishable key must not be sent to the principal one.
-func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
+func TestOrgForKey_EachPrefixUsesItsOwnEndpoint(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)

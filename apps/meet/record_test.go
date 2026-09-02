@@ -1005,7 +1005,7 @@ func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head 
 	return string(b)
 }
 
-// TestTheMCPDoorIsNotAWayPastTheGate.
+// TestTheMCPEndpointIsNotAWayPastTheGate.
 //
 // A typed op is reachable by TWO entry points and only one is a route. zip records
 // the route's handler and the op as two fields of one entry, and wraps only the
@@ -1018,7 +1018,7 @@ func mcp(t *testing.T, app *zip.App, method string, params map[string]any, head 
 // POST with a CORS-simple content type needs no preflight, and the anti-CSRF token
 // a route would have demanded is never asked for. The gate therefore cannot live on
 // the group. It lives in ops.ready, which both entry points go through.
-func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
+func TestTheMCPEndpointIsNotAWayPastTheGate(t *testing.T) {
 	app, m := recordUse(t, holds(map[string]string{spaceA: token.RoleMember}))
 
 	// The tool is really there — otherwise this test passes by naming nothing.
@@ -1044,7 +1044,7 @@ func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
 	}
 }
 
-// TestEveryWriteIsGatedOnEveryDoorAndEveryHeader.
+// TestEveryWriteIsGatedOnEveryEndpointAndEveryHeader.
 //
 // The anti-CSRF gate has to hold across THREE independent axes, and a test that
 // fixes two of them measures almost nothing:
@@ -1065,7 +1065,7 @@ func TestTheMCPDoorIsNotAWayPastTheGate(t *testing.T) {
 //
 // Every row is a signed-in tab: a real session cookie, which is ambient, and no
 // CSRF token. The writes must be refused before the media server hears anything.
-func TestEveryWriteIsGatedOnEveryDoorAndEveryHeader(t *testing.T) {
+func TestEveryWriteIsGatedOnEveryEndpointAndEveryHeader(t *testing.T) {
 	// basic64 is `user:password` — a WELL-FORMED Basic credential. Under
 	// Authorization the boundary reads it and the caller is explicit; under
 	// X-Authorization the boundary never tries Basic at all and falls through to

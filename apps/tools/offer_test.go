@@ -14,20 +14,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// door_test.go pins the client that makes the catalog worth having: a server an org
+// endpoint_test.go pins the client that makes the catalog worth having: a server an org
 // ENABLED shows up as tools on the fleet's one MCP endpoint, namespaced by the
 // server it came from, callable, and invisible to every other tenant.
 
-// doorApp mounts the tool plane on an app whose MCP endpoint has the per-caller
+// endpointApp mounts the tool plane on an app whose MCP endpoint has the per-caller
 // half wired — the same composition plugin/tools/main.go declares. Prepare() is
 // what installs the endpoint, so it is called here rather than left to Listen.
-func doorApp(t *testing.T) *zip.App {
+func endpointApp(t *testing.T) *zip.App {
 	t.Helper()
 	old := std
 	std = NewRegistry()
 	t.Cleanup(func() { std = old })
 
-	app := zip.New(zip.Config{Logger: luxlog.New("test"), MCP: zip.MCPConfig{Source: Door()}})
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), MCP: zip.MCPConfig{Source: Offer()}})
 	app.Use(cloud.Bridge())
 	if err := Use(app, cloud.Deps{DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Use:  %v", err)
@@ -50,8 +50,8 @@ func rpc(t *testing.T, app *zip.App, org, body string) map[string]any {
 	return out
 }
 
-// doorTools is the tool names the MCP endpoint lists for org.
-func doorTools(t *testing.T, app *zip.App, org string) map[string]bool {
+// endpointTools is the tool names the MCP endpoint lists for org.
+func endpointTools(t *testing.T, app *zip.App, org string) map[string]bool {
 	t.Helper()
 	res, _ := rpc(t, app, org, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)["result"].(map[string]any)
 	list, _ := res["tools"].([]any)
@@ -118,12 +118,12 @@ func enable(t *testing.T, org, id, listing, url string) {
 	}
 }
 
-// TestDoorListsAnEnabledServersTools: the whole point. An org enables a catalog
+// TestEndpointListsAnEnabledServersTools: the whole point. An org enables a catalog
 // listing; its tools are on the fleet's ONE MCP endpoint, prefixed by the server
 // they came from, and calling one reaches the vendor with the org's own credential.
-func TestDoorListsAnEnabledServersTools(t *testing.T) {
+func TestEndpointListsAnEnabledServersTools(t *testing.T) {
 	ts := remoteServer(t)
-	app := doorApp(t)
+	app := endpointApp(t)
 	enable(t, "acme", "stripe", "com.stripe_mcp", ts.URL)
 
 	p := newMCPProvider(mounted.State.servers, fakeKMS{"stripe": "Bearer sk-live"})
@@ -132,7 +132,7 @@ func TestDoorListsAnEnabledServersTools(t *testing.T) {
 
 	// Unactivated, it is not on the MCP endpoint: listing a name that answers 403
 	// would be worse than not listing it.
-	if names := doorTools(t, app, "acme"); names["stripe_charge"] {
+	if names := endpointTools(t, app, "acme"); names["stripe_charge"] {
 		t.Fatal("an unactivated tool must not be on the MCP endpoint")
 	}
 
@@ -141,7 +141,7 @@ func TestDoorListsAnEnabledServersTools(t *testing.T) {
 		t.Fatalf("activate: %d (%s)", r.Code, r.Body)
 	}
 
-	names := doorTools(t, app, "acme")
+	names := endpointTools(t, app, "acme")
 	if !names["stripe_charge"] {
 		t.Fatalf("the enabled server's tool is not on the MCP endpoint: %v", names)
 	}
@@ -155,12 +155,12 @@ func TestDoorListsAnEnabledServersTools(t *testing.T) {
 	}
 }
 
-// TestDoorIsNamespacedPerServer: two servers offering the same remote tool name
+// TestEndpointIsNamespacedPerServer: two servers offering the same remote tool name
 // stay apart, because the server id prefixes it. Without this an org's second
 // vendor would silently shadow its first.
-func TestDoorIsNamespacedPerServer(t *testing.T) {
+func TestEndpointIsNamespacedPerServer(t *testing.T) {
 	ts := remoteServer(t)
-	app := doorApp(t)
+	app := endpointApp(t)
 	enable(t, "acme", "stripe", "com.stripe_mcp", ts.URL)
 	enable(t, "acme", "adyen", "com.adyen_mcp", ts.URL)
 
@@ -172,18 +172,18 @@ func TestDoorIsNamespacedPerServer(t *testing.T) {
 		map[string]any{"activate": []string{"stripe_charge", "adyen_charge"}}); r.Code != 200 {
 		t.Fatalf("activate: %d (%s)", r.Code, r.Body)
 	}
-	names := doorTools(t, app, "acme")
+	names := endpointTools(t, app, "acme")
 	if !names["stripe_charge"] || !names["adyen_charge"] {
 		t.Fatalf("both vendors' charge must be on the MCP endpoint under their own names: %v", names)
 	}
 }
 
-// TestDoorIsPerTenant: org B never sees org A's tools on the MCP endpoint, and
+// TestEndpointIsPerTenant: org B never sees org A's tools on the MCP endpoint, and
 // cannot call one by naming it. The tenancy comes from the validated principal,
 // so there is no field a caller could set to reach across.
-func TestDoorIsPerTenant(t *testing.T) {
+func TestEndpointIsPerTenant(t *testing.T) {
 	ts := remoteServer(t)
-	app := doorApp(t)
+	app := endpointApp(t)
 	enable(t, "acme", "stripe", "com.stripe_mcp", ts.URL)
 
 	p := newMCPProvider(mounted.State.servers, fakeKMS{"stripe": "Bearer sk-live"})
@@ -194,7 +194,7 @@ func TestDoorIsPerTenant(t *testing.T) {
 		t.Fatalf("activate: %d (%s)", r.Code, r.Body)
 	}
 
-	if names := doorTools(t, app, "rival"); names["stripe_charge"] {
+	if names := endpointTools(t, app, "rival"); names["stripe_charge"] {
 		t.Fatalf("another tenant sees acme's tool on the MCP endpoint: %v", names)
 	}
 	res, _ := rpc(t, app, "rival",
@@ -208,7 +208,7 @@ func TestDoorIsPerTenant(t *testing.T) {
 // TestServersArePerTenant: the registration surface is scoped the same way, and no
 // route ever returns a credential VALUE.
 func TestServersArePerTenant(t *testing.T) {
-	app := doorApp(t)
+	app := endpointApp(t)
 	enable(t, "acme", "stripe", "com.stripe_mcp", "https://mcp.stripe.com")
 
 	mine := do(t, app, http.MethodGet, "/v1/tools/mcp/servers", "acme", nil)
@@ -232,18 +232,18 @@ func TestServersArePerTenant(t *testing.T) {
 	}
 }
 
-// TestAnonymousDoorIsTheFleetsOwn: a tools/list that names no caller gets the
+// TestAnonymousEndpointIsTheFleetsOwn: a tools/list that names no caller gets the
 // build-time half and nothing else — the memcpy that makes the endpoint
 // affordable is not spent asking about a tenant who is not there.
-func TestAnonymousDoorIsTheFleetsOwn(t *testing.T) {
+func TestAnonymousEndpointIsTheFleetsOwn(t *testing.T) {
 	ts := remoteServer(t)
-	app := doorApp(t)
+	app := endpointApp(t)
 	enable(t, "acme", "stripe", "com.stripe_mcp", ts.URL)
 	p := newMCPProvider(mounted.State.servers, fakeKMS{"stripe": "Bearer sk-live"})
 	p.http = ts.Client()
 	std.Register(p)
 
-	names := doorTools(t, app, "")
+	names := endpointTools(t, app, "")
 	if names["stripe_charge"] {
 		t.Fatalf("an anonymous list must carry no tenant's tools: %v", names)
 	}

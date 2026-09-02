@@ -16,21 +16,21 @@
       "name": "kms_config",
       "path": "kms_config/SKILL.md",
       "service": "kms",
-      "sha256": "8e4626069609c8995bfea2d76ba1c028003a5244d46802a67f37b0b7d304601f"
+      "sha256": "c41ec490fc8882a211064061be77e9f82a457858d7166e1c6e0f60186709c521"
     },
     {
       "description": "Read kms health: Reports whether this broker can actually serve secrets..",
       "name": "kms_health",
       "path": "kms_health/SKILL.md",
       "service": "kms",
-      "sha256": "3701c7401cec647c9dcf6bcc0743c44b0872b327b71ce9260c5617b655dbdfb7"
+      "sha256": "c74e75433a13b13bcfa2d7f8ce891338cc5b208878094e543b4ab3bcd7b505b2"
     },
     {
       "description": "Read kms secrets: Lists the secrets your org holds, without their values., Reads one secret's value from your org..",
       "name": "kms_secrets",
       "path": "kms_secrets/SKILL.md",
       "service": "kms",
-      "sha256": "00a253047e45e94b73589b09e2507ec2caff8ab908fb791f00808d69fc3bc12f"
+      "sha256": "15b0f61cc5feff7fa173423133d6573d7e86429f2ac1f4926350ac2b6916282a"
     }
   ],
   "spec_version": "8.0.0"

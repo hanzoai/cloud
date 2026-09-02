@@ -22,7 +22,7 @@ import (
 	zapmcp "github.com/zap-proto/mcp"
 )
 
-// mcpDoor answers the two MCP addresses when — and only when — no route claimed
+// serveMCP answers the two MCP addresses when — and only when — no route claimed
 // them, and reports whether it wrote the response.
 //
 // It lives in the console package because the console is the TERMINAL handler:
@@ -40,7 +40,7 @@ import (
 // ops are on the internal plane by design — reached here AT ITS OWN MCP ADDRESS
 // and was sent to an address only a host serves. The signpost is the host's, and
 // it lives with the host's MCP server now (fleet.Use).
-func (h *consoleHandler) mcpDoor(w http.ResponseWriter, r *http.Request, upath string) bool {
+func (h *consoleHandler) serveMCP(w http.ResponseWriter, r *http.Request, upath string) bool {
 	switch upath {
 	case manifest.FrameworkMCPPath:
 		// THIS PROCESS'S OWN MCP SERVER. Reaching a terminal handler here means
@@ -58,7 +58,7 @@ func (h *consoleHandler) mcpDoor(w http.ResponseWriter, r *http.Request, upath s
 				`{"error":"the MCP server speaks JSON-RPC over POST","door":"`+manifest.FrameworkMCPPath+`"}`)
 			return true
 		}
-		h.serveDoor(w, r)
+		h.serveEndpoint(w, r)
 		return true
 
 	case manifest.MCPPath:
@@ -81,20 +81,20 @@ func (h *consoleHandler) mcpDoor(w http.ResponseWriter, r *http.Request, upath s
 	return false
 }
 
-// serveDoor is HTTP over the MCP server, not an MCP server of its own: read the
+// serveEndpoint is HTTP over the MCP server, not an MCP server of its own: read the
 // JSON-RPC body into a frame, hand it to [zip.App.MCP], write the answer back.
 // zip's own /mcp route is the identical adapter over the identical value — one
 // MCP server, and the transport is a choice, which is the whole point of the
 // frame-in/frame-out signature. What is NOT duplicated is any tool: this file
 // knows no tool names, no schemas and no dispatch.
-func (h *consoleHandler) serveDoor(w http.ResponseWriter, r *http.Request) {
+func (h *consoleHandler) serveEndpoint(w http.ResponseWriter, r *http.Request) {
 	var f zapmcp.Frame
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
 		writeFrame(w, &zapmcp.Frame{Kind: zapmcp.Response,
 			Err: &zapmcp.Error{Code: zapmcp.CodeParse, Message: "parse error"}})
 		return
 	}
-	ans := h.door(r.Context(), &f)
+	ans := h.mcp(r.Context(), &f)
 	if ans == nil {
 		// A notification: nothing to say, and 202 says exactly that.
 		w.WriteHeader(http.StatusAccepted)

@@ -16,14 +16,14 @@
       "name": "entitlement_entitlement",
       "path": "entitlement_entitlement/SKILL.md",
       "service": "entitlement",
-      "sha256": "9016ca597797372713d279957b47b42ddc9673fcc757f424fd9f5df1f42fdc9c"
+      "sha256": "452e66490da7fc71cc6fe77a1fb757f000eb3d0418e7cf3b5aa538cd9802d7ed"
     },
     {
       "description": "Read entitlement orgs: Get lists the products an org has ENABLED — its own intent, which the console's paid-product sidebar reads to decide what to show..",
       "name": "entitlement_orgs",
       "path": "entitlement_orgs/SKILL.md",
       "service": "entitlement",
-      "sha256": "1a4cc28ee7cef2cccb0da3e26a2b38df0ef010cf5b834e624bf7e6a81db46999"
+      "sha256": "d0196e6112555a7a310308950a733ec5e52a74f358379ba25b225a667e298873"
     }
   ],
   "spec_version": "8.0.0"

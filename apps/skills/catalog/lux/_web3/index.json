@@ -16,14 +16,14 @@
       "name": "web3_chains",
       "path": "web3_chains/SKILL.md",
       "service": "web3",
-      "sha256": "5ad2564462fa924402ea2f75edb776a6a66f6f94db86f1b64e68360a0542006b"
+      "sha256": "d8a1ec657fd553f0b04da77ab874456b403eec6a699b2d36f7951e40a57b4eee"
     },
     {
       "description": "Read web3 tokens: Reads an address's native balance on a chain..",
       "name": "web3_tokens",
       "path": "web3_tokens/SKILL.md",
       "service": "web3",
-      "sha256": "45a8f0767a1a585d4e6813647027a169fda5ddc09db4342cc27c7eed16fc7044"
+      "sha256": "a77df4d372a25783bb930f254767c852d4e88488e466369d393fca14a76866b0"
     }
   ],
   "spec_version": "8.0.0"

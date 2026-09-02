@@ -35,10 +35,10 @@ import (
 	"github.com/hanzoai/cloud/manifest"
 )
 
-// door is the framework's default MCP path. This file asserts what is BEHIND the
+// endpoint is the framework's default MCP path. This file asserts what is BEHIND the
 // path, never where it is: the public address is one value the composition root
 // owns, and pinning it here would be a second place for it to be written down.
-const door = "/mcp"
+const endpoint = "/mcp"
 
 // served is ai's own op, mounted on its own MCP server, with the identity boundary's
 // carrier installed exactly as cloud.Listen installs it.
@@ -54,7 +54,7 @@ func served(t *testing.T) *zip.App {
 // (the headers SanitizeIdentity mints), and returns the body.
 func rpc(t *testing.T, app *zip.App, msg, user, org string) string {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, door, strings.NewReader(msg))
+	req := httptest.NewRequest(http.MethodPost, endpoint, strings.NewReader(msg))
 	req.Header.Set("Content-Type", "application/json")
 	if user != "" {
 		req.Header.Set("X-User-Id", user)
@@ -64,13 +64,13 @@ func rpc(t *testing.T, app *zip.App, msg, user, org string) string {
 	}
 	resp, err := app.Test(req)
 	if err != nil {
-		t.Fatalf("POST %s: %v", door, err)
+		t.Fatalf("POST %s: %v", endpoint, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("POST %s answered %d — the MCP server must answer JSON-RPC, body: %s",
-			door, resp.StatusCode, trunc(string(b)))
+			endpoint, resp.StatusCode, trunc(string(b)))
 	}
 	return string(b)
 }
@@ -263,9 +263,9 @@ func TestTheInventoryReadsTheLiveRegistry(t *testing.T) {
 	}
 }
 
-// TestAiIsOnItsOwnDoor: the op is a TOOL, because a typed op is one — nothing
+// TestAiIsOnItsOwnEndpoint: the op is a TOOL, because a typed op is one — nothing
 // here registers it as such, which is the point.
-func TestAiIsOnItsOwnDoor(t *testing.T) {
+func TestAiIsOnItsOwnEndpoint(t *testing.T) {
 	names := list(t, served(t))
 	if len(names) != 1 || names[0] != "aiMCPTools" {
 		t.Fatalf("ai's MCP server carries %v, want exactly [aiMCPTools]", names)

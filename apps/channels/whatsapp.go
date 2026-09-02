@@ -60,8 +60,8 @@ func whatsappNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 	}, true
 }
 
-// whatsappDoor is the send path; tests spy it, prod never repoints.
-var whatsappDoor = func(ctx context.Context, org, to, replyTo, text string) (string, error) {
+// whatsappEndpoint is the send path; tests spy it, prod never repoints.
+var whatsappEndpoint = func(ctx context.Context, org, to, replyTo, text string) (string, error) {
 	return post(ctx, org, plane.ChatSendIn{Provider: "whatsapp", Room: to, ReplyTo: replyTo, Text: text})
 }
 
@@ -78,7 +78,7 @@ func whatsappEgress(ctx context.Context, s *cloud.Service[state], org string, m 
 	if !ok {
 		return Delivery{}, errNoRoute
 	}
-	id, err := whatsappDoor(ctx, org, m.Room.ID, m.ReplyTo, renderText(m))
+	id, err := whatsappEndpoint(ctx, org, m.Room.ID, m.ReplyTo, renderText(m))
 	if err != nil {
 		return Delivery{}, err
 	}

@@ -40,11 +40,11 @@ import (
 // MCPTools() is in-process — so an agent run inside `agents` could resolve its
 // declared tool names against nothing but its own registry, which in the split
 // fleet holds what `agents` itself registered and no more. The thing that DOES
-// aggregate already exists and is already mounted: fleet.Door, at
+// aggregate already exists and is already mounted: fleet.MCP, at
 // api.hanzo.ai/v1/mcp. The only part it was missing was an address reachable
 // from inside.
 //
-// It is the SAME Door object, not a second one. So an agent gets the same union
+// It is the SAME MCP object, not a second one. So an agent gets the same union
 // its external MCP clients get, ordered by the same rank and — the part that
 // matters — narrowed by the same [fleet] curation rule, which is applied inside
 // gather where the routing table is written. A tool the MCP server will not project
@@ -64,24 +64,24 @@ import (
 // logged where the socket is named, so the degradation is visible rather than
 // inferred — and it does not return until the socket ACCEPTS, so "listening" in the
 // log is a fact rather than an intention.
-func serveWake(app *zip.App, mcp *fleet.Door) {
-	door := zip.New(zip.Config{AppName: "plane", Logger: app.Logger()})
+func serveWake(app *zip.App, mcp *fleet.MCP) {
+	host := zip.New(zip.Config{AppName: "plane", Logger: app.Logger()})
 
 	// The fleet's agent MCP server, at its OWN address (manifest.MCPPath) on this
 	// socket. One name for one MCP server across both transports: over HTTP it is the
 	// edge's /v1/mcp, over ZAP it is the fleet's own. Nothing here re-aggregates
-	// and nothing here filters — [fleet.Door.Serve] publishes the object main.go
+	// and nothing here filters — [fleet.MCP.Serve] publishes the object main.go
 	// already built.
 	//
 	// It forwards INSIDE, which is the whole of what this address adds. A caller
 	// on this socket is a sibling with a principal it resolved server-side and no
 	// bearer to replay for it; sent into a subsystem's edge endpoint, its statement
 	// is deleted by the identity boundary and every org-scoped tool refuses it. Sent
-	// into the subsystem's plane endpoint it is read as what it is — see cloud.Door.
+	// into the subsystem's plane endpoint it is read as what it is — see cloud.UseMCP.
 	// The edge's own mount is untouched and still forwards to the edge.
-	mcp.Serve(door, manifest.MCPPath, inside(app))
+	mcp.Serve(host, manifest.MCPPath, inside(app))
 
-	zip.Post[plane.StartIn, plane.Started](door, "/host/start",
+	zip.Post[plane.StartIn, plane.Started](host, "/host/start",
 		func(_ context.Context, in *plane.StartIn) (*plane.Started, error) {
 			// No tenancy check, because there is no tenant: starting a process
 			// reads nobody's books and returns nobody's data. The boundary is the
@@ -124,9 +124,9 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 	path := zip.SocketPath(plane.HostApp)
 	done := make(chan struct{})
 	var listenErr error
-	go func() { listenErr = door.Listen(path); close(done) }()
+	go func() { listenErr = host.Listen(path); close(done) }()
 	app.OnShutdown(func(context.Context) error {
-		if err := door.Shutdown(); err != nil {
+		if err := host.Shutdown(); err != nil {
 			return err
 		}
 		<-done // Listen has returned; the socket is released
@@ -139,7 +139,7 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 	// already gave up. (cloud.ServePlane does the same for an app's own socket; it is
 	// not shared because this router must not link the fleet's package graph to bind
 	// one socket.)
-	deadline := time.Now().Add(doorBindWait)
+	deadline := time.Now().Add(endpointBindWait)
 	for {
 		select {
 		case <-done:
@@ -155,15 +155,15 @@ func serveWake(app *zip.App, mcp *fleet.Door) {
 		}
 		if time.Now().After(deadline) {
 			app.Logger().Error("fleet start endpoint did not bind — an internal call cannot wake a cold app",
-				"sock", path, "waited", doorBindWait)
+				"sock", path, "waited", endpointBindWait)
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 }
 
-// doorBindWait bounds how long boot waits for the start endpoint's socket.
-const doorBindWait = 5 * time.Second
+// endpointBindWait bounds how long boot waits for the start endpoint's socket.
+const endpointBindWait = 5 * time.Second
 
 // isUnknownApp reports whether name is absent from this host's plugin table.
 //

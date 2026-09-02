@@ -25,10 +25,10 @@ type pingOut struct {
 	OK bool `json:"ok"`
 }
 
-// testDoor is a process's agent MCP server for the tests that drive the console
+// testEndpoint is a process's agent MCP server for the tests that drive the console
 // handler directly. It is a REAL zip.App's — the same value Mount hands in — so
 // no test is exercising a shape production does not have.
-func testDoor() zapmcp.Handler {
+func testEndpoint() zapmcp.Handler {
 	return zip.New(zip.Config{AppName: "console", DisableStartupMessage: true}).MCP
 }
 
@@ -123,7 +123,7 @@ func mcpResult(t *testing.T, got reply, path string) map[string]any {
 
 // The money proof: the canonical endpoint answers the MCP protocol, in JSON,
 // with a tool list that actually contains the app's typed op.
-func TestMCPDoorAnswersMCP(t *testing.T) {
+func TestMCPEndpointAnswersMCP(t *testing.T) {
 	got := call(t, hostApp(t), http.MethodPost, manifest.MCPPath, toolsList)
 	res := mcpResult(t, got, manifest.MCPPath)
 	tools, _ := res["tools"].([]any)
@@ -140,13 +140,13 @@ func TestMCPDoorAnswersMCP(t *testing.T) {
 // end-to-end host is pinned in cmd/cloud/mcp_test.go, where both halves are
 // composed. Here the rule is the one the terminal handler can actually keep on
 // its own.
-func TestFrameworkPathIsAnsweredAsADoor(t *testing.T) {
+func TestFrameworkPathIsAnsweredAsAEndpoint(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		app  *zip.App
 	}{
 		{"MCP route moved off the framework default", hostApp(t)},
-		{"no MCP route mounted at all", doorlessApp(t)},
+		{"no MCP route mounted at all", noRouteApp(t)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodHead} {
@@ -182,7 +182,7 @@ func TestFrameworkPathIsAnsweredAsADoor(t *testing.T) {
 // A GET on the endpoint is a client asking for the optional SSE stream. There is
 // none, so MCP Streamable HTTP wants 405 + Allow — not the 404 that says the
 // endpoint is absent.
-func TestDoorRefusesNonPOSTHonestly(t *testing.T) {
+func TestEndpointRefusesNonPOSTHonestly(t *testing.T) {
 	got := call(t, hostApp(t), http.MethodGet, manifest.MCPPath, "")
 	if got.status != http.StatusMethodNotAllowed {
 		t.Fatalf("GET %s: status %d, want 405 — %.120s", manifest.MCPPath, got.status, got.body)
@@ -199,7 +199,7 @@ func TestDoorRefusesNonPOSTHonestly(t *testing.T) {
 // for a path no route claimed. A plugin serving its own MCP server at the
 // framework default — which is where a host forwards a composed tools/call —
 // must still answer MCP there, not redirect to an address it does not serve.
-func TestPluginKeepsItsOwnDoor(t *testing.T) {
+func TestPluginKeepsItsOwnEndpoint(t *testing.T) {
 	app := pluginApp(t)
 	got := call(t, app, http.MethodPost, manifest.FrameworkMCPPath, toolsList)
 	mcpResult(t, got, manifest.FrameworkMCPPath)
@@ -213,7 +213,7 @@ func TestPluginKeepsItsOwnDoor(t *testing.T) {
 	}
 }
 
-// doorlessApp is the shape kms actually has, and the one nothing here modelled:
+// noRouteApp is the shape kms actually has, and the one nothing here modelled:
 // a plugin whose REST surface is PLAIN handlers and whose four typed ops live on
 // the internal plane (cloud.Plane, apps/kms/secret_rpc.go) so that no route runs
 // from the edge to a secret. Its own registry is therefore EMPTY — and zip mounts
@@ -222,7 +222,7 @@ func TestPluginKeepsItsOwnDoor(t *testing.T) {
 //
 // nil bundle on purpose: a child cannot bootstrap the console release, so every
 // per-app plugin binary runs exactly this way.
-func doorlessApp(t *testing.T) *zip.App {
+func noRouteApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{AppName: "kms", DisableStartupMessage: true})
 	app.Get("/v1/kms/health", func(c *zip.Ctx) error {
@@ -242,15 +242,15 @@ func doorlessApp(t *testing.T) *zip.App {
 // address it does not serve drops out of the composed tool list AND is reported
 // down — for the crime of having no tools. An empty list is the honest answer and
 // it is a 200.
-func TestDoorlessPluginAnswersItsOwnDoor(t *testing.T) {
-	app := doorlessApp(t)
+func TestPluginWithNoMCPRouteAnswersItsOwn(t *testing.T) {
+	app := noRouteApp(t)
 
 	got := call(t, app, http.MethodPost, manifest.FrameworkMCPPath, toolsList)
 	res := mcpResult(t, got, manifest.FrameworkMCPPath)
 	if _, ok := res["tools"]; !ok {
 		t.Fatalf("POST %s: result has no tools array — %.200s", manifest.FrameworkMCPPath, got.body)
 	}
-	t.Logf("doorless POST %s -> %d %s %.140s", manifest.FrameworkMCPPath, got.status, got.ctype, got.body)
+	t.Logf("no MCP route: POST %s -> %d %s %.140s", manifest.FrameworkMCPPath, got.status, got.ctype, got.body)
 
 	// initialize is the handshake every MCP client opens with; an endpoint that only
 	// answered tools/list would fail before it ever asked.
@@ -280,7 +280,7 @@ func TestDoorlessPluginAnswersItsOwnDoor(t *testing.T) {
 // inserted most-specific-first within the run that follows the last middleware
 // barrier (fiber router_precedence.go insertRouteSorted), so the static /mcp
 // sorts AHEAD of the greedy /* however late it arrives.
-func TestCatchAllNeverShadowsTheDoor(t *testing.T) {
+func TestCatchAllNeverShadowsTheEndpoint(t *testing.T) {
 	app := pluginApp(t) // catch-all first; the route does not exist yet
 	// Test() runs prepare(), which is where installMCP registers the control route.
 	mcpResult(t, call(t, app, http.MethodPost, manifest.FrameworkMCPPath, toolsList),

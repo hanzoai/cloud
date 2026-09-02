@@ -16,7 +16,7 @@
       "name": "admission_waitlist",
       "path": "admission_waitlist/SKILL.md",
       "service": "admission",
-      "sha256": "a6874b068c595b87975f2b2fb1b328099e4742bc393cc2f0c89dda22d5739945"
+      "sha256": "af48bbdd86a8a6a3c396e8d52a7d3ba8b82e9c35a84a19aa6cb7ae2af081555f"
     }
   ],
   "spec_version": "8.0.0"

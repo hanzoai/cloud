@@ -39,7 +39,7 @@ func doMethod(t *testing.T, app *zip.App, method, path, body string) (int, strin
 // registration in between, and that is the point — webui's handler is TERMINAL,
 // so it answers the bare /mcp precisely because nothing else claimed it. This
 // test is therefore a test of the COMPOSED host and not of a helper: neuter
-// mcpDoor (webui/mcp.go) and every case below fails with the console shell.
+// serveMCP (webui/mcp.go) and every case below fails with the console shell.
 //
 // The MCP server is the HOST's, registered by fleet.Use, and zip's is disabled — the
 // same pair run() sets. It fronts no app here (an empty composed set), which is
@@ -73,7 +73,7 @@ var errNoFleetHere = errors.New("this host composes no subsystems")
 // client configured with the host and the conventional /mcp path could not reach
 // the MCP server, and neither answer looked like an outage.
 //
-// Without mcpDoor both probes fall through to webui's SPA fallback and this fails.
+// Without serveMCP both probes fall through to webui's SPA fallback and this fails.
 func TestBareMCPBeatsTheConsoleCatchAll(t *testing.T) {
 	app := app308(t)
 

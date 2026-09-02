@@ -16,28 +16,28 @@
       "name": "social_accounts",
       "path": "social_accounts/SKILL.md",
       "service": "social",
-      "sha256": "c912cafb1243342dad029eb5900e9f4ef2df643f3decefb2f33133151876e929"
+      "sha256": "7424726082a95348234b6eb02dcd1107e8611efb9c54b814749dc1be62bb96ef"
     },
     {
       "description": "Read social posts: Returns the org's posts — content, channel, status, scheduled time, media and timestamps — most-recently-updated first., Returns one of the org's posts by id, with its current status, scheduled time, media and — once it has published — the account and external ",
       "name": "social_posts",
       "path": "social_posts/SKILL.md",
       "service": "social",
-      "sha256": "29ae56617876b2da0fe78207beb86f713c968e68720785127390a467efd73b63"
+      "sha256": "77b051a5c9b8068e8693ccbba713bb70e9bb494b66adaee86f0558e2323e2a69"
     },
     {
       "description": "Read social providers: Reports each supported network's publish-readiness: whether this deployment holds the OAuth application credentials for it and, when it does not, exactly which environment variables are missing..",
       "name": "social_providers",
       "path": "social_providers/SKILL.md",
       "service": "social",
-      "sha256": "5eeec556a4acfaaa5a587d00c6af66dcdb1bbc5cdf6a10ec8e7efecf0e59e710"
+      "sha256": "cecb4e80c92fa0839537b0e53c3ca86909a49da9d7cbafd827f88fb05da4322a"
     },
     {
       "description": "Read social summary: Returns four counts for the caller's org: total posts, how many are scheduled, how many have published, and how many accounts are connected..",
       "name": "social_summary",
       "path": "social_summary/SKILL.md",
       "service": "social",
-      "sha256": "80f0be544784c2de615ee2331d1482a9402d7a9aca4cca045480b5b329365954"
+      "sha256": "a6058ea3f50552840b74f23b0a43544aa8e66e912a7b49e53802a62ce4bcf310"
     }
   ],
   "spec_version": "8.0.0"

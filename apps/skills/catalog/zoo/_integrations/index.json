@@ -16,70 +16,70 @@
       "name": "integrations_callback",
       "path": "integrations_callback/SKILL.md",
       "service": "integrations",
-      "sha256": "5b1b4447f8705d36589e2e756e87d881dd31b959a9f807b684dc6e0945f1046c"
+      "sha256": "a95e0c8edf28d443cbe38ca00a020091f55bef304eeb3768e1295b63d21b7ac8"
     },
     {
       "description": "Read integrations connectors: Lists the caller's OWN connectors across every provider — the set `hanzo connector ls` prints., Lists the user-scoped provider cards — the catalog of what a user can connect, and how., Hands the custodied access token to its owner — the ONE place cus",
       "name": "integrations_connectors",
       "path": "integrations_connectors/SKILL.md",
       "service": "integrations",
-      "sha256": "92f5a42ef3b6ecdec6e6cbb64b0259c8109b1da8320bbfdfc4987ddb197be9ad"
+      "sha256": "c75bdac49bb758a610a7ceb78d2aca847b3c8906ca053c207f04e0a6bef2b6af"
     },
     {
       "description": "Read integrations discord: Begin linking a Zoo account from Discord, Complete the Discord account link, Discord sign-in return leg.",
       "name": "integrations_discord",
       "path": "integrations_discord/SKILL.md",
       "service": "integrations",
-      "sha256": "b4dcffa56c599103eb8c3f6ede41f9fcb238f5ddcf1f34bd27dac51cf51e5dcb"
+      "sha256": "cb83104ac26a5aea7971a1e56f6e8b8d6c4918eb2d12d82f019e096d536534ca"
     },
     {
       "description": "Read integrations github: Lists the GitHub accounts the caller may see the App installed on, each confirmed against the App's own list, plus where to add another., Lists the org's granted GitHub repositories, each annotated with its native import + sync status from the git object",
       "name": "integrations_github",
       "path": "integrations_github/SKILL.md",
       "service": "integrations",
-      "sha256": "0271e1b8ccc616bfbc7fda47810183938a175f722d75f1c6a75b04b994b2e687"
+      "sha256": "74029cc5fe9060f37a8d7a3e87932fbd7e89eda22bb3118c4a5cb7276af542f4"
     },
     {
       "description": "Read integrations gitlab: Lists the projects the org's GitLab connection can reach — membership projects, most recently active first..",
       "name": "integrations_gitlab",
       "path": "integrations_gitlab/SKILL.md",
       "service": "integrations",
-      "sha256": "454d561bcdbf2146f5dd14185994f7a3298775c233153eedc24a95fc18ffd70b"
+      "sha256": "b095b7cba5dc15594a1b3b871b1efc135d8ab9a7cd2ae4c8a606c49906afb2ca"
     },
     {
       "description": "Read integrations integrations: Returns every registered integration provider together with THIS org's connection status for it — the catalog the console's Integrations page renders., Returns ONE provider with this org's connection status — the same view list carries, for a singl",
       "name": "integrations_integrations",
       "path": "integrations_integrations/SKILL.md",
       "service": "integrations",
-      "sha256": "be271cc56e7eeee1c2f5d9499bb74c71e52f117c177fc102ba38ffccd3341a0d"
+      "sha256": "5722cb38b92bd4a12c5932a5bab348406258c861274cfb204016a496bc77f8f8"
     },
     {
       "description": "Read integrations slack: Install the Zoo app into a Slack workspace, Begin linking a Zoo account from Slack, Complete the Slack account link.",
       "name": "integrations_slack",
       "path": "integrations_slack/SKILL.md",
       "service": "integrations",
-      "sha256": "6c24d368b1e2456400c174f4a4e57dafa86722c6ac55b360bac60ef2c9c4d612"
+      "sha256": "f20088a4844dfb471196849afb964541797e2c6d230655d6982b700f54617e8e"
     },
     {
       "description": "Read integrations teams: Begin linking a Zoo account from Teams, Microsoft sign-in return leg, Complete the Teams account link.",
       "name": "integrations_teams",
       "path": "integrations_teams/SKILL.md",
       "service": "integrations",
-      "sha256": "9fa6eca1bd1d468a03e290a7eed1d88796e4b12cf86bb56b8fa1b166ca3bd16d"
+      "sha256": "400b2351fa92339ee5a8845aff7ebbb3e652366a1ffd749ef79fdb581addc289"
     },
     {
       "description": "Read integrations telegram: Begin linking a Zoo account from Telegram, Telegram Login Widget return leg, Complete the Telegram account link.",
       "name": "integrations_telegram",
       "path": "integrations_telegram/SKILL.md",
       "service": "integrations",
-      "sha256": "c9359e6c1d4b1adac25281d3ea0ebc61f94cd46ae197298159eeaf0060f1eb2d"
+      "sha256": "ee783af5dc7203bb02f9b5112b5126ee1353c072f87829475bdd9e4a4db8fda5"
     },
     {
       "description": "Read integrations whatsapp: WhatsApp Cloud API subscription challenge.",
       "name": "integrations_whatsapp",
       "path": "integrations_whatsapp/SKILL.md",
       "service": "integrations",
-      "sha256": "6579eb23a4a44b64b66285be46177aa0ba572cc192459381d4e5631868c3d8d1"
+      "sha256": "5daf7dfe7db71b69108b6c94e1594d672b6e27b088dae0475c7992ae21a4136c"
     }
   ],
   "spec_version": "8.0.0"

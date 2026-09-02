@@ -16,14 +16,14 @@
       "name": "treasury_accounts",
       "path": "treasury_accounts/SKILL.md",
       "service": "treasury",
-      "sha256": "88e6345430caa29ea97af77d398123c80eb4417d938b3d47da3f86a7c7d04e4f"
+      "sha256": "baf27a99df10f0dc783507ecd54ae5d713f5a7fd59d95de0a9b3acf74b2b2fa9"
     },
     {
       "description": "Read treasury treasury: Returns the reserve fund's health and the current revenue-share policy for any validated caller..",
       "name": "treasury_treasury",
       "path": "treasury_treasury/SKILL.md",
       "service": "treasury",
-      "sha256": "b0977a5eedac0c56259442c5eef526849219222dc9dcf52056becdd605126e27"
+      "sha256": "98388d38dbc36b8fa00046291f6148d2e8d8823f9464ac69823d98814e1968c9"
     }
   ],
   "spec_version": "8.0.0"

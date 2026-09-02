@@ -1,6 +1,6 @@
 package fleet
 
-// door.go mounts the fleet's GraphQL address.
+// graph.go mounts the fleet's GraphQL address.
 //
 // It is the HOST's, for the reason /v1/openapi.json is: the answer is about the
 // whole fleet, and no plugin can see past itself. Left unclaimed the address falls
@@ -27,7 +27,7 @@ import (
 // app's embedded subset, and a deployment that never receives a GraphQL request
 // should not pay for one.
 func UseGraph(app *zip.App, path string, subsets func() ([]openapi.Part, error), at At) {
-	build := sync.OnceValues(func() (*door, error) {
+	build := sync.OnceValues(func() (*schema, error) {
 		parts, err := subsets()
 		if err != nil {
 			return nil, err
@@ -36,7 +36,7 @@ func UseGraph(app *zip.App, path string, subsets func() ([]openapi.Part, error),
 		if err != nil {
 			return nil, err
 		}
-		return &door{graph: NewGraph(d, at), sdl: openapi.GraphQL(d)}, nil
+		return &schema{graph: NewGraph(d, at), sdl: openapi.GraphQL(d)}, nil
 	})
 
 	app.Get(path, func(c *zip.Ctx) error {
@@ -61,9 +61,9 @@ func UseGraph(app *zip.App, path string, subsets func() ([]openapi.Part, error),
 	})
 }
 
-// door is the schema and the dispatch, built together from one document so they
-// cannot describe different surfaces.
-type door struct {
+// schema is the executable graph and its printed SDL, built together from one
+// document so they cannot describe different surfaces.
+type schema struct {
 	graph *Graph
 	sdl   string
 }

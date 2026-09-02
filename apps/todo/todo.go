@@ -290,7 +290,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 }
 
 // changes and reads say what an operation DOES, so no call site carries a bare
-// boolean. It cannot be read off the HTTP method: over the MCP door every
+// boolean. It cannot be read off the HTTP method: over the MCP endpoint every
 // operation arrives as one POST to /mcp, so the method describes the transport
 // and says nothing about the operation.
 const (
@@ -310,7 +310,7 @@ const (
 // through; the group keeps the same control for the untyped routes, which have no
 // preamble to put it in. One rule, two ways to ask it, never two rules.
 //
-// source_test.go measures all three writes on both doors.
+// source_test.go measures all three writes on both endpoints.
 func csrf(ctx context.Context, act bool) error {
 	if act == reads {
 		return nil
@@ -328,7 +328,7 @@ var unsafe = map[string]bool{
 // not typed ops and so have no preamble to put it in.
 //
 // It is not what protects the three typed writes — csrf above is, because this
-// never runs for them off the REST door. It stays because a raw handler under
+// never runs for them off the REST route. It stays because a raw handler under
 // /v1/todo has only this: the three repository-lifecycle refusals today, and
 // whatever untyped route is written next, which would otherwise be the one write
 // on this surface with no control at all.

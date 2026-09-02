@@ -16,21 +16,21 @@
       "name": "affiliate_affiliate",
       "path": "affiliate_affiliate/SKILL.md",
       "service": "affiliate",
-      "sha256": "d2bb608406aa305476a05d7a2180ccc133a1b13707db58748490203c181aca38"
+      "sha256": "151fb59714b65efe8646d14868e4012c63891c8de68a9848dd14eab889a8a44b"
     },
     {
       "description": "Read affiliate leaderboard: Answers the top affiliates by lifetime accrued commission, shown by OPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank..",
       "name": "affiliate_leaderboard",
       "path": "affiliate_leaderboard/SKILL.md",
       "service": "affiliate",
-      "sha256": "a5248206e6b804ebd6f9277da43289c91e11b2aff0e1da23f2b9f8effdc19915"
+      "sha256": "75b327253b23f421552d8ebfc277c91254bb2271cb0447a31185409e5ce73622"
     },
     {
       "description": "Read affiliate me: Answers the richer self-view: the same lifetime accrued, pending and paid commission and payout history, plus the caller's downline broken out by upline LEVEL — direct, second, third — each with the rate paid at that level and how many orgs sit there., Answers ",
       "name": "affiliate_me",
       "path": "affiliate_me/SKILL.md",
       "service": "affiliate",
-      "sha256": "1520314c07d69797d68eb7f940a8ac35aa44b1dd3e0057b843ef4e2dd4c7b7ec"
+      "sha256": "f2b8541e80a6ae43637816562a3c579a59b261303f32990e9c0d6d06370b2fe8"
     }
   ],
   "spec_version": "8.0.0"

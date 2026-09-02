@@ -79,7 +79,7 @@ type catalog struct {
 // on the brand's OWN host — a Hanzo URL in the Lux catalogue is the white-label
 // leak [rebrand] exists to stop, and it would arrive here rather than in a
 // skill's prose.
-func TestTheIndexNamesTheAgentDoor(t *testing.T) {
+func TestTheIndexNamesTheAgentEndpoint(t *testing.T) {
 	sub, err := fs.Sub(catalogFS, "catalog")
 	if err != nil {
 		t.Fatal(err)
@@ -103,20 +103,20 @@ func TestTheIndexNamesTheAgentDoor(t *testing.T) {
 		}
 		seen++
 		if doc.MCP.URL != doc.BaseURL+"/v1/mcp" {
-			t.Errorf("%s names the agent door at %q; want %q. The catalogue's read-only "+
+			t.Errorf("%s names the agent endpoint at %q; want %q. The catalogue's read-only "+
 				"surface has no onward pointer without it.", b.Name(), doc.MCP.URL, doc.BaseURL+"/v1/mcp")
 		}
 		if doc.MCP.Method != "POST" {
-			t.Errorf("%s says the door takes %q", b.Name(), doc.MCP.Method)
+			t.Errorf("%s says the endpoint takes %q", b.Name(), doc.MCP.Method)
 		}
 		// The sentence is the operation's own, lifted from the published
 		// contract — so an empty one means the contract stopped describing it
-		// and the generator wrote a door nobody can use.
+		// and the generator wrote a endpoint nobody can use.
 		if strings.TrimSpace(doc.MCP.Description) == "" {
-			t.Errorf("%s names the door and says nothing about it", b.Name())
+			t.Errorf("%s names the endpoint and says nothing about it", b.Name())
 		}
 		if b.Name() != "hanzo" && strings.Contains(strings.ToLower(doc.MCP.Description), "hanzo") {
-			t.Errorf("%s carries Hanzo prose on its agent door: %q", b.Name(), doc.MCP.Description)
+			t.Errorf("%s carries Hanzo prose on its agent endpoint: %q", b.Name(), doc.MCP.Description)
 		}
 	}
 	if seen == 0 {

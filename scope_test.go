@@ -161,13 +161,13 @@ func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 	}
 }
 
-// TestGlobalIsTheOnlyAppWideDoor pins the asymmetry that makes the whole thing
+// TestGlobalIsTheOnlyAppWideEndpoint pins the asymmetry that makes the whole thing
 // work: with Global the subsystem's Router IS the bare app, so its Use means what
 // it has always meant. That is the capability, and it is spelled out at the
 // composition root — as a BOOL, beside Price and Prefixes, where a grant belongs.
 // It used to be a second Mount field with a second signature, which is how three
 // subsystems acquired the capability by naming a concrete parameter type.
-func TestGlobalIsTheOnlyAppWideDoor(t *testing.T) {
+func TestGlobalIsTheOnlyAppWideEndpoint(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.Plugin{
 		{Name: "edge", Global: true, Use: func(r cloud.Router, _ cloud.Deps) error {

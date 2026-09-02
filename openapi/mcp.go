@@ -19,7 +19,7 @@ package openapi
 import (
 	"net/http"
 
-	"github.com/hanzoai/cloud/manifest/door"
+	"github.com/hanzoai/cloud/manifest/mcp"
 	"github.com/zap-proto/zip"
 )
 
@@ -49,7 +49,7 @@ type MCPError struct {
 }
 
 func init() {
-	Describe(door.Path, http.MethodPost,
+	Describe(mcp.Path, http.MethodPost,
 		"The agent endpoint: every subsystem's operations as MCP tools",
 		"Model Context Protocol over JSON-RPC 2.0 — one POST per message, stateless, "+
 			"protocol revision 2026-07-28. tools/list answers without a credential with one tool "+
@@ -57,17 +57,17 @@ func init() {
 			"operation's input schema. tools/call names a subsystem tool and carries "+
 			"{\"op\": <operation>, \"input\": <its arguments>}; it takes the same bearer the REST "+
 			"API does, and a call that carries none is answered 401 with a WWW-Authenticate header "+
-			"naming the resource metadata at "+door.Metadata+", which names the "+
+			"naming the resource metadata at "+mcp.Metadata+", which names the "+
 			"authorization server to sign in at. The tool surface is the public contract: the "+
 			"operator's admin product is not offered, and a name that would disclose a secret or "+
 			"mutate an identity is withheld — the list says how many, under _meta.")
-	Register(door.Path, http.MethodPost, MCPRequest{}, MCPResponse{})
+	Register(mcp.Path, http.MethodPost, MCPRequest{}, MCPResponse{})
 }
 
-// useDoor puts the agent endpoint on core's throwaway router so Spec projects
+// useEndpoint puts the agent endpoint on core's throwaway router so Spec projects
 // it. The handler is never reached: the real endpoint is the host's.
-func useDoor(app *zip.App) {
-	app.Post(door.Path, func(*zip.Ctx) error {
+func useEndpoint(app *zip.App) {
+	app.Post(mcp.Path, func(*zip.Ctx) error {
 		return zip.ErrInternal("the document's stub for the agent endpoint — the host serves it")
 	})
 }

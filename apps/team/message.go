@@ -6,7 +6,7 @@ package team
 // conversation: hanzo.ai could name every channel the org has and had nothing to
 // draw when a reader opened one, because the whole message surface lived behind
 // the transactor's own websocket protocol. These two ops are the same second
-// DOOR the room listing is — the SAME Chunter documents, read and written
+// SURFACE the room listing is — the SAME Chunter documents, read and written
 // through the SAME applyTx path the Team client uses, so a message posted here
 // arrives in an open client live and one typed there is read here with no sync.
 //
@@ -36,7 +36,7 @@ import (
 // is a second parameter and not a bigger number.
 const messageMax = 200
 
-// The longest message this door accepts, in bytes of plain text. It is the
+// The longest message this endpoint accepts, in bytes of plain text. It is the
 // bound the Team client's own composer keeps, and it is here so a caller
 // driving the API by hand cannot write a document the client then cannot render.
 const messageBytes = 16 << 10

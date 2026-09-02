@@ -14,7 +14,7 @@ package fleet_test
 // So the assertions are BY BODY and never by status code, and they are EXACT
 // SETS: "the MCP server lists what the children serve" is only a real claim if
 // dropping a child from the MCP server turns it red. See
-// TestDoorListsExactlyWhatItsChildrenServe.
+// TestEndpointListsExactlyWhatItsChildrenServe.
 
 import (
 	"context"
@@ -227,14 +227,14 @@ func unavailable(t *testing.T, h *zip.App) map[string]string {
 	return out
 }
 
-// TestDoorListsExactlyWhatItsChildrenServe is the whole claim, as an EXACT set.
+// TestEndpointListsExactlyWhatItsChildrenServe is the whole claim, as an EXACT set.
 //
 // It is exact on purpose. A subset assertion ("o11y's tools are in there") is the
 // test the deleted catalogue passed for months while it was missing 353 ops: a
 // list that is too short satisfies every containment check written against it.
 // Drop a child from `apps` below and this goes red naming the tools that vanished
 // — which is the mutation that proves the suite is load-bearing.
-func TestDoorListsExactlyWhatItsChildrenServe(t *testing.T) {
+func TestEndpointListsExactlyWhatItsChildrenServe(t *testing.T) {
 	kids := map[string]*child{"alpha": start(t, "alpha", 3), "beta": start(t, "beta", 2)}
 	h := host(t, []string{"alpha", "beta"}, kids)
 
@@ -248,13 +248,13 @@ func TestDoorListsExactlyWhatItsChildrenServe(t *testing.T) {
 	}
 }
 
-// TestDoorAnswersTheChildsOwnProjection: the descriptors are the child's bytes,
+// TestEndpointAnswersTheChildsOwnProjection: the descriptors are the child's bytes,
 // not a re-encoding and not a copy that could differ from them.
 //
 // This is the property the file could never have: the host's answer for an app is
 // EQUAL to what that app's own registry projects, at the instant of asking, so
 // there is no version of the fleet in which they disagree.
-func TestDoorAnswersTheChildsOwnProjection(t *testing.T) {
+func TestEndpointAnswersTheChildsOwnProjection(t *testing.T) {
 	kid := start(t, "alpha", 4)
 	h := host(t, []string{"alpha"}, map[string]*child{"alpha": kid})
 

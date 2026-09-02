@@ -32,11 +32,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// doorApp mounts the whole surface with the runtime pointed at a stand-in that
+// endpointApp mounts the whole surface with the runtime pointed at a stand-in that
 // ROUTES — the reverse-proxy backing, whose upstream is a real server here
 // rather than an in-cluster Service. Everything in front of it (route table,
 // Bridge, typed ops, relay, gate) is production's.
-func doorApp(t *testing.T) *zip.App {
+func endpointApp(t *testing.T) *zip.App {
 	t.Helper()
 	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -70,11 +70,11 @@ func doorApp(t *testing.T) *zip.App {
 	return app
 }
 
-// TestDoorServesTenantFreeReadsAnonymously is the lane's assertion: no
+// TestEndpointServesTenantFreeReadsAnonymously is the lane's assertion: no
 // credentials, and the two reads a console makes BEFORE it has a session answer
 // the runtime's own bytes.
-func TestDoorServesTenantFreeReadsAnonymously(t *testing.T) {
-	app := doorApp(t)
+func TestEndpointServesTenantFreeReadsAnonymously(t *testing.T) {
+	app := endpointApp(t)
 
 	for _, tc := range []struct{ path, want string }{
 		{"/v1/o11y/version", `"ee":"N"`},
@@ -94,13 +94,13 @@ func TestDoorServesTenantFreeReadsAnonymously(t *testing.T) {
 	}
 }
 
-// TestDoorStillRefusesTenantReads is the other half, and the one that matters
+// TestEndpointStillRefusesTenantReads is the other half, and the one that matters
 // more: if everything answers 200 the gate is gone, which is worse than the 403
 // this lane closed. A read of a TENANT's telemetry must still be refused, and
 // the refusal must be the SURFACE's, not the runtime's 401 — proving the request
 // never reached the runtime at all.
-func TestDoorStillRefusesTenantReads(t *testing.T) {
-	app := doorApp(t)
+func TestEndpointStillRefusesTenantReads(t *testing.T) {
+	app := endpointApp(t)
 
 	for _, path := range []string{
 		"/v1/o11y/dashboards",
@@ -121,13 +121,13 @@ func TestDoorStillRefusesTenantReads(t *testing.T) {
 	}
 }
 
-// TestDoorExemptionIsTheModulesAnswer pins WHERE the exempt set lives. This repo
+// TestEndpointExemptionIsTheModulesAnswer pins WHERE the exempt set lives. This repo
 // kept its own copy once — /v1/o11y/api/v1/health and three /api/v2 siblings,
 // the internal namespace hanzoai/o11y stopped rewriting onto at v1.5.37 — so the
 // list named four addresses no route served and the gate refused every real
 // public op behind it. The fact belongs beside the routes; if it ever moves back
 // here, this fails.
-func TestDoorExemptionIsTheModulesAnswer(t *testing.T) {
+func TestEndpointExemptionIsTheModulesAnswer(t *testing.T) {
 	for _, dead := range []string{
 		"/v1/o11y/api/v1/health",
 		"/v1/o11y/api/v2/healthz",

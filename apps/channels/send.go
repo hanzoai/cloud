@@ -1,6 +1,6 @@
 package channels
 
-// door.go — the ONE outbound path, and why it is a plane call.
+// send.go — the ONE outbound path, and why it is a plane call.
 //
 // A transport must not hold an integrations Send* helper as a function value.
 // Every one of those ends at TokenFor, which is gated on integrations' `mounted`
@@ -29,10 +29,10 @@ var ask = plane.Ask[plane.ChatSendIn, plane.ChatSendOut]
 //
 // The tenant is a parameter rather than a field the caller fills, because it is
 // what resolves the credential the send spends: integrations refuses a send that
-// names no org, and four of the five doors named none — so telegram and whatsapp
+// names no org, and four of the five transports named none — so telegram and whatsapp
 // could not deliver at all, and discord and teams spent a shared app credential
-// with nothing to check it against. A door cannot forget an argument it has to
-// pass.
+// with nothing to check it against. A parameter cannot be forgotten the way a
+// field can.
 func post(ctx context.Context, org string, in plane.ChatSendIn) (string, error) {
 	in.Org = org
 	out, err := ask(ctx, "integrations", plane.ChatSend, &in)

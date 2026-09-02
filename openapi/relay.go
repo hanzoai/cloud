@@ -261,7 +261,7 @@ func relays() []Relay {
 	return out
 }
 
-// doors returns the path keys in doc that ARE the relay for prefix: the bare
+// endpoints returns the path keys in doc that ARE the relay for prefix: the bare
 // prefix and its wildcard form, which is what [translate] makes of `prefix/*`.
 //
 // Both, because a subsystem registers both — `/v1/iam/*` already matches
@@ -270,7 +270,7 @@ func relays() []Relay {
 // this at the registration site). Neither survives projection: leaving the
 // wildcard beside the routes it stands for would publish one address twice, and
 // `{wildcard1}` is what a spec-derived CLI turns into a phantom command.
-func doors(doc *Document, prefix string) []string {
+func endpoints(doc *Document, prefix string) []string {
 	var out []string
 	for _, p := range []string{prefix, prefix + "/{wildcard1}"} {
 		if _, ok := doc.Paths[p]; ok {
@@ -298,7 +298,7 @@ func Project(doc *Document, rs []Relay) error {
 		}
 	}
 	for _, r := range rs {
-		open := doors(doc, r.Prefix)
+		open := endpoints(doc, r.Prefix)
 		if len(open) == 0 {
 			continue
 		}

@@ -321,7 +321,7 @@ func TestRouteShell_ServedForExportedRoutes(t *testing.T) {
 		"signin.html":        {Data: []byte("<html><head><title>Hanzo Cloud Console</title></head><body>SIGNIN</body></html>")},
 		"auth/callback.html": {Data: []byte("<html><head><title>Hanzo Cloud Console</title></head><body>CALLBACK</body></html>")},
 	}
-	h, err := newConsoleHandler(fsys, testDoor())
+	h, err := newConsoleHandler(fsys, testEndpoint())
 	if err != nil {
 		t.Fatalf("newConsoleHandler: %v", err)
 	}

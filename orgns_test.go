@@ -57,7 +57,7 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 	// strictly worse than the call it now makes. Its org is principal.Org, the same
 	// validated claim every OrgNamespace caller passes. A THIRD place is not a thing
 	// to add; move the caller above cloud, or take the namespace as a parameter.
-	doors := map[string]bool{
+	endpoints := map[string]bool{
 		"orgns.go":                true,
 		"apps/finance/finance.go": true,
 	}
@@ -92,7 +92,7 @@ func TestOnlyOrgnsBuildsANamespace(t *testing.T) {
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			return nil
 		}
-		if rel, _ := filepath.Rel(root, path); doors[filepath.ToSlash(rel)] {
+		if rel, _ := filepath.Rel(root, path); endpoints[filepath.ToSlash(rel)] {
 			return nil
 		}
 		b, err := os.ReadFile(path)

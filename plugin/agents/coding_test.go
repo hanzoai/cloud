@@ -13,7 +13,7 @@ package main
 //	            the input has no field either could arrive in
 //
 // Nothing here is a fixture at the client under test. The first two drive the
-// REAL fleet.Door over a child carrying the REAL registration [codingDoor], so
+// REAL fleet.MCP over a child carrying the REAL registration [codingEndpoint], so
 // deleting that registration fails them — which is the whole point, because the
 // magic-word path that used to reach the engine has been deleted and this is
 // now the only way in. A harness that rebuilt the route table by hand could
@@ -51,7 +51,7 @@ const tool = "create_agent_coding"
 
 // agentsChild brings up the agents app's coding surface on its own socket, the
 // way cloud.Serve brings up a plugin binary — and it registers the route by
-// CALLING codingDoor, so there is one registration in the program and the test
+// CALLING codingEndpoint, so there is one registration in the program and the test
 // is downstream of it rather than beside it.
 func agentsChild(t *testing.T) string {
 	t.Helper()
@@ -63,7 +63,7 @@ func agentsChild(t *testing.T) string {
 	sock := dir + "/agents.sock"
 
 	app := zip.New(zip.Config{AppName: "agents", DisableStartupMessage: true})
-	codingDoor(app)
+	codingEndpoint(app)
 	go func() { _ = app.Listen(sock) }()
 	t.Cleanup(func() { _ = app.Shutdown() })
 
@@ -79,9 +79,9 @@ func agentsChild(t *testing.T) string {
 	return ""
 }
 
-// door composes the real fleet MCP server over that child — fleet.Use, the
+// endpoint composes the real fleet MCP server over that child — fleet.Use, the
 // same call cmd/cloud makes, with the same MCP path.
-func door(t *testing.T) *zip.App {
+func endpoint(t *testing.T) *zip.App {
 	t.Helper()
 	sock := agentsChild(t)
 	h := zip.New(zip.Config{AppName: "cloud", DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
@@ -124,7 +124,7 @@ func rpc(t *testing.T, h *zip.App, body string) map[string]any {
 
 // ops reads the operation names out of one subsystem tool's schema — the `op`
 // enum, which is where the grouped MCP server carries them (fleet/grouped.go).
-// This is the same read apps/agents/door.go does to build a run's offer, so what
+// This is the same read apps/agents/endpoint.go does to build a run's offer, so what
 // this asserts about is exactly what an agent is handed.
 func ops(t *testing.T, res map[string]any, subsystem string) []string {
 	t.Helper()
@@ -163,7 +163,7 @@ func ops(t *testing.T, res map[string]any, subsystem string) []string {
 // registered and unreachable, which is indistinguishable from this test's
 // absence.
 func TestTheCodingToolIsOfferedToAnAgent(t *testing.T) {
-	res := rpc(t, door(t), `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	res := rpc(t, endpoint(t), `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	got := ops(t, res, "agents")
 	for _, op := range got {
 		if op == tool {
@@ -178,14 +178,14 @@ func TestTheCodingToolIsOfferedToAnAgent(t *testing.T) {
 // only thing a model reads before deciding — so it is asserted, not assumed.
 //
 // It is asserted for the second time, too. This op shipped for months describing
-// itself as "Is the app's door. It answers 202 with the run's handle…", because
+// itself as "Is the app's endpoint. It answers 202 with the run's handle…", because
 // zipdoc strips an exact leading match of the handler's own name and the comment
-// opened "httpCodingStart is the app's door". Every word of that is true and none
+// opened "httpCodingStart is the app's endpoint". Every word of that is true and none
 // of it says the thing runs a coding task on a repository — a model reading it
 // has no reason to pick it for "fix the bug in X", which is why the prefix nobody
 // could delete looked load-bearing.
 func TestTheDescriptionTellsAModelWhatItDoes(t *testing.T) {
-	res := rpc(t, door(t),
+	res := rpc(t, endpoint(t),
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+fleet.Describe+`","arguments":{"op":"`+tool+`"}}}`)
 	content, _ := res["content"].([]any)
 	if len(content) == 0 {

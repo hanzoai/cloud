@@ -13,8 +13,8 @@ import (
 // client and egress through the ONE existing Bot Connector send path
 // (integrations.SendTeams).
 
-// teamsDoor is the send path; tests spy it, prod never repoints.
-var teamsDoor = func(ctx context.Context, org, serviceURL, conversationID, text string) error {
+// teamsEndpoint is the send path; tests spy it, prod never repoints.
+var teamsEndpoint = func(ctx context.Context, org, serviceURL, conversationID, text string) error {
 	_, err := post(ctx, org, plane.ChatSendIn{Provider: "teams", Root: serviceURL, Room: conversationID, Text: text})
 	return err
 }
@@ -61,7 +61,7 @@ func teamsEgress(ctx context.Context, s *cloud.Service[state], org string, m Mes
 	if !ok || root == "" {
 		return Delivery{}, errNoRoute
 	}
-	if err := teamsDoor(ctx, org, root, m.Room.ID, renderText(m)); err != nil {
+	if err := teamsEndpoint(ctx, org, root, m.Room.ID, renderText(m)); err != nil {
 		return Delivery{}, err
 	}
 	// The Bot Connector activity id is not surfaced by the existing helper —

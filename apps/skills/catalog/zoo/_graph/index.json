@@ -16,21 +16,21 @@
       "name": "graph_graph",
       "path": "graph_graph/SKILL.md",
       "service": "graph",
-      "sha256": "a97eeb7dc1329a21cb049bd3cfcaaeda94de52760467bd449f66e6dcb1fd1012"
+      "sha256": "3cd421e82a8161133408bd03763725b7eb1c74e97382173f723f5cc79585b1f6"
     },
     {
       "description": "Read graph search: Find assertions by their text rather than by an entity key.",
       "name": "graph_search",
       "path": "graph_search/SKILL.md",
       "service": "graph",
-      "sha256": "f8674f6c9b0fac31b37add90ffe94f0d6995087ef79fb91825922d382c289f1b"
+      "sha256": "062efc500b81c5489eaf9830bef8948e47d973fe1bdec93fe8b17713732e3934"
     },
     {
       "description": "Read graph vocabulary: The relations in use, and the rule that resolves a conflict.",
       "name": "graph_vocabulary",
       "path": "graph_vocabulary/SKILL.md",
       "service": "graph",
-      "sha256": "13cd9b0f0d02e63fbadf542beee85396a9c68dfb555b4f13a136bbe3938c8cf4"
+      "sha256": "172e7503339b9fd80acf09c9df859d0b08b61102c29dd89d4934a625c6392a53"
     }
   ],
   "spec_version": "8.0.0"

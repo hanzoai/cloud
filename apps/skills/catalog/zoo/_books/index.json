@@ -16,91 +16,91 @@
       "name": "books_accounts",
       "path": "books_accounts/SKILL.md",
       "service": "books",
-      "sha256": "1e11d1f5da7ce49b76865d27898f417456e506bacdf53c31d29a9fc3df025373"
+      "sha256": "9bd6612f1934fdc91fc53c0388be44eb940840580e81872caaccd350dfdcdbab"
     },
     {
       "description": "Read books bank: Returns the org's normalized bank transactions, newest first — every row the import and connector paths have ingested, with its amount in exact cents, its direction, and whether it has been matched to a voucher yet., Returns the org's unmatched bank inflows and t",
       "name": "books_bank",
       "path": "books_bank/SKILL.md",
       "service": "books",
-      "sha256": "d46027315a44847d1d6002615781584e3a0fb8ca7132b35d415115ae7c7701b6"
+      "sha256": "35a236e19044805ad73409880e73219ace5b14ded6130f5ca16ba4602b35ebb8"
     },
     {
       "description": "Read books export: Returns the complete financial package for the caller's org over (from, to]: the trial balance, the P&L, the balance sheet, and the GL detail behind them — the four statements a tax preparer or an investor asks for, assembled from the one ledger in a single rea",
       "name": "books_export",
       "path": "books_export/SKILL.md",
       "service": "books",
-      "sha256": "51a55b6ed8624b8378e94eec70b04d3b2baf6d38f32f188ed90561817ba065c8"
+      "sha256": "8df11c82ded7dd45151fb3c1065dc9009fd9718a7912d975498983c9453f704b"
     },
     {
       "description": "Read books gl: ListGL returns the org's most recent GL Entry rows, newest first..",
       "name": "books_gl",
       "path": "books_gl/SKILL.md",
       "service": "books",
-      "sha256": "19bd2999cffabcbb7601fde51045fff75fcaaa7a285e69253d2fca5da7665062"
+      "sha256": "afd025902ca8e01480ee4d299bc86a2d78028757dc258637d6df1c8eaa88eebe"
     },
     {
       "description": "Read books inbox: Returns the org's open document queue — everything uploaded but not yet booked, newest first, each with its extracted summary and the confidence the scanner resolved its category at..",
       "name": "books_inbox",
       "path": "books_inbox/SKILL.md",
       "service": "books",
-      "sha256": "88a01294e2730e6b07034f1242a11f74d7a6ee0d6c825a9e9fbe6502f883e41d"
+      "sha256": "df0caac13ec53f5c5a9eeb0342a435532ea5ddbb20d6978ded51b791ace3b09f"
     },
     {
       "description": "Read books metrics: Metrics returns the org's deterministic SaaS-metrics snapshot over an optional (from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash, deferred revenue, monthly burn and runway — as raw int64-cent figures AND the same figures already",
       "name": "books_metrics",
       "path": "books_metrics/SKILL.md",
       "service": "books",
-      "sha256": "1dcd666b0ec543dee6d00aaa0a2c46d4ea59509cfb334d863e370872c068a2de"
+      "sha256": "884d04b6987ec075c79a4f095e8d6a7263945cc4df8e4a1c6cd3331e68da598d"
     },
     {
       "description": "Read books pnl: Returns the org's accrual-basis Profit & Loss over an optional (from, to] window of RFC3339 posting times: recognized revenue, matched cost, and the net..",
       "name": "books_pnl",
       "path": "books_pnl/SKILL.md",
       "service": "books",
-      "sha256": "ba6e9b845c23af774ac15d864039fb7b79c084d242bdd5fd8e60ef518bfceaf6"
+      "sha256": "b6a1636defa9b6edd4c82b0e5259dc137d6c928facb70d069f6cd69c086ea4ca"
     },
     {
       "description": "Read books position: Returns the org's Balance Sheet as of `to` (empty = all time), with the Assets == Liabilities + Equity equation proof..",
       "name": "books_position",
       "path": "books_position/SKILL.md",
       "service": "books",
-      "sha256": "5d44b72e94bc5b6aa734bacf262461b78c33562a47a3dc241f1c1a749e48af0c"
+      "sha256": "28a37e6cfbe60c2551478e4e8e123c7c3f779e5d00661b4e55657fff2b4cd93c"
     },
     {
       "description": "Read books questions: Returns the clarifying questions the caller's own recent GL raises — the unusual postings a founder should look at (outliers, reversals, round-offs, uncosted revenue, an overdrawn wallet), sharpest first..",
       "name": "books_questions",
       "path": "books_questions/SKILL.md",
       "service": "books",
-      "sha256": "be0d13496c19ab9def6a70dd863e174ce87e64fa203638d169fbf4debf33f730"
+      "sha256": "420b0f587ce9a96109d5ff329f21ca94788b3dbfa083dd03d6c1af137e9f1345"
     },
     {
       "description": "Read books rules: Returns the org's auto-categorization rules, highest priority first..",
       "name": "books_rules",
       "path": "books_rules/SKILL.md",
       "service": "books",
-      "sha256": "193e41ff4088bcbb666afa916e10f0890f54238e40d4772c44fc4a55762946b4"
+      "sha256": "5b41b4d293715850a0509e22c0641aeef72a3becb4121e5286515d6e7ec54584"
     },
     {
       "description": "Read books transactions: Returns the org's booked ledger as a single-line register, newest first: one row per voucher, with its date, description, vendor, category, source and amount in exact cents..",
       "name": "books_transactions",
       "path": "books_transactions/SKILL.md",
       "service": "books",
-      "sha256": "375dff06abaad1d912bd992552d5e60ac32544d3a58c376b474c0f2b6938e5e1"
+      "sha256": "5ec43e4302de7c6b7e4b6e14ba7ce6bb9e5275fe059b1ad78c8edfcdcddc2cbc"
     },
     {
       "description": "Read books trial: Returns the org's trial balance over an optional [from, to] window of RFC3339 posting times, including the opening/closing columns and the TotalDebit == TotalCredit proof that the books balance..",
       "name": "books_trial",
       "path": "books_trial/SKILL.md",
       "service": "books",
-      "sha256": "3407641351630e9d9fa5751afa49b217c707804dcb7f4dfe4d1d26f44fe7d50b"
+      "sha256": "1ec035bda92273e71099e3922b7c5c99926fd06d61c7143cb78e73ca63bd3c4f"
     },
     {
       "description": "Read books vendors: Returns the org's vendor book: each canonical vendor, the alias spellings a receipt may print it under, and the expense account new bills from it default to..",
       "name": "books_vendors",
       "path": "books_vendors/SKILL.md",
       "service": "books",
-      "sha256": "ebfc5ff363ad4bc7e0559dc463f578b12bd57587fa518d4eeaf756e1c724cc28"
+      "sha256": "b872688ba4eda92cb549142b8c0eac7d83d43d7cc0215a95dec881aa46bfac4a"
     }
   ],
   "spec_version": "8.0.0"

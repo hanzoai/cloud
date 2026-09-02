@@ -16,7 +16,7 @@
       "name": "settings_settings",
       "path": "settings_settings/SKILL.md",
       "service": "settings",
-      "sha256": "70d4f638f4fbab85beda07cf070194fb21908d4d256240dd92fe599f808f8e10"
+      "sha256": "559410be715960ad331c858d3472db273a1aeb7a6fd27b7c6d1cd78ae55278cd"
     }
   ],
   "spec_version": "8.0.0"

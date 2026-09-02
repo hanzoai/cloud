@@ -66,7 +66,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hanzoai/cloud/manifest/door"
+	"github.com/hanzoai/cloud/manifest/mcp"
 	"github.com/zap-proto/zip"
 )
 
@@ -964,7 +964,7 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 	serveCommands(app, render)
 }
 
-// Door reports whether path is the host's — one [serve] registers (the document
+// MCP reports whether path is the host's — one [serve] registers (the document
 // and its command projection), the agent MCP server (openapi/mcp.go), or the
 // index a client follows from the API root (openapi/index.go).
 //
@@ -985,14 +985,14 @@ func serve(app *zip.App, doc func() (*Document, error)) {
 //
 // Whether the host REGISTERS a route at one of them is a narrower question, and
 // the last gate is the one that asks it: see [Routed].
-func Door(path string) bool {
+func Host(path string) bool {
 	// Either spelling answers, because the callers hold different ones: a prose
 	// declaration is keyed by the ROUTER's pattern (/v1/:name) and the document by
 	// the rendered template (/v1/{name}). translate is what already maps one onto
 	// the other, so this asks it rather than listing both.
 	at, _ := translate(path)
 	switch at {
-	case Path, WellKnown, CommandPath, door.Path, RootPath, IndexPath:
+	case Path, WellKnown, CommandPath, mcp.Path, RootPath, IndexPath:
 		return true
 	}
 	return false
@@ -1007,11 +1007,11 @@ func Door(path string) bool {
 // outright. [UseIndex] answers them from middleware composed before the mounts
 // instead, which no Load can sit in front of.
 //
-// That distinction is the whole content of manifest.TestNoAppClaimsAHostDoor: a
+// That distinction is the whole content of manifest.TestNoAppClaimsAHostEndpoint: a
 // row may not claim an address the host ROUTES, because fiber would merge the two
 // patterns and leave the host's handler behind the proxy; it may claim one the
 // host answers ahead of the router, because there is nothing there to merge with.
 func Routed(path string) bool {
 	at, _ := translate(path)
-	return Door(at) && at != RootPath && at != IndexPath
+	return Host(at) && at != RootPath && at != IndexPath
 }

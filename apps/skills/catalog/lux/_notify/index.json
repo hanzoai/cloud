@@ -16,7 +16,7 @@
       "name": "notify_health",
       "path": "notify_health/SKILL.md",
       "service": "notify",
-      "sha256": "705a9f59e3594f8da18a1ec8b029bb658b59dfcaa2bbca5759bd7379833cc6ec"
+      "sha256": "fb5a6a8b14619be4b80b17305ed33da06b4ab7f22ad05997ff5838c5c511c067"
     }
   ],
   "spec_version": "8.0.0"

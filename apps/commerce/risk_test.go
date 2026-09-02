@@ -99,7 +99,7 @@ func topupAs(t *testing.T, app *zip.App, hdr map[string]string) (int, string) {
 	return resp.StatusCode, string(b)
 }
 
-// TestRiskGate_ANotDeployedScorerDoesNotCloseTheCreditDoor — THE NEGATIVE
+// TestRiskGate_ANotDeployedScorerDoesNotCloseTheCreditEndpoint — THE NEGATIVE
 // CONTROL.
 //
 // A fleet that does not run the risk app must still take money. cloud's fail
@@ -112,7 +112,7 @@ func topupAs(t *testing.T, app *zip.App, hdr map[string]string) (int, string) {
 // Mutation proof: return an error instead of the absent verdict in
 // scoreOverPlane, or drop the scorerUp probe, and this fails while
 // [TestRiskGate_APresentScorerThatCannotAnswerMakesTheGrantWait] still passes.
-func TestRiskGate_ANotDeployedScorerDoesNotCloseTheCreditDoor(t *testing.T) {
+func TestRiskGate_ANotDeployedScorerDoesNotCloseTheCreditEndpoint(t *testing.T) {
 	app := gateApp(t)
 
 	// No producer at all — the state of every process before this change.

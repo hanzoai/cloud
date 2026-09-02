@@ -16,49 +16,49 @@
       "name": "functions_deployments",
       "path": "functions_deployments/SKILL.md",
       "service": "functions",
-      "sha256": "16e9ed644d862f21844a966adacf15f602686a726ec55445d86fb5ef09210cc0"
+      "sha256": "773a1bb987232feeca8031069bbb3414405791a620e0f9cba182015d84fda34b"
     },
     {
       "description": "Read functions functions: Is every serverless function the caller's org has published, each with its real 7-day rollup., Is one function with everything a detail page needs in one round-trip: its definition, its 7-day rollup, its trigger, its twenty most recent invocations and th",
       "name": "functions_functions",
       "path": "functions_functions/SKILL.md",
       "service": "functions",
-      "sha256": "2a4dcb31e7c3242d76524d37cde4f0d268589e72ce797b8c4be91149c3f75413"
+      "sha256": "7f3cda7d5f8a03b87d1278d258c9ed773f02d3acf231f53832eef5a520fc939b"
     },
     {
       "description": "Read functions invocations: Is one function's past runs, newest first — each with its status, HTTP code, method, time and duration..",
       "name": "functions_invocations",
       "path": "functions_invocations/SKILL.md",
       "service": "functions",
-      "sha256": "18bdf7e2201e9798907316eda2f651566004bc04c048fc15d8a02dd0dedcffc0"
+      "sha256": "86fd299f199a40f7aa1fa7c6a2ee43e1fa10f897e393af8942a1cb0fca5cb65a"
     },
     {
       "description": "Read functions logs: Is the output of a function's most recent run — its error text when that run failed, else what it printed..",
       "name": "functions_logs",
       "path": "functions_logs/SKILL.md",
       "service": "functions",
-      "sha256": "bf36562760322ebc4115b220c3c7142f5b061d6ba45348c6aca15d3df1ab265d"
+      "sha256": "cdc00b87a264086c5e247a7aae37d714ed38cbc173e5955f3ce4532a81dc15f8"
     },
     {
       "description": "Read functions metrics: Is the org's serverless dashboard over a window: a per-function invocation costLine and how those invocations ended..",
       "name": "functions_metrics",
       "path": "functions_metrics/SKILL.md",
       "service": "functions",
-      "sha256": "acfe2c09faaed6b1220cb395e3cae26f221dfbf283f8e594f415663b670857c7"
+      "sha256": "86ad6132237be5f2b23c25b6b087d3037e7ff52dc4a636807a221f8ab7942c8f"
     },
     {
       "description": "Read functions secrets: Is the NAMES of the secrets the caller org's functions mount..",
       "name": "functions_secrets",
       "path": "functions_secrets/SKILL.md",
       "service": "functions",
-      "sha256": "5e96e3f8ab729e14c69c29fd4d7bc9239bde351e88e3a81e0469b5b6a542691f"
+      "sha256": "e67ce66ed9d6c3754be06eaf2df30b8fe16c6205a731fee84e9aff3842247df6"
     },
     {
       "description": "Read functions triggers: Is what calls the caller org's functions — one row per function..",
       "name": "functions_triggers",
       "path": "functions_triggers/SKILL.md",
       "service": "functions",
-      "sha256": "b610bc83fd25c727dcc63cdf69b04b2f5089f05b809eab66378c03ddbc8b8da4"
+      "sha256": "10b71ef8cac7490697c5ab5d5c68c4d40c6b6ac103c9c96aabc3fa3909d421c6"
     }
   ],
   "spec_version": "8.0.0"

@@ -16,28 +16,28 @@
       "name": "security_findings",
       "path": "security_findings/SKILL.md",
       "service": "security",
-      "sha256": "6c7099d2971e914a84f4918e2496d91fdb65ba088764dd9a0bd05301a99817a1"
+      "sha256": "1622ddf8a7adda6e5e7d8801532de1b4496f6226bd4b6413cfc836675ad8f3ae"
     },
     {
       "description": "Read security health: Reports that the scanning subsystem is serving and how many secret-detection rules the engine holds..",
       "name": "security_health",
       "path": "security_health/SKILL.md",
       "service": "security",
-      "sha256": "43c5671855bc4c1b39a7164a17c67dcdf69bb4ea0142bbaf89c25938b566a528"
+      "sha256": "7529e57062a55236a96b8ba340bb73cf20919c82825e86cdd7020aa2da6f7598"
     },
     {
       "description": "Read security rules: Is the secret-detection catalog the engine scans with..",
       "name": "security_rules",
       "path": "security_rules/SKILL.md",
       "service": "security",
-      "sha256": "e316aa38ef87765f40363606facfee488a0e0311ee0f2be25d9951f23cb4628b"
+      "sha256": "a2fd157084e8f3888aa1a82282bda6743bb63b075438a16ec0e8801b7b805459"
     },
     {
       "description": "Read security scans: Is the org's scan history, newest first, each as the same summary the submission answered — files read, findings fired, tally by severity., Returns one scan together with every finding on it, so the detail view is one round-trip rather than a list call per sc",
       "name": "security_scans",
       "path": "security_scans/SKILL.md",
       "service": "security",
-      "sha256": "64ecb0caa784ab14db907b49ad36dc20f52211d4bb131d66ff750723bec45faf"
+      "sha256": "790969eccc7d0ed98d8ae874140016c104bb7f3a454d6d51392dca152042ba1d"
     }
   ],
   "spec_version": "8.0.0"

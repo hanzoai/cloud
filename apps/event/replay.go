@@ -23,11 +23,11 @@
 // computes the summary row the player reads. Cloud does not touch object storage
 // and does not touch the warehouse on this path.
 //
-// IT IS NOT A `doors` ENTRY, and cannot be. Every row of that table is a wire that
+// IT IS NOT A `endpoints` ENTRY, and cannot be. Every row of that table is a wire that
 // decodes to []CaptureEvent and flows through the ONE write core onto the event
 // plane (ingestEvents → the JetStream fact plane → the warehouse). A snapshot batch
 // decodes to none of that: it is an opaque rrweb recording bound for a different
-// consumer on a different transport. Forcing it into the doors table would mean
+// consumer on a different transport. Forcing it into the endpoints table would mean
 // either a decoder that returns no events (an endpoint that always drops) or a
 // second meaning for CaptureEvent. So it is registered explicitly in routes,
 // exactly as the Sentry relay is — the other route on this surface whose body is
@@ -85,7 +85,7 @@ const replayPath = "/v1/event/replay"
 // lives here rather than in capture.go's source block deliberately: every tag in
 // that block is stamped into a warehouse row's $source by ingestEvents, and this
 // endpoint writes no row. Naming it there would put a value in a table whose comment
-// promises one tag per entry in `doors` — a promise this endpoint is precisely the
+// promises one tag per entry in `endpoints` — a promise this endpoint is precisely the
 // exception to.
 const sourceReplay = "replay"
 

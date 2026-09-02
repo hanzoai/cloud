@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/manifest/door"
+	"github.com/hanzoai/cloud/manifest/mcp"
 	"github.com/zap-proto/zip"
 )
 
@@ -110,11 +110,11 @@ func TestTheRootListsTheCustomerSurfaceAndNothingBeside(t *testing.T) {
 			t.Errorf("the root offers no %q link", rel)
 		}
 	}
-	if root.Links["auth"].Href != door.Metadata {
+	if root.Links["auth"].Href != mcp.Metadata {
 		t.Errorf("the root links auth to %q, want the protected-resource metadata at %q",
-			root.Links["auth"].Href, door.Metadata)
+			root.Links["auth"].Href, mcp.Metadata)
 	}
-	if root.Links["describedby"].Href != Path || root.Links["mcp"].Href != door.Path {
+	if root.Links["describedby"].Href != Path || root.Links["mcp"].Href != mcp.Path {
 		t.Errorf("the root's links name %v, not the document and the agent MCP address", root.Links)
 	}
 }
@@ -198,7 +198,7 @@ func indexed(t *testing.T) *zip.App {
 	return app
 }
 
-func TestTheDoorsAnswerAndTheCapabilityStillAnswersItsOwn(t *testing.T) {
+func TestTheEndpointsAnswerAndTheCapabilityStillAnswersItsOwn(t *testing.T) {
 	app := indexed(t)
 
 	resp, body := served(t, app, http.MethodGet, RootPath)
@@ -281,7 +281,7 @@ func TestEveryAnswerCarriesItsLinksAndClobbersNone(t *testing.T) {
 
 // The endpoints are described where the fleet document describes them, so an SDK
 // generated off it can call the index it needs in order to discover anything else.
-func TestBothDoorsAreInTheDocument(t *testing.T) {
+func TestBothEndpointsAreInTheDocument(t *testing.T) {
 	app := newApp()
 	Use(app, Info{Title: "t", Version: "v1"})
 	stubIndex(app)
@@ -300,8 +300,8 @@ func TestBothDoorsAreInTheDocument(t *testing.T) {
 		if op.Security == nil || len(*op.Security) != 0 {
 			t.Errorf("%s requires a credential — a client has to read the index before it holds one", path)
 		}
-		if !Door(path) {
-			t.Errorf("%s is served by the host and Door does not say so", path)
+		if !Host(path) {
+			t.Errorf("%s is served by the host and MCP does not say so", path)
 		}
 		if Routed(path) {
 			t.Errorf("%s reads as a host ROUTE; it is answered ahead of the router", path)
@@ -421,7 +421,7 @@ func TestOptionsAnswersWhatAnAddressAccepts(t *testing.T) {
 // Answering one here would be a second CORS authority — the defect
 // middleware_edge.go's own comment exists to prevent — so the split is on the
 // header that defines it.
-func TestAPreflightIsNotThisDoor(t *testing.T) {
+func TestAPreflightIsNotThisEndpoint(t *testing.T) {
 	app := indexed(t)
 	req := httptest.NewRequest(http.MethodOptions, "/v1/agents", nil)
 	req.Header.Set("Origin", "https://example.test")

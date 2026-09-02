@@ -39,7 +39,7 @@ import (
 // session reaches the endpoint, and the org the endpoint resolved is the org
 // the op is invoked for. The stub stands in for commerce and records what it
 // was told.
-func TestTheOrgTheDoorResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
+func TestTheOrgTheEndpointResolvedIsTheOrgThePlaneOpActsFor(t *testing.T) {
 	const token = "test-commerce-service-token"
 
 	// The stub has to be REACHABLE as commerce, not merely registered: plane.Ask

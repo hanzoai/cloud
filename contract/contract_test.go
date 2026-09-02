@@ -344,7 +344,7 @@ func TestShape(t *testing.T) {
 }
 
 // LOAD READS AND DOES NOT RUN. Every downstream reader — CI, platform, the
-// operator — holds this door and no other, so a repository cannot get code
+// operator — holds this endpoint and no other, so a repository cannot get code
 // executed by naming its declaration hanzo.config.ts.
 func TestLoadRefusesCode(t *testing.T) {
 	for _, name := range []string{"hanzo.config.js", "hanzo.config.ts", ".hanzo/contract.go"} {
@@ -359,7 +359,7 @@ func TestLoadRefusesCode(t *testing.T) {
 	}
 }
 
-// Eval is the one door that runs a generator, and what it produces is an ordinary
+// Eval is the one endpoint that runs a generator, and what it produces is an ordinary
 // document: the same canonical form, the same digest as the data spelling of the
 // same declaration.
 func TestEvalGenerator(t *testing.T) {

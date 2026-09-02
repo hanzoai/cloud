@@ -260,10 +260,10 @@ func TestTheAuthoritysRoleDecides(t *testing.T) {
 	}
 }
 
-// TestNotAMemberIsRefusedOnBothDoors: an authority that answers "no row" is a
+// TestNotAMemberIsRefusedOnBothEndpoints: an authority that answers "no row" is a
 // refusal, and it is one the AUTHORITY made — distinct from an authority that
 // could not be reached, which is the next test.
-func TestNotAMemberIsRefusedOnBothDoors(t *testing.T) {
+func TestNotAMemberIsRefusedOnBothEndpoints(t *testing.T) {
 	a := &answers{}
 	st := state{apiKey: apiKey, apiSecret: apiSecret, authority: a}
 	onLane(t, human, func(c *zip.Ctx) {

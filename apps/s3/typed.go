@@ -512,7 +512,7 @@ func (o ops) deleteObject(ctx context.Context, in *objectRef) (*cloud.Unit, erro
 }
 
 // streamed is the mint's answer when there is no public store to sign against:
-// the object's own byte address on this API, which is the one door every
+// the object's own byte address on this API, which is the one address every
 // deployment has. The response is the SAME shape a presigned mint returns, so a
 // caller follows {url, method} without knowing which it received — and a
 // deployment that later gains a public store starts handing out signed URLs with

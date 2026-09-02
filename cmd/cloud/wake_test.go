@@ -146,7 +146,7 @@ func TestWakeStartsALazyAppForAPlaneCall(t *testing.T) {
 	}
 }
 
-// running counts this process's live children, which is how e2e/mcp-door.sh counts
+// running counts this process's live children, which is how e2e/mcp-endpoint.sh counts
 // woken plugins: a wake that spawns two is a wake that will spawn a hundred.
 func running(t *testing.T) int {
 	t.Helper()

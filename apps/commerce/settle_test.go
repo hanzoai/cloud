@@ -71,7 +71,7 @@ func funded(t *testing.T) finance.Client {
 // that outlives the request — while every endpoint fixture in this package unbinds the
 // plane in its own cleanup. Those two race: plane.Unbind on the test goroutine against
 // plane.Bind inside the detached one. It is not a property of this change (main reports
-// the same race from TestPayments_ANotDeployedScorerDoesNotCloseTheTypedDoor under
+// the same race from TestPayments_ANotDeployedScorerDoesNotCloseTheTypedEndpoint under
 // -race, on a fixture that predates it), and it is not what these tests are about — the
 // money is. So they take the plane out of the picture and WAIT for the goroutine.
 //
@@ -179,7 +179,7 @@ func spendable(t *testing.T, fin finance.Client, test bool) int64 {
 // assertion reads 0 against a 200 — which is the shipped defect, exactly.
 func TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads(t *testing.T) {
 	fin := funded(t)
-	app := creditDoor(t, stating(riskGate(luxlog.New("settletest")),
+	app := creditEndpoint(t, stating(riskGate(luxlog.New("settletest")),
 		settlement{cents: gateCents, currency: "usd"}))
 
 	if code, body := topup(t, app); code != http.StatusOK {
@@ -214,7 +214,7 @@ func TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads(t *testing.T) {
 	}
 }
 
-// TestSettle_TheTypedDoorFundsThePayerAndNotTheOrgPool — the AGENT's endpoint, and the
+// TestSettle_TheTypedEndpointFundsThePayerAndNotTheOrgPool — the AGENT's endpoint, and the
 // divergence it closes.
 //
 // commerce's money core credits its own store under the ORG POOL (org.Name), while the
@@ -225,7 +225,7 @@ func TestSettle_ASettledTopUpFundsTheWalletTheSpendGateReads(t *testing.T) {
 // credit is posted at the payer's own address.
 //
 // Mutation proof: delete the s.settle call from [screen.route] and this reads 0.
-func TestSettle_TheDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
+func TestSettle_TheEndpointFundsThePayerAndNotTheOrgPool(t *testing.T) {
 	// A member of the SHARED SIGNUP ORG, which is the population where the pool and the
 	// payer are different keys — account.Payer resolves a person there and the org's
 	// slug everywhere else. A dedicated tenant would make the two the same string and
@@ -241,15 +241,15 @@ func TestSettle_TheDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 	quiet(t)
 	fin := finance.Current()
 	cloud.SetRiskScorer(allowAll)
-	browserDoor(app, riskGate(luxlog.New("settletest")), func() string { return settledRef })
+	browserEndpoint(app, riskGate(luxlog.New("settletest")), func() string { return settledRef })
 
-	r := httptest.NewRequest(http.MethodPost, topupDoor, strings.NewReader(gateBody))
+	r := httptest.NewRequest(http.MethodPost, topupEndpoint, strings.NewReader(gateBody))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Org-Id", org)
 	r.Header.Set("X-User-Id", user)
 	resp, err := app.Test(r)
 	if err != nil {
-		t.Fatalf("post %s: %v", topupDoor, err)
+		t.Fatalf("post %s: %v", topupEndpoint, err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
@@ -289,7 +289,7 @@ func TestSettle_TheDoorFundsThePayerAndNotTheOrgPool(t *testing.T) {
 // first thing this file asserts after the credit itself.
 func TestSettle_ASettledTopUpCreditsExactlyOncePerSettlement(t *testing.T) {
 	fin := funded(t)
-	app := creditDoor(t, stating(riskGate(luxlog.New("settletest")),
+	app := creditEndpoint(t, stating(riskGate(luxlog.New("settletest")),
 		settlement{cents: gateCents, currency: "usd"}))
 
 	for i := range 3 {
@@ -316,7 +316,7 @@ func TestSettle_ASettledTopUpCreditsExactlyOncePerSettlement(t *testing.T) {
 // of the receipt and this credits 500000.
 func TestSettle_TheCreditIsSizedByTheReceiptAndNeverByTheRequest(t *testing.T) {
 	fin := funded(t)
-	app := creditDoor(t, stating(riskGate(luxlog.New("settletest")),
+	app := creditEndpoint(t, stating(riskGate(luxlog.New("settletest")),
 		settlement{cents: gateCents, currency: "usd"}))
 
 	// The request asks for $5,000; the settlement was $42.
@@ -350,7 +350,7 @@ func TestSettle_TheCreditIsSizedByTheReceiptAndNeverByTheRequest(t *testing.T) {
 // cost of a test nonce.
 func TestSettle_ASandboxChargeCreditsTheSandboxBooks(t *testing.T) {
 	fin := funded(t)
-	app := creditDoor(t, stating(riskGate(luxlog.New("settletest")),
+	app := creditEndpoint(t, stating(riskGate(luxlog.New("settletest")),
 		settlement{cents: gateCents, currency: "usd", test: true}))
 
 	if code, body := topup(t, app); code != http.StatusOK {
@@ -465,10 +465,10 @@ func TestSettle_TheReceiptIsReadFromTheOrgTheChargeWasWrittenIn(t *testing.T) {
 				// under test has already happened by then.
 				_ = s.settle(context.Background(), payment{
 					org: tc.charged, ledger: tc.ledger, subject: wallet(tc.ledger),
-					door: "/v1/billing/topup/token", via: "/v1/billing/topup/token",
+					path: "/v1/billing/topup/token", via: "/v1/billing/topup/token",
 				}, settledRef, settledReceipt)
 			} else {
-				topupAs(t, creditDoorBody(t, s,
+				topupAs(t, creditEndpointBody(t, s,
 					`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`), tc.hdr)
 			}
 
@@ -523,7 +523,7 @@ func TestSettle_AMintThatCannotLandIsRefusedBeforeTheCardIsCharged(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			fin := funded(t)
 			var taken int
-			app := creditDoorHandler(t,
+			app := creditEndpointHandler(t,
 				stating(riskGate(luxlog.New("settletest")), settlement{cents: gateCents, currency: "usd"}),
 				charging(settledBody(http.StatusOK,
 					`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`), &taken))
@@ -598,7 +598,7 @@ func TestSettle_TheLedgerBoundaryStillRefusesAMintReachedDirectly(t *testing.T) 
 
 	err := s.settle(context.Background(), payment{
 		org: gateOrg, ledger: adminOrg, subject: wallet(adminOrg),
-		door: "/v1/billing/topup/token", via: "/v1/billing/topup/token",
+		path: "/v1/billing/topup/token", via: "/v1/billing/topup/token",
 	}, settledRef, settledReceipt)
 
 	if err == nil {
@@ -633,10 +633,10 @@ func TestSettle_TheLedgerBoundaryStillRefusesAMintReachedDirectly(t *testing.T) 
 func TestSettle_ARefusedCreditStillTeachesTheModel(t *testing.T) {
 	funded(t)
 	// A charge that settled in yen: a real settlement this USD ledger must refuse.
-	app := creditDoorBody(t,
+	app := creditEndpointBody(t,
 		stating(riskGate(luxlog.New("settletest")), settlement{cents: 500000, currency: "jpy"}),
 		`{"transactionId":"`+settledReceipt+`","status":"ok","processorRef":"`+settledRef+`"}`)
-	// AFTER the fixture: creditDoorBody substitutes the same client ([quiet]), and the
+	// AFTER the fixture: creditEndpointBody substitutes the same client ([quiet]), and the
 	// watcher has to be the one in place when the endpoint runs.
 	seen := watchTeaching(t)
 
@@ -653,7 +653,7 @@ func TestSettle_ARefusedCreditStillTeachesTheModel(t *testing.T) {
 	}
 }
 
-// TestSettle_ATopUpThatCannotBeCreditedRefusesTheDoor — the fail-loud half.
+// TestSettle_ATopUpThatCannotBeCreditedRefusesTheEndpoint — the fail-loud half.
 //
 // Every row here is the same fact: the card cleared and the balance cannot be moved.
 // None of them may answer 200. A settled charge answered with success and no credit is
@@ -666,12 +666,12 @@ func TestSettle_ARefusedCreditStillTeachesTheModel(t *testing.T) {
 //
 // Mutation proof: return nil instead of the refusal from any branch of [screen.settle]
 // and that row answers 200 with a zero balance.
-func TestSettle_ATopUpThatCannotBeCreditedRefusesTheDoor(t *testing.T) {
+func TestSettle_ATopUpThatCannotBeCreditedRefusesTheEndpoint(t *testing.T) {
 	for _, tc := range refusals {
 		t.Run(tc.name, func(t *testing.T) {
 			fin, _ := refused(t, tc)
 
-			code, body := topup(t, refusalDoor(t, tc, riskGate(luxlog.New("settletest"))))
+			code, body := topup(t, refusalEndpoint(t, tc, riskGate(luxlog.New("settletest"))))
 			if code == http.StatusOK {
 				t.Fatalf("a settled charge that credited NOTHING answered 200 (%s) — the customer is "+
 					"charged and told it worked", body)
@@ -716,7 +716,7 @@ func TestSettle_ARefusalSaysWhetherARetryCanClearIt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			refused(t, tc)
 			var lines journal
-			_, body := topup(t, refusalDoor(t, tc, riskGate(luxlog.NewWriter(&lines))))
+			_, body := topup(t, refusalEndpoint(t, tc, riskGate(luxlog.NewWriter(&lines))))
 
 			// THE CUSTOMER'S HALF: a terminal refusal must not invite the retry that
 			// takes their card again, and a retryable one must not send them to support
@@ -855,11 +855,11 @@ func refused(t *testing.T, tc refusal) (finance.Client, bool) {
 	return fin, true
 }
 
-// refusalDoor is the credit endpoint for one row, with the screen the caller states — the
+// refusalEndpoint is the credit endpoint for one row, with the screen the caller states — the
 // production one, or one whose log a test can read.
-func refusalDoor(t *testing.T, tc refusal, s screen) *zip.App {
+func refusalEndpoint(t *testing.T, tc refusal, s screen) *zip.App {
 	t.Helper()
-	return creditDoorBody(t, tc.screw(s), tc.body)
+	return creditEndpointBody(t, tc.screw(s), tc.body)
 }
 
 // journal is a logger's output a test can READ, and it is mutex-guarded because the
@@ -962,24 +962,24 @@ func allowAll(context.Context, string, cloud.RiskQuery) (cloud.RiskVerdict, erro
 	return cloud.RiskVerdict{Action: cloud.ActionAllow}, nil
 }
 
-// creditDoor is the browser credit endpoint answering the way commerce's core answers a
+// creditEndpoint is the browser credit endpoint answering the way commerce's core answers a
 // charge that cleared — the REAL TakePaymentOut field names, because the settlement is
 // read out of exactly those.
-func creditDoor(t *testing.T, s screen) *zip.App {
+func creditEndpoint(t *testing.T, s screen) *zip.App {
 	t.Helper()
-	return creditDoorBody(t, s,
+	return creditEndpointBody(t, s,
 		`{"transactionId":"`+settledReceipt+`","balanceCents":4200,"status":"ok","processorRef":"`+settledRef+`"}`)
 }
 
-func creditDoorBody(t *testing.T, s screen, body string) *zip.App {
+func creditEndpointBody(t *testing.T, s screen, body string) *zip.App {
 	t.Helper()
-	return creditDoorHandler(t, s, settledBody(http.StatusOK, body))
+	return creditEndpointHandler(t, s, settledBody(http.StatusOK, body))
 }
 
-// creditDoorHandler is that same endpoint in front of a handler the TEST supplies — the
+// creditEndpointHandler is that same endpoint in front of a handler the TEST supplies — the
 // form a test needs when what it asserts is not what the handler ANSWERED but whether it
 // ran at all. [charging] is the handler it exists for.
-func creditDoorHandler(t *testing.T, s screen, h zip.Handler) *zip.App {
+func creditEndpointHandler(t *testing.T, s screen, h zip.Handler) *zip.App {
 	t.Helper()
 	shortRuntimeDir(t)
 	plane.Unbind()

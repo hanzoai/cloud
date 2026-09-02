@@ -74,9 +74,9 @@ func darkChild(t *testing.T, name string, mount cloud.UseFunc) *child {
 	return &child{name: name, addr: sock, app: app}
 }
 
-// TestASubsystemWithNoTypedOpStillAnswersTheDoor is the regression, from both
+// TestASubsystemWithNoTypedOpStillAnswersTheEndpoint is the regression, from both
 // ends of the hop.
-func TestASubsystemWithNoTypedOpStillAnswersTheDoor(t *testing.T) {
+func TestASubsystemWithNoTypedOpStillAnswersTheEndpoint(t *testing.T) {
 	kid := darkChild(t, "exec", exec.Use)
 
 	// END ONE — the child's own MCP server, at the address the fleet asks. The claim is

@@ -16,280 +16,280 @@
       "name": "ai_account",
       "path": "ai_account/SKILL.md",
       "service": "ai",
-      "sha256": "bfc721c3a24f2282ff01a13d82d524b33b42076473771add31fbb1f24bee9720"
+      "sha256": "08166c1cb5ab9249474daaf90511f4e98cbfff1e3b1ef805fd72c1ed55d78e8a"
     },
     {
       "description": "Read ai activities: List activities.",
       "name": "ai_activities",
       "path": "ai_activities/SKILL.md",
       "service": "ai",
-      "sha256": "ead41a6d55849bb9f2e48a90e13712d4c5f4a8dc73f93d4c24bc374646b7568c"
+      "sha256": "81693ec55ab67c1f0f72234640e850e3abec672fb0491b9aad03f64fb7403500"
     },
     {
       "description": "Read ai answer: Answer.",
       "name": "ai_answer",
       "path": "ai_answer/SKILL.md",
       "service": "ai",
-      "sha256": "df3a1e46b73ab6d57d5e9409ce3f66fdc8f59462219ec50844cf0bc23c769e59"
+      "sha256": "60520dfc7937bc45da7b662031fbad55bb64da13ca2ba091379f050c88c19eb8"
     },
     {
       "description": "Read ai articles: List articles, List articles across tenants, Retrieve a article.",
       "name": "ai_articles",
       "path": "ai_articles/SKILL.md",
       "service": "ai",
-      "sha256": "5b301bd9f3a25827dddcc47229707f652379c5f0d4ca8a13d032e0c8f2f31f45"
+      "sha256": "623974cce253b41cae1c79fb8c6f89970d5ab4d1e79df792a951c51182d6f3d9"
     },
     {
       "description": "Read ai assets: List assets, Retrieve a asset.",
       "name": "ai_assets",
       "path": "ai_assets/SKILL.md",
       "service": "ai",
-      "sha256": "6508825a2e632a3543a291ee68098111f84c8e8ed9dcd7fdc3b0dd2cb53efae4"
+      "sha256": "f90da3570d8e4ca687ab57a3ee9a862642bd7afd54a2970eccc5de33ce294368"
     },
     {
       "description": "Read ai chats: List chats, List chats across tenants, Retrieve a chat.",
       "name": "ai_chats",
       "path": "ai_chats/SKILL.md",
       "service": "ai",
-      "sha256": "2b872e1de04ba37c269e85392d8675cf7ec238cc70c4e47f6aa0609ddaf45019"
+      "sha256": "21912aab72cb8f3759de01fe3ce449ce0f21ac4e554b19dbfb47bc98fff9cfb8"
     },
     {
       "description": "Read ai connections: Lists the org's connectable AI accounts and whether each is currently connected., Begins an OAuth connection for the caller's org: it binds the org into a signed state and sends the caller to the provider's authorize URL., Completes OAuth: the org is recovere",
       "name": "ai_connections",
       "path": "ai_connections/SKILL.md",
       "service": "ai",
-      "sha256": "68bc9f77dcce82468ad7bb4f0aab41fd88ed71a7c64cc9f3baf33c4d4be04b64"
+      "sha256": "5ca89e7b9b2f8dfde9ad0de3fd7375bf9e74bda93e8ffef1a2a12f745d5a9127"
     },
     {
       "description": "Read ai dashboards: Dashboards Agents, Dashboards Vm.",
       "name": "ai_dashboards",
       "path": "ai_dashboards/SKILL.md",
       "service": "ai",
-      "sha256": "8135fd341600027b41386da3c6c246f63318c1e68ee2f088779692b006144d6b"
+      "sha256": "70fe4baa3688c9aa64126f10a34aec3f3c23a9f4f10288d9f66665a4ac5037db"
     },
     {
       "description": "Read ai deployments: List deployments, Retrieve a application.",
       "name": "ai_deployments",
       "path": "ai_deployments/SKILL.md",
       "service": "ai",
-      "sha256": "41c1ae943b6b16f3bd79654c62d56332d3b13da2da5b3ccbe07d99a26b9fabbc"
+      "sha256": "7e3babe660b9ce9d4455709a515de8c61d9d15579ce1375487a876ebc8f51f56"
     },
     {
       "description": "Read ai files: List files, Active (file), List files across tenants.",
       "name": "ai_files",
       "path": "ai_files/SKILL.md",
       "service": "ai",
-      "sha256": "17b7d9b79ba7825c57b4282afe506c2edcfd1b919b76ca69788e8d5c704439eb"
+      "sha256": "ba33b8e651e12ca5b41c1c0bb096f4ab6475c5b9b1a97a8082db84d7b7635132"
     },
     {
       "description": "Read ai finetune: Proxies a HuggingFace dataset search (dataset picker)., Proxies a HuggingFace model search (base-model picker)., Returns a repo's detail (files, gated/private state)..",
       "name": "ai_finetune",
       "path": "ai_finetune/SKILL.md",
       "service": "ai",
-      "sha256": "f7e52eac32fe7e454f418b003d299070bd4b58d4c7157dc80acd00a4244959c5"
+      "sha256": "32dbe9b613e63c7a5f9ac9428c3abb34587b59d726511c1b2f726d7b114f8f38"
     },
     {
       "description": "Read ai forms: List forms, Data (form), List forms across tenants.",
       "name": "ai_forms",
       "path": "ai_forms/SKILL.md",
       "service": "ai",
-      "sha256": "7ad7fd5ca52f6c174cae114e333c949801b7af66d00dcb0e3925ab1178553a7a"
+      "sha256": "febf048391895910689f6c3fa23ec8aef0780c4244e18390edf0ebc50a69defb"
     },
     {
       "description": "Read ai graphs: List graphs, List graphs across tenants, Retrieve a graph.",
       "name": "ai_graphs",
       "path": "ai_graphs/SKILL.md",
       "service": "ai",
-      "sha256": "25cd9ab11100f4564750664e639652f4ab80efe7e047d9978f9009506b434533"
+      "sha256": "3b9492deab2edf5a493fa6de2d9c155d4b29e9de6abadb8f33778a2db2542dfc"
     },
     {
       "description": "Read ai k8s status: K8s Status.",
       "name": "ai_k8s-status",
       "path": "ai_k8s-status/SKILL.md",
       "service": "ai",
-      "sha256": "2b4fa9c8589699c1e7a4f565b54beeb56159e8a213db621717f5506423c2ce89"
+      "sha256": "0cfde1c703121239cae7886a50f2d8113bd00eb94a10cb62a11401e384cd9500"
     },
     {
       "description": "Read ai mcp: Tools reports what THIS PROCESS's MCP server carries: how many tools its own registry projects, optionally their names, and which subsystems this process composed..",
       "name": "ai_mcp",
       "path": "ai_mcp/SKILL.md",
       "service": "ai",
-      "sha256": "63398bfafac4742b9e908789011403e84e37b53a2d3a5da29aadab6e63521482"
+      "sha256": "8edd073bb635d2dde3dfe63701ca41731b9548db5dc0115e6cc7d1aeac3af9b3"
     },
     {
       "description": "Read ai memory: List the authenticated user's stored facts, List the authenticated user's memories, newest first, Recall recent/relevant memories for context injection; with q it.",
       "name": "ai_memory",
       "path": "ai_memory/SKILL.md",
       "service": "ai",
-      "sha256": "19e5f0b8008de44bd18aa088db203043f45f62a675e3dd09b88b09034d427ea4"
+      "sha256": "748caea6bfdd6f08695cd099e06ed650266b8b27c8b2147d6daf51927a9049f8"
     },
     {
       "description": "Read ai messages: List messages, Retrieve a message, Answer (message).",
       "name": "ai_messages",
       "path": "ai_messages/SKILL.md",
       "service": "ai",
-      "sha256": "819df4aa86df9d35d7197856a4c8a6cc8c8e41739df9c6f41faec34cf4480e5b"
+      "sha256": "9afcf3ca199e9e149a1a5367b68aecd1a6cf9fdafe12d67c183d8725bfac89d1"
     },
     {
       "description": "Read ai nodes: List nodes, Retrieve a node, Tunnel (node).",
       "name": "ai_nodes",
       "path": "ai_nodes/SKILL.md",
       "service": "ai",
-      "sha256": "0d5bf85ff2b881838cbe1d9c2ea82ef26b4c4727ca9fc859acbaee6158221a1b"
+      "sha256": "2da1ed9ef26562f09ed262890ac2616f21ec4f13ca5d19a56b51eb57583794d7"
     },
     {
       "description": "Read ai org: The HTTP transport binding for the RESTful router-config nouns (/v1/ai/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/ai/org/settings[/list])., The HTTP transport binding for the RESTful router-config nouns (/v1/ai/router/{policy,defaults,ledger,reward",
       "name": "ai_org",
       "path": "ai_org/SKILL.md",
       "service": "ai",
-      "sha256": "3bd729850ca910ba87fdb18a868c840fe6b100f6b4c1814ce6281a02dc6b2c50"
+      "sha256": "67e39d7248d71e7d53453a541cec705f44d837e43f7ee054a74d3d85378abd03"
     },
     {
       "description": "Read ai prometheus: Prometheus.",
       "name": "ai_prometheus",
       "path": "ai_prometheus/SKILL.md",
       "service": "ai",
-      "sha256": "5430094ba939ccd47a4425e4bcd46e22ba10b5c9e62466fd4a8972ff4ff99d40"
+      "sha256": "5eb9570bbee3155f154eb640a1cbf5913fad2c7c28e41fe9f2d7e55f6f310813"
     },
     {
       "description": "Read ai providers: List providers, List providers across tenants, Retrieve a provider.",
       "name": "ai_providers",
       "path": "ai_providers/SKILL.md",
       "service": "ai",
-      "sha256": "b4c47fae888bbac17ae1fbcc5e004b4811f129c00b80393047012e8e86947e37"
+      "sha256": "9c1ee5df3806709617d28e5ea09e82a188a3668b20ac02ca45970f3c0c29fb0f"
     },
     {
       "description": "Read ai rag: Return every stored chunk of one file_id (full document context)..",
       "name": "ai_rag",
       "path": "ai_rag/SKILL.md",
       "service": "ai",
-      "sha256": "4de91ac9a0ef73481f88fdfc07a46c223fdca73b83e045fde6b8f7386f3bb429"
+      "sha256": "770b92c6b20211150eae51de371729d1c976e5e0845cb144336526ea667267cb"
     },
     {
       "description": "Read ai records: List records, Query (record), Query Second (record).",
       "name": "ai_records",
       "path": "ai_records/SKILL.md",
       "service": "ai",
-      "sha256": "afb808053133632dc6afa40ad1732083ea9f84e294a3c833c93ae9f3ceabc94f"
+      "sha256": "60c70ee9d1c33da311c1515e6e5ddfa15276aa30010cea005a7ccd62c8901f6e"
     },
     {
       "description": "Read ai remote connections: List remote-connections, Retrieve a connection.",
       "name": "ai_remote-connections",
       "path": "ai_remote-connections/SKILL.md",
       "service": "ai",
-      "sha256": "fbb9e94f887c099dadacd3b42846f37657fe2c335ed24c1b1e7dc265914e66a5"
+      "sha256": "4e7c87f477b482ab9ecb28b76035eb89b49af865c2ce1899c92931301b7ead69"
     },
     {
       "description": "Read ai router: The HTTP transport binding for the RESTful router-config nouns (/v1/ai/router/{policy,defaults,ledger,rewards,artifact-meta} and /v1/ai/org/settings[/list])., Router Data, The HTTP transport binding for the RESTful router-config nouns (/v1/ai/router/{policy,defaul",
       "name": "ai_router",
       "path": "ai_router/SKILL.md",
       "service": "ai",
-      "sha256": "2ead18b6b61ef5fd0f31439ea41c9b00996a00ef192e39c16aa0458e70fcb6b2"
+      "sha256": "5ccf20e7afb9b4df28c7a9254751e40228e8c81508a8a79d066ee347cef28a42"
     },
     {
       "description": "Read ai routes: List routes, Retrieve a model-route.",
       "name": "ai_routes",
       "path": "ai_routes/SKILL.md",
       "service": "ai",
-      "sha256": "d8ed131c80c87ade7b8ee00dfeb30869f545e955285004a430f0b4a8a53600c9"
+      "sha256": "419de8784aab7047c0f3acb81cd124aa15ad451ff68ff924b247ebae541c4e1b"
     },
     {
       "description": "Read ai scales: List scales, List scales across tenants, Public (scale).",
       "name": "ai_scales",
       "path": "ai_scales/SKILL.md",
       "service": "ai",
-      "sha256": "126a8680e1be0b588c867339189dcb8769785a660875a820c35e5ff47aadd569"
+      "sha256": "877a6b8153b543170533ba4e70badf1824cc4e86f40060c4ca48d00fb9191a33"
     },
     {
       "description": "Read ai scans: List scans, Retrieve a scan.",
       "name": "ai_scans",
       "path": "ai_scans/SKILL.md",
       "service": "ai",
-      "sha256": "b84ddd10efd9bceb56a09812f3018e271c2a486ef48428ff4029912f2aae977e"
+      "sha256": "f323d208a3ec2d8a107aeac49ab6d17d8436f4049b907c3b87232aaf79b07e73"
     },
     {
       "description": "Read ai signin sessions: List signin-sessions, Duplicated (session), Retrieve a session.",
       "name": "ai_signin-sessions",
       "path": "ai_signin-sessions/SKILL.md",
       "service": "ai",
-      "sha256": "9c07afee596067b3d30b81339feba46eac09fae7f89174380e51eb60c52ea19c"
+      "sha256": "9d7b138988ed9c84d241039263e22d36bc1f2eb28f58bf8a9272362483360cc3"
     },
     {
       "description": "Read ai stores: List stores, List stores across tenants, Names (store).",
       "name": "ai_stores",
       "path": "ai_stores/SKILL.md",
       "service": "ai",
-      "sha256": "67500340491dd73a7a1981fce68b32f8b445f53f4a387c6ea01fc23de11af341"
+      "sha256": "3085d47eaa79f05403db792a3aa45d8a559e7f09bf28c222651cd35ebea0582c"
     },
     {
       "description": "Read ai system: System.",
       "name": "ai_system",
       "path": "ai_system/SKILL.md",
       "service": "ai",
-      "sha256": "9764a679e9e93a826e719fbd2b5be2aad1d56beae67ad25a2a783bbb765d8d3c"
+      "sha256": "87a6d5db796143b26d0ab24c52279c883205e9e3039d92c744e6a07e8e0e6d4f"
     },
     {
       "description": "Read ai tasks: List tasks, List tasks across tenants, Retrieve a task.",
       "name": "ai_tasks",
       "path": "ai_tasks/SKILL.md",
       "service": "ai",
-      "sha256": "2f6e153fbb602b4c3715429db0b570395cf95210c349b0bdf7598376130349a2"
+      "sha256": "574a52596e93bc982de9a0c82dbf225aa8112908312b4590254f85bdc7eb3b2e"
     },
     {
       "description": "Read ai templates: List templates, Retrieve a template.",
       "name": "ai_templates",
       "path": "ai_templates/SKILL.md",
       "service": "ai",
-      "sha256": "31e37a8e659c3f3da14136708af745a1daaf470440656f5071eafa528e87707c"
+      "sha256": "576783527f2f026dba6bdd2cb0038aab045aa872ffd1d14378d9e92854524561"
     },
     {
       "description": "Read ai traffic: Returns the PUBLIC live request-geo aggregate for the world.zoo.ngo \"Zoo mode\" globe: WHERE requests to api.zoo.ngo are coming from, as country/region points with per-service-class counts, plus headline throughput rates..",
       "name": "ai_traffic",
       "path": "ai_traffic/SKILL.md",
       "service": "ai",
-      "sha256": "bb7ae34f0182d98c59408ffc0d287c10e7f298303ecaf3b0512052eb057560c0"
+      "sha256": "193d5f633ee86270801f15bd5736af9379285b41a252d910cb53c3d2dadc7e0a"
     },
     {
       "description": "Read ai training contribution: Training Contribution.",
       "name": "ai_training-contribution",
       "path": "ai_training-contribution/SKILL.md",
       "service": "ai",
-      "sha256": "e1110c905a6278cce464b4185a959cd848c0afc769bce5ae5d8b8e5d0a0c0fc1"
+      "sha256": "369920d0d0ecf429e19e90bb0ddc340f1b8d7e7ca310b8385519fed2a1084035"
     },
     {
       "description": "Read ai usages: List usages, By User (usage), Cloud (usage).",
       "name": "ai_usages",
       "path": "ai_usages/SKILL.md",
       "service": "ai",
-      "sha256": "59a065b7863d0e36e1bd7f91de80b34c725c6ed99f35b23f86842c0a4bec7346"
+      "sha256": "c9e599043905eacbd88132412eb28dabd7479c36300b8512f96cebd8203a3ced"
     },
     {
       "description": "Read ai vectors: List vectors, List vectors across tenants, Retrieve a vector.",
       "name": "ai_vectors",
       "path": "ai_vectors/SKILL.md",
       "service": "ai",
-      "sha256": "c98420b7070ccb8cd678ba060063cc121faa0e1eb399606ae25b0b9934abacbb"
+      "sha256": "1fcc9e1325d035a540139e51f1c2fdc1190f89864d14b19b2d33fe208a43502a"
     },
     {
       "description": "Read ai version: Version.",
       "name": "ai_version",
       "path": "ai_version/SKILL.md",
       "service": "ai",
-      "sha256": "7b93af1b31b3603b222133197b1bfe6439a0a7295725453081f9ba3848a6d605"
+      "sha256": "40f25d76d081d7f347e3031a4ebbabcb8665717a3144f602cc376292feb2e0da"
     },
     {
       "description": "Read ai videos: List videos, List videos across tenants, Retrieve a video.",
       "name": "ai_videos",
       "path": "ai_videos/SKILL.md",
       "service": "ai",
-      "sha256": "2a93ae924533dc855e589deebc43f57a143832356d0289b5020845b92e1c250c"
+      "sha256": "2119b3c7649f57288bd44d2498e75143ee12c6cc0275f2dd4f586487665932d9"
     },
     {
       "description": "Read ai workflows: List workflows, List workflows across tenants, Retrieve a workflow.",
       "name": "ai_workflows",
       "path": "ai_workflows/SKILL.md",
       "service": "ai",
-      "sha256": "305aed1a6232f088004b1bd61dfaf7d0e9382f152ddcfa7b196009a651357ca5"
+      "sha256": "b206a326d5d2f9d16f55d01a43d1ebccc951e6e6eb0aec71f15296ae639b87c5"
     }
   ],
   "spec_version": "8.0.0"

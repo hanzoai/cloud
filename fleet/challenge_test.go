@@ -90,7 +90,7 @@ func TestACredentiallessCallAtTheEdgeIsChallenged(t *testing.T) {
 	}
 }
 
-func TestThePlaneDoorIsNeverChallenged(t *testing.T) {
+func TestThePlaneEndpointIsNeverChallenged(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}})
 	d := fleet.Use(zip.New(zip.Config{DisableStartupMessage: true, MCP: zip.MCPConfig{Disabled: true}}), manifest.MCPPath, nil, nowhere)
 	d.Serve(app, manifest.MCPPath, nowhere)

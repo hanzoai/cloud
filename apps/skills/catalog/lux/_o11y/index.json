@@ -16,525 +16,525 @@
       "name": "o11y_alerts",
       "path": "o11y_alerts/SKILL.md",
       "service": "o11y",
-      "sha256": "01f4c734068c7b1aa2180b6d86bf55d2697d6902d0822fc3111a285547874fd9"
+      "sha256": "6f7bb884baf2400dda2cfa36be0016011ab19ff418f47a692acbb93eaf671fd8"
     },
     {
       "description": "Read o11y autocomplete: Lists the attributes usable as an aggregate target for the given telemetry and operator — what a filter builder offers after the aggregation is chosen., Lists the attribute keys available for filtering the given telemetry, each with its data type and wheth",
       "name": "o11y_autocomplete",
       "path": "o11y_autocomplete/SKILL.md",
       "service": "o11y",
-      "sha256": "3733dfc33614df4b4a403969a677cd10098eebb3752e83e212686675ad7494f0"
+      "sha256": "5e43e33d05643a76cd6ad0c377d4b86defce97c669960d35b00ab3b8a2c86308"
     },
     {
       "description": "Read o11y availability: Reports how much of the Lux fleet is up — the current per-service inventory plus an up-versus-reporting trend across the window..",
       "name": "o11y_availability",
       "path": "o11y_availability/SKILL.md",
       "service": "o11y",
-      "sha256": "5d3114e838e4a6db797876075b82cb0d20b206e756b6f039873e3acf05c78455"
+      "sha256": "1baa6e1e9496dd395a1df63eab9fff645b366f92f9fb9d5ae82994ad0c74a3b1"
     },
     {
       "description": "Read o11y channels: Lists the org's notification channels., Returns one notification channel, by id..",
       "name": "o11y_channels",
       "path": "o11y_channels/SKILL.md",
       "service": "o11y",
-      "sha256": "ac96a87def0981e2161e028dc3d388c8fdd0215978496889d07ea46ce041a287"
+      "sha256": "117547c0289dc83531fe1d92ebc481c152ae9780593b40327aea352fa3b7ab3f"
     },
     {
       "description": "Read o11y cloud integrations: Lists the cloud-integration accounts connected for the given provider., Returns one connected account for the given provider, by id., Lists the services metadata for one connected account of the given provider, by account id..",
       "name": "o11y_cloud-integrations",
       "path": "o11y_cloud-integrations/SKILL.md",
       "service": "o11y",
-      "sha256": "59d5c4d810180fd18f9399ec92d75130484def0864b2d38cc3431d4132b06208"
+      "sha256": "5017411dd969a36afa7d7a92936f7467521310b7650dcac33ecf661027c44d73"
     },
     {
       "description": "Read o11y clusters: Lists the metric attribute keys Kubernetes clusters report, for building cluster filters., Lists the values one cluster attribute key has taken, for building cluster filters..",
       "name": "o11y_clusters",
       "path": "o11y_clusters/SKILL.md",
       "service": "o11y",
-      "sha256": "8cfda1a7ab17eed15c44b4c75af97917f4123cc9884c2c4926c34e9d1d7802b6"
+      "sha256": "341b01468bd8f648800c3ef9118e225e36c1c7babbee14b7896a6e855f928b75"
     },
     {
       "description": "Read o11y complete: Complete a Google sign-in, Complete a generic OIDC sign-in.",
       "name": "o11y_complete",
       "path": "o11y_complete/SKILL.md",
       "service": "o11y",
-      "sha256": "8882f4994a632f8091f38078fa76c74acb3813eb1c679ea949f37201c989898f"
+      "sha256": "32e07f2f9c490cf5e8aaae4e0977032442efa7ca45faf233e2d02208d10142c0"
     },
     {
       "description": "Read o11y daemonsets: Lists the metric attribute keys Kubernetes daemonsets report, for building daemonset filters., Lists the values one daemonset attribute key has taken, for building daemonset filters..",
       "name": "o11y_daemonsets",
       "path": "o11y_daemonsets/SKILL.md",
       "service": "o11y",
-      "sha256": "18df0d8f811ea6551c9bec8d37332fd12575eda5b22749f0cee6a48ada084352"
+      "sha256": "22292a4804348af3e5cb7f628f4846b13a8edcf2fa1282445f13ee6f9ad46af2"
     },
     {
       "description": "Read o11y dashboard views: Returns every saved view in the calling user's org..",
       "name": "o11y_dashboard-views",
       "path": "o11y_dashboard-views/SKILL.md",
       "service": "o11y",
-      "sha256": "b7b42d043ef4119da25df54f41b42404bad023cfecfca4ca90cc67349df0a86d"
+      "sha256": "7ae616154e06cc10ef392b644051e9cb7b7f6cdc499edde6c00746286a703076"
     },
     {
       "description": "Read o11y dashboards: Returns a page of v2-shape dashboards for the org., Returns a v2-shape dashboard., Returns the public-sharing config for a dashboard..",
       "name": "o11y_dashboards",
       "path": "o11y_dashboards/SKILL.md",
       "service": "o11y",
-      "sha256": "f0be143de6e1f76ed567c28ca47f80e57fcad3109da7ef199dbe555f72e63390"
+      "sha256": "9c6fa92bc5c494732bef8ff3ef4b80286121a4d15efb4fdc77c7704b6b7140f8"
     },
     {
       "description": "Read o11y deployments: Lists the metric attribute keys Kubernetes deployments report, for building deployment filters., Lists the values one deployment attribute key has taken, for building deployment filters..",
       "name": "o11y_deployments",
       "path": "o11y_deployments/SKILL.md",
       "service": "o11y",
-      "sha256": "3964785ef798bbc4be4174a6f4cf521f364fff2429016da6c32e620f80aed900"
+      "sha256": "503d27eced31220225d8460d77b86ff667df38ed8102df19ffa18916709acab7"
     },
     {
       "description": "Read o11y disks: Lists the storage disks the datastore reports, with their names and types..",
       "name": "o11y_disks",
       "path": "o11y_disks/SKILL.md",
       "service": "o11y",
-      "sha256": "00deae4bc9a33e73e0ef9da6ba21270f057b1e879ff8a51ee03a7951b40a4384"
+      "sha256": "33f1dffc8874295a74d7aa270f69c553b8814ed5069a9a8895de61ac973e377e"
     },
     {
       "description": "Read o11y domains: Lists the org's auth domains — the email domains whose SSO configuration this org owns., Returns one auth domain with its SSO configuration, by id..",
       "name": "o11y_domains",
       "path": "o11y_domains/SKILL.md",
       "service": "o11y",
-      "sha256": "94343af8a3a42a000ddcd0a3ba1612b0c8354bff9cac6360641abb779f626060"
+      "sha256": "d57eb3b28db722ba8d351b1296e65bc690a25bc72f634c9ce1626b6b72aa1cfe"
     },
     {
       "description": "Read o11y downtime schedules: Lists all planned maintenance windows, optionally narrowed to the active ones or the recurring ones., Returns one planned maintenance window, by id..",
       "name": "o11y_downtime-schedules",
       "path": "o11y_downtime-schedules/SKILL.md",
       "service": "o11y",
-      "sha256": "23f793ce8c80ca78c070befdd45bd9fcee8cdd72813438a831abe58f82ecdebe"
+      "sha256": "ef88280e1b11a9affd824d8da8c6fdd9849cde879e31a2c74d4b9f2938a5d7da"
     },
     {
       "description": "Read o11y errorfromerrorid: Returns one exception instance and the span it happened on, by its error id within a group at a timestamp..",
       "name": "o11y_errorfromerrorid",
       "path": "o11y_errorfromerrorid/SKILL.md",
       "service": "o11y",
-      "sha256": "ed1524732b0c867cc86c852565eddfdd52e44271821d723abd10de6609eda07c"
+      "sha256": "7322005190ed719ac2c400b4dc3753c18c12ce7561d43ebd2ecc5d06601a6ba7"
     },
     {
       "description": "Read o11y errorfromgroupid: Returns the representative exception instance of a group at a timestamp, and the span it happened on..",
       "name": "o11y_errorfromgroupid",
       "path": "o11y_errorfromgroupid/SKILL.md",
       "service": "o11y",
-      "sha256": "380b75b51b786b43403eb09d6a3818dd06d92f181d64b27a3e07618906f7992e"
+      "sha256": "9d4bd2eb3232a52a890a703bf1bd5286fb6c2cb5f75a61bcdca9a4dbd3609d54"
     },
     {
       "description": "Read o11y errortracking: Lists the caller's org's grouped error issues (by fingerprint) with status, level, counts and first/last-seen., Returns one grouped issue with its latest occurrence sample..",
       "name": "o11y_errortracking",
       "path": "o11y_errortracking/SKILL.md",
       "service": "o11y",
-      "sha256": "cf422a5880b866f40fe919418b98f70dda50a975bddc6f7fec56fdff82ca0088"
+      "sha256": "65524ce4def5918af70ad3d4908492c2874c7e5a3dd1fb7695236e7ec36b95f0"
     },
     {
       "description": "Read o11y explorer: Lists the caller's org's saved explorer views, optionally narrowed to one source page, name or category., Returns one saved explorer view by id..",
       "name": "o11y_explorer",
       "path": "o11y_explorer/SKILL.md",
       "service": "o11y",
-      "sha256": "77eb2522919a964396ad233fee93da69c5a92662d21cc357aca56bd7856e75a2"
+      "sha256": "87db08f229f74ea8a61b230089d2948c0adbed6c581b9313b38fda51b95ef57e"
     },
     {
       "description": "Read o11y features: Returns the supported feature flags and their resolved values for the caller's org..",
       "name": "o11y_features",
       "path": "o11y_features/SKILL.md",
       "service": "o11y",
-      "sha256": "4909de8b59b56ef10e110911d44429aa89651f8d2aa33e176d33feabf5834e7d"
+      "sha256": "5f4fc0155ec42c277e1b744e1dcc76d871c297ed57c57bb469c8fa2d39877456"
     },
     {
       "description": "Read o11y fields: Returns the telemetry field keys matching the selector — the signal's fields grouped by name, and whether the catalog is complete., Returns the values one telemetry field has taken — string, bool, number and related values — and whether the value list is complet",
       "name": "o11y_fields",
       "path": "o11y_fields/SKILL.md",
       "service": "o11y",
-      "sha256": "562e8c62223d7d80a02dd07f0880607311fdb62c1b80c82a271010610df6cda6"
+      "sha256": "9badd15a10419b3d1a93f329a81f564d8cd514d97e3c5f6e0033991d3a3d0c35"
     },
     {
       "description": "Read o11y filter suggestions: Suggests attribute keys and example filter queries for the query builder, seeded by what the org's own telemetry carries..",
       "name": "o11y_filter-suggestions",
       "path": "o11y_filter-suggestions/SKILL.md",
       "service": "o11y",
-      "sha256": "c2b0c84f14c82e394389dffba65259a23643441cce089a8e9fd8911ecf10882a"
+      "sha256": "d35b1d282af8b64f464a73618393c3aac29ba9a88ce56dcecf4bfdc8b0641154"
     },
     {
       "description": "Read o11y gateway: Lists the workspace's ingestion keys, paginated., Lists the workspace's ingestion keys whose name matches the search, paginated..",
       "name": "o11y_gateway",
       "path": "o11y_gateway/SKILL.md",
       "service": "o11y",
-      "sha256": "b40582dc9921fc667b6be8d9a2be6b30d53e453f16710bd428a1d3734f6d41cb"
+      "sha256": "06134881d6a3ebc23bd95f5ee2bd005dfff345fc0b928060b2197204c6627f05"
     },
     {
       "description": "Read o11y getresetpasswordtoken: Returns a user's password-reset token, creating one if none is live..",
       "name": "o11y_getresetpasswordtoken",
       "path": "o11y_getresetpasswordtoken/SKILL.md",
       "service": "o11y",
-      "sha256": "dd706d9e2f2b263baea9e4bb64220c3be8fb73c3de2596b9d4ce92c17a8255cb"
+      "sha256": "a56c169224c14b2fe5a66ff9e22e4861a2c94531cc0fbcefae1ad8eb2bd60d54"
     },
     {
       "description": "Read o11y global: Returns the deployment's global configuration: its public endpoints and which identity providers are enabled..",
       "name": "o11y_global",
       "path": "o11y_global/SKILL.md",
       "service": "o11y",
-      "sha256": "da6f94bc456ee74746c264df58a347c9a28fc22a78f987618ce7e8aec4482667"
+      "sha256": "27eb3e8826eba2327fac7e593f7b3135c9af5ff448514783f1a57af049513067"
     },
     {
       "description": "Read o11y health: Reports service health..",
       "name": "o11y_health",
       "path": "o11y_health/SKILL.md",
       "service": "o11y",
-      "sha256": "5c040b60ef9a52b2e90b8886fb4b7db811f2046fe7882fac3f3a5ab54c77f466"
+      "sha256": "92ceb38bb70fd321ec77f67263108d8f3186f730a040a252e558e588c710997c"
     },
     {
       "description": "Read o11y healthz: Health of the observability runtime's services.",
       "name": "o11y_healthz",
       "path": "o11y_healthz/SKILL.md",
       "service": "o11y",
-      "sha256": "123be9a8bd232acad3d879f2ff207d5a64aea692133d25bfdeb1d0360357fafb"
+      "sha256": "2ab2e9612e165f86d4800d0b9590c7f6d64d3f310f929167184838493ebe61c7"
     },
     {
       "description": "Read o11y hosts: Lists the metric attribute keys hosts report, for building host filters — each with its data type and whether it is a materialized column., Lists the values one host attribute key has taken, for building host filters — string, number and bool values in their own ",
       "name": "o11y_hosts",
       "path": "o11y_hosts/SKILL.md",
       "service": "o11y",
-      "sha256": "5b6d9e80788e2fd7b87a2fd6914b367471aeb740ca1846fb27a61df0956f3497"
+      "sha256": "e30d52d7e94940fb1a65137c2e5bb41a90d40ea766bf8f92658b4fe96710ebc1"
     },
     {
       "description": "Read o11y infra monitoring: Reports whether the metrics and attributes an infra-monitoring section needs are being received — for each collector receiver or processor involved, what is present and what is missing, with a user-facing message and a docs link per missing piece..",
       "name": "o11y_infra-monitoring",
       "path": "o11y_infra-monitoring/SKILL.md",
       "service": "o11y",
-      "sha256": "293c1be143e333f32efe970ef81d679dd902b8f6f2eba6e68519c77050ae1862"
+      "sha256": "93e2a17185470c90e330354b7295ac4b729c2c79eebdc116510ac86632d7d8f8"
     },
     {
       "description": "Read o11y infra onboarding: Reports how far Kubernetes infra onboarding has progressed: which metric families have arrived and, per pod, which required metadata labels are present..",
       "name": "o11y_infra-onboarding",
       "path": "o11y_infra-onboarding/SKILL.md",
       "service": "o11y",
-      "sha256": "36fe1fb9bb42b5cc7baf9eb48a757bc7f39f7d73b1a072c88b84d88ba99ec7a0"
+      "sha256": "5705c3b54901c39f30a844d2eb9fb14a22b67277a3049729765315de9e5f51f9"
     },
     {
       "description": "Read o11y integrations: Lists the available integrations and whether each is installed in the caller's org, optionally narrowed to installed or not-installed., Returns one integration's full detail — its overview, configuration steps, collected data and assets — together with its",
       "name": "o11y_integrations",
       "path": "o11y_integrations/SKILL.md",
       "service": "o11y",
-      "sha256": "39ed98b7ce594e6d492360d56d29e9c0d139fb7cb18ec10fb959288e1a0073bf"
+      "sha256": "3818f4489308c6a8fc74510ae57933976907c7f7f80ac1d2dbbae7b223ca3147"
     },
     {
       "description": "Read o11y jobs: Lists the metric attribute keys Kubernetes jobs report, for building job filters., Lists the values one job attribute key has taken, for building job filters..",
       "name": "o11y_jobs",
       "path": "o11y_jobs/SKILL.md",
       "service": "o11y",
-      "sha256": "3e463f54425d553cdd92642b5d64ae8ca23ff8d48c0fe5f12765b7698a54b23b"
+      "sha256": "4deb40953168d97f3089fc6902b217de19841cb2d8d8a0424457b82d294bb6d2"
     },
     {
       "description": "Read o11y licenses: Lists the org's licenses., Activates the enterprise license..",
       "name": "o11y_licenses",
       "path": "o11y_licenses/SKILL.md",
       "service": "o11y",
-      "sha256": "0d567cac5fd6690260af86f41774f4f6cb59a004e64e72379e33c90c7476fc6e"
+      "sha256": "e58331cb791baf59a259ec848885df8fbbad1274af0f18f4eb4950edc644e4c7"
     },
     {
       "description": "Read o11y livez: Liveness of the observability process.",
       "name": "o11y_livez",
       "path": "o11y_livez/SKILL.md",
       "service": "o11y",
-      "sha256": "41538a0c6557a4b2c3fa65f499c38fb99262dbc9822ba51eb62b5185a39f3ec2"
+      "sha256": "300361e921f0501137f5fb592efa547a28c58d87afe5dbe41aec72c69ad8a58d"
     },
     {
       "description": "Read o11y llm: Lists human annotations on traces and observations, optionally scoped to one review queue., Lists gen_ai spans as LLM observations — each an LLM call with its model, token counts, cost and latency projected from gen_ai.* attributes, newest first, over the query win",
       "name": "o11y_llm",
       "path": "o11y_llm/SKILL.md",
       "service": "o11y",
-      "sha256": "49cbc3619b51b0c1e7a8fad6537d3bd2b6c24cad4219e5492d0744217747fd59"
+      "sha256": "b0979291bb71fbe10a871fa471b190790b5b84994657d7c318d3d36d72503387"
     },
     {
       "description": "Read o11y llm pricing rules: Returns the LLM pricing rules for the caller's org, with pagination and an optional search and override filter., Returns a single LLM pricing rule by id..",
       "name": "o11y_llm-pricing-rules",
       "path": "o11y_llm-pricing-rules/SKILL.md",
       "service": "o11y",
-      "sha256": "dcb50c8440c61bfae1ae4a0b03c3f5734674c6dd9419235dc48e3caad9584c80"
+      "sha256": "5b820a1fb13ca31c710935072722adb04fc0ebda4fcdbdf840371059f3426fed"
     },
     {
       "description": "Read o11y login: Report why an observability sign-in did not complete.",
       "name": "o11y_login",
       "path": "o11y_login/SKILL.md",
       "service": "o11y",
-      "sha256": "e8093efee499f237a83a78d43252c3a999202980a18c8f660a00cddc7635fc39"
+      "sha256": "38aea7a497514c1c116c796db346ef4650e4aabfa4d322469b2bd08cd8b1a0ab"
     },
     {
       "description": "Read o11y logs: Returns the most recent log records in the query window, newest first — each record an open object carrying its nanosecond timestamp and whatever fields the record was ingested with., Returns the logs aggregate buckets for the query window., Returns the log field ",
       "name": "o11y_logs",
       "path": "o11y_logs/SKILL.md",
       "service": "o11y",
-      "sha256": "48b7211bee40c3bda4e769812b07d2faa008e43696577f4f7f1bbd8ddaf6fa06"
+      "sha256": "a5fcbad4561e52437352c64cd7b7ce2ae7dde5805e2feba2954a6fcc5b500cc8"
     },
     {
       "description": "Read o11y metric: Serves the OLDER /metric/metric_metadata route..",
       "name": "o11y_metric",
       "path": "o11y_metric/SKILL.md",
       "service": "o11y",
-      "sha256": "c4cab47f20f62c7ec0e859e150f857fe408665b4433fcb6aa09e13eb5231c1e3"
+      "sha256": "040bd48ddb1151bd99eabb73404afe5aa86f8d204579ef51d34494753de253f7"
     },
     {
       "description": "Read o11y metric reduction rules: Lists the org's metric volume-control (label reduction) rules, pageable and sortable by name, volume or recency., Returns total ingested vs retained series and samples and the estimated monthly savings across all volume-control rules., Returns in",
       "name": "o11y_metric-reduction-rules",
       "path": "o11y_metric-reduction-rules/SKILL.md",
       "service": "o11y",
-      "sha256": "dfaadf155c63d586f86d66bcea286c75bfd6e92880c6c92d191b36c9302967b1"
+      "sha256": "55f837e47ad2dcbf1914e415be3990760aefe606fbc43edc4bc65c9c837d5e90"
     },
     {
       "description": "Read o11y metrics: Lists the distinct metric names seen in a time range, each with its description, type, unit, temporality and monotonicity., Lists the alert rules that reference a metric., Returns one metric's attribute keys, each with its unique values and their count..",
       "name": "o11y_metrics",
       "path": "o11y_metrics/SKILL.md",
       "service": "o11y",
-      "sha256": "1ad25359a1f7e57edf649428fa2f000ae6ad24d74ee50d882ac1817d7021a360"
+      "sha256": "335164106ece8fbdae96097b562e2a9739afacd3a6767ce51aeabcf624718928"
     },
     {
       "description": "Read o11y namespaces: Lists the metric attribute keys Kubernetes namespaces report, for building namespace filters., Lists the values one namespace attribute key has taken, for building namespace filters..",
       "name": "o11y_namespaces",
       "path": "o11y_namespaces/SKILL.md",
       "service": "o11y",
-      "sha256": "c31ced400caeb3d7ac458745d34dac310a00f00b912d5cc0eaa5c545c73e7422"
+      "sha256": "08db9bb6bcb8ae97ebba6af091cf479c379ae5689f88c49dac9aab9d56f2e4ba"
     },
     {
       "description": "Read o11y nextpreverrorids: Returns the ids of the exception instances immediately after and before a given one within its group — the paging cursor the error detail view walks..",
       "name": "o11y_nextpreverrorids",
       "path": "o11y_nextpreverrorids/SKILL.md",
       "service": "o11y",
-      "sha256": "3328ffb50bc7c5e1c11038eba0abeca8b14fbd307123b314f5082e923cee2555"
+      "sha256": "d461aad8dcd3cd58d88e2ba9f3a2852f378428b450df9b0dd7fbe499ec5fe35a"
     },
     {
       "description": "Read o11y nodes: Lists the metric attribute keys Kubernetes nodes report, for building node filters., Lists the values one node attribute key has taken, for building node filters..",
       "name": "o11y_nodes",
       "path": "o11y_nodes/SKILL.md",
       "service": "o11y",
-      "sha256": "415964c3a7922bd0a84b55014f2acda6c8f6d99ab91bebd6693ceaf6fe1d469c"
+      "sha256": "a6499071f6a3845c30cd951426a1739efd3d75c088529bf0c0c9c74fda80a9a1"
     },
     {
       "description": "Read o11y org: Lists every org-scoped preference, each with its current and default value., Returns one org-scoped preference, by name..",
       "name": "o11y_org",
       "path": "o11y_org/SKILL.md",
       "service": "o11y",
-      "sha256": "cf108346e63b33f546e6d38e9a454cd505f38b434d804a821415c52578344eda"
+      "sha256": "99575cba19e289466882ffcb1aed08c90de2610f3805b0de131e5f29353e2a28"
     },
     {
       "description": "Read o11y orgs: Returns the caller's own organization., Returns the org's quick filters for every signal — the attribute shortlists its explorers offer as one-click filters., Returns the org's quick filters for one signal — traces, logs, metrics, exceptions or api_monitoring..",
       "name": "o11y_orgs",
       "path": "o11y_orgs/SKILL.md",
       "service": "o11y",
-      "sha256": "37c416f323a472eeb1558c877d32d6b5e091c740f32d8bf110d6d2104071e815"
+      "sha256": "7928b78ff00fa72f47319dd4a7bcd727399e38eae2ebfbe756ec1d03bc454b11"
     },
     {
       "description": "Read o11y pods: Lists the metric attribute keys Kubernetes pods report, for building pod filters., Lists the values one pod attribute key has taken, for building pod filters..",
       "name": "o11y_pods",
       "path": "o11y_pods/SKILL.md",
       "service": "o11y",
-      "sha256": "dc0f75b529353c3ba1d3651a1a91d515651f2253895c46a2053a73f7920e2647"
+      "sha256": "e5e857f7478884f3f7bf7e66818dd62138ed8f9bcd0defc951bc7351693d215a"
     },
     {
       "description": "Read o11y processes: Lists the metric attribute keys processes report, for building process filters., Lists the values one process attribute key has taken, for building process filters..",
       "name": "o11y_processes",
       "path": "o11y_processes/SKILL.md",
       "service": "o11y",
-      "sha256": "aef80ca713acc16728ddd1c6ef8cc79307161d3922ec0c5626c30486fd97b6c8"
+      "sha256": "23e431f1a7d76010711802933f4207ab920136067422ece904203c5a7d297a93"
     },
     {
       "description": "Read o11y product: Returns one product's RED series — request rate, errors, p50 and p95 latency — for the caller's org, plus that org's LLM usage rollup over the same window..",
       "name": "o11y_product",
       "path": "o11y_product/SKILL.md",
       "service": "o11y",
-      "sha256": "fba7afb2088ed723b6cde5419897d8725f3db1883a46b1fe86cb38ef642d8ab5"
+      "sha256": "358db6027bd3137b3c097e3ffe33c7231b10a2d58b9ecbb7e29a29fc13f0ce66"
     },
     {
       "description": "Read o11y public: Returns the sanitized dashboard data for public access — the read a shared dashboard's public page makes., Returns the query-range result for one widget of a public dashboard..",
       "name": "o11y_public",
       "path": "o11y_public/SKILL.md",
       "service": "o11y",
-      "sha256": "3719498a08bbc445897abcfc1274cc693316d6af5c206262bbb6e72e74764fe2"
+      "sha256": "7090582e4d89ec154fd1bf90e5aecccb8967df3839ddb82238742a209665fb93"
     },
     {
       "description": "Read o11y pvcs: Lists the metric attribute keys persistent volume claims report, for building volume filters., Lists the values one persistent-volume-claim attribute key has taken, for building volume filters..",
       "name": "o11y_pvcs",
       "path": "o11y_pvcs/SKILL.md",
       "service": "o11y",
-      "sha256": "6836e56641d0ebf70d456fbd5000f820187f05e1b0c71031d7e48e32f6eb0365"
+      "sha256": "b691dfd19db28cec2b09e519ca3a115d7cff95fd9c16bdcfd54cdb98d873993a"
     },
     {
       "description": "Read o11y query: Evaluates one instant PromQL query against the org's metrics and returns the result at a single point in time..",
       "name": "o11y_query",
       "path": "o11y_query/SKILL.md",
       "service": "o11y",
-      "sha256": "a8d18f0ccc5e283897decf07cb69d88fc24def72adc12305c98952bacb559af1"
+      "sha256": "c14d82de508d4038892a13187d3deaebc8b3cb3a9f1e0afe4a0b5297effb33e0"
     },
     {
       "description": "Read o11y query progress: Watch one running query's progress.",
       "name": "o11y_query-progress",
       "path": "o11y_query-progress/SKILL.md",
       "service": "o11y",
-      "sha256": "18532cf8b0eec17737dfae0cc1e40af5351831bd12870fcb4378e7a890ca1b4e"
+      "sha256": "f36191f551715df9461494de4307200133e4a6e476236e9e571f43692a65c94d"
     },
     {
       "description": "Read o11y query range: Runs a Prometheus-style range query over metrics — the legacy read that predates the v5 querier — and returns the matrix, vector or scalar the query resolved to..",
       "name": "o11y_query-range",
       "path": "o11y_query-range/SKILL.md",
       "service": "o11y",
-      "sha256": "77a90a36e77fa02d7fe77d851fd678ce46247cc36f0ad1198f3410445ea99d7d"
+      "sha256": "dd0e2b8b01b1194af620256a2995b3c45b907387cf3787cbd45d262c61d6c257"
     },
     {
       "description": "Read o11y readyz: Readiness of the observability runtime to serve.",
       "name": "o11y_readyz",
       "path": "o11y_readyz/SKILL.md",
       "service": "o11y",
-      "sha256": "028115117984262f3b4685797a72d4d605b49daec68bce7df7355853f26032e3"
+      "sha256": "0be579fc6577400c3389d0a588de279f83efd675965c710ad399aca727b1b243"
     },
     {
       "description": "Read o11y reviews: Returns a page of the caller org's human-review queues, newest first, narrowed to the caller's project., Returns one review queue with its pending and completed counts and its first page of items., Returns a page of one review queue's items, newest first, optio",
       "name": "o11y_reviews",
       "path": "o11y_reviews/SKILL.md",
       "service": "o11y",
-      "sha256": "36298854f331b50537d32b34cd197b754443fb92c240121804532e6c3d0d7eaa"
+      "sha256": "677d99b78f67e77beb23bc2c9e9cb32224b6d72cb8b38c7891cb92e447adce51"
     },
     {
       "description": "Read o11y roles: Lists every role in the caller's org — the managed ones the platform seeds and the custom ones its admins created., Returns one role with the transaction groups it grants., Returns every org member holding a role, by role id..",
       "name": "o11y_roles",
       "path": "o11y_roles/SKILL.md",
       "service": "o11y",
-      "sha256": "becdc436c48cd42fcaaa878e6b6e86ac3c418bdadc7026b8d62c41f5e06666a6"
+      "sha256": "7c72728d1cd524234e852d1963791b5200d90699c048b1452347d75b9f3ead5e"
     },
     {
       "description": "Read o11y route policies: Lists the org's route policies., Returns one route policy, by id..",
       "name": "o11y_route-policies",
       "path": "o11y_route-policies/SKILL.md",
       "service": "o11y",
-      "sha256": "b61b9436e98a7833d684187f692caf6ba85684525d63df72ffc62b595ba29137"
+      "sha256": "ae612ffd574dd1f080d97affc37d5d6aadf2e982aa6c44933280b83b64d3d29d"
     },
     {
       "description": "Read o11y rules: Lists all alert rules with their current evaluation state., Returns one alert rule with its evaluation state, by id., Returns the distinct label keys present in a rule's history entries over the selected range, for building history filters..",
       "name": "o11y_rules",
       "path": "o11y_rules/SKILL.md",
       "service": "o11y",
-      "sha256": "2fb8b07d32fc1a0e84fb0835135d1d689a90623f5fb9525aef7d68f8de48db31"
+      "sha256": "fa90f6bcdcdc7c326c773123f6dc30d82a0cd138ab69f02d4e121ba4696a77bb"
     },
     {
       "description": "Read o11y sentinel: Returns one captured error event of a project, by its id., Lists the caller's org's grouped error issues, optionally narrowed to one project and one time window, and filtered by status, level, environment, service, a free-text query and a sort., Returns one gr",
       "name": "o11y_sentinel",
       "path": "o11y_sentinel/SKILL.md",
       "service": "o11y",
-      "sha256": "18b57935afb3f9c41b925a84291c7e64787a23048770cd323abeb2af1906bed2"
+      "sha256": "6be37966a0b3b5972a444abc23582c66f9ab3782755dd5f85b36b4f852c7e1b1"
     },
     {
       "description": "Read o11y service accounts: Lists the caller's org's service accounts., Returns the calling service account itself, with the roles it holds — the self-inspection read for a key-authenticated caller., Returns one service account with the roles it holds..",
       "name": "o11y_service-accounts",
       "path": "o11y_service-accounts/SKILL.md",
       "service": "o11y",
-      "sha256": "22a79bec05ea958cd2fdd227051127b4c3296a02471cbac1b9c9b22dbd2875fa"
+      "sha256": "6397c72a58900f1fa3058545272dab3715e002b8479e664430d23439b71b58aa"
     },
     {
       "description": "Read o11y services: Lists the name of every service the trace store holds, with no window applied — the complete catalog, for pickers and autocomplete..",
       "name": "o11y_services",
       "path": "o11y_services/SKILL.md",
       "service": "o11y",
-      "sha256": "7a155500467a47d48943f2891a78175f0bde2d5e382f13aef51525e2937bec21"
+      "sha256": "bfe86f25b04ab50648fb7631454d14cda31cad84d7968a30d500667bac0331c4"
     },
     {
       "description": "Read o11y sessions: List the caller org's LLM sessions, Tells a sign-in page what an email address can do: which orgs the address belongs to and, per org, which password and SSO routes are open to it..",
       "name": "o11y_sessions",
       "path": "o11y_sessions/SKILL.md",
       "service": "o11y",
-      "sha256": "242b312ee4b04b3dcba99fecd7796208b175bb13bafba597543b76150c4994de"
+      "sha256": "5ce516e7e1c8cf63a22fe23ab403fec49738577c572e685d179e20405e56ab5d"
     },
     {
       "description": "Read o11y settings: Returns apdex settings for the named services., Returns the org's current retention policy: default TTL, custom per-label rules, and cold-storage settings where configured..",
       "name": "o11y_settings",
       "path": "o11y_settings/SKILL.md",
       "service": "o11y",
-      "sha256": "b7f1fd6dd758e2df79d5b1b5b9b37e01db9db28963e662c83bd50a1b33cdfb86"
+      "sha256": "c80af83ab7d0f0232899bc480415459d7604f777ba88ae9cfda940d5f0688be8"
     },
     {
       "description": "Read o11y span mapper groups: Lists the caller's org's mapping groups, optionally only the enabled ones., Lists the mappers belonging to one group, in the order they are applied..",
       "name": "o11y_span-mapper-groups",
       "path": "o11y_span-mapper-groups/SKILL.md",
       "service": "o11y",
-      "sha256": "e4e6ba2c9f0196a0868951a2868dd116b5575ecf37622dba6a0fdb9be31619e0"
+      "sha256": "829bc5c0cbe87fe2514829092e05796a6085198ad36881c0e49af548c3720609"
     },
     {
       "description": "Read o11y statefulsets: Lists the metric attribute keys Kubernetes statefulsets report, for building statefulset filters., Lists the values one statefulset attribute key has taken, for building statefulset filters..",
       "name": "o11y_statefulsets",
       "path": "o11y_statefulsets/SKILL.md",
       "service": "o11y",
-      "sha256": "1d16c283c8e30ac8516498923a4dd6fee97ce0dc20fd47308cfd1354776dcdbc"
+      "sha256": "492dbae7db16c6bfc696cc46adc398abb8a3627a2120c011e0cffaef172a2fb2"
     },
     {
       "description": "Read o11y stats: Returns the collected usage statistics for the caller's org, as the stats reporter aggregates them — a map whose keys are the reporter's own counter names..",
       "name": "o11y_stats",
       "path": "o11y_stats/SKILL.md",
       "service": "o11y",
-      "sha256": "9e296c1a2db8c517e5a22cb1dbc91e1a9ff142884898f628577d51e9372b1f45"
+      "sha256": "cd2a646a3209ee516c51f9e362ba6702e97aa33f592dc51012411ca2fa3f1250"
     },
     {
       "description": "Read o11y status: Reports whether a product's service is live: an in-cluster health probe with its measured latency, fused with the per-replica up inventory..",
       "name": "o11y_status",
       "path": "o11y_status/SKILL.md",
       "service": "o11y",
-      "sha256": "2136a177d82257cbf3eaa1254c62291a6fe152f22067a75ce4941aaedc25fd39"
+      "sha256": "d145dcbe27d42b3ca0c02d8224770cc93eb6a5e86a1c12ac878bd52b66c35c32"
     },
     {
       "description": "Read o11y summary: Reports whether the platform is up..",
       "name": "o11y_summary",
       "path": "o11y_summary/SKILL.md",
       "service": "o11y",
-      "sha256": "f38f278426150de561b13c3f351d14bb1ec813fda83d59ea4913a92cb4fcc4cb"
+      "sha256": "2b597ad3db34c46345478e0e13a66b0228f0050e7bd87a0b43d1c780d8dd25da"
     },
     {
       "description": "Read o11y trace funnels: Lists the caller's org's funnels, each with its steps and who last touched it., Returns one funnel with its steps..",
       "name": "o11y_trace-funnels",
       "path": "o11y_trace-funnels/SKILL.md",
       "service": "o11y",
-      "sha256": "5747f61e81565b352ce3eb00621818c98e7bfea0f6e7c3b10120a43f47d0898a"
+      "sha256": "20b3e233b320ee6a977720ee454642038115352a1d52863b565691825a4d79ba"
     },
     {
       "description": "Read o11y traces: Lists the caller org's recent traces — one row per trace with its span count and wall-clock duration, most recently active first., Returns the trace field catalog: the span fields already selected as indexed columns, and the interesting ones seen in the data tha",
       "name": "o11y_traces",
       "path": "o11y_traces/SKILL.md",
       "service": "o11y",
-      "sha256": "ee6c06f1896806bc3de25442ac55fc0b66fe2f4511b17a1f51c4e64cdbe23730"
+      "sha256": "ef1dceeece4c921a8f5725ecc4f70411f0a8e9a3d48120f4e670c8fc548763ef"
     },
     {
       "description": "Read o11y usage: Returns ingestion usage counts bucketed over the requested window, optionally narrowed to one service..",
       "name": "o11y_usage",
       "path": "o11y_usage/SKILL.md",
       "service": "o11y",
-      "sha256": "192891b6194b4693e808bb8aa332e661c131b3e5472de193aa063fd1090f9b9a"
+      "sha256": "c5c07d33195aa8655fd366f73c47f87fa259b59bfe9b406423bbc36b260414c6"
     },
     {
       "description": "Read o11y user: Lists the org's members with their single legacy role., Returns the calling user with their single legacy role., Lists every preference of the calling user, each with its current and default value..",
       "name": "o11y_user",
       "path": "o11y_user/SKILL.md",
       "service": "o11y",
-      "sha256": "dd49e2535a23e60a569bc0bedb4dbcecc56897d2c5219d347ecca60777629402"
+      "sha256": "2426dc02dd65f895cbf6e2e1bfe6a2b1bdd4c836298a553b3d70744c6d62f890"
     },
     {
       "description": "Read o11y users: Lists the caller's org members., Returns the calling user together with every role they hold., Is dashboardListV2 personalized for the calling user: each dashboard carries the caller's pinned state, and pinned dashboards float to the top of the requested ordering",
       "name": "o11y_users",
       "path": "o11y_users/SKILL.md",
       "service": "o11y",
-      "sha256": "ad0b65c01dcec60d8feed9c3f8bbccd3da4c64d052e094a67b2f3db2575a05e7"
+      "sha256": "c086c84dcf2a6053dd0d3540a83c01397b743326523f229f2731b4d8000275dd"
     },
     {
       "description": "Read o11y version: Reports the running build: its version, whether an enterprise edition is present (\"N\" in this build), and whether first-user setup has completed..",
       "name": "o11y_version",
       "path": "o11y_version/SKILL.md",
       "service": "o11y",
-      "sha256": "b54db3a473a5eab5607c9ae88b98f9b744dbd32a1f5010594d2de9ef61d83790"
+      "sha256": "e14356b3101a4b0648f8f6cdbbb67bf1337b6646846f9fb941c20d4d030ace0f"
     },
     {
       "description": "Read o11y zeus: Returns the deployment's host info from Zeus..",
       "name": "o11y_zeus",
       "path": "o11y_zeus/SKILL.md",
       "service": "o11y",
-      "sha256": "0ba5326002b7f3ed3c76e25ec0a8181274815e2f149e5ad7b2cc2ab3aff98ca0"
+      "sha256": "6cab71a09a0fbf67a78c11d1189076f017981320573b4e7df2f53583d7e44701"
     }
   ],
   "spec_version": "8.0.0"

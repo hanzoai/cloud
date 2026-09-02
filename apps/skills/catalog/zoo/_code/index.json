@@ -16,28 +16,28 @@
       "name": "code_ask",
       "path": "code_ask/SKILL.md",
       "service": "code",
-      "sha256": "8bb4fd9a76a57cc7f2c2d3e5dffa8dc778e2593d34c00d4de203cf64d1b2e0b7"
+      "sha256": "4d2c10dbe6488fcd3974b1b87c48e00c18c3639e2150193035eb6a255ccc9399"
     },
     {
       "description": "Read code file: Returns the INDEXED content of one file — read_file over the chunks the search tiers hold, for pulling up code an agent just found..",
       "name": "code_file",
       "path": "code_file/SKILL.md",
       "service": "code",
-      "sha256": "06c39ea9a78cb313e035f38d7ef119ffb81f5d7d9022123f22665daac28bed88"
+      "sha256": "a631359813cd2e8a389d99bfbace9d04ae909d1b0104cc0040adaa559fe95737"
     },
     {
       "description": "Read code search: Finds code in the caller org's index across three orthogonal retrieval tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over code-tokenized text), symbolic (real definition and reference edges), and semantic (embedding cosine over AST-boundary chunks",
       "name": "code_search",
       "path": "code_search/SKILL.md",
       "service": "code",
-      "sha256": "3ae5f57f45c45c8fe9cb5eebdf988714ed394b24da38ed3d068bbe1422de4167"
+      "sha256": "19f7cbcd61d3f1854dde6900182e07794c94d3bcf6c173fa3a9d8700e7dbf961"
     },
     {
       "description": "Read code tree: Returns one repository's file structure with a per-file symbol count — get_repo_structure over the org's own index, with no git checkout involved..",
       "name": "code_tree",
       "path": "code_tree/SKILL.md",
       "service": "code",
-      "sha256": "05cf5c07d3427efab8163e5c4ae5a30ad16e39f231ba2b9eb76458e64b16668d"
+      "sha256": "3ec8c0b5900c6eb1da733c2cc6d14e3be3c4902012d1bf9b96d8ed225a5537fe"
     }
   ],
   "spec_version": "8.0.0"

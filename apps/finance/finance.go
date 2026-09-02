@@ -124,7 +124,7 @@ func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error)
 
 // nameOf folds an org into the name its ledger file is keyed by.
 //
-// IT LIVES HERE BECAUSE THIS FILE IS THE DOOR. Every namespace in the tree comes
+// IT LIVES HERE BECAUSE THIS FILE IS THE ONE WAY IN. Every namespace in the tree comes
 // from one of two places — cloud's OrgNamespace, and this file, which is the
 // second only because cloud imports this package and so the arrow cannot point
 // back (TestOnlyOrgnsBuildsANamespace holds both). A third place is not a thing to

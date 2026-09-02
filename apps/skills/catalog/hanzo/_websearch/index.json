@@ -16,7 +16,7 @@
       "name": "websearch_search",
       "path": "websearch_search/SKILL.md",
       "service": "websearch",
-      "sha256": "786d6596a6fec433cc6407c72f811bbc02dad406d161b8dd66e541b9ad250f1e"
+      "sha256": "f910cc4a663d8c8251de384770e8908f0f840dabd51b80f225557b59e42524b3"
     }
   ],
   "spec_version": "8.0.0"

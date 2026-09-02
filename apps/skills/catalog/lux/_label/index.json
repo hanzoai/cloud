@@ -16,21 +16,21 @@
       "name": "label_coverage",
       "path": "label_coverage/SKILL.md",
       "service": "label",
-      "sha256": "e2e86f55d28a5bbfaa4e10238d9d39b21bb4a6b760b3cc21003b83c02d40bd51"
+      "sha256": "b775c16b9533e668e22c08f8cc122b7425b69fef55e9b686f1c3335ab95d3f30"
     },
     {
       "description": "Read label label: Read the assertions this tenant has recorded.",
       "name": "label_label",
       "path": "label_label/SKILL.md",
       "service": "label",
-      "sha256": "e0dab49ec81e9d6e3ee205aa497267529b7dc8a4287bc1aec4b0b370421447cd"
+      "sha256": "feae3ee50e2481dec758562375b8299835574cd3e0df91bc7d23523e5140ed07"
     },
     {
       "description": "Read label vocabulary: The closed vocabularies and the precedence rule that resolves a conflict.",
       "name": "label_vocabulary",
       "path": "label_vocabulary/SKILL.md",
       "service": "label",
-      "sha256": "2d5fbb6ac7ab1ce3d04614e16daf31d80207a4420098a88b615b11879a9198fc"
+      "sha256": "bec23889d47242c923ed5e73108180ef9832e8db302fad662b059de14cfe1536"
     }
   ],
   "spec_version": "8.0.0"

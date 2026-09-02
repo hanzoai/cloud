@@ -16,14 +16,14 @@
       "name": "s3_buckets",
       "path": "s3_buckets/SKILL.md",
       "service": "s3",
-      "sha256": "69a4fc2703143a21b9f11f4d1a35900ac4f7aa92e10012369e40f9c03ea9f840"
+      "sha256": "d2c1532ec7dd3d4c780c70b2b99f6e3dd73c310d8854d8e646ee5e74ab04b7c9"
     },
     {
       "description": "Read s3 health: Health reports whether this deployment can serve object storage..",
       "name": "s3_health",
       "path": "s3_health/SKILL.md",
       "service": "s3",
-      "sha256": "5fa346240d82ef226a62b889f8afebe420840b228b76a0980dc10af94793f815"
+      "sha256": "58c9574417282498880aa55feebf1070eaa7a3798b39388e1e3985e8e8b8bf6b"
     }
   ],
   "spec_version": "8.0.0"

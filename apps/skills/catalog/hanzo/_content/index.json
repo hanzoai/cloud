@@ -16,21 +16,21 @@
       "name": "content_board",
       "path": "content_board/SKILL.md",
       "service": "content",
-      "sha256": "6145880d07a1705889178189f92e09e41027b7b7cf0183056c432fc532b461af"
+      "sha256": "ebfb92fec23884396f7600f249a6d0fe62b548c794bb9a0221f4d176ce3752c8"
     },
     {
       "description": "Read content channels: Lists the distribution channels the caller's org has connected — the social integrations a publish can target..",
       "name": "content_channels",
       "path": "content_channels/SKILL.md",
       "service": "content",
-      "sha256": "c365f57062965aadafa4a8d217da53b375fe3700019fdb0b74acd224402a3f3f"
+      "sha256": "bec914fc7b0a8e2622ca4dacb59fb2623170a790ceda4e185e6262d387a4a75c"
     },
     {
       "description": "Read content lifecycle: Returns the ONE marketing-content state machine: the ordered lifecycle states, which state a fresh document starts in, which one is publicly live, and the legal successors of every state..",
       "name": "content_lifecycle",
       "path": "content_lifecycle/SKILL.md",
       "service": "content",
-      "sha256": "b8dedbbb76a7f477c6a77b14d6353029adf11f8356985e7a5b7da2735a156446"
+      "sha256": "32cf8a56c2b5e9efa1415425f1717173bd00f74f9ac302be0eee8ebe9715b368"
     }
   ],
   "spec_version": "8.0.0"

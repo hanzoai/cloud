@@ -45,7 +45,7 @@ import (
 	"github.com/hanzoai/cloud/plane"
 )
 
-// creditDoors is every address in this package that reaches commerce's card money
+// creditEndpoints is every address in this package that reaches commerce's card money
 // move, and therefore every address that MUST carry the screen. It is a closed list
 // because the structural check below reads it: an endpoint added to the binary and not
 // to this list is the bug this whole file is about, so the list is also the place the
@@ -63,7 +63,7 @@ import (
 // once that route became a typed op the second address was redundant rather than
 // necessary, and it was retired. The screen did not move — it never rode that
 // endpoint's router — and this list shrank with the surface rather than around it.
-var creditDoors = []string{
+var creditEndpoints = []string{
 	"/billing/topup/card",
 	"/billing/topup",
 	"/billing/subscribe",
@@ -73,7 +73,7 @@ var creditDoors = []string{
 // source recognisable AS the screen. Held to the real one by [screenIsAValue].
 const screenType = "screen"
 
-// TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen — the STRUCTURAL half,
+// TestCreditEndpoints_EveryEndpointOntoTheMintIsComposedWithTheScreen — the STRUCTURAL half,
 // and the one that guards the endpoints this file's behavioural tests cannot reach.
 //
 // The behavioural tests drive registrations: exposePayments is called directly, so the
@@ -125,7 +125,7 @@ const screenType = "screen"
 // — the money core with no wrap — and this names the file, the line and the endpoint.
 // Restore the old `zip.Post(app.With(screen).Group("/v1"), "/payments", o.charge)` and
 // it fails twice: once for the unscreened handler, once for the router composition.
-func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
+func TestCreditEndpoints_EveryEndpointOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 	fset := token.NewFileSet()
 	pkgs := shipped(t, fset)
 
@@ -171,11 +171,11 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 				if sel.Sel.Name != "Post" {
 					return true
 				}
-				door := doorOf(call, sel, groups)
-				if door == "" {
+				endpoint := endpointOf(call, sel, groups)
+				if endpoint == "" {
 					return true
 				}
-				held[door] = true
+				held[endpoint] = true
 				h := handlerOf(call, sel)
 				if h != nil && carries(h, values) {
 					return true
@@ -183,17 +183,17 @@ func TestCreditDoors_EveryDoorOntoTheMintIsComposedWithTheScreen(t *testing.T) {
 				t.Errorf("%s registers the credit endpoint %s with a handler the screen VALUE never "+
 					"reached — this address ends in commerce's card money move, and a screen that "+
 					"is not inside the handler is absent from every projection of it except the "+
-					"one HTTP route", fset.Position(call.Pos()), door)
+					"one HTTP route", fset.Position(call.Pos()), endpoint)
 				return true
 			})
 		}
 	}
 
-	for _, door := range creditDoors {
-		if !held[door] {
+	for _, endpoint := range creditEndpoints {
+		if !held[endpoint] {
 			t.Errorf("no registration of the credit endpoint %s was found — either it moved (and this "+
 				"list must move with it) or the check is reading nothing and would stay green "+
-				"however the endpoint is wired", door)
+				"however the endpoint is wired", endpoint)
 		}
 	}
 }
@@ -231,13 +231,13 @@ var mints = map[string]string{
 		"funds another organisation through and the one the pre-charge refusal names",
 }
 
-// TestCreditDoors_EveryMintIntoTheSpendableLedgerIsAccountedFor — the same structural
+// TestCreditEndpoints_EveryMintIntoTheSpendableLedgerIsAccountedFor — the same structural
 // argument as the endpoint check, one level down.
 //
 // The endpoint check asks whether every ADDRESS onto the card core is screened. This asks
 // what can put money in the ledger AT ALL, because the two questions have different
 // answers: a mint reached from a webhook, a job or a second settlement path is not an
-// endpoint and would not appear on [creditDoors] at all.
+// endpoint and would not appear on [creditEndpoints] at all.
 //
 // It is a LIST WITH REASONS rather than a count, so the failure tells the next author
 // what the check is for: either the new mint charges nothing first (say why, add it) or
@@ -246,7 +246,7 @@ var mints = map[string]string{
 // Mutation proof: delete any entry from [mints] and the check names the function and the
 // line; add a fourth `fin.Deposit` anywhere in the package and it fails until the reason
 // is written down.
-func TestCreditDoors_EveryMintIntoTheSpendableLedgerIsAccountedFor(t *testing.T) {
+func TestCreditEndpoints_EveryMintIntoTheSpendableLedgerIsAccountedFor(t *testing.T) {
 	fset := token.NewFileSet()
 	found := map[string]string{}
 	for _, pkg := range shipped(t, fset) {
@@ -379,12 +379,12 @@ func handlerOf(call *ast.CallExpr, sel *ast.SelectorExpr) ast.Expr {
 	return call.Args[len(call.Args)-1]
 }
 
-// doorOf returns the credit endpoint a registration addresses, or "" for a route that is
+// endpointOf returns the credit endpoint a registration addresses, or "" for a route that is
 // not one. The address is the ROUTER'S PREFIX joined with the leaf, which is how zip
 // composes it; a path assembled from anything but literals is one this check cannot vouch
 // for, and it reports nothing rather than pretending otherwise (the found-set assertion is
 // what turns such a gap into a failure instead of a silence).
-func doorOf(call *ast.CallExpr, sel *ast.SelectorExpr, groups map[string]router) string {
+func endpointOf(call *ast.CallExpr, sel *ast.SelectorExpr, groups map[string]router) string {
 	leaf := leafOf(call.Args)
 	if leaf == "" {
 		return ""
@@ -397,9 +397,9 @@ func doorOf(call *ast.CallExpr, sel *ast.SelectorExpr, groups map[string]router)
 		}
 	}
 	got := prefix + leaf
-	for _, door := range creditDoors {
-		if got == door {
-			return door
+	for _, endpoint := range creditEndpoints {
+		if got == endpoint {
+			return endpoint
 		}
 	}
 	return ""
@@ -517,13 +517,13 @@ func groupCall(e ast.Expr) (router, bool) {
 	return router{prefix: strings.Trim(lit.Value, `"`)}, true
 }
 
-// topupDoor is the ONE endpoint onto the mint. A second address onto the same money
+// topupEndpoint is the ONE endpoint onto the mint. A second address onto the same money
 // move used to sit at /v1/commerce/payments; it was retired, and the tests that
 // drove it went with it. What did NOT go is the structural guard above: it walks the
-// package and refuses any NEW door onto the mint that is not composed with the
+// package and refuses any NEW endpoint onto the mint that is not composed with the
 // screen, which is the check that made one endpoint the whole story rather than the
 // one somebody happened to remember.
-const topupDoor = "/v1/billing/topup/token"
+const topupEndpoint = "/v1/billing/topup/token"
 
 // isolate gives one test its own risk plane: a socket directory with no listener in it
 // (so "not deployed" is the state of the world unless the test installs a scorer) and a
@@ -554,7 +554,7 @@ func payApp(t *testing.T) *zip.App {
 	return app
 }
 
-func browserDoor(app *zip.App, s screen, ref func() string) {
+func browserEndpoint(app *zip.App, s screen, ref func() string) {
 	s = stating(s, settlement{cents: gateCents, currency: "usd"})
 	app.Post("/v1/billing/topup/token", s.route(func(c *zip.Ctx) error {
 		c.Fiber().Response().Header.Set("Content-Type", "application/json")

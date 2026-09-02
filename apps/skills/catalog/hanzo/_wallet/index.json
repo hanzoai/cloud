@@ -16,14 +16,14 @@
       "name": "wallet_accounts",
       "path": "wallet_accounts/SKILL.md",
       "service": "wallet",
-      "sha256": "16b39b9e273032baa6ac0079ae4624824017931c7adcf0edbb38bc2b9442c4f0"
+      "sha256": "14b7809422085c4ea5ac4427c21467537e487a59aa98f18617a9d45740cac93b"
     },
     {
       "description": "Read wallet wallet: Returns the caller org's wallets, newest first, optionally NARROWED within the org by project, agent or account., Returns one of the caller org's wallets: its scope, custody kind, tier, chain and on-chain address..",
       "name": "wallet_wallet",
       "path": "wallet_wallet/SKILL.md",
       "service": "wallet",
-      "sha256": "97872774e0b9ca2a9a43fbf62c569269bcbc9340e261662ad3447804c1df9676"
+      "sha256": "b7ef6fc1ee7e1fedbfa25c65b51ac6da42540a15f3d93c6015de1404aed5a034"
     }
   ],
   "spec_version": "8.0.0"

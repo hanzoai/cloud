@@ -6,7 +6,7 @@ package fleet_test
 //
 // The property is easy to assert falsely: point At at the app's real socket and
 // the test passes whether or not the short-circuit exists, because the socket
-// path reaches the same door. So At here names an address nothing is listening
+// path reaches the same endpoint. So At here names an address nothing is listening
 // on. If ask() dials, it fails; the answer can only have come from memory.
 //
 // It is the same shape apps/commerce proves the plane's zip.Here with, for the
@@ -81,7 +81,7 @@ func TestACoResidentSubsystemIsReachedWithoutDialing(t *testing.T) {
 		t.Fatalf("a co-resident subsystem was dialed instead of called: %v", ans.Err)
 	}
 	if len(ans.Body) == 0 {
-		t.Fatal("no answer from the in-memory door")
+		t.Fatal("no answer from the in-memory endpoint")
 	}
 
 	var frame struct {
@@ -91,7 +91,7 @@ func TestACoResidentSubsystemIsReachedWithoutDialing(t *testing.T) {
 		t.Fatalf("the in-memory answer is not a frame: %v", err)
 	}
 	if len(frame.Result) == 0 {
-		t.Fatalf("the door answered no result: %s", ans.Body)
+		t.Fatalf("the endpoint answered no result: %s", ans.Body)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestAPeerThisProcessDoesNotServeIsStillDialed(t *testing.T) {
 	}
 }
 
-func TestTheStatedCallerReachesTheInMemoryDoor(t *testing.T) {
+func TestTheStatedCallerReachesTheInMemoryEndpoint(t *testing.T) {
 	// Over the socket a child reads identity off the request's headers. In memory
 	// there is no request, so the caller is STATED — and a stated caller is what
 	// CallerOf answers when nothing else is there. If this regressed, a
@@ -123,7 +123,7 @@ func TestTheStatedCallerReachesTheInMemoryDoor(t *testing.T) {
 	ctx := zip.WithCaller(context.Background(), zip.Caller{Org: "acme", User: "u-1"})
 	ans := fleet.Ask(ctx, deadEnd(t), []string{"probe"}, req)[0]
 	if ans.Err != nil {
-		t.Fatalf("stated caller did not reach the door: %v", ans.Err)
+		t.Fatalf("stated caller did not reach the endpoint: %v", ans.Err)
 	}
 	if got := zip.CallerOf(ctx).Org; got != "acme" {
 		t.Fatalf("the caller this hop states is %q, not acme", got)

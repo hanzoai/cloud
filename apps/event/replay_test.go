@@ -318,8 +318,8 @@ func TestReplayRefusesTheAnonymousCaller(t *testing.T) {
 
 // TestReplayFailsClosedOnUnresolvableCredential: a caller that PRESENTED a
 // credential which does not resolve is 403 on every carrier — never downgraded, and
-// never produced. This is the same fail-closed rule doors_test.go holds over the
-// doors table, asserted here because this route is not in that table.
+// never produced. This is the same fail-closed rule endpoints_test.go holds over the
+// endpoints table, asserted here because this route is not in that table.
 func TestReplayFailsClosedOnUnresolvableCredential(t *testing.T) {
 	got := fakeProducer(t, nil)
 	app := mountApp(t)

@@ -55,7 +55,7 @@ func TestObsShapedBodyIsRefusedNotAbsorbed(t *testing.T) {
 	}
 }
 
-func TestTeamWireRidesTheCanonicalDoor(t *testing.T) {
+func TestTeamWireRidesTheCanonicalEndpoint(t *testing.T) {
 	team := `[{"event":"navigation","properties":{"path":"/x"},"timestamp":1753900000000,"distinct_id":"acct-1"}]`
 	evs, err := decodeIngest([]byte(team))
 	if err != nil || len(evs) != 1 {
@@ -72,13 +72,13 @@ func TestTeamWireRidesTheCanonicalDoor(t *testing.T) {
 	}
 }
 
-// TestPostHogWireRidesTheCanonicalDoor pins the other half of retiring
+// TestPostHogWireRidesTheCanonicalEndpoint pins the other half of retiring
 // /v1/event/insights/e: the endpoint was removed, but until the canonical decode
 // learned this wire's shape, a PostHog body landing on /v1/event decoded with an
 // EMPTY person and an unnamed kind — which admitPublic drops whole, so the SDK
 // saw a 200 that stored nothing. insights.hanzo.ai's /e, /batch and /capture all
 // rewrite onto /v1/event, so this is the live path for every PostHog SDK.
-func TestPostHogWireRidesTheCanonicalDoor(t *testing.T) {
+func TestPostHogWireRidesTheCanonicalEndpoint(t *testing.T) {
 	// A bare PostHog event: snake_case person, string timestamp.
 	evs, err := decodeIngest([]byte(`{"event":"$pageview","distinct_id":"ph-1","timestamp":"2026-01-01T00:00:00Z","properties":{"$current_url":"/x"}}`))
 	if err != nil || len(evs) != 1 {

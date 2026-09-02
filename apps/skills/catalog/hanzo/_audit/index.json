@@ -16,7 +16,7 @@
       "name": "audit_audit",
       "path": "audit_audit/SKILL.md",
       "service": "audit",
-      "sha256": "0298a967ecb010ad2e0470d9f37e89be15dc3ad0276d6160b4f0e00f8af814b4"
+      "sha256": "06a2c5ee56433d1c1be75cae3487085a721bedc74cde19daec64258fef4a52cf"
     }
   ],
   "spec_version": "8.0.0"

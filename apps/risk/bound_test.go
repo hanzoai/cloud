@@ -639,14 +639,14 @@ func shelfBytes(t *testing.T, sh *shelf) int {
 	return pages * size
 }
 
-// TestField_IsRefusedAtTheDoorAndNotTruncated: the bound is applied where an
+// TestField_IsRefusedAtTheEndpointAndNotTruncated: the bound is applied where an
 // observation is MINTED, so the live wire, the replay and the fold all get it —
 // and it REFUSES, because two subjects differing only past a truncation would
 // silently become one set of aggregates.
 //
 // Mutation proof: delete the length loop in observe and the 413s below become
 // 200s.
-func TestField_IsRefusedAtTheDoorAndNotTruncated(t *testing.T) {
+func TestField_IsRefusedAtTheEndpointAndNotTruncated(t *testing.T) {
 	probe.reset(true)
 	app := mountBilled(t, &ledger{available: 1_000_000})
 	over := strings.Repeat("z", maxField+1)

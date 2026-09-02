@@ -68,9 +68,9 @@ func TestLiveEverySignalLandsItsOwnRow(t *testing.T) {
 	   "span":{"trace":"trace-abc","id":"span-2","parent":"span-1",
 	           "kind":"server","duration":12000000,"status":"OK"}}
 	]}`
-	code, resp := livePost(t, app, canonDoor, "u-1", org, body)
+	code, resp := livePost(t, app, canonEndpoint, "u-1", org, body)
 	if code != http.StatusOK {
-		t.Fatalf("POST %s = %d (%s)", canonDoor, code, resp)
+		t.Fatalf("POST %s = %d (%s)", canonEndpoint, code, resp)
 	}
 	t.Logf("ingest receipt: %s", strings.TrimSpace(string(resp)))
 

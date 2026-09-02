@@ -303,7 +303,7 @@ func TestASummaryIsOneSentenceAndFits(t *testing.T) {
 // reason [Corpus] is: two readings of one rule is one reading too many.
 func Phrase(op string) string { return phrase(op) }
 
-// gathered is the corpus as [Door.gather] would hold it: refused operations
+// gathered is the corpus as [MCP.gather] would hold it: refused operations
 // dropped, one owner per name, sorted by [rank] then name. Everything this file
 // asserts is asserted against THAT set, because it is the set the MCP server
 // names.

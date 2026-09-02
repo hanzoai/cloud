@@ -16,28 +16,28 @@
       "name": "domain_availability",
       "path": "domain_availability/SKILL.md",
       "service": "domain",
-      "sha256": "9ca76ffc1af5782c7998309d7a9ca5449d2b8f5b96963020d27f02ade24e200f"
+      "sha256": "733d33a23f4def64952cedcb1162e793cf135260298ca4bd9bd705d4c42c5858"
     },
     {
       "description": "Read domain domains: Is the domains your org has bought here, newest registration first, each carrying the name, when it was registered, when it expires, what the org paid, the registrar order id and the nameservers it points at..",
       "name": "domain_domains",
       "path": "domain_domains/SKILL.md",
       "service": "domain",
-      "sha256": "65826635e58271e42df8c4622a8c04b30a58cfdd103be37791feb438a0c5cc1c"
+      "sha256": "5ccac62335c79e4647c8be291da158e25d51db0384f09097e2e12d218a03b106"
     },
     {
       "description": "Read domain health: Reports registrar reachability honestly: ok only when the wholesale credentials are present AND name.com accepted them on a live call made while you waited..",
       "name": "domain_health",
       "path": "domain_health/SKILL.md",
       "service": "domain",
-      "sha256": "f23682a50cc900c59f3189411a16a0b8ded970c292eb4cac91d7a024d0cce799"
+      "sha256": "c8efa65dd291d196fb4e2175c0935170dc39f3f11a9a6be9d35d7411dc476fe8"
     },
     {
       "description": "Read domain search: Finds names built from the keyword q, plus the registrar's alternate-TLD suggestions, and answers a quote for each: the name, whether it is purchasable, whether it is premium, the first-term and renewal price in cents, and the TLD..",
       "name": "domain_search",
       "path": "domain_search/SKILL.md",
       "service": "domain",
-      "sha256": "9fd72b8dc336b63b420aab00eca57dc43af493d98af41d9794eb2d5d5b2cf96b"
+      "sha256": "9f3f9ceecea2f8af569770b35425b78e55283b92cadd28f188e778902cf0c771"
     }
   ],
   "spec_version": "8.0.0"

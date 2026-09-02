@@ -265,7 +265,7 @@ func TestNoWireFieldCanNameAnOrg(t *testing.T) {
 // (`bare` is empty), which is the second half of the derivation: even ours only
 // gets that boundary where the topology holds.
 func TestAskingForTheNodesKernelOverHTTPDoesNotGetIt(t *testing.T) {
-	app := door(t)
+	app := endpoint(t)
 	for _, c := range []struct {
 		name, org, body string
 		want            int
@@ -298,7 +298,7 @@ func TestAskingForTheNodesKernelOverHTTPDoesNotGetIt(t *testing.T) {
 // the whole reason runtimeFor reads m.Org: the value it reads has already been
 // through here.
 func TestClaimingTheReservedOrgWithoutAPrincipalIsRefused(t *testing.T) {
-	app := door(t)
+	app := endpoint(t)
 	for _, c := range []struct {
 		name, org, user string
 		want            int
@@ -503,9 +503,9 @@ func away(t *testing.T) {
 	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "none"))
 }
 
-// door mounts the HTTP surface with no cluster behind it, which is all these
+// endpoint mounts the HTTP surface with no cluster behind it, which is all these
 // need: every case is decided before the first call to one.
-func door(t *testing.T) *zip.App {
+func endpoint(t *testing.T) *zip.App {
 	t.Helper()
 	away(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})

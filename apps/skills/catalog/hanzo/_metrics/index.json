@@ -16,28 +16,28 @@
       "name": "metrics_health",
       "path": "metrics_health/SKILL.md",
       "service": "metrics",
-      "sha256": "a0691928ff9097c69fea0968778c4ffea10194dabbbabf976168a6fb1a55e6b8"
+      "sha256": "f59c1b6488b6269267735c84a54708c08966ce63b2166f0a104c97d3844be603"
     },
     {
       "description": "Read metrics logs: How many log records this deployment holds for your org, Search your org's logs by label, time and substring.",
       "name": "metrics_logs",
       "path": "metrics_logs/SKILL.md",
       "service": "metrics",
-      "sha256": "b43616530138cb9ed5fd4096577414499f5afaadba808f619b42d56763fe04a4"
+      "sha256": "9935b61954ab49103963d72ad62088bb3b28ad2be0fbab2205199779d885e260"
     },
     {
       "description": "Read metrics query: Read your org's series back over a time range.",
       "name": "metrics_query",
       "path": "metrics_query/SKILL.md",
       "service": "metrics",
-      "sha256": "112d0ddf126409b9a4487317b9cdc1697c9d6325505e88b1e8288ce027c01066"
+      "sha256": "7c9f9e75527e81425c40bda98760939f607abf54268bf6e9ef290ac816539ad2"
     },
     {
       "description": "Read metrics traces: How many spans this deployment holds for your org, Recent spans for your org over a time range, Every span of one trace — the waterfall.",
       "name": "metrics_traces",
       "path": "metrics_traces/SKILL.md",
       "service": "metrics",
-      "sha256": "e16d1006390f6585bfdd561cce54220ca61c9803fee8aea88fb1fa7d51a1808e"
+      "sha256": "315abf0cd527c9a77758cfcf54ea73414a418c9570d0524d7429d67dce9ef070"
     }
   ],
   "spec_version": "8.0.0"

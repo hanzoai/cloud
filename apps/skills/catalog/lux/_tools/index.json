@@ -16,42 +16,42 @@
       "name": "tools_activation",
       "path": "tools_activation/SKILL.md",
       "service": "tools",
-      "sha256": "57fb724d827efcff8c6e98ff3671fdc769dca00eb0a0df6dc9d171a7ff025648"
+      "sha256": "400673fc7bea82cdea359d3d7ebeff5b4038c7db7de29fb41dbde781ae31b553"
     },
     {
       "description": "Read tools catalog: Lists the MCP servers the public registries publish, as we hold them: our canonical copy of registry.modelcontextprotocol.io, plus what we decided about each entry., Returns one catalog entry in full: the publisher's description, its repository and site, every",
       "name": "tools_catalog",
       "path": "tools_catalog/SKILL.md",
       "service": "tools",
-      "sha256": "133ff7dc9f2acb4ad916699df3eb1a227a0004e17fa3c05f5b206061642e9158"
+      "sha256": "b5f604585f424f5b6c2a7635752b5790e541dd80f452f49d18550411d20e838b"
     },
     {
       "description": "Read tools mcp: Lists the external MCP servers the caller's org has registered..",
       "name": "tools_mcp",
       "path": "tools_mcp/SKILL.md",
       "service": "tools",
-      "sha256": "a652f58b2675b31a9b62914d824236c2dc899f11adc9b9e2622d50808a22e87e"
+      "sha256": "5dd41e1a075339a8b28f4e5e3a9953f1ca3e9becd90bbe65d8a576f3fcbea382"
     },
     {
       "description": "Read tools plugins: Reports what this deployment actually mounted: every subsystem the composition root declared and whether it is switched on., Lists the plugins the caller's org BUILT, newest first, each with the TypeScript as authored..",
       "name": "tools_plugins",
       "path": "tools_plugins/SKILL.md",
       "service": "tools",
-      "sha256": "682e2dfb2aece404cdc9a885d4f01af7aee5a126295b0e4ded88432b1d5b2370"
+      "sha256": "0c2929150eed79db38e3767cb51cc0bb47443b9ce93f0b3ee73d70e15192ce51"
     },
     {
       "description": "Read tools skills: Lists the skills the caller's org can reach — the brand's embedded catalogue plus the org's own authored ones — with each one's activation flag., Lists the caller org's OWN skills with their SKILL.md bodies..",
       "name": "tools_skills",
       "path": "tools_skills/SKILL.md",
       "service": "tools",
-      "sha256": "9ff890c4785f4611be4d94884ae541c57938777f2db03f2e2150fecc7769231b"
+      "sha256": "7abfd84340ae5c6df401210e35308fe6679a5c3786dcd69c05d1419ceebd3869"
     },
     {
       "description": "Read tools tools: Lists every tool the caller's org and project can reach, from every source, each flagged with whether it is activated..",
       "name": "tools_tools",
       "path": "tools_tools/SKILL.md",
       "service": "tools",
-      "sha256": "14bdacba3db328d76cb975dc505f1819f7ab2e82ce49f4e09df5a9bf512e230c"
+      "sha256": "2addbce6f9c1658d6f0ec8103d658840b1755c8bca93b7e7eab2ba426209a4a9"
     }
   ],
   "spec_version": "8.0.0"

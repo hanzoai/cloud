@@ -59,7 +59,7 @@ const maxSBOMBytes = 64 << 20 // 64 MiB
 // tag or referrer in the same repository — so its contents are whatever the party
 // holding that repository put there. Pulling from a repository we do not hold would
 // therefore write one tenant's supplier into the answer every other tenant reads,
-// through a door that POST /v1/sbom keeps shut behind SuperAdmin. It also decides
+// through an endpoint that POST /v1/sbom keeps shut behind SuperAdmin. It also decides
 // which hosts this pod will open a connection to, which the caller otherwise names.
 //
 // A ref outside this list is not pullable, and pull-on-miss ends in the same honest
@@ -99,7 +99,7 @@ type pulled struct {
 // pullSBOM is the production entry, and it decides WHERE before it fetches: the
 // reference is resolved to the repository a connection would go to, that repository
 // must be one of ours (see registries), and only then does the network open. It is
-// the ONE path pullAndStore takes, so both doors into the shared store — a caller's
+// the ONE path pullAndStore takes, so both endpoints into the shared store — a caller's
 // miss and a deploy's prefetch — pass the same decision.
 //
 // ref MUST be a full image reference with a repository (a bare `sha256:…` digest has

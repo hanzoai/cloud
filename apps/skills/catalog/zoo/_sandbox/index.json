@@ -16,28 +16,28 @@
       "name": "sandbox_fs",
       "path": "sandbox_fs/SKILL.md",
       "service": "sandbox",
-      "sha256": "62ff51aaac4963eb88d04fb834ee15b2a9bbc81e657726f4877c3715df84e460"
+      "sha256": "449a509ee11e5b06a69cf42755b16f7034aee365f447429c957253d0a9a95c87"
     },
     {
       "description": "Read sandbox sandbox: Lists the caller org's sandboxes, newest first., Returns one sandbox: its class, project, image, the runtime it was given, its status and when its lease ends..",
       "name": "sandbox_sandbox",
       "path": "sandbox_sandbox/SKILL.md",
       "service": "sandbox",
-      "sha256": "a3a045315d87594220b2d1fab947f5537e2fff26d6bb43f62c94ac14bb82bc26"
+      "sha256": "803ecd4fff66bfe39427896bd05ed1efec9af462f234aaa6da3792e6fa2dd4f9"
     },
     {
       "description": "Read sandbox screen: The screen, as a page, The screen, as a socket.",
       "name": "sandbox_screen",
       "path": "sandbox_screen/SKILL.md",
       "service": "sandbox",
-      "sha256": "4c652d7084d35012a716319c197d2e2a5a52d2aa92011e9c8c4621509f84ad59"
+      "sha256": "780f0c48a544cb82c487e65075b18785e4c1938c74d300947c8fabe9a137797b"
     },
     {
       "description": "Read sandbox terminal: The terminal, as a page, The terminal, as a socket.",
       "name": "sandbox_terminal",
       "path": "sandbox_terminal/SKILL.md",
       "service": "sandbox",
-      "sha256": "7a2276b365a722791b85d3b9af2ce239358ab0bb7d8164809df8b79c59ed793e"
+      "sha256": "be536e8581595c05f5a3fa7c8584ecee53184020a7378b429dcb5ef1322d69c4"
     }
   ],
   "spec_version": "8.0.0"

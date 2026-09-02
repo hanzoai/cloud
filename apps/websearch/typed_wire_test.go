@@ -52,7 +52,7 @@ func searched(t *testing.T, app *zip.App, body string, hdr map[string]string) (i
 // reads both, and a request carrying neither is anonymous.
 var signedIn = map[string]string{"X-Org-Id": "acme", "X-User-Id": "u-acme"}
 
-// TestWebSearchIsTheSameSearchAsTheCompatDoor is the claim the native endpoint
+// TestWebSearchIsTheSameSearchAsTheCompatEndpoint is the claim the native endpoint
 // rests on: it is not a second search stack, it is the SAME metaSearch reached at
 // an address a typed op can live at.
 //
@@ -62,7 +62,7 @@ var signedIn = map[string]string{"X-Org-Id": "acme", "X-User-Id": "u-acme"}
 // search: this subsystem served the fleet's only path to the live internet and
 // projected no tool at all, so an agent asked for today's weather had nothing to
 // call. The native endpoint is that capability at an address the registry can hold.
-func TestWebSearchIsTheSameSearchAsTheCompatDoor(t *testing.T) {
+func TestWebSearchIsTheSameSearchAsTheCompatEndpoint(t *testing.T) {
 	mockBing(t, bingFixture)
 	t.Setenv("WEBSEARCH_API_KEY", "k")
 	app := mounted(t)
@@ -182,7 +182,7 @@ func TestWebSearchProjectsAsATool(t *testing.T) {
 //
 // Neither costs the plane its capability: `POST /v1/websearch` is the SAME
 // metaSearch at an address the registry can hold, and it is typed, described and
-// projected — which is what TestWebSearchIsTheSameSearchAsTheCompatDoor proves.
+// projected — which is what TestWebSearchIsTheSameSearchAsTheCompatEndpoint proves.
 var untypedByDesign = map[string]string{
 	"/v1/websearch/search": "the SearXNG-compatible endpoint — one All registration answering every method, " +
 		"whose request shape and answer belong to SearXNG's contract rather than to us.",

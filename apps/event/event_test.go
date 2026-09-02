@@ -214,7 +214,7 @@ func TestEvent_NoBrandHostFallback(t *testing.T) {
 	app := mountApp(t)
 	pageview := `{"batch":[{"type":"pageview"}]}`
 	commerce := `{"batch":[{"type":"event","event":"order_completed","revenue":999}]}`
-	path := canonDoor
+	path := canonEndpoint
 	for _, host := range []string{"hanzo.ai", "zoo.ngo", "evil.example.com"} {
 		code, body := doHost(t, app, path, "", "", host, pageview)
 		refusedAnon(t, "anonymous pageview "+path+" on host "+host, code, body)

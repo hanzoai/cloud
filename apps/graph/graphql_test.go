@@ -27,11 +27,11 @@ func ask(t *testing.T, app *zip.App, q string) map[string]any {
 	return env
 }
 
-// TestTheDoorTraversesInOneRequest is the whole reason this endpoint exists. Over
+// TestTheEndpointTraversesInOneRequest is the whole reason this endpoint exists. Over
 // REST, "the things this one points at, and what each of THOSE points at" is a
 // request per hop with the intermediate keys held by the caller. Here it is one
 // query, and the nesting is the answer's shape.
-func TestTheDoorTraversesInOneRequest(t *testing.T) {
+func TestTheEndpointTraversesInOneRequest(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/order/1", "placedBy", "acme/person/ada", true)
 	assertFact(t, app, "", "acme/person/ada", "worksFor", "acme/org/hanzo", true)
@@ -64,10 +64,10 @@ func TestTheDoorTraversesInOneRequest(t *testing.T) {
 	}
 }
 
-// TestTheDoorReadsTheSameGraphTheOpsDo pins that this is a second ENDPOINT and not
+// TestTheEndpointReadsTheSameGraphTheOpsDo pins that this is a second ENDPOINT and not
 // a second store: an assertion filed through REST is visible here, with the
 // server-minted fields the write path stamps.
-func TestTheDoorReadsTheSameGraphTheOpsDo(t *testing.T) {
+func TestTheEndpointReadsTheSameGraphTheOpsDo(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/thing/1", "colour", "blue", false)
 
@@ -92,10 +92,10 @@ func TestTheDoorReadsTheSameGraphTheOpsDo(t *testing.T) {
 	}
 }
 
-// TestTheDoorIsScopedToTheCallersOrg is the tenancy check, and it is the reason
+// TestTheEndpointIsScopedToTheCallersOrg is the tenancy check, and it is the reason
 // every resolver calls an op rather than the store: the org is read from the
 // validated principal on the request context, so a second endpoint cannot widen it.
-func TestTheDoorIsScopedToTheCallersOrg(t *testing.T) {
+func TestTheEndpointIsScopedToTheCallersOrg(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/secret/1", "value", "acme-only", false)
 

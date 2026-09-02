@@ -16,14 +16,14 @@
       "name": "validator_challenge",
       "path": "validator_challenge/SKILL.md",
       "service": "validator",
-      "sha256": "6c011a22a9901312ba4d495b3a2505de854885d8c5ab0b4c01ceb14dc22e74aa"
+      "sha256": "d714a70c145cfae1985064f0216ed0db6a28a07d812ed4efcb539038fe27aa2e"
     },
     {
       "description": "Read validator validator: Returns the validator slots the caller's org has claimed., Returns one claimed validator slot, scoped to the caller's org..",
       "name": "validator_validator",
       "path": "validator_validator/SKILL.md",
       "service": "validator",
-      "sha256": "379f1e5e07b44a5dc4bdca8a56ac1fc4c7a8d1de053734366260bce634b09a79"
+      "sha256": "e7da27b350e5d1f43c2b62f474dfd3b253daf90bcb08d8f873a0391073bf5934"
     }
   ],
   "spec_version": "8.0.0"

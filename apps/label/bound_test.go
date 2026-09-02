@@ -37,14 +37,14 @@ import (
 	"github.com/hanzoai/cloud/openapi"
 )
 
-// doors is every In type this plane accepts — the closed set its router registers.
+// endpoints is every In type this plane accepts — the closed set its router registers.
 //
 // It is written down because reflect cannot enumerate a generic registry's type
 // parameters, and a hand-written list is exactly the thing that goes stale. So it
 // is PINNED against the registered operation count below: an op added without its
 // In type added here fails, which is the only property that makes the list worth
 // having.
-var doors = []any{
+var endpoints = []any{
 	riskLabelIn{},
 	riskLabelsIn{},
 	riskResolveIn{},
@@ -131,7 +131,7 @@ func TestEveryCallerSizedFieldDeclaresACeiling(t *testing.T) {
 			seen[path] = true
 		}
 	}
-	for _, d := range doors {
+	for _, d := range endpoints {
 		rt := reflect.TypeOf(d)
 		walk(rt, rt.Name())
 	}
@@ -161,14 +161,14 @@ func TestEveryCallerSizedFieldDeclaresACeiling(t *testing.T) {
 		t.Errorf("STALE: %q is declared in `ceilings` and is not a field of any endpoint. A ceiling for "+
 			"a field that no longer exists inflates the count and hides the next real gap.", f)
 	}
-	t.Logf("%d caller-sized fields across %d endpoints, every one bounded", len(seen), len(doors))
+	t.Logf("%d caller-sized fields across %d endpoints, every one bounded", len(seen), len(endpoints))
 }
 
-// TestEveryDoorIsWalked pins the endpoint list against the registry, because a
+// TestEveryEndpointIsWalked pins the endpoint list against the registry, because a
 // list nothing checks is a list that goes stale. An op added without its In type
-// added to `doors` publishes an endpoint the walk above never sees, which is
+// added to `endpoints` publishes an endpoint the walk above never sees, which is
 // precisely how an unbounded field arrives unnoticed.
-func TestEveryDoorIsWalked(t *testing.T) {
+func TestEveryEndpointIsWalked(t *testing.T) {
 	app, _ := wireApp(t, "")
 	doc, err := openapi.FleetSpec(app)
 	if err != nil {
@@ -181,9 +181,9 @@ func TestEveryDoorIsWalked(t *testing.T) {
 	if ops == 0 {
 		t.Fatal("the projection found no operation — this gate proved nothing")
 	}
-	if ops != len(doors) {
-		t.Fatalf("the router registers %d operations and `doors` names %d In types; "+
-			"every op has exactly one In, so add the new one to `doors` (and its fields to `ceilings`)", ops, len(doors))
+	if ops != len(endpoints) {
+		t.Fatalf("the router registers %d operations and `endpoints` names %d In types; "+
+			"every op has exactly one In, so add the new one to `endpoints` (and its fields to `ceilings`)", ops, len(endpoints))
 	}
 }
 

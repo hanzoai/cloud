@@ -16,49 +16,49 @@
       "name": "dataroom_analytics",
       "path": "dataroom_analytics/SKILL.md",
       "service": "dataroom",
-      "sha256": "cb593e8293d859648f09d67e250955453995c599a79375acf21dc014c901dbea"
+      "sha256": "8dd54f74664f2c6ba63693b591797a6531250c24dc07bb7eecf7067fdd56b44e"
     },
     {
       "description": "Read dataroom datarooms: Returns every data room in the caller org's own store, newest first, with its short public id, name, description and timestamps., Reads one of the caller org's data rooms together with every document in it, each carrying its membership id and order index.",
       "name": "dataroom_datarooms",
       "path": "dataroom_datarooms/SKILL.md",
       "service": "dataroom",
-      "sha256": "5730f4255f6ba40f221561918283873ae048ee4cd95da9f0b48ee9458dd27a18"
+      "sha256": "8f7b58e21176607fd71b7f641d3141ae5b1b4cdf1254a6935b707c7d051d5bbb"
     },
     {
       "description": "Read dataroom documents: Returns every document in the caller org's own store, newest first — name, opaque storage key, content type, page count, size and timestamps., Reads one of the caller org's documents — its name, opaque storage key, content type, page count, size and times",
       "name": "dataroom_documents",
       "path": "dataroom_documents/SKILL.md",
       "service": "dataroom",
-      "sha256": "1798800bef98a652eb5ed886278b7c65a46c895e2791c0cad54e6eebf9a09f46"
+      "sha256": "9b33302b49e42069301a3e20efcb14d5a4c6ae7f6e934e7608e0bdfa8de8a468"
     },
     {
       "description": "Read dataroom health: Health reports that the data room subsystem is up..",
       "name": "dataroom_health",
       "path": "dataroom_health/SKILL.md",
       "service": "dataroom",
-      "sha256": "ed5cb2eb8ed9e0e6dc046ce22adfbbdd43af1fd721ff621ff3e4ccdacb1ce867"
+      "sha256": "53c5f2cf7d636bc025a1ba3a3f1abe717551ab010098533d47b11c0d6ce850bc"
     },
     {
       "description": "Read dataroom links: Returns every live share link in the caller org's own store, newest first, with the controls a visitor will meet: whether an address is required, whether a password is set, the allow and deny lists, whether download is permitted, and when the link expires..",
       "name": "dataroom_links",
       "path": "dataroom_links/SKILL.md",
       "service": "dataroom",
-      "sha256": "206a1aab79fc264f12d95b1a0bfab1c8287701e227439a612ebb0302d811bc8e"
+      "sha256": "4dd9843e32f000dd9927f9c20de4db9da488b129e2027779b56156eed57dd6d5"
     },
     {
       "description": "Read dataroom trust: Answers the caller org's OWN trust centre: its settings, every item it holds in both tiers, the requests waiting on it, and the grants it has made., Answers an org's public trust centre: its name, the text a party must accept to ask for a document, and every ",
       "name": "dataroom_trust",
       "path": "dataroom_trust/SKILL.md",
       "service": "dataroom",
-      "sha256": "4c4fbedae2f09e7e68667be1128bb1ab716e14e6ec7bdabd30adf2cb1eb15b13"
+      "sha256": "ba6534d6b518529fd6a9390f3d4b69b69062811357065236dba726707deeb2fc"
     },
     {
       "description": "Read dataroom view: What a share link's visitor sees before authenticating, Read a document's bytes as an authorised link visitor.",
       "name": "dataroom_view",
       "path": "dataroom_view/SKILL.md",
       "service": "dataroom",
-      "sha256": "71c6eca8d708d4b72766eafcb2c74632b0aab91fa244a6cd143d53150b556ff9"
+      "sha256": "a5036d687573dc5eeb800fe8b8296785d407bea85a0d224d8143ce8c8af7dcbb"
     }
   ],
   "spec_version": "8.0.0"

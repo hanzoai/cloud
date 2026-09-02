@@ -16,42 +16,42 @@
       "name": "benchmark_catalog",
       "path": "benchmark_catalog/SKILL.md",
       "service": "benchmark",
-      "sha256": "7a7e36bda8d679b7c92c1362598d1332852085c9bcf55eca39afd27ea8a16748"
+      "sha256": "9779ed3b73bbda9fdbb16219ce5c1b81de526c770de81b3912151f16e5574954"
     },
     {
       "description": "Read benchmark claims: Lists the effective published claims: what the leaderboard will use for each (benchmark, model) after the seed, the import and any stored correction are layered..",
       "name": "benchmark_claims",
       "path": "benchmark_claims/SKILL.md",
       "service": "benchmark",
-      "sha256": "6175934209e02d51515585ea4a0dcd61ff6476728fd54da2a99f5fdd760eee21"
+      "sha256": "66e03eed00055de4e44bdfdfedacaf3bb13bc7c71e0fd2a4da1c70c5a3a1f00d"
     },
     {
       "description": "Read benchmark compare: Is the ONLY valid arm-vs-arm test: it pairs the two models on the items BOTH completed, and answers rescue and damage counts with an exact-McNemar p..",
       "name": "benchmark_compare",
       "path": "benchmark_compare/SKILL.md",
       "service": "benchmark",
-      "sha256": "47ceec7bf828d2a0ce425c385f43b27218b8f37cf4b1461654968b9d57043374"
+      "sha256": "12315aab116cb05c6d9046242c52d7b664f217293d9b4c81eea24418ee78c909"
     },
     {
       "description": "Read benchmark history: Returns each model's measured score per run over time, oldest first, with the change between runs..",
       "name": "benchmark_history",
       "path": "benchmark_history/SKILL.md",
       "service": "benchmark",
-      "sha256": "91d92e93cfeeec0308fd1de002652158bcbc22eb3d8c87c7ee5b59681e204fc7"
+      "sha256": "c8ef3e9e8b1bf9929b5b6a11f3d2bc8d8b77493a7b279feb8285ca763dfc1e4e"
     },
     {
       "description": "Read benchmark leaderboard: Answers one row per model for the benchmark named — what our own harness measured, beside what the vendor claims, and the gap between them..",
       "name": "benchmark_leaderboard",
       "path": "benchmark_leaderboard/SKILL.md",
       "service": "benchmark",
-      "sha256": "0786116e0fb6d115ee9c00c1f6c3a0d90e848d4cd2b55cd06983c9fa20d485b0"
+      "sha256": "329bd50bdd0deab514e22002cf3daf1c81a8d8215e168ef073ca8db15e4765e0"
     },
     {
       "description": "Read benchmark presets: Are the router blends available to compose from — a named set of model arms, the rank they escalate through and the panel width that bounds fan-out — each served by the model layer as enso-<name>..",
       "name": "benchmark_presets",
       "path": "benchmark_presets/SKILL.md",
       "service": "benchmark",
-      "sha256": "4e03e82d7a84b53fffa2d9297aa82d760a46234d50ec8c912996d64189c812bb"
+      "sha256": "0057530610e46dd745daa223a196cbc883251db8764963d9d0e39129a811586e"
     }
   ],
   "spec_version": "8.0.0"

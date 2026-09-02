@@ -187,7 +187,7 @@ func TestServiceCallerGetsTheFreeTier(t *testing.T) {
 // what is being asserted is the wiring between them: the endpoint answers off the
 // zip Ctx, whose Context IS the one cloud.Bridge parked the caller in, and that is
 // the whole of why the meter downstream can find a payer.
-func TestSearXNGDoorBillsTheCaller(t *testing.T) {
+func TestSearXNGEndpointBillsTheCaller(t *testing.T) {
 	l := planetest.Money(t, 100000)
 	braveAt(t, "brave")
 	t.Setenv("WEBSEARCH_API_KEY", "svc-key")

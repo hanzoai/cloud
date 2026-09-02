@@ -57,7 +57,7 @@
 // reads them.
 //
 // Every ingest route is therefore one line — handle(c, <wire>, <origin tag>) — and no
-// route is written by hand at all: doors below declares them and both the router and
+// route is written by hand at all: endpoints below declares them and both the router and
 // the site-host carve derive from it. One write path, many endpoints, ONE admission
 // decision.
 
@@ -452,7 +452,7 @@ func answer(c *zip.Ctx, org, source string, res CaptureResult, refused refusal) 
 //
 // CARDINALITY is bounded on all three labels: org is a SERVER-resolved tenant (an IAM
 // owner, a resolved key's org, or the $public constant) and never a caller-chosen
-// string; source is the endpoint's own origin tag, from the finite doors table; reason
+// string; source is the endpoint's own origin tag, from the finite endpoints table; reason
 // is two values. Bounded by real orgs × endpoints × 2 — the same envelope
 // hanzo_http_requests_total already lives in.
 var (
@@ -603,7 +603,7 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 	return cannotAttribute(presented(c))
 }
 
-// door is one ingest endpoint: a PATH bound to the WIRE it speaks. Capability is not a
+// endpoint is one ingest address: a PATH bound to the WIRE it speaks. Capability is not a
 // field and cannot become one — handle decides it, once, for every endpoint.
 //
 // decode and wire are the two halves of ONE fact: what this endpoint accepts. decode is
@@ -617,7 +617,7 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 // place its prose can be stated. Keeping it on the row means an endpoint added tomorrow
 // carries its own account of what it accepts and from whom, rather than inheriting
 // one blurb written about a different endpoint.
-type door struct {
+type endpoint struct {
 	path   string
 	decode decode
 	wire   any // openapi.Register's request declaration; see declare below
@@ -627,7 +627,7 @@ type door struct {
 	description string
 }
 
-// doors is THE ingest surface: the ONE place an endpoint is declared, and the ONE list
+// endpoints is THE ingest surface: the ONE place an endpoint is declared, and the ONE list
 // both consumers derive from. routes (event.go) registers exactly these paths;
 // installHostCarve hands sites exactly these paths bound to exactly these wires. So
 // "what is an ingest endpoint" has a single answer, and the router and the site-host
@@ -704,7 +704,7 @@ type door struct {
 // insights.hanzo.ai /e,/batch, /capture) now replacePaths onto /v1/event.
 //
 // Trying canonical first and falling back on an empty result is WRONG, and
-// TestPostHogWireRidesTheCanonicalDoor (obs_door_test.go) refutes it: decodeIngest
+// TestPostHogWireRidesTheCanonicalEndpoint (obs_endpoint_test.go) refutes it: decodeIngest
 // ACCEPTS a PostHog body as a bare canonical Event and returns ONE event, which is
 // then dropped whole downstream (canonicalType("") is "event", which is not an
 // allowlisted kind, and $pageview is not an autocapture name — it is a KIND). The
@@ -750,7 +750,7 @@ func decodeEvent(body []byte) ([]CaptureEvent, error) {
 // is variable, so analytics has to own the route while o11y owns the runtime.
 const peerO11y = "o11y"
 
-var doors = []door{
+var endpoints = []endpoint{
 	{
 		path: "/v1/event", decode: decodeEvent, wire: canonicalWire, source: sourceEvent,
 		summary: "Capture product events into your org's warehouse",
@@ -826,14 +826,14 @@ var canonicalWire = openapi.OneOf{CaptureEvent{}, []CaptureEvent{}, CaptureBatch
 // word about what a publishable key may do with it is an endpoint a reader has to
 // guess at. Describe is the client for the other half, and it derives from the SAME
 // rows — an endpoint added tomorrow declares its schema and its prose together, or
-// fails the gate in doors_test.go rather than silently publishing neither.
+// fails the gate in endpoints_test.go rather than silently publishing neither.
 //
 // The receipt is the SAME for every endpoint and every lane — the anonymous projection,
 // the reduced team principal, the full credential and the o11y plane's claim all
 // answer CaptureResult (handle/publicIngest/ingestDecoded, above), so one response
 // declaration is the whole truth rather than the common case.
 func init() {
-	for _, d := range doors {
+	for _, d := range endpoints {
 		openapi.Register(d.path, http.MethodPost, d.wire, CaptureResult{})
 		openapi.Describe(d.path, http.MethodPost, d.summary, d.description)
 	}
@@ -864,7 +864,7 @@ func init() {
 		openapi.Register(d.path, http.MethodPost, openapi.Binary{}, nil)
 		openapi.Describe(d.path, http.MethodPost, d.summary, d.description+sentryWire)
 	}
-	// The session-replay snapshot endpoint (replay.go). It is not a `doors` row — its
+	// The session-replay snapshot endpoint (replay.go). It is not a `endpoints` row — its
 	// body is not the canonical wire and it lands no warehouse row — so it declares
 	// itself here beside the other route on this surface that is registered by hand.
 	// Its RESPONSE is the same CaptureResult every endpoint answers, because the receipt
@@ -924,8 +924,8 @@ const sentryWire = "\n\nCLOUD ROUTES IT AND READS NONE OF IT. The body is relaye
 // ingest is the endpoint's API-host handler: admission (handle) over the endpoint's wire.
 // Capability is resolved fail-closed there — bearer | pk- | access key ⇒ full;
 // presented-but-unresolvable ⇒ 403; nothing ⇒ the anonymous projection.
-func (d door) ingest(_ *cloud.Service[state], c *zip.Ctx) error {
-	return handle(c, d.decode, d.source)
+func (e endpoint) ingest(_ *cloud.Service[state], c *zip.Ctx) error {
+	return handle(c, e.decode, e.source)
 }
 
 // decodeBare decodes the canonical wire's two unwrapped spellings — one event, or

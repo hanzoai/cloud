@@ -322,10 +322,10 @@ type payment struct {
 	ledger string
 	// subject is the payer's wallet key inside that LEDGER ([principal.Subject]).
 	subject string
-	// door is the ADDRESS of the mint this payment was taken at — the op's own path,
+	// path is the ADDRESS of the mint this payment was taken at — the op's own path,
 	// not the transport's. One screen answers for two endpoints and a record that does
 	// not say which cannot be read back against the traffic that produced it.
-	door string
+	path string
 	// via is the path THIS PROCESS ACTUALLY SERVED, which for a typed op is not the
 	// endpoint: the same handler answers an agent's tools/call at /mcp and a sibling's
 	// by-name call on zip's op plane. The pair is the only way an operator can see
@@ -519,7 +519,7 @@ func (s screen) record(ctx context.Context, p payment, ref, id string) error {
 // balance exists that does not.
 func screened[In, Out any](
 	s screen,
-	door string,
+	path string,
 	worth func(*In) (cents int64, currency string),
 	receipt func(*Out) (ref, id string),
 	core zip.TypedHandler[In, Out],
@@ -528,10 +528,10 @@ func screened[In, Out any](
 		// The endpoint is the op's OWN address, stated rather than read off the
 		// request: over MCP the request path is /mcp, which is the transport and
 		// not the mint.
-		p := payment{door: door}
+		p := payment{path: path}
 		if c, ok := cloud.Request(ctx); ok {
 			cents, currency := worth(in)
-			p = seen(c, door, cents, currency)
+			p = seen(c, path, cents, currency)
 		}
 		if err := s.decide(ctx, p); err != nil {
 			return nil, err
@@ -602,7 +602,7 @@ func (s screen) decide(ctx context.Context, p payment) error {
 	// at the wrong endpoint.
 	if p.diverged() {
 		s.lg.Warn("credit endpoint refused a payment whose charge and credit are two organisations",
-			"door", p.door, "via", p.via, "org", p.org, "ledger", p.ledger, "subject", p.subject)
+			"door", p.path, "via", p.via, "org", p.org, "ledger", p.ledger, "subject", p.subject)
 		return zip.Errorf(http.StatusConflict,
 			"a card charged in %q cannot fund the balance of %q — fund another organisation "+
 				"with POST /v1/admin/grants", p.org, p.ledger)
@@ -634,7 +634,7 @@ func (s screen) decide(ctx context.Context, p payment) error {
 	// because one endpoint is now reached over three: a mint reached at /mcp is the fact
 	// this record exists to make visible.
 	s.lg.Info("credit endpoint screened",
-		"door", p.door, "via", p.via, "org", p.org,
+		"door", p.path, "via", p.via, "org", p.org,
 		"ledger", p.ledger, "action", v.Action, "scored", v.Scored(), "refusal", v.Refusal,
 		"cause", v.Cause, "score", v.Score, "shape", v.Shape, "policy", v.Policy)
 	if v.Allowed() {
@@ -681,13 +681,13 @@ func (s screen) decide(ctx context.Context, p payment) error {
 // differently: the raw endpoint has bytes and reads them with [bodyAmount], the typed
 // op is handed them decoded. Everything else comes off the request, which every
 // projection with a connection behind it has.
-func seen(c *zip.Ctx, door string, amountCents int64, currency string) payment {
+func seen(c *zip.Ctx, path string, amountCents int64, currency string) payment {
 	ledger := payerOrg(c)
 	return payment{
 		org:      chargedOrg(c),
 		ledger:   ledger,
 		subject:  principal.PayerIn(c, ledger).Subject(),
-		door:     door,
+		path:     path,
 		via:      c.Path(),
 		cents:    amountCents,
 		currency: currency,
@@ -797,7 +797,7 @@ func (s screen) learn(p payment, ref string) {
 		// rather than minting a key: an observation under an invented id counts the same
 		// money again on the next retry, which is worse than the one it did not record.
 		s.lg.Warn("a settled payment could not be taught to the risk model: the answer named no settlement",
-			"door", p.door, "via", p.via, "ledger", p.ledger)
+			"door", p.path, "via", p.via, "ledger", p.ledger)
 		return
 	}
 	nano := p.facts[plane.SignalNano]
@@ -805,7 +805,7 @@ func (s screen) learn(p payment, ref string) {
 		// No amount this endpoint could state in USD ([paymentSignals]). The event still
 		// happened, so it is still taught — the value features read blind, which is a
 		// different and honest fact from a payment of nothing.
-		s.lg.Debug("teaching a settled payment with no stated value", "door", p.door, "ledger", p.ledger)
+		s.lg.Debug("teaching a settled payment with no stated value", "door", p.path, "ledger", p.ledger)
 	}
 	in := &plane.RiskObserveIn{
 		Stage:      cloud.StagePayment,

@@ -20,7 +20,7 @@ import (
 // the module is what a customer buys.
 //
 // Asked on every request, not only at install: DocTypes stay in an org's database
-// after it stops paying, so install alone would be a one-way door.
+// after it stops paying, so install alone would be irreversible.
 
 // prefix is the group every framework route hangs off. Two readers need it: the
 // router that mounts the group, and doctypeIn.

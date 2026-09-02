@@ -16,7 +16,7 @@
       "name": "sync_sync",
       "path": "sync_sync/SKILL.md",
       "service": "sync",
-      "sha256": "350d9918a0caf7039a8c97752d2f2bdd9506269711d36cd583a60c5a3d11912d"
+      "sha256": "950a45aee9a1f00c7313f752a249f961140a382b74c6f52882d412f6e4175308"
     }
   ],
   "spec_version": "8.0.0"

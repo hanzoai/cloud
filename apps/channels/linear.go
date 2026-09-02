@@ -14,8 +14,8 @@ import (
 // webhook normalizes the delivery; the reply is a comment posted with the key of
 // the person who bound the organization (integrations planeChatSend).
 
-// linearDoor is the send path; tests spy it, prod never repoints.
-var linearDoor = func(ctx context.Context, org, room, text string) (string, error) {
+// linearEndpoint is the send path; tests spy it, prod never repoints.
+var linearEndpoint = func(ctx context.Context, org, room, text string) (string, error) {
 	return post(ctx, org, plane.ChatSendIn{Provider: "linear", Room: room, Text: text})
 }
 
@@ -44,7 +44,7 @@ func linearNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 
 // linearEgress posts a comment on the issue.
 func linearEgress(ctx context.Context, _ *cloud.Service[state], org string, m Message) (Delivery, error) {
-	id, err := linearDoor(ctx, org, m.Room.ID, renderText(m))
+	id, err := linearEndpoint(ctx, org, m.Room.ID, renderText(m))
 	if err != nil {
 		return Delivery{}, err
 	}

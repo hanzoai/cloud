@@ -16,35 +16,35 @@
       "name": "licensing_download",
       "path": "licensing_download/SKILL.md",
       "service": "licensing",
-      "sha256": "142d140212c7883fafdd15e19c09a20448e55b2c4ffedcdc56bb3efaaaea358b"
+      "sha256": "0b285918159bf057a0160a7011ff69364de39bec4054f08c0fc700f1ab406098"
     },
     {
       "description": "Read licensing healthz: Health reports which signer this deployment mints with, and in which env..",
       "name": "licensing_healthz",
       "path": "licensing_healthz/SKILL.md",
       "service": "licensing",
-      "sha256": "8e23a8d931207af9736b19b8ac500c876d604c400e847b3ba7208cdd3c80af6c"
+      "sha256": "faf52d7aa93b1d0771fc529de1815056f1dfe3bd10c7745745f1a790e63609fd"
     },
     {
       "description": "Read licensing jwks: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
       "name": "licensing_jwks",
       "path": "licensing_jwks/SKILL.md",
       "service": "licensing",
-      "sha256": "a9410dea8a3c8aa0609e6b63b2165e2b62fc10acf4e966bbfc9b684ba25c7161"
+      "sha256": "d8426616f9ca0f6062965f2b9290185811c2843215c41fd5502c81c8d63c20d3"
     },
     {
       "description": "Read licensing pubkey: Pubkey publishes the Ed25519 PUBLIC verification key, at both /pubkey and /jwks..",
       "name": "licensing_pubkey",
       "path": "licensing_pubkey/SKILL.md",
       "service": "licensing",
-      "sha256": "976e2d545fbb1224e844eef183ddb5cb772857a6839e4520f7c879a141fa1240"
+      "sha256": "ce47f00f044d46a537dcc35fabb4d37d643f5322a33de4e007df29b535055d1e"
     },
     {
       "description": "Read licensing releases: Lists the signed binary releases this deployment can serve., Reads one release's metadata: its product, version, platform and the cosign material a client verifies the binary against..",
       "name": "licensing_releases",
       "path": "licensing_releases/SKILL.md",
       "service": "licensing",
-      "sha256": "bc1c868d20660d8459b275384cfb3e67d4fa31be1b02cd412268a3d314ee8983"
+      "sha256": "c0ecc86af07cbd9a809ac011b5ba28b77188229fd7f2dcb4de7ed8e48cc741db"
     }
   ],
   "spec_version": "8.0.0"

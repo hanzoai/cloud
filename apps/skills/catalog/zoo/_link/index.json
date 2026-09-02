@@ -16,28 +16,28 @@
       "name": "link_devices",
       "path": "link_devices/SKILL.md",
       "service": "link",
-      "sha256": "90f86b44ccf7f7bff9d435ffdba6f2f212d5154e83c4a1f8382ce75ed82abfa9"
+      "sha256": "f02e52aa9269836e8476891ab1cc77b2e4e87a6f26df73cecb5ed31c412cf929"
     },
     {
       "description": "Read link link: Lists your linked accounts and the devices they sit on., Reads one linked account..",
       "name": "link_link",
       "path": "link_link/SKILL.md",
       "service": "link",
-      "sha256": "b38650f62ef2ba0d9837f71538d26b373589d745ab71a6a9d2e30cd86723152d"
+      "sha256": "240a0a67b3d4067b78b06919691e8f280edad2beb9b2d3f6a3e43f88132eae7d"
     },
     {
       "description": "Read link route: Gets the failover order across your linked accounts..",
       "name": "link_route",
       "path": "link_route/SKILL.md",
       "service": "link",
-      "sha256": "55abf87f8b9c2871fd3ee699f51e6e369c5e7241c7cc0c0221bd0f023c648096"
+      "sha256": "106260448df64a80042ba8e25ff935be4262904d2e56dcd918dcd76a1fd74105"
     },
     {
       "description": "Read link usage: Shows one provider account's own usage dashboard., Breaks down what the gateway routed through each of your accounts., Shows plan consumption and Zoo spend side by side..",
       "name": "link_usage",
       "path": "link_usage/SKILL.md",
       "service": "link",
-      "sha256": "b582a46aba09ac58b8a83929d3b28d2cb818c355b1bb533a777d16c00e9d9909"
+      "sha256": "243b55a08948dd90da68262aeb076d4bb11f05ae97fa3127ab8998553d18a710"
     }
   ],
   "spec_version": "8.0.0"

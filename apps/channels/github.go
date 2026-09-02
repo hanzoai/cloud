@@ -16,8 +16,8 @@ import (
 // (integrations planeChatSend). One room per issue is what lets an org bind an
 // agent to a repository's issues the way it binds one to a Slack channel.
 
-// githubDoor is the send path; tests spy it, prod never repoints.
-var githubDoor = func(ctx context.Context, org, room, text string) (string, error) {
+// githubEndpoint is the send path; tests spy it, prod never repoints.
+var githubEndpoint = func(ctx context.Context, org, room, text string) (string, error) {
 	return post(ctx, org, plane.ChatSendIn{Provider: "github", Room: room, Text: text})
 }
 
@@ -48,7 +48,7 @@ func githubNormalize(ev plane.ChannelsIngestIn) (Message, bool) {
 
 // githubEgress posts an issue comment through the org's own installation.
 func githubEgress(ctx context.Context, _ *cloud.Service[state], org string, m Message) (Delivery, error) {
-	id, err := githubDoor(ctx, org, m.Room.ID, renderText(m))
+	id, err := githubEndpoint(ctx, org, m.Room.ID, renderText(m))
 	if err != nil {
 		return Delivery{}, err
 	}

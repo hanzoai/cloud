@@ -376,13 +376,13 @@ func TestFactColumnsMatchArgsWidth(t *testing.T) {
 
 // ── HTTP contract (datastore is DOWN in this harness) ────────────────────────
 
-// canonDoor is the ONE path the canonical wire is served on. The three name-aliases
+// canonEndpoint is the ONE path the canonical wire is served on. The three name-aliases
 // this file used to sweep (/v1/event{,/batch}, /v1/todo) are retired, and
-// doors_test.go holds them shut on both surfaces. The properties below are the
+// endpoints_test.go holds them shut on both surfaces. The properties below are the
 // canonical endpoint's own; the per-wire generalisation over every declared
-// endpoint lives in doors_test.go, which builds each endpoint's body from its own
+// endpoint lives in endpoints_test.go, which builds each endpoint's body from its own
 // decoder.
-const canonDoor = "/v1/event"
+const canonEndpoint = "/v1/event"
 
 // doBody issues a request with a JSON body, mirroring http_test.go's do() (which
 // carries no body). user/org simulate the SanitizeIdentity-minted headers.
@@ -414,7 +414,7 @@ func doBody(t *testing.T, app *zip.App, method, path, user, org, body string) (i
 func TestCapture_NoPrincipalIsRefused(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	p := canonDoor
+	p := canonEndpoint
 	for _, body := range []string{
 		`{"batch":[{"type":"pageview"}]}`,
 		`{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`,
@@ -428,12 +428,12 @@ func TestCapture_NoPrincipalIsRefused(t *testing.T) {
 // principal is the cross-tenant forge. It is not refused any more (the request is
 // anonymous, and anonymous traffic is admitted), but it buys NOTHING: the anonymous
 // tenant is server-chosen, so the forged org cannot be the one a row lands in
-// (TestAdmitPublic_DoorOwnsTheTenant), and the projection strips every field that
+// (TestAdmitPublic_EndpointOwnsTheTenant), and the projection strips every field that
 // could name the victim anyway.
 func TestCapture_ForgedOrgWithoutBearerBuysNothing(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	p := canonDoor
+	p := canonEndpoint
 	code, body := doBody(t, app, http.MethodPost, p, "", "maxpower",
 		`{"batch":[{"type":"event","event":"steal","groupId":"maxpower","personId":"victim","revenue":1}]}`)
 	refusedAnon(t, "forged-org-no-bearer POST "+p, code, body)
@@ -442,7 +442,7 @@ func TestCapture_ForgedOrgWithoutBearerBuysNothing(t *testing.T) {
 func TestCapture_EmptyBatchOK(t *testing.T) {
 	app := mountApp(t)
 	// Empty batch returns 200 with zero counts BEFORE the datastore is consulted.
-	code, body := doBody(t, app, http.MethodPost, canonDoor, "user-dave", "acme", `{"batch":[]}`)
+	code, body := doBody(t, app, http.MethodPost, canonEndpoint, "user-dave", "acme", `{"batch":[]}`)
 	if code != http.StatusOK {
 		t.Fatalf("empty batch want 200, got %d (%s)", code, body)
 	}
@@ -463,7 +463,7 @@ func TestCapture_TooLarge400(t *testing.T) {
 		sb.WriteString(`{"type":"pageview"}`)
 	}
 	sb.WriteString(`]}`)
-	code, _ := doBody(t, app, http.MethodPost, canonDoor, "user-dave", "acme", sb.String())
+	code, _ := doBody(t, app, http.MethodPost, canonEndpoint, "user-dave", "acme", sb.String())
 	if code != http.StatusBadRequest {
 		t.Fatalf("oversized batch want 400, got %d", code)
 	}
@@ -473,7 +473,7 @@ func TestCapture_DatastoreDownHonest503(t *testing.T) {
 	app := mountApp(t)
 	// A real batch with a validated principal but no datastore → honest 503,
 	// never a fake 200 (mirrors the read side's no-fabrication contract).
-	code, _ := doBody(t, app, http.MethodPost, canonDoor, "user-dave", "acme", `{"batch":[{"type":"event","event":"signup_completed"}]}`)
+	code, _ := doBody(t, app, http.MethodPost, canonEndpoint, "user-dave", "acme", `{"batch":[{"type":"event","event":"signup_completed"}]}`)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("datastore-down capture want 503, got %d", code)
 	}
@@ -514,9 +514,9 @@ func TestCapture_HostIsNotATenant(t *testing.T) {
 	// like the refusal this test exists to rule out. The wire has to be the
 	// endpoint's or the assertion measures the decoder instead of the tenant rule.
 	for _, tc := range []struct{ path, host, body string }{
-		{canonDoor, "hanzo.ai", canonPageview},
-		{canonDoor, "app.lux.cloud", canonPageview},
-		{canonDoor, "evil.example.com", canonPageview}, // an unknown Host is treated the same
+		{canonEndpoint, "hanzo.ai", canonPageview},
+		{canonEndpoint, "app.lux.cloud", canonPageview},
+		{canonEndpoint, "evil.example.com", canonPageview}, // an unknown Host is treated the same
 		{"/v1/event", "hanzo.ai", posthogPage},
 		{"/v1/event", "evil.example.com", posthogPage},
 	} {

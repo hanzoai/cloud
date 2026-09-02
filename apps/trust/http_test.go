@@ -154,11 +154,11 @@ func TestAnotherOrganizationSeesNoneOfOurControls(t *testing.T) {
 	}
 }
 
-// TestTheTwoDoorsDisagreeAboutExactlyOneThing: the owner sees a gated artifact's
+// TestTheTwoEndpointsDisagreeAboutExactlyOneThing: the owner sees a gated artifact's
 // address and a visitor sees that it exists. Everything else is identical, which
 // is what keeps the public page and the owner's view from becoming two
 // descriptions of one organization.
-func TestTheTwoDoorsDisagreeAboutExactlyOneThing(t *testing.T) {
+func TestTheTwoEndpointsDisagreeAboutExactlyOneThing(t *testing.T) {
 	app := mountApp(t)
 
 	put := func(kind, id string, data any) (int, []byte) {

@@ -88,10 +88,10 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 	return plane.Ask[In, Out](ctx, app, op, in)
 }
 
-// Door publishes app's AGENT MCP SERVER on the internal plane, at
+// UseMCP publishes app's AGENT MCP SERVER on the internal plane, at
 // [manifest.MCPPath].
 //
-// It is the same move [fleet.Door.Serve] makes one level up, for the same
+// It is the same move [fleet.MCP.Serve] makes one level up, for the same
 // reason: the MCP server a subsystem serves on the edge is reachable only
 // through the identity boundary, and the fleet's own callers are not on the
 // edge.
@@ -126,7 +126,7 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 //
 // It is at manifest.MCPPath and not zip's own /mcp because zip already serves the
 // PLANE's ops at /mcp — a different registry, and one route per address.
-func Door(app *zip.App) {
+func UseMCP(app *zip.App) {
 	Plane().Post(manifest.MCPPath, func(c *zip.Ctx) error {
 		var f zapmcp.Frame
 		if err := json.Unmarshal(c.Body(), &f); err != nil {

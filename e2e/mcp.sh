@@ -16,7 +16,7 @@
 # bug shipped here once (zipdoc blind to group prefixes), so it is asserted.
 #
 #   usage:  make cloud && make -f mk/fleet.mk binaries  # host + plugins into ./bin
-#           e2e/mcp-door.sh
+#           e2e/mcp.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

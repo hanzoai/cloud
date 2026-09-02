@@ -16,56 +16,56 @@
       "name": "guide_actions",
       "path": "guide_actions/SKILL.md",
       "service": "guide",
-      "sha256": "57390932b5829c3ca17e2accbe8499009c700a619dc91be7062806e173d9fa5f"
+      "sha256": "2da2943d89df87b87ffdbdb52ec95ec134ec4f6d59955e309c55604d9cf9cbf6"
     },
     {
       "description": "Read guide analytics: Analytics returns the caller org's funnel from the analytics lens plus the GTM recommendations derived from it..",
       "name": "guide_analytics",
       "path": "guide_analytics/SKILL.md",
       "service": "guide",
-      "sha256": "5e5088558748f9754fae81e1df5ddc1319a4308e109db71e1d65b7d55a62e38b"
+      "sha256": "374e69942d195c17f5b078bfe970d9564ed4f7ba588af7d831a692f11c74bae4"
     },
     {
       "description": "Read guide blueprint: Returns the FULL authored brand blueprint — every principle, section, step, strategy and template WITH its enabled flag made explicit, including the disabled items the org-facing reads never see — plus the active version number, the brand key it is stored un",
       "name": "guide_blueprint",
       "path": "guide_blueprint/SKILL.md",
       "service": "guide",
-      "sha256": "f51eb5f1c09bbfa4bee85d2efe9c517d3f1df2bd4de5fcd2acb49ff19406e238"
+      "sha256": "6c53a6243c398b62c8f236559191ec0a22a0640d46215f121cfac727690af7a9"
     },
     {
       "description": "Read guide curriculum: Returns the journey the caller's org is actually running, and whether it comes from the org's OWN override (custom) or from the platform default — the brand blueprint, else the embedded fixture..",
       "name": "guide_curriculum",
       "path": "guide_curriculum/SKILL.md",
       "service": "guide",
-      "sha256": "a9b5b81c8296f571e0d1628ef901b78d0f23cd2c823a09cb59bb30e948c22c02"
+      "sha256": "540000679792a6bc0347c88f38d8d03bc3a8519de8d56c4e27bafc287c67046b"
     },
     {
       "description": "Read guide guide: Overview returns the caller org's launch journey: the active curriculum's version and title, every step with its state, whether it is available, what blocks it and whether the Business AI can run it, the done/total/percent progress with the next step to take, an",
       "name": "guide_guide",
       "path": "guide_guide/SKILL.md",
       "service": "guide",
-      "sha256": "17a66b2a9e26210f9ec8a144c7675244f3b73452f938ab2873ed8ebfbd14940a"
+      "sha256": "b31b1c7dbbde146c74bc9bd6e58ae3329bc373644445721b650d97d94cb9994c"
     },
     {
       "description": "Read guide profile: Profile returns the caller org's OBSERVED growth profile — the signal set, the classified growth stage, and the org's own key metrics..",
       "name": "guide_profile",
       "path": "guide_profile/SKILL.md",
       "service": "guide",
-      "sha256": "1a33c33335fbfd342bfb0c8b2fc79eb0d82dff6641e0d34d93b0dd40ea0e9d19"
+      "sha256": "ebaa3614450a3a2354020272f7b46dd7a4f0b051b3c8077c462fa2312ddca28d"
     },
     {
       "description": "Read guide strategies: Strategies returns the ENABLED tactics corpus for the caller's org: the tactics library narrowed by the explicit category/workload filters AND by the org's OBSERVED growth stage and capability signals (a tactic's tags are preconditions, so it surfaces only ",
       "name": "guide_strategies",
       "path": "guide_strategies/SKILL.md",
       "service": "guide",
-      "sha256": "f20eef18365b12a0bcaa6ea07d7ae9872b521560a44a26d7dc3ae4a57bb56a3c"
+      "sha256": "c822693d766d4135f2e3ac7c222a1dfa595a17e579b4c386b20296b9f205c0e6"
     },
     {
       "description": "Read guide suggest: Suggest returns the caller org's next-best quests: the available, non-terminal steps of its journey ranked by how much downstream work each unblocks, each with the grounded reason it is a good next move and whether the Business AI can run it, plus the org's fu",
       "name": "guide_suggest",
       "path": "guide_suggest/SKILL.md",
       "service": "guide",
-      "sha256": "d5938df99dd1aabe235ec0bc505fc2f05026887fd2fc8d53bec8534c977d85c7"
+      "sha256": "bcfaffcc69d0159ebbdd57db20cefa08bd6e6da5c1a5e503d15094cbd245b0e4"
     }
   ],
   "spec_version": "8.0.0"

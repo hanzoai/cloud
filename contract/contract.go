@@ -108,7 +108,7 @@ func (d Doc) Into(v any) error { return json.Unmarshal(d.Data, v) }
 
 // Load resolves a repository's contract and returns it in canonical form.
 //
-// It READS, and never runs anything. That is why this is the door every
+// It READS, and never runs anything. That is why this is the one entry every
 // downstream reader gets and Eval is not: a generator spelling is refused here,
 // by name, so a reader holding only Load cannot execute a repository's file
 // however the repository spells it.

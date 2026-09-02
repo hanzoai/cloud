@@ -16,35 +16,35 @@
       "name": "ingress_middlewares",
       "path": "ingress_middlewares/SKILL.md",
       "service": "ingress",
-      "sha256": "f763df297937ede58bda5f7e3f978696e138a895c1df2e0a69f7bcf0f4e4abd4"
+      "sha256": "030edde131eaa086eb6b682ce9b9f1507f4288411253c5df2390ee279eefd5f7"
     },
     {
       "description": "Read ingress routes: Returns every routing rule the caller's org has configured, ordered by id., Returns one of the caller org's routing rules by id..",
       "name": "ingress_routes",
       "path": "ingress_routes/SKILL.md",
       "service": "ingress",
-      "sha256": "70599a76e435c707e53ad3e712d9a4b13ab3b59b5f4dae659ddfd170a9cda0bf"
+      "sha256": "b71e6ffefdedfb403426e3aec1e8478dd07da91eea54cb384e90dcef2f5e3152"
     },
     {
       "description": "Read ingress services: Returns every backend pool the caller's org has configured, ordered by id., Returns one of the caller org's backend pools by id..",
       "name": "ingress_services",
       "path": "ingress_services/SKILL.md",
       "service": "ingress",
-      "sha256": "fa7b944d9241748996344d1d534032123f9b0d59bbd5dcfd8c1f2537572a2b3a"
+      "sha256": "db47e8cbbd46168bf69927dc5c5ca03b3dd3fb8d1daa5771de33a4e568ce3f11"
     },
     {
       "description": "Read ingress status: Status reports the ingress edge's live posture: the role this instance runs in (app or edge), whether its listeners are bound and on which addresses, the ACME posture (staging flag and certificate cache directory), how many hosts the compiled route table curr",
       "name": "ingress_status",
       "path": "ingress_status/SKILL.md",
       "service": "ingress",
-      "sha256": "5a0d8f2cb98eb6d83409e6000b72c990b6b83e311029e634a62b5459ca175fad"
+      "sha256": "7833ca3122b6b5220600e9b6ef00de2c44afbb2bb6534375d8faca3e24a7e16d"
     },
     {
       "description": "Read ingress tls: GetTLS returns the caller org's ACME intent together with the edge-wide TLS facts it lands in: which role this instance runs in, whether its listeners are bound, every host the ACME HostPolicy will issue a certificate for (the union across ALL orgs of TLS-marked",
       "name": "ingress_tls",
       "path": "ingress_tls/SKILL.md",
       "service": "ingress",
-      "sha256": "d3245b84c8e27abeee8b7b3f6cb39850150301ab64694cfc1d37a94d4233f4a3"
+      "sha256": "f94fe1a17a4719453e64b37ef09076852960e5738d79851152f86e469920ba53"
     }
   ],
   "spec_version": "8.0.0"

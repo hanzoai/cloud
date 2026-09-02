@@ -16,35 +16,35 @@
       "name": "risk_features",
       "path": "risk_features/SKILL.md",
       "service": "risk",
-      "sha256": "845353caa159ab631df5a3d4a57776c3099e992846e6982713d770c4f33ba1e5"
+      "sha256": "25b8a8356b1d8f0becfbb25ac31413162d8ffe3fd45152ae4aa736121bf3a1f4"
     },
     {
       "description": "Read risk health: Whether the risk model plane can actually work right now.",
       "name": "risk_health",
       "path": "risk_health/SKILL.md",
       "service": "risk",
-      "sha256": "b9cdb42d2e80e75fb77677ccf971604c7e8a2e9f051d0496968d5a8f3f6761d2"
+      "sha256": "39c679f37bbada377dcbe090cf8c06496628ce5c40b9a2506cbd77817cfdb650"
     },
     {
       "description": "Read risk policy: Your organisation's decision-regime history, and which version is in force.",
       "name": "risk_policy",
       "path": "risk_policy/SKILL.md",
       "service": "risk",
-      "sha256": "f7f9cf7183a475e84ed63c82d1c1bfafc76ad7a4a8ce4c322f5181b103702f06"
+      "sha256": "a95560191c3ff4eaab1d79a14199701c855e20286cfae10e98a2f7154a6f1d1f"
     },
     {
       "description": "Read risk search: Read back one exhaustive search.",
       "name": "risk_search",
       "path": "risk_search/SKILL.md",
       "service": "risk",
-      "sha256": "d8148d50687e9b741c2f2c54c423bf8a3e4190c6f50864ae6463a725ca8bf84f"
+      "sha256": "cb9705aa31e4ee41a0506885a84ead413be77e6bc6a0f12e195b2043b01f4279"
     },
     {
       "description": "Read risk state: Report your organisation's model: what it learned, and what it realised.",
       "name": "risk_state",
       "path": "risk_state/SKILL.md",
       "service": "risk",
-      "sha256": "1da136821784734499acc80f6176cd18c90c2e518158491f714791b1ae022c8b"
+      "sha256": "169406ac0bc7d8094faa9944e934f9bdbde7987d119f41afd281906d8d47f91b"
     }
   ],
   "spec_version": "8.0.0"

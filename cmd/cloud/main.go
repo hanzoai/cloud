@@ -106,7 +106,7 @@ func forward(kv map[string]string) {
 	}
 }
 
-// doorConfig is the entry point's transport posture. The entry point installs no
+// endpointConfig is the entry point's transport posture. The entry point installs no
 // middleware -- that is the program's job behind it -- but it still TERMINATES
 // public HTTP, so the transport ceilings are its to set. They were not set: this
 // app was built with the framework defaults while cloud.App() configured the
@@ -117,7 +117,7 @@ func forward(kv map[string]string) {
 //
 // The numbers come from cloud, not from literals here. A literal is what made
 // the two disagree in the first place.
-func doorConfig() zip.Config {
+func endpointConfig() zip.Config {
 	return zip.Config{
 		AppName: "cloud",
 		MCP:     zip.MCPConfig{Disabled: true},
@@ -163,7 +163,7 @@ func run(addr, zapAddr string) error {
 	// the SPA shell, and to send an agent that guessed zip's default to the real
 	// one), and when those two were written down separately the second one was
 	// simply missing — GET /mcp answered 200 text/html for as long as that lasted.
-	app := zip.New(doorConfig())
+	app := zip.New(endpointConfig())
 
 	// A lazy child that has served once stays resident forever unless something
 	// stops it, so the pod's process count follows the CATALOG rather than the
@@ -200,7 +200,7 @@ func run(addr, zapAddr string) error {
 	// decides what happens when more than 48 are genuinely in use. It is not read
 	// from the cgroup, because the cgroup carries the LIMIT and the number worth
 	// sizing against is the REQUEST, which a process cannot see.
-	// The ceiling itself is in doorConfig, enforced at every start; this only puts
+	// The ceiling itself is in endpointConfig, enforced at every start; this only puts
 	// the AGE bound on a ticker. One reaper: there were two on this app, both a
 	// minute apart with the same number written twice, and a second sweep buys
 	// nothing a single one does not already do.
@@ -644,7 +644,7 @@ func locate(app *zip.App) fleet.At {
 
 // inside is how an endpoint reached from INSIDE the fleet reaches one app: the
 // app's own plane socket, where its agent MCP server answers with no edge in
-// front of it (cloud.Door). Same start, different address.
+// front of it (cloud.UseMCP). Same start, different address.
 //
 // A REMOTELY mounted app (CLOUD_<NAME>_ADDR) keeps the edge address, because its
 // plane socket is on its own host and no path here reaches it. So an internal

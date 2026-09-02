@@ -16,7 +16,7 @@
       "name": "translate_memory",
       "path": "translate_memory/SKILL.md",
       "service": "translate",
-      "sha256": "b67dbf6998759b1e4c415b6edb079fe74ddf4fcc485f1535b6d4eec4919bb612"
+      "sha256": "e06e769139eba68ee478b19a82bf1ced64e6c5958e7db51a0bde2821eef83fa2"
     }
   ],
   "spec_version": "8.0.0"

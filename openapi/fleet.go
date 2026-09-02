@@ -163,7 +163,7 @@ func Subsets(apps []string, read func(app string) []byte, stage func(app string)
 func core() (Part, error) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	Use(app, Info{})
-	useDoor(app)
+	useEndpoint(app)
 	stubIndex(app)
 	doc, err := FleetSpec(app)
 	if err != nil {

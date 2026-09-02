@@ -16,35 +16,35 @@
       "name": "market_chains",
       "path": "market_chains/SKILL.md",
       "service": "market",
-      "sha256": "2722e1de3474fa24a272d2af82621f2a1e9d207f49e0ad59e3dfce1e7b03c7cf"
+      "sha256": "00d096f9cdf70a4b3ba98048ab3230b36255a32f96a9807528783a43d20aac1a"
     },
     {
       "description": "Read market pools: Answers the automated market makers on one chain: their two tokens, their fee tier, and what has moved through each..",
       "name": "market_pools",
       "path": "market_pools/SKILL.md",
       "service": "market",
-      "sha256": "610b4d6f08d22cb5cbb149840fc68734d15b8b3fdc0a04815549f969a340077e"
+      "sha256": "1064feaca56067129a7fae4f4075af6ba0f6bf4c68db058ec502258848065909"
     },
     {
       "description": "Read market survey: Answers which of the four settlement precompiles carry code on one chain..",
       "name": "market_survey",
       "path": "market_survey/SKILL.md",
       "service": "market",
-      "sha256": "e6838056c70379cea449df557472f0553a9def5a43bf616dabb5cb808be764ef"
+      "sha256": "7db7a0ee8cc861d5d98ca371be35dda9fa319a6701358dd889a14f4370c0c04d"
     },
     {
       "description": "Read market token: Answers one token's daily history — open, high, low, close, price and volume per UTC day, oldest first..",
       "name": "market_token",
       "path": "market_token/SKILL.md",
       "service": "market",
-      "sha256": "e4ed3bc140cfca1699de8a702dec0eeb9c1180426f63aa277e40437236c8aeb5"
+      "sha256": "c57e69ca28449b49acdfef6dcc5c1717cac96b489e52beb13a3b0c663d3616ea"
     },
     {
       "description": "Read market tokens: Answers the tokens one chain's indexer has seen, with the decimals a caller needs to read any amount of one correctly..",
       "name": "market_tokens",
       "path": "market_tokens/SKILL.md",
       "service": "market",
-      "sha256": "100cfef03d78ccd2baee168b70d08906c801884dedae1ad98305d642f4473da2"
+      "sha256": "30ee6770daa94add8275923a9298164c3097998959a82bbad7c122113c17f576"
     }
   ],
   "spec_version": "8.0.0"

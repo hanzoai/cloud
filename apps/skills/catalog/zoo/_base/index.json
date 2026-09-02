@@ -16,14 +16,14 @@
       "name": "base_bases",
       "path": "base_bases/SKILL.md",
       "service": "base",
-      "sha256": "e0a09d7724640e1a56310ec91d23ac7dc7e32e9761c56a7c20f29ccf3c4f735d"
+      "sha256": "3147def43c4429d167ca23df4834ce5d0ca254f50ce1de19d0a44fb92f71ae36"
     },
     {
       "description": "Read base health: Reports that the base subsystem is serving..",
       "name": "base_health",
       "path": "base_health/SKILL.md",
       "service": "base",
-      "sha256": "cac58e76aef998e672269d3c2067c72a960b01d21fcd6b5af1f0f6d6d7889f1b"
+      "sha256": "90cc3d0d67d34504c2aedd1f7cccd5cbfe35be0a31794abbc741b58519548429"
     }
   ],
   "spec_version": "8.0.0"

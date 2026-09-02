@@ -16,21 +16,21 @@
       "name": "flags_activity",
       "path": "flags_activity/SKILL.md",
       "service": "flags",
-      "sha256": "9abd2e23dfbb409185cb3cfe8b4eff60393b8ab6f2152d89faf1fa4ff9dc6c6a"
+      "sha256": "9eb2fdfb48328d22c16f96ede150794738206cae7342eb3a4c1f58817a87320f"
     },
     {
       "description": "Read flags defs: Returns every flag definition in the caller's (org, project) store, by key, with its version and who last changed it., Returns one flag definition by key, or 404 when the caller's store has none under that key..",
       "name": "flags_defs",
       "path": "flags_defs/SKILL.md",
       "service": "flags",
-      "sha256": "ab0aeab46cdf23c363e242d8ea0d2aa7cabb372917ae1b3a0dab5bdeca9e6dab"
+      "sha256": "cda5e003014edd2e16855227174587e73a1e559da89459e2f389b646cb0c36d9"
     },
     {
       "description": "Read flags health: Health reports that the flag engine is serving..",
       "name": "flags_health",
       "path": "flags_health/SKILL.md",
       "service": "flags",
-      "sha256": "c6d3d95db94a33b4a9e1f9e67680b75e06876926074414f5d682ec786d0f215c"
+      "sha256": "3bda5759e5120c46bcb47f5c163732fa748021fed0e6f246e0858bd2e0863b38"
     }
   ],
   "spec_version": "8.0.0"

@@ -1366,7 +1366,7 @@ type Plugin struct {
 	// subsystem simply gets one whose Router IS the app.
 	Global bool
 
-	// Door is this subsystem's PER-CALLER contribution to the MCP server: the tools
+	// Offer is this subsystem's PER-CALLER contribution to the MCP server: the tools
 	// that exist because of who is asking, which the build-time projection cannot
 	// hold. Nil — every subsystem but one — leaves the MCP server exactly the typed
 	// ops.
@@ -1375,23 +1375,23 @@ type Plugin struct {
 	// Prefixes are: what a binary serves is a property of the binary, declared
 	// where the binary is assembled, not installed from inside a Mount that runs
 	// after the MCP server is configured.
-	Door zip.Source
+	Offer zip.Source
 }
 
-// door is the ONE per-caller tool source of a binary. Two subsystems each
+// offer is the ONE per-caller tool source of a binary. Two subsystems each
 // claiming one would be two answers to "what else can this caller call", so the
 // second is a composition error and not a merge.
-func door(plugins []Plugin) (zip.Source, error) {
+func offer(plugins []Plugin) (zip.Source, error) {
 	var src zip.Source
 	var held string
 	for _, p := range plugins {
-		if p.Door == nil {
+		if p.Offer == nil {
 			continue
 		}
 		if src != nil {
-			return nil, fmt.Errorf("%s and %s both declare a Door — a binary has one per-caller tool source", held, p.Name)
+			return nil, fmt.Errorf("%s and %s both declare an Offer — a binary has one per-caller tool source", held, p.Name)
 		}
-		src, held = p.Door, p.Name
+		src, held = p.Offer, p.Name
 	}
 	return src, nil
 }

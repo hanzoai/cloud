@@ -16,14 +16,14 @@
       "name": "authz_health",
       "path": "authz_health/SKILL.md",
       "service": "authz",
-      "sha256": "2dc47f6da25e32a6527423cd930f6ce5a331da656cddb0988374311b966ada79"
+      "sha256": "ff63f59340cc4807b58c8ca31e59d7acc74cf4450d304563ca7c8fabe346a69b"
     },
     {
       "description": "Read authz readyz: Readiness of the policy engine.",
       "name": "authz_readyz",
       "path": "authz_readyz/SKILL.md",
       "service": "authz",
-      "sha256": "c02e87e8dbdfaaf9b0f3279da433d87de60fb8efbf7f0c9475272f9e3c697993"
+      "sha256": "93a96258e1923d6bfc02deab3b8d99509ecd3e7f405a751f0791521c822e52b5"
     }
   ],
   "spec_version": "8.0.0"

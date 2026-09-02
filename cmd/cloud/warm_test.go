@@ -2,9 +2,9 @@ package main
 
 // THE PLUGIN CEILING, AS A GATE RATHER THAN AS A PARAGRAPH.
 //
-// manifest.Warm and doorConfig both carry a careful argument for why the ceiling
+// manifest.Warm and endpointConfig both carry a careful argument for why the ceiling
 // is what it is and why the binding figure is the container's memory REQUEST.
-// Neither carries a way to be wrong out loud. Delete the field from doorConfig,
+// Neither carries a way to be wrong out loud. Delete the field from endpointConfig,
 // set it to zero, or let it run past the reservation, and every test in this repo
 // still passes — while the host goes back to holding every child a single
 // fleet-wide tools/list can start, which is the state that stopped it answering
@@ -40,21 +40,21 @@ const (
 	hostMiB = 200
 )
 
-// TestTheDoorCarriesTheCeiling: the ceiling reaches zip, and it is the manifest's
+// TestTheEndpointCarriesTheCeiling: the ceiling reaches zip, and it is the manifest's
 // number rather than a literal that can drift from it.
 //
 // zip enforces Warm where a plugin STARTS, so this field is the whole mechanism —
 // there is no second place that would catch its absence, and the reaper cannot:
 // age reclaims only a plugin quiet for its entire window, and a burst is by
 // definition not quiet.
-func TestTheDoorCarriesTheCeiling(t *testing.T) {
-	got := doorConfig().Warm
+func TestTheEndpointCarriesTheCeiling(t *testing.T) {
+	got := endpointConfig().Warm
 	if got == 0 {
-		t.Fatal("doorConfig carries no plugin ceiling — one tools/list starts every " +
+		t.Fatal("endpointConfig carries no plugin ceiling — one tools/list starts every " +
 			"subsystem this host composes and the pod holds all of them")
 	}
 	if got != manifest.Warm() {
-		t.Fatalf("doorConfig.Warm = %d, manifest.Warm() = %d — two numbers for one budget, "+
+		t.Fatalf("endpointConfig.Warm = %d, manifest.Warm() = %d — two numbers for one budget, "+
 			"free to disagree", got, manifest.Warm())
 	}
 }

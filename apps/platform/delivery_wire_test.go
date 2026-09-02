@@ -124,7 +124,7 @@ func TestEveryDeliveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 }
 
-// TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor is the reason the gate moved
+// TestTheDeliveryBoardIsShutToANonAdminOnEveryEndpoint is the reason the gate moved
 // INSIDE the op rather than staying as middleware around it.
 //
 // cloud.Guard is middleware on a ROUTE. A typed op is ALSO reached by tools/call
@@ -133,7 +133,7 @@ func TestEveryDeliveryRouteIsTypedOrNamed(t *testing.T) {
 // these four were typed. That is the apps/exec incident precisely: "a bespoke
 // credential checked in middleware covers exactly one of a typed op's three
 // entry points." This drives the transport a route test cannot see.
-func TestTheDeliveryBoardIsShutToANonAdminOnEveryDoor(t *testing.T) {
+func TestTheDeliveryBoardIsShutToANonAdminOnEveryEndpoint(t *testing.T) {
 	app := mountDelivery(t)
 	for _, op := range []string{
 		"get_platform_apps",

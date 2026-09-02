@@ -16,49 +16,49 @@
       "name": "event_errors",
       "path": "event_errors/SKILL.md",
       "service": "event",
-      "sha256": "7122791d9527a0978dad6bc1117f7c8a5da77f93ee35f4c4f6c9c999dd30b067"
+      "sha256": "dc0b58df3d5ab091b7ddbd3455c94c7d0b3631a0b57a152175e73942f66040cb"
     },
     {
       "description": "Read event health: Health reports whether the event plane can take a write and the warehouse can answer a read..",
       "name": "event_health",
       "path": "event_health/SKILL.md",
       "service": "event",
-      "sha256": "a0e4e0c71e110a9092d05557f69baa7e1e21acc55103a57a38b8b8d1eafd59e1"
+      "sha256": "9b3a7669f9652be2b4228246d9d6929818d3be632e8e5df3374d1254eb0320d8"
     },
     {
       "description": "Read event insights: Returns the caller org's most recent product events, newest first., Reports that the unified insights surface is serving..",
       "name": "event_insights",
       "path": "event_insights/SKILL.md",
       "service": "event",
-      "sha256": "855f1cf9291fea63ef7cdf16c503fc02148b41b862096e80967310558fc7485e"
+      "sha256": "9549b0650e21283953570d38af5a3ef420048993f9ca77f09c70cd7509028e27"
     },
     {
       "description": "Read event overview: Overview returns the caller org's analytics KPIs for one time window..",
       "name": "event_overview",
       "path": "event_overview/SKILL.md",
       "service": "event",
-      "sha256": "2f5b3bab706c10177edd6ee7188a88027561442702080a28c709710cabb9b4c1"
+      "sha256": "40fed6bb17340486354f4f3b831f0f321cb5a5b42b74fe44e598bbcbe68ef0d4"
     },
     {
       "description": "Read event tag js: The Hanzo event tag — the one-line install for a surface with no bundler.",
       "name": "event_tag-js",
       "path": "event_tag-js/SKILL.md",
       "service": "event",
-      "sha256": "8cfb9d8154db8e465727c144943c4dec5bcd66af0086ed74d805a4ce8d9cb2da"
+      "sha256": "0b5a3441b8c348e09e7faaca673b01b3b9be36b6d0e8cf409c765850d077616d"
     },
     {
       "description": "Read event timeseries: Timeseries returns the caller org's LLM usage over time as an evenly-spaced series..",
       "name": "event_timeseries",
       "path": "event_timeseries/SKILL.md",
       "service": "event",
-      "sha256": "ae9cab01dd248b46005ed1abfccf272e9478d679cfac2fd7e6d3f4a41d70bfbb"
+      "sha256": "0f63d08c7505cfa9e9c0ac2eee4a302c628ae89b54f88369306146373c5d797a"
     },
     {
       "description": "Read event top: Top returns the caller org's ranked lenses for one window, five of them at once..",
       "name": "event_top",
       "path": "event_top/SKILL.md",
       "service": "event",
-      "sha256": "ccf50bf5dbc9596b440873cd02fe40dc062877454a09d20f2a0b78111dd43601"
+      "sha256": "c83d1431ba37ae0067cc83ba79f732e40c47ee05bed356f208e97362438a7ebd"
     }
   ],
   "spec_version": "8.0.0"

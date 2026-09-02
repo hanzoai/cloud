@@ -16,21 +16,21 @@
       "name": "space_drives",
       "path": "space_drives/SKILL.md",
       "service": "space",
-      "sha256": "a2e699738219aa47bac4051130a7fe99e01fa2905f63ef38dcb3c3e81a5f3b28"
+      "sha256": "869f066cd43f875375223b568bd99001b415c93deddd41ea5a98949ff6fd7659"
     },
     {
       "description": "Read space health: Health reports whether this deployment can serve spaces, drives and files..",
       "name": "space_health",
       "path": "space_health/SKILL.md",
       "service": "space",
-      "sha256": "a7a9a0a1af79a1e45c97332f3fdff2de2ade8ecf44d55537503970619478cc04"
+      "sha256": "165dd4beb3e4d88d8e2d5ac44ab436f14403ff1ad7c79002541b7017c1046c22"
     },
     {
       "description": "Read space spaces: Lists the caller org's own spaces..",
       "name": "space_spaces",
       "path": "space_spaces/SKILL.md",
       "service": "space",
-      "sha256": "49fdc6cc1434e375dec8d8faf5135ff78a8314a6c82b45f2603b081dafa4d46e"
+      "sha256": "0e7cc7cd8f86c3024532ed8ccf62d0e52d4786b346148d29cb4eb8d7d95b9766"
     }
   ],
   "spec_version": "8.0.0"

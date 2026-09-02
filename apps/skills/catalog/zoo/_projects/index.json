@@ -16,56 +16,56 @@
       "name": "projects_deployments",
       "path": "projects_deployments/SKILL.md",
       "service": "projects",
-      "sha256": "6042c623debfa831476707c29e59aded75eb21feff924b2747e52f6b3af79594"
+      "sha256": "c6d54df1d098c7a5a695c122ed334fe6515ca698adb09366ef9d1060f1ed1f04"
     },
     {
       "description": "Read projects domains: Returns every custom hostname this site holds: the live ones, plus any pending claim with the DNS records it still owes..",
       "name": "projects_domains",
       "path": "projects_domains/SKILL.md",
       "service": "projects",
-      "sha256": "855e3521d293d98805aafd6377873d671f2e3f6de947f156fa7edf59c371374b"
+      "sha256": "9a5bea18ab13f8925e1b6e946f4b145979a63af7c3530e10913cb5591ebb8481"
     },
     {
       "description": "Read projects edge: health reports whether a publish reaches readers, rather than whether it was accepted..",
       "name": "projects_edge",
       "path": "projects_edge/SKILL.md",
       "service": "projects",
-      "sha256": "e9f5165247f495254a7d7c4546f15cad20b7a0f33ff98e65e6a3e94f9cb1aea4"
+      "sha256": "f16c0ae1ead555b07013e3240aefcaae9f61a8fdda4ac3c0a6f5c6798fdbcb0b"
     },
     {
       "description": "Read projects projects: Returns every project your org owns., Returns one project of yours by slug — its settings, its live URL and the deployment currently serving it..",
       "name": "projects_projects",
       "path": "projects_projects/SKILL.md",
       "service": "projects",
-      "sha256": "ae9b2f4def01b5a746881ac6b473c1e20bb9cba5f177868bd1238617f965102d"
+      "sha256": "5f04c57ca5a02b9a869db0a782cd66f97fabf4547cd467e471ce1408999093b7"
     },
     {
       "description": "Read projects releases: Returns a site's releases newest-first, marking the active one — the rollback menu..",
       "name": "projects_releases",
       "path": "projects_releases/SKILL.md",
       "service": "projects",
-      "sha256": "ff270a307172c43e7beaed2d52a6ee85277948e5bb920d5071f1b7aa321e17d9"
+      "sha256": "cad744255dbacfac85654b0f2f5549cb535f57825a83c13fd4ee3beabea3f60f"
     },
     {
       "description": "Read projects shot: Get a PNG of the project's live site.",
       "name": "projects_shot",
       "path": "projects_shot/SKILL.md",
       "service": "projects",
-      "sha256": "21456c451904169985069477557672e1a7079bcad5a4b487b110e12b018a1155"
+      "sha256": "912b106251c1e3512675aa71e8d0d22b650aa227d41c77e10fbf92ecd28fd13e"
     },
     {
       "description": "Read projects sites: Returns the org's deployed sites at the pretty URLs they serve at., Returns one site — the same row ListSites carries, for one slug..",
       "name": "projects_sites",
       "path": "projects_sites/SKILL.md",
       "service": "projects",
-      "sha256": "36c37746fcd06d2f8cd695bb4baead9521fbd4000c27d9c0e715ca84395056c3"
+      "sha256": "a3847efe0f6e0ac18e1de7f8fb7cd1d1afaaa228c6113c46c8a2038630cfe107"
     },
     {
       "description": "Read projects tags: The site's browser tag set for the hosted tag — which pixels to inject, by publishable key.",
       "name": "projects_tags",
       "path": "projects_tags/SKILL.md",
       "service": "projects",
-      "sha256": "9a2ebe0c2c2bc2a963ae8d8a3bac99e2aa0f0bbe4e4bb15b6dfbfe58a65aa651"
+      "sha256": "66a2b2f3383a4a8d9446eecf91b469b145538e3113928aba2a632f2a0112a7d7"
     }
   ],
   "spec_version": "8.0.0"

@@ -16,28 +16,28 @@
       "name": "todo_board",
       "path": "todo_board/SKILL.md",
       "service": "todo",
-      "sha256": "c438e5f87e05f3e804724776eeb1fd099ee8fa9827392dbe4001268906a5eabe"
+      "sha256": "6019d116c6d58d2ca3d8ae0c591cd50e96f44cd2a08c2c478d614e47fa49be5c"
     },
     {
       "description": "Read todo issues: Answers across every project in the org..",
       "name": "todo_issues",
       "path": "todo_issues/SKILL.md",
       "service": "todo",
-      "sha256": "0e4c35f0162c590a206da98bb7754e423e530b25e5d435d26a3818d8b81abb80"
+      "sha256": "3ae3ceb926a14add28a3dd746c8c433c6d0ed2a4f681b498e49d97ddb8300f28"
     },
     {
       "description": "Read todo projects: Returns the boards of your org — the places your work actually is., Returns one board of your org by its key — the repository name., Returns a board's issues — work items with their column, priority, assignee, labels and schedule..",
       "name": "todo_projects",
       "path": "todo_projects/SKILL.md",
       "service": "todo",
-      "sha256": "d7d4cf71c68e2ff9633d8dbba34e5d6ad02614d85d955380e6e82e39b1523529"
+      "sha256": "162def871a33c391b1c554a465d522b2f19d79dae4cfe33a4d7df20887ae2f15"
     },
     {
       "description": "Read todo rooms: Summarises one room's work..",
       "name": "todo_rooms",
       "path": "todo_rooms/SKILL.md",
       "service": "todo",
-      "sha256": "273d8486e231fcbb5b4e93887c3c24e293e12103cdf2d0d8f85484be7afdc022"
+      "sha256": "f935ab1f1952b3a8fe18708da6ebfe565290098d2cbdaffa8464544728d836a0"
     }
   ],
   "spec_version": "8.0.0"

@@ -208,11 +208,11 @@ func TestAPropertyAndAnEdgeAreDifferentAssertions(t *testing.T) {
 	}
 }
 
-// TestTheDoorAnswersWhatIsInForceAndWhatDisagreed carries the adjudication above
+// TestTheEndpointAnswersWhatIsInForceAndWhatDisagreed carries the adjudication above
 // all the way out to the wire. Two sources say different things about one relation;
 // the answer names a winner AND keeps the loser attributable, because a caller
 // deciding on this needs to see that the question was contested.
-func TestTheDoorAnswersWhatIsInForceAndWhatDisagreed(t *testing.T) {
+func TestTheEndpointAnswersWhatIsInForceAndWhatDisagreed(t *testing.T) {
 	app := mountGraph(t)
 	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/core", true)
 	assertFact(t, app, "", "acme/svc/api", "owner", "acme/team/platform", true)
