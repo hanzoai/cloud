@@ -41,7 +41,7 @@
 package cloudflare
 
 import (
-	"github.com/hanzoai/cloud/internal/environ"
+	cf "github.com/hanzoai/cloud/internal/cloudflare"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -80,17 +80,6 @@ var tokenFor = integrations.TokenFor
 // at connect time, ExternalID) from the integrations plane. Also a package var ONLY
 // for test injection; production never reassigns it.
 var connectionFor = integrations.ConnectionFor
-
-// cfAPIBase is Cloudflare's API v4 origin. Overridable via CLOUDFLARE_API_BASE for
-// tests (an httptest server) and CF-compatible endpoints; read at call time. The
-// default is the real Cloudflare API. (Same knob hanzodns uses, so a test harness
-// points both planes at one stub.)
-func cfAPIBase() string {
-	if v := environ.Or("CLOUDFLARE_API_BASE", ""); v != "" {
-		return strings.TrimRight(v, "/")
-	}
-	return "https://api.cloudflare.com/client/v4"
-}
 
 // cfHTTPClient is the ONE client for every Cloudflare call (connection-pooled). Its
 // Timeout is the outer ceiling; each call tightens it with a per-request deadline via
@@ -344,15 +333,6 @@ type client struct {
 	base  string
 }
 
-// cfEnvelope is the shared Cloudflare API v4 response envelope.
-type cfEnvelope struct {
-	Success bool `json:"success"`
-	Errors  []struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
 // cfError carries the upstream Cloudflare HTTP status so a proxied not-found/bad
 // request is reported with a recognizable code rather than a blanket 502. Its
 // message is Cloudflare's own — token-free by construction.
@@ -363,17 +343,6 @@ type cfError struct {
 }
 
 func (e *cfError) Error() string { return e.msg }
-
-func (e cfEnvelope) err(status int) error {
-	if e.Success {
-		return nil
-	}
-	if len(e.Errors) > 0 {
-		return &cfError{upstream: status, code: e.Errors[0].Code,
-			msg: fmt.Sprintf("cloudflare API error (%d): [%d] %s", status, e.Errors[0].Code, e.Errors[0].Message)}
-	}
-	return &cfError{upstream: status, msg: fmt.Sprintf("cloudflare API error (status %d)", status)}
-}
 
 // send is the ONE authed Cloudflare request: issue method+path with the per-org
 // Bearer (the token rides ONLY this header — never a query, log, or error), bound the
@@ -407,12 +376,23 @@ func (cl *client) send(ctx context.Context, method, path, contentType string, bo
 // envErr maps a Cloudflare response to a token-free error from its {success,errors}
 // envelope, carrying the upstream status for cfErr's remap. It returns nil ONLY for a
 // successful envelope — the shared fail-closed check for every enveloped response.
+//
+// The envelope is a SHAPE and lives in internal/cloudflare, where the other caller
+// of that API reads it too. What a failed one MEANS is this package's own, so it is
+// decided here rather than carried by the leaf for one of its two readers.
 func envErr(status int, data []byte) error {
-	var env cfEnvelope
+	var env cf.Envelope
 	if len(data) > 0 {
 		_ = json.Unmarshal(data, &env)
 	}
-	return env.err(status)
+	if env.Success {
+		return nil
+	}
+	if len(env.Errors) > 0 {
+		return &cfError{upstream: status, code: env.Errors[0].Code,
+			msg: fmt.Sprintf("cloudflare API error (%d): [%d] %s", status, env.Errors[0].Code, env.Errors[0].Message)}
+	}
+	return &cfError{upstream: status, msg: fmt.Sprintf("cloudflare API error (status %d)", status)}
 }
 
 // cfDo performs a Cloudflare API v4 call, JSON-encoding body and decoding the
@@ -552,7 +532,7 @@ func (o ops) authClient(ctx context.Context) (*client, string, error) {
 	if c, ok := cloud.Request(ctx); ok {
 		c.SetHeader(actingOrgHeader, org)
 	}
-	return &client{token: string(bytes.TrimSpace(tok)), base: cfAPIBase()}, org, nil
+	return &client{token: string(bytes.TrimSpace(tok)), base: cf.APIBase()}, org, nil
 }
 
 // authWrite is the MUTATION preamble (POST/PUT/DELETE): it additionally requires the
