@@ -190,18 +190,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(g, "/posts/:id/publish", o.publish)
 }
 
-// ---- shared helpers (mirror clients/crm + clients/marketing) ----
-
-// clip trims and bounds a short text field to maxField.
-func clip(s string) string { return clipN(s, maxField) }
-
-// clipBody trims and bounds a post body to maxContent.
-func clipBody(s string) string { return clipN(s, maxContent) }
-
-func clipN(s string, n int) string {
-	return shorten.To(strings.TrimSpace(s), n)
-}
-
 // limitOf reads the caller's ?limit token. It TRIMS before parsing and falls back
 // to the default on anything it cannot read, which is why the field carrying it is
 // a string: zip's own setScalar (typed.go:407) parses with strconv.ParseInt and no
@@ -262,7 +250,7 @@ func nonNeg(n int64) int64 {
 func normMedia(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, u := range in {
-		if u = clip(u); u == "" {
+		if u = shorten.Trim(u, maxField); u == "" {
 			continue
 		}
 		out = append(out, u)

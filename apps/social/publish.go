@@ -1,6 +1,7 @@
 package social
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
@@ -214,7 +215,7 @@ func publishPost(ctx context.Context, s *cloud.Service[state], org, id string) (
 // markFailed records a failed publish on the post and returns the refreshed record with
 // an optional control error to surface to the HTTP layer (errProviderNotConfigured → 503).
 func markFailed(ctx context.Context, s *cloud.Service[state], org, id, reason string, surface error) (socialPost, error) {
-	if err := s.State.store.MarkFailed(ctx, org, id, clipN(reason, maxError), time.Now().Unix()); err != nil {
+	if err := s.State.store.MarkFailed(ctx, org, id, shorten.Trim(reason, maxError), time.Now().Unix()); err != nil {
 		return socialPost{}, err
 	}
 	post, err := s.State.store.GetPost(ctx, org, id)

@@ -3,6 +3,7 @@
 package marketing
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -300,7 +301,7 @@ func (o ops) addSuppression(ctx context.Context, in *Suppression) (*Suppression,
 	if addr == "" {
 		return nil, zip.ErrBadRequest("address is required")
 	}
-	sup := Suppression{Org: org, Channel: channel, Address: addr, Reason: clip(in.Reason), CreatedAt: time.Now().Unix()}
+	sup := Suppression{Org: org, Channel: channel, Address: addr, Reason: shorten.Trim(in.Reason, maxField), CreatedAt: time.Now().Unix()}
 	if err := o.s.State.store.Suppress(ctx, sup); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "suppress: %v", err)
 	}

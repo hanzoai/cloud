@@ -238,11 +238,6 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 // reach the spec. ops therefore carries STATE and no logic.
 type ops struct{ s *cloud.Service[state] }
 
-// clip trims and bounds a text field to maxField.
-func clip(s string) string {
-	return shorten.To(strings.TrimSpace(s), maxField)
-}
-
 // limitOf bounds a caller's page size: absent, unparseable or non-positive means
 // defaultLimit, and nothing above maxLimit is honoured.
 func limitOf(n int) int {
@@ -372,7 +367,7 @@ func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 	if err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
@@ -393,7 +388,7 @@ func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 	now := time.Now().Unix()
 	saved, err := o.s.State.store.CreateCampaign(ctx, Campaign{
 		ID: id, Org: org, Name: name, Channel: channel, Status: status,
-		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
+		Objective: shorten.Trim(in.Objective, maxField), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
 		ScheduledAt: nonNeg(in.ScheduledAt), CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
@@ -446,7 +441,7 @@ func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 	if err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
@@ -460,7 +455,7 @@ func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 	}
 	saved, err := o.s.State.store.UpdateCampaign(ctx, Campaign{
 		ID: strings.TrimSpace(in.ID), Org: org, Name: name, Channel: channel, Status: status,
-		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
+		Objective: shorten.Trim(in.Objective, maxField), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
 		ScheduledAt: nonNeg(in.ScheduledAt), UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {

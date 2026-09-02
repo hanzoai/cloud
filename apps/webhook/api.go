@@ -315,7 +315,7 @@ func (o ops) createEndpoint(ctx context.Context, in *createEndpointIn) (*Endpoin
 		Events:      events,
 		Secret:      newSecret(),
 		Status:      status,
-		Description: clip(in.Description, maxDescription),
+		Description: shorten.Trim(in.Description, maxDescription),
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -383,7 +383,7 @@ func (o ops) updateEndpoint(ctx context.Context, in *updateEndpointIn) (*Endpoin
 		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	e, err := st.update(ctx, strings.TrimSpace(in.ID), url, events, status, clip(in.Description, maxDescription), now)
+	e, err := st.update(ctx, strings.TrimSpace(in.ID), url, events, status, shorten.Trim(in.Description, maxDescription), now)
 	if err != nil {
 		return nil, notFoundOr(err)
 	}
@@ -585,10 +585,6 @@ func clampLimit(n int) int {
 // value the delivery table's sortable `created` column is compared against.
 func windowStart() string {
 	return time.Now().UTC().Add(-usageWindow).Format(time.RFC3339)
-}
-
-func clip(s string, max int) string {
-	return shorten.To(strings.TrimSpace(s), max)
 }
 
 // newSecret mints the HMAC signing secret returned once on create (256 random bits,

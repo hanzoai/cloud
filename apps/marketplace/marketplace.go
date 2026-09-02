@@ -328,8 +328,8 @@ func (o marketOps) publish(ctx context.Context, in *publishReq) (*Listing, error
 		return nil, zip.Errorf(http.StatusUnprocessableEntity, "unknown tool: %s", body.Tool)
 	}
 	created, err := o.s.State.store.Create(ctx, Listing{
-		PublisherOrg: org, Tool: body.Tool, Title: body.Title, Description: clip(body.Description),
-		Category: clip(body.Category), Price: price, Currency: strings.TrimSpace(body.Currency),
+		PublisherOrg: org, Tool: body.Tool, Title: body.Title, Description: shorten.Trim(body.Description, maxText),
+		Category: shorten.Trim(body.Category, maxText), Price: price, Currency: strings.TrimSpace(body.Currency),
 		Recipient: strings.TrimSpace(body.Recipient), Public: body.Public,
 	})
 	if err != nil {
@@ -435,12 +435,6 @@ func (o marketOps) uninstall(ctx context.Context, in *installReq) (*installState
 	}
 	record(ctx, o.s, org, "install:"+tool, "uninstalled", http.StatusOK)
 	return &installState{Tool: tool, Installed: false}, nil
-}
-
-// ── helpers ─────────────────────────────────────────────────────────────────────
-
-func clip(s string) string {
-	return strings.TrimSpace(shorten.To(s, maxText))
 }
 
 // callerOf is the validated principal behind the request — the actor an activation

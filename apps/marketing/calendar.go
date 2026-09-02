@@ -3,6 +3,7 @@
 package marketing
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"database/sql"
 	"errors"
@@ -343,7 +344,7 @@ func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 	if !okCh {
 		return nil, zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
 	}
-	if clip(in.Body) == "" {
+	if shorten.Trim(in.Body, maxField) == "" {
 		return nil, zip.ErrBadRequest("body is required")
 	}
 	status := calDraft
@@ -353,7 +354,7 @@ func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 	id := mint.ID("cal")
 	now := time.Now().Unix()
 	p, err := o.s.State.store.CreateCalendarPost(ctx, CalendarPost{
-		ID: id, Org: org, Title: clip(in.Title), Body: in.Body, Channel: channel,
+		ID: id, Org: org, Title: shorten.Trim(in.Title, maxField), Body: in.Body, Channel: channel,
 		ScheduledAt: in.ScheduledAt, Status: status, CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
@@ -416,7 +417,7 @@ func (o ops) updateCalendarPost(ctx context.Context, in *CalendarPost) (*Calenda
 		status = calScheduled
 	}
 	p, err := o.s.State.store.UpdateCalendarPost(ctx, CalendarPost{
-		ID: strings.TrimSpace(in.ID), Org: org, Title: clip(in.Title), Body: in.Body, Channel: channel,
+		ID: strings.TrimSpace(in.ID), Org: org, Title: shorten.Trim(in.Title, maxField), Body: in.Body, Channel: channel,
 		ScheduledAt: in.ScheduledAt, Status: status, UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {

@@ -27,6 +27,7 @@ package webhook
 // diverge quietly: it fails to bind, forever, and delivers nothing on ANY stream.
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -471,7 +472,7 @@ func (d *dispatcher) recordAttempt(ctx context.Context, job deliveryJob, attempt
 		Attempt:    attempt,
 		Status:     status,
 		HTTPStatus: res.httpStatus,
-		Error:      clip(res.err, maxDeliveryError),
+		Error:      shorten.Trim(res.err, maxDeliveryError),
 		DurationMs: res.duration.Milliseconds(),
 		Created:    time.Now().UTC().Format(time.RFC3339),
 	}

@@ -321,7 +321,7 @@ func parseMove(content string, maxQueries int) (move, bool) {
 	if json.Unmarshal([]byte(obj), &m) != nil {
 		return move{}, false
 	}
-	m.Next = strings.TrimSpace(clip(oneLine(m.Next), maxNextStep))
+	m.Next = strings.TrimSpace(runes(oneLine(m.Next), maxNextStep))
 	m.Queries = capList(trimAll(m.Queries), maxQueries)
 	m.Read = capList(trimAll(m.Read), maxRead)
 	return m, true
@@ -425,7 +425,7 @@ func gathered(srcs []Source) string {
 	}
 	var b strings.Builder
 	for _, s := range srcs {
-		fmt.Fprintf(&b, "- %s — %s\n", clip(oneLine(s.Title), 120), clip(s.URL, maxURL))
+		fmt.Fprintf(&b, "- %s — %s\n", runes(oneLine(s.Title), 120), runes(s.URL, maxURL))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
