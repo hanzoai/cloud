@@ -23,6 +23,7 @@ package books
 // skipped until they post.
 
 import (
+	"github.com/hanzoai/cloud/types"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -62,18 +63,13 @@ const (
 	tellerMaxRespBytes = 8 << 20 // 8 MiB ceiling on a single Teller response body
 )
 
-// tellerDoer is the HTTP client: the production path uses an mTLS-configured *http.Client;
-// tests inject a mock so the connector is exercised with no network and no real cert.
-type tellerDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
 
 // tellerConn is the Teller connector. Its three clients (kms, doer, base) default to
 // production values and are overridden only in tests — the zero value newTeller() returns is
 // the real connector.
 type tellerConn struct {
 	kms  func() cloud.KMSClient // credential store accessor; nil → bankKMS()
-	doer tellerDoer             // HTTP transport; nil → mTLS client built from the KMS cert
+	doer types.Doer             // HTTP transport; nil → mTLS client built from the KMS cert
 	base string                 // API base; "" → tellerBase
 }
 
@@ -161,7 +157,7 @@ func (tc *tellerConn) Fetch(ctx context.Context, org, cursor string) ([]BankTxn,
 // cursor). It stops at lastID (already ingested), at a short page (end of history), or at the
 // page bound. parseCents failures surface as errors — a bank amount we cannot parse is never
 // silently dropped.
-func (tc *tellerConn) fetchAccount(ctx context.Context, doer tellerDoer, token string, acct tellerAccount, lastID string) ([]BankTxn, string, error) {
+func (tc *tellerConn) fetchAccount(ctx context.Context, doer types.Doer, token string, acct tellerAccount, lastID string) ([]BankTxn, string, error) {
 	base := tc.baseURL() + "/accounts/" + url.PathEscape(acct.ID) + "/transactions"
 	fromID, newest := "", ""
 	var out []BankTxn
@@ -205,7 +201,7 @@ func (tc *tellerConn) fetchAccount(ctx context.Context, doer tellerDoer, token s
 // get performs one authenticated Teller GET. The access_token is the Basic-auth username
 // (empty password) sent only in the request header over mTLS — never in the URL, never
 // logged. An error carries the request path and status, never the token or the raw body.
-func (tc *tellerConn) get(ctx context.Context, doer tellerDoer, token, rawURL string, out any) error {
+func (tc *tellerConn) get(ctx context.Context, doer types.Doer, token, rawURL string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return fmt.Errorf("teller: build request: %w", err)
@@ -233,7 +229,7 @@ func (tc *tellerConn) get(ctx context.Context, doer tellerDoer, token, rawURL st
 // transport resolves the HTTP doer: the injected mock in tests, else an mTLS client built
 // from the client certificate + private key in KMS. Building it per-Fetch keeps the secret
 // out of any long-lived field and re-reads a rotated cert on the next sync.
-func (tc *tellerConn) transport(ctx context.Context, kms cloud.KMSClient) (tellerDoer, error) {
+func (tc *tellerConn) transport(ctx context.Context, kms cloud.KMSClient) (types.Doer, error) {
 	if tc.doer != nil {
 		return tc.doer, nil
 	}
@@ -251,7 +247,7 @@ func (tc *tellerConn) transport(ctx context.Context, kms cloud.KMSClient) (telle
 // buildTellerClient assembles the mutually-authenticated TLS client Teller requires: our
 // client certificate proves the app's identity, TLS 1.2 is the floor, and a finite timeout
 // means a stalled bank never hangs the sync loop.
-func buildTellerClient(certPEM, keyPEM []byte) (tellerDoer, error) {
+func buildTellerClient(certPEM, keyPEM []byte) (types.Doer, error) {
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("teller: load client cert: %w", err)

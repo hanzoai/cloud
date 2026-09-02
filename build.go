@@ -193,7 +193,7 @@ func staticEdgePolicy(cfg *Config) edge.Policy {
 // standalone, exactly as before. The token is KMS-sourced; never logged.
 func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 	base := cfg.CommerceHTTPURL
-	var httpClient metering.HTTPDoer
+	var httpClient types.Doer
 	inProcess := cfg.Enabled("commerce")
 	if inProcess {
 		if base == "" {

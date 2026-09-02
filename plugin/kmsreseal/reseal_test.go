@@ -255,7 +255,7 @@ func TestReseal_FolderSyncResolvedViaList(t *testing.T) {
 }
 
 func TestReseal_PlanDoesNoNetwork(t *testing.T) {
-	// A nil-doer client would panic on any Do; --plan must never touch it.
+	// A nil-types.Doer client would panic on any Do; --plan must never touch it.
 	src := newKMSClient("http://kms.hanzo.svc", standalone, panicDoer{})
 	dst := newKMSClient("http://cloud.hanzo.svc", embedded, panicDoer{})
 	inv := Inventory{Targets: []Target{{Org: "hanzo", Path: "p", Env: "prod", Key: "K"}}, Folders: []Target{{Org: "hanzo", Path: "f", Env: "prod", Folder: true}}}

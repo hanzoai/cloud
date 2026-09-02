@@ -117,11 +117,6 @@ var ErrInsufficientBalance = errors.New("metering: insufficient balance")
 // out-of-funds insufficient_balance.
 var ErrSpendCapExceeded = errors.New("metering: spend cap exceeded")
 
-// HTTPDoer is the minimal HTTP surface the client needs. *http.Client
-// satisfies it; tests and instrumented transports can substitute their own.
-type HTTPDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
 
 // Config configures a Client. Only BaseURL is conceptually required; an empty
 // BaseURL puts the client in "not configured" mode where Authorize allows and
@@ -164,7 +159,7 @@ type Config struct {
 
 	// HTTPClient overrides the underlying HTTP client. When nil a client with
 	// Timeout is created.
-	HTTPClient HTTPDoer
+	HTTPClient types.Doer
 }
 
 // Client meters usage to commerce. It is safe for concurrent use.
@@ -175,7 +170,7 @@ type Client struct {
 	tierAware bool
 	failOpen  bool
 	test      bool
-	http      HTTPDoer
+	http      types.Doer
 }
 
 // New builds a metering Client from cfg. It returns an error only for an

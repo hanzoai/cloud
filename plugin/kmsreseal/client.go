@@ -18,6 +18,7 @@ package main
 // never logged and never written to disk.
 
 import (
+	"github.com/hanzoai/cloud/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -32,12 +33,6 @@ import (
 	"github.com/hanzoai/cloud/internal/shorten"
 )
 
-// doer is the transport client. Production is *http.Client; tests inject an adapter
-// that routes requests to cloud's in-process zip app (app.Fiber().Test), which has
-// the identical Do(*http.Request) (*http.Response, error) signature.
-type doer interface {
-	Do(*http.Request) (*http.Response, error)
-}
 
 // errSecretNotFound distinguishes a 404 (absent record) from a transport/5xx error
 // so callers can report "missing at source" rather than fail the whole run.
@@ -67,14 +62,14 @@ func standalone(org string) string { return "/v1/kms/orgs/" + url.PathEscape(org
 func embedded(string) string { return "/v1/kms/secrets" }
 
 // kmsClient talks to one KMS face at base, in that face's route grammar, via the
-// injected doer.
+// injected types.Doer.
 type kmsClient struct {
 	base  string
 	route route
-	do    doer
+	do    types.Doer
 }
 
-func newKMSClient(base string, r route, d doer) *kmsClient {
+func newKMSClient(base string, r route, d types.Doer) *kmsClient {
 	if d == nil {
 		d = &http.Client{Timeout: httpTimeout}
 	}
@@ -228,7 +223,7 @@ func (c *kmsClient) probeStatus(ctx context.Context, method, token, org, path, e
 	return status, err
 }
 
-// send performs the request through the doer, reading a bounded body.
+// send performs the request through the types.Doer, reading a bounded body.
 func (c *kmsClient) send(req *http.Request) ([]byte, int, error) {
 	resp, err := c.do.Do(req)
 	if err != nil {

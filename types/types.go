@@ -12,6 +12,7 @@ package types
 
 import (
 	"context"
+	"net/http"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -479,4 +480,17 @@ type VFSClient interface {
 	Put(ctx context.Context, key string, payload []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)
 	Delete(ctx context.Context, key string) error
+}
+
+// Doer performs one HTTP round trip. *http.Client satisfies it, and so does any
+// transport a test substitutes — which is why every caller of an outbound HTTP
+// dependency takes this rather than a concrete client.
+//
+// ONE METHOD, ONE NAME. Three packages had declared this method set for
+// themselves under three names. Go satisfies an interface implicitly, so those
+// were already interchangeable; what they cost was a reader having to prove that,
+// and an exported one implying a sharing that the import graph forbids — this
+// package is the leaf that both cloud and the subsystems under it can reach.
+type Doer interface {
+	Do(*http.Request) (*http.Response, error)
 }
