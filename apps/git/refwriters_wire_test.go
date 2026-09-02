@@ -11,10 +11,6 @@ package git
 // exercises, and the file fails if a writer is reopened.
 
 import (
-	"bytes"
-	"encoding/base64"
-	"io"
-	"net/http/httptest"
 
 	"context"
 	"encoding/json"
@@ -265,17 +261,6 @@ func TestInboundSyncCannotAdvanceAnAgentBranch(t *testing.T) {
 	t.Logf("REFUSED before the fetch ran: %s", res.Detail)
 }
 
-// firstRejectLine pulls git's own rejection line out of its output, for a log
-// line that shows what the pusher actually read.
-func firstRejectLine(out string) string {
-	for l := range strings.SplitSeq(out, "\n") {
-		if strings.Contains(l, "remote rejected") || strings.Contains(l, "[rejected]") {
-			return strings.TrimSpace(l)
-		}
-	}
-	return strings.TrimSpace(out)
-}
-
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 func write(t *testing.T, dir, name, content string) {
@@ -302,30 +287,6 @@ func refTip(t *testing.T, app *zip.App, org, repo, branch string) string {
 		}
 	}
 	return ""
-}
-
-// doAuth is `do` with a BEARER credential and NO identity headers — the shape a
-// request carries when the caller is not a principal.
-func doAuth(t *testing.T, app *zip.App, method, path, token string, body any) (int, []byte) {
-	t.Helper()
-	var r io.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
-		r = bytes.NewReader(b)
-	}
-	req := httptest.NewRequest(method, path, r)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("Authorization", "Basic "+
-		base64.StdEncoding.EncodeToString([]byte("x-access-token:"+token)))
-	resp, err := app.Test(req, testCfg)
-	if err != nil {
-		t.Fatalf("Test %s %s: %v", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	out, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, out
 }
 
 // ── writer 9: the merge path ─────────────────────────────────────────────────

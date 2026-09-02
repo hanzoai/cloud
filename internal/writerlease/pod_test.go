@@ -13,29 +13,20 @@ import (
 	"time"
 )
 
-// These tests run REAL processes, because the defect was a property of the
+// These tests run REAL processes, because the property under test belongs to the
 // process tree and nothing else. flock excludes per open file description, so a
-// same-process test can demonstrate exclusion but can never demonstrate the
-// thing that actually happened: sibling processes of ONE pod, sharing one
-// DataDir, each reaching for a lock only one of them can have.
+// same-process test can demonstrate exclusion but never the case that matters:
+// sibling processes of ONE pod, sharing one DataDir, each reaching for a lock
+// only one of them can have.
 //
-// The two rules a child might follow are both kept here, and the same topology
-// is run under each:
+// THE RULE. The pod root takes the lock once, before it spawns anything, and
+// stamps the environment its children are born with. Every subsystem then starts
+// at once AND the volume stays defended against the next pod.
 //
-//	legacy — what shipped on 2026-08-04. Every process that runs the server body
-//	         takes the lock itself, and the router takes nothing because it never
-//	         runs that body. Result below: one subsystem serves, the rest wait
-//	         for a handoff that cannot come. That is the outage, reproduced.
-//
-//	fixed  — Hold. The pod root takes the lock once, before it spawns anything,
-//	         and stamps the environment its children are born with. Result below:
-//	         every subsystem starts at once AND the volume is still defended
-//	         against the next pod.
-//
-// The second half of that last sentence is the part worth guarding. The repair
-// that followed the incident stopped the deadlock by having the children skip
-// the lock, which "fixed" it in the sense that a disconnected smoke alarm fixes
-// a nuisance alarm. TestFixed_VolumeStillDefended is the test that fails.
+// The second half of that sentence is the part worth guarding, because the cheap
+// way to get siblings starting together is to let the children skip the lock —
+// which starts them and disarms the interlock in the same move, and leaves it
+// looking armed. TestFixed_VolumeStillDefended is the test that catches that.
 
 const (
 	modeEnv = "WRITERLEASE_TEST_MODE"
@@ -47,7 +38,8 @@ const (
 	exitFailClosed = 3 // it waited for the lease and never got it
 	exitBroken     = 4 // anything else
 
-	// subsystems mirrors the three the pod actually deadlocked on.
+	// subsystems are three eager plugins one pod starts at once — enough for a
+	// sibling to contend with a sibling, which is the whole shape under test.
 	kms, pubsub, kafka = "kms", "pubsub", "kafka"
 )
 
@@ -55,8 +47,6 @@ func TestMain(m *testing.M) {
 	switch os.Getenv(modeEnv) {
 	case "":
 		os.Exit(m.Run())
-	case "legacy":
-		os.Exit(asLegacyChild())
 	case "fixed":
 		os.Exit(asFixedChild())
 	case "other-pod":
@@ -65,28 +55,6 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "writerlease test: unknown mode")
 		os.Exit(9)
 	}
-}
-
-// asLegacyChild is the 2026-08-04 rule, preserved as executable history: a
-// subsystem process reads CLOUD_WRITER_LEASE and takes the lock on its own
-// behalf. Correct against another POD. Fatal among SIBLINGS.
-func asLegacyChild() int {
-	if !truthy(os.Getenv(Enable)) {
-		return exitServing
-	}
-	release, err := Acquire(os.Getenv(dirEnv), envDur(waitEnv), nil)
-	if err != nil {
-		if strings.Contains(err.Error(), "still held by another writer") {
-			fmt.Println("waiting for handoff, gave up")
-			return exitFailClosed
-		}
-		fmt.Fprintln(os.Stderr, err)
-		return exitBroken
-	}
-	fmt.Println("serving")
-	time.Sleep(envDur(holdEnv))
-	_ = release()
-	return exitServing
 }
 
 // asFixedChild is the rule this package exists to state: ask what this process's
@@ -129,38 +97,6 @@ func asOtherPod() int {
 	return exitServing
 }
 
-// --- the two runs -----------------------------------------------------------
-
-// TestLegacyRule_SiblingsDeadlock reproduces the incident. Three subsystem
-// processes, one pod, one DataDir, nobody above them holding anything — exactly
-// the shape of api.hanzo.ai at 08:52Z on 2026-08-04.
-//
-// Expected and asserted: kms (or whichever wins the race) serves, and the other
-// two burn their whole fail-closed budget and exit without ever binding. A pod
-// in this state cannot pass a readiness probe, so the liveness probe kills it
-// and its replacement arrives at the identical deadlock.
-func TestLegacyRule_SiblingsDeadlock(t *testing.T) {
-	dir := t.TempDir()
-	wait, hold := 900*time.Millisecond, 2500*time.Millisecond
-
-	started := time.Now()
-	out := runSubsystems(t, "legacy", dir, wait, hold, nil)
-
-	serving, blocked := tally(out)
-	if serving != 1 {
-		t.Fatalf("legacy rule: %d of 3 subsystems served, want exactly 1 — the reproduction is not reproducing", serving)
-	}
-	if blocked != 2 {
-		t.Fatalf("legacy rule: %d subsystems blocked, want 2 (%v)", blocked, out)
-	}
-	// The losers did not fail fast — they SPUN, which is why the pod hung rather
-	// than crashed, and why the liveness probe was what eventually noticed.
-	if spent := time.Since(started); spent < wait {
-		t.Fatalf("legacy rule: the blocked subsystems returned in %s, faster than the %s lease wait — they did not actually contend", spent, wait)
-	}
-	t.Logf("reproduced: 1 subsystem serving, 2 waiting for a handoff that cannot come — %v", out)
-}
-
 // TestFixedRule_SiblingsAllServe is the same three processes under the same
 // conditions, except the pod root took the lease first and stamped what it
 // spawned. Every subsystem comes up, and none of them waits on any other.
@@ -187,7 +123,7 @@ func TestFixedRule_SiblingsAllServe(t *testing.T) {
 
 	serving, blocked := tally(out)
 	if blocked != 0 {
-		t.Fatalf("%d subsystems blocked on their own pod's lease — the sibling deadlock is back (%v)", blocked, out)
+		t.Fatalf("%d subsystems blocked on their own pod's lease — siblings are contending instead of inheriting (%v)", blocked, out)
 	}
 	if serving != 3 {
 		t.Fatalf("%d of 3 subsystems served (%v)", serving, out)
@@ -204,12 +140,12 @@ func TestFixedRule_SiblingsAllServe(t *testing.T) {
 	t.Logf("all 3 subsystems serving, none contended — %v", out)
 }
 
-// TestFixed_VolumeStillDefended is the assertion the post-incident repair would
-// fail. Making the children skip the lock removes the deadlock; it also removes
-// the lock, because the router never ran the code that takes it. A pod whose
-// children all start and whose volume is open to the next pod is not fixed — it
-// is the same bug with the alarm disconnected, and it is the state in which
-// someone reads "writer lease: enabled" and switches to RollingUpdate.
+// TestFixed_VolumeStillDefended is the assertion a naive repair fails. Making the
+// children skip the lock stops them contending; it also removes the lock, because
+// then nothing runs the code that takes it. A pod whose children all start and
+// whose volume is open to the next pod is not fixed — it is the same defect with
+// the alarm disconnected, and it is the state in which someone reads "writer
+// lease: enabled" and switches to RollingUpdate.
 func TestFixed_VolumeStillDefended(t *testing.T) {
 	dir := t.TempDir()
 
@@ -273,7 +209,7 @@ func TestTwoPodGenerations_ExactlyOneWriter(t *testing.T) {
 
 // --- harness ----------------------------------------------------------------
 
-// runSubsystems starts the three subsystems that deadlocked, concurrently,
+// runSubsystems starts the three subsystems concurrently,
 // exactly as zip starts eager plugins.
 func runSubsystems(t *testing.T, mode, dir string, wait, hold time.Duration, extra []string) map[string]string {
 	t.Helper()

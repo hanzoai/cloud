@@ -326,13 +326,6 @@ func TestFleetPlane_NoSocketIsAnError(t *testing.T) {
 	}
 }
 
-// headers stands in for the gateway-minted request on the two calls above that have
-// no HTTP request to delegate. It is the transport's own Headers sliver — the tests
-// that matter (the boundary ones) drive a real *zip.Ctx instead.
-type headers map[string]string
-
-func (h headers) Header(k string) string { return h[k] }
-
 // TestFleetApp_CarriesNoScope is the STRUCTURAL half of the guarantee, and the
 // stronger one. The tests above show the handler ignores who the caller claims to
 // be; this shows the caller cannot even ASK. The fleet op's INPUT is the empty

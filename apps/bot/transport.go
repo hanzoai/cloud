@@ -47,9 +47,6 @@ const (
 	// tokenEnv is the shared service bearer (KMS-injected) the runtime gates on.
 	tokenEnv = "BOT_GATEWAY_TOKEN"
 
-	// lineCap bounds one streamed message: a diffstat or log line can be large but
-	// never unbounded, so a hostile or huge message cannot exhaust cloud memory.
-	lineCap = 1 << 20
 
 	// errBodyCap bounds the failure detail read back for an error message.
 	errBodyCap = 64 << 10

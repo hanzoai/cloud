@@ -37,10 +37,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// maxCompletionResponse bounds the in-process completion body read so a hostile or
-// broken upstream cannot balloon memory.
-const maxCompletionResponse = 8 << 20
-
 // chat is where the round answers. The agents root is spent — POST /v1/agents is
 // the typed create — so the conversation surface takes a sub-path of it, and the
 // five routes compose off this one address (HIP-1210).

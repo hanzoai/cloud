@@ -18,7 +18,6 @@ import (
 	"github.com/hanzoai/o11y/pkg/community"
 	"github.com/hanzoai/o11y/pkg/modules/sentry/implsentry"
 	o11yrt "github.com/hanzoai/o11y/pkg/o11y"
-	o11yapp "github.com/hanzoai/o11y/pkg/query-service/app"
 )
 
 // embeddedDSN is the enable signal AND the datastore (Hanzo Datastore) target for
@@ -32,16 +31,12 @@ func embeddedDSN() string {
 	return cmp.Or(os.Getenv("O11Y_DATASTORE_DSN"), os.Getenv("O11Y_TELEMETRYSTORE_DATASTORE_DSN"))
 }
 
-// embeddedRuntime / embeddedServer pin the ONE in-process o11y runtime for the
-// life of the process (a package ref the GC won't collect), mirroring cloud's
-// embeddedTasks. It is the SAME runtime the standalone o11y cmd/community builds —
+// embeddedRuntime is the ONE in-process o11y runtime, held for the life of the
+// process. It is the SAME runtime the standalone o11y cmd/community builds —
 // telemetry stores (datastore/datastore), sqlstore, querier, rule manager,
 // dashboards, alerts — served through cloud's HTTP stack instead of a second
 // Deployment.
-var (
-	embeddedRuntime *o11yrt.O11y
-	embeddedServer  *o11yapp.Server
-)
+var embeddedRuntime *o11yrt.O11y
 
 // buildEmbeddedHandler constructs the o11y runtime IN-PROCESS and returns its
 // public HTTP handler via the ONE shared builder — community.NewServer — the
@@ -112,7 +107,6 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	runtime.Start(ctx)
 
 	embeddedRuntime = runtime
-	embeddedServer = server
 
 	// Keyed error ingest (pk- → org) for the embedded sentry runtime goes through the
 	// ONE binary-wide key resolver — the same client /v1/event's out-of-band resolution

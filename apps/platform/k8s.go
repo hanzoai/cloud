@@ -1198,22 +1198,6 @@ const (
 	artifactWorkspaceLimit = "50Gi"
 )
 
-// buildPushSecretPrefix + buildPushSecret select the PER-ORG push credential a
-// build mounts. The Secret is named push-<namespace> (push-hanzoai / push-luxfi /
-// push-zooai) and holds ONLY that one org's registry write token, so a build for
-// one brand can never read another brand's push credential (H2). Combined with H1
-// (a non-SuperAdmin build's target namespace already equals the caller's own org),
-// a malicious Dockerfile can exfiltrate at most the SAME org's push token it was
-// authorized to push with — never the shared 3-org credential. Fail-closed: an
-// image not on an owned namespace yields an error and NO Job is launched
-// (imageAllowed has already passed on every live path, so this only fires on a
-// logic error, and it fails closed rather than falling back to a broad cred).
-// buildPullSecret is the registry READ credential in the build namespace, used by
-// the smoke Job to pull the image it just built. It named `kaniko-ghcr`, a Secret
-// that does not exist there — so every smoke pulled anonymously and a private
-// image could only fail on a pull nobody attributed to a credential.
-const buildPullSecret = "ghcr-pull"
-
 const buildPushSecretPrefix = "push-"
 
 func buildPushSecret(image string) (string, error) {
