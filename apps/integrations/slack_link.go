@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
@@ -304,33 +303,6 @@ func putSlackUserLink(s *cloud.Service[state], org, slackUser string, link slack
 		return err
 	}
 	return kmsPut(s, kmsPath(org, "slack"), slackUserSecretName(slackUser), blob)
-}
-
-// getSlackUserLink returns the linked (org, slackUser) binding. found=false (nil
-// error) when the user has not linked (no secret). Fails closed on invalid org /
-// KMS-down.
-func getSlackUserLink(s *cloud.Service[state], org, slackUser string) (slackUserLink, bool, error) {
-	if !validOrg(org) {
-		return slackUserLink{}, false, fmt.Errorf("slack: invalid org")
-	}
-	if !kmsReady(s) {
-		return slackUserLink{}, false, kms.ErrMasterKeyMissing
-	}
-	raw, err := kmsGet(s, kmsPath(org, "slack"), slackUserSecretName(slackUser))
-	if errors.Is(err, kms.ErrSecretNotFound) {
-		return slackUserLink{}, false, nil
-	}
-	if err != nil {
-		return slackUserLink{}, false, err
-	}
-	var link slackUserLink
-	if err := json.Unmarshal(raw, &link); err != nil {
-		return slackUserLink{}, false, fmt.Errorf("slack: user link decode: %w", err)
-	}
-	if link.Subject == "" {
-		return slackUserLink{}, false, nil
-	}
-	return link, true, nil
 }
 
 // ── Slack sign-in (user_scope) code exchange ────────────────────────────────

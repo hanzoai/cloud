@@ -2,7 +2,6 @@ package integrations
 
 import (
 	"context"
-	"strconv"
 )
 
 // The catalog: every connector this deployment knows how to speak, as data.
@@ -173,28 +172,6 @@ func identifyOIDC(endpoint string) func(context.Context, string) (identity, erro
 		}
 		return identity{ExternalID: u.Sub, Label: firstNonEmpty(u.Email, u.Name)}, nil
 	}
-}
-
-func identifyGitHub(ctx context.Context, token string) (identity, error) {
-	var u struct {
-		ID    int64  `json:"id"`
-		Login string `json:"login"`
-	}
-	if err := getJSON(ctx, "https://api.github.com/user", token, &u); err != nil {
-		return identity{}, err
-	}
-	return identity{ExternalID: strconv.FormatInt(u.ID, 10), Label: u.Login}, nil
-}
-
-func identifyDiscord(ctx context.Context, token string) (identity, error) {
-	var u struct {
-		ID       string `json:"id"`
-		Username string `json:"username"`
-	}
-	if err := getJSON(ctx, "https://discord.com/api/users/@me", token, &u); err != nil {
-		return identity{}, err
-	}
-	return identity{ExternalID: u.ID, Label: u.Username}, nil
 }
 
 func identifyGraph(ctx context.Context, token string) (identity, error) {

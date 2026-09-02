@@ -519,15 +519,6 @@ func slackChatUpdate(ctx context.Context, botToken, channel, ts, text string) (s
 	})
 }
 
-// slackPostThread posts to a channel, threaded under threadTS when non-empty.
-func slackPostThread(ctx context.Context, botToken, channel, threadTS, text string) error {
-	fields := map[string]any{"channel": channel, "text": text}
-	if threadTS != "" {
-		fields["thread_ts"] = threadTS
-	}
-	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
-}
-
 // slackPostEphemeral posts a message visible ONLY to `user` in `channel` — used
 // for the account-link prompt so a link URL is NEVER shown to a whole channel.
 func slackPostEphemeral(ctx context.Context, botToken, channel, user, text string) error {
@@ -548,21 +539,6 @@ func PostSlackBlocks(ctx context.Context, botToken, channel, text string, blocks
 	fields := map[string]any{"channel": channel, "text": text}
 	if len(blocks) > 0 {
 		fields["blocks"] = blocks
-	}
-	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
-}
-
-// PostSlackBlocksThread posts a Block Kit message threaded under threadTS (when
-// non-empty) via the shared chat.postMessage path — the same path PostSlackBlocks
-// uses, plus in-thread delivery so a coding result lands under the triggering
-// @hanzo message.
-func PostSlackBlocksThread(ctx context.Context, botToken, channel, threadTS, text string, blocks []any) error {
-	fields := map[string]any{"channel": channel, "text": text}
-	if len(blocks) > 0 {
-		fields["blocks"] = blocks
-	}
-	if threadTS != "" {
-		fields["thread_ts"] = threadTS
 	}
 	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
 }

@@ -62,7 +62,7 @@ type testEnv struct {
 func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 
 // newApp mounts channels exactly as apps.go does. Integrations stays
-// unmounted on purpose: LinkedSubject fails soft (empty UserID),
+// unmounted on purpose: identity fails soft (empty UserID),
 // OrgForExternalID / ConnectionFor answer not-found — the fail-closed side
 // every gate must survive.
 func newApp(t *testing.T) *testEnv {

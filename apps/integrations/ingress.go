@@ -97,33 +97,6 @@ func emitIngress(ctx context.Context, s *cloud.Service[state], org string, in In
 	return true
 }
 
-// LinkedSubject returns the Hanzo account subject bound to (org, provider,
-// extUser) by the account-link flow (channel_link.go / *_link.go). Returns
-// ("", false, nil) when the user has not linked; an error (fail closed) on an
-// unmounted subsystem, invalid org, or KMS-down.
-func LinkedSubject(org, provider, extUser string) (string, bool, error) {
-	if mounted == nil {
-		return "", false, fmt.Errorf("integrations: not mounted")
-	}
-	link, ok, err := getUserLink(mounted, org, provider, extUser)
-	if err != nil || !ok {
-		return "", false, err
-	}
-	return link.Subject, true, nil
-}
-
-// ── transport send helpers (each delegates to the ONE existing HTTP path) ────
-
-// SendSlack posts text to channel, threaded under threadTS when non-empty
-// (slackPostThread, slack_events.go — posts top-level chat.postMessage when
-// threadTS == ""). The token is the org's OWN custodied bot token: TokenFor
-// fails closed for unmounted/unknown/not-connected/KMS-down, so an org that
-// never connected Slack cannot post — the per-org token IS the tenancy gate.
-func SendSlack(ctx context.Context, org, channel, threadTS, text string) error {
-	_, err := SendSlackAt(ctx, org, channel, threadTS, "", text)
-	return err
-}
-
 // SendSlackAt is the ONE Slack write, and it either POSTS or EDITS depending on
 // whether it was given a message to edit. It returns the message's timestamp —
 // Slack's id for it — which is what a later edit addresses.
@@ -226,12 +199,12 @@ func ingestIn(org string, in Inbound, replyRoot string) *plane.ChannelsIngestIn 
 
 // serveIdentity publishes the linked-account lookup on the plane.
 //
-// integrations.LinkedSubject is a Go function gated on this package's `mounted`
-// global, and a package global is per-process. The turn runs in channels, which
-// is a different process, so every call there answered "integrations: not
-// mounted" and the turn ran as nobody — silently, because the caller treats
-// identity as best-effort. Custody is the reason this stays here: the link lives
-// in KMS under this subsystem, and only the answer crosses.
+// An in-process lookup would be gated on this package's `mounted` global, and a
+// package global is per-process. The turn runs in channels, a different process,
+// so every such call answers "integrations: not mounted" and the turn runs as
+// nobody — silently, because the caller treats identity as best-effort. Custody
+// is the reason this stays here: the link lives in KMS under this subsystem, and
+// only the answer crosses.
 func serveIdentity() {
 	zip.Post[plane.ChatIdentityIn, plane.ChatIdentityOut](cloud.Plane(), "/integrations/chat-identity", planeChatIdentity,
 		zip.WithOperationID(plane.ChatIdentity),
@@ -255,11 +228,11 @@ func planeChatIdentity(ctx context.Context, in *plane.ChatIdentityIn) (*plane.Ch
 
 // serveSend publishes the outbound send on the plane.
 //
-// The four Send* helpers above are Go calls, and every one of them ends at
-// TokenFor, which is gated on this package's `mounted` global. channels holds
-// them as function values (slackDoor = integrations.SendSlack) and runs in a
-// DIFFERENT PROCESS, so each answered "integrations: not mounted" and a reply
-// was never posted — a turn that ran perfectly and then spoke into nothing.
+// The Send* helpers above are Go calls, and every one of them ends at TokenFor,
+// which is gated on this package's `mounted` global. channels runs in a DIFFERENT
+// PROCESS, so holding one as a function value there answers "integrations: not
+// mounted" and posts no reply — a turn that runs perfectly and then speaks into
+// nothing.
 //
 // The send stays here because the per-org bot token IS the tenancy gate: an org
 // that never connected Slack cannot post, and that property only holds where the

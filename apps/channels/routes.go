@@ -867,8 +867,8 @@ func send(s *cloud.Service[state], c *zip.Ctx) error {
 		case errors.Is(err, errNoRoute):
 			return zip.ErrConflict("no inbound route for this room; the bot must be messaged there first")
 		}
-		// Transport errors carry status/shape only — never tokens (SendSlack /
-		// SendDiscord contract, integrations/ingress.go).
+		// Transport errors carry status/shape only — never tokens (the Send*
+		// contract in integrations/ingress.go).
 		return zip.Errorf(http.StatusBadGateway, "%s: %v", tr.id, err)
 	}
 	if r.Idempotency != "" {

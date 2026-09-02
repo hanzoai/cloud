@@ -368,10 +368,9 @@ const (
 
 	// ChatIdentity resolves the Hanzo account a chat user has linked, for the
 	// process that runs the turn. Token custody stays in integrations — this
-	// answers WHO, never with what. It exists because integrations.LinkedSubject
-	// gates on that package's `mounted` global and channels is a different
-	// process, so the in-process call answered "not mounted" every time and the
-	// turn ran as nobody.
+	// answers WHO, never with what. It exists because an in-process lookup gates
+	// on integrations' `mounted` global and channels is a different process, so
+	// such a call answers "not mounted" every time and the turn runs as nobody.
 	ChatIdentity = "chat_identity"
 
 	// ChatSend posts one message back to a chat platform. Token custody lives in

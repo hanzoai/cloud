@@ -2,11 +2,12 @@ package channels
 
 // door.go — the ONE outbound path, and why it is a plane call.
 //
-// Each transport used to hold integrations' Send* helper as a function value
-// (slackDoor = integrations.SendSlack). Every one of those ends at TokenFor,
-// which is gated on integrations' `mounted` global — and this is a different
-// PROCESS, so all four answered "integrations: not mounted" and no reply was
-// ever posted. A turn ran, produced an answer, and spoke into nothing.
+// A transport must not hold an integrations Send* helper as a function value.
+// Every one of those ends at TokenFor, which is gated on integrations' `mounted`
+// global — and this is a different PROCESS, so each would answer "integrations:
+// not mounted" and post no reply at all: a turn that runs, produces an answer,
+// and speaks into nothing. The plane call crosses the process boundary that a
+// function value cannot.
 //
 // The send itself stays in integrations because the per-org bot token IS the
 // tenancy gate: an org that never connected a workspace cannot post, and that

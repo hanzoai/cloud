@@ -37,8 +37,8 @@ func TestSendSlack(t *testing.T) {
 		t.Fatalf("transport calls = %d, want 1", sl.count())
 	}
 	call := sl.call(t, 0)
-	// The caller's org rides to the transport — SendSlack's per-org TokenFor IS
-	// the slack tenancy gate.
+	// The caller's org rides to the transport — the per-org TokenFor behind the
+	// send IS the slack tenancy gate.
 	if call.org != "acme" || call.room != "C1" || call.replyTo != "171.2" || call.text != "hi" {
 		t.Fatalf("transport call = %+v", call)
 	}
