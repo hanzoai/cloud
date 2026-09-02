@@ -9,21 +9,21 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/git/keys/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git DELETE /v1/git/keys/:id", zip.Doc{
 		Description: "Removes a registered SSH key, scoped to the caller's org: an org can\nonly delete its own, and a key id it does not own is not found. Answers 204\nwith no body. Once removed the key no longer authenticates any SSH git access.",
 		Fields: map[string]string{
 			"keyRef.id": "ID is the key's identifier (\"gitkey_…\"), from the :id path segment.",
 		},
 		Example: json.RawMessage(`{"id":"gitkey_4a1b"}`),
 	})
-	zip.Describe("DELETE /v1/git/repos/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git DELETE /v1/git/repos/:name", zip.Doc{
 		Description: "Removes a repo's metadata and purges its storage. Answers 204 with\nno body. The metadata row is the source of truth for existence, so a storage\npurge that fails is logged and the delete still succeeds — and a second call\nis a 404, not a second delete.",
 		Fields: map[string]string{
 			"repoRef.name": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
 		},
 		Example: json.RawMessage(`{"name":"widgets"}`),
 	})
-	zip.Describe("DELETE /v1/git/repos/:name/mirrors/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git DELETE /v1/git/repos/:name/mirrors/:id", zip.Doc{
 		Description: "Removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
 		Fields: map[string]string{
 			"childRef.id":   "ID is the row to remove, from the :id path segment.",
@@ -31,7 +31,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","id":"mir_2d90"}`),
 	})
-	zip.Describe("DELETE /v1/git/repos/:name/subscriptions/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git DELETE /v1/git/repos/:name/subscriptions/:id", zip.Doc{
 		Description: "Removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found.",
 		Fields: map[string]string{
 			"childRef.id":   "ID is the row to remove, from the :id path segment.",
@@ -39,13 +39,13 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","id":"sub_7c2e"}`),
 	})
-	zip.Describe("GET /v1/git/:org/:project/:repo/info/refs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/:org/:project/:repo/info/refs", zip.Doc{
 		Description: "Serves GET /info/refs — the ref-advertisement phase. The service is\nselected by the ?service= query param; both upload-pack (fetch) and\nreceive-pack (push) advertise here.",
 	})
-	zip.Describe("GET /v1/git/:org/:repo/info/refs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/:org/:repo/info/refs", zip.Doc{
 		Description: "Serves GET /info/refs — the ref-advertisement phase. The service is\nselected by the ?service= query param; both upload-pack (fetch) and\nreceive-pack (push) advertise here.",
 	})
-	zip.Describe("GET /v1/git/keys", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/keys", zip.Doc{
 		Description: "Returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
 		Fields: map[string]string{
 			"keyList.data":        "Data holds the org's keys.",
@@ -58,7 +58,7 @@ func init() {
 		Example:  json.RawMessage(`{}`),
 		Response: json.RawMessage(`{"data":[{"id":"gitkey_4a1b","title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz…","fingerprint":"SHA256:9pQ…","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
-	zip.Describe("GET /v1/git/repos", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos", zip.Doc{
 		Description: "Returns the repos in the caller's scope, most recently updated\nfirst. The scope is the request principal's — the gateway-minted org and its\noptional project — never anything off the wire, so a caller only ever sees its\nown. Rows carry no branches or HEAD; read one repo for those.",
 		Fields: map[string]string{
 			"repoList.data":          "Data holds the repos in scope, most recently updated first.",
@@ -80,7 +80,7 @@ func init() {
 		Example:  json.RawMessage(`{}`),
 		Response: json.RawMessage(`{"data":[{"id":"repo_9f3c","org":"acme","name":"widgets","defaultBranch":"main","public":false,"cloneUrl":"https://api.hanzo.ai/v1/git/acme/widgets.git","sshUrl":"git@git.hanzo.ai:acme/widgets.git","sizeBytes":4096,"createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name", zip.Doc{
 		Description: "Returns one repo with its live ref state: every branch name and the\nresolved HEAD commit. Both are read from the object store on each call, so an\nempty repo reports no branches and an empty head rather than failing. A repo\noutside the caller's scope is not found.",
 		Fields: map[string]string{
 			"repoRef.name":           "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
@@ -101,7 +101,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets"}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/blob", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/blob", zip.Doc{
 		Description: "Returns one file's bytes at one revision. Text comes back verbatim,\nbinary comes back base64, and a file past the 1 MiB view cap comes back marked\ntruncated with NO content — the client is expected to clone instead.",
 		Fields: map[string]string{
 			"blobJSON.binary":    "Binary marks content git could not treat as text; it comes back base64.",
@@ -117,7 +117,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","ref":"main","path":"go.mod"}`),
 		Response: json.RawMessage(`{"path":"go.mod","size":42,"encoding":"utf8","content":"module widgets\n","binary":false,"truncated":false}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/commits", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/commits", zip.Doc{
 		Description: "Walks a ref's history newest first, or one path's history when a\npath is given. There is no cursor: the page is the newest `limit` commits.",
 		Fields: map[string]string{
 			"commitJSON.authorEmail": "AuthorEmail is the commit author's email.",
@@ -135,7 +135,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","ref":"main","limit":2}`),
 		Response: json.RawMessage(`{"commits":[{"sha":"a1b2c3d4e5f6","shortSha":"a1b2c3d","message":"add the widget service","authorName":"Ada","authorEmail":"ada@hanzo.ai","date":"2026-07-01T10:00:00Z"}]}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/files", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/files", zip.Doc{
 		Description: "Returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from. It is the read a delivery generator makes:\none call answers \"what is the inventory at this commit, and what does it say\",\nwhere listing and then fetching would be a request per file.\n\nReturning the resolved revision matters as much as the bytes. A generator that\nlists at `main` and then reads at `main` can straddle a push and assemble half\nits inventory from one commit and half from the next; resolving once makes the\nwhole read consistent by construction.\n\nA file past the read cap comes back Truncated with no content rather than\nbeing dropped. A caller building a desired set has to know the difference\nbetween \"this file is empty\" and \"this file was not read\" — silently omitting\nit is how a pruning reconcile deletes what the missing file declared.",
 		Fields: map[string]string{
 			"fileJSON.content":   "Content is the file's bytes, empty when Truncated.",
@@ -151,7 +151,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"universe","ref":"main","glob":"charts/app/values/*/*.yaml"}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/mirrors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/mirrors", zip.Doc{
 		Description: "Returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
 		Fields: map[string]string{
 			"mirrorList.data":            "Data holds the repo's outbound mirror targets.",
@@ -165,7 +165,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"data":[{"id":"mir_2d90","repo":"widgets","host":"github.com","url":"https://github.com/acme/widgets.git","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/pulls", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/pulls", zip.Doc{
 		Description: "Returns a repo's pull requests, newest number first — what is\nwaiting to be reviewed, and what has already landed. Narrow it with\n?state=open or ?state=merged; omit state for every proposal.",
 		Fields: map[string]string{
 			"pullFilter.name":    "Name is the repo, from the :name path segment.",
@@ -186,7 +186,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","state":"open"}`),
 		Response: json.RawMessage(`{"data":[{"number":4,"repo":"widgets","title":"cache the catalog read","head":"agent/cache-catalog","base":"main","state":"open","createdAt":"2026-08-07T10:00:00Z","updatedAt":"2026-08-07T10:00:00Z"}]}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/pulls/:number", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/pulls/:number", zip.Doc{
 		Description: "Returns one pull request by its per-repo number. A number belonging to\nanother tenant's repo is not found, exactly as the repo itself is not.",
 		Fields: map[string]string{
 			"pullRef.name":       "Name is the repo, from the :name path segment.",
@@ -205,7 +205,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","number":4}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/readme", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/readme", zip.Doc{
 		Description: "Returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
 		Fields: map[string]string{
 			"readmeJSON.content":  "Content is the file's text, verbatim and unrendered.",
@@ -217,7 +217,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","ref":"main"}`),
 		Response: json.RawMessage(`{"path":"README.md","content":"# widgets\n","encoding":"utf8"}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/refs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/refs", zip.Doc{
 		Description: "Lists a repo's branches, tags and default branch — what a branch\npicker needs in one call. Unlike the other read ops it tolerates a repo with no\ncommits: the ref sets come back empty and the default branch is still named.",
 		Fields: map[string]string{
 			"refJSON.name":      "Name is the short ref name (\"main\", \"v1.2.0\"), not the full refs/… path.",
@@ -230,7 +230,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"branches":[{"name":"main","sha":"a1b2c3d4"}],"tags":[],"default":"main"}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/subscriptions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/subscriptions", zip.Doc{
 		Description: "Returns a repo's Slack subscriptions — which channels the\nlifecycle notifier posts this repo's push and deploy events to.",
 		Fields: map[string]string{
 			"repoRef.name":               "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
@@ -244,7 +244,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"data":[{"id":"sub_7c2e","repo":"widgets","channel":"#builds","events":["push.landed"],"createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
-	zip.Describe("GET /v1/git/repos/:name/tree", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/repos/:name/tree", zip.Doc{
 		Description: "Lists the immediate children of one directory at one revision,\ndirectories before files. It does not recurse — walk down a level at a time.",
 		Fields: map[string]string{
 			"pathRef.name":       "Name is the repo to read, from the :name path segment.",
@@ -260,7 +260,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","ref":"main","path":"cmd"}`),
 		Response: json.RawMessage(`{"entries":[{"name":"server","path":"cmd/server","type":"tree","size":0,"mode":"040000"}]}`),
 	})
-	zip.Describe("GET /v1/git/usage", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git GET /v1/git/usage", zip.Doc{
 		Description: "Returns per-repo and total storage bytes for the caller's org — the\nqueryable, per-tenant number commerce and o11y meter on. It spans EVERY\nproject sub-scope, unlike the repo list, so a billing consumer sees the whole\ntenant footprint in one call. Sizes are last-measured values (create, push,\nmirror and gc each re-measure), not a live walk of the disk.",
 		Fields: map[string]string{
 			"usageRepo.name":       "Name is the repo's org-unique handle.",
@@ -273,7 +273,7 @@ func init() {
 		Example:  json.RawMessage(`{}`),
 		Response: json.RawMessage(`{"org":"acme","totalBytes":12288,"repos":[{"name":"widgets","sizeBytes":4096},{"name":"site","project":"web","sizeBytes":8192}]}`),
 	})
-	zip.Describe("PATCH /v1/git/repos/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git PATCH /v1/git/repos/:name", zip.Doc{
 		Description: "Flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed. Returns the updated repo.",
 		Fields: map[string]string{
 			"patchIn.name":           "Name is the repo to update, from the :name path segment.",
@@ -295,13 +295,13 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","public":true}`),
 	})
-	zip.Describe("POST /git/figures", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/figures", zip.Doc{
 		Description: "Answers the caller's own org-wide git rollup: how many\nrepositories, their total on-disk footprint, how many moved inside\n[activeWindow], and which one moved last.\n\nThe org is the CALLER's plane identity — the same rule every op in this app\nfollows, and here it is structural rather than checked: [plane.FiguresIn]\ncarries no field at all, so there is nothing to validate and nothing an\nargument could widen. Anonymous is refused, never defaulted.\n\nAn org with no repositories answers a figure of zero, not an error. \"You have\nno repositories\" is a true and useful answer; only a failure to find out is an\nerror.",
 	})
-	zip.Describe("POST /git/files", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/files", zip.Doc{
 		Description: "Reads the glob-selected files of one of the caller's repos at one\nrevision, returning the resolved commit and each file's path and contents.\nThe org is the CALLER's plane identity, never the argument — an anonymous\ncaller is refused — and the whole reply is read at one resolved commit, so a\ncaller can never assemble half an inventory from each side of a push. A named\nhandler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /git/import", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/import", zip.Doc{
 		Description: "Creates the repo and mirrors the upstream, for the CALLER's org.\n\nThe org is never read off the argument: it is the identity the edge minted and\nthe plane carried, so a caller holding one org's context cannot create a repo\nin another's namespace. Project carries the provider-side account, which is\nwhat keeps two upstreams of the same name — hanzoai/ai and hanzo-apps/ai —\ndistinct repos rather than one overwriting the other.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"ImportIn.cloneUrl":  "CloneURL is the upstream to mirror from.",
@@ -312,7 +312,7 @@ func init() {
 			"Imported.repo":      "Repo names what was imported.",
 		},
 	})
-	zip.Describe("POST /git/inbound", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/inbound", zip.Doc{
 		Description: "Advances ONE branch of the CALLER's repo from an upstream push.\n\nNative is canonical: the fetch never force-overwrites a native ref, so a\ndivergence comes back as Conflict with native untouched rather than as an\nerror — the caller needs to know it diverged, not retry into an overwrite.\nThe org is the caller's plane identity, so a push routed to one org can never\nadvance another's refs.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"InboundIn.cloneUrl": "CloneURL is the upstream to fetch the ref from.",
@@ -328,20 +328,20 @@ func init() {
 			"Synced.noOp":        "NoOp is true when native was already at that tip.",
 		},
 	})
-	zip.Describe("POST /git/mirror", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/mirror", zip.Doc{
 		Description: "Registers (Enabled) or removes (!Enabled) one outbound mirror\ntarget on a repo of the CALLER's org, idempotently either way.\n\nIt declares the target and nothing more: the pushing stays with the mirror_out\nreactor on the native push lifecycle, so a mirror that exists is a fact about\nthis repo rather than a job somebody has to keep running. EnsureMirror is the\nsame func the in-process controller exposes, so the URL crossing the plane\npasses the identical validateMirrorTarget gate — https, no userinfo, host on\nthe outbound allowlist — and a remote caller cannot register a push to an\ninternal host that a local one could not.\n\nThe error is returned as it comes: a rejected URL is already an HTTPError(400)\nand survives the crossing whole, while a store failure carries no status and\nlands as the 500 it is. Wrapping both would turn the caller's own mistake into\nour fault.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"MirrorIn.enabled": "Enabled registers the target when true and removes it when false.",
 			"MirrorIn.url":     "URL is the outbound target to push to.",
 		},
 	})
-	zip.Describe("POST /git/publish", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/publish", zip.Doc{
 		Description: "Reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /git/rev", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/rev", zip.Doc{
 		Description: "Resolves one of the caller's repos at one ref to the commit it names,\nreturning that commit and the branch or tag label it was reached by. The org is\nthe CALLER's plane identity, never the argument — an anonymous caller is\nrefused. A named handler, not a closure, so zipdoc can lift this prose into the\nregistry.",
 	})
-	zip.Describe("POST /git/status", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /git/status", zip.Doc{
 		Description: "Reports which of the named repos the CALLER's org has imported and\nwhich a prior inbound sync left in conflict.\n\nThe app that DRAWS the repo list is integrations (it has the provider's\ncatalogue of what could be imported); the app that knows what WAS is this one.\nIn a split fleet the in-process importer is nil over there, so the list\nrendered every repo as never-imported — a wrong answer delivered confidently,\nwhich is worse than the import failure the same split caused, because nothing\nerrored.\n\nThe reply is a SLICE, not a map: a map cannot cross this wire, so each row\ncarries the name it answers for. A name git holds nothing under is ABSENT\nrather than a false row — the caller reads absence as not-imported, which is\nthe same value the in-process leg's zero entry yields, so neither leg can be\ntold from the other by its result.\n\nIt calls the in-process implementation directly rather than\ncloud.GitRepoStatuses: the package func dispatches to whatever is registered,\nand in THIS process that resolution would come back around through the plane\nto this same handler.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"RepoStatus.conflict":     "Conflict is true when a branch diverged on a prior inbound sync and native\nwas preserved.",
@@ -351,19 +351,19 @@ func init() {
 			"StatusIn.project":        "Project is the sub-scope; empty means the org's default store.",
 		},
 	})
-	zip.Describe("POST /v1/git/:org/:project/:repo/git-receive-pack", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/:org/:project/:repo/git-receive-pack", zip.Doc{
 		Description: "Serves POST /git-receive-pack — the push phase. The heavy data is\nthe INBOUND pack (request body → `git receive-pack --stateless-rpc` stdin →\nindex-pack to disk); the RESPONSE is only the small report-status, so it runs\nSYNCHRONOUSLY: apply the pack, then re-meter storage and fire push-to-deploy\nfor every branch the push advanced (branch-tip diff), then return the report —\nthe SAME side effects an SSH push produces, deterministic before the client's\npush returns. Memory stays bounded: the pack streams to disk, only the tiny\nreport is buffered.",
 	})
-	zip.Describe("POST /v1/git/:org/:project/:repo/git-upload-pack", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/:org/:project/:repo/git-upload-pack", zip.Doc{
 		Description: "Serves POST /git-upload-pack — the clone/fetch phase. The RESPONSE\nis the packfile (potentially multi-GB), so it STREAMS: the request body feeds\n`git upload-pack --stateless-rpc` stdin and git's stdout is handed to fasthttp\nas the response body — no pack bytes are buffered in this process.",
 	})
-	zip.Describe("POST /v1/git/:org/:repo/git-receive-pack", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/:org/:repo/git-receive-pack", zip.Doc{
 		Description: "Serves POST /git-receive-pack — the push phase. The heavy data is\nthe INBOUND pack (request body → `git receive-pack --stateless-rpc` stdin →\nindex-pack to disk); the RESPONSE is only the small report-status, so it runs\nSYNCHRONOUSLY: apply the pack, then re-meter storage and fire push-to-deploy\nfor every branch the push advanced (branch-tip diff), then return the report —\nthe SAME side effects an SSH push produces, deterministic before the client's\npush returns. Memory stays bounded: the pack streams to disk, only the tiny\nreport is buffered.",
 	})
-	zip.Describe("POST /v1/git/:org/:repo/git-upload-pack", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/:org/:repo/git-upload-pack", zip.Doc{
 		Description: "Serves POST /git-upload-pack — the clone/fetch phase. The RESPONSE\nis the packfile (potentially multi-GB), so it STREAMS: the request body feeds\n`git upload-pack --stateless-rpc` stdin and git's stdout is handed to fasthttp\nas the response body — no pack bytes are buffered in this process.",
 	})
-	zip.Describe("POST /v1/git/keys", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/keys", zip.Doc{
 		Description: "Registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
 		Fields: map[string]string{
 			"keyView.createdAt":        "CreatedAt is RFC 3339 UTC.",
@@ -376,7 +376,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"title":"laptop","publicKey":"ssh-ed25519 AAAAC3Nz… z@hanzo.ai"}`),
 	})
-	zip.Describe("POST /v1/git/repos", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos", zip.Doc{
 		Description: "Provisions an empty bare repository in the caller's scope and\nreturns it with its clone URLs. Answers 201. The name must be unique within\nthe scope — a repeat is a 409, never a silent overwrite of an existing repo.\nThe org comes from the validated principal, so a repo is always born owned by\nthe caller's own tenant.",
 		Fields: map[string]string{
 			"createReq.description":  "Description is a free-form blurb, max 4KiB.",
@@ -400,7 +400,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","description":"the widget service"}`),
 	})
-	zip.Describe("POST /v1/git/repos/:name/gc", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/gc", zip.Doc{
 		Description: "Repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically. It\nruns under one pack slot with the same memory bounds as a clone, so it can\nblock behind heavy pack traffic rather than compete with it. Storage usage is\nre-measured afterwards, since a repack reclaims space.",
 		Fields: map[string]string{
 			"gcOut.maintained": "Maintained is always true; the call fails rather than reporting false.",
@@ -411,7 +411,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"repo":"widgets","sizeBytes":3072,"maintained":true}`),
 	})
-	zip.Describe("POST /v1/git/repos/:name/mirror", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/mirror", zip.Doc{
 		Description: "Imports an external git repository into the caller's repo, provisioning\nit on first use. Fetch is FORCED and covers every ref, so a first call clones\nthe source and a repeat call re-syncs it — the endpoint is idempotent by mirror\nsemantics. Mirrored bytes are metered exactly like a push, and a push.landed\nevent is emitted for the default branch so the code index picks the repo up.",
 		Fields: map[string]string{
 			"mirrorReq.name":         "Name is the local repo to mirror into, from the :name path segment. It is\nCREATED on first use.",
@@ -434,7 +434,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","source":"https://github.com/acme/widgets.git"}`),
 	})
-	zip.Describe("POST /v1/git/repos/:name/mirrors", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/mirrors", zip.Doc{
 		Description: "Registers a downstream remote the repo's advanced refs are pushed to\nwhenever a push lands here. Answers 201. The URL must be https to a host on the\nmirror allowlist (github.com / gitlab.com): the same set the mirror credential\nmay be sent to, so a target can never capture the shared token or point the push\nat an internal service. Any embedded userinfo is stripped — credentials ride\nenv-only at push time and never enter the stored URL. One mirror per host per\nrepo; a second is a 409.",
 		Fields: map[string]string{
 			"mirrorTargetReq.host":       "Host is an optional assertion of the target's hostname. The authoritative\nhost is the one in URL; a value that disagrees with it is refused.",
@@ -448,7 +448,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","url":"https://github.com/acme/widgets.git"}`),
 	})
-	zip.Describe("POST /v1/git/repos/:name/pulls", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/pulls", zip.Doc{
 		Description: "Proposes a branch for merging and returns it with its number. Answers\n201. Both branches must already exist — a proposal naming a branch nobody\npushed is a typo, not a plan — and base defaults to the repo's default branch.\n\nProposing the same head into the same base twice is a 409 while the first\nproposal is still open, so a retried agent run leaves ONE thing to review\nrather than a pile of identical ones. A repo outside the caller's scope is a\n404, exactly as reading it is.",
 		Fields: map[string]string{
 			"openReq.base":       "Base is the branch the work is proposed INTO, by short name. Defaults to\nthe repo's default branch, which is where a proposal goes when nobody says\notherwise.",
@@ -470,7 +470,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","title":"cache the catalog read","head":"agent/cache-catalog","base":"main"}`),
 	})
-	zip.Describe("POST /v1/git/repos/:name/pulls/:number/merge", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/pulls/:number/merge", zip.Doc{
 		Description: "Merges an open pull request by FAST-FORWARDING base to head, and\nanswers the proposal in its merged state with the revision base now points at.\n\nIt merges only when base is already an ancestor of head — the case where head\ncontains every commit base has, so moving the branch loses nothing and invents\nnothing. When base has moved on independently, this REFUSES with 409 and says\nso: a real three-way merge is not implemented here, and reporting one would\nclaim a result these bytes do not produce. Rebase head onto base and merge\nagain.\n\nThe move is judged by the same ref policy a `git push` of it would face, and\nfires the same build and notify reactions, so merging is not a way around\neither. Merging an already-merged proposal is a 409.",
 		Fields: map[string]string{
 			"pullRef.name":       "Name is the repo, from the :name path segment.",
@@ -489,7 +489,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","number":4}`),
 	})
-	zip.Describe("POST /v1/git/repos/:name/push", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/push", zip.Doc{
 		Description: "Lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
 		Fields: map[string]string{
 			"pushFile.content":  "Content is the file's bytes, carried per Encoding.",
@@ -507,7 +507,7 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","branch":"main","message":"generated build","files":[{"path":"index.html","content":"<h1>hi</h1>"}]}`),
 		Response: json.RawMessage(`{"commit":"a1b2c3d4e5f6","branch":"main","cloneUrl":"https://api.hanzo.ai/v1/git/acme/widgets.git","sshUrl":"git@git.hanzo.ai:acme/widgets.git"}`),
 	})
-	zip.Describe("POST /v1/git/repos/:name/subscriptions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/repos/:name/subscriptions", zip.Doc{
 		Description: "Binds a Slack channel to a repo, so the lifecycle notifier posts\nthat repo's push and deploy events there. Answers 201. The same channel twice\non one repo is a 409; a repo outside the caller's scope is a 404, exactly as\nreading it is.",
 		Fields: map[string]string{
 			"subscribeReq.channel":       "Channel is the Slack channel the notifier posts to — an id (C…/G…), a\n#name, or a bare name. Required.",
@@ -521,7 +521,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","channel":"#builds","events":["push.landed"]}`),
 	})
-	zip.Describe("POST /v1/git/webhook", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/git POST /v1/git/webhook", zip.Doc{
 		Description: "Answers every delivery 410 Gone, naming the endpoint that builds. It\nreads no body: there is nothing here to authenticate and nothing to parse.\n\n410, not 404: the address was real and its meaning moved, which is exactly the\ndistinction 410 carries. 404 would say \"no such route\" about a route this\nbinary still serves, and is indistinguishable here from the /api/v1 prefix\nmistake, since Hanzo Git serves /v1.",
 	})
 }

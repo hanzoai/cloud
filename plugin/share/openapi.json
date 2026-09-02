@@ -105,6 +105,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the share was opened, unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "token": {

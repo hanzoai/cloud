@@ -200,6 +200,7 @@
             "required": false,
             "description": "Limit caps how many rows come back; 500 when absent or not positive.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 100
@@ -314,6 +315,7 @@
             "required": false,
             "description": "Limit caps the GL detail rows included as the audit trail; 5000 when absent\nor not positive.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -358,6 +360,7 @@
             "required": false,
             "description": "Limit caps how many rows come back; 500 when absent or not positive.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 100
@@ -881,6 +884,7 @@
             "required": false,
             "description": "Limit caps how many rows come back; 200 when absent or not positive.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -1111,6 +1115,7 @@
           },
           "amount": {
             "description": "Amount is the balance as of the statement date, in whole cents, in its NATURAL\nsign: positive when the account behaved normally, on all three sides. Assets\nare debit-normal and shown as stored; liabilities and equity are credit-normal\nand flipped once here for display. A negative asset is a real overdraft, not a\nsign convention.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -1157,14 +1162,17 @@
           },
           "totalAssets": {
             "description": "TotalAssets is the sum of the asset lines, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "totalEquity": {
             "description": "TotalEquity is the sum of the equity lines including retained earnings, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "totalLiabilities": {
             "description": "TotalLiabilities is the sum of the liability lines, in cents.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1199,26 +1207,32 @@
         "properties": {
           "ingested": {
             "description": "transactions seen",
+            "format": "int64",
             "type": "integer"
           },
           "posted": {
             "description": "vouchers newly posted (outflow + reconciled)",
+            "format": "int64",
             "type": "integer"
           },
           "questions": {
             "description": "unmatched inflows that raised a question",
+            "format": "int64",
             "type": "integer"
           },
           "reconciled": {
             "description": "inflows cleared against Square-clearing",
+            "format": "int64",
             "type": "integer"
           },
           "skipped": {
             "description": "already-processed idempotent no-ops",
+            "format": "int64",
             "type": "integer"
           },
           "transfers": {
             "description": "own-account moves recorded (no P\u0026L)",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1228,6 +1242,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is the size of the movement in whole cents, always POSITIVE —\ndirection carries the sign, so a caller must read both to know which way money\nwent.",
+            "format": "int64",
             "type": "integer"
           },
           "connector": {
@@ -1330,10 +1345,12 @@
           },
           "taxCents": {
             "description": "TaxCents is how much of that total is tax, in cents. It is part of totalCents,\nnot additional to it.",
+            "format": "int64",
             "type": "integer"
           },
           "totalCents": {
             "description": "TotalCents is the document total in whole cents, tax INCLUDED.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1408,14 +1425,17 @@
           },
           "credit": {
             "description": "Credit is the amount credited to that account, in whole cents.",
+            "format": "int64",
             "type": "integer"
           },
           "debit": {
             "description": "Debit is the amount debited to that account, in whole cents. Exactly one of\ndebit and credit is non-zero on a leg; a negative amount is never used to mean\nthe other side.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
             "description": "ID is the entry's position in the ledger. The ledger is append-only, so ids\nascend with posting order and a higher id is a later entry.",
+            "format": "int64",
             "type": "integer"
           },
           "postingAt": {
@@ -1482,10 +1502,12 @@
           },
           "credit": {
             "description": "Credit is the leg's credit in exact cents. Set this or Debit, not both.",
+            "format": "int64",
             "type": "integer"
           },
           "debit": {
             "description": "Debit is the leg's debit in exact cents. Set this or Credit, not both.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1495,6 +1517,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is that line's amount in whole cents. The scanner is instructed to\nreturn integer cents rather than a decimal, so no float rounding can enter the\nledger through here.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -1508,22 +1531,27 @@
         "properties": {
           "arr": {
             "description": "ARR is annualized recurring revenue in cents (MRR × 12).",
+            "format": "int64",
             "type": "integer"
           },
           "burn": {
             "description": "Burn is total expense in cents over the period.",
+            "format": "int64",
             "type": "integer"
           },
           "cash": {
             "description": "Cash is the bank + processor-clearing balance in cents as of To.",
+            "format": "int64",
             "type": "integer"
           },
           "cogs": {
             "description": "COGS is cost of goods sold in cents over the period.",
+            "format": "int64",
             "type": "integer"
           },
           "deferredRevenue": {
             "description": "DeferredRevenue is the customer-wallet liability in cents as of To.",
+            "format": "int64",
             "type": "integer"
           },
           "figures": {
@@ -1539,26 +1567,32 @@
           },
           "grossMarginBps": {
             "description": "GrossMarginBps is GrossProfit / Revenue in basis points (7000 = 70%).",
+            "format": "int64",
             "type": "integer"
           },
           "grossProfit": {
             "description": "GrossProfit is Revenue − COGS, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "monthlyBurn": {
             "description": "MonthlyBurn is net cash burned per month in cents; 0 when not losing cash.",
+            "format": "int64",
             "type": "integer"
           },
           "months": {
             "description": "Months is the window length in whole months used to normalize MRR and burn.",
+            "format": "int64",
             "type": "integer"
           },
           "mrr": {
             "description": "MRR is monthly recurring revenue in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "netIncome": {
             "description": "NetIncome is Revenue − Burn, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "period": {
@@ -1567,10 +1601,12 @@
           },
           "revenue": {
             "description": "Revenue is recognized revenue in cents over the period.",
+            "format": "int64",
             "type": "integer"
           },
           "runwayMonths": {
             "description": "RunwayMonths is Cash / MonthlyBurn; -1 means infinite (the org is not burning).",
+            "format": "int64",
             "type": "integer"
           },
           "to": {
@@ -1602,6 +1638,7 @@
           },
           "netIncome": {
             "description": "NetIncome is totalIncome minus totalExpense, in cents. Negative is a loss.",
+            "format": "int64",
             "type": "integer"
           },
           "to": {
@@ -1610,10 +1647,12 @@
           },
           "totalExpense": {
             "description": "TotalExpense is cost MATCHED to that revenue, in cents, including accrued\ninfrastructure that has not been billed yet.",
+            "format": "int64",
             "type": "integer"
           },
           "totalIncome": {
             "description": "TotalIncome is revenue RECOGNIZED in the period, in cents — accrual, not cash,\nso a prepaid top-up is not in it until the credit is consumed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1627,6 +1666,7 @@
           },
           "amount": {
             "description": "Amount is the account's movement over the period in whole cents, in its\nNATURAL sign: positive when the account behaved normally, for income and\nexpense alike. Income is credit-normal so its stored net is flipped once here\nfor display; the ledger underneath is never sign-flipped. A negative amount\ntherefore means the account ran backwards — a refunded sale, a reversed cost.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -1693,6 +1733,7 @@
           },
           "priority": {
             "description": "Priority breaks ties: when several patterns match, the highest wins.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1753,10 +1794,12 @@
           },
           "totalCredit": {
             "description": "TotalCredit is the sum of every row's closing credit column, in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "totalDebit": {
             "description": "TotalDebit is the sum of every row's CLOSING debit column, in cents.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1770,18 +1813,22 @@
           },
           "closingCredit": {
             "description": "ClosingCredit is that closing balance in cents when it is a credit balance.",
+            "format": "int64",
             "type": "integer"
           },
           "closingDebit": {
             "description": "ClosingDebit is the balance at the end of the window, in cents, when it is a\ndebit balance. This is the column the report's totals are summed from.",
+            "format": "int64",
             "type": "integer"
           },
           "credit": {
             "description": "Credit is the same window movement in cents when it was net credit.",
+            "format": "int64",
             "type": "integer"
           },
           "debit": {
             "description": "Debit is the account's MOVEMENT within the window — closing minus opening, not\nthe closing balance — in cents, when that movement was net debit. Zero when the\naccount moved net credit.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -1790,10 +1837,12 @@
           },
           "openingCredit": {
             "description": "OpeningCredit is the same opening balance in cents when it fell on the credit\nside. Zero when the balance was a debit one.",
+            "format": "int64",
             "type": "integer"
           },
           "openingDebit": {
             "description": "OpeningDebit is the account's balance before the window began, in whole cents,\nwhen that balance was on the debit side. Zero when the balance was a credit\none — the pair is exclusive, never two halves of one number.",
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -1807,6 +1856,7 @@
         "properties": {
           "amountCents": {
             "description": "AmountCents is the voucher's total, in whole cents — its total debit, which\nequals its total credit because every voucher balances. It is the size of the\nentry and carries no direction; the category says which way it went.",
+            "format": "int64",
             "type": "integer"
           },
           "category": {
@@ -1835,6 +1885,7 @@
           },
           "voucherId": {
             "description": "VoucherID identifies the underlying double-entry voucher, so a caller can open\nthe full set of legs behind this single register line.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1916,10 +1967,12 @@
         "properties": {
           "live": {
             "description": "Live is the number of vouchers newly posted to the live ledger.",
+            "format": "int64",
             "type": "integer"
           },
           "sandbox": {
             "description": "Sandbox is the number newly posted to the sandbox ledger.",
+            "format": "int64",
             "type": "integer"
           }
         },

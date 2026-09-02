@@ -597,6 +597,7 @@
           },
           "generated": {
             "description": "Generated is when this answer was computed, unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "inventory": {
@@ -639,6 +640,7 @@
         "properties": {
           "automated": {
             "description": "Automated is how many clauses have an automated control behind them that\nsomething can fail on behalf of.",
+            "format": "int64",
             "type": "integer"
           },
           "clauses": {
@@ -658,6 +660,7 @@
           },
           "generated": {
             "description": "Generated is when this was computed, unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -666,6 +669,7 @@
           },
           "none": {
             "description": "None is how many have nothing behind them.",
+            "format": "int64",
             "type": "integer"
           },
           "note": {
@@ -674,6 +678,7 @@
           },
           "partial": {
             "description": "Partial is how many are answered in part.",
+            "format": "int64",
             "type": "integer"
           },
           "publisher": {
@@ -686,6 +691,7 @@
           },
           "total": {
             "description": "Total is the framework's WHOLE published clause list — the denominator.",
+            "format": "int64",
             "type": "integer"
           },
           "unit": {
@@ -735,10 +741,12 @@
         "properties": {
           "absent": {
             "description": "Absent is how many the organization does not have. Each still names the\nclause it would satisfy, and none of them moves a coverage number.",
+            "format": "int64",
             "type": "integer"
           },
           "automated": {
             "description": "Automated is how many run with nobody in the loop.",
+            "format": "int64",
             "type": "integer"
           },
           "controls": {
@@ -748,6 +756,7 @@
           },
           "partial": {
             "description": "Partial is how many run but do not cover their whole claim.",
+            "format": "int64",
             "type": "integer"
           },
           "statement": {
@@ -756,10 +765,12 @@
           },
           "total": {
             "description": "Total is how many controls this organization publishes.",
+            "format": "int64",
             "type": "integer"
           },
           "unverified": {
             "description": "Unverified is how many rest on somebody having read the source rather than\non a test or an audit row.",
+            "format": "int64",
             "type": "integer"
           },
           "version": {
@@ -773,6 +784,7 @@
         "properties": {
           "automated": {
             "description": "Automated is how many clauses have an automated control behind them that\nsomething can fail on behalf of.",
+            "format": "int64",
             "type": "integer"
           },
           "edition": {
@@ -789,6 +801,7 @@
           },
           "none": {
             "description": "None is how many have nothing behind them. It stays visible rather than\ndropping out of the fraction.",
+            "format": "int64",
             "type": "integer"
           },
           "note": {
@@ -797,6 +810,7 @@
           },
           "partial": {
             "description": "Partial is how many are answered in part.",
+            "format": "int64",
             "type": "integer"
           },
           "publisher": {
@@ -809,6 +823,7 @@
           },
           "total": {
             "description": "Total is the framework's WHOLE published clause list — the denominator.\nCounting only the clauses some control happened to name would report 100%\nevery time.",
+            "format": "int64",
             "type": "integer"
           },
           "unit": {
@@ -862,6 +877,7 @@
           },
           "updated": {
             "description": "Updated is when the record last changed, unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -926,6 +942,7 @@
           },
           "total": {
             "description": "Total is how many clauses the standard publishes.",
+            "format": "int64",
             "type": "integer"
           },
           "unit": {
@@ -964,6 +981,7 @@
           },
           "ord": {
             "description": "Ord orders this record within its section, ascending, ties broken by id.\nIt is the organization's own ordering — the page renders in it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -994,6 +1012,7 @@
           },
           "generated": {
             "description": "Generated is when this was computed, unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "version": {
@@ -1019,14 +1038,17 @@
         "properties": {
           "absent": {
             "description": "Absent is how many the organization does not have. An absent control still\nnames the clause it would satisfy — that is a roadmap — but it never moves\na coverage number.",
+            "format": "int64",
             "type": "integer"
           },
           "automated": {
             "description": "Automated is how many run with nobody in the loop.",
+            "format": "int64",
             "type": "integer"
           },
           "partial": {
             "description": "Partial is how many run but do not cover their whole claim. Each says what\nis missing.",
+            "format": "int64",
             "type": "integer"
           },
           "statement": {
@@ -1035,10 +1057,12 @@
           },
           "total": {
             "description": "Total is how many controls this organization publishes.",
+            "format": "int64",
             "type": "integer"
           },
           "unverified": {
             "description": "Unverified is how many rest on somebody having READ the source rather than\non a test or an audit row. Only a check that can FAIL counts as verified,\nand coverage counts those one rung weaker than they claim to be.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1066,6 +1090,7 @@
           },
           "updated": {
             "description": "Updated is when it was written, unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },

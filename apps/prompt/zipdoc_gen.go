@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/prompt/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/prompt DELETE /v1/prompt/:name", zip.Doc{
 		Description: "Delete removes one of the caller org's prompts and every version of it, answering\n204. It is scoped to the caller's org, so a name another tenant owns is the same\n404 an unknown name gives. There is no undo: the version history goes with it.",
 		Fields: map[string]string{
 			"promptRef.name": "Name is the prompt to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"name":"greeting"}`),
 	})
-	zip.Describe("GET /v1/prompt", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/prompt GET /v1/prompt", zip.Doc{
 		Description: "List returns the caller org's prompt library as one row per prompt: its name,\ntype, every version number it has, its taxonomy and when it last changed. The\ntemplate bodies are deliberately absent — fetch one prompt to read its text.",
 		Fields: map[string]string{
 			"promptList.data":          "Data is one row per prompt the org owns, each with its version numbers and\ntaxonomy — never the template bodies.",
@@ -28,7 +28,7 @@ func init() {
 			"promptMeta.versions":      "Versions lists every version NUMBER this prompt has, newest first, capped at\nthe last 100. The highest is the current one. (On a metrics row the same key\nis a count, not a list.)",
 		},
 	})
-	zip.Describe("GET /v1/prompt/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/prompt GET /v1/prompt/:name", zip.Doc{
 		Description: "Get returns one of the caller org's prompts: its CURRENT template text plus the\nmetadata of every version it has had. The history carries version numbers, types\nand timestamps only — not each version's body — so a long history cannot inflate\nthis response. A name the caller's org does not own is 404, whoever owns it.",
 		Fields: map[string]string{
 			"promptDetail.createdAt":      "CreatedAt is when version 1 was written, RFC 3339 UTC. Appending a version\ndoes not move it.",
@@ -47,7 +47,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"greeting"}`),
 	})
-	zip.Describe("GET /v1/prompt/catalog", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/prompt GET /v1/prompt/catalog", zip.Doc{
 		Description: "Catalog returns the read-only starter prompt library shipped with the binary —\nreference content every tenant sees the same, NOT the caller's own prompts and\nnever mixed into them. An org's library stays honestly empty until someone\nexplicitly imports a starter, which is an ordinary POST /v1/prompt. Entries that\nwould fail the create guards are dropped, so everything offered here can actually\nbe imported.",
 		Fields: map[string]string{
 			"CatalogEntry.labels": "Labels is the starter's second suggested taxonomy, same treatment as Tags.",
@@ -58,7 +58,7 @@ func init() {
 			"catalogList.data":    "Data is every starter prompt, each importable as-is with POST /v1/prompt.",
 		},
 	})
-	zip.Describe("GET /v1/prompt/metrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/prompt GET /v1/prompt/metrics", zip.Doc{
 		Description: "Metrics returns real per-prompt statistics for the caller's org: how many versions\neach prompt has, which one is current, and when it was created and last changed.\nEvery number is counted from the store — nothing here is estimated or fabricated.",
 		Fields: map[string]string{
 			"metricList.data":          "Data is one row per prompt the org owns.",
@@ -70,7 +70,7 @@ func init() {
 			"metricRow.versions":       "Versions is how many revisions the prompt has, COUNTED in the store and\nuncapped — so it can exceed the 100 entries a list row or a detail response\ncarries. Note the type: here `versions` is a number, while on a list row it is\nthe list of version numbers.",
 		},
 	})
-	zip.Describe("POST /v1/prompt", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/prompt POST /v1/prompt", zip.Doc{
 		Description: "Create records a prompt for the caller's org and answers 201 with it. A name the\norg already uses is NOT an error and NOT an overwrite: it appends a new version,\nso the library keeps real, inspectable history and the response carries the whole\nversion list. The name is also the URL segment the prompt is fetched by, which is\nwhy its shape is constrained and a handful of names are reserved.",
 		Fields: map[string]string{
 			"promptDetail.createdAt":      "CreatedAt is when version 1 was written, RFC 3339 UTC. Appending a version\ndoes not move it.",

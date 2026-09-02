@@ -7,13 +7,13 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/eval/datasets/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval DELETE /v1/eval/datasets/:name", zip.Doc{
 		Description: "Removes the named dataset of the caller's org AND all of its\nexamples, in one transaction.\n\nThis is not a detach: the examples are gone with the set, so a dataset cannot\nbe resurrected by re-creating the name. A name this org does not have is 404 —\nnever a silent success — and a name belonging to another tenant is the same\n404, because the delete is predicated on the validated org. Requires a\nvalidated principal; 403 without one. Runs and scores already recorded against\nthe dataset are telemetry events and are NOT deleted with it.",
 		Fields: map[string]string{
 			"datasetRef.name": "Name is the dataset the URL names.",
 		},
 	})
-	zip.Describe("GET /v1/eval/datasets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/datasets", zip.Doc{
 		Description: "Is the datasets your org has, each with its name, description,\nmetadata and timestamps.\n\nIt is the only way to enumerate what an org holds. Requires a validated\nprincipal; 403 without one. Every row is filtered on the validated org, so\nthere is no parameter that reaches another tenant's datasets. The item count is\nNOT populated here — read one dataset to get it.",
 		Fields: map[string]string{
 			"datasetList.data":        "Data is the caller org's datasets, newest first, bounded by limit.",
@@ -26,7 +26,7 @@ func init() {
 			"page.limit":              "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
 		},
 	})
-	zip.Describe("GET /v1/eval/datasets/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/datasets/:name", zip.Doc{
 		Description: "Returns one dataset of the caller's org by name, together with its\nlive item count — the one read that answers how big the set actually is.\n\nA name this org does not have is 404, which is also what another tenant's\ndataset looks like from here. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"datasetRef.name":         "Name is the dataset the URL names.",
@@ -38,7 +38,7 @@ func init() {
 			"datasetView.updatedAt":   "UpdatedAt is when the description or metadata last changed.",
 		},
 	})
-	zip.Describe("GET /v1/eval/datasets/:name/items", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/datasets/:name/items", zip.Doc{
 		Description: "Is the examples in one of your datasets — the set is named in the\npath, because this collection only exists inside one.\n\nArchived examples are included, so the caller sees the whole set rather than\nonly what a run would use. Requires a validated principal; 403 without one, and\nthe read is filtered on the validated org, so naming another tenant's dataset\nreturns nothing rather than its contents.",
 		Fields: map[string]string{
 			"itemList.data":           "Data is the examples of the one dataset named in the path, archived ones\nincluded, so the caller sees the whole set rather than what a run would use.",
@@ -54,7 +54,7 @@ func init() {
 			"page.limit":              "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
 		},
 	})
-	zip.Describe("GET /v1/eval/evaluators", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/evaluators", zip.Doc{
 		Description: "Is the judges your org has defined, each with its judge model,\ncriteria and the score name it writes under.\n\nRequires a validated principal; 403 without one, and the listing is filtered on\nthe validated org.",
 		Fields: map[string]string{
 			"evaluatorList.data":      "Data is the caller org's judges, bounded by limit.",
@@ -67,7 +67,7 @@ func init() {
 			"page.limit":              "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
 		},
 	})
-	zip.Describe("GET /v1/eval/metrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/metrics", zip.Doc{
 		Description: "Is your org's AI overview board over a window: totals\n(generations, prompt and completion tokens, cost in cents, errors, success\nrate, distinct models and users), a gap-filled time series, a per-model\nbreakdown with the long tail folded into \"other\", and latency percentiles read\nfrom the GenAI spans.\n\nThe window the answer was actually computed over is echoed back, so a client\nnever has to infer it. A platform admin sees the board across ALL orgs;\neveryone else sees their own.\n\nThe board is HONEST-EMPTY where it cannot be computed: with no datastore wired,\nor under a named project scope the usage ledger does not yet carry, it answers a\nvalid board with zero totals and a flat series rather than a fabricated number\nor a 500. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"Board.byModel":                "the top models by spend",
@@ -120,7 +120,7 @@ func init() {
 			"boardQuery.range":             "Range is 24h (the default), 7d or 30d. Anything else normalises to 24h\nrather than failing, so the board always has a valid window.",
 		},
 	})
-	zip.Describe("GET /v1/eval/rubrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/rubrics", zip.Doc{
 		Description: "Is the score shapes your org has declared — each name's data\ntype, its numeric bounds and its allowed categories.\n\nRequires a validated principal; 403 without one, and the listing is filtered on\nthe validated org.",
 		Fields: map[string]string{
 			"page.limit":                 "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
@@ -134,7 +134,7 @@ func init() {
 			"scoreConfigView.updatedAt":  "UpdatedAt is when it last changed.",
 		},
 	})
-	zip.Describe("GET /v1/eval/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/runs", zip.Doc{
 		Description: "Is your past runs and how they scored — the dataset and model, the\njudge model, how many examples were attempted and how many scored, the average\nscore, and when it happened.\n\nRequires a validated principal; 403 without one, and rows are filtered on the\nvalidated org. These records come from the metastore rather than the datastore,\nso they are readable on a deployment with no telemetry wired — but a run's\ntraces and scores are not.",
 		Fields: map[string]string{
 			"page.limit":            "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
@@ -151,7 +151,7 @@ func init() {
 			"runs.data":             "Data is the caller org's runs, bounded by limit.",
 		},
 	})
-	zip.Describe("GET /v1/eval/scores", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/scores", zip.Doc{
 		Description: "Is the score events your org has recorded, narrowed by any of name,\nrunName and traceId.\n\nThe org is bound as an authoritative predicate on the query, never taken from a\nheader, so a filter can narrow the caller's own scores but can never widen past\nthem. Requires a validated principal; 403 without one. Scores live in the\ndatastore, so a deployment with none wired answers 503 rather than an empty\npage that would read as \"no scores\".",
 		Fields: map[string]string{
 			"page.limit":            "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
@@ -170,7 +170,7 @@ func init() {
 			"scoreView.value":       "Value is the numeric score; for BOOLEAN it is 0 or 1.",
 		},
 	})
-	zip.Describe("GET /v1/eval/traces", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval GET /v1/eval/traces", zip.Doc{
 		Description: "Is the traces behind your evaluations — one per model call an\nevaluation made, carrying its input, output, model and timing — narrowed by any\nof sessionId, runName and datasetName.\n\nScoped by org AND by project: the project is the caller's server-minted scope,\nnot a parameter, so it cannot be widened by asking. Requires a validated\nprincipal; 403 without one. Traces live in the datastore, so a deployment with\nnone wired answers 503 rather than an empty page.",
 		Fields: map[string]string{
 			"page.limit":              "Limit caps the rows returned. It defaults to 100 and is capped at 500; a\nnon-positive or unparseable value falls back to the default rather than\nfailing, because a typo about paging is not a reason to refuse a read.",
@@ -195,7 +195,7 @@ func init() {
 			"traceView.timestamp":     "Timestamp is the trace's own clock, equal to StartTime for a timed call.",
 		},
 	})
-	zip.Describe("POST /v1/eval/datasets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval POST /v1/eval/datasets", zip.Doc{
 		Description: "Writes a dataset — the named set of graded examples a run scores\na model against — under the caller's org and answers 201 with it.\n\nThe NAME is the key, not an id: posting a name the org already has updates that\ndataset's description and metadata and keeps its original creation time, so this\nis create-or-edit and never a duplicate. Its items are untouched.\n\nRequires a validated principal; 403 without one. The org comes from the\nvalidated owner claim, never from a client X-Org-Id, so a dataset can only ever\nbe written under the caller's own tenant. A description over 64 KiB is 400.",
 		Fields: map[string]string{
 			"datasetReq.description":  "Description is free text about what this set measures; over 64 KiB is refused.",
@@ -209,7 +209,7 @@ func init() {
 			"datasetView.updatedAt":   "UpdatedAt is when the description or metadata last changed.",
 		},
 	})
-	zip.Describe("POST /v1/eval/datasets/:name/items", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval POST /v1/eval/datasets/:name/items", zip.Doc{
 		Description: "Writes one graded example — its input, its expected output,\nfree-form metadata and a status — into the dataset named in the path, and\nanswers 201 with it.\n\nThat dataset MUST already exist for this org: an unknown one is 404, never a\nsilent create. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"itemReq.expectedOutput":  "Expected is the answer a correct model produces, which the judge grades\nagainst, stored as raw JSON exactly as sent, up to 64 KiB.",
@@ -227,7 +227,7 @@ func init() {
 			"itemView.updatedAt":      "UpdatedAt is when it last changed.",
 		},
 	})
-	zip.Describe("POST /v1/eval/evaluators", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval POST /v1/eval/evaluators", zip.Doc{
 		Description: "Saves a reusable judge for the caller's org — the judge model\nand the written criteria it grades against — and answers 201 with it.\n\nLike a dataset, the NAME is the key: re-posting a name edits that judge rather\nthan adding a second one. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"evaluatorReq.criteria":   "Criteria is the written standard the judge applies; over 64 KiB is refused.",
@@ -242,7 +242,7 @@ func init() {
 			"evaluatorView.updatedAt": "UpdatedAt is when it last changed.",
 		},
 	})
-	zip.Describe("POST /v1/eval/rubrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval POST /v1/eval/rubrics", zip.Doc{
 		Description: "Defines the shape of one score name for the caller's org and\nanswers 201 with it.\n\nThis is the integrity contract, not documentation: once a rubric exists for a\nname, every score recorded under that name is checked against it and the\nrubric's data type is AUTHORITATIVE — a caller cannot claim a different one.\nOut-of-range values, unlisted labels and non-finite numbers are refused at\nwrite time.\n\nA CATEGORICAL rubric with no categories is 400, as is a non-finite bound or a\nminValue above maxValue. Requires a validated principal; 403 without one.",
 		Fields: map[string]string{
 			"scoreConfigReq.categories":  "Categories is the closed set of labels a CATEGORICAL score may carry. A\nCATEGORICAL rubric with none is refused.",
@@ -259,7 +259,7 @@ func init() {
 			"scoreConfigView.updatedAt":  "UpdatedAt is when it last changed.",
 		},
 	})
-	zip.Describe("POST /v1/eval/runs", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval POST /v1/eval/runs", zip.Doc{
 		Description: "Runs a real evaluation and answers the summary when it is finished —\nthis is synchronous work, not a job id.\n\nFor each ACTIVE example in the dataset it calls the model under test, records a\ntrace, calls the LLM-as-judge, and records the judge's score with its\nreasoning. The answer carries the per-item results (item id, trace id, score,\noutput or error) alongside items, scored and avgScore.\n\nThe dataset must belong to the caller's org (404 otherwise) and must have at\nleast one ACTIVE example (422 otherwise).\n\nIt runs as YOU: the caller's own Authorization bearer drives the model gateway,\nso a request without one is 401 rather than a run made anonymously or under a\nservice identity. Only a non-reversible hash of that credential is recorded on\nthe traces.\n\nBounded and honest about it: an org may have at most 4 runs in flight and the\nfifth is 429 rather than queued, and the whole run is capped at 10 minutes —\nexamples past the deadline come back with an error instead of a score, and\nscored counts only real successes. A run where NOTHING scored answers 502, not\na 200 that looks like an evaluation. A run must be able to persist what it\nproduces, so a deployment with no datastore wired is 503 up front. Requires a\nvalidated principal; 403 without one.",
 		Fields: map[string]string{
 			"itemResult.error":      "Error is why this example produced no score — the model, the judge, or the\nrun's deadline. A result carrying one is not counted in Scored.",
@@ -285,7 +285,7 @@ func init() {
 			"runSummary.scored":     "Scored is how many produced a real score. It counts successes only, so a\npartial run is honest about what it achieved.",
 		},
 	})
-	zip.Describe("POST /v1/eval/scores", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/eval POST /v1/eval/scores", zip.Doc{
 		Description: "Files one score event for the caller's org and answers 201 with it.\n\nThis is how human review and out-of-band graders land beside the automatic\nones: name the score, give it a value (or a stringValue for a categorical\nlabel), and attach it to a trace, a run, a dataset example, or any combination.\n\nScores are validated fail-closed. A value must be FINITE — NaN and Inf are 400\n— and if the org has declared a rubric for this name, that rubric decides the\ntype and the value must satisfy it: inside the numeric bounds, or one of the\nallowed categories. A caller cannot override the declared type by sending a\ndifferent dataType.\n\nA score is TELEMETRY, not metadata, so it needs the datastore: a deployment\nwith none wired answers 503 rather than accepting a score it cannot persist.\nRequires a validated principal; 403 without one, and the org is stamped from\nthe validated claim rather than read off the body.",
 		Fields: map[string]string{
 			"scoreReq.comment":       "Comment is the grader's reasoning, truncated at 2000 characters.",

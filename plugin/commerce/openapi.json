@@ -3297,6 +3297,7 @@
           },
           "discountCents": {
             "description": "DiscountCents is what coupons and promotions took off, in whole cents.",
+            "format": "int64",
             "type": "integer"
           },
           "email": {
@@ -3316,6 +3317,7 @@
           },
           "lineTotalCents": {
             "description": "LineTotalCents is the sum of the lines before any discount, in whole cents.",
+            "format": "int64",
             "type": "integer"
           },
           "order": {
@@ -3324,6 +3326,7 @@
           },
           "shippingCents": {
             "description": "ShippingCents is the shipping charge, in whole cents. It stays zero until a\nshipping option is priced at checkout.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -3336,14 +3339,17 @@
           },
           "subtotalCents": {
             "description": "SubtotalCents is LineTotalCents less DiscountCents, in whole cents.",
+            "format": "int64",
             "type": "integer"
           },
           "taxCents": {
             "description": "TaxCents is the sales tax, in whole cents. It stays zero until checkout\nresolves the shopper's tax region.",
+            "format": "int64",
             "type": "integer"
           },
           "totalCents": {
             "description": "TotalCents is what the shopper pays: subtotal plus shipping plus tax, in\nwhole cents.",
+            "format": "int64",
             "type": "integer"
           },
           "updatedAt": {
@@ -3377,10 +3383,12 @@
           },
           "priceCents": {
             "description": "PriceCents is the unit price in whole cents, cached at the moment the line\nwas added. The line's contribution to the cart is this times Quantity.",
+            "format": "int64",
             "type": "integer"
           },
           "quantity": {
             "description": "Quantity is how many units of this item the cart holds.",
+            "format": "int64",
             "type": "integer"
           },
           "sku": {
@@ -3402,6 +3410,7 @@
           },
           "quantity": {
             "description": "Quantity is how many of that item the cart should hold AFTER this call — it\nis the resulting count, not a delta, so sending 3 twice leaves 3 and not 6.\nZERO REMOVES the line, which is the only way to take an item out.",
+            "format": "int64",
             "type": "integer"
           },
           "variant": {

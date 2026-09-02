@@ -459,6 +459,7 @@
           },
           "total": {
             "description": "Total is how many descriptors this listing carries.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -489,6 +490,7 @@
           },
           "expiresIn": {
             "description": "ExpiresIn is the token's lifetime in seconds, as IAM reported it.",
+            "format": "int64",
             "type": "integer"
           },
           "tokenType": {

@@ -280,10 +280,12 @@
           },
           "score": {
             "description": "Score is the upstream's on-page score, 0 to 100.",
+            "format": "double",
             "type": "number"
           },
           "status": {
             "description": "Status is the HTTP status the page answered with.",
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -296,6 +298,7 @@
           },
           "words": {
             "description": "Words is how many words of readable text the page carries.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -314,10 +317,12 @@
         "properties": {
           "backlinks": {
             "description": "Backlinks is how many links point at it.",
+            "format": "int64",
             "type": "integer"
           },
           "broken": {
             "description": "Broken is how many of those links point at something that no longer answers.",
+            "format": "int64",
             "type": "integer"
           },
           "cost": {
@@ -326,6 +331,7 @@
           },
           "domains": {
             "description": "Domains is how many distinct sites those links come from — the number that\nmatters, since a thousand links from one site is one site.",
+            "format": "int64",
             "type": "integer"
           },
           "firstSeen": {
@@ -334,14 +340,17 @@
           },
           "pages": {
             "description": "Pages is how many distinct pages link in.",
+            "format": "int64",
             "type": "integer"
           },
           "rank": {
             "description": "Rank is the upstream's authority score for the target, 0 to 1000.",
+            "format": "int64",
             "type": "integer"
           },
           "spam": {
             "description": "Spam is the share of the profile judged spam, 0 to 100.",
+            "format": "int64",
             "type": "integer"
           },
           "target": {
@@ -383,10 +392,12 @@
           },
           "limit": {
             "description": "Limit is how many domains to return, 1 to 1000. Defaults to 100.",
+            "format": "int64",
             "type": "integer"
           },
           "location": {
             "description": "Location is the market, as the upstream's numeric code. Defaults to 2840.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -407,6 +418,7 @@
           },
           "total": {
             "description": "Total is how many domains the upstream holds for these phrases.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -420,18 +432,22 @@
           },
           "keywords": {
             "description": "Keywords is how many of the phrases it places for.",
+            "format": "int64",
             "type": "integer"
           },
           "position": {
             "description": "Position is its average rank across the phrases.",
+            "format": "double",
             "type": "number"
           },
           "traffic": {
             "description": "Traffic is the estimated monthly visits those placements earn.",
+            "format": "double",
             "type": "number"
           },
           "visibility": {
             "description": "Visibility is its share of the possible attention across those phrases.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -452,10 +468,12 @@
           },
           "limit": {
             "description": "Limit is how many phrases to return, 1 to 1000. Defaults to 100. It is what\nthis call is priced on, because the upstream charges per row.",
+            "format": "int64",
             "type": "integer"
           },
           "location": {
             "description": "Location is the market, as the upstream's numeric code. Defaults to 2840.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -476,6 +494,7 @@
           },
           "total": {
             "description": "Total is how many the upstream holds, which is usually more than Limit\nreturned — it is what raising the limit would reach.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -496,6 +515,7 @@
           },
           "location": {
             "description": "Location is the market, as the upstream's numeric code. Defaults to 2840,\nthe United States.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -521,14 +541,17 @@
         "properties": {
           "competition": {
             "description": "Competition is how contested the advertising is, from 0 to 1. The upstream\nreports it as an index out of a hundred on one endpoint and as this fraction\non another; it is the fraction here in both cases.",
+            "format": "double",
             "type": "number"
           },
           "cpc": {
             "description": "CPC is the average cost of one advertising click, in USD. It is a reported\nstatistic about somebody else's auction, not an amount this API moves.",
+            "format": "double",
             "type": "number"
           },
           "difficulty": {
             "description": "Difficulty is how hard the first page is to reach organically, 0 to 100.\nPresent on seoIdea, which measures it; absent on seoKeyword, which does not.",
+            "format": "int64",
             "type": "integer"
           },
           "keyword": {
@@ -541,6 +564,7 @@
           },
           "volume": {
             "description": "Volume is the average monthly searches.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -558,10 +582,12 @@
           },
           "limit": {
             "description": "Limit is how many placements to return, 1 to 1000. Defaults to 100.",
+            "format": "int64",
             "type": "integer"
           },
           "location": {
             "description": "Location is the market, as the upstream's numeric code. Defaults to 2840.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -582,6 +608,7 @@
           },
           "total": {
             "description": "Total is how many placements the upstream holds for this domain.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -595,6 +622,7 @@
           },
           "position": {
             "description": "Position is the absolute rank on the results page, counting every element —\nso it is what a person scrolling actually passes, not the organic-only rank.",
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -603,6 +631,7 @@
           },
           "traffic": {
             "description": "Traffic is the estimated monthly visits this placement earns.",
+            "format": "double",
             "type": "number"
           },
           "url": {
@@ -611,6 +640,7 @@
           },
           "volume": {
             "description": "Volume is the phrase's average monthly searches.",
+            "format": "int64",
             "type": "integer"
           }
         },

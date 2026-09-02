@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/affiliate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate GET /v1/admin/affiliate", zip.Doc{
 		Description: "Lists every affiliate across the fleet with its ORG exposed, plus a\nfleet summary of lifetime accrued, still-pending and paid commission in\ninteger cents.\n\nPLATFORM SUDO ONLY, and a non-admin is refused outright. This is the\ncross-tenant view and it names orgs — exactly what the partner-facing\nleaderboard refuses to do. There is deliberately no org-scoped variant of this\nread; a partner sees its own standing through its own dashboard. Bounded per\nrequest.",
 		Fields: map[string]string{
 			"adminAffiliateView.accruedCents":  "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout moves paidCents, never this.",
@@ -40,7 +40,7 @@ func init() {
 			"totals.total":                     "Total is how many affiliate rows this page covered, at every status. It is the\npage, not the table: a limit that truncates truncates this too.",
 		},
 	})
-	zip.Describe("GET /v1/admin/affiliate/referrals", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate GET /v1/admin/affiliate/referrals", zip.Doc{
 		Description: "Answers the referral board: the top referrers by lifetime\ncommission, the funnel conversion rate (referred orgs that have actually\nproduced commission, over all referred orgs), and the accrual LIABILITY the\nplatform owes, broken out by upline level.\n\nRead the liability figure carefully — it is commission accrued and NOT yet\npaid, so it is money owed, not money spent, and the per-level split says how\nmuch of it comes from direct referrals versus the second and third levels.\n\nPLATFORM SUDO ONLY, cross-tenant, and it names orgs. It reads the SAME single\nattribution spine the accrual itself walks, so the board and the ledger cannot\ndisagree. Amounts are integer cents.",
 		Fields: map[string]string{
 			"envelope.msg":                 "Msg is an operator-facing note. Empty on every success here — it exists\nbecause the console's admin unwrapper reads the shape cloud.OK writes.",
@@ -69,7 +69,7 @@ func init() {
 			"tally.pendingLiabilityCents":  "PendingLiabilityCents is accrued minus paid across every affiliate, in cents.\nRead it as money OWED and not yet disbursed — a liability, not spend.",
 		},
 	})
-	zip.Describe("GET /v1/affiliate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate GET /v1/affiliate", zip.Doc{
 		Description: "Answers the caller org's OWN affiliate standing: status, referral\ncode and share link, commission rate, how many orgs it has referred, and its\nlifetime accrued, still-pending and already-paid commission in integer cents,\nwith its payout history.\n\nAn org that never applied gets an honest `isAffiliate:false` and the default\nrate rather than a 404 — the console renders the apply form off that answer.\n\nThe affiliate is resolved from the VALIDATED org, never from a field, so this\ncan only ever read the caller's own row; without a principal it is refused. It\nis a PURE READ: nothing accrues until the sweep runs. Commission is earned on\nHanzo's MARGIN, never on the referred customer's bill, so nothing here changes\nwhat that customer pays.",
 		Fields: map[string]string{
 			"affiliateStanding.accruedCents":   "AccruedCents is lifetime commission accrued, in cents.",
@@ -95,7 +95,7 @@ func init() {
 			"remittance.txn":                   "Txn is the commerce ledger transaction id, set ONLY where a \"credits\" payout\nactually issued the grant. Absent for cash methods, which write no ledger row.",
 		},
 	})
-	zip.Describe("GET /v1/affiliate/leaderboard", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate GET /v1/affiliate/leaderboard", zip.Doc{
 		Description: "Answers the top affiliates by lifetime accrued commission, shown by\nOPT-IN HANDLE with aggregate figures only, plus the caller's own exact rank.\n\nIt never discloses an org identity and never a referred org's usage. An\naffiliate that has set no handle still OCCUPIES its rank but is not listed —\nso opting out hides the name, not the position, and the visible board must not\nbe read as a complete roster.\n\nThe caller's own row carries its exact GLOBAL rank, computed over the whole\napproved set rather than over the page, so it is right well outside the top of\nthe board. Only an approved affiliate has a rank. Requires a validated\nprincipal; a signed-in non-affiliate may read the board but gets no personal\nrow.",
 		Fields: map[string]string{
 			"affiliateBoard.leaders":       "Leaders are the top opt-in affiliates, by handle and aggregate figures only.",
@@ -108,7 +108,7 @@ func init() {
 			"leaderboardRow.referredCount": "ReferredCount is how many orgs that affiliate directly referred — a count\nonly, never which orgs.",
 		},
 	})
-	zip.Describe("GET /v1/affiliate/me", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate GET /v1/affiliate/me", zip.Doc{
 		Description: "Answers the richer self-view: the same lifetime accrued, pending and paid\ncommission and payout history, plus the caller's downline broken out by upline\nLEVEL — direct, second, third — each with the rate paid at that level and how\nmany orgs sit there.\n\nCommission is MULTI-LEVEL: a referred org's spend pays up its referral chain,\nthree levels deep and no further. The direct level is the affiliate's own\nnegotiated rate; the second and third are platform-wide switches, read live,\nso the schedule shown is the one actually in force rather than one compiled\nin. A caller that has not applied still gets that schedule alongside\n`isAffiliate:false`, so the console can show what it would earn.\n\nScoped to the validated org and nothing else, and refused without a\nprincipal. A PURE READ — it reports the downline but accrues nothing.",
 		Fields: map[string]string{
 			"affiliateSelf.accruedCents":   "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout is recorded against paidCents and never reduces this.",
@@ -138,7 +138,7 @@ func init() {
 			"remittance.txn":               "Txn is the commerce ledger transaction id, set ONLY where a \"credits\" payout\nactually issued the grant. Absent for cash methods, which write no ledger row.",
 		},
 	})
-	zip.Describe("GET /v1/affiliate/me/earnings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate GET /v1/affiliate/me/earnings", zip.Doc{
 		Description: "Answers the caller's own commission ledger: per period, the margin it\nearned against and the commission taken from that margin; and per referred\norg, that referral's aggregate contribution. Integer cents throughout.\n\nThe per-org view deliberately carries the affiliate's OWN earned share and NOT\nthe referred org's spend or margin. An affiliate is entitled to what it\nearned, not to a restatement of its customer's usage — the period view is\nwhere the margin base appears, aggregated across every referral.\n\nScoped server-side to the validated caller's affiliate; a caller that is not\none gets `isAffiliate:false`.",
 		Fields: map[string]string{
 			"affiliateEarnings.accruedCents":    "AccruedCents is lifetime commission accrued, in cents.",
@@ -155,7 +155,7 @@ func init() {
 			"periodEarningView.period":          "Period is the accrual bucket: the UTC year-month, \"YYYY-MM\". Commission is\nlatched at most once per referred org per period, so one row is one month.",
 		},
 	})
-	zip.Describe("GET /v1/affiliate/me/links", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate GET /v1/affiliate/me/links", zip.Doc{
 		Description: "Answers the caller's share links, each with its URL and its funnel:\nclicks tracked, signups — orgs attributed with that code — and conversions,\nmeaning how many of those signups have actually produced commission.\n\nSignups and conversions are DERIVED from the commission ledger and never\nstored, so they cannot drift from the money. Clicks are the one stored counter\nand the one that is pure vanity.\n\nAny pending public click pings are folded into the store before the read, in\none batch — which is how the counters stay current without a database write\nper click. Scoped to the validated caller's own affiliate; a non-affiliate\ngets `isAffiliate:false` and the link cap.",
 		Fields: map[string]string{
 			"affiliateLinks.isAffiliate": "IsAffiliate says whether the caller org has an affiliate record. On false only\nmaxLinks comes back — there are no links, and there is no link to mint until\nthe org applies and is approved.",
@@ -171,7 +171,7 @@ func init() {
 			"codeView.url":               "URL is the full shareable link, the brand host plus ?aff=<code>. The host is\nthe deployment's own brand, so a Lux or Zoo install never mints a hanzo.ai\nlink.",
 		},
 	})
-	zip.Describe("POST /v1/admin/affiliate/:id/approve", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/admin/affiliate/:id/approve", zip.Doc{
 		Description: "Approves an affiliate and MINTS its referral code — the moment\nthe partner has a working share link and starts accruing.\n\nThe code is taken from the body if one is given, else the vanity code the\napplicant requested, else a slug derived for them. Codes are ONE global\nnamespace, so a taken code is a 409 and nothing is approved. The minted code\nis also mirrored as a link row so click tracking is uniform across every code\nthe affiliate holds; that mirror is best-effort and its failure never fails\nthe approval.\n\nApproval is what makes an affiliate eligible: before it, attribution against\nits code does not resolve and no sweep accrues to it. PLATFORM SUDO ONLY.\nAudited.",
 		Fields: map[string]string{
 			"adminAffiliateView.accruedCents":  "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout moves paidCents, never this.",
@@ -195,7 +195,7 @@ func init() {
 			"envelope.status":                  "Status is \"ok\" on every 2xx from this surface; a failure is an HTTP error with\nzip's error body, not this envelope carrying a different word.",
 		},
 	})
-	zip.Describe("POST /v1/admin/affiliate/:id/payout", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/admin/affiliate/:id/payout", zip.Doc{
 		Description: "Pays out accrued commission and answers the payout row with the\naffiliate's updated balances.\n\nThe amount is reserved atomically against the affiliate's PENDING commission —\naccrued minus paid — so a payout can never exceed what is owed. The METHOD\ndecides whether money actually moves: `credits` issues a commerce grant into\nthe affiliate ORG's own wallet, tagged so the ledger can tell an affiliate\npayout apart from an admin or referral grant; every other method — wire,\npaypal and the rest — is RECORD-ONLY: the payout row and the balances move,\nthe cash is disbursed out of band.\n\nThe amount is integer cents and must be positive. PLATFORM SUDO ONLY.\nAudited.",
 		Fields: map[string]string{
 			"adminAffiliateView.accruedCents":  "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout moves paidCents, never this.",
@@ -229,7 +229,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"amountCents":1200,"method":"credits","reference":"ledger-1"}`),
 	})
-	zip.Describe("POST /v1/admin/affiliate/:id/rate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/admin/affiliate/:id/rate", zip.Doc{
 		Description: "Sets one affiliate's DIRECT commission rate, in basis points of\nHanzo's margin.\n\nThe rate is CAPPED so that the direct rate plus the platform-wide second- and\nthird-level rates can never exceed the whole margin — the structural guarantee\nthat everything paid on one source event stays inside the margin actually\nearned. The cap is resolved from the rates in force at the moment of the call\nand quoted in the refusal, because those switches move; a hardcoded bound\nwould start lying the moment somebody edits the schedule.\n\nOnly the direct level is per-affiliate. The second and third levels are\nplatform switches and are not settable here. The change applies to FUTURE\naccruals — commission already latched for a period is not recomputed. PLATFORM\nSUDO ONLY. Audited.",
 		Fields: map[string]string{
 			"adminAffiliateView.accruedCents":  "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout moves paidCents, never this.",
@@ -254,7 +254,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"rateBps":2500}`),
 	})
-	zip.Describe("POST /v1/admin/affiliate/:id/suspend", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/admin/affiliate/:id/suspend", zip.Doc{
 		Description: "Suspends an affiliate: it stops accruing on the next sweep, and\nits code stops resolving for new attributions.\n\nIt CLAWS NOTHING BACK. Commission already accrued stays accrued and stays\npayable, and existing attribution edges are left standing — suspension ends\nearning, it does not unwind history. PLATFORM SUDO ONLY. Audited.",
 		Fields: map[string]string{
 			"adminAffiliateView.accruedCents":  "AccruedCents is lifetime commission accrued, in cents. It only grows — a\npayout moves paidCents, never this.",
@@ -277,7 +277,7 @@ func init() {
 			"envelope.status":                  "Status is \"ok\" on every 2xx from this surface; a failure is an HTTP error with\nzip's error body, not this envelope carrying a different word.",
 		},
 	})
-	zip.Describe("POST /v1/admin/affiliate/sweep", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/admin/affiliate/sweep", zip.Doc{
 		Description: "Runs the accrual: for each referred org it reads that org's metered\nspend for the current period and accrues commission to every affiliate up its\nreferral chain, then answers how many sources were swept and how many NEW\naccruals landed.\n\nThis is the cron path, and it is LATCHED at most once per affiliate, source\norg and period — so re-running it inside the same period accrues nothing\nfurther. Safe to retry, and safe to run by hand beside the schedule.\n\nCommission is a rate of Hanzo's MARGIN on that spend, never of the customer's\ngross bill, so every level's share summed over one source event stays within\nthe margin actually earned and the customer's charge is untouched. Nothing\naccrues past the third upline level, and only an APPROVED affiliate accrues at\nall.\n\nThe same spend read drives the OSS author royalty — one read, both programs —\nso the answer reports royalties accrued alongside. PLATFORM SUDO ONLY. Bounded\nper run; a source whose spend cannot be read is skipped and picked up next\ntime, never half-accrued.",
 		Fields: map[string]string{
 			"accruals.accrued":          "Accrued is how many NEW commission accruals this run created, counted across\nevery upline level. The accrual is latched at most once per (affiliate, source\norg, period), so a re-run inside the same month reports 0 having changed\nnothing — 0 means \"already accrued\", not \"failed\".",
@@ -289,7 +289,7 @@ func init() {
 			"envelope.status":           "Status is \"ok\" on every 2xx from this surface; a failure is an HTTP error with\nzip's error body, not this envelope carrying a different word.",
 		},
 	})
-	zip.Describe("POST /v1/affiliate/apply", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/affiliate/apply", zip.Doc{
 		Description: "Enrolls the caller's OWN org as an affiliate at status `applied`,\noptionally requesting a vanity code, and answers the record — 201 on the first\napply, 200 with `created:false` afterwards.\n\nIDEMPOTENT, first apply wins: one affiliate per org, so re-applying never\ncreates a second row and never resets an existing approval. Applying is not\njoining — no code is minted and nothing accrues until staff approve, which is\nwhere both the code and the commission rate come from.\n\nThe org is the validated caller's, never a field. A malformed vanity code is\nrefused up front; the code is only REQUESTED here, and approval may mint a\ndifferent one if the requested code is taken.",
 		Fields: map[string]string{
 			"application.code":           "Code is the minted referral code. Empty on a first apply — applying does not\nmint a code, approval does; a re-apply echoes whatever the row already holds.",
@@ -302,7 +302,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"requestedCode":"acme"}`),
 	})
-	zip.Describe("POST /v1/affiliate/attribute", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/affiliate/attribute", zip.Doc{
 		Description: "Records the first-touch edge every later commission is computed\nfrom: the caller's org was referred by the affiliate that owns this code.\n\nThe REFERRED org is the validated caller, never a field. A caller that could\nname the referred org could attach itself to somebody else's revenue. The\naffiliate is resolved from the code, and only an APPROVED affiliate's code\nresolves.\n\nFIRST TOUCH WINS, set once: one affiliate per referred org, so a re-post\nanswers the existing edge with `created:false` rather than moving the\nattribution. Self-attribution is refused, and so is a code that would make a\ncycle in the upline chain. An unknown code is a 404, deliberately: an\naffiliate code IS a public shareable link, so whether one is real is public by\ndesign, and the caller legitimately needs to know its link resolved.\n\nA user-level mirror of the edge is written best-effort; a conflict there never\nfails the org attribution, which is the money-bearing one.",
 		Fields: map[string]string{
 			"attributeRequest.code": "Code is the affiliate code the referred org arrived with. Body-only: the\nURL cannot supply it.",
@@ -313,7 +313,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"code":"acme"}`),
 	})
-	zip.Describe("POST /v1/affiliate/click", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/affiliate/click", zip.Doc{
 		Description: "Counts a click on a share link. PUBLIC — it takes no principal, because\na visitor clicking a shareable link has no session yet.\n\nThe ping folds into an in-memory buffer and NEVER writes the money database\nsynchronously, so a click flood cannot contend with the accrual and payout\nwrite path; tallies are flushed in one batch on the next authenticated links\nread and at shutdown. Clicks are a vanity metric: no accrual and no payout\never reads them — those key on real metered spend — so click inflation cannot\nmove money.\n\nAny well-formed code is accepted WITHOUT checking that it exists,\ndeliberately: this is not a code-existence oracle. `counted` reports that the\nbuffer took the ping, not that the code is real; an unknown code simply no-ops\nat flush time.",
 		Fields: map[string]string{
 			"clickCount.counted": "Counted says the in-memory buffer took the ping. It does NOT say the code\nexists — this is deliberately not a code-existence oracle, and an unknown code\nsimply no-ops at flush time. false means the buffer was full and the ping was\ndropped, which is harmless: clicks are vanity and move no money.",
@@ -321,7 +321,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"code":"acme"}`),
 	})
-	zip.Describe("POST /v1/affiliate/me/handle", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/affiliate/me/handle", zip.Doc{
 		Description: "Sets the caller's public leaderboard display name, or clears it.\n\nThe handle IS the opt-in. An empty handle opts out: the affiliate keeps its\nrank and can still see its own row, it simply stops being listed to anyone\nelse. That is the whole privacy control — there is no separate visibility\nflag, and no way to be listed without choosing a name.\n\nRequires a validated principal and an existing affiliate record; apply first.\nThe handle is bounded and restricted to letters, digits, space, hyphen,\nunderscore and dot.",
 		Fields: map[string]string{
 			"handleRequest.handle": "Handle is the public leaderboard display name; empty opts out. Body-only:\nthe URL cannot supply it.",
@@ -329,7 +329,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"handle":"acme partners"}`),
 	})
-	zip.Describe("POST /v1/affiliate/me/links", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/affiliate POST /v1/affiliate/me/links", zip.Doc{
 		Description: "Mints a new share link for the caller's own affiliate and answers it\nwith its full URL, 201.\n\nAPPROVAL IS REQUIRED: an org that has applied but is not approved is refused,\nbecause a link that cannot accrue is a link that quietly loses the referral. A\nrequested vanity code must be valid and free across the WHOLE directory —\ncodes are one global namespace, so a taken code is a 409 rather than a silent\nalias. Omit the code and a random one is minted.\n\nBounded per affiliate. The label is cosmetic: it is trimmed, stripped of\ncontrol characters and capped, and it is never part of a code.",
 		Fields: map[string]string{
 			"codeView.clicks":         "Clicks is how many pings this code has taken. The one STORED counter here and\npure vanity: no accrual or payout reads it, pings are coalesced in memory and\nflushed in batches, and a dropped tally is accepted rather than contending\nwith the money write path. Do not reconcile it against anything.",

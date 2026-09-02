@@ -99,6 +99,7 @@
           },
           "settledAt": {
             "description": "SettledAt is when this settlement was CLAIMED, in unix seconds — the moment\nthe authorization was accepted, which is also the moment the time window it\ncarried stopped applying. A settlement finished later by reconciliation\nkeeps this instant.",
+            "format": "int64",
             "type": "integer"
           },
           "settledVia": {

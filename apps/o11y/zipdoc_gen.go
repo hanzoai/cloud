@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/o11y/reviews/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y DELETE /v1/o11y/reviews/:id", zip.Doc{
 		Description: "Removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists.",
 		Fields: map[string]string{
 			"annQueueDeleted.deleted": "Deleted is true when the queue (and its items) were removed.",
@@ -17,10 +17,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1"}`),
 	})
-	zip.Describe("GET /v1/o11y/alerts/last", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/alerts/last", zip.Doc{
 		Description: "Serves the ring as plain text, newest last, so `curl … | tail` reads\nin the order the records were made.",
 	})
-	zip.Describe("GET /v1/o11y/availability", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/availability", zip.Doc{
 		Description: "Reports how much of the Hanzo fleet is up — the current\nper-service inventory plus an up-versus-reporting trend across the window.\nBoth come from the fleet prober's own measurements: every service is asked its\nhealth URL every 30 seconds, so a service is listed as down because it did not\nanswer, never because something failed to collect it. PLATFORM SUDO ONLY —\nthis is the whole fleet's inventory, not tenant data, so every customer is\n403. An unreachable telemetry store answers 503 rather than an empty trend,\nbecause a board of zeroes and a fleet that is down look identical.",
 		Fields: map[string]string{
 			"availabilityIn.range":          "Range is the trend window in seconds. Default 3600, capped at 604800 (7d).",
@@ -38,7 +38,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":3600}`),
 	})
-	zip.Describe("GET /v1/o11y/product/metrics", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/product/metrics", zip.Doc{
 		Description: "Returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window. The series come from org-tagged request spans, so a tenant\nonly ever aggregates its own traffic; a validated platform SuperAdmin sees the\nwhole product's RED, while usage stays the caller's own org either way. A\nwell-formed product with no backing workload answers empty series; a malformed\nslug is a 400.",
 		Fields: map[string]string{
 			"metricsIn.product":       "Product is the console product slug to read, e.g. \"kms\". Required.",
@@ -58,7 +58,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"product":"kms","range":3600}`),
 	})
-	zip.Describe("GET /v1/o11y/reviews", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/reviews", zip.Doc{
 		Description: "Returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
 		Fields: map[string]string{
 			"annPage.limit":               "Limit is how many rows to return. Default 20, capped at 100.",
@@ -78,7 +78,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"page":1,"limit":20}`),
 	})
-	zip.Describe("GET /v1/o11y/reviews/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/reviews/:id", zip.Doc{
 		Description: "Returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
 		Fields: map[string]string{
 			"annItemView.assignee":              "Assignee is the reviewer it is for, omitted when unassigned.",
@@ -106,7 +106,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1"}`),
 	})
-	zip.Describe("GET /v1/o11y/reviews/:id/items", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/reviews/:id/items", zip.Doc{
 		Description: "Returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
 		Fields: map[string]string{
 			"annItemList.data":          "Data is the page of items.",
@@ -134,10 +134,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1","status":"PENDING"}`),
 	})
-	zip.Describe("GET /v1/o11y/sessions", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/sessions", zip.Doc{
 		Description: "GET /v1/o11y/sessions — the flat, org-pinned public path for the LLM-obs\nsessions list (traces grouped by session.id on the gen_ai span plane). The\nconsole's SessionsModule reads this; session DETAIL is composed client-side\nfrom this list plus the traces filtered by session, so there is no\n/sessions/:id backing route (the runtime serves the list only) and none is\nregistered here.\n\nTwo things happen and nothing else. An org-less caller is refused at the cloud\nboundary, before the request reaches the runtime — and the org the runtime then\nbinds (gen_ai.hanzo.org_id from X-Org-Id) is that SAME validated tenant. Then\nthe call is handed to the runtime handler at /v1/o11y/llm/sessions and its\nstatus, headers and bytes come back untouched. A flat alias has to be\nindistinguishable from the address it aliases, which is what makes verbatim the\nonly correct answer here — and why there is no Go shape to declare.\n\nIt delegates in process rather than adapting an http.Handler. The runtime\nregisters every route at its full public path, so the address above is the one\nit serves and no rewrite stands between them. The request is built\nserver-shaped, which is what RequestURI needs: a CLIENT request leaves that\nfield empty by contract and the in-process backing forwards it verbatim.",
 	})
-	zip.Describe("GET /v1/o11y/status", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/status", zip.Doc{
 		Description: "Reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
 		Fields: map[string]string{
 			"deployment.instance":      "Instance is the replica as the telemetry store labels it — the address the\nseries was recorded against, which is what distinguishes two replicas of one\nservice.",
@@ -152,7 +152,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"product":"kms"}`),
 	})
-	zip.Describe("GET /v1/o11y/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/summary", zip.Doc{
 		Description: "Reports whether the platform is up. It returns the public status\ndocument: the incidents currently open against Hanzo's own services, derived\nfrom the fleet health probes, plus the address of the human status page. No\nauthentication is required and no tenant data is involved — the answer is the\nsame for every caller.\n\nA service that fails its health probe becomes one incident naming that service.\nWhen the availability source itself cannot be read the endpoint answers 503\nrather than an empty incident list, because \"we cannot tell\" and \"everything is\nfine\" are different answers and only one of them is true.",
 		Fields: map[string]string{
 			"StatusComponent.current_status":         "CurrentStatus is this component's own condition: \"full_outage\" for a\nservice that did not answer its health probe at all.",
@@ -184,7 +184,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{}`),
 	})
-	zip.Describe("GET /v1/o11y/traces", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y GET /v1/o11y/traces", zip.Doc{
 		Description: "Lists the caller org's recent traces — one row per trace with\nits span count and wall-clock duration, most recently active first. This is\nthe trace SEARCH: it is where a trace id comes from, and the spans behind any\nrow are then read from GET /v1/o11y/traces/{traceId}. Every row belongs to the\ncaller's own org — the tenant is the validated principal, never an input, and\nthere is no administrator widening, because a trace list is a tenant's records\nrather than a rollup over them. An unreachable telemetry store answers 503\nrather than an empty page, because \"no traces\" and \"cannot see the traces\" are\ndifferent facts and only one of them is about the caller's system.",
 		Fields: map[string]string{
 			"traceRow.durationMs":    "DurationMs is End minus Start in milliseconds: the trace's wall clock,\nnot the sum of its spans, which double-counts everything concurrent.",
@@ -202,7 +202,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"range":3600,"limit":50}`),
 	})
-	zip.Describe("PATCH /v1/o11y/reviews/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y PATCH /v1/o11y/reviews/:id", zip.Doc{
 		Description: "Changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
 		Fields: map[string]string{
 			"annQueueView.createdAt":       "CreatedAt is when it was created, RFC3339 in UTC.",
@@ -218,7 +218,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1","name":"hallucination review v2"}`),
 	})
-	zip.Describe("PATCH /v1/o11y/reviews/:id/items/:itemId", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y PATCH /v1/o11y/reviews/:id/items/:itemId", zip.Doc{
 		Description: "Moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
 		Fields: map[string]string{
 			"annItemView.assignee":      "Assignee is the reviewer it is for, omitted when unassigned.",
@@ -240,13 +240,13 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1","itemId":"annqi_1","status":"COMPLETED"}`),
 	})
-	zip.Describe("POST /obs/error/post", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y POST /obs/error/post", zip.Doc{
 		Description: "Relays one Sentry-wire request to the runtime and returns its\nanswer VERBATIM — a 401 \"invalid ingest key\" must reach the SDK as a 401, not\nbe reshaped into a plane error. The request is rebuilt here rather than\nforwarded as bytes because the runtime is an http.Handler.",
 	})
-	zip.Describe("POST /v1/o11y/alerts/:receiver", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y POST /v1/o11y/alerts/:receiver", zip.Doc{
 		Description: "Records one Alertmanager notification, carries it to a human, and\nanswers with the result of the CARRYING — not of the recording.\n\nDelivery is SYNCHRONOUS. The previous version sent in a detached goroutine,\nwhich made 200 structurally incapable of meaning anything: the response was\nwritten before the send was tried. A bounded wait is what makes the status\ncode a fact rather than a hope.",
 	})
-	zip.Describe("POST /v1/o11y/reviews", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y POST /v1/o11y/reviews", zip.Doc{
 		Description: "Creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
 		Fields: map[string]string{
 			"annQueueView.createdAt":        "CreatedAt is when it was created, RFC3339 in UTC.",
@@ -261,7 +261,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"hallucination review","scoreConfigIds":["quality"]}`),
 	})
-	zip.Describe("POST /v1/o11y/reviews/:id/items", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/o11y POST /v1/o11y/reviews/:id/items", zip.Doc{
 		Description: "Enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
 		Fields: map[string]string{
 			"addItemsIn.id":             "ID is the annotation queue to add to, from the path.",

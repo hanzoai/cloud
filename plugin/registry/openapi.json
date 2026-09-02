@@ -278,10 +278,12 @@
         "properties": {
           "images": {
             "description": "Images is how many of the org's repositories the OCI catalog holds.",
+            "format": "int64",
             "type": "integer"
           },
           "packages": {
             "description": "Packages is how many of the org's packages the npm registry reports.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {
@@ -356,6 +358,7 @@
         "properties": {
           "expires": {
             "description": "Expires is the token's lifetime in seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "ref": {

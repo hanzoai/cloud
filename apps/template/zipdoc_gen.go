@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/template/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/template DELETE /v1/template/:slug", zip.Doc{
 		Description: "Deletes the caller org's OWN starter kit. A slug they do not own is a\n404, never a delete: the DELETE binds org.",
 		Fields: map[string]string{
 			"kitRef.slug": "Slug is the starter kit to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"slug":"acme-portal"}`),
 	})
-	zip.Describe("GET /v1/template", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/template GET /v1/template", zip.Doc{
 		Description: "Lists the public starter-kit catalog plus, for a validated caller, that\norg's own private kits. No request field can widen the scope: the org comes\nfrom the validated principal, so an anonymous or cross-org caller structurally\nsees the public catalog only.",
 		Fields: map[string]string{
 			"StarterKit.category":    "groups the kit in the gallery browser (\"Portfolio\", \"SaaS\")",
@@ -41,7 +41,7 @@ func init() {
 			"kitList.data":           "Data is the public catalog followed by the caller org's own kits.",
 		},
 	})
-	zip.Describe("GET /v1/template/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/template GET /v1/template/:slug", zip.Doc{
 		Description: "Returns one starter kit: the caller org's own by that slug, else the public\ncatalog's. A slug another org owns reads as not found.",
 		Fields: map[string]string{
 			"StarterKit.category":    "groups the kit in the gallery browser (\"Portfolio\", \"SaaS\")",
@@ -67,7 +67,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"slug":"folio"}`),
 	})
-	zip.Describe("POST /v1/template", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/template POST /v1/template", zip.Doc{
 		Description: "Creates a starter kit PRIVATE to the caller's org and answers 201 with\nthe stored kit. The owner is stamped by the server, so a body \"org\" is never\ntrusted; publishing over a public-catalog slug is 409, so a slug still names\nexactly one kit.",
 		Fields: map[string]string{
 			"StarterKit.category":      "groups the kit in the gallery browser (\"Portfolio\", \"SaaS\")",
@@ -103,7 +103,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"slug":"acme-portal","title":"Acme Internal Portal","framework":"Next.js 14"}`),
 	})
-	zip.Describe("PUT /v1/template/:slug", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/template PUT /v1/template/:slug", zip.Doc{
 		Description: "Overwrites the caller org's OWN starter kit at the path slug, answering\nthe stored kit. A slug they do not own is 404, never a create: the UPDATE binds\norg, so a PUT can never reach another org's kit.",
 		Fields: map[string]string{
 			"StarterKit.category":      "groups the kit in the gallery browser (\"Portfolio\", \"SaaS\")",

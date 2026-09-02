@@ -28,7 +28,7 @@ Bearer JWT issued by Hanzo IAM (OIDC issuer `https://hanzo.id`). Send it as `Aut
 ## Response
 
 - `/v1/sandbox` → `sandboxList` object with fields: `sandboxes`.
-- `/v1/sandbox/{id}` → `Sandbox` object with fields: `class`, `connectedAt`, `createdAt`, `error`, `expiresAt`, `id`, `image`, `kind`, `lastUsedAt`, `org`, `project`, `runtime`.
+- `/v1/sandbox/{id}` → `Sandbox` object with fields: `class`, `cluster`, `connectedAt`, `createdAt`, `error`, `expiresAt`, `id`, `image`, `kind`, `lastUsedAt`, `org`, `project`.
 
 ## Example
 

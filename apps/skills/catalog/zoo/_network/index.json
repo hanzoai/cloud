@@ -9,8 +9,15 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 3,
+  "skill_count": 4,
   "skills": [
+    {
+      "description": "Read network identities: Returns the fabric identities the caller's org owns..",
+      "name": "network_identities",
+      "path": "network_identities/SKILL.md",
+      "service": "network",
+      "sha256": "70fb4f0918820d2525768f9dc439cda6f78e00a3d6e130cbbe41d74bae9cb950"
+    },
     {
       "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
       "name": "network_network",

@@ -1518,6 +1518,7 @@
             "type": "string"
           },
           "vcpu": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1563,6 +1564,7 @@
           },
           "cpus": {
             "description": "CPUs is the host's logical core count.",
+            "format": "int64",
             "type": "integer"
           },
           "cuda": {
@@ -1614,6 +1616,7 @@
           },
           "memory": {
             "description": "Memory is the host's total RAM in BYTES.",
+            "format": "int64",
             "type": "integer"
           },
           "os": {
@@ -1672,6 +1675,7 @@
       "clusterDetailView": {
         "properties": {
           "amdGpu": {
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -1690,6 +1694,7 @@
             "type": "string"
           },
           "nodeCount": {
+            "format": "int64",
             "type": "integer"
           },
           "nodePools": {
@@ -1709,6 +1714,7 @@
             "type": "array"
           },
           "nvidiaGpu": {
+            "format": "int64",
             "type": "integer"
           },
           "region": {
@@ -1743,6 +1749,7 @@
         "properties": {
           "amdGpu": {
             "description": "AmdGPU is the same count for `amd.com/gpu`: AMD accelerators across the BYO\ncluster's nodes, as of the attach.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
@@ -1767,6 +1774,7 @@
           },
           "nodeCount": {
             "description": "NodeCount is how many worker nodes the cluster has — the sum over its pools\nfor a managed cluster, and for a BYO one the node count read off the cluster\nwhen it was attached.",
+            "format": "int64",
             "type": "integer"
           },
           "nodePools": {
@@ -1782,6 +1790,7 @@
           },
           "nvidiaGpu": {
             "description": "NvidiaGPU is how many NVIDIA accelerators the cluster's nodes advertise, the\nsum of `nvidia.com/gpu` allocatable across them. BYO only, and counted ONCE\nwhen the cluster was attached — it is an inventory, not live capacity.",
+            "format": "int64",
             "type": "integer"
           },
           "region": {
@@ -1805,6 +1814,7 @@
             "description": "NodePool is the ONE pool the cluster is born with — a cluster with no nodes\nruns nothing, so it is not optional. More pools are added afterwards through\nPOST /v1/visor/clusters/:clusterId/pools.",
             "properties": {
               "count": {
+                "format": "int64",
                 "type": "integer"
               },
               "name": {
@@ -1874,18 +1884,22 @@
           },
           "gpuUtil": {
             "description": "GPUUtil is aggregate accelerator utilization as a FRACTION of 1 — 0.42 is\n42% busy, never 42. Across all of the unit's cards, not one of them.",
+            "format": "double",
             "type": "number"
           },
           "load1": {
             "description": "Load1 is the host's 1-minute load average — runnable processes, not a\npercentage, so it is read against the unit's core count and can exceed 1.",
+            "format": "double",
             "type": "number"
           },
           "memFree": {
             "description": "MemFree is host memory still available, in BYTES. It is what the source\nreported, not fleetSpec.Memory minus MemUsed.",
+            "format": "int64",
             "type": "integer"
           },
           "memUsed": {
             "description": "MemUsed is host memory in use, in BYTES.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1899,6 +1913,7 @@
           },
           "cpus": {
             "description": "CPUs is logical cores on the unit.",
+            "format": "int64",
             "type": "integer"
           },
           "gpuModel": {
@@ -1907,10 +1922,12 @@
           },
           "gpus": {
             "description": "GPUs is how many accelerators the unit has. For a cluster it is the vendor\ntotals summed across every node, so it counts cards, not machines.",
+            "format": "int64",
             "type": "integer"
           },
           "memory": {
             "description": "Memory is total system RAM in BYTES — not GB, and not what is free right now\n(fleetMetrics carries that). Absent when the source reports no RAM figure.",
+            "format": "int64",
             "type": "integer"
           },
           "os": {
@@ -1940,14 +1957,17 @@
           },
           "queued": {
             "description": "Queued is how many renders are waiting on THIS GPU's own lane in the org's\ngpu-jobs queue. BYO units only — an agent run-target dispatches, it does not\nqueue — and omitted when nothing is waiting.",
+            "format": "int64",
             "type": "integer"
           },
           "running": {
             "description": "Running is what the unit is executing right now: agent sessions in flight for\na run-target, claimed renders for a BYO GPU.",
+            "format": "int64",
             "type": "integer"
           },
           "sessions": {
             "description": "Sessions is how many agent sessions are open on this unit. Always present,\nand 0 for a source that cannot host agent sessions at all — a fact about that\nplane, not a gap in the reading.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {
@@ -1985,6 +2005,7 @@
         "properties": {
           "attempt": {
             "description": "Attempt is which try this is, counting from 1. Above 1 means the job was\nretried after a failed or abandoned run.",
+            "format": "int64",
             "type": "integer"
           },
           "closeTime": {
@@ -2201,6 +2222,7 @@
           },
           "vcpu": {
             "description": "Vcpu is logical cores — the provider's own cpuSize when that is a clean\ninteger, else the count read out of the size slug (4 from \"s-4vcpu-8gb\").\nABSENT, never 0, when neither says. A BYO machine leaves it absent here; its\nreal core count is on GET /v1/visor/fleet/workers.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2226,14 +2248,17 @@
           },
           "count": {
             "description": "Count is how many nodes the pool has right now. Always present, so 0 means a\npool that is genuinely empty rather than a figure the provider withheld.",
+            "format": "int64",
             "type": "integer"
           },
           "maxNodes": {
             "description": "MaxNodes is the ceiling the autoscaler will not grow the pool past, and so\nthe bound on what this pool can cost. Read it only with AutoScale set.",
+            "format": "int64",
             "type": "integer"
           },
           "minNodes": {
             "description": "MinNodes is the floor the autoscaler will not shrink the pool below. Read it\nonly with AutoScale set — the provider ignores it otherwise.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -2263,14 +2288,17 @@
           },
           "count": {
             "description": "Count is how many nodes the pool starts with.",
+            "format": "int64",
             "type": "integer"
           },
           "maxNodes": {
             "description": "MaxNodes is the ceiling the autoscaler may not grow the pool past, and so the\nbound on what this pool can spend. Ignored unless AutoScale is set.",
+            "format": "int64",
             "type": "integer"
           },
           "minNodes": {
             "description": "MinNodes is the floor the autoscaler may not shrink the pool below. Ignored\nunless AutoScale is set.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -2296,6 +2324,7 @@
           },
           "count": {
             "description": "Count is the node count to scale TO — an absolute target, not a delta, and\nnever negative.",
+            "format": "int64",
             "type": "integer"
           },
           "poolId": {
@@ -2326,10 +2355,12 @@
           },
           "gpuUtil": {
             "description": "GPUUtil is accelerator utilization as a fraction 0..1; the warehouse clamps\nanything outside that.",
+            "format": "double",
             "type": "number"
           },
           "gpus": {
             "description": "GPUs is how many accelerators this reading covers.",
+            "format": "int64",
             "type": "integer"
           },
           "host": {
@@ -2338,10 +2369,12 @@
           },
           "memFree": {
             "description": "MemFree is host memory still available, in BYTES.",
+            "format": "int64",
             "type": "integer"
           },
           "memUsed": {
             "description": "MemUsed is host memory in use, in BYTES.",
+            "format": "int64",
             "type": "integer"
           },
           "unit": {
@@ -2371,10 +2404,12 @@
           },
           "costCents": {
             "description": "CostCents is what this unit resold for over the hour the reading falls in, in\nwhole US cents. 0 means UNPRICED, not free: the operator's own machines — a\nlinked run-target, a dialed-in BYO worker — are metered for utilization and\nnever resold, so only a priced source ever fills it.",
+            "format": "int64",
             "type": "integer"
           },
           "cpus": {
             "description": "CPUs is logical cores. The static capability rides every row on purpose: a\nchart can size load against cores without joining a registry whose row may\nsince have been rewritten or the unit deregistered.",
+            "format": "int64",
             "type": "integer"
           },
           "gpuModel": {
@@ -2383,10 +2418,12 @@
           },
           "gpuUtil": {
             "description": "GPUUtil is aggregate accelerator utilization as a FRACTION of 1 — 0.42 is\n42% busy. Anything a reporter sends outside 0..1 is clamped into it on write.",
+            "format": "double",
             "type": "number"
           },
           "gpus": {
             "description": "GPUs is how many accelerators the reading covers.",
+            "format": "int64",
             "type": "integer"
           },
           "host": {
@@ -2399,26 +2436,32 @@
           },
           "load1": {
             "description": "Load1 is the 1-minute load average — runnable processes, not a percentage.",
+            "format": "double",
             "type": "number"
           },
           "load15": {
             "description": "Load15 is the 15-minute load average, the same units as Load1.",
+            "format": "double",
             "type": "number"
           },
           "load5": {
             "description": "Load5 is the 5-minute load average, the same units as Load1.",
+            "format": "double",
             "type": "number"
           },
           "memFree": {
             "description": "MemFree is host memory available, in BYTES, as reported rather than derived.",
+            "format": "int64",
             "type": "integer"
           },
           "memUsed": {
             "description": "MemUsed is host memory in use, in BYTES.",
+            "format": "int64",
             "type": "integer"
           },
           "memory": {
             "description": "Memory is total system RAM in BYTES at the time of the reading.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {

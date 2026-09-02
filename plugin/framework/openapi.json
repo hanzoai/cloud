@@ -702,6 +702,7 @@
             "type": "string"
           },
           "createdAt": {
+            "format": "int64",
             "type": "integer"
           },
           "fields": {
@@ -732,6 +733,7 @@
             "type": "string"
           },
           "updatedAt": {
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -838,10 +840,12 @@
         "properties": {
           "doctypes": {
             "description": "DocTypes is how many DocTypes the org has defined.",
+            "format": "int64",
             "type": "integer"
           },
           "documents": {
             "description": "Documents is how many documents exist across them.",
+            "format": "int64",
             "type": "integer"
           }
         },

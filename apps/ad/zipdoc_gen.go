@@ -9,11 +9,11 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/ad/campaigns/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ad DELETE /v1/ad/campaigns/:id", zip.Doc{
 		Description: "Removes one of the caller org's campaigns and answers 204 with\nno body. It deletes the stored record only: a campaign already launched keeps\nrunning on the ad network, which must be stopped there. An id another org owns\nreads as not found.",
 		Example:     json.RawMessage(`{"id":"camp_2f9c1d"}`),
 	})
-	zip.Describe("GET /v1/ad/campaigns", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ad GET /v1/ad/campaigns", zip.Doc{
 		Description: "Returns the caller org's ad campaigns, most recently updated\nfirst, optionally narrowed to one lifecycle status. The listing is bounded by\nthe org: another tenant's campaigns are not reachable from here at all.",
 		Fields: map[string]string{
 			"AdCampaign.account":     "Account is the provider ad-account the campaign runs under, in Meta's\nact_<id> form. Empty until the org supplies one or a launch resolves it.",
@@ -33,7 +33,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"status":"active","limit":50}`),
 	})
-	zip.Describe("GET /v1/ad/campaigns/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ad GET /v1/ad/campaigns/:id", zip.Doc{
 		Description: "Returns one of the caller org's campaigns. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
 		Fields: map[string]string{
 			"AdCampaign.account":    "Account is the provider ad-account the campaign runs under, in Meta's\nact_<id> form. Empty until the org supplies one or a launch resolves it.",
@@ -50,7 +50,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"camp_2f9c1d"}`),
 	})
-	zip.Describe("GET /v1/ad/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ad GET /v1/ad/summary", zip.Doc{
 		Description: "Rolls the caller org's ad campaigns up into four numbers: how many\ncampaigns exist, how many are active, and the summed budget and spend across\nall of them. Budget and spend are MINOR units (cents), the same units the\ncampaign rows carry. It counts only this org's campaigns.",
 		Fields: map[string]string{
 			"adSummary.active":    "Active is how many of those campaigns are in the active state.",
@@ -59,7 +59,7 @@ func init() {
 			"adSummary.spend":     "Spend is the summed spend of every campaign in the org, in cents.",
 		},
 	})
-	zip.Describe("POST /v1/ad/campaigns", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ad POST /v1/ad/campaigns", zip.Doc{
 		Description: "Registers a new ad campaign for the caller's org and answers\n201 with the stored row. It only records the campaign — nothing is sent to the\nad network until POST /v1/ad/campaigns/{id}/launch runs it. The org is\nstamped by the server from the validated principal, so a body can never place\na campaign in another tenant.",
 		Fields: map[string]string{
 			"AdCampaign.account":      "Account is the provider ad-account the campaign runs under, in Meta's\nact_<id> form. Empty until the org supplies one or a launch resolves it.",
@@ -83,10 +83,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"Spring Launch","platform":"meta","objective":"conversions","budget":50000}`),
 	})
-	zip.Describe("POST /v1/ad/campaigns/:id/launch", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ad POST /v1/ad/campaigns/:id/launch", zip.Doc{
 		Description: "Runs a stored ad campaign on its provider using the ORG'S\nconnected ad-account token. It is the standalone proof that /v1/ad consumes the\nconnector plane: no token is held here — LaunchPaid (provider.go) resolves it\nfrom KMS through integrations.TokenFor and FAILS CLOSED when the org has not\nconnected the platform (424), so a launch can never spend on a connection the\norg did not make. On success the provider campaign id is recorded (MarkLaunched)\nand the campaign goes active. An optional body {account} sets/overrides the\ntarget ad account when the stored campaign has none.",
 	})
-	zip.Describe("PUT /v1/ad/campaigns/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ad PUT /v1/ad/campaigns/:id", zip.Doc{
 		Description: "Replaces the user-owned fields of one of the caller org's\ncampaigns and answers the stored row. It is a full replace, not a patch: every\nfield is written from the request, so an omitted one is cleared. externalId is\nlaunch-owned and is never touched here, so editing a campaign cannot break its\nlink to a live provider execution.",
 		Fields: map[string]string{
 			"AdCampaign.account":         "Account is the provider ad-account the campaign runs under, in Meta's\nact_<id> form. Empty until the org supplies one or a launch resolves it.",

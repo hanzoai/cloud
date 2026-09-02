@@ -200,6 +200,7 @@
           },
           "stars": {
             "description": "Stars is GitHub's stargazer count for the source repository, read at the last\nsync and never accumulated here. It is not a ranking — the page sorts on\nUpdated — but it is the tiebreak when two orgs claim one ID. Absent for a\nsite with no repository behind it, and for a repository nobody has starred.",
+            "format": "int64",
             "type": "integer"
           },
           "template": {
@@ -237,6 +238,7 @@
           "facets": {
             "additionalProperties": {
               "additionalProperties": {
+                "format": "int64",
                 "type": "integer"
               },
               "type": "object"
@@ -246,6 +248,7 @@
           },
           "total": {
             "description": "Total is how many entries matched BEFORE paging — what a pager sizes itself on.",
+            "format": "int64",
             "type": "integer"
           }
         },

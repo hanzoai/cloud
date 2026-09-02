@@ -885,6 +885,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the document was uploaded, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "fileKey": {
@@ -893,6 +894,7 @@
           },
           "fileSize": {
             "description": "FileSize is the stored byte count, null when it was not recorded.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -905,6 +907,7 @@
           },
           "numPages": {
             "description": "NumPages is the page count, null when it was not supplied at upload.",
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -913,6 +916,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the document row last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -954,6 +958,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the link was minted, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "dataroomId": {
@@ -977,6 +982,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is when the link closes, in unix milliseconds; null never expires.",
+            "format": "int64",
             "type": "integer"
           },
           "hasPassword": {
@@ -1001,6 +1007,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the link last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1066,10 +1073,12 @@
           },
           "totalPageViews": {
             "description": "TotalPageViews is how many page views the link received.",
+            "format": "int64",
             "type": "integer"
           },
           "totalViews": {
             "description": "TotalViews is how many viewing sessions the link opened.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1108,6 +1117,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the document was uploaded, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "dataroomDocumentId": {
@@ -1120,6 +1130,7 @@
           },
           "fileSize": {
             "description": "FileSize is the stored byte count, null when it was not recorded.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1132,10 +1143,12 @@
           },
           "numPages": {
             "description": "NumPages is the page count, null when it was not supplied at upload.",
+            "format": "int64",
             "type": "integer"
           },
           "orderIndex": {
             "description": "OrderIndex is the document's place in the viewer's list, null when it was\nadded without one. Unordered documents sort last.",
+            "format": "int64",
             "type": "integer"
           },
           "type": {
@@ -1144,6 +1157,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the document row last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1170,18 +1184,22 @@
         "properties": {
           "avgDuration": {
             "description": "AvgDuration is totalDuration divided by views, rounded; 0 when unviewed.",
+            "format": "int64",
             "type": "integer"
           },
           "pageNumber": {
             "description": "PageNumber is the page these counts are for.",
+            "format": "int64",
             "type": "integer"
           },
           "totalDuration": {
             "description": "TotalDuration is the summed dwell measure reported for the page.",
+            "format": "int64",
             "type": "integer"
           },
           "views": {
             "description": "Views is how many times the page was viewed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1191,6 +1209,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the room was created, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -1211,6 +1230,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the room last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1220,6 +1240,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the room was created, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -1247,6 +1268,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the room last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1297,10 +1319,12 @@
           },
           "totalPageViews": {
             "description": "TotalPageViews is the room's page views across every link.",
+            "format": "int64",
             "type": "integer"
           },
           "totalViews": {
             "description": "TotalViews is the room's viewing sessions across every link.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1339,10 +1363,12 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the ask arrived, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "decidedAt": {
             "description": "DecidedAt is when it was answered, in unix milliseconds; 0 while open.",
+            "format": "int64",
             "type": "integer"
           },
           "decidedBy": {
@@ -1355,6 +1381,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is when a granted ask closes, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1409,6 +1436,7 @@
         "properties": {
           "days": {
             "description": "Days is how long the grant stays open, from now. Optional; 14 by default and\n365 at most — a longer release is describing a customer relationship rather\nthan a document.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1509,6 +1537,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is when the grant closes, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "item": {
@@ -1534,6 +1563,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is when the grant closes, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "link": {
@@ -1583,6 +1613,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the item last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1600,6 +1631,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when it was published, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "document": {
@@ -1636,6 +1668,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when it last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1715,10 +1748,12 @@
         "properties": {
           "grants": {
             "description": "Grants is how many grants that org has made.",
+            "format": "int64",
             "type": "integer"
           },
           "items": {
             "description": "Items is how many items it publishes, retired excluded.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -1727,6 +1762,7 @@
           },
           "open": {
             "description": "Open is how many requests are waiting on it — the number that says whether\nanybody is being kept waiting.",
+            "format": "int64",
             "type": "integer"
           },
           "org": {

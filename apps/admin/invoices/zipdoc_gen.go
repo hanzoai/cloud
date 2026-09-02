@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/admin/invoices", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/admin/invoices GET /v1/admin/invoices", zip.Doc{
 		Description: "Answers GET /v1/admin/invoices.\n\n\tGET /v1/admin/invoices?org=&status=&limit=",
 		Fields: map[string]string{
 			"InvoiceRow.amountCents": "AmountCents is the invoice total in minor units of Currency, as of its latest\nevent. It is the amount BILLED — a partially paid invoice does not report a\nremainder here.",

@@ -9,26 +9,26 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/entitlement", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/entitlement GET /v1/entitlement", zip.Doc{
 		Description: "Projection reports which console apps the CALLER's org may open, and the plan slug\nthat decides it. It is the READ side of the unified paywall: the org's plan tier\nresolved from commerce, which is a different authority from the enablement store\nbehind GET /v1/entitlement/orgs/{org} (that one is the org's own on/off intent).\n\nIt fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a\ncommerce outage reports every app locked at 200 rather than breaking the shell.\nThe ENFORCEMENT path still fails open, so functionality survives the same outage\neven while the UI conservatively shows locked.",
 		Fields: map[string]string{
 			"projectionView.apps": "Apps says, per console app, whether the org may open it. The SAME six keys are\nalways present (studio, bot, world, platform, team, admin), so a client maps\nover it unconditionally; a key is false both when the plan does not grant the\napp and when commerce could not be reached, because a read that decides what to\nSHOW fails to LOCKED rather than to an error.",
 			"projectionView.tier": "Tier is the plan slug commerce resolved for the org, or \"\" when the org has no\nactive licensing subscription — which the console treats as its free default.",
 		},
 	})
-	zip.Describe("GET /v1/entitlement/orgs/:org", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/entitlement GET /v1/entitlement/orgs/:org", zip.Doc{
 		Description: "Get lists the products an org has ENABLED — its own intent, which the console's\npaid-product sidebar reads to decide what to show. It is distinct from what the\norg's plan ENTITLES it to (that is GET /v1/entitlement, resolved from commerce).\n\nA caller may only read its OWN org's row; a platform super admin may read any.",
 		Fields: map[string]string{
 			"entitlementsView.enabled": "Enabled is the org's turned-on product ids, sorted. Always an array, never null.",
 		},
 	})
-	zip.Describe("POST /entitlement/holds", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/entitlement POST /entitlement/holds", zip.Doc{
 		Description: "Reads one product for the caller's own org. The caller names only the\nproduct, so \"check another org's entitlement\" is unrepresentable.\n\nAn unmounted store is an error, never a false: a subsystem that failed to start\nmust not read as a customer who has not subscribed.",
 		Fields: map[string]string{
 			"ProductIn.product": "the product id; for a module it is the module name",
 		},
 	})
-	zip.Describe("POST /v1/entitlement/orgs/:org", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/entitlement POST /v1/entitlement/orgs/:org", zip.Doc{
 		Description: "Post turns products on or off for an org and returns the enabled set afterwards.\n\nA product may only be ENABLED if the org's plan already ENTITLES it, so enabling\nnever spends new money — a product the plan does not grant answers 402 and the\nconsole routes that to an upgrade prompt. DISABLING is never gated. A platform\nsuper admin bypasses the plan check (operator comp/grant) and may target any org;\neveryone else may only change their own. Commerce unreachable is a 503, never an\nimplicit yes.",
 		Fields: map[string]string{
 			"entitlementsView.enabled": "Enabled is the org's turned-on product ids, sorted. Always an array, never null.",

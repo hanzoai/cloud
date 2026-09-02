@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("POST /v1/pubsub/publish", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pubsub POST /v1/pubsub/publish", zip.Doc{
 		Description: "Publish puts one message on the org's bus. When a stream captures the subject\nthe write is DURABLE — the receipt names the stream and sequence only after\nJetStream has it on storage, and a repeated Nats-Msg-Id header within the\ndedup window answers duplicate instead of storing twice. When nothing\ncaptures it, the message goes out core NATS: delivered to current\nsubscribers, receipt {ok}, nothing retained.",
 		Fields: map[string]string{
 			"busAck.duplicate":   "Duplicate is true when JetStream deduplicated the message by its\nNats-Msg-Id instead of storing it again.",
@@ -22,7 +22,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"subject":"orders.created","data":"{\"id\":\"o_1\"}","headers":{"Nats-Msg-Id":"o_1"}}`),
 	})
-	zip.Describe("POST /v1/pubsub/request", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/pubsub POST /v1/pubsub/request", zip.Doc{
 		Description: "Request sends one request on the org's bus and waits for one reply — the\nsynchronous half of pub/sub, for callers speaking to a responder subscribed\non the NATS port. 404 when nobody is listening on the subject; 408 when a\nresponder exists but no reply arrived within the timeout.",
 		Fields: map[string]string{
 			"busMessage.data":      "Data is the payload as UTF-8 text.",

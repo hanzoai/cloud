@@ -84,6 +84,7 @@
             "required": false,
             "description": "Limit caps the streams returned (1–1000, default 100).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -93,6 +94,7 @@
             "required": false,
             "description": "Offset skips that many streams, name-ordered.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -273,6 +275,7 @@
             "required": false,
             "description": "Seq reads the message at this sequence (with next_by_subject: the walk's start).",
             "schema": {
+              "format": "uint64",
               "type": "integer"
             }
           },
@@ -300,6 +303,7 @@
             "required": false,
             "description": "Limit caps a next_by_subject walk (1–1000, default 100).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -344,6 +348,7 @@
             "required": true,
             "description": "Seq is the message's stream sequence, from the path.",
             "schema": {
+              "format": "uint64",
               "type": "integer"
             }
           }
@@ -426,6 +431,7 @@
             "required": false,
             "description": "Limit caps the consumers returned (1–1000, default 100).",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -435,6 +441,7 @@
             "required": false,
             "description": "Offset skips that many consumers, name-ordered.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -642,14 +649,17 @@
           },
           "max_bytes": {
             "description": "MaxBytes caps the stream's total stored bytes; -1 (default) is unlimited.",
+            "format": "int64",
             "type": "integer"
           },
           "max_msg_size": {
             "description": "MaxMsgSize caps one message's size in bytes; -1 (default) is the broker's limit.",
+            "format": "int32",
             "type": "integer"
           },
           "max_msgs": {
             "description": "MaxMsgs caps the number of stored messages; -1 (default) is unlimited.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -658,6 +668,7 @@
           },
           "num_replicas": {
             "description": "Replicas is the number of stream replicas (1–5); this plane runs 1.",
+            "format": "int64",
             "type": "integer"
           },
           "retention": {
@@ -703,18 +714,22 @@
           },
           "num_ack_pending": {
             "description": "AckPending is the number of delivered, not yet acknowledged messages.",
+            "format": "int64",
             "type": "integer"
           },
           "num_pending": {
             "description": "Pending is the number of messages yet to be delivered.",
+            "format": "uint64",
             "type": "integer"
           },
           "num_redelivered": {
             "description": "Redelivered is the number of messages currently being redelivered.",
+            "format": "int64",
             "type": "integer"
           },
           "num_waiting": {
             "description": "Waiting is the number of pull requests waiting for messages.",
+            "format": "int64",
             "type": "integer"
           },
           "stream_name": {
@@ -742,14 +757,17 @@
           },
           "num_delivered": {
             "description": "Delivered is how many times a consumer has been handed this message (pulls only).",
+            "format": "int64",
             "type": "integer"
           },
           "num_pending": {
             "description": "Remaining is how many messages follow this one for the consumer (pulls only).",
+            "format": "uint64",
             "type": "integer"
           },
           "sequence": {
             "description": "Sequence is the message's stream sequence.",
+            "format": "uint64",
             "type": "integer"
           },
           "subject": {
@@ -792,14 +810,17 @@
           },
           "max_ack_pending": {
             "description": "MaxAckPending caps unacknowledged messages in flight (default 1000).",
+            "format": "int64",
             "type": "integer"
           },
           "max_deliver": {
             "description": "MaxDeliver caps delivery attempts per message; -1 (default) is unlimited.",
+            "format": "int64",
             "type": "integer"
           },
           "opt_start_seq": {
             "description": "StartSeq is the starting sequence for deliver_policy by_start_sequence.",
+            "format": "uint64",
             "type": "integer"
           },
           "opt_start_time": {
@@ -839,6 +860,7 @@
           },
           "keep": {
             "description": "Keep retains that many newest messages.",
+            "format": "uint64",
             "type": "integer"
           },
           "name": {
@@ -852,10 +874,12 @@
         "properties": {
           "consumer_seq": {
             "description": "Consumer is the consumer's own sequence.",
+            "format": "uint64",
             "type": "integer"
           },
           "stream_seq": {
             "description": "Stream is the corresponding stream sequence.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -865,14 +889,17 @@
         "properties": {
           "bytes": {
             "description": "Bytes is the total stored size.",
+            "format": "uint64",
             "type": "integer"
           },
           "consumer_count": {
             "description": "Consumers is the number of consumers attached to this stream.",
+            "format": "int64",
             "type": "integer"
           },
           "first_seq": {
             "description": "FirstSeq is the sequence of the first stored message.",
+            "format": "uint64",
             "type": "integer"
           },
           "first_ts": {
@@ -882,6 +909,7 @@
           },
           "last_seq": {
             "description": "LastSeq is the sequence of the last stored message.",
+            "format": "uint64",
             "type": "integer"
           },
           "last_ts": {
@@ -891,14 +919,17 @@
           },
           "messages": {
             "description": "Messages is the number of messages currently stored.",
+            "format": "uint64",
             "type": "integer"
           },
           "num_deleted": {
             "description": "Deleted is the number of deleted messages (sequence gaps).",
+            "format": "int64",
             "type": "integer"
           },
           "num_subjects": {
             "description": "Subjects is the number of distinct subjects stored.",
+            "format": "uint64",
             "type": "integer"
           }
         },
@@ -937,6 +968,7 @@
           },
           "total": {
             "description": "Total is the org's stream count before paging.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -950,6 +982,7 @@
           },
           "max_payload": {
             "description": "MaxPayload is the broker's message-size ceiling in bytes.",
+            "format": "int64",
             "type": "integer"
           },
           "server_id": {
@@ -962,6 +995,7 @@
           },
           "streams": {
             "description": "Streams is the org's stream count.",
+            "format": "int64",
             "type": "integer"
           },
           "version": {
@@ -992,12 +1026,15 @@
             "type": "string"
           },
           "max_ack_pending": {
+            "format": "int64",
             "type": "integer"
           },
           "max_deliver": {
+            "format": "int64",
             "type": "integer"
           },
           "opt_start_seq": {
+            "format": "uint64",
             "type": "integer"
           },
           "opt_start_time": {
@@ -1018,6 +1055,7 @@
         "properties": {
           "batch": {
             "description": "Batch is how many messages to pull (1–1000, default 1).",
+            "format": "int64",
             "type": "integer"
           },
           "expires": {
@@ -1050,6 +1088,7 @@
           },
           "total": {
             "description": "Total is the stream's consumer count before paging.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1059,6 +1098,7 @@
         "properties": {
           "purged": {
             "description": "Purged is the number of messages removed.",
+            "format": "uint64",
             "type": "integer"
           }
         },

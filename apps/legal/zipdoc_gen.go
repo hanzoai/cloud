@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/legal/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal GET /v1/legal/documents", zip.Doc{
 		Description: "Returns the org's generated documents, newest first, WITHOUT\ntheir rendered content — fetch one document to read its body.\n\nThe response is marked no-store: these records name the counterparties an org is\ncontracting with, and must not sit in a shared cache.",
 		Fields: map[string]string{
 			"documentFilter.limit":            "Limit bounds the page. Absent or unparseable means the store's own default.",
@@ -27,7 +27,7 @@ func init() {
 			"documentSummary.updatedAt":       "UpdatedAt is when it last changed, in unix seconds.",
 		},
 	})
-	zip.Describe("GET /v1/legal/documents/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal GET /v1/legal/documents/:id", zip.Doc{
 		Description: "Returns one of the org's documents WITH its rendered body. 404\nwhen the org has no document with that id — a document is never readable across\norgs.\n\nThe response is marked no-store: the body is contract text, sealed at rest and\nreturned only to the owning org, and must not sit in a shared cache.",
 		Fields: map[string]string{
 			"documentRef.id":                  "ID is the document's server-minted handle, \"doc_\"-prefixed.",
@@ -47,7 +47,7 @@ func init() {
 			"documentView.contentType":        "ContentType is the rendered body's media type — text/markdown.",
 		},
 	})
-	zip.Describe("GET /v1/legal/filings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal GET /v1/legal/filings", zip.Doc{
 		Description: "Returns the org's filing records, newest first — which documents\nwere filed where, through which provider, and what the filing's honest status is.",
 		Fields: map[string]string{
 			"documentFilter.limit":  "Limit bounds the page. Absent or unparseable means the store's own default.",
@@ -55,14 +55,14 @@ func init() {
 			"filingPage.disclaimer": "Disclaimer is the boundary made visible on the wire.",
 		},
 	})
-	zip.Describe("GET /v1/legal/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal GET /v1/legal/health", zip.Doc{
 		Description: "Reports that the legal subsystem is serving and how many built-in\ntemplates its catalog carries. It reads no tenant, so a liveness prober that\nsends no principal is answered rather than refused.",
 		Fields: map[string]string{
 			"legalHealth.status":    "Status is \"ok\" when the subsystem is serving.",
 			"legalHealth.templates": "Templates is how many built-in templates the catalog carries.",
 		},
 	})
-	zip.Describe("GET /v1/legal/templates", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal GET /v1/legal/templates", zip.Doc{
 		Description: "Returns the org's effective template catalog: every built-in\ntemplate, with any the org has overridden replaced by its own latest version.\n\nThe listing carries each template's metadata and its declared MERGE FIELDS — the\nkeys a document generation must supply — but never the template bodies; fetch one\ntemplate to get its body. Templates in the formation and equity categories are\nmarked counselReview: every document rendered from them carries a counsel notice,\nand that posture cannot be dropped by an override.",
 		Fields: map[string]string{
 			"Field.key":                  "Key is the identifier the body substitutes ({{.key}}) and the key a\ngeneration's data map must carry. snake_case by convention across the\nbuilt-ins — effective_date, company_name, governing_law. An override whose\nbody references a key no Field declares is refused on save.",
@@ -78,7 +78,7 @@ func init() {
 			"templateView.version":       "Version is which version of this template the caller's org resolves to. A\nbuilt-in is version 1; the org's first override is 2 and each save increments,\nso an override version never collides with the built-in's.",
 		},
 	})
-	zip.Describe("GET /v1/legal/templates/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal GET /v1/legal/templates/:id", zip.Doc{
 		Description: "Returns one template resolved for the caller's org — the org's\nown override if it has saved one, else the built-in — with its full text/template\nbody and its declared merge fields. 404 when neither exists.",
 		Fields: map[string]string{
 			"Field.key":                "Key is the identifier the body substitutes ({{.key}}) and the key a\ngeneration's data map must carry. snake_case by convention across the\nbuilt-ins — effective_date, company_name, governing_law. An override whose\nbody references a key no Field declares is refused on save.",
@@ -88,7 +88,7 @@ func init() {
 			"templateReply.template":   "Template is the resolved template — the org's override if it has one, else\nthe built-in.",
 		},
 	})
-	zip.Describe("POST /v1/legal/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal POST /v1/legal/documents", zip.Doc{
 		Description: "Renders a document from a template and the caller's own\nmerge data, seals it in the org's store, and returns it with its rendered body.\n\nThe render is PURE and deterministic — no clock, no I/O — so the same template\nversion and the same data always produce identical bytes, which is what makes a\ngenerated contract reproducible. It fails CLOSED on a missing merge field: there\nis no blank-filled contract, only a 400 naming the fields that were absent. When\nthe template is counsel-review the rendered body opens with the counsel notice,\nwhich no caller can suppress.\n\nThe document is a DRAFT. Hanzo Legal manages documents; it does not give legal\nadvice and does not determine that a document is valid or sufficient.",
 		Fields: map[string]string{
 			"documentReply.disclaimer":        "Disclaimer is the boundary made visible on the wire.",
@@ -110,7 +110,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"templateId":"nda","data":{"counterparty":"AgentCo, LLC","date":"2026-07-30"}}`),
 	})
-	zip.Describe("POST /v1/legal/documents/:id/sign", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal POST /v1/legal/documents/:id/sign", zip.Doc{
 		Description: "Opens an e-signature request over one document and moves it\nto out_for_signature, returning the provider's reference for the request.\n\nThe provider is whatever this deployment has wired. The honest default is\n\"manual\": the request is recorded and the org fulfils it out of band — nothing\nhere fabricates a signature, and the stub never reports itself complete.",
 		Fields: map[string]string{
 			"documentSummary.category":        "Category is the template's category: formation, equity, ops or sales.",
@@ -131,10 +131,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"doc_1f…","signers":[{"name":"Ada","email":"ada@acme.com"}]}`),
 	})
-	zip.Describe("POST /v1/legal/documents/:id/sign/complete", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal POST /v1/legal/documents/:id/sign/complete", zip.Doc{
 		Description: "Records signature completion — a provider webhook or a reviewer signal.\nThe stub never self-completes; this authenticated, audited endpoint is the signal.",
 	})
-	zip.Describe("POST /v1/legal/filings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal POST /v1/legal/filings", zip.Doc{
 		Description: "Records a filing of one or more of the org's documents with a\nstate or agency, and returns the tracking record.\n\nIt is a TRACKING record, not an autonomous filing. With no filing partner wired\nthe honest status is \"manual\" and the note says so: the documents were generated\nfor signature, and the org files them through its registered agent. Nothing here\ninvents a filing id it does not have.\n\nEvery document id must belong to the caller's org; one that does not is a 404\nnaming it, so a filing can never reach across tenants.",
 		Fields: map[string]string{
 			"filingReply.disclaimer":     "Disclaimer is the boundary made visible on the wire.",
@@ -144,7 +144,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"documentIds":["doc_1f…"],"jurisdiction":"DE"}`),
 	})
-	zip.Describe("PUT /v1/legal/templates/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/legal PUT /v1/legal/templates/:id", zip.Doc{
 		Description: "Saves the org's own version of a template — a custom\nNDA, a house MSA — and returns it with its new version number. It takes effect\nfor that org only; other orgs keep the built-in.\n\nTwo boundaries cannot be crossed here. Overriding a built-in INHERITS its\ncategory and its counsel-review posture, which can be raised but never dropped;\nand a formation or equity template is counsel-review whatever the caller sends,\nso no org can generate a securities-class document without the notice.\n\nThe body is validated on save, not at generation: a template that references an\nUNDECLARED merge field is refused with 400 rather than stored and rendered blank\ninto a contract months later.",
 		Fields: map[string]string{
 			"Field.key":                      "Key is the identifier the body substitutes ({{.key}}) and the key a\ngeneration's data map must carry. snake_case by convention across the\nbuilt-ins — effective_date, company_name, governing_law. An override whose\nbody references a key no Field declares is refused on save.",

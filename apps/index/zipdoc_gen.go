@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/index/indexes/:uid", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index DELETE /v1/index/indexes/:uid", zip.Doc{
 		Description: "Deletes an index and everything in it.\n\nDrops the index and every document in it from the caller's own org, and\nanswers the dialect's EnqueuedTask. This is the only way to retire an index;\nwithout it a mistaken uid is permanent. Deleting an index that is not there\nsucceeds, so a cleanup pass is safe to re-run.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the documents are already gone when this answers.",
 		Fields: map[string]string{
 			"indexEnqueued.enqueuedAt": "EnqueuedAt is when the task was recorded, RFC 3339 — which is also when it\ncompleted.",
@@ -19,7 +19,7 @@ func init() {
 			"indexEnqueued.type":       "Type is the dialect's name for the kind of write: indexCreation,\nindexDeletion, settingsUpdate, documentAdditionOrUpdate, documentDeletion.",
 		},
 	})
-	zip.Describe("DELETE /v1/index/indexes/:uid/documents/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index DELETE /v1/index/indexes/:uid/documents/:id", zip.Doc{
 		Description: "Deletes one document by its primary key.\n\nRemoves the document from the caller's own org and answers the dialect's\nEnqueuedTask. Deleting a key that is not there succeeds, so a client\nreconciling its own corpus can delete without checking first.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the document is already gone when this answers.",
 		Fields: map[string]string{
 			"indexEnqueued.enqueuedAt": "EnqueuedAt is when the task was recorded, RFC 3339 — which is also when it\ncompleted.",
@@ -29,13 +29,13 @@ func init() {
 			"indexEnqueued.type":       "Type is the dialect's name for the kind of write: indexCreation,\nindexDeletion, settingsUpdate, documentAdditionOrUpdate, documentDeletion.",
 		},
 	})
-	zip.Describe("GET /v1/index/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/health", zip.Doc{
 		Description: "Reports whether the search plane can serve.\n\nAnswers the dialect's `{\"status\":\"available\"}` when the index store is\nreadable. It FAILS CLOSED — an unreadable store answers 503 with\n`{\"status\":\"unavailable\"}` rather than an empty result set, because a\nMeilisearch client probes this before it will use a server at all and a\ncheerful 200 over a broken volume turns \"search is down\" into \"nothing\nmatched\". It requires no principal and reads no tenant data.",
 		Fields: map[string]string{
 			"indexHealth.status": "Status is `available` when the store is readable and `unavailable` when it\nis not — the second answer rides a 503, so a pod with a broken volume is\ntaken out of rotation rather than serving empty searches.",
 		},
 	})
-	zip.Describe("GET /v1/index/indexes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/indexes", zip.Doc{
 		Description: "Lists the indexes your org holds.\n\nAnswers every index in the caller's own org with its primary key and\ntimestamps. Without it an index whose uid a caller has forgotten is\nunreachable — there is no other way to enumerate what an org holds. The page\nis the whole set: an org's index count is small by construction, so `limit`\nand `total` both report it.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a\nclient-supplied header, and two orgs may both hold an index named \"messages\"\nwithout either seeing the other. Without a validated principal the answer is\n403 carrying the dialect's `invalid_api_key` body.",
 		Fields: map[string]string{
 			"indexList.limit":      "Limit is how many rows this page could hold.",
@@ -48,7 +48,7 @@ func init() {
 			"indexView.updatedAt":  "UpdatedAt is when the index or its settings last changed, RFC 3339.",
 		},
 	})
-	zip.Describe("GET /v1/index/indexes/:uid", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/indexes/:uid", zip.Doc{
 		Description: "Reads one index's definition.\n\nAnswers the index's uid, primary key and timestamps. An index this org does\nnot hold answers 404 carrying the dialect's `index_not_found` — the code a\nMeilisearch client reads as permission to create it, which is why this is a\nrefusal rather than an empty object.\n\nThe uid is scoped to the caller's own org, so another tenant's index is\nindistinguishable from one that never existed: this surface is not an\nexistence oracle.",
 		Fields: map[string]string{
 			"indexView.createdAt":  "CreatedAt is when this org first created the index, RFC 3339.",
@@ -57,7 +57,7 @@ func init() {
 			"indexView.updatedAt":  "UpdatedAt is when the index or its settings last changed, RFC 3339.",
 		},
 	})
-	zip.Describe("GET /v1/index/indexes/:uid/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/indexes/:uid/documents", zip.Doc{
 		Description: "Pages through the documents in an index.\n\nAnswers the org's stored documents in insertion order, whole, with the page's\nbounds and the index's total. It is the enumeration surface — search ranks by\nrelevance and cannot walk a corpus — so a caller reconciling what it has\nwritten reads it here.\n\nAn index this org does not hold answers 404 carrying the dialect's\n`index_not_found`.",
 		Fields: map[string]string{
 			"indexDocuments.limit":   "Limit is how many documents this page could hold.",
@@ -66,16 +66,16 @@ func init() {
 			"indexDocuments.total":   "Total is how many documents the index holds altogether.",
 		},
 	})
-	zip.Describe("GET /v1/index/indexes/:uid/documents/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/indexes/:uid/documents/:id", zip.Doc{
 		Description: "Reads one document by its primary key.\n\nAnswers the stored document exactly as it was written — this surface keeps\ndocuments whole rather than projecting them, so what comes back is what went\nin. A primary key this index does not hold answers 404 carrying the dialect's\n`document_not_found`; an index this org does not hold answers\n`index_not_found`, and the two are different facts a client acts on\ndifferently.",
 	})
-	zip.Describe("GET /v1/index/indexes/:uid/settings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/indexes/:uid/settings", zip.Doc{
 		Description: "Reads an index's filterable attributes.\n\nAnswers the settings subset this surface implements: the attributes a search\n`filter` may constrain. An index this org does not hold answers 404 carrying\nthe dialect's `index_not_found`.",
 		Fields: map[string]string{
 			"indexSettings.filterableAttributes": "FilterableAttributes are the document fields a search `filter` may\nconstrain. A field not listed here cannot be filtered on.",
 		},
 	})
-	zip.Describe("GET /v1/index/stats", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/stats", zip.Doc{
 		Description: "Counts the documents in each of your indexes.\n\nReports every index the caller's own org holds with its document count, plus\nthe org's total. `isIndexing` is always false because writes here are applied\nbefore their response — there is never a background pass to wait on.\n\nThe tenant is the org minted from the VALIDATED bearer's owner claim, never a\nclient-supplied header, so this counts the caller's own documents and no\nother tenant's. Without a validated principal the answer is 403 carrying the\ndialect's `invalid_api_key` body.",
 		Fields: map[string]string{
 			"indexCount.isIndexing":        "IsIndexing is always false: writes are applied before their response, so\nthere is never a background pass a caller could be waiting on.",
@@ -84,7 +84,7 @@ func init() {
 			"indexStats.indexes":           "Indexes maps each index uid to its own count.",
 		},
 	})
-	zip.Describe("GET /v1/index/tasks/:uid", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/tasks/:uid", zip.Doc{
 		Description: "Checks a write task, which has already finished.\n\nAlways reports `succeeded`. Writes here are applied to SQLite before their\nEnqueuedTask is returned, so a client polling waitForTask resolves on its\nfirst call rather than waiting for a queue that was never there. The three\ntimestamps are the same instant for the same reason.\n\nIt requires a validated principal but reads no tenant data: the task id it\nechoes was minted by this process and names nothing about any org.",
 		Fields: map[string]string{
 			"indexTask.enqueuedAt": "EnqueuedAt, StartedAt and FinishedAt are the same instant: the write was\napplied before its task id was minted.",
@@ -95,7 +95,7 @@ func init() {
 			"indexTask.uid":        "UID echoes the task id that was asked about.",
 		},
 	})
-	zip.Describe("GET /v1/index/version", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index GET /v1/index/version", zip.Doc{
 		Description: "Identifies the search implementation answering.\n\nReports the dialect's version shape with `commitSha` naming this\nimplementation rather than a Meilisearch build, so a client that logs the\nversion records which server answered instead of implying a release of\nsoftware this is not. It requires no principal and reads no tenant data.",
 		Fields: map[string]string{
 			"indexVersion.commitDate": "CommitDate is empty here: this surface is a dialect implementation, not a\nbuild of Meilisearch, so there is no upstream commit to date.",
@@ -103,7 +103,7 @@ func init() {
 			"indexVersion.pkgVersion": "PkgVersion is this dialect implementation's own version.",
 		},
 	})
-	zip.Describe("PATCH /v1/index/indexes/:uid/settings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index PATCH /v1/index/indexes/:uid/settings", zip.Doc{
 		Description: "Sets which attributes an index can be filtered on.\n\nReplaces the whole filterable set. An attribute not listed here cannot be\nused in a search `filter`, so this is what makes a per-user or per-tag\nnarrowing possible at all.\n\nIt CREATES the index when it is missing rather than answering 404, because a\nMeilisearch client configures settings on an index it has just asked for and\na refusal there leaves the client with no index at all.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the setting is already applied when this answers.",
 		Fields: map[string]string{
 			"indexEnqueued.enqueuedAt":         "EnqueuedAt is when the task was recorded, RFC 3339 — which is also when it\ncompleted.",
@@ -115,7 +115,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"filterableAttributes":["user","conversationId"]}`),
 	})
-	zip.Describe("POST /index/query", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index POST /index/query", zip.Doc{
 		Description: "Reads out of the index THIS process owns, so an app that has no\nindex can still search what was written here.\n\nThe org is the CALLER's, taken from the call and never from the input — the\nsame tenancy rule every op on this plane follows. A caller reaches the public\ncatalog by asking as the public org, which is a different call, not a wider\none.",
 		Fields: map[string]string{
 			"IndexQueryIn.limit": "Limit bounds the page; Offset walks it.",
@@ -123,7 +123,7 @@ func init() {
 			"IndexQueryIn.uid":   "UID is the index within the org (catalog rows all live in one).",
 		},
 	})
-	zip.Describe("POST /index/reconcile", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index POST /index/reconcile", zip.Doc{
 		Description: "Swaps one corpus into the index THIS process owns, so the app\nthat ASSEMBLES a corpus does not have to be the app that stores it.\n\nThe org is the caller's by exactly the same rule as the read, which is what\nmakes the write no wider than the read it feeds: a call can only ever replace\nthe corpus of the tenant it was made as. The published catalog is written by\nasking as \"~catalog\" — a name no principal can mint, so the only callers who\ncan state it are the ones already inside this deployment, on a socket the edge\nrouter does not carry.\n\nAn empty Docs is a legitimate request and is passed through: \"the upstream\ntruth is now nothing\" is a real answer, and a transport that second-guessed it\nwould be a second copy of a decision that belongs to the corpus's owner. The\nowner already makes it — catalog's sync refuses to reconcile a pass whose\nsources all failed, precisely so a GitHub outage cannot prune the catalog.",
 		Fields: map[string]string{
 			"IndexReconcileIn.docs":       "Docs is the corpus, relayed verbatim for the same reason IndexQueryOut.Rows\nis raw: the documents belong to the app that assembled them, and a struct\nhere would be a second copy of a type this package does not own, free to\ndrift from the one that produced the bytes.",
@@ -131,7 +131,7 @@ func init() {
 			"IndexReconcileIn.uid":        "UID is the index within the org, exactly as on the read.",
 		},
 	})
-	zip.Describe("POST /v1/index/indexes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index POST /v1/index/indexes", zip.Doc{
 		Description: "Creates an index.\n\nRegisters a named index in the caller's own org and answers the dialect's\nEnqueuedTask. It is idempotent: creating an index that already exists returns\nthe same receipt and changes nothing, which is what lets a client create on\nstartup without checking first.\n\n`primaryKey` is optional — the first write establishes one when it is omitted.\nAn index is a ROW here rather than a table, so an unusual uid is stored\nverbatim instead of being sanitised into a schema name.\n\nThe 202 and its `enqueued` task are DIALECT COMPATIBILITY, not a promise of\nlater work: the write is already applied when this answers. A client that\npolls waitForTask resolves immediately.",
 		Fields: map[string]string{
 			"indexEnqueued.enqueuedAt": "EnqueuedAt is when the task was recorded, RFC 3339 — which is also when it\ncompleted.",
@@ -144,10 +144,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"uid":"messages","primaryKey":"id"}`),
 	})
-	zip.Describe("POST /v1/index/indexes/:uid/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index POST /v1/index/indexes/:uid/documents", zip.Doc{
 		Description: "Serves both POST (add or replace) and PUT (add or update). Both\nare an upsert keyed by the index's primary key, which is what the JS client's\naddDocuments and updateDocuments both reduce to for whole documents.",
 	})
-	zip.Describe("POST /v1/index/indexes/:uid/search", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index POST /v1/index/indexes/:uid/search", zip.Doc{
 		Description: "Searches an index, forgiving typos.\n\nRanks the org's documents in one index against `q` and answers the matching\ndocuments whole, most relevant first. A prefix matches, so a partial word\nfinds the documents containing it, and `filter` narrows the result to\ndocuments whose filterable attributes match — which is how a caller scopes\nresults to one end user within its own org.\n\n`estimatedTotalHits` is the dialect's name for the count; every hit is\nmaterialised here, so for this page it is exact. An index this org does not\nhold answers 404 carrying the dialect's `index_not_found`.",
 		Fields: map[string]string{
 			"indexHits.estimatedTotalHits": "EstimatedTotalHits is the dialect's name for the match count. Every hit is\nmaterialised here, so for this page it is exact rather than estimated.",
@@ -163,7 +163,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"q":"roadmap","filter":"user = alice","limit":20}`),
 	})
-	zip.Describe("PUT /v1/index/indexes/:uid/documents", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/index PUT /v1/index/indexes/:uid/documents", zip.Doc{
 		Description: "Serves both POST (add or replace) and PUT (add or update). Both\nare an upsert keyed by the index's primary key, which is what the JS client's\naddDocuments and updateDocuments both reduce to for whole documents.",
 	})
 }

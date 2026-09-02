@@ -54,6 +54,7 @@
             "required": false,
             "description": "Limit caps the page.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -172,6 +173,7 @@
             "required": false,
             "description": "Limit caps the page.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -299,6 +301,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the finding was recorded, in Unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "fingerprint": {
@@ -311,6 +314,7 @@
           },
           "line": {
             "description": "Line is where in that file.",
+            "format": "int64",
             "type": "integer"
           },
           "path": {
@@ -356,6 +360,7 @@
         "properties": {
           "rules": {
             "description": "Rules is how many detection rules the engine holds.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -410,22 +415,27 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the scan ran, in Unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "critical": {
             "description": "Critical is how many findings carry the highest severity.",
+            "format": "int64",
             "type": "integer"
           },
           "files": {
             "description": "Files is how many files the scan read.",
+            "format": "int64",
             "type": "integer"
           },
           "findings": {
             "description": "Findings is how many secrets fired across them.",
+            "format": "int64",
             "type": "integer"
           },
           "high": {
             "description": "High is how many findings rank high.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -434,10 +444,12 @@
           },
           "low": {
             "description": "Low is how many findings rank low.",
+            "format": "int64",
             "type": "integer"
           },
           "medium": {
             "description": "Medium is how many findings rank medium.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {

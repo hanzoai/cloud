@@ -28,7 +28,7 @@ Bearer JWT issued by Lux IAM (OIDC issuer `https://lux.id`). Send it as `Authori
 ## Response
 
 - `/v1/sandbox` → `sandboxList` object with fields: `sandboxes`.
-- `/v1/sandbox/{id}` → `Sandbox` object with fields: `class`, `connectedAt`, `createdAt`, `error`, `expiresAt`, `id`, `image`, `kind`, `lastUsedAt`, `org`, `project`, `runtime`.
+- `/v1/sandbox/{id}` → `Sandbox` object with fields: `class`, `cluster`, `connectedAt`, `createdAt`, `error`, `expiresAt`, `id`, `image`, `kind`, `lastUsedAt`, `org`, `project`.
 
 ## Example
 

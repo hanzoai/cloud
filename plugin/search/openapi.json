@@ -137,6 +137,7 @@
           },
           "hits": {
             "description": "Hits is how many results this leg returned, counted BEFORE fusion, so it is\nnot the number that survived into Fusion.Hits — fusion merges what both\nlegs found and the caller's limit and offset then page it. 0 for a leg that\ndid not run.",
+            "format": "int64",
             "type": "integer"
           },
           "name": {
@@ -149,6 +150,7 @@
           },
           "took_ms": {
             "description": "TookMS is how long this leg took, in milliseconds, timed around its own call\nand excluding fusion. 0 for a leg that was skipped or is disabled, since\nnothing was called.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -180,6 +182,7 @@
           },
           "took_ms": {
             "description": "TookMS is the whole query's wall time in milliseconds — every leg it\nconsulted, plus fusion and paging. Each leg's own share is in\nBackends[].TookMS; the legs run in sequence, so this is at least their sum.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -212,6 +215,7 @@
           },
           "score": {
             "description": "Score is the FUSED score, not a relevance or a similarity: Reciprocal Rank\nFusion sums 1/(60+rank) over each leg that returned the document, so it is\nbounded by roughly 1/61 per leg (about 0.033 for a document two legs put\nfirst) and hits are ordered by it, descending. Being built from ranks, it is\ncomparable only WITHIN one response — never across queries, and never against\na backend's own score, which stays in Matched.",
+            "format": "double",
             "type": "number"
           },
           "title": {
@@ -233,10 +237,12 @@
           },
           "rank": {
             "description": "Rank is this document's 1-based position in THAT leg's own result list,\nbefore fusion — 1 is the leg's best hit. It is the only input to the fused\nscore: RRF adds 1/(60+rank) per leg, which is why a document two legs ranked\nsecond beats one a single leg ranked first.",
+            "format": "int64",
             "type": "integer"
           },
           "score": {
             "description": "Score is the leg's NATIVE score, on that leg's own scale, reported for\nexplanation and never used in ranking — the scales are incomparable (a cosine\nsimilarity against a term-match count), which is why fusion works on ranks.\nThe vector leg reports Qdrant's cosine similarity; the lexical leg exposes no\nper-row score and reports 0, meaning \"unscored\", not \"scored zero\".",
+            "format": "double",
             "type": "number"
           }
         },
@@ -257,6 +263,7 @@
           },
           "limit": {
             "description": "Limit bounds the FUSED result set (default 10, max 50).",
+            "format": "int64",
             "type": "integer"
           },
           "mode": {
@@ -265,6 +272,7 @@
           },
           "offset": {
             "description": "Offset pages the fused result set.",
+            "format": "int64",
             "type": "integer"
           },
           "project": {
@@ -282,6 +290,7 @@
         "properties": {
           "count": {
             "description": "Count is that day's total.",
+            "format": "int64",
             "type": "integer"
           },
           "date": {
@@ -299,6 +308,7 @@
           },
           "docCount": {
             "description": "DocCount is how many documents the index currently holds.",
+            "format": "int64",
             "type": "integer"
           },
           "lastIndexedAt": {
@@ -335,14 +345,17 @@
           },
           "totalDocuments": {
             "description": "TotalDocuments is the sum of every index's document count.",
+            "format": "int64",
             "type": "integer"
           },
           "totalSearches": {
             "description": "TotalSearches is always 0: Meilisearch keeps no query-history counter, so\nthis surface reports the honest zero rather than an estimate.",
+            "format": "int64",
             "type": "integer"
           },
           "totalSessions": {
             "description": "TotalSessions is always 0, for the same reason as totalSearches.",
+            "format": "int64",
             "type": "integer"
           }
         },

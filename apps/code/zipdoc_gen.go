@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/code/ask", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code GET /v1/code/ask", zip.Doc{
 		Description: "Answers a question about the caller org's code with a CITED answer:\nretrieval packs grounding context, then the synthesizer writes the answer over\nexactly those spans, which come back alongside it. It never answers without\ngrounding — with no matched code the answer is empty and says so, and with no\nsynthesizer available the citations still come back with \"degraded\": true so\nthe caller can reason over the spans itself.",
 		Fields: map[string]string{
 			"AskAnswer.answer":    "Answer is the synthesized prose. EMPTY is a real answer here: nothing in the\nindex matched, or synthesis was unavailable — read `degraded` and `citations`\nto tell those apart. It is never written without grounding.",
@@ -26,7 +26,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"q":"where is the per-org SQLite file opened","repo":"cloud"}`),
 	})
-	zip.Describe("GET /v1/code/file", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code GET /v1/code/file", zip.Doc{
 		Description: "Returns the INDEXED content of one file — read_file over the chunks the\nsearch tiers hold, for pulling up code an agent just found. It is NOT\nbyte-verbatim: the git object plane is the source of record for exact bytes,\nhistory and blame. A file absent from the index is a 404, so an agent can tell\n\"not indexed\" from \"empty file\".",
 		Fields: map[string]string{
 			"fileContent.content": "Content is the file's text as the index stored it. It is NOT guaranteed\nbyte-verbatim — the git object plane is the source of record for exact\nbytes, history and blame.",
@@ -38,7 +38,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"repo":"cloud","path":"apps/code/store.go"}`),
 	})
-	zip.Describe("GET /v1/code/search", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code GET /v1/code/search", zip.Doc{
 		Description: "Finds code in the caller org's index across three orthogonal retrieval\ntiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over\ncode-tokenized text), symbolic (real definition and reference edges), and\nsemantic (embedding cosine over AST-boundary chunks). Pick one tier with\n`type`, or leave it to run all three as hybrid, which is what a coding agent\nusually wants. It is FAIL-HONEST: a retrieval outage answers 200 with an empty\nresult set and \"degraded\": true rather than a 5xx, so an agent degrades instead\nof stalling. A malformed regex is a 400.",
 		Fields: map[string]string{
 			"Span.endLine":           "EndLine is the last line of the span, inclusive. It equals Line for a\none-line span rather than being zero or absent.",
@@ -62,7 +62,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"q":"func openStore","type":"hybrid","repo":"cloud","limit":20}`),
 	})
-	zip.Describe("GET /v1/code/tree", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code GET /v1/code/tree", zip.Doc{
 		Description: "Returns one repository's file structure with a per-file symbol count —\nget_repo_structure over the org's own index, with no git checkout involved. A\nrepository that has not been indexed answers an empty tree rather than an\nerror, so an agent can tell \"nothing here\" without handling a failure.",
 		Fields: map[string]string{
 			"TreeEntry.lang":    "Lang is the language the indexer parsed the file as (\"go\", \"python\", …), or\nempty when it recognised none — in which case Symbols is 0 because nothing was\nextracted, not because the file declares nothing.",
@@ -74,10 +74,10 @@ func init() {
 		},
 		Example: json.RawMessage(`{"repo":"cloud"}`),
 	})
-	zip.Describe("POST /code/index", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code POST /code/index", zip.Doc{
 		Description: "Reconciles one repo's whole tree, pruning what the push removed.\n\nIT IS THE SAME PIPELINE the POST /v1/code/index handler runs — same per-file\ncaps, same prune semantics — because a second indexing path would drift from\nthe first and index differently depending on who asked.\n\nAn unmounted service answers an EMPTY reconcile rather than an error: this is a\nbackground enrichment reached from a push reactor, and a deployment that hosts\nno code index is not a fault in the push that landed.",
 	})
-	zip.Describe("POST /v1/code/ask", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code POST /v1/code/ask", zip.Doc{
 		Description: "Is askGet with the question in the request BODY, for a question too\nlong or too awkward to put in a URL. `query` and `repo` in the body take\nprecedence over `?q=` and `?repo=`; either source works alone.",
 		Fields: map[string]string{
 			"AskAnswer.answer":    "Answer is the synthesized prose. EMPTY is a real answer here: nothing in the\nindex matched, or synthesis was unavailable — read `degraded` and `citations`\nto tell those apart. It is never written without grounding.",
@@ -94,7 +94,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"query":"where is the per-org SQLite file opened","repo":"cloud"}`),
 	})
-	zip.Describe("POST /v1/code/context", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code POST /v1/code/context", zip.Doc{
 		Description: "Packs the most relevant code for a query into a token budget — THE\nprimitive for a coding agent that has to decide what to put in a prompt. It\nretrieves seed spans, expands each with the definitions it calls and its key\ncallers, then greedily fills the budget, so the answer is a coherent slice of\nthe codebase rather than a list of disconnected matches. The top match is\nalways included, truncated if it alone overflows, so a matched query never\ncomes back empty. A retrieval outage answers 200 with an empty bundle rather\nthan a 5xx.",
 		Fields: map[string]string{
 			"ContextBundle.budgetTokens": "BudgetTokens is the ceiling the caller asked for. Packing stops under it, so\nthis is a bound and not a target.",
@@ -118,7 +118,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"query":"how does the store open a per-org database","budgetTokens":4000,"repo":"cloud"}`),
 	})
-	zip.Describe("POST /v1/code/index", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/code POST /v1/code/index", zip.Doc{
 		Description: "(re)indexes a repository for the caller's org, incrementally: files whose\ncontent hash is unchanged are skipped, so re-sending a whole tree is cheap.\nEach file is parsed for symbols, split at AST boundaries and — when the\nsemantic tier is available — embedded, which is what makes it searchable across\nall three retrieval tiers. Pass `prune` to also DELETE indexed files absent\nfrom the request, which turns the call into a full sync; without it the call is\nan upsert. The index is written to the caller org's own physically separate\ndatabase.",
 		Fields: map[string]string{
 			"fileInput.content":    "Content is the file's full text. Max 1 MiB per file; binary files should\nsimply be omitted rather than sent.",

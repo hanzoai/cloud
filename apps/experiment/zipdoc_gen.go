@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/experiment", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/experiment GET /v1/experiment", zip.Doc{
 		Description: "Is every experiment in the caller's org, with its variants, status and\ndecision, ordered by project then id.\n\nScoped to the org resolved from the validated principal — a distinct org is a\ndistinct physical store, so no query here can reach another tenant's rows — and\nfurther narrowed to the caller's project scope when the credential carries one.\nA principal with NO project scope sees the org's experiments across all of its\nprojects, which is the answer a reader most often expects to be filtered and is\nnot.\n\nRequires a validated principal; refuses without one rather than answering an\nempty list.",
 		Fields: map[string]string{
 			"Arm.control":          "true on the baseline arm every other arm is compared to",
@@ -32,7 +32,7 @@ func init() {
 			"experimentList.total": "Total is how many rows Data holds.",
 		},
 	})
-	zip.Describe("GET /v1/experiment/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/experiment GET /v1/experiment/:id", zip.Doc{
 		Description: "Is one experiment's definition and lifecycle: variants, weights, control\narm, status and winner.\n\nIt reads the registry row only — the definition and the decision, never live\nmeasurements. Assignment lives in the flags plane and outcomes in analytics;\nthis is the value that names both.\n\nScoped to the caller's org and project from the validated principal, so another\ntenant's experiment of the same id is simply not found. An id that is not a\nlegal slug is answered the same way, without a store read — the shape check and\nthe existence check are one answer, so neither leaks the other.",
 		Fields: map[string]string{
 			"Arm.control":         "true on the baseline arm every other arm is compared to",
@@ -56,7 +56,7 @@ func init() {
 			"experimentRef.id":    "ID is the experiment the URL names.",
 		},
 	})
-	zip.Describe("GET /v1/experiment/:id/assign", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/experiment GET /v1/experiment/:id/assign", zip.Doc{
 		Description: "Is the variant one subject is bucketed into, and the payload that\nvariant carries.\n\nThe bucketing is a deterministic hash of the subject, so the same subject gets\nthe same arm on every call for as long as the flag definition is unchanged —\nand this is a pure READ: it records nothing. In particular it does NOT record an\nexposure. The caller's SDK must emit the experiment's exposure event itself, or\nthe analysis has an empty denominator and every arm measures zero.\n\nAn empty variant with on false is not an error — it means the flag returned\nnothing for this subject, so the subject is not enrolled. A flags engine that is\nunavailable refuses rather than defaulting to an arm. Requires a validated\nprincipal, and the experiment must exist in the caller's org and project.",
 		Fields: map[string]string{
 			"assignQuery.id":        "ID is the experiment the URL names.",
@@ -69,14 +69,14 @@ func init() {
 			"assignment.variant":    "Arm is the arm the subject falls in, empty when the flag enrolled it in\nnone.",
 		},
 	})
-	zip.Describe("GET /v1/experiment/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/experiment GET /v1/experiment/health", zip.Doc{
 		Description: "Is whether the experiments subsystem is mounted and serving in this\nprocess.\n\nIt answers unconditionally. It proves exactly one thing — that this binary\nregistered the experiments routes and is dispatching them — and deliberately no\nmore: it reads no principal, opens no per-org registry, and touches neither the\nflags engine nor the analytics plane, so a 200 here says nothing about whether a\ngiven tenant's store will open or whether an analysis can run. It is the only\nroute on this surface that needs no org.\n\nThe static path is registered ahead of the /:id read, so it always wins the\nfirst-match scan. \"health\" is a legal experiment id, which means an experiment\ncreated under that id can never be fetched by id — pick another.",
 		Fields: map[string]string{
 			"health.ok":        "OK is true whenever this route answers at all: reaching the handler IS the\nproof that the routes are registered and dispatching.",
 			"health.subsystem": "Subsystem names what answered, so a health response read out of context still\nsays which surface it came from.",
 		},
 	})
-	zip.Describe("POST /v1/experiment", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/experiment POST /v1/experiment", zip.Doc{
 		Description: "Registers a controlled experiment AND puts its assignment flag live, in\nthat order, so the arms start bucketing subjects the moment this returns 201 —\nthe flag is created active at 100% rollout, with each variant weighted as\ndeclared. There is no separate start call; creating IS starting.\n\nA variant carries an opaque payload this primitive never interprets: a feature\nconfig, an ad-creative id, a subject line, a model id.\n\nRequires a validated principal, and refuses without one. The org and project are\ntaken from that principal and the creator is stamped from the credential — none\nof the three is a body field, so an experiment cannot be filed against another\ntenant. An id already used in this project is a conflict, never a silent\noverwrite: re-creating would stomp the assignment flag of a run in progress.\n\nIt fails closed on the flag write. An experiment whose assignment flag does not\nexist would assign nobody, so if that write fails nothing is registered.",
 		Fields: map[string]string{
 			"Arm.control":              "true on the baseline arm every other arm is compared to",
@@ -106,7 +106,7 @@ func init() {
 			"createBody.variants":      "Arms are the arms, at least two. Weights that are all zero become an\neven split; otherwise they must sum to 100, and at most one arm may be\nflagged control.",
 		},
 	})
-	zip.Describe("POST /v1/experiment/:id/analyze", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/experiment POST /v1/experiment/:id/analyze", zip.Doc{
 		Description: "Is per-variant conversion, lift and statistical significance against\nthe control arm.\n\nIt reads per-subject outcomes from the analytics plane over a window, folds them\ninto per-variant samples, and returns each arm's exposed count, conversions,\nrate, lift versus control, two-proportion z, two-tailed p-value and whether it\nclears alpha. Arms with no data still appear with zero exposed, so the read is\ncomplete over the experiment's declared arms; the control arm sorts first. The\npooled-variance estimator is used and the p-value is exact; a degenerate\ncomparison (an empty arm, no variance) answers z 0 and p 1 — not significant,\nnever an error.\n\nOnly EXPOSED subjects are counted, and each is joined to its arm by re-evaluating\nthe assignment flag AT ANALYSIS TIME — not from what was in force during the\nwindow. That is the one rule to get right: analyzing an experiment after its\nwinner has been promoted re-buckets every subject into the promoted arm,\ncollapsing the control to zero exposed and making the result meaningless. Read\nthe analysis before deciding. A subject the flag cannot place is dropped rather\nthan allowed to poison the fold.\n\nThe winner in the response is ADVISORY — the significant, control-beating arm\nwith the highest rate, or empty when inconclusive. It promotes nothing; the\ndecision is a separate, explicit act.\n\nEvery plane read is scoped to the caller's org. Per-variant samples are also\nwritten to the research evidence plane as immutable ab rows, best-effort: the\nanalysis is still returned if that write fails, because the samples are\nrecomputable, and the failure is logged rather than swallowed.",
 		Fields: map[string]string{
 			"Analysis.alpha":        "the two-tailed threshold significance was judged at",
@@ -131,7 +131,7 @@ func init() {
 			"analyzeQuery.start":    "Start is the window's inclusive start in RFC3339. Given, it wins over days.",
 		},
 	})
-	zip.Describe("POST /v1/experiment/:id/decide", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/experiment POST /v1/experiment/:id/decide", zip.Doc{
 		Description: "Promotes one variant to the whole rollout and records who decided.\n\nIt rewrites the assignment flag so the named winner serves 100% of the rollout\nand every other arm 0%, preserving the flag's targeting groups and payloads,\nthen stamps the experiment decided with the winner, the deciding credential and\nthe time. This is a production behaviour change that takes effect immediately\nfor every subject the flag evaluates.\n\nIt requires an ORG ADMIN of the caller's own org — a stricter gate than the rest\nof this surface, matching the flags write plane, because promoting is a flag\nwrite. The admin check runs AFTER the experiment is found, so a caller from\nanother tenant is answered not-found rather than forbidden and learns nothing\nabout what exists.\n\nAn experiment whose assignment flag has gone missing is a conflict rather than a\nsilent no-op — there is nothing to promote.\n\nDeciding is NOT terminal. A second call re-promotes a different variant and\nre-stamps the row; the status stays decided and the previous winner is\noverwritten with no record that it was ever chosen. Nothing here reverts the\nflag to its original weights either, so an experiment cannot be un-decided\nthrough this route — restoring a split means writing the flag definition back\nthrough the flags plane.",
 		Fields: map[string]string{
 			"Arm.control":         "true on the baseline arm every other arm is compared to",

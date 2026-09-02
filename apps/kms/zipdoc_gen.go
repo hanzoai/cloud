@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/kms/secrets/+", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms DELETE /v1/kms/secrets/+", zip.Doc{
 		Description: "Removes one secret from your org.\n\nForgets one secret belonging to the caller's own org and confirms the name and\nenvironment that were removed. Deleting a secret that is not there is a 404,\nnot a silent success, so a caller can tell a real deletion from a typo.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. The org comes from the\nvalidated claim, never from the request.\n\nRequires ADMIN authority over the org, like the write: destroying a secret is\nan administrative act, and a credential distributed to READ one must not be\nable to remove it. A machine credential holds no membership and so is never an\norg admin. Fail-closed admission, in order: admin of the org, well-formed org,\nmaster key present — 403, 400 and 503, all decided before any record is\ntouched.",
 		Fields: map[string]string{
 			"kmsRef.env":         "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
@@ -20,7 +20,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"secret":"ci/deploy/token","env":"prod"}`),
 	})
-	zip.Describe("GET /v1/kms/config", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms GET /v1/kms/config", zip.Doc{
 		Description: "Returns the runtime configuration for the KMS console.\n\nWhat the console needs before anyone has signed in: the brand, the OIDC issuer\nit authenticates against, the API base for this subsystem and the path of the\nlogin exchange.\n\nPublic on purpose, and it holds nothing sensitive — it is deliberately kept\nunder this subsystem's own namespace rather than under an admin prefix, so a\ngateway that admin-gates the admin routes cannot break the console's\nlegitimate pre-login fetch.",
 		Fields: map[string]string{
 			"kmsConfig.apiBase":   "APIBase is this subsystem's own prefix, `/v1/kms`.",
@@ -29,7 +29,7 @@ func init() {
 			"kmsConfig.loginPath": "LoginPath is the credential exchange's address.",
 		},
 	})
-	zip.Describe("GET /v1/kms/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms GET /v1/kms/health", zip.Doc{
 		Description: "Reports whether this broker can actually serve secrets.\n\nA real readiness probe, not a liveness stub: 200 only when the store is open\nAND a master key is configured, with `signing` reporting whether signing keys\nare set up too. Anything less answers 503 with `ready:false` and the reason —\nno in-process store, or no master key — which are exactly the two states in\nwhich the secret operations refuse.\n\nNot token-gated, because the platform must be able to probe it without a\ncredential. It reports the broker's configuration state only; no secret, no\nkey material and no tenant name appears in it.",
 		Fields: map[string]string{
 			"kmsHealth.error":   "Error is the honest reason readiness is false: no in-process KMS client,\nor no master key. Absent when ready.",
@@ -39,7 +39,7 @@ func init() {
 			"kmsHealth.status":  "Status is `ok` or `degraded`, the one-word form of Ready.",
 		},
 	})
-	zip.Describe("GET /v1/kms/secrets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms GET /v1/kms/secrets", zip.Doc{
 		Description: "Lists the secrets your org holds, without their values.\n\nReturns the METADATA of the caller's own secrets: each one's name, path,\nenvironment and sealing scheme. No value and no ciphertext is included — this\noperation exists to enumerate what is held, and reading a value is a separate,\nper-secret call.\n\nScoped to the caller's own org and nothing else, structurally: there is no org\nin the path, the store root is derived from the validated org claim, and a\ncaller therefore has no way to name another tenant's namespace. `path` narrows\nto a subpath and `env` selects the environment; both are also accepted under\nthe operator's spellings, `secretPath` and `environment`. An omitted `env`\nmeans every environment and an omitted `path` means the whole org, because a\ndefault here reported a populated store as empty.\n\nAdmission is fail-closed and in order: a validated member, an org that is a\nDNS-1123 label, and a store holding a master key — 403, 400 and 503\nrespectively, all decided before any record is touched.",
 		Fields: map[string]string{
 			"SecretMeta.env":      "Env is the environment the secret belongs to. It is part of the storage\nkey, so the same name in two environments is two secrets.",
@@ -55,7 +55,7 @@ func init() {
 			"kmsSecrets.total":    "Total is how many descriptors this listing carries.",
 		},
 	})
-	zip.Describe("GET /v1/kms/secrets/+", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms GET /v1/kms/secrets/+", zip.Doc{
 		Description: "Reads one secret's value from your org.\n\nOpens one sealed secret belonging to the caller's own org and returns its\nvalue, with the name and environment it was resolved under. This is the\nbroker's purpose, and the response body is the ONLY place the value appears —\nit is not logged, and it is never carried in an error.\n\n`secret` is the coordinate beneath the caller's org root, subpath and name\ntogether, and over HTTP it is the trailing path itself. `env` selects the\nenvironment and falls back to the default when omitted. A secret that is not\nthere is a plain 404 that names nothing about the store.\n\nScoped to the caller's own org and nothing else: there is no org in the\naddress, so another tenant's secret is not merely refused, it is unnameable.\nAdmission is fail-closed and in order — a validated member, an org that is a\nDNS-1123 label, and a store holding a master key — 403, 400 and 503, all\ndecided before any record is touched, so an unconfigured master key is a 503\nrather than an empty read.",
 		Fields: map[string]string{
 			"kmsRef.env":      "Env selects the environment to resolve the secret in. It is part of the\nstorage key, so one name in two environments is two secrets. OMITTED means\nthe `default` environment — where a WRITE refuses to default, because a\nmisplaced write strands a value no reader looks for, a read or a delete\naimed at the wrong environment simply answers 404 and the caller learns.",
@@ -66,19 +66,19 @@ func init() {
 		},
 		Example: json.RawMessage(`{"secret":"ci/deploy/token","env":"prod"}`),
 	})
-	zip.Describe("POST /kms/delete", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms POST /kms/delete", zip.Doc{
 		Description: "Delete forgets one secret. It is here for the same reason put is: exactly one\nprocess holds the store, so an app that custodies a credential on a customer's\nbehalf must be able to REMOVE it when that customer disconnects — otherwise\ndisconnecting leaves the material behind and the connection row is the only\nthing that goes.\n\nIt widens no boundary. The surface is deliberately narrow because material\nLEAVING is the risk, and delete moves nothing outward; a caller that can put can\nalready overwrite a secret into uselessness, so this adds no destructive power\neither. The same ref rule as every other op applies, so a tenant's material is\nremovable only by a call acting for that tenant.",
 	})
-	zip.Describe("POST /kms/get", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms POST /kms/get", zip.Doc{
 		Description: "Get opens one sealed secret and returns its value to the calling process. This\nop exists because exactly one process holds the store, so every other app has to\nask it for material it needs; the value travels back over the internal socket\nonly, and appears in no log line and in no error.\n\nThe ref decides the authority. A ref naming a tenant is served only to a call\nacting for that same tenant, so an app holding one org's context cannot read\nanother's. A ref naming no tenant is the deployment's own material and is served\nto any peer, because the socket has already decided who may ask — it is\nmode-0600 and peer-credential authenticated, so the caller is one of our own\nprocesses.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /kms/put", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms POST /kms/put", zip.Doc{
 		Description: "Put seals one secret into the store under the given ref, replacing whatever was\nthere. The reply is EMPTY on purpose — a write confirms by not failing, and\nechoing the value back would put it on the wire a second time for no reader.\n\nThe same ref rule as the read governs the write: a ref naming a tenant is\naccepted only from a call acting for that tenant, so one org's context can never\nplant material in another's namespace.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /kms/sign", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms POST /kms/sign", zip.Doc{
 		Description: "Sign returns a signature over the submitted payload, produced by the key the ref\nnames. The KEY ITSELF NEVER LEAVES this process — that is the whole point of the\nop: a caller that needs something signed sends the payload rather than fetching\nthe key, so signing material has one custodian and no copies.\n\nThe value field carries the payload on the way in and the signature on the way\nout; it is never a key. The same ref rule as the read applies, so a tenant's key\nsigns only for a call acting for that tenant.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 	})
-	zip.Describe("POST /v1/kms/auth/login", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms POST /v1/kms/auth/login", zip.Doc{
 		Description: "Exchanges a machine credential for an IAM bearer token.\n\nTakes a tenant's machine credential — a client id and client secret — and\nreturns an owner-scoped IAM access token with its lifetime, which is the\nbearer the caller then carries on the org-scoped secret operations.\n\nIt is deliberately public and unauthenticated, because it IS the credential\nexchange and runs before any principal exists. That makes it the one route in\nthis subsystem rate-limited PER SOURCE IP, keyed on the real TCP peer rather\nthan on any caller-supplied header, and body-capped in the same place.\n\nThe submitted secret is never logged and never echoed, and failures collapse\nto one clean status with no upstream detail: 401 when the credential does not\nauthenticate, 502 when the identity provider is unreachable, 503 when no\nissuer is configured. That is on purpose — a richer error would be a validity\noracle for guessed credentials.",
 		Fields: map[string]string{
 			"kmsLogin.clientId":     "ClientID is the machine identity's id, as IAM issued it.",
@@ -89,7 +89,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"clientId":"kms-operator","clientSecret":"…"}`),
 	})
-	zip.Describe("POST /v1/kms/secrets", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/kms POST /v1/kms/secrets", zip.Doc{
 		Description: "Stores or replaces one secret in your org.\n\nUpserts one secret under the caller's own org. The value is sealed before it\nis written — a fresh per-secret data key, itself wrapped by the master key —\nso plaintext never reaches disk. The receipt confirms the name and environment\nthat were written and does not echo the value.\n\n`env` is REQUIRED on a write and has no default, which is the rule most easily\ngot wrong here: reads and deletes still fall back to the default environment\nfor older callers, but a write must not, because the environment is part of\nthe storage key. A silently defaulted write lands in a bucket the readers that\nresolve project, environment and path never look in, and the stale value keeps\nbeing served — so the write fails loudly instead.\n\n`name` is required, `path` is an optional subpath beneath the org root, and\nthe org is taken from the validated claim rather than the body.\n\nRequires ADMIN authority over the org — a member reads, an admin writes. A\nmachine credential holds no membership and so is never an org admin: it can\nread the secrets it was issued for and cannot replace one. Fail-closed\nadmission, in order: admin of the org, well-formed org, master key present —\n403, 400 and 503, all decided before any record is touched.",
 		Fields: map[string]string{
 			"kmsPut.env":       "Env is the environment to write under. REQUIRED, with no default: it is\npart of the storage key, so a silently defaulted write lands in a bucket\nthe readers that resolve project, environment and path never look in, and\nthe stale value keeps being served.",

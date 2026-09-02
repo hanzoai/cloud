@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/content/board", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/content GET /v1/content/board", zip.Doc{
 		Description: "Aggregates the caller org's marketing content across every publishable\ncontent type into ONE queue board — the cross-type read the framework's\nper-DocType list cannot give. It never fails on a partial outage: a content type\nthe org has not installed, or one whose search errors, is skipped and logged\nrather than failing the whole board.",
 		Fields: map[string]string{
 			"boardItem.doctype":   "DocType is which content type the row came from: Campaign, SocialPost or\nAsset. The board spans all three at once, so this is what tells them apart.",
@@ -27,7 +27,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"status":"queued","limit":50}`),
 	})
-	zip.Describe("GET /v1/content/channels", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/content GET /v1/content/channels", zip.Doc{
 		Description: "Lists the distribution channels the caller's org has connected — the\nsocial integrations a publish can target. A deployment with no distribution edge\nwired answers 503 rather than an empty list that would read as \"no channels\".",
 		Fields: map[string]string{
 			"Channel.disabled": "Disabled is true for a channel the org switched off at the social edge. It\nis still listed — this is what the org has CONNECTED, not what it can post\nto — but a publish never targets it, neither by name nor as part of the\n\"every channel\" default.",
@@ -37,7 +37,7 @@ func init() {
 			"channelList.data": "Data is every social channel the caller's org has connected, disabled ones\nincluded (Disabled says which).",
 		},
 	})
-	zip.Describe("GET /v1/content/lifecycle", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/content GET /v1/content/lifecycle", zip.Doc{
 		Description: "Returns the ONE marketing-content state machine: the ordered\nlifecycle states, which state a fresh document starts in, which one is publicly\nlive, and the legal successors of every state. The console builds its board\ncolumns and its per-item action buttons from this single answer, so the UI and\nthe write-time enforcement hook can never disagree about what is legal.",
 		Fields: map[string]string{
 			"stateGraph.initial":     "Initial is the state a fresh document starts in — \"draft\". A stored document\nwith no status at all is read as this too.",
@@ -46,7 +46,7 @@ func init() {
 			"stateGraph.transitions": "Transitions maps each state to the states it may move to. A target absent\nfrom a state's list is REFUSED, at the endpoint and again at the storage\nboundary — this is the whole rule, not a hint for the UI. A state never\nlists itself; a move that changes nothing is always legal.",
 		},
 	})
-	zip.Describe("POST /v1/content/:doctype/:name/transition", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/content POST /v1/content/:doctype/:name/transition", zip.Doc{
 		Description: "Moves one content item to a new lifecycle state and, on the move to\npublished, fans it out to the item's channels. The edge must be legal for the\nitem's current state — an illegal move is refused with 409 — and the status write\nre-validates it at the storage boundary. Distribution is best effort: its honest\nstate is reported on the result and a distribution failure never rolls the status\nchange back.",
 		Fields: map[string]string{
 			"ChannelResult.channel":         "the social integration id targeted",
@@ -75,7 +75,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"doctype":"marketing.SocialPost","name":"spring-teaser","to":"published"}`),
 	})
-	zip.Describe("POST /v1/content/generate", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/content POST /v1/content/generate", zip.Doc{
 		Description: "Draft a piece of marketing content and file it in the CMS as a draft.\n\nAnswers 201 with the created draft's identity — {doctype, name, status} — and the\ndocument itself lands in the CMS through the SAME validate and lifecycle-hook\npipeline an ordinary create runs. This is a WRITE, not a preview: there is no\ndry-run, and every call that succeeds leaves a document behind.\n\n`doctype` picks which of two generation planes runs, and they are the only two.\nCampaign and SocialPost are drafted as brand COPY on the platform AI plane (zen5 by\ndefault, overridable per request with `model` or per deployment); Asset is a studio\nimage render the AI plane never sees. Everything else about the call is identical.\n\nMONEY, metered in exactly one place per mode and never both. Copy rides the\nplatform's own inference meter — the org's balance is authorised before the model\ncall and debited at the exact token cost after — so content never re-bills it. A\nstudio render is invisible to that meter, so content is the sole meter for it: the\norg is gated BEFORE the GPU compute and refused 402 when out of funds or over its\nspend cap, and the debit is recorded only once the render actually returns, because\nthe billable event is the consumed compute and not the CMS row. `project` rides the\nBODY rather than a server-minted identity claim, so it attributes spend but a\nproject-scoped cap stays soft on it — the org is the value that is enforced.\n\nThe org is the caller's own, resolved once from the validated principal and never\nread from the body; a caller without one is refused 403. Status is not the\ngenerator's to choose: a generated item is ALWAYS a draft, and the storage-boundary\nhook enforces that a second time.\n\nIt fails closed rather than inventing anything. An unknown content type is 404 and a\ndeployment whose marketing module is not installed is 409 naming the install call.\nAn AI plane or studio that is unconfigured or unreachable, a graph the studio\nrejects, and a render that does not return in time all degrade to 503 — never\nfabricated copy, never a fake render. A `source_media` that fails the SSRF and\ntraversal validator is 400 raised before the billing gate and before the studio is\ncontacted, so a hostile source never costs the caller anything.",
 		Fields: map[string]string{
 			"GenerateInput.brief":        "the brief/goal driving copy generation",
@@ -95,7 +95,7 @@ func init() {
 			"GenerateResult.status":      "always \"draft\"; the lifecycle owns the initial state",
 		},
 	})
-	zip.Describe("POST /v1/content/publish", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/content POST /v1/content/publish", zip.Doc{
 		Description: "Publish distributes one CMS content item to the channels recorded on it and\nreturns the honest per-channel outcome. The item names itself — its caption,\nmedia and channel list are read from the stored document, not from this request.\nIt is idempotent per channel (a channel already posted for this item is skipped),\nand a publish that loses the per-item lease to a live publisher answers status\n\"in_progress\" having posted nothing.",
 		Fields: map[string]string{
 			"ChannelResult.channel":     "the social integration id targeted",

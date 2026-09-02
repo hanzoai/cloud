@@ -9,8 +9,15 @@
     "method": "POST",
     "url": "https://api.hanzo.ai/v1/mcp"
   },
-  "skill_count": 3,
+  "skill_count": 4,
   "skills": [
+    {
+      "description": "Read network identities: Returns the fabric identities the caller's org owns..",
+      "name": "network_identities",
+      "path": "network_identities/SKILL.md",
+      "service": "network",
+      "sha256": "7c7a070153613b9ab7afeedf9049d237e3236e44e87e105463d942041dc05b4c"
+    },
     {
       "description": "Read network network: Returns the caller's org overlay network on the Zero Trust fabric., Returns one overlay network by id, scoped to the caller's org..",
       "name": "network_network",

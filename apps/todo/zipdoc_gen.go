@@ -7,10 +7,10 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/todo/projects/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo DELETE /v1/todo/projects/:key", zip.Doc{
 		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second endpoint onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
-	zip.Describe("GET /v1/todo/board", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo GET /v1/todo/board", zip.Doc{
 		Description: "Returns a board's issues — work items with their column, priority,\nassignee, labels and schedule.\n\nWHICH board is a filter, not an address. Bound to a repository (the key from\nthe path) it is that project's board; left unbound it is the org's whole\nboard; narrowed by label it is a board smaller than any repository — which is\nthe only way an app that lives as a directory inside a shared repository can\nhave one. Every combination is the same rows through the same projection, so\nno two boards can disagree about what a column means.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
 		Fields: map[string]string{
 			"issueQuery.key":        "Key is the project whose issues to list, from the path. EMPTY means every\nproject in the org — the global board. It is a filter like the rest of\nthis struct rather than an address, which is what lets one op answer both\n\"this board\" and \"all the work\" without a second surface disagreeing with\nthe first about what a column is.",
@@ -40,7 +40,7 @@ func init() {
 			"issueView.updatedAt":   "UpdatedAt is when it last changed, in unix seconds.",
 		},
 	})
-	zip.Describe("GET /v1/todo/issues", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo GET /v1/todo/issues", zip.Doc{
 		Description: "Answers across every project in the org.\n\nThe org comes from the validated principal and never from the request: a\ncaller able to name the org could read another tenant's backlog, and a search\nis exactly the shape that would quietly return it.",
 		Fields: map[string]string{
 			"issueHit.assignee":    "Assignee is who holds the work. EMPTY MEANS UNHELD, which is what makes the\nissue claimable: claiming one already held by someone else is refused with\n409 rather than quietly taken.",
@@ -67,7 +67,7 @@ func init() {
 			"issueSearch.status":   "Status keeps one board column: backlog, todo, in_progress, done, canceled.",
 		},
 	})
-	zip.Describe("GET /v1/todo/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo GET /v1/todo/projects", zip.Doc{
 		Description: "Returns the boards of your org — the places your work actually\nis. The key addresses the board's issues.\n\nA BOARD IS A PLACE WORK IS, not an object somebody provisioned. So the list is\nassembled from the work itself: the repositories your org has filed issues on,\nplus the boards the index holds. A repository with nothing on it is not in the\nlist and is still perfectly addressable — GET /projects/<name> reads it and a\ncreate files into it — so nothing is lost by leaving it out.\n\nMeasured, which is why: reading the forge's whole repository inventory put 745\nboards here, of which all but a handful were vendored forks and mirrors\n(.github, .profile, DOMPurify, BoatAttack) that will never carry this org's\nwork. A list that long is not a list — the estate's real roadmap was in it\nsomewhere and no one could see it.\n\nThe forge half is the FORGE's answer for your own account, so two people in\none org can legitimately see different boards.",
 		Fields: map[string]string{
 			"todoProject.createdAt":   "CreatedAt is when the board was created, in unix seconds. 0 on a forge board\nfor the same reason Description is absent.",
@@ -79,7 +79,7 @@ func init() {
 			"todoProject.updatedAt":   "UpdatedAt is when the board record last changed, in unix seconds — the BOARD,\nnot the work on it, so filing an issue does not move it. 0 on a forge board.",
 		},
 	})
-	zip.Describe("GET /v1/todo/projects/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo GET /v1/todo/projects/:key", zip.Doc{
 		Description: "Returns one board of your org by its key — the repository name.\n404 when your org has no repository under that key, or when your own forge\naccount cannot see it.",
 		Fields: map[string]string{
 			"projectRef.key":          "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
@@ -92,7 +92,7 @@ func init() {
 			"todoProject.updatedAt":   "UpdatedAt is when the board record last changed, in unix seconds — the BOARD,\nnot the work on it, so filing an issue does not move it. 0 on a forge board.",
 		},
 	})
-	zip.Describe("GET /v1/todo/projects/:key/issues", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo GET /v1/todo/projects/:key/issues", zip.Doc{
 		Description: "Returns a board's issues — work items with their column, priority,\nassignee, labels and schedule.\n\nWHICH board is a filter, not an address. Bound to a repository (the key from\nthe path) it is that project's board; left unbound it is the org's whole\nboard; narrowed by label it is a board smaller than any repository — which is\nthe only way an app that lives as a directory inside a shared repository can\nhave one. Every combination is the same rows through the same projection, so\nno two boards can disagree about what a column means.\n\nThe column is a LABEL on the forge, so the board and the forge web UI are the\nsame object seen twice: relabelling in either moves the card in both. A closed\nissue reads as done whatever its labels say.",
 		Fields: map[string]string{
 			"issueQuery.key":        "Key is the project whose issues to list, from the path. EMPTY means every\nproject in the org — the global board. It is a filter like the rest of\nthis struct rather than an address, which is what lets one op answer both\n\"this board\" and \"all the work\" without a second surface disagreeing with\nthe first about what a column is.",
@@ -122,7 +122,7 @@ func init() {
 			"issueView.updatedAt":   "UpdatedAt is when it last changed, in unix seconds.",
 		},
 	})
-	zip.Describe("GET /v1/todo/projects/:key/issues/:num", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo GET /v1/todo/projects/:key/issues/:num", zip.Doc{
 		Description: "Returns ONE work item in full — its description included.\n\nThe list reads answer a board, and a board is a summary: the description is\nwhere the actual content of a work item lives — what an issue asks for, what\nan epic's acceptance criteria are — and no read on this surface returned it.\nThe address is the one PATCH already accepts, so an item you can move is now\nan item you can read.\n\nIt reads the forge directly rather than filtering the org fan-out, then falls\nback to the index for a board the forge has never heard of — the same order,\nand the same reason, as GetProject: a row is one kind of thing however it came\nto exist, so a caller does not have to know which store it is in to fetch it.",
 		Fields: map[string]string{
 			"issueRef.key":          "Key is the board — the repository name, or an index board's key.",
@@ -147,7 +147,7 @@ func init() {
 			"issueView.updatedAt":   "UpdatedAt is when it last changed, in unix seconds.",
 		},
 	})
-	zip.Describe("GET /v1/todo/rooms/:room", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo GET /v1/todo/rooms/:room", zip.Doc{
 		Description: "Summarises one room's work.\n\nThe room is opaque here and is deliberately not resolved: this package cannot\nsay whether a room exists — apps/team owns that document — so an unknown room\nanswers an EMPTY board rather than a 404. That is the honest answer and the\nuseful one: a channel that has never had an item filed in it and a channel id\nthat was mistyped both have no work, and inventing a distinction would require\nthis surface to hold a second copy of the room list (HIP-0523 §2 forbids it,\nand it would drift the first time a room was renamed).\n\nTenancy is the validated principal's org and nothing else, so a caller cannot\nread another tenant's channel by naming its room.",
 		Fields: map[string]string{
 			"roomRef.project":  "Project is the IAM project whose index to read; empty reads the org's\ndefault, which is where every mirrored source lands. It is the same\ndefaulting GET /v1/todo/issues does, deliberately: this rollup must count\nexactly the rows that listing returns, and two different defaults would let\na channel's header disagree with its own list.",
@@ -159,10 +159,10 @@ func init() {
 			"roomWork.updated": "Updated is when anything in this room's work last moved, in unix seconds.\nABSENT when the room has no work at all: zero would read as the epoch, and\na room nobody has filed anything in has no last activity rather than an\ninfinitely old one. Total is 0 in exactly that case.",
 		},
 	})
-	zip.Describe("PATCH /v1/todo/projects/:key", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo PATCH /v1/todo/projects/:key", zip.Doc{
 		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second endpoint onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
-	zip.Describe("PATCH /v1/todo/projects/:key/issues/:num", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo PATCH /v1/todo/projects/:key/issues/:num", zip.Doc{
 		Description: "Edits a work item — rename it, rewrite it, move it to another\ncolumn, or re-prioritise it. Absent fields are left alone.\n\nMOVING A CARD IS A RELABEL. The column lives in the forge's label set, so the\nmove replaces that set rather than writing a status column here that a\nforge-side change could contradict. Moving to `done` also CLOSES the issue on\nthe forge, because a done card and an open issue are a contradiction.",
 		Fields: map[string]string{
 			"issueEdit.assignee":    "Assignee hands the work to somebody — a person or an agent, by the name\nthey are known by on the forge. \"\" TAKES IT OFF whoever holds it, which is\nwhy this is a pointer: absent leaves the holder alone.\n\nIt is the other half of `claim`, which that handler already named: a claim\ntakes work for the CALLER and refuses to name anyone else, because giving\nwork away is a different act with different authority. This is that act,\nand until it existed a board could only be worked by whoever clicked\nfirst — an agent could never be given anything.",
@@ -192,7 +192,7 @@ func init() {
 			"issueView.updatedAt":   "UpdatedAt is when it last changed, in unix seconds.",
 		},
 	})
-	zip.Describe("POST /todo/upsert", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo POST /todo/upsert", zip.Doc{
 		Description: "Mirrors one external work item into the CALLER's org — creating the\nrow, or updating the one already carrying that ExtRef — and reports which it did\nplus the todo identity the item is now known by.\n\nThe org is the caller's plane identity and never the argument — plane.IssueIn has\nno org field, deliberately, because a feeder able to state the org could file\ninto another tenant's todo. Anonymous is refused rather than defaulted: an\nitem arriving with no principal must fail, not land on somebody's board.\n\nIt calls upsertIssue, never cloud.UpsertIssue. cloud.UpsertIssue now falls\nthrough to THIS op when the local sink is nil, so a process serving it that went\nback through it would dial its own socket and ask itself, forever.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"IssueIn.extRef":           "ExtRef is the external anchor AND the idempotency key, e.g.\n\"github:owner/repo#123\".",
@@ -208,10 +208,10 @@ func init() {
 			"IssueUpserted.number":     "Number is the todo's own item number.",
 		},
 	})
-	zip.Describe("POST /v1/todo/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo POST /v1/todo/projects", zip.Doc{
 		Description: "Refuses to create, rename or delete a board.\n\nA board IS a repository on the forge. Its lifecycle is a forge operation with\nforge permissions, and offering a second endpoint onto it here would mean this\nsurface's guard, not the forge's, decided who may make and destroy\nrepositories — a weaker guard on the same object.\n\n405 and not 404: the route exists and the answer is \"not this service's job\",\nwhich is a different fact from \"no such thing\", and the message names where\nthe job IS done.",
 	})
-	zip.Describe("POST /v1/todo/projects/:key/issues", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo POST /v1/todo/projects/:key/issues", zip.Doc{
 		Description: "Opens a work item on the board — an issue on that repository on\nthe deployment's forge, filed as YOU.\n\nThe column and priority are written as LABELS, which is what makes the card\nand the forge issue the same object: someone relabelling in the forge web UI\nhas moved your card.",
 		Fields: map[string]string{
 			"issueView.assignee":    "Assignee is who holds the work — an IAM username, or the login of the FIRST\nassignee when a forge issue has several. Absent when nobody holds it, which\nis exactly the state a claim needs.",
@@ -239,7 +239,7 @@ func init() {
 			"newIssue.title":        "Title is the one line the card is read by on the board. Blank or whitespace\nis refused — an untitled card cannot be told apart from any other.",
 		},
 	})
-	zip.Describe("POST /v1/todo/projects/:key/issues/:num/claim", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/todo POST /v1/todo/projects/:key/issues/:num/claim", zip.Doc{
 		Description: "Takes an issue: it becomes yours and it moves to in_progress.\n\nThe holder is the CALLER, never an argument. \"Assign this to someone else\" is\na different act with different authority, and it already exists as a PATCH;\nconflating them would let anyone hand work to anyone by naming them.\n\nClaiming something already held by someone else is refused rather than\nsilently taken — two agents on one issue is the failure this prevents, and a\nclaim that quietly wins a race is worse than one that says no.",
 		Fields: map[string]string{
 			"issueHit.assignee": "Assignee is who holds the work. EMPTY MEANS UNHELD, which is what makes the\nissue claimable: claiming one already held by someone else is refused with\n409 rather than quietly taken.",

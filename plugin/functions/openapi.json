@@ -205,13 +205,6 @@
         ],
         "responses": {
           "204": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/none"
-                }
-              }
-            },
             "description": "no content"
           }
         },
@@ -276,6 +269,7 @@
             "required": false,
             "description": "Limit caps the page, defaulting to 100.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -461,6 +455,7 @@
           },
           "timeoutSec": {
             "description": "TimeoutSec is the per-invocation deadline, defaulting to 30 and clamped at\n900 — a larger value is capped rather than reset to the default.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -484,6 +479,7 @@
       "functionDetail": {
         "properties": {
           "avgDurationMs": {
+            "format": "double",
             "type": "number"
           },
           "createdAt": {
@@ -493,18 +489,21 @@
             "type": "string"
           },
           "envCount": {
+            "format": "int64",
             "type": "integer"
           },
           "environment": {
             "type": "string"
           },
           "errors7d": {
+            "format": "int64",
             "type": "integer"
           },
           "image": {
             "type": "string"
           },
           "invocations7d": {
+            "format": "int64",
             "type": "integer"
           },
           "lastDeployedAt": {
@@ -537,12 +536,14 @@
             "type": "string"
           },
           "successRate": {
+            "format": "double",
             "type": "number"
           },
           "target": {
             "type": "string"
           },
           "timeoutSec": {
+            "format": "int64",
             "type": "integer"
           },
           "triggers": {
@@ -559,6 +560,7 @@
         "properties": {
           "avgDurationMs": {
             "description": "mean wall-clock of those runs",
+            "format": "double",
             "type": "number"
           },
           "createdAt": {
@@ -571,6 +573,7 @@
           },
           "envCount": {
             "description": "how many secret NAMES it mounts; values are never carried",
+            "format": "int64",
             "type": "integer"
           },
           "environment": {
@@ -579,6 +582,7 @@
           },
           "errors7d": {
             "description": "how many of those runs failed",
+            "format": "int64",
             "type": "integer"
           },
           "image": {
@@ -587,6 +591,7 @@
           },
           "invocations7d": {
             "description": "runs in the last 7 days; ABSENT, never 0, when it has not run",
+            "format": "int64",
             "type": "integer"
           },
           "lastDeployedAt": {
@@ -611,6 +616,7 @@
           },
           "successRate": {
             "description": "share of those runs that succeeded, 0..1",
+            "format": "double",
             "type": "number"
           },
           "target": {
@@ -619,6 +625,7 @@
           },
           "timeoutSec": {
             "description": "its per-invocation deadline",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -640,6 +647,7 @@
         "properties": {
           "durationMs": {
             "description": "how long it took",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -656,6 +664,7 @@
           },
           "statusCode": {
             "description": "Code is the status the function's OWN code answered with, which is not the\nstatus of the reply — a program can answer 500 through a healthy sandbox.",
+            "format": "int64",
             "type": "integer"
           },
           "time": {
@@ -683,10 +692,6 @@
         },
         "type": "object"
       },
-      "none": {
-        "properties": {},
-        "type": "object"
-      },
       "pointView": {
         "properties": {
           "t": {
@@ -695,6 +700,7 @@
           },
           "v": {
             "description": "how many invocations fell in it — a real count, never interpolated",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -733,14 +739,17 @@
         "properties": {
           "error": {
             "description": "invocations that ran and failed",
+            "format": "int64",
             "type": "integer"
           },
           "success": {
             "description": "invocations whose code ran and wrote nothing to stderr",
+            "format": "int64",
             "type": "integer"
           },
           "timeout": {
             "description": "invocations that hit their configured deadline",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -791,6 +800,7 @@
         "properties": {
           "costCents": {
             "description": "null — no per-invocation cost source",
+            "format": "int64",
             "type": "integer"
           },
           "series": {

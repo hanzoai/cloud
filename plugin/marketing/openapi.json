@@ -36,6 +36,7 @@
             "required": false,
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -229,6 +230,7 @@
             "required": false,
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -461,6 +463,7 @@
             "required": false,
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 25
@@ -758,6 +761,7 @@
             "required": false,
             "description": "Seats is the Team seat count; 0 means 1, and it is ignored for the\nsingle-seat plans.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 12
@@ -890,6 +894,7 @@
             "required": false,
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -1062,6 +1067,7 @@
             "required": false,
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 100
@@ -1330,6 +1336,7 @@
             "required": false,
             "description": "CreatedAt is unix seconds, server-assigned.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -1356,6 +1363,7 @@
             "required": false,
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 100
@@ -1492,6 +1500,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is unix seconds when the filter was saved, server-assigned.",
+            "format": "int64",
             "type": "integer"
           },
           "event": {
@@ -1508,10 +1517,12 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is unix seconds of the last write, server-assigned, and the key\nthe audience list is ordered by (newest first). A saved audience has no\nupdate route, so in practice it stays equal to CreatedAt: to change a\nfilter you save another one.",
+            "format": "int64",
             "type": "integer"
           },
           "windowDays": {
             "description": "WindowDays is how far back the event counts, ending now. 0 means 30 and\nnothing above 3650 is honoured. Ignored when Event is empty.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1537,10 +1548,12 @@
           },
           "count": {
             "description": "Count is the cohort size: distinct warehouse identifiers for an event\naudience, mailable customers for an event-less (whole-org) one.",
+            "format": "int64",
             "type": "integer"
           },
           "deliverable": {
             "description": "Deliverable is how many de-duplicated mailboxes a send would reach. Two\ncustomers sharing an address count once, so it is \u003c= Count.",
+            "format": "int64",
             "type": "integer"
           },
           "reason": {
@@ -1560,6 +1573,7 @@
           },
           "unmatched": {
             "description": "Unmatched is how many cohort identifiers named nobody on the org's roster\nand so have no address to mail. It is reported rather than hidden: it is\nthe honest explanation for a cohort of 500 that mails 3. Always 0 for an\nevent-less (whole-org) audience, which starts from the roster and has\nnothing to match.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1577,6 +1591,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds when the post was added, server-assigned and\nnever rewritten.",
+            "format": "int64",
             "type": "integer"
           },
           "error": {
@@ -1589,10 +1604,12 @@
           },
           "publishedAt": {
             "description": "PublishedAt is when the publish succeeded; 0 until it does.",
+            "format": "int64",
             "type": "integer"
           },
           "scheduledAt": {
             "description": "ScheduledAt is the unix publish time; 0 leaves the post a draft, and any\nvalue makes it \"scheduled\" for the durable sweep to pick up.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -1605,6 +1622,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is unix seconds of the last write, server-assigned. The durable\nsweep writes too — claiming a due post, publishing it and recording a\nfailure each bump it — so this moves without anyone editing the post.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1614,6 +1632,7 @@
         "properties": {
           "budget": {
             "description": "Budget is what the campaign is allowed to cost, in USD cents. A negative\nvalue is clamped to 0; nothing enforces the ceiling here.",
+            "format": "int64",
             "type": "integer"
           },
           "channel": {
@@ -1622,6 +1641,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds when the campaign was registered. Server-assigned\nand never rewritten — an update leaves it as it was.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1638,10 +1658,12 @@
           },
           "scheduledAt": {
             "description": "ScheduledAt is the unix send time; 0 means unscheduled. Setting it on a\ncampaign with no explicit status makes that status \"scheduled\".",
+            "format": "int64",
             "type": "integer"
           },
           "spend": {
             "description": "Spend is what the campaign has cost so far, in USD cents, clamped to \u003e= 0.\nThe CALLER owns it: no send, ad buy or invoice moves it, so it changes only\nwhen create or update carries a new value. It is summed across the org's\ncampaigns into GET /v1/marketing/summary.",
+            "format": "int64",
             "type": "integer"
           },
           "status": {
@@ -1650,6 +1672,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is unix seconds of the last write. Server-assigned on create and\non every update or schedule change, and the campaign list is ordered by it,\nnewest first.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1692,10 +1715,12 @@
         "properties": {
           "alreadyEnrolled": {
             "description": "AlreadyEnrolled is how many this sequence had already taken and were left\nalone.",
+            "format": "int64",
             "type": "integer"
           },
           "enrolled": {
             "description": "Enrolled is how many started a walk on this call.",
+            "format": "int64",
             "type": "integer"
           },
           "enrollmentId": {
@@ -1704,6 +1729,7 @@
           },
           "resolved": {
             "description": "Resolved is how many addresses the request named — 1 for an address, the\naudience's deliverable count for an audience.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1721,10 +1747,12 @@
           },
           "currentStep": {
             "description": "CurrentStep is the index of the step that sends next.",
+            "format": "int64",
             "type": "integer"
           },
           "enrolledAt": {
             "description": "EnrolledAt is unix seconds when the contact joined the walk, and orders the\nenrollment list (newest first).",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1733,6 +1761,7 @@
           },
           "nextRunAt": {
             "description": "NextRunAt is the unix time the current step comes due; 0 once the walk has\nended. It IS the schedule — durable in SQLite, so it survives restarts.",
+            "format": "int64",
             "type": "integer"
           },
           "sequenceId": {
@@ -1745,6 +1774,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is unix seconds of the last move: the drip engine writes it each\ntime it advances the walk a step, completes it or cancels it. Together with\nStatus it says when the walk last did anything, which is how a stalled\nenrollment is told from a finished one.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1786,6 +1816,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -1794,10 +1825,12 @@
           },
           "maxRedemptions": {
             "description": "MaxRedemptions is the hard fleet-wide cap; the redemption past it is\ndeclined.",
+            "format": "int64",
             "type": "integer"
           },
           "percentOff": {
             "description": "PercentOff is the discount applied to ONE month's list price.",
+            "format": "int64",
             "type": "integer"
           },
           "plans": {
@@ -1806,6 +1839,7 @@
           },
           "teamSeatCap": {
             "description": "TeamSeatCap is how many Team seats bill at the promo rate; seats beyond it\nbill at list.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1831,10 +1865,12 @@
           },
           "redeemed": {
             "description": "Redeemed is how many orgs have taken it, Remaining how many are left under\nthe fleet-wide cap.",
+            "format": "int64",
             "type": "integer"
           },
           "remaining": {
             "description": "Remaining is MaxRedemptions minus Redeemed, floored at 0. At 0 the next\nredeem is declined, and a quote reports ineligible rather than pricing an\noffer that cannot be taken.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1844,6 +1880,7 @@
         "properties": {
           "chargeCents": {
             "description": "ChargeCents is what month one costs after the discount, in USD cents,\ntotalled over the seats quoted. On team that is a multiple of the seat\ncount, so it is not ListCents minus DiscountCents.",
+            "format": "int64",
             "type": "integer"
           },
           "code": {
@@ -1852,6 +1889,7 @@
           },
           "discountCents": {
             "description": "DiscountCents is what the promo takes off month one, in USD cents. The\npromo rate reaches at most TeamSeatCap seats; seats past the cap bill at\nfull list and add nothing here. It is arithmetic only — quoting credits\nnothing, counts nothing and reserves nothing.",
+            "format": "int64",
             "type": "integer"
           },
           "eligible": {
@@ -1860,6 +1898,7 @@
           },
           "listCents": {
             "description": "ListCents is the undiscounted month price in USD cents: PER SEAT on team,\nthe whole month on pro and max, 0 for a plan with no list price.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -1872,10 +1911,12 @@
           },
           "remaining": {
             "description": "Remaining is how many redemptions are left under the fleet-wide cap.",
+            "format": "int64",
             "type": "integer"
           },
           "seats": {
             "description": "Seats is the seat count priced; a request of 0 or less was read as 1. It\nonly bites on team, the one per-seat plan — pro and max are single-seat and\nignore it.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1902,10 +1943,12 @@
           },
           "chargeCents": {
             "description": "ChargeCents is what month one costs after the discount, DiscountCents the\ndiscount that produced it. Both are quoted figures against the org's\nderived plan — NOTHING WAS CREDITED and no wallet moved.",
+            "format": "int64",
             "type": "integer"
           },
           "discountCents": {
             "description": "DiscountCents is the discount claimed for month one, in USD cents, at the\nsingle-seat floor. It is the same figure recorded on the Redemption, and it\nis evidence an admin may later grant against — not a balance.",
+            "format": "int64",
             "type": "integer"
           },
           "redemption": {
@@ -1923,6 +1966,7 @@
           },
           "discountCents": {
             "description": "DiscountCents is the month-one discount this redemption CLAIMS, in USD\ncents. It is a recorded figure, NOT a balance: nothing was credited and no\nwallet moved. An admin granting against this claim is what would make it\nmoney, and that decision happens on the admin surface, not here.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -1931,10 +1975,12 @@
           },
           "redeemedAt": {
             "description": "RedeemedAt is unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "seats": {
             "description": "Seats is the seat count the claim was priced at, and it is ALWAYS 1. No\nserver-side authority on this surface answers \"how many seats\", and the\ncaller's own number is exactly the input that once inflated these claims,\nso a redemption records the single-seat floor and an admin resolves the\nreal count against subscription data at grant time.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1948,6 +1994,7 @@
           },
           "scheduledAt": {
             "description": "ScheduledAt is the unix send time. 0 clears the schedule.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1957,6 +2004,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is unix seconds when the sequence was registered, server-assigned\nand never rewritten.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -1973,6 +2021,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is unix seconds of the last status flip, server-assigned, and the\nkey the sequence list is ordered by (newest first). Adding a step or\nenrolling a contact does NOT touch it — only draft/active/archived does —\nso it tracks activation rather than activity.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2027,10 +2076,12 @@
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds, server-assigned.",
+            "format": "int64",
             "type": "integer"
           },
           "delaySeconds": {
             "description": "DelaySeconds is how long after the previous step this one sends (after\nenrollment, for step 0).",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -2039,6 +2090,7 @@
           },
           "idx": {
             "description": "Idx is the step's 0-based position, assigned by appending: a new step\nalways lands after the last one.",
+            "format": "int64",
             "type": "integer"
           },
           "sequenceId": {
@@ -2060,6 +2112,7 @@
           },
           "delaySeconds": {
             "description": "DelaySeconds is how long after the previous step this one sends (after\nenrollment, for the first step). Must be \u003e= 0.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -2089,18 +2142,22 @@
         "properties": {
           "active": {
             "description": "Active is how many of them sit in the \"active\" state exactly. A scheduled\nor paused campaign counts in Campaigns and not here, so Active is never a\nshare of anything but the whole.",
+            "format": "int64",
             "type": "integer"
           },
           "budget": {
             "description": "Budget is every campaign's budget summed, in USD cents.",
+            "format": "int64",
             "type": "integer"
           },
           "campaigns": {
             "description": "Campaigns is how many campaigns the org has, counted in every lifecycle\nstate including draft and completed.",
+            "format": "int64",
             "type": "integer"
           },
           "spend": {
             "description": "Spend is every campaign's spend summed, in USD cents. It adds up figures\ncallers wrote on the campaigns themselves — this app meters no delivery\nagainst a budget — so it is a reported total, not an observed one.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -2118,6 +2175,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is unix seconds, server-assigned.",
+            "format": "int64",
             "type": "integer"
           },
           "reason": {

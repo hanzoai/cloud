@@ -399,26 +399,32 @@
         "properties": {
           "accounts": {
             "description": "Accounts is how many linked accounts the total folds.",
+            "format": "int64",
             "type": "integer"
           },
           "completionTokens": {
             "description": "CompletionTokens is the total completion-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is the total cost in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "promptTokens": {
             "description": "PromptTokens is the total prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "requests": {
             "description": "Requests is the total request count the gateway routed.",
+            "format": "int64",
             "type": "integer"
           },
           "totalTokens": {
             "description": "TotalTokens is the total token count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -464,6 +470,7 @@
           },
           "headroomPct": {
             "description": "HeadroomPct is the remaining rate-limit capacity, 0..100. A link with no\nsnapshot counts as full headroom.",
+            "format": "double",
             "type": "number"
           },
           "host": {
@@ -529,10 +536,12 @@
           },
           "completionTokens": {
             "description": "CompletionTokens is the routed completion-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "costCents": {
             "description": "CostCents is the routed cost in cents.",
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -541,6 +550,7 @@
           },
           "promptTokens": {
             "description": "PromptTokens is the routed prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -549,10 +559,12 @@
           },
           "requests": {
             "description": "Requests is how many requests the gateway routed through this account.",
+            "format": "int64",
             "type": "integer"
           },
           "totalTokens": {
             "description": "TotalTokens is the routed total token count.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -620,6 +632,7 @@
           },
           "activeSessions": {
             "description": "ActiveSessions is how many agent sessions the caller currently has running\non this machine; 0 where the agent plane is not mounted.",
+            "format": "int64",
             "type": "integer"
           },
           "host": {
@@ -683,21 +696,25 @@
             "type": "string"
           },
           "cachedInputTokens": {
+            "format": "int64",
             "type": "integer"
           },
           "confidence": {
             "type": "string"
           },
           "costCents": {
+            "format": "int64",
             "type": "integer"
           },
           "costLimitCents": {
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
             "type": "string"
           },
           "inputTokens": {
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -710,6 +727,7 @@
             "type": "string"
           },
           "outputTokens": {
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -719,6 +737,7 @@
             "type": "string"
           },
           "requests": {
+            "format": "int64",
             "type": "integer"
           },
           "resetsAt": {
@@ -735,15 +754,18 @@
             "type": "boolean"
           },
           "totalTokens": {
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
+            "format": "double",
             "type": "number"
           },
           "window": {
             "type": "string"
           },
           "windowMinutes": {
+            "format": "int32",
             "type": "integer"
           },
           "windowStart": {
@@ -756,6 +778,7 @@
         "properties": {
           "accepted": {
             "description": "Accepted is how many samples this report landed.",
+            "format": "int64",
             "type": "integer"
           },
           "links": {
@@ -863,6 +886,7 @@
           },
           "cachedInputTokens": {
             "description": "CachedInputTokens is the window's cached-prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "confidence": {
@@ -871,10 +895,12 @@
           },
           "costCents": {
             "description": "CostCents is the window's spend in cents, as the provider's meter states it.",
+            "format": "int64",
             "type": "integer"
           },
           "costLimitCents": {
             "description": "CostLimitCents is the window's spend cap in cents, when the meter knows one.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -883,6 +909,7 @@
           },
           "inputTokens": {
             "description": "InputTokens is the window's prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "kind": {
@@ -899,6 +926,7 @@
           },
           "outputTokens": {
             "description": "OutputTokens is the window's completion-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -911,6 +939,7 @@
           },
           "requests": {
             "description": "Requests is the window's request count.",
+            "format": "int64",
             "type": "integer"
           },
           "resetsAt": {
@@ -923,10 +952,12 @@
           },
           "totalTokens": {
             "description": "TotalTokens is the window's total token count.",
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
             "description": "UsedPct is how much of the window's allowance is consumed, clamped 0..100.",
+            "format": "double",
             "type": "number"
           },
           "window": {
@@ -935,6 +966,7 @@
           },
           "windowMinutes": {
             "description": "WindowMinutes is the window's length as the meter reported it.",
+            "format": "int32",
             "type": "integer"
           },
           "windowStart": {
@@ -952,6 +984,7 @@
           },
           "cachedInputTokens": {
             "description": "CachedInputTokens is the window's cached-prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "confidence": {
@@ -960,10 +993,12 @@
           },
           "costCents": {
             "description": "CostCents is the window's spend in cents, as the provider's meter states it.",
+            "format": "int64",
             "type": "integer"
           },
           "costLimitCents": {
             "description": "CostLimitCents is the window's spend cap in cents, when the meter knows one.",
+            "format": "int64",
             "type": "integer"
           },
           "currency": {
@@ -972,6 +1007,7 @@
           },
           "inputTokens": {
             "description": "InputTokens is the window's prompt-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "lane": {
@@ -984,6 +1020,7 @@
           },
           "outputTokens": {
             "description": "OutputTokens is the window's completion-token count.",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -992,6 +1029,7 @@
           },
           "requests": {
             "description": "Requests is the window's request count.",
+            "format": "int64",
             "type": "integer"
           },
           "resetsAt": {
@@ -1004,10 +1042,12 @@
           },
           "totalTokens": {
             "description": "TotalTokens is the window's total token count.",
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
             "description": "UsedPct is how much of the window's allowance is consumed, 0..100.",
+            "format": "double",
             "type": "number"
           },
           "window": {
@@ -1016,6 +1056,7 @@
           },
           "windowMinutes": {
             "description": "WindowMinutes is the window's length as the meter reported it.",
+            "format": "int32",
             "type": "integer"
           },
           "windowStart": {
@@ -1036,10 +1077,12 @@
           },
           "revoked": {
             "description": "Revoked is how many links this call revoked.",
+            "format": "int64",
             "type": "integer"
           },
           "sessionsStopped": {
             "description": "SessionsStopped is how many of the caller's own agent sessions stopped. A\nstop that fails does not fail the revoke, so this may honestly report fewer.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1106,6 +1149,7 @@
           },
           "costCents": {
             "description": "CostCents is the period's spend in cents, in the row's own ledger.",
+            "format": "int64",
             "type": "integer"
           },
           "provider": {
@@ -1114,6 +1158,7 @@
           },
           "requests": {
             "description": "Requests is the period's request count.",
+            "format": "int64",
             "type": "integer"
           },
           "scope": {
@@ -1126,10 +1171,12 @@
           },
           "tokens": {
             "description": "Tokens is the period's total token count.",
+            "format": "int64",
             "type": "integer"
           },
           "usedPct": {
             "description": "UsedPct is the plan consumption percentage, on the account side.",
+            "format": "double",
             "type": "number"
           },
           "window": {
@@ -1138,6 +1185,7 @@
           },
           "windows": {
             "description": "Windows is how many window instances the row folds.",
+            "format": "int64",
             "type": "integer"
           }
         },

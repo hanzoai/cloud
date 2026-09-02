@@ -7,42 +7,42 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/captable/convertibles/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable DELETE /v1/captable/convertibles/:id", zip.Doc{
 		Description: "Removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"noteRef.id":              "ID is the convertible note to delete.",
 		},
 	})
-	zip.Describe("DELETE /v1/captable/options/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable DELETE /v1/captable/options/:id", zip.Doc{
 		Description: "Removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"optionRef.id":            "ID is the option grant to delete.",
 		},
 	})
-	zip.Describe("DELETE /v1/captable/safes/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable DELETE /v1/captable/safes/:id", zip.Doc{
 		Description: "Removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"safeRef.id":              "ID is the SAFE to delete.",
 		},
 	})
-	zip.Describe("DELETE /v1/captable/shares/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable DELETE /v1/captable/shares/:id", zip.Doc{
 		Description: "Removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"shareRef.id":             "ID is the share certificate to delete.",
 		},
 	})
-	zip.Describe("DELETE /v1/captable/stakeholders/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable DELETE /v1/captable/stakeholders/:id", zip.Doc{
 		Description: "Removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
 		Fields: map[string]string{
 			"captableDeleted.success": "Success is true when the row was removed.",
 			"stakeholderRef.id":       "ID is the stakeholder to delete.",
 		},
 	})
-	zip.Describe("GET /v1/captable/classes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/classes", zip.Doc{
 		Description: "Returns the caller org's share classes, in creation order. A\nshare class is what a certificate is issued in, and every class the company\nhas authorized appears. The response is a bare JSON array, not an envelope.",
 		Fields: map[string]string{
 			"captableShareClass.classType":                     "ClassType is COMMON or PREFERRED.",
@@ -61,7 +61,7 @@ func init() {
 			"captableShareClass.votesPerShare":                 "VotesPerShare is how many votes one share of this class carries.",
 		},
 	})
-	zip.Describe("GET /v1/captable/company", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/company", zip.Doc{
 		Description: "Returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
 		Fields: map[string]string{
 			"captableCompany.createdAt":            "CreatedAt is when the company row was seeded, in unix milliseconds.",
@@ -74,7 +74,7 @@ func init() {
 			"captableCompany.updatedAt":            "UpdatedAt is when the company row last changed, in unix milliseconds.",
 		},
 	})
-	zip.Describe("GET /v1/captable/convertibles", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/convertibles", zip.Doc{
 		Description: "Returns the caller org's convertible notes, newest first. A\nnote's principal sits OUTSIDE issued equity until it converts, so it is not\npart of the share counts.",
 		Fields: map[string]string{
 			"captableNote.capital":         "Capital is the principal the investor lent.",
@@ -91,7 +91,7 @@ func init() {
 			"captableNotes.data":           "Data is every convertible note, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/captable/investments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/investments", zip.Doc{
 		Description: "Returns the caller org's investments, newest first. It spans\nevery round, so it is the flat ledger of cheques written into the company,\neach naming its investor and the round it went into.",
 		Fields: map[string]string{
 			"captableInvestment.amount":          "Amount is the cash invested.",
@@ -105,7 +105,7 @@ func init() {
 			"captableInvestments.data":           "Data is every investment across every round, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/captable/options", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/options", zip.Doc{
 		Description: "Returns the caller org's option grants, newest first. Each row is\njoined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED\nor CANCELLED are listed here but do not dilute the cap table.",
 		Fields: map[string]string{
 			"captableOption.cliffYears":      "CliffYears is how many years before any of the grant vests.",
@@ -125,7 +125,7 @@ func init() {
 			"captableOptions.data":           "Data is every option grant, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/captable/plans", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/plans", zip.Doc{
 		Description: "Returns the caller org's equity plans, newest first. An equity\nplan is an option pool: a reserve of shares, drawn from one share class, that\noption grants are written against.",
 		Fields: map[string]string{
 			"captableEquityPlan.boardApprovalDate":          "BoardApprovalDate is the ISO date the board approved the plan.",
@@ -140,7 +140,7 @@ func init() {
 			"captableEquityPlans.data":                      "Data is every equity plan on the caller org's cap table, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/captable/rounds", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/rounds", zip.Doc{
 		Description: "Returns the caller org's fundraising rounds, newest first. A round\ngroups a fundraising event; a PRICED round also carries the share class and\nprice per share it issues at.",
 		Fields: map[string]string{
 			"captableRound.closeDate":         "CloseDate is the ISO date the round closed, once it has.",
@@ -157,7 +157,7 @@ func init() {
 			"captableRounds.data":             "Data is every round, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/captable/rounds/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/rounds/:id", zip.Doc{
 		Description: "Returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
 		Fields: map[string]string{
 			"captableRound.closeDate":                 "CloseDate is the ISO date the round closed, once it has.",
@@ -183,7 +183,7 @@ func init() {
 			"roundRef.id":                             "ID is the round to read. It is the path segment: the URL is the addressing\nauthority, and the org it is resolved in comes from the caller's principal,\nso an id from another tenant is simply not found.",
 		},
 	})
-	zip.Describe("GET /v1/captable/safes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/safes", zip.Doc{
 		Description: "Returns the caller org's SAFEs, newest first. A SAFE is a simple\nagreement for future equity: its capital sits OUTSIDE issued equity until it\nconverts, so it is not part of the share counts.",
 		Fields: map[string]string{
 			"captableSafe.capital":         "Capital is the cash the investor put in.",
@@ -201,7 +201,7 @@ func init() {
 			"captableSafes.data":           "Data is every SAFE, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/captable/shares", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/shares", zip.Doc{
 		Description: "Returns the caller org's share certificates, newest first. Each row\nis joined to its holder and its share class, so a certificate names who holds\nit and what class it is in without a second call.",
 		Fields: map[string]string{
 			"captableShare.capitalContribution": "CapitalContribution is the cash paid for the certificate, if recorded.",
@@ -220,7 +220,7 @@ func init() {
 			"captableShares.data":               "Data is every issued share certificate, newest first.",
 		},
 	})
-	zip.Describe("GET /v1/captable/stakeholders", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/stakeholders", zip.Doc{
 		Description: "Returns the caller org's stakeholders, newest first. The\nresponse is a bare JSON array, not an envelope. Each row carries the holder's\ncontact and address fields alongside the company's name.",
 		Fields: map[string]string{
 			"captableStakeholder.city":                "City is the stakeholder's city, if recorded.",
@@ -239,7 +239,7 @@ func init() {
 			"captableStakeholder.zipcode":             "Zipcode is the stakeholder's postal code, if recorded.",
 		},
 	})
-	zip.Describe("GET /v1/captable/summary", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable GET /v1/captable/summary", zip.Doc{
 		Description: "Computes the caller org's cap table. It answers who owns what on a\nfully-diluted basis: outstanding shares, granted options, per-stakeholder\nownership percentages, each share class's authorized versus issued position,\nand the capital sitting on SAFEs and convertible notes that have not yet\nconverted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and\nCANCELLED grants are excluded, so equity issued through an exercised option is\nnever counted twice.",
 		Fields: map[string]string{
 			"captableClassHolding.authorized":   "Authorized is how many shares of the class are authorized.",
@@ -274,7 +274,7 @@ func init() {
 			"captableTotals.stakeholders":       "Stakeholders is how many stakeholders the company has.",
 		},
 	})
-	zip.Describe("PATCH /v1/captable/classes/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable PATCH /v1/captable/classes/:id", zip.Doc{
 		Description: "Replaces one share class's terms.\n\nIt is a full REPLACE and not a merge, despite the PATCH: every field is written\nas sent, so a field omitted is written empty rather than left alone. Send the\nwhole class. The method is PATCH because the resource is addressed by id, not\nbecause the body is partial — and getting that backwards silently blanks terms\nevery later issuance prices against.",
 		Fields: map[string]string{
 			"captableShareClassAmend.boardApprovalDate":             "BoardApprovalDate is when the board approved the class, YYYY-MM-DD.",
@@ -295,7 +295,7 @@ func init() {
 			"captableUpdated.success":                               "Success is true when the update was applied.",
 		},
 	})
-	zip.Describe("PATCH /v1/captable/stakeholders/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable PATCH /v1/captable/stakeholders/:id", zip.Doc{
 		Description: "Changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
 		Fields: map[string]string{
 			"captableStakeholderPatch.city":                "City is the stakeholder's city.",
@@ -313,7 +313,7 @@ func init() {
 			"captableUpdated.success":                      "Success is true when the update was applied.",
 		},
 	})
-	zip.Describe("POST /v1/captable/classes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/classes", zip.Doc{
 		Description: "Defines a new class of shares.\n\nEvery field but convertsToShareClassId is required — a class is the instrument\nevery later issuance prices against, so a partially-specified one would silently\nmis-value every share issued into it. `seniority` orders liquidation preference\nwith LOWER first.",
 		Fields: map[string]string{
 			"captableCreated.id":                                 "ID is the created row's id.",
@@ -334,7 +334,7 @@ func init() {
 			"captableShareClassIn.votesPerShare":                 "VotesPerShare is how many votes one share of this class carries. A whole number; 0 for non-voting.",
 		},
 	})
-	zip.Describe("POST /v1/captable/convertibles", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/convertibles", zip.Doc{
 		Description: "Records a convertible note.",
 		Fields: map[string]string{
 			"captableConvertibleIn.additionalTerms":   "AdditionalTerms is free text for anything the fields above do not carry. Optional.",
@@ -353,7 +353,7 @@ func init() {
 			"captableCreated.success":                 "Success is true when the row was written.",
 		},
 	})
-	zip.Describe("POST /v1/captable/options", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/options", zip.Doc{
 		Description: "Grants options to a stakeholder from an equity plan.",
 		Fields: map[string]string{
 			"captableCreated.id":                 "ID is the created row's id.",
@@ -376,7 +376,7 @@ func init() {
 			"captableOptionIn.vestingYears":      "VestingYears is the total vesting period. A whole number.",
 		},
 	})
-	zip.Describe("POST /v1/captable/plans", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/plans", zip.Doc{
 		Description: "Opens an equity plan that options are granted from.",
 		Fields: map[string]string{
 			"captableCreated.id":                              "ID is the created row's id.",
@@ -391,7 +391,7 @@ func init() {
 			"captableEquityPlanIn.shareClassId":               "ShareClassID is the class the plan grants from. It must name a class of THIS company.",
 		},
 	})
-	zip.Describe("POST /v1/captable/rounds", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/rounds", zip.Doc{
 		Description: "Opens a priced round that investments can be added to.\n\nThe round opens OPEN; investing into a closed one is refused.",
 		Fields: map[string]string{
 			"captableCreated.id":                "ID is the created row's id.",
@@ -405,7 +405,7 @@ func init() {
 			"captableRoundIn.targetAmount":      "TargetAmount is how much the round aims to raise, in the company's currency.",
 		},
 	})
-	zip.Describe("POST /v1/captable/rounds/:id/close", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/rounds/:id/close", zip.Doc{
 		Description: "Closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
 		Fields: map[string]string{
 			"captableRoundCloseRequest.closeDate": "CloseDate is the date to record the round as closed on. Optional: omitted,\nnull or empty records TODAY. Any JSON scalar is accepted and stored as its\ntext, and the text is stored unparsed, so a caller that wants an ISO date\nsends one.",
@@ -414,7 +414,7 @@ func init() {
 			"captableUpdated.success":             "Success is true when the update was applied.",
 		},
 	})
-	zip.Describe("POST /v1/captable/rounds/:id/investments", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/rounds/:id/investments", zip.Doc{
 		Description: "Records one investor's money into an open round.\n\nThe round must be OPEN; investing into a closed one is refused. Where the round\ncarries a price per share, the investment also issues the shares it buys and the\nanswer names them.",
 		Fields: map[string]string{
 			"captableInvested.id":                "ID is the investment record's id.",
@@ -428,7 +428,7 @@ func init() {
 			"captableInvestmentIn.stakeholderId": "StakeholderID is the investor. Required, and it must reference a stakeholder\nof the same company.",
 		},
 	})
-	zip.Describe("POST /v1/captable/safes", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/safes", zip.Doc{
 		Description: "Records a SAFE — a simple agreement for future equity.",
 		Fields: map[string]string{
 			"captableCreated.id":               "ID is the created row's id.",
@@ -446,7 +446,7 @@ func init() {
 			"captableSafeIn.valuationCap":      "ValuationCap is the valuation the SAFE converts at, at most. Optional; omit for an uncapped SAFE.",
 		},
 	})
-	zip.Describe("POST /v1/captable/shares", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/shares", zip.Doc{
 		Description: "Issues a share certificate to a stakeholder.\n\nThe certificate id must be UNIQUE within the company — a duplicate is refused\n409, not silently merged — and both the stakeholder and the share class must\nbelong to this company, so an id from another tenant is a 400 rather than a\ncross-company issuance.",
 		Fields: map[string]string{
 			"captableCreated.id":                  "ID is the created row's id.",
@@ -471,7 +471,7 @@ func init() {
 			"captableShareIn.vestingYears":        "VestingYears is the total vesting period. A whole number; 0 for fully vested at issue.",
 		},
 	})
-	zip.Describe("POST /v1/captable/shares/transfer", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/shares/transfer", zip.Doc{
 		Description: "Moves shares from one stakeholder to another.\n\nOmit `quantity` to transfer the whole certificate, which REASSIGNS it and mints\nno new share. Send a quantity below the amount held to SPLIT it — the source\ncertificate keeps the remainder, and a split additionally requires\n`certificateId` for the new certificate, which must be unique in the company.\nA quantity outside 1..held is refused, so a transfer can never over-issue.\n\nBoth outcomes answer 200: a transfer records a movement between holders and\nmints no security of its own, which is why this is not a 201 the way an\ninvestment is.",
 		Fields: map[string]string{
 			"captableShareTransfer.certificateId":   "CertificateID names the NEW certificate a partial transfer issues, and is\nrequired for one — a partial transfer without it is refused 400. It is unused\nby a full transfer, which reassigns the existing certificate.\n\nIt must be unique within the company; reusing one is refused 409. Declaring\nit is not optional in the way the tag suggests: omitting this field from the\nGo type would leave `quantity` accepted and every PARTIAL transfer answering\n\"certificateId is required\" with no way for a caller to supply it — the\nsilent-drop failure this whole conversion was blocked on, one field wide.",
@@ -484,10 +484,10 @@ func init() {
 			"captableTransferred.transferred":       "Transferred is how many shares moved.",
 		},
 	})
-	zip.Describe("POST /v1/captable/stakeholders", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable POST /v1/captable/stakeholders", zip.Doc{
 		Description: "Builds a zip handler that dispatches a fixed bundle route. readBody\ncontrols whether the JSON request body is decoded and passed as req.body.",
 	})
-	zip.Describe("PUT /v1/captable/company", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/captable PUT /v1/captable/company", zip.Doc{
 		Description: "Sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.",
 		Fields: map[string]string{
 			"captableCompanyUpdate.incorporationCountry": "IncorporationCountry is the ISO country the entity is incorporated in.\nOptional; omitted, null or empty clears it. Any JSON scalar is accepted\nand stored as its text.",

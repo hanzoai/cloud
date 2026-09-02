@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/deploy/applications", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/applications", zip.Doc{
 		Description: "Returns the fleet as an argocd ApplicationList: one\nprojected Application per operator App CR, carrying the image tag the CR\nDECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled\nhealth, and the sync verdict those two produce (declared == running ⇒ Synced,\nboth known and different ⇒ OutOfSync, either unknown ⇒ Unknown).\n\nIt is TENANT-SCOPED: a platform SuperAdmin reads every platform namespace, a\nvalidated org member reads only its own org's tenant namespace and only the App\nCRs labelled with its org, and anyone else is refused. A cross-tenant CR is\nnever projected into an answer.",
 		Fields: map[string]string{
 			"argoApp.apiVersion":           "APIVersion is the constant \"argoproj.io/v1alpha1\" — the shape, not the source.\nThese are projections of operator App CRs and Hanzo CD Applications; no\nargoproj.io object is stored anywhere behind this plane.",
@@ -53,7 +53,7 @@ func init() {
 			"argoSyncStatus.status":        "Status is the ArgoCD sync vocabulary, Capitalized: Synced, OutOfSync or\nUnknown. For an App CR it compares the tag the CR DECLARES against the tag\nthe cluster's Deployment is RUNNING — equal is Synced, both known and\ndifferent is OutOfSync, either unknown is Unknown. For a CD row it is CD's\nown git-versus-cluster verdict.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/applications/:name", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/applications/:name", zip.Doc{
 		Description: "Returns ONE projected argocd Application by name, with\nstatus.resources filled in from its reconciled resource tree — which is what\nmakes it the detail view rather than a row of the list.\n\nIt is TENANT-SCOPED, and a name that belongs to another org is reported NOT\nFOUND rather than refused: a 403 would confirm the application exists, so the\nroute would become a cross-tenant existence oracle. A name that is not a\nDNS-1123 label is a 400 before any cluster read.",
 		Fields: map[string]string{
 			"appRef.name":                  "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
@@ -95,7 +95,7 @@ func init() {
 			"argoSyncStatus.status":        "Status is the ArgoCD sync vocabulary, Capitalized: Synced, OutOfSync or\nUnknown. For an App CR it compares the tag the CR DECLARES against the tag\nthe cluster's Deployment is RUNNING — equal is Synced, both known and\ndifferent is OutOfSync, either unknown is Unknown. For a CD row it is CD's\nown git-versus-cluster verdict.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/applications/:name/resource-tree", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/applications/:name/resource-tree", zip.Doc{
 		Description: "Returns one application's argocd ApplicationTree: the\nobjects the operator reconciled from its App CR, reached by ownerRef — the\nDeployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress,\nHorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node\ncarrying its parent edges and its health.\n\nSecrets are DELIBERATELY not walked, so no materialized environment can ever\nappear in the tree. Tenant-scoped exactly like the application read: another\norg's name is not found, a malformed name is a 400.",
 		Fields: map[string]string{
 			"appRef.name":               "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
@@ -120,7 +120,7 @@ func init() {
 			"argoTree.orphanedNodes":    "OrphanedNodes are objects in the namespace belonging to no application.\nAlways empty: this walk reaches an object only THROUGH ownership from the App\nCR, so it can never hold one that is orphaned.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/applications/:name/revisions/:revision/metadata", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/applications/:name/revisions/:revision/metadata", zip.Doc{
 		Description: "Returns the argocd RevisionMetadata for one revision\nof one application — what the detail view shows beside a revision.\n\nAn App CR is IMAGE-pinned rather than commit-pinned: the deploy names an image\ntag, and the git source this projection reports is the display-only manifest\nrepo, not the application's own source. Nothing in this process can read a\ncommit's author or message for an arbitrary revision. So rather than 404 (which\nthe SPA turns into an error toast) or invent a git author, it answers the\nHONEST minimum: date is when the App CR was created, message is the revision\nasked for — with the empty revision and \"HEAD\" resolving to the image tag the\nCR declares — and author is empty. An over-long revision is truncated before it\nis echoed back.\n\nTenant-scoped exactly like the application read.",
 		Fields: map[string]string{
 			"argoRevisionMetadata.author":        "Author is the commit author. Always absent: an App CR pins an IMAGE, so this\nprocess has no commit to read one from and will not invent one.",
@@ -132,7 +132,7 @@ func init() {
 			"revisionRef.revision":               "Revision is the revision to describe, from the path. The empty revision and\n\"HEAD\" both mean \"whatever this application currently declares\".",
 		},
 	})
-	zip.Describe("GET /v1/deploy/applications/:name/syncwindows", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/applications/:name/syncwindows", zip.Doc{
 		Description: "Returns one application's argocd\nApplicationSyncWindowState — the answer to \"is anything blocking a sync of this\napplication right now?\".\n\nThis platform runs NO sync windows, so the answer is always the permissive\nempty one: canSync true, with no active and no assigned windows. The\napplication is still resolved first, so a name that is not the caller's is not\nfound rather than handed the static body — the endpoint discloses nothing about\nanother tenant's fleet.",
 		Fields: map[string]string{
 			"appRef.name":                     "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
@@ -141,7 +141,7 @@ func init() {
 			"argoSyncWindows.canSync":         "CanSync is whether a sync would be permitted at this moment. Always true —\nwith no windows there is nothing to deny it. A caller must not read this as\n\"a sync will succeed\"; it only means no window is blocking one.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/clusters", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/clusters", zip.Doc{
 		Description: "Returns the argocd ClusterList of the destinations the\ncaller's applications reconcile into: one entry per distinct destination\nserver, carrying the count of applications reconciling into it. The in-cluster\ndestination is always present, so an empty fleet still answers one cluster, and\nno cluster credential can appear — the projected type physically has no config\nfield.\n\nIt is TENANT-SCOPED and reads the SAME App CRs the applications list reads: a\nplatform SuperAdmin counts the whole fleet, a validated org member counts only\nits own org's applications, anyone else is refused.",
 		Fields: map[string]string{
 			"argoCluster.connectionState":       "ConnectionState is whether the destination is reachable.",
@@ -159,7 +159,7 @@ func init() {
 			"argoListMeta.resourceVersion":      "ResourceVersion is the k8s list version a watch would resume from. Always\nempty: every list on this plane is COMPUTED per request rather than read from\none etcd revision, so there is no point to resume from. The live view is the\nSSE stream, not a resumed watch.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/gitops", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/gitops", zip.Doc{
 		Description: "Lists every Hanzo CD Application in the cluster: the git source\neach one polls, the commit it last APPLIED, how its last sync operation ended,\nand its recent deploy history — newest deploy first, ordered by namespace then\nname.\n\nThis is the layer ABOVE the application board, and the two disagree in exactly\nthe case an operator most needs to see: main carries a new image pin, CD has\nnot applied that commit yet, so every App CR still declares the old tag and the\napplication board is legitimately \"Synced\" while the deploy has not landed.\nOnly the applied revision here can show that.\n\ninstalled is false — with a reason and an empty list — when the CD CRD is not\nserved in this cluster. That is a FACT about the cluster rather than a failure\nof the request, so the caller can say \"no CD plane here\" instead of rendering\nan error it cannot act on; a genuine transport or RBAC failure still errors.\n\nRead-only, and platform SuperAdmin only: the CD plane is fleet infrastructure\nwith no tenant dimension. This view observes CD and never drives it — the sync\npolicy is automated with self-heal, and the actionable verb an operator has is\nthe per-application reconcile at POST /v1/deploy/applications/{name}/sync.",
 		Fields: map[string]string{
 			"GitOpsApp.automated":        "Automated is whether CD applies new commits without being asked. It reads the\nPRESENCE of spec.syncPolicy.automated, which is a block rather than a\nboolean; false means drift is reported and nothing moves.",
@@ -192,7 +192,7 @@ func init() {
 			"GitOpsPlane.reason":         "Reason says why the plane is absent, in words a caller can show. Empty when\nInstalled.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/health", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/health", zip.Doc{
 		Description: "Health reports whether this deployment can observe the delivery plane.\n\n200 only when the Kubernetes API answers AND the App custom resource is served;\n503 with the same shape otherwise, naming which half failed. It reports BOOLEANS\nand never the underlying error, because the route is unauthenticated — liveness\nmust be probe-able without a token — and a raw client error can disclose the\napiserver address or an RBAC detail. That detail is logged server-side instead.",
 		Fields: map[string]string{
 			"deployHealth.crd":     "CRD reports whether the App custom resource is served and listable. Absent\nwhen the apiserver was unreachable, because then it is unknown rather than\nfalse.",
@@ -201,7 +201,7 @@ func init() {
 			"deployHealth.status":  "Status is `ok` when this deployment can serve the delivery plane, and\n`degraded` otherwise. It agrees with the HTTP status by construction — see\nStatusCode.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/projects", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/projects", zip.Doc{
 		Description: "Returns the argocd AppProjectList this console groups and\nfilters applications by. Projects are owned by Hanzo IAM rather than by argocd,\nso they are REFLECTED read-only from the IAM project store and nothing is\npersisted here: a validated org member gets its own organization's projects and\na platform SuperAdmin gets every organization's.\n\nA SuperAdmin whose IAM store is not reachable falls back to the real\nargoproj.io AppProject CRs when that CRD is served, and otherwise to one\npermissive synthesized project per distinct project name the App CRs declare.\nA project named \"default\" is always present, because that is what an App CR\ncarrying no project label projects to.",
 		Fields: map[string]string{
 			"argoDestination.name":                     "ArgoCD allows a destination by cluster name; omitted for the in-cluster projection.",
@@ -228,7 +228,7 @@ func init() {
 			"argoProjectSpec.sourceRepos":              "SourceRepos are the git repos applications in this project may pull from.\n[\"*\"] for every project this plane synthesizes or reflects from IAM: the\nboundary that actually holds on this platform is the IAM org, resolved before\na row is ever projected, so the projected fence is deliberately permissive\nand is NOT an authorization statement.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/session/userinfo", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/session/userinfo", zip.Doc{
 		Description: "Answers \"is this browser signed in, and if not where does it\nsign in?\" — the dashboard SPA's bootstrap question, and the only route on this\nplane that answers for an anonymous caller.\n\nThe anonymous answer carries loggedIn:false and a URL and NOTHING else: no\nusername, no org, no groups, no issuer, no hint about who the caller might be or\nwhat exists in the cluster. Answering it costs nothing (the caller already knows\nwhether it holds a cookie) and withholding it costs the whole sign-in journey.\n\nThe predicate is the platform SuperAdmin fact — the SAME one every other route\nhere gates on, minted from a validated principal whose org is the reserved admin\norg — so a validated-but-not-SuperAdmin caller is reported as NOT signed in,\nwhich is the truth as this console defines it: they cannot use it.",
 		Fields: map[string]string{
 			"sessionUser.groups":    "Groups is the caller's group list, always empty here: this console\nauthorizes on the platform SuperAdmin fact alone, not on argocd RBAC groups.\nAbsent for an anonymous caller.",
@@ -239,7 +239,7 @@ func init() {
 			"sessionUser.username":  "Username is the validated principal's user ID — the opaque gateway id, which\nis what argocd's UI renders as the signed-in user here — or \"admin\" when the\nprincipal carries none. Absent when anonymous.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/settings", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/settings", zip.Doc{
 		Description: "Returns the argocd AuthSettings object the dashboard SPA\nawaits before its first render.\n\nEvery value is a CONSTANT of this projection rather than configuration read\nfrom anywhere: the SPA's own login form is reported disabled and its OIDC\nconfig null because Hanzo IAM owns identity at the edge and this console's\nsign-in is GET /v1/deploy/login, and every argocd feature the projection does\nnot implement — status badges, Dex connectors, config-management plugins,\nkustomize versions, the exec terminal, apps-in-any-namespace, the hydrator,\nsync-with-replace — is reported off. Platform SuperAdmin only.",
 		Fields: map[string]string{
 			"consoleSettings.appsInAnyNamespaceEnabled": "AppsInAnyNamespaceEnabled is false: applications are projected from operator\nApp CRs in the platform namespaces, never declared in an arbitrary one.",
@@ -260,13 +260,13 @@ func init() {
 			"consoleSettings.userLoginsDisabled":        "UserLoginsDisabled is true: the SPA must not render its own username/password\nform. Signing in goes through IAM, at GET /v1/deploy/login.",
 		},
 	})
-	zip.Describe("GET /v1/deploy/stream/applications", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/stream/applications", zip.Doc{
 		Description: "Is GET /v1/deploy/stream/applications — the applications watch as\nSSE. Tenant-scoped (resolveScope): a SuperAdmin streams the whole fleet, a validated\norg member streams ONLY its own org's apps; anyone else 403s. 503 when no cluster\nclient is configured.",
 	})
-	zip.Describe("GET /v1/deploy/stream/applications/:name/resource-tree", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/stream/applications/:name/resource-tree", zip.Doc{
 		Description: "Is GET /v1/deploy/stream/applications/:name/resource-tree — the\nLIVE ApplicationTree as SSE. TENANT-SCOPED: resolveScope + findNamespace run BEFORE any\nemission (a cross-tenant name 404s with no SSE opened, an unvalidated caller 403s), then\nthe tree is emitted once and refreshed on the keep-alive interval, honoring ctx cancel.",
 	})
-	zip.Describe("GET /v1/deploy/version", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy GET /v1/deploy/version", zip.Doc{
 		Description: "Returns the argocd VersionMessage the dashboard SPA reads at\nbootstrap. There is no argocd binary behind this plane — it is a projection\nover operator App CRs — so the fields say so rather than describing a build:\nVersion names the projection, BuildDate is the moment this response was\ngenerated, and Compiler/Platform/GoVersion are the constants the SPA tolerates\nrather than facts about this process. Platform SuperAdmin only.",
 		Fields: map[string]string{
 			"versionMessage.BuildDate": "BuildDate is the time THIS RESPONSE was generated, in RFC 3339 — not a build\ntimestamp. There is no argocd build here to report one for.",
@@ -276,7 +276,7 @@ func init() {
 			"versionMessage.Version":   "Version names the projection, \"hanzo-cd (projection)\".",
 		},
 	})
-	zip.Describe("POST /v1/deploy/applications/:name/rollback", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy POST /v1/deploy/applications/:name/rollback", zip.Doc{
 		Description: "Serves the console's rollback control, and today it\nrequests a reconcile and nothing more.\n\nThe opening verb is not style. zipdoc drops a leading CamelCase symbol only\nwhen a plain verb follows it and never before a copula (internal/zipdoc/\nextract.go:811-824, \"CompleteDeployment IS the CI completion hook\" would\notherwise become \"Is the CI completion hook\") — so \"RollbackDeployApplication\nis …\" would publish a Go symbol no caller can see into the summary an SDK\ndocstring, an MCP tool list and a CLI help line all show.\n\nIt performs exactly what the sync action performs — the same stamp on the same\nApp CR, the same application re-projected — and it does NOT select, pin or\nrevert to a prior image tag. That is the one thing to know before wiring\nanything to it: the name is the console's, the behaviour is the sync. Pinning a\nprevious release rides the release client, which this address does not call yet.\n\nSame gate, same refusals and the same absent request body as the sync it shares\na core with.",
 		Fields: map[string]string{
 			"appRef.name":                  "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
@@ -318,7 +318,7 @@ func init() {
 			"argoSyncStatus.status":        "Status is the ArgoCD sync vocabulary, Capitalized: Synced, OutOfSync or\nUnknown. For an App CR it compares the tag the CR DECLARES against the tag\nthe cluster's Deployment is RUNNING — equal is Synced, both known and\ndifferent is OutOfSync, either unknown is Unknown. For a CD row it is CD's\nown git-versus-cluster verdict.",
 		},
 	})
-	zip.Describe("POST /v1/deploy/applications/:name/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy POST /v1/deploy/applications/:name/sync", zip.Doc{
 		Description: "Asks the operator to reconcile ONE application now.\n\nIt stamps a sync-requested timestamp onto the application's App CR, which the\noperator's watch observes, and answers the application re-projected. It ASKS,\nit does not apply: the operator reconciles on its own clock, so a 200 means the\nrequest landed, not that the rollout finished — the returned row's running\nversion still lags until it does.\n\nSuperAdmin-only and fail-closed, and the gate is INSIDE the op rather than in\nmiddleware wrapped around the route. That is a correctness requirement, not a\npreference: this op is also reached by POST /mcp and by the by-name call plane,\nneither of which runs route middleware, so a gate that only the REST projection\nruns would publish an unguarded alias of a fleet-mutating write. It reads no\nrequest body — the URL names the application and nothing else does. An unknown\nname is a 404 (never a 403, which would confirm the application exists), a name\nthat is not a DNS-1123 label is a 400, and no cluster client is a 503.",
 		Fields: map[string]string{
 			"appRef.name":                  "Name is the application to read, from the path. It must be a DNS-1123 label\n(lowercase alphanumerics and hyphens, starting and ending alphanumeric) —\nevery operator App CR's metadata.name satisfies that, and anything else is a\n400 rather than a lookup.",
@@ -360,14 +360,14 @@ func init() {
 			"argoSyncStatus.status":        "Status is the ArgoCD sync vocabulary, Capitalized: Synced, OutOfSync or\nUnknown. For an App CR it compares the tag the CR DECLARES against the tag\nthe cluster's Deployment is RUNNING — equal is Synced, both known and\ndifferent is OutOfSync, either unknown is Unknown. For a CD row it is CD's\nown git-versus-cluster verdict.",
 		},
 	})
-	zip.Describe("POST /v1/deploy/logout", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy POST /v1/deploy/logout", zip.Doc{
 		Description: "Ends the console session on this host.\n\nIt clears this console's session cookie and answers the signed-out state with\nthe sign-in URL to start again. IAM's own session is untouched — this ends the\nconsole session only, so signing back in may not prompt for credentials.\n\nIt is a POST because it CHANGES STATE. As a GET it was reachable by a\ncross-site top-level navigation, which a SameSite=Lax cookie still rides, so\nany page could sign a SuperAdmin out; a POST is not carried cross-site by that\ncookie. It reads no request body and takes no argument: the session it ends is\nthe one the request already carries.",
 		Fields: map[string]string{
 			"sessionEnded.loggedIn": "LoggedIn is always false — this is the answer to having just signed out, so\nit states the resulting session state rather than reporting the request's\noutcome. It is not omitempty: false is the whole answer.",
 			"sessionEnded.loginUrl": "LoginURL is where to sign in again. Always present, because a caller that\nhas just signed out is exactly the caller who needs it.",
 		},
 	})
-	zip.Describe("POST /v1/deploy/reconcile", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/deploy POST /v1/deploy/reconcile", zip.Doc{
 		Description: "Renders the configured git source and applies it to the\ncluster, once.\n\nIt runs one full GitOps sync through the embedded engine — render the\nconfigured repo, ref and path, then three-way server-side apply with scoped\nprune — and answers the revision it applied, the source it came from, the\ndeclared/synced/pruned/failed counts and a per-resource result. This is the\nWRITE half of the plane: it mutates live cluster objects and, with prune\nenabled, deletes objects the source no longer declares.\n\nSuperAdmin-only and fail-closed, with the gate INSIDE the op because a typed op\nis also reached by POST /mcp and by the by-name call plane, where no route\nmiddleware runs. The git source is read AS THE PLATFORM, not as the caller: the\ncoordinate is this deployment's own configuration and never a parameter, which\nis why the op reads no request body at all. A deployment with the engine\nswitched off, or with no usable cluster config, answers 503; a failure to\nstart, render or sync is a 502.",
 		Fields: map[string]string{
 			"appliedResource.message":  "Message is the engine's own sentence about this object — the apiserver's\nrefusal on a failure, and typically empty on success. It is for a human\nreading a failed run, not a value to branch on.",

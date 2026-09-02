@@ -139,6 +139,7 @@
         "properties": {
           "bytes": {
             "description": "Bytes is the store's size on disk, present only once it exists. It is what\nthis Base occupies, not a quota.",
+            "format": "int64",
             "type": "integer"
           },
           "exists": {

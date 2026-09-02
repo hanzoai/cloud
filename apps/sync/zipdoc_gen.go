@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	zip.Describe("DELETE /v1/sync/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync DELETE /v1/sync/:id", zip.Doc{
 		Description: "Delete removes one sync and tears down the outbound mirror it derived, answering\n204. The teardown is the point: without it an unsynced repository would keep\nforce-pushing to the upstream it is no longer linked to. Org-scoped, so another\ntenant's id is the same 404 an unknown id gives.",
 		Fields: map[string]string{
 			"syncRef.id": "ID is the sync to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"sync_1"}`),
 	})
-	zip.Describe("GET /v1/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync GET /v1/sync", zip.Doc{
 		Description: "List returns every sync link the caller's org has, each with its two endpoints, its\ndirection and trigger policy, and the time it last reconciled. Scoped to the\ncaller's own org — another tenant's links are structurally unreachable.",
 		Fields: map[string]string{
 			"endpointView.connector": "Connector names a connected account from the org's connector registry, when the\nendpoint reaches its provider through one. Absent means the locator stands on\nits own; the pair below is always sufficient either way.",
@@ -34,7 +34,7 @@ func init() {
 			"syncView.updatedAt":     "UpdatedAt is bumped by every reconcile, so it reads as the LAST-SYNCED time\nrather than the last edit. Absent until the first one runs.",
 		},
 	})
-	zip.Describe("GET /v1/sync/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync GET /v1/sync/:id", zip.Doc{
 		Description: "Get returns one sync by id. It is org-scoped: an id belonging to another tenant is\nthe same 404 an unknown id gives, so a probe learns nothing about what exists.",
 		Fields: map[string]string{
 			"endpointView.connector": "Connector names a connected account from the org's connector registry, when the\nendpoint reaches its provider through one. Absent means the locator stands on\nits own; the pair below is always sufficient either way.",
@@ -53,7 +53,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sync_1"}`),
 	})
-	zip.Describe("PATCH /v1/sync/:id", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync PATCH /v1/sync/:id", zip.Doc{
 		Description: "Patch updates one sync's mutable policy — direction, trigger and actor — in place.\nThe endpoints and the kind are immutable: re-pointing a sync is a delete and a\ncreate, so a link can never silently start syncing somewhere else. A field the\nrequest omits is left as it was. Changing the direction immediately reconciles the\nderived outbound mirror, so turning push off stops the upstream being written to\nrather than merely recording the intent.",
 		Fields: map[string]string{
 			"endpointReq.connector":  "Connector names the stored credential to reach this endpoint with.",
@@ -81,7 +81,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"sync_1","direction":"pull"}`),
 	})
-	zip.Describe("POST /git/import", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync POST /git/import", zip.Doc{
 		Description: "Creates the repo on the forge and advances the upstream into it,\nfor the CALLER's org.\n\nThe org is never read off the argument: it is the identity the edge minted and\nthe plane carried, so a caller holding one org's context cannot create a repo\nin another's namespace.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"ImportIn.cloneUrl":  "CloneURL is the upstream to mirror from.",
@@ -92,7 +92,7 @@ func init() {
 			"Imported.repo":      "Repo names what was imported.",
 		},
 	})
-	zip.Describe("POST /git/inbound", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync POST /git/inbound", zip.Doc{
 		Description: "Advances ONE ref of the CALLER's repo from an upstream push.\n\nThe forge is canonical: the push that carries the update is non-forcing, so a\ndivergence comes back as Conflict with the forge untouched rather than as an\nerror — the caller needs to know it diverged, not to retry into an overwrite.\nThe org is the caller's plane identity, so a push routed to one org can never\nadvance another's refs.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"InboundIn.cloneUrl": "CloneURL is the upstream to fetch the ref from.",
@@ -108,14 +108,14 @@ func init() {
 			"Synced.noOp":        "NoOp is true when native was already at that tip.",
 		},
 	})
-	zip.Describe("POST /git/mirror", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync POST /git/mirror", zip.Doc{
 		Description: "Declares (Enabled) or withdraws (!Enabled) one outbound mirror\ntarget on a repo of the CALLER's org, idempotently either way.\n\nIt declares the target and nothing more: the pushing happens on the next\nadvance of that repository, so a target that exists is a fact about the repo\nrather than a job somebody has to keep running. EnsureMirror is the same func\nthe in-process controller exposes, so a URL crossing the plane passes the\nidentical gate — https, no userinfo, on the outbound allowlist — and a remote\ncaller cannot declare a push a local one could not.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"MirrorIn.enabled": "Enabled registers the target when true and removes it when false.",
 			"MirrorIn.url":     "URL is the outbound target to push to.",
 		},
 	})
-	zip.Describe("POST /git/status", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync POST /git/status", zip.Doc{
 		Description: "Reports which of the named repos the forge holds for the CALLER's\norg and which a prior advance left in conflict.\n\nThe app that DRAWS the repo list is integrations (it has the provider's\ncatalogue of what could be imported); the app that knows what WAS is this one.\n\nThe reply is a SLICE, not a map: a map cannot cross this wire, so each row\ncarries the name it answers for. A name with nothing to say is ABSENT rather\nthan a false row — the caller reads absence as not-imported, which is the same\nvalue the in-process leg's zero entry yields, so neither leg can be told from\nthe other by its result.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"RepoStatus.conflict":     "Conflict is true when a branch diverged on a prior inbound sync and native\nwas preserved.",
@@ -125,7 +125,7 @@ func init() {
 			"StatusIn.project":        "Project is the sub-scope; empty means the org's default store.",
 		},
 	})
-	zip.Describe("POST /sync/run", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync POST /sync/run", zip.Doc{
 		Description: "Reconciles every sync of the CALLER's org whose source matches the\nevent, answering how many changed and how many were skipped.\n\nThe org is the caller's plane identity and never the argument — plane.SyncIn has\nno org field, deliberately, because a trigger able to state the org could\nreconcile another tenant's repositories. Anonymous is refused rather than\ndefaulted: an event arriving with no principal must fail, not sync somebody's\nrepos.\n\nIt calls reconcileEvent, never cloud.Sync. cloud.Sync now falls through to THIS\nop when the local one is nil, so a process serving it that dispatched through\nit would dial its own socket and answer itself, forever.\n\nA named handler, not a closure, so zipdoc can lift this prose into the registry.",
 		Fields: map[string]string{
 			"SyncIn.actor":    "Actor is who made the upstream push; the engine's loop guard compares it to\nthe sync's own actor.",
@@ -141,7 +141,7 @@ func init() {
 			"SyncRan.skipped": "Skipped is the number resolved but skipped — loop guard, idempotent, or\ndirection off.",
 		},
 	})
-	zip.Describe("POST /v1/sync", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync POST /v1/sync", zip.Doc{
 		Description: "Create declares a sync between two endpoints and returns it. It is an UPSERT:\nre-declaring the same source and target updates that link rather than piling up\nduplicates, so a console that re-submits is safe. The org comes from the validated\nprincipal, never from the request, so a sync can only ever bind endpoints inside\nthe caller's own org. A git source must be an https clone URL on the provider's own\nhost with no embedded credentials; a target left empty is derived as a native\nrepository named after the source. With run=true the first reconcile is queued in\nthe background, so a large initial import never blocks this response.",
 		Fields: map[string]string{
 			"endpointReq.connector":  "Connector names the stored credential to reach this endpoint with.",
@@ -169,7 +169,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"source":{"provider":"github","locator":"https://github.com/acme/site"},"run":true}`),
 	})
-	zip.Describe("POST /v1/sync/:id/run", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/sync POST /v1/sync/:id/run", zip.Doc{
 		Description: "Run reconciles one sync now — the manual re-sync, and the initial import for a link\ncreated without run=true. The work is handed to a bounded background worker and the\ncall answers 202 immediately, so a large mirror-in never holds the request open;\nqueued=true means accepted, not finished.",
 		Fields: map[string]string{
 			"syncQueued.id":     "ID is the sync the reconcile was queued for.",

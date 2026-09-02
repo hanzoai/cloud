@@ -64,6 +64,7 @@
             "required": false,
             "description": "Limit caps the rows returned, clamped to 1000. Defaults to 200, which is also\nwhat a non-positive or unparseable value takes.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 50
@@ -516,6 +517,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is unix seconds of the document's last write, and the key the\nboard sorts on, newest first.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -525,6 +527,7 @@
         "properties": {
           "count": {
             "description": "Count is the number of rows in THIS page — never the org's total.",
+            "format": "int64",
             "type": "integer"
           },
           "data": {

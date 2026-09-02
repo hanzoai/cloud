@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	zip.Describe("GET /v1/ai/mcp/tools", zip.Doc{
+	zip.Describe("github.com/hanzoai/cloud/apps/ai GET /v1/ai/mcp/tools", zip.Doc{
 		Description: "Tools reports what THIS PROCESS's MCP server carries: how many tools its own\nregistry projects, optionally their names, and which subsystems this process\ncomposed. It is the answer to \"is this MCP server up and does it have anything\nbehind it\" — a question a status code cannot answer, since an empty server and\na full one are both 200. What the FLEET's server carries is the fleet server's\nown answer: POST /v1/mcp, tools/list, which asks every subsystem and names the\nones that did not reply.",
 		Fields: map[string]string{
 			"aiMCPApp.name":      "Name is the subsystem, as the manifest names it.",

@@ -250,6 +250,7 @@
           },
           "order": {
             "description": "Order is where the category sits among its siblings, ascending.",
+            "format": "int64",
             "type": "integer"
           },
           "owner": {
@@ -305,6 +306,7 @@
           },
           "order": {
             "description": "Order is where the taxon sits within its category, ascending.",
+            "format": "int64",
             "type": "integer"
           },
           "owner": {
@@ -360,6 +362,7 @@
           },
           "order": {
             "description": "Order is where the category sits among its siblings, ascending.",
+            "format": "int64",
             "type": "integer"
           },
           "summary": {
@@ -413,6 +416,7 @@
           },
           "order": {
             "description": "Order is where it sits within its category, ascending.",
+            "format": "int64",
             "type": "integer"
           },
           "published": {

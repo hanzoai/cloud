@@ -36,6 +36,7 @@
             "required": false,
             "description": "Days is how far back to measure the organisation's own coverage, 1 to 400.\nZero takes thirty.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             },
             "example": 30
@@ -384,10 +385,12 @@
         "properties": {
           "bound": {
             "description": "Bound is the most they can hold. It is a per-organisation bound: at it, this\norganisation degrades and no other one notices.",
+            "format": "int64",
             "type": "integer"
           },
           "forgotten": {
             "description": "Forgotten is how many of its own subjects have been dropped to stay inside\nthat bound. Each one reads as inactive until it is active again.",
+            "format": "int64",
             "type": "integer"
           },
           "saturated": {
@@ -396,6 +399,7 @@
           },
           "subjects": {
             "description": "Subjects is how many of this organisation's subjects the aggregates hold.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -409,10 +413,12 @@
           },
           "review": {
             "description": "Review is the share of the stream that may be sent for examination, in\n(0, 0.5]. The alert threshold is derived from it as a quantile of the scores\nactually observed, so the level is governed rather than tuned.",
+            "format": "double",
             "type": "number"
           },
           "sample": {
             "description": "Sample is the share of below-the-line events retained for review, in\n[0, 1]. It is the instrument that measures what the model missed; there are\nno labels, so nothing else can.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -435,22 +441,27 @@
           },
           "n": {
             "description": "N is how many subject-days went into it.",
+            "format": "uint64",
             "type": "integer"
           },
           "orgs": {
             "description": "Orgs is how many organisations contributed, each weighted exactly one vote\nwhatever its size. It is published so a reader can judge the band rather\nthan trust it.",
+            "format": "uint32",
             "type": "integer"
           },
           "q10": {
             "description": "Q10 is the quiet end of the network's day: a tenth of contributing\norganisations sit at or below it.",
+            "format": "double",
             "type": "number"
           },
           "q50": {
             "description": "Q50 is the network's median day.",
+            "format": "double",
             "type": "number"
           },
           "q90": {
             "description": "Q90 is the busy end: a tenth of contributing organisations sit at or above\nit. It is the highest level published.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -494,6 +505,7 @@
         "properties": {
           "baseline": {
             "description": "Baseline is the number it was measured against — always this\norganisation's own history, never a fixed limit and never another\norganisation's.",
+            "format": "double",
             "type": "number"
           },
           "citation": {
@@ -510,6 +522,7 @@
           },
           "observed": {
             "description": "Observed is the raw number the coordinate was computed from.",
+            "format": "double",
             "type": "number"
           },
           "severity": {
@@ -518,6 +531,7 @@
           },
           "share": {
             "description": "Share is this feature's part of the score, in [0,1]. Zero across every\ncause means no single feature accounts for the alert and the combination\ndoes; the causes are then ordered by how far each sits from unremarkable.",
+            "format": "double",
             "type": "number"
           },
           "typology": {
@@ -530,6 +544,7 @@
           },
           "without": {
             "description": "Without is the score the same event would have received with this\ncoordinate at its neutral value — the counterfactual itself.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -555,6 +570,7 @@
           },
           "nano": {
             "description": "Nano is the value moved, in nano-USD. Omit it for an event that moves no\nmoney: the value features then read BLIND rather than being told the amount\nwas zero, and the difference is reported on the model state.",
+            "format": "int64",
             "type": "integer"
           },
           "peer": {
@@ -584,6 +600,7 @@
         "properties": {
           "learned": {
             "description": "Learned is how many of the events the model actually learned from, and is\nalso what the call is metered at: one screen per event learned from. It is\nthe batch minus the events already in this organisation's record, so a\nretried batch reports — and is charged — zero.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -593,6 +610,7 @@
         "properties": {
           "blind": {
             "description": "Blind is how often this dimension took that neutral value for THIS\norganisation.",
+            "format": "int64",
             "type": "integer"
           },
           "citation": {
@@ -609,6 +627,7 @@
           },
           "neutral": {
             "description": "Neutral is the value the coordinate takes when the data cannot support it.",
+            "format": "double",
             "type": "number"
           },
           "severity": {
@@ -638,6 +657,7 @@
           },
           "blind": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "Blind counts, per feature, how often it took its neutral value for want of\ndata. A feature blind on most traffic is not contributing whatever the\ninventory claims for it.",
@@ -645,6 +665,7 @@
           },
           "cut": {
             "description": "Cut is the threshold in force, derived from Stated as a quantile of the\nscores actually observed.",
+            "format": "double",
             "type": "number"
           },
           "descends": {
@@ -653,10 +674,12 @@
           },
           "disposed": {
             "description": "Disposed is how many published values retention has taken. It is DERIVED from\nthe lowest surviving sequence, so it cannot drift from what it describes, and\nit is reported because a retention that binds is a fact an operator must be\nable to read rather than a silence.",
+            "format": "int64",
             "type": "integer"
           },
           "learned": {
             "description": "Learned is how many events the model has learned from.",
+            "format": "int64",
             "type": "integer"
           },
           "live": {
@@ -665,14 +688,17 @@
           },
           "policy": {
             "description": "Policy is the version of the decision regime this model is deciding under,\nfrom your organisation's own policy history (GET /v1/risk/policy). Every\nscore cites it, so it is the join between a past decision and the appetite\nthat produced its threshold. Zero means no regime has ever been stated and\nthe default posture — shadow — is in force.",
+            "format": "int64",
             "type": "integer"
           },
           "realised": {
             "description": "Realised is the share that actually was. Reading it beside Stated is what\nmakes the appetite a measured commitment rather than an intention.",
+            "format": "double",
             "type": "number"
           },
           "refused": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "Refused counts events the model would not score, by reason. None of them\nwas examined; a refusal is counted, never silent.",
@@ -680,6 +706,7 @@
           },
           "sample": {
             "description": "Sample is the share of below-the-line events retained for review, which is\nhow the miss rate is measured rather than assumed.",
+            "format": "double",
             "type": "number"
           },
           "saturated": {
@@ -692,6 +719,7 @@
           },
           "stated": {
             "description": "Stated is the share of the stream this organisation said may be examined.",
+            "format": "double",
             "type": "number"
           },
           "surface": {
@@ -728,10 +756,12 @@
           },
           "learned": {
             "description": "Learned is how many events are behind the masses.",
+            "format": "int64",
             "type": "integer"
           },
           "sequence": {
             "description": "Sequence is this value's place in YOUR organisation's own history, from 1 and\ncontiguous until retention disposes of the oldest.",
+            "format": "int64",
             "type": "integer"
           },
           "shape": {
@@ -753,14 +783,17 @@
           },
           "buckets": {
             "description": "Buckets is how many five-minute buckets of this organisation's surface were\nmeasured.",
+            "format": "int64",
             "type": "integer"
           },
           "max": {
             "description": "Max is the largest value it reached in the window.",
+            "format": "double",
             "type": "number"
           },
           "mean": {
             "description": "Mean is the dimension's average where it was present.",
+            "format": "double",
             "type": "number"
           },
           "name": {
@@ -769,6 +802,7 @@
           },
           "present": {
             "description": "Present is in how many of them the dimension carried a value at all.",
+            "format": "int64",
             "type": "integer"
           },
           "source": {
@@ -786,10 +820,12 @@
         "properties": {
           "changes": {
             "description": "Changes is how many DISTINCT regimes may be adopted per Window. A restatement\nidentical to the regime in force mints no version and is not counted against\nit.",
+            "format": "int64",
             "type": "integer"
           },
           "disposed": {
             "description": "Disposed is how many versions retention has taken. It is NOT a silence: a\nhistory bounded on disk must say what it no longer holds, because a decision\nciting a disposed version can no longer be reconstructed from this record.",
+            "format": "int64",
             "type": "integer"
           },
           "history": {
@@ -801,10 +837,12 @@
           },
           "retained": {
             "description": "Retained is how many versions this organisation's history holds at most,\nderived from the byte budget its rows are a multiple of.",
+            "format": "int64",
             "type": "integer"
           },
           "version": {
             "description": "Version is the version in force — the one every score currently cites. Zero\nmeans no regime has ever been stated and the default posture, shadow, is in\nforce.",
+            "format": "int64",
             "type": "integer"
           },
           "window": {
@@ -830,14 +868,17 @@
           },
           "review": {
             "description": "Review is the share of the stream the regime states may be examined. The\nthreshold in force is derived from it, which is why a decision is only\ndefensible against the version that produced it.",
+            "format": "double",
             "type": "number"
           },
           "sample": {
             "description": "Sample is the share of below-the-line events the regime retains for review.",
+            "format": "double",
             "type": "number"
           },
           "version": {
             "description": "Version names this regime in this organisation's history.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -884,10 +925,12 @@
           },
           "cut": {
             "description": "Cut is the threshold in force, derived from the stated appetite as a\nquantile of the scores actually observed rather than fixed at a number.",
+            "format": "double",
             "type": "number"
           },
           "policy": {
             "description": "Policy is the version of your organisation's decision regime this verdict\nwas reached under, from its own policy history (GET /v1/risk/policy). Cut is\nderived from the appetite that version states, so it is the record that makes\nthis decision reconstructible after the appetite is restated. Zero means no\nregime has ever been stated and the default posture — shadow — was in force.",
+            "format": "int64",
             "type": "integer"
           },
           "refusal": {
@@ -896,6 +939,7 @@
           },
           "score": {
             "description": "Score is where the event sits in the tenant's own density: 0 where its\nrecent behaviour is densest, 1 where there is none of it.",
+            "format": "double",
             "type": "number"
           },
           "scored": {
@@ -924,6 +968,7 @@
         "properties": {
           "days": {
             "description": "Days is how much of the organisation's own history to replay, 1 to 400.\nZero takes thirty.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -941,6 +986,7 @@
           },
           "events": {
             "description": "Events is how much of this organisation's history was replayed.",
+            "format": "int64",
             "type": "integer"
           },
           "fitted": {
@@ -981,10 +1027,12 @@
         "properties": {
           "candidates": {
             "description": "Candidates is how many model shapes will be tried.",
+            "format": "int64",
             "type": "integer"
           },
           "events": {
             "description": "Events is how much of the organisation's own history the run will replay.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -998,6 +1046,7 @@
         "properties": {
           "folded": {
             "description": "Folded is how many buckets of the tenant's own feature surface were folded\ninto the model when it became resident.",
+            "format": "int64",
             "type": "integer"
           },
           "gap": {
@@ -1006,14 +1055,17 @@
           },
           "refused": {
             "description": "Refused is how many buckets of this organisation's own surface the fold\ncould not fold, because a subject on them is longer than this plane's own\nfield bound. It is history the model does not have, said out loud.",
+            "format": "int64",
             "type": "integer"
           },
           "replayed": {
             "description": "Replayed is how many of this organisation's own recorded observations\nrebuilt its sliding aggregates when the model became resident. It is what\nsays a rollout was a rebuild rather than a blindness: the aggregates are a\nprojection of a durable record, so a restart costs a replay and not a\ncontrol.",
+            "format": "int64",
             "type": "integer"
           },
           "rolled": {
             "description": "Rolled is how many windows of this organisation's own source planes —\nproduct events, captured failures, metered inference — were rolled up into\nits feature surface before that fold. Zero with no gap means the surface was\nalready current, which is a different fact from the rollup never running.",
+            "format": "int64",
             "type": "integer"
           },
           "window": {
@@ -1027,10 +1079,12 @@
         "properties": {
           "blend": {
             "description": "Blend is how much of a closing window folds into the reference: 1 replaces\nit outright, less makes the reference expensive to move.",
+            "format": "double",
             "type": "number"
           },
           "depth": {
             "description": "Depth is how deep each tree is. With Trees it sets how finely the space is\npartitioned, and therefore how much history it takes to fill.",
+            "format": "int64",
             "type": "integer"
           },
           "family": {
@@ -1039,14 +1093,17 @@
           },
           "review": {
             "description": "Review is the appetite this shape was tried at.",
+            "format": "double",
             "type": "number"
           },
           "trees": {
             "description": "Trees is how many half-space trees the ensemble holds.",
+            "format": "int64",
             "type": "integer"
           },
           "window": {
             "description": "Window is how many events make one reference window.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1056,25 +1113,30 @@
         "properties": {
           "alerted": {
             "description": "Alerted is how many of those it would have raised.",
+            "format": "int64",
             "type": "integer"
           },
           "curve": {
             "description": "Curve is the realised alert rate over successive tenths of the history —\nthe learning curve, which says whether the shape settled or is still moving.",
             "items": {
+              "format": "double",
               "type": "number"
             },
             "type": "array"
           },
           "fit": {
             "description": "Fit ranks the shape, smaller being better: the relative miss of the stated\nappetite, plus flat penalties for never warming and for saturating, plus the\nshare of coordinates that were blind.",
+            "format": "double",
             "type": "number"
           },
           "learned": {
             "description": "Learned is how many events the shape learned from during the replay.",
+            "format": "int64",
             "type": "integer"
           },
           "realised": {
             "description": "Realised is what that appetite actually produced. The distance between the\ntwo is what the search is searching over.",
+            "format": "double",
             "type": "number"
           },
           "saturated": {
@@ -1083,10 +1145,12 @@
           },
           "scored": {
             "description": "Scored is how many it was able to score.",
+            "format": "int64",
             "type": "integer"
           },
           "stated": {
             "description": "Stated is the appetite the shape was tried at.",
+            "format": "double",
             "type": "number"
           },
           "topology": {
@@ -1104,6 +1168,7 @@
         "properties": {
           "baseline": {
             "description": "Baseline is what Observed was measured against: this organisation's own\nhistory for this subject.",
+            "format": "double",
             "type": "number"
           },
           "blind": {
@@ -1116,6 +1181,7 @@
           },
           "observed": {
             "description": "Observed is the raw number X was computed from, quoted so the coordinate\nreads back as a sentence rather than a bare ratio.",
+            "format": "double",
             "type": "number"
           },
           "unit": {
@@ -1124,6 +1190,7 @@
           },
           "x": {
             "description": "X is the coordinate in the model space, always dimensionless.",
+            "format": "double",
             "type": "number"
           }
         },

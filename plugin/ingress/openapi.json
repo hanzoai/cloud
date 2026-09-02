@@ -650,6 +650,7 @@
           },
           "weight": {
             "description": "Weight is this member's share of the round-robin; must be \u003e= 0.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -698,6 +699,7 @@
           },
           "priority": {
             "description": "Priority orders routes that share a host: higher wins, and equal priorities\nfall back to the longer PathPrefix.",
+            "format": "int64",
             "type": "integer"
           },
           "service": {
@@ -811,6 +813,7 @@
           },
           "liveHosts": {
             "description": "LiveHosts is how many hosts the compiled table routes.",
+            "format": "int64",
             "type": "integer"
           },
           "proxy": {
@@ -823,6 +826,7 @@
           },
           "tlsHosts": {
             "description": "TLSHosts is how many hosts the ACME HostPolicy will issue a certificate\nfor. NOT a subset of LiveHosts: an extraHost owns no route, and a TLS route\nnaming a missing service is skipped while its host still wants a cert.",
+            "format": "int64",
             "type": "integer"
           }
         },

@@ -52,6 +52,7 @@
         "properties": {
           "limit": {
             "description": "calls the plan allows per period; 0 = unbounded",
+            "format": "int64",
             "type": "integer"
           },
           "plan": {
@@ -60,6 +61,7 @@
           },
           "resets": {
             "description": "unix seconds; when THAT window starts again",
+            "format": "int64",
             "type": "integer"
           },
           "spent": {
@@ -68,6 +70,7 @@
           },
           "used": {
             "description": "Used is how many zero-priced calls this subject has been SERVED in the period\nending at Resets — the UTC calendar day. Only a served call counts, so an\nadmission check, a refusal, or a vendor that never answered leaves it where it\nstood. It stops AT Limit rather than climbing past it, so Limit-Used is what\nremains and never goes negative.",
+            "format": "int64",
             "type": "integer"
           },
           "window": {

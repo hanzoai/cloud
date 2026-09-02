@@ -573,10 +573,12 @@
         "properties": {
           "completedAt": {
             "description": "CompletedAt is when the document sealed, in unix milliseconds; null until it\ndoes.",
+            "format": "int64",
             "type": "integer"
           },
           "createdAt": {
             "description": "CreatedAt is when the document was uploaded, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "externalId": {
@@ -627,6 +629,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the document last changed, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -648,6 +651,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when it happened, in unix milliseconds.",
+            "format": "int64",
             "type": "integer"
           },
           "data": {
@@ -683,6 +687,7 @@
           },
           "height": {
             "description": "Height is the field's height, -1 when the renderer is to choose one.",
+            "format": "double",
             "type": "number"
           },
           "id": {
@@ -695,14 +700,17 @@
           },
           "page": {
             "description": "Page is the 1-based page the field sits on.",
+            "format": "double",
             "type": "number"
           },
           "positionX": {
             "description": "PositionX is the field's horizontal position on that page.",
+            "format": "double",
             "type": "number"
           },
           "positionY": {
             "description": "PositionY is the field's vertical position on that page.",
+            "format": "double",
             "type": "number"
           },
           "recipientId": {
@@ -715,6 +723,7 @@
           },
           "width": {
             "description": "Width is the field's width, -1 when the renderer is to choose one.",
+            "format": "double",
             "type": "number"
           }
         },
@@ -878,6 +887,7 @@
           },
           "page": {
             "description": "Page is the page it was placed on.",
+            "format": "double",
             "type": "number"
           },
           "recipientId": {
@@ -923,10 +933,12 @@
           },
           "signedAt": {
             "description": "SignedAt is when they finished or declined, in unix milliseconds; null while\nneither has happened.",
+            "format": "int64",
             "type": "integer"
           },
           "signingOrder": {
             "description": "SigningOrder is their position in a SEQUENTIAL document, null when they were\nadded without one. A PARALLEL document ignores it.",
+            "format": "double",
             "type": "number"
           },
           "signingStatus": {

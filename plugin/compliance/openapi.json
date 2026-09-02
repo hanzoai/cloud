@@ -36,6 +36,7 @@
             "required": false,
             "description": "Limit caps the rows returned; non-positive means the server default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -253,6 +254,7 @@
             "required": false,
             "description": "Limit caps the rows returned; non-positive means the server default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -312,6 +314,7 @@
             "required": false,
             "description": "Limit caps the rows returned; non-positive means the server default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -420,6 +423,7 @@
             "required": false,
             "description": "Limit caps the rows returned; non-positive means the server default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -615,6 +619,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the subject was first recorded, Unix SECONDS.",
+            "format": "int64",
             "type": "integer"
           },
           "email": {
@@ -643,6 +648,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is when the subject's own fields last changed, Unix seconds. A check\nmoving to a new status does not touch it — that history lives on the check.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -712,6 +718,7 @@
           },
           "seq": {
             "description": "Seq is the record's position in the chain, 0-based and gapless. The Recorder\nassigns it under its own lock, so it is a true total order: seq n+1 was\nwritten after seq n, and a missing number is a missing record.",
+            "format": "uint64",
             "type": "integer"
           },
           "sourceIp": {
@@ -720,6 +727,7 @@
           },
           "status": {
             "description": "Status is the HTTP status the caller received. It is the outcome as the client\nsaw it, so a 200 carrying a domain refusal still reads 200 here.",
+            "format": "int64",
             "type": "integer"
           },
           "sub": {
@@ -761,6 +769,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is the unix second the record was created.",
+            "format": "int64",
             "type": "integer"
           },
           "evidenceDocId": {
@@ -769,6 +778,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is the unix second a confirmation ages out; 0 means none.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -797,6 +807,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is the unix second the record last changed.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -827,6 +838,7 @@
           },
           "expiresAt": {
             "description": "ExpiresAt is the unix second a confirmation ages out; 0 means none.",
+            "format": "int64",
             "type": "integer"
           },
           "method": {
@@ -884,10 +896,12 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is the unix second the verification was started.",
+            "format": "int64",
             "type": "integer"
           },
           "decidedAt": {
             "description": "DecidedAt is the unix second a terminal status was recorded.",
+            "format": "int64",
             "type": "integer"
           },
           "decidedBy": {
@@ -916,6 +930,7 @@
           },
           "updatedAt": {
             "description": "UpdatedAt is the unix second the verification last changed.",
+            "format": "int64",
             "type": "integer"
           },
           "verifyUrl": {
@@ -1015,6 +1030,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is the unix second the subject was recorded.",
+            "format": "int64",
             "type": "integer"
           },
           "hasEmail": {
@@ -1078,6 +1094,7 @@
         "properties": {
           "byStatus": {
             "additionalProperties": {
+              "format": "int64",
               "type": "integer"
             },
             "description": "ByStatus tallies the org's verifications by provider-reported status.",
@@ -1085,6 +1102,7 @@
           },
           "total": {
             "description": "Total is the sum over every status.",
+            "format": "int64",
             "type": "integer"
           }
         },

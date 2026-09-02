@@ -210,6 +210,7 @@
             "required": false,
             "description": "Limit bounds the page: default 50, maximum 200. A value that is not a\npositive integer reads as the default.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           },
@@ -219,6 +220,7 @@
             "required": false,
             "description": "Offset skips that many listings.",
             "schema": {
+              "format": "int64",
               "type": "integer"
             }
           }
@@ -705,6 +707,7 @@
         "properties": {
           "createdAt": {
             "description": "CreatedAt is when the plugin was last built, Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "id": {
@@ -788,6 +791,7 @@
           },
           "synced": {
             "description": "Synced is when this row was last confirmed against upstream, Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "title": {
@@ -858,6 +862,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the server was registered, Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "hasSecret": {
@@ -915,6 +920,7 @@
           },
           "createdAt": {
             "description": "CreatedAt is when the skill was last written, Unix seconds.",
+            "format": "int64",
             "type": "integer"
           },
           "description": {
@@ -931,6 +937,10 @@
           },
           "org": {
             "description": "Org is the org that authored the skill — the validated caller's, never a\nvalue the body supplied.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the repository the skill was read from, \"\u003cproject\u003e/\u003cname\u003e\" or\n\"\u003cname\u003e\"; empty for a skill written through the API. A push replaces every\nskill of its source at once, so a skill leaves when its file does.",
             "type": "string"
           }
         },
@@ -1027,6 +1037,7 @@
         "properties": {
           "bytes": {
             "description": "Bytes is the size of the bundled CommonJS the runtime will execute.",
+            "format": "int64",
             "type": "integer"
           },
           "generated": {
@@ -1122,14 +1133,17 @@
           },
           "limit": {
             "description": "Limit is the page size that was actually applied — the default or the clamp,\nwhen the request asked for neither or for too much.",
+            "format": "int64",
             "type": "integer"
           },
           "offset": {
             "description": "Offset is where this page started, so a caller pages from what the server\ndid rather than from what it asked for.",
+            "format": "int64",
             "type": "integer"
           },
           "total": {
             "description": "Total is how many listings the filter matched, which is more than this page\nholds whenever there is a next one.",
+            "format": "int64",
             "type": "integer"
           }
         },
@@ -1139,6 +1153,7 @@
         "properties": {
           "added": {
             "description": "Added is how many listings the catalog did not have before.",
+            "format": "int64",
             "type": "integer"
           },
           "registry": {
@@ -1147,10 +1162,12 @@
           },
           "total": {
             "description": "Total is how many listings the catalog holds now.",
+            "format": "int64",
             "type": "integer"
           },
           "updated": {
             "description": "Updated is how many the publisher has changed since we last looked.",
+            "format": "int64",
             "type": "integer"
           }
         },
