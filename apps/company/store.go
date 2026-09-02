@@ -258,13 +258,3 @@ func (s *Store) Pending(ctx context.Context, limit int) ([]*Formation, error) {
 	}
 	return out, nil
 }
-
-// Delete removes the org's formation (used only in tests / a hard reset).
-func (s *Store) Delete(ctx context.Context, org string) (bool, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM company_formations WHERE org=?`, org)
-	if err != nil {
-		return false, fmt.Errorf("delete formation: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
-}

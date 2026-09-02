@@ -443,22 +443,6 @@ func (e *Env) accessToken() string {
 	return cmp.Or(os.Getenv("HANZO_TOKEN"), e.creds.AccessToken)
 }
 
-// freshAccessToken returns the IAM user token only while it is not yet expired.
-// accessToken() stays expiry-agnostic so `hanzo whoami` can report a dead token
-// rather than masking it as logged-out; freshAccessToken is the code-agent path,
-// where an expired token would 401 a session a still-valid sk- key could serve.
-// No expiry recorded (a raw HANZO_TOKEN with no claims) ⟹ trust it as-is.
-func (e *Env) freshAccessToken() string {
-	tok := e.accessToken()
-	if tok == "" {
-		return ""
-	}
-	if exp := e.creds.Expiry; exp > 0 && time.Now().Unix() >= exp {
-		return ""
-	}
-	return tok
-}
-
 // platformToken resolves the bearer the platform control plane authenticates
 // apps/clusters/redeploy with. ONE identity authorizes everything: after a plain
 // `hanzo login` the IAM access token is the FINAL fallback, so no separate

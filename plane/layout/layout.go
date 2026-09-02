@@ -74,15 +74,6 @@ var name = [...]string{
 	Fixed: "bytes_fixed", Struct: "struct", List: "list",
 }
 
-// String is the kind's .zap spelling. Fixed renders bytes_fixed without its
-// length, which the field carries (see [Field.N]).
-func (k Kind) String() string {
-	if int(k) < len(name) && name[k] != "" {
-		return name[k]
-	}
-	return "kind(" + strconv.Itoa(int(k)) + ")"
-}
-
 // Field is one slot: where it sits, how wide it is, and what it holds.
 type Field struct {
 	Name   string // the Go field name

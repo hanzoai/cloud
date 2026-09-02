@@ -42,15 +42,6 @@ import (
 // an operator provisioning it and an error telling them say the same word.
 const KeyEnv = attest.KeyEnv
 
-// serving reports whether this process will answer requests. `<binary> describe <dir>`
-// projects the router into an artifact and exits, so it holds no session, is sent no
-// token and has nothing to control — and the artifact is a function of the code alone
-// (cloud.SpecConfig), which a key read from the environment would break.
-func serving() bool {
-	_, projecting := cloud.DescribeRequested()
-	return !projecting
-}
-
 // NO MINTER KEY CHECK EITHER. own() refused to mount a DEPLOYED account process
 // holding a key of its own, because a per-replica key meant a token minted by one
 // replica failed on the next.

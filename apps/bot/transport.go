@@ -20,7 +20,6 @@
 package bot
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -147,33 +146,6 @@ func Read(ctx context.Context, c Call, out any) error {
 	}
 	if err := json.Unmarshal(b, out); err != nil {
 		return fmt.Errorf("runtime: decode answer: %w", err)
-	}
-	return nil
-}
-
-// Stream invokes c and hands each response message to fn as it arrives — the
-// streaming form. Framing is ours; what a message MEANS is the caller's contract,
-// so fn receives one encoded message and decodes it itself. A message over
-// lineCap ends the stream with an error rather than growing the buffer. The
-// deadline is the caller's ctx: a stream legitimately runs for minutes.
-func Stream(ctx context.Context, c Call, fn func(msg []byte)) error {
-	resp, err := send(ctx, c, http.MethodPost, "application/x-ndjson")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if err := status(resp); err != nil {
-		return err
-	}
-	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 64<<10), lineCap)
-	for sc.Scan() {
-		if msg := bytes.TrimSpace(sc.Bytes()); len(msg) > 0 {
-			fn(msg)
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return fmt.Errorf("runtime: stream read: %w", err)
 	}
 	return nil
 }

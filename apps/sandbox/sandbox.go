@@ -171,9 +171,6 @@ const KindSandbox = "sandbox"
 // than a lookup, so dispatch costs nothing and cannot go stale.
 const IDPrefix = "m_"
 
-// Ours reports whether an id names a sandbox this package provisions.
-func Ours(id string) bool { return strings.HasPrefix(strings.TrimSpace(id), IDPrefix) }
-
 type state struct {
 	stores *cloud.OrgStore[*Store]
 	rt     *runtime

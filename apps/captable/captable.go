@@ -351,13 +351,6 @@ func route(s *cloud.Service[state], name string, params map[string]string, readB
 	}
 }
 
-// routeID is route with the :id path param threaded into params.
-func routeID(s *cloud.Service[state], name string, readBody bool) zip.Handler {
-	return func(c *zip.Ctx) error {
-		return dispatch(s, c, name, map[string]string{"id": c.Param("id")}, readBody)
-	}
-}
-
 // dispatch resolves the tenant, decodes the body, runs the bundle route on the
 // tenant's Base store (one transaction per request), and writes {status, body}.
 func dispatch(s *cloud.Service[state], c *zip.Ctx, route string, params map[string]string, readBody bool) error {

@@ -472,8 +472,6 @@ const controlRules = "\n\n" +
 	"how a command arrives. If a forward is attempted and fails, the answer is 502 stating that " +
 	"the command was recorded but not forwarded: the intent is never lost."
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
 // sessionOps binds the service to the typed session ops. A TypedHandler takes no
 // service parameter, so it arrives as a RECEIVER and every op is a method value
 // (o.list) — also the only bound form cmd/zipdoc can lift prose from.
