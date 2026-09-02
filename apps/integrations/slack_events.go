@@ -44,7 +44,7 @@ import (
 // ISOLATION BAR: a workspace's events reach ONLY the org that connected that Slack
 // team. The org comes ONLY from OrgForExternalID("slack", team_id) — never a payload
 // field — and team_id is trustworthy only because the whole payload is HMAC-verified
-// with SLACK_SIGNING_SECRET first. The reply uses THAT org's bot token (TokenFor);
+// against the signing secret first. The reply uses THAT org's bot token (TokenFor);
 // the run is THAT org's agent on behalf of THAT org's linked user.
 //
 // MOUNT HANDOFF (registered in integrations.go's routes(); this file deliberately

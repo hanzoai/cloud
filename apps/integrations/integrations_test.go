@@ -47,6 +47,20 @@ func newKMS(t *testing.T) *kms.Client {
 	return kc
 }
 
+// newSigningKMS is newKMS with the Slack signing secret already sealed and
+// SLACK_SIGNING_SECRET_REF pointing at it — the one way slackSigningSecret
+// resolves it, so a test signs with the same value the handler verifies against.
+func newSigningKMS(t *testing.T, secret string) *kms.Client {
+	t.Helper()
+	kc := newKMS(t)
+	const ref = "integrations/slack/signing"
+	if err := kc.PutSecret(context.Background(), ref, []byte(secret)); err != nil {
+		t.Fatalf("seal slack signing secret: %v", err)
+	}
+	t.Setenv("SLACK_SIGNING_SECRET_REF", ref)
+	return kc
+}
+
 // compose installs what a HOST installs, and it is the reason every app built in
 // this package is built through a helper. A subsystem never installs cloud.Bridge
 // (routes() says why): the program's composer installs it once at the root, after
