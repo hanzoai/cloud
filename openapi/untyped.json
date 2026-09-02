@@ -1,5 +1,5 @@
 {
-  "operations": 755,
+  "operations": 757,
   "products": {
     "account": 2,
     "ad": 1,
@@ -45,6 +45,7 @@
     "projects": 3,
     "research": 1,
     "risk": 1,
+    "s3": 2,
     "sandbox": 6,
     "skills": 3,
     "tasks": 10,
