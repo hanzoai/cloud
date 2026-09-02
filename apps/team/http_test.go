@@ -3,6 +3,8 @@ package team
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/hanzoai/cloud/internal/planetest"
@@ -14,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
@@ -21,6 +24,39 @@ import (
 )
 
 const testSecret = "team-http-test-secret"
+
+// teamKMS is the custody the subsystem reads its secrets through: `secret` is
+// sealed under the ref SERVER_SECRET_REF names, so a test signs with the value
+// the handler will verify against.
+//
+// An empty secret seals nothing and leaves the ref unset, which is the degraded
+// path — the same answer an unresolvable ref gives, and the one the fail-closed
+// tests assert on.
+func teamKMS(t *testing.T, secret string) cloud.KMSClient {
+	t.Helper()
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatalf("rand: %v", err)
+	}
+	kc, err := kms.New(kms.Config{
+		DataDir:      t.TempDir(),
+		MasterKeyB64: base64.StdEncoding.EncodeToString(key),
+	}, luxlog.New("test"))
+	if err != nil {
+		t.Fatalf("kms.New: %v", err)
+	}
+	t.Cleanup(func() { _ = kc.Close() })
+	if secret == "" {
+		t.Setenv("SERVER_SECRET_REF", "")
+		return kc
+	}
+	const ref = "team/server-secret"
+	if err := kc.PutSecret(context.Background(), ref, []byte(secret)); err != nil {
+		t.Fatalf("seal server secret: %v", err)
+	}
+	t.Setenv("SERVER_SECRET_REF", ref)
+	return kc
+}
 
 // compose installs what a HOST installs — cloud.Bridge, once at the root, which
 // is what Serve does binary-wide. In a test the test IS the composer, so it owes
@@ -37,7 +73,7 @@ func compose(app *zip.App) { app.Use(cloud.Bridge()) }
 func mountTeam(t *testing.T) *zip.App { return mountTeamVFS(t, newMemVFS()) }
 
 // mountTeamVFS mounts the team subsystem onto a fresh zip.App with an isolated
-// DataDir, a pinned (non-default) SERVER_SECRET so the subsystem is functional
+// DataDir, a sealed (non-default) signing secret so the subsystem is functional
 // (not degraded), and the given VFS backend (memVFS for round-trips, or
 // clients.DisabledVFS() to prove the files plane fails closed).
 func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
@@ -45,10 +81,9 @@ func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
 	// Membership is IAM's, so a team that resolves one needs the peer that holds
 	// it — in production it is a process, here it is in memory.
 	planetest.ServeIdentity(t)
-	t.Setenv("SERVER_SECRET", testSecret)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: vfs, KMS: teamKMS(t, testSecret)}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -362,10 +397,9 @@ func TestBotsReadRouteTenantGate(t *testing.T) {
 // is not registered by Mount, so this unit test asserts the route-degrade, which is
 // the security-load-bearing half.)
 func TestDegradedWithoutSecret(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "") // unset
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "")}); err != nil {
 		t.Fatalf("Mount must SUCCEED in degraded mode (health-only), got: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -383,10 +417,9 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	// The upstream public "secret" literal is ALSO degraded (a public key must
 	// never sign) — and there is NO env escape hatch back to it.
 	_ = Shutdown()
-	t.Setenv("SERVER_SECRET", "secret")
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app2)
-	if err := Use(app2, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Use(app2, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "secret")}); err != nil {
 		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
 	}
 	if code, _ := call(t, app2, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
@@ -398,11 +431,10 @@ func TestDegradedWithoutSecret(t *testing.T) {
 // DEAD: even with it set, an unset SERVER_SECRET stays degraded. Dev runs on a
 // real secret like every other deployment — one way.
 func TestInsecureHatchRemoved(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "")
 	t.Setenv("TEAM_DEV_INSECURE", "1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "")}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })

@@ -99,10 +99,9 @@ func TestCollabRPCShapesAreExact(t *testing.T) {
 // /v1/team, registered from a different file's group — so a 200 also proves the
 // install reaches every group team builds and not merely the one it sits beside.
 func TestCollabRPCBridgedUnderABareApp(t *testing.T) {
-	t.Setenv("SERVER_SECRET", testSecret)
 	planetest.ServeIdentity(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, testSecret)}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -153,10 +152,9 @@ func TestClearCookieIsExact(t *testing.T) {
 // refusal Mount's guard gave it: a subsystem with no signing secret answers 503,
 // because a typed op is not a zip.Handler and cannot be wrapped by that guard.
 func TestClearCookieDegraded(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	compose(app)
-	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Use(app, cloud.Deps{DataDir: t.TempDir(), VFS: newMemVFS(), KMS: teamKMS(t, "")}); err != nil {
 		t.Fatalf("Use:  %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
