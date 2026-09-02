@@ -135,8 +135,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// DEFERRED — DO NOT ENABLE YET: the "world" product is ABSENT from @hanzo/plans
 	// licensing.product_ids (v1.4.4), so CheckEntitlement returns Active:false for
 	// EVERY org and enforcing now would 402 all users. Flip on once the catalog
-	// licenses "world" to a tier (and confirm /v1/world/news may 403 unvalidated —
-	// RequireProduct refuses anonymous callers). See clients/entitlements.
+	// licenses "world" to a tier, and confirm /v1/world/news may 403 an unvalidated
+	// caller. See apps/entitlement.
 	// A typed op receives only a context, so the facts its signature drops — the
 	// validated org, and the request the PROJECT claim and the ?project
 	// cross-check ride on — reach it by being parked there. cloud.Bridge parks
