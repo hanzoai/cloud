@@ -29,11 +29,12 @@
 // HERE, in package cloud, beside Handle/Mount/Terminal — the handler ergonomics
 // every subsystem already reaches for.
 //
-// A subsystem writes a success body with cloud.OK and a surfaced error with
-// cloud.Fail — never a hand-rolled map[string]any{"status":...}. Handlers with a
-// typed public body that is NOT the operator envelope (a health probe, an OAuth
-// token, an SDK-shaped struct) keep returning c.JSON with their own type — this
-// envelope is for the operator get<T> contract, not a mandate on every response.
+// A subsystem writes a success body with cloud.OK and returns a zip.Errorf for a
+// surfaced error — never a hand-rolled map[string]any{"status":...}. Handlers
+// with a typed public body that is NOT the operator envelope (a health probe, an
+// OAuth token, an SDK-shaped struct) keep returning c.JSON with their own type —
+// this envelope is for the operator get<T> contract, not a mandate on every
+// response.
 
 package cloud
 
@@ -42,10 +43,4 @@ import "github.com/zap-proto/zip"
 // OK writes a { status:"ok", data } envelope (the get<T> shape).
 func OK(c *zip.Ctx, data any) error {
 	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": data})
-}
-
-// Fail writes a { status:"error", msg } envelope. The operator's transport maps a
-// non-ok envelope to a surfaced error (never a fabricated value).
-func Fail(c *zip.Ctx, msg string) error {
-	return c.JSON(200, map[string]any{"status": "error", "msg": msg, "data": nil})
 }

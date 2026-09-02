@@ -78,8 +78,6 @@ func bindRuntimeDir() { plane.Bind() }
 // listening reports whether path has a LISTENER behind it.
 func listening(path string) (bool, error) { return plane.Listening(path) }
 
-// Peer opens a call to another app.
-func Peer(app string) (*zip.Conn, error) { return plane.Peer(app) }
 
 // Ask is the whole client half: dial the app, invoke the op, close.
 //
