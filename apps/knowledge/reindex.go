@@ -40,7 +40,7 @@ type reindexOut struct {
 // a few thousand documents, and the answer is the count.
 //
 // The request has no body. Response: {"vectors": 412, "lexical": 412, "removed": 3, "failed": 0}
-func (o ops) reindex(ctx context.Context, _ *noInput) (*reindexOut, error) {
+func (o ops) reindex(ctx context.Context, _ *cloud.Unit) (*reindexOut, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
