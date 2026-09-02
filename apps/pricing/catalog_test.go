@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud"
+
 	// devmaster keys this test binary: cek opens nothing without a master and a
 	// test process has no KMS.
 	_ "github.com/hanzoai/cloud/internal/devmaster"
@@ -331,7 +333,7 @@ func TestGateRootData(t *testing.T) {
 
 	// Non-beta customer: zen4 and the Anthropic model gone from EVERY field.
 	d := root()
-	GateRootData(d, snap, "other", false)
+	GateRootData(d, snap, "other", false, nil)
 	hz := asModels(d["hanzoModels"])
 	if catHasID(hz, "zen4") {
 		t.Errorf("root.hanzoModels leaked disabled zen4")
@@ -368,7 +370,7 @@ func TestGateRootData(t *testing.T) {
 
 	// Provider beta org sees the Anthropic model again; zen4 still hidden (no beta).
 	d2 := root()
-	GateRootData(d2, snap, "acme", false)
+	GateRootData(d2, snap, "acme", false, nil)
 	if tp2 := asModels(d2["thirdPartyModels"]); !catHasID(tp2, "anthropic/claude-opus-4.6") {
 		t.Errorf("provider beta org must see the model in root")
 	}
@@ -378,7 +380,7 @@ func TestGateRootData(t *testing.T) {
 
 	// Admin sees everything; id-reference lists untouched.
 	d3 := root()
-	GateRootData(d3, snap, "", true)
+	GateRootData(d3, snap, "", true, nil)
 	if hz3 := asModels(d3["hanzoModels"]); !catHasID(hz3, "zen4") {
 		t.Errorf("admin must see disabled zen4 in root")
 	}
@@ -387,6 +389,57 @@ func TestGateRootData(t *testing.T) {
 	}
 	if _, ok := d3["providers"].(map[string]any)["Anthropic"]; !ok {
 		t.Errorf("admin must see disabled provider in root")
+	}
+}
+
+// THE CREDENTIAL LIMIT IS APPLIED, not merely implemented.
+//
+// Reachable is a predicate; this asserts the read path calls it. The two fail
+// independently, and only one of them is visible: a correct predicate nothing
+// invokes narrows nothing, while every test of the predicate alone still passes.
+func TestRootDataAppliesTheCredentialLimit(t *testing.T) {
+	root := func() map[string]any {
+		return map[string]any{
+			"hanzoModels": []any{
+				map[string]any{"name": "zen4"},
+				map[string]any{"name": "zen5"},
+			},
+			"thirdPartyModels": []any{
+				map[string]any{"id": "anthropic/claude-opus-4.6", "name": "Opus", "provider": "Anthropic"},
+			},
+		}
+	}
+	snap := map[string]Overlay{}
+
+	for _, tc := range []struct {
+		name    string
+		isAdmin bool
+	}{
+		{"customer", false},
+		// The limit belongs to the key, so being an admin does not shed it.
+		{"admin", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := root()
+			GateRootData(d, snap, "acme", tc.isAdmin, cloud.ParseGrant("model:zen5"))
+			hz := asModels(d["hanzoModels"])
+			if catHasID(hz, "zen4") {
+				t.Errorf("a key limited to zen5 reached zen4")
+			}
+			if !catHasID(hz, "zen5") {
+				t.Errorf("a key limited to zen5 lost zen5")
+			}
+			if tp := asModels(d["thirdPartyModels"]); len(tp) != 0 {
+				t.Errorf("a key limited to zen5 reached %d third-party models", len(tp))
+			}
+		})
+	}
+
+	// And the open default stays open: no limit narrows nothing.
+	d := root()
+	GateRootData(d, snap, "acme", false, nil)
+	if hz := asModels(d["hanzoModels"]); len(hz) != 2 {
+		t.Errorf("an unlimited credential must see both models, got %d", len(hz))
 	}
 }
 

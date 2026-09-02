@@ -534,7 +534,7 @@ func (o ops) catalog(ctx context.Context, _ *pricingNoInput) (*pricingBlob, erro
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "catalog gate failed")
 	}
-	GateRootData(data, snap, callerOrg(ctx), callerIsAdmin(ctx))
+	GateRootData(data, snap, callerOrg(ctx), callerIsAdmin(ctx), callerGrant(ctx))
 	return &data, nil
 }
 
