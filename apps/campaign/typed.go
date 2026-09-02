@@ -32,6 +32,7 @@ package campaign
 // checkable.
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"net/http"
 	"strings"
@@ -268,7 +269,7 @@ func (o ops) create(ctx context.Context, in *campaignWrite) (*campaignRecord, er
 	if err := requireBody(ctx); err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
@@ -279,7 +280,7 @@ func (o ops) create(ctx context.Context, in *campaignWrite) (*campaignRecord, er
 	id := mint.ID("cmp")
 	now := time.Now().Unix()
 	saved, err := o.s.State.store.CreateCampaign(ctx, Campaign{
-		ID: id, Org: org, Name: name, Audience: clip(in.Audience),
+		ID: id, Org: org, Name: name, Audience: shorten.Trim(in.Audience, maxField),
 		Content: clipContent(in.Content), Channels: channels,
 		ScheduleAt: nonNeg(in.ScheduleAt), Budget: nonNeg(in.Budget),
 		Status: StatusDraft, CreatedAt: now, UpdatedAt: now,
@@ -331,12 +332,12 @@ func (o ops) update(ctx context.Context, in *campaignUpdate) (*campaignRecord, e
 	if err := requireBody(ctx); err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
 	current.Name = name
-	current.Audience = clip(in.Audience)
+	current.Audience = shorten.Trim(in.Audience, maxField)
 	current.Content = clipContent(in.Content)
 	current.ScheduleAt = nonNeg(in.ScheduleAt)
 	current.Budget = nonNeg(in.Budget)

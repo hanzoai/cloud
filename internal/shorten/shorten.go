@@ -1,7 +1,10 @@
 // Package shorten bounds the length of a string.
 package shorten
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // To returns s cut to at most n bytes, never in the middle of a character.
 //
@@ -25,3 +28,17 @@ func To(s string, n int) string {
 	}
 	return s[:n]
 }
+
+// Trim is To over a value whose surrounding space was never part of it — the
+// bound eleven packages actually wanted when they wrote their own.
+//
+// THE ORDER IS THE POINT, and it is where two of them differed. Trimming AFTER
+// the cut spends the bound on space and then throws the space away, so the
+// result is shorter than asked by however much padding the input carried: at
+// n=4, " abcdef" yields "abc" that way and "abcd" this way. A bound that moves
+// with the input's whitespace is not a bound.
+//
+// It does NOT mark what it removed. These bound values that are stored, indexed
+// and logged, and an ellipsis appended to one of those is a character the value
+// never had. A surface that wants the reader to see a cut says so itself.
+func Trim(s string, n int) string { return To(strings.TrimSpace(s), n) }

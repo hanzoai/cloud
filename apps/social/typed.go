@@ -32,6 +32,7 @@ package social
 // for the next reader who thinks the order is cosmetic.
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"errors"
 	"net/http"
@@ -533,13 +534,13 @@ func accountFrom(id, org, provider, handle, status string) (socialAccount, error
 	if !ok {
 		return socialAccount{}, zip.ErrBadRequest("status must be one of connected, disconnected, error")
 	}
-	return socialAccount{ID: id, Org: org, Provider: p, Handle: clip(handle), Status: st}, nil
+	return socialAccount{ID: id, Org: org, Provider: p, Handle: shorten.Trim(handle, maxField), Status: st}, nil
 }
 
 // postFrom validates a caller's post fields against the fixed vocabularies and
 // returns the row to store, or the 400 the vocabulary refused.
 func postFrom(id, org, content, channel, status string, scheduleAt int64, media []string) (socialPost, error) {
-	body := clipBody(content)
+	body := shorten.Trim(content, maxContent)
 	if body == "" {
 		return socialPost{}, zip.ErrBadRequest("content is required")
 	}

@@ -78,7 +78,7 @@ func read(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, srcs []S
 	}
 	for i := range srcs {
 		if md, ok := text[srcs[i].URL]; ok {
-			srcs[i].Text = clip(md, limit)
+			srcs[i].Text = runes(md, limit)
 		}
 	}
 	return srcs

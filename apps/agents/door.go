@@ -212,7 +212,7 @@ func (doorTools) catalog(ctx context.Context, org, actor string, want []string) 
 	// what makes "declared 3, offered 1" diagnosable instead of a shrug.
 	if len(out) < len(wanted) && len(listed.Meta) > 0 {
 		trace.SpanFromContext(ctx).SetAttributes(
-			attribute.String("hanzo.agent.tools_meta", clip(string(listed.Meta), maxDoorMeta)))
+			attribute.String("hanzo.agent.tools_meta", preview(string(listed.Meta), maxDoorMeta)))
 	}
 	return out
 }
@@ -281,7 +281,7 @@ func describe(ctx context.Context, org, actor, op string) (types.ToolDef, error)
 // hundred rows on every run's trace.
 const maxDoorMeta = 1024
 
-func clip(s string, n int) string {
+func preview(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}

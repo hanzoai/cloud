@@ -76,7 +76,7 @@ func runAgent(ctx context.Context, d agentDeps, org, payer string, step JourneyS
 			emit(event{Type: "error", Step: step.ID, Error: "draft: " + err.Error()})
 			return "", fmt.Errorf("draft: %w", err)
 		}
-		drafted = clipDraft(res.Content)
+		drafted = shorten.Trim(res.Content, maxDraftOutput)
 		emit(event{Type: "draft", Step: step.ID, Text: drafted})
 	}
 
@@ -125,7 +125,7 @@ func runAgent(ctx context.Context, d agentDeps, org, payer string, step JourneyS
 		return "", invErr
 	}
 	if b, err := json.Marshal(out); err == nil {
-		rec.Result = clipDraft(string(b))
+		rec.Result = shorten.Trim(string(b), maxDraftOutput)
 	}
 	rec.OK = true
 	if err := d.store.AddAction(ctx, rec); err != nil {
@@ -146,8 +146,4 @@ func planText(step JourneyStep) string {
 		return "Draft guidance for: " + step.Title
 	}
 	return "Draft content and run " + step.Tool + " for: " + step.Title
-}
-
-func clipDraft(s string) string {
-	return shorten.To(strings.TrimSpace(s), maxDraftOutput)
 }

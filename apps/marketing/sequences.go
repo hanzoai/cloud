@@ -3,6 +3,7 @@
 package marketing
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"database/sql"
 	"errors"
@@ -577,7 +578,7 @@ func (o ops) createSequence(ctx context.Context, in *Sequence) (*Sequence, error
 	if err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
@@ -672,7 +673,7 @@ func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
 	if _, err := o.s.State.store.GetSequence(ctx, org, seqID); err != nil {
 		return nil, mapErr(err, "sequence not found")
 	}
-	if clip(in.Body) == "" {
+	if shorten.Trim(in.Body, maxField) == "" {
 		return nil, zip.ErrBadRequest("body is required")
 	}
 	if in.DelaySeconds < 0 {
@@ -681,7 +682,7 @@ func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
 	id := mint.ID("step")
 	step, err := o.s.State.store.AddStep(ctx, Step{
 		ID: id, Org: org, SequenceID: seqID, DelaySeconds: in.DelaySeconds,
-		Subject: clip(in.Subject), Body: in.Body, CreatedAt: time.Now().Unix(),
+		Subject: shorten.Trim(in.Subject, maxField), Body: in.Body, CreatedAt: time.Now().Unix(),
 	})
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "add step: %v", err)

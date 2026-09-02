@@ -426,7 +426,7 @@ func titles(plan []topic) string {
 			out = append(out, s)
 		}
 	}
-	return clip(strings.Join(out, " · "), maxPlanDetail)
+	return runes(strings.Join(out, " · "), maxPlanDetail)
 }
 
 // maxPlanDetail bounds the plan headline on the wire: a legible line, not the
@@ -572,7 +572,7 @@ func (e Engine) synthesize(ctx context.Context, p Params, srcs []Source, emit fu
 func (e Engine) followUpQuestions(ctx context.Context, p Params, answer string) ([]string, *cloud.ChatResponse) {
 	prompt := "Given a question and its answer, propose 3 to 5 concise, distinct follow-up questions a curious user would ask next. " +
 		"Reply ONLY as compact JSON: {\"questions\":[\"...\"]}.\n\nQuestion: " + p.q +
-		"\n\nAnswer:\n" + clip(answer, 4000)
+		"\n\nAnswer:\n" + runes(answer, 4000)
 	resp := e.chat(ctx, p, p.model, prompt, nil)
 	if resp == nil {
 		return nil, nil

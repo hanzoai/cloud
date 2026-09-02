@@ -93,7 +93,7 @@ func rank(query string, results []websearch.Result, limit, hostCap int) []Source
 			src: Source{
 				URL:     r.URL,
 				Title:   orHost(cleanTitle(r.Title), host),
-				Snippet: clip(r.Content, maxSnippet),
+				Snippet: runes(r.Content, maxSnippet),
 				Engine:  r.Engine,
 				Favicon: favicon(host),
 			},
@@ -219,7 +219,7 @@ func orHost(title, host string) string {
 }
 
 // clip truncates s to at most n runes (no partial-rune corruption).
-func clip(s string, n int) string {
+func runes(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
 		return s

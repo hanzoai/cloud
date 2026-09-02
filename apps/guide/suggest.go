@@ -1,6 +1,7 @@
 package guide
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"fmt"
 	"net/http"
@@ -258,7 +259,7 @@ func narrate(s *cloud.Service[state], ctx context.Context, org, prompt string) s
 	if err != nil || res == nil {
 		return ""
 	}
-	return clipDraft(res.Content)
+	return shorten.Trim(res.Content, maxDraftOutput)
 }
 
 // groundingText renders the compact, grounded state the AI reasons over: progress,

@@ -3,6 +3,7 @@
 package marketing
 
 import (
+	"github.com/hanzoai/cloud/internal/shorten"
 	"context"
 	"database/sql"
 	"errors"
@@ -296,12 +297,12 @@ func (o ops) createAudience(ctx context.Context, in *Audience) (*Audience, error
 	if err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
 	// No event means no filter: the audience is every mailable customer in the org.
-	event := clip(in.Event)
+	event := shorten.Trim(in.Event, maxField)
 	window := in.WindowDays
 	if window <= 0 {
 		window = audDefaultWindowDays

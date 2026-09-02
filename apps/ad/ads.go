@@ -179,11 +179,6 @@ type ops struct{ s *cloud.Service[state] }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
-// clip trims and bounds a text field to maxField.
-func clip(s string) string {
-	return shorten.To(strings.TrimSpace(s), maxField)
-}
-
 // clampLimit bounds a requested page size to (0, maxLimit], defaulting anything
 // that is not a positive integer. A query value zip could not parse as an int
 // arrives here as 0, which is exactly the "absent or unusable" case the untyped
@@ -343,7 +338,7 @@ func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign
 	if err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
@@ -357,8 +352,8 @@ func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign
 	}
 	now := time.Now().Unix()
 	camp := AdCampaign{
-		ID: mint.ID("camp"), Org: org, Name: name, Platform: platform, Account: clip(in.Account), Status: status,
-		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
+		ID: mint.ID("camp"), Org: org, Name: name, Platform: platform, Account: shorten.Trim(in.Account, maxField), Status: status,
+		Objective: shorten.Trim(in.Objective, maxField), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
 		CreatedAt: now, UpdatedAt: now,
 	}
 	saved, err := o.s.State.store.CreateCampaign(ctx, camp)
@@ -414,7 +409,7 @@ func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampa
 	if err != nil {
 		return nil, err
 	}
-	name := clip(in.Name)
+	name := shorten.Trim(in.Name, maxField)
 	if name == "" {
 		return nil, zip.ErrBadRequest("name is required")
 	}
@@ -427,8 +422,8 @@ func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampa
 		return nil, zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
 	camp := AdCampaign{
-		ID: strings.TrimSpace(in.ID), Org: org, Name: name, Platform: platform, Account: clip(in.Account), Status: status,
-		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
+		ID: strings.TrimSpace(in.ID), Org: org, Name: name, Platform: platform, Account: shorten.Trim(in.Account, maxField), Status: status,
+		Objective: shorten.Trim(in.Objective, maxField), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
 		UpdatedAt: time.Now().Unix(),
 	}
 	saved, err := o.s.State.store.UpdateCampaign(ctx, camp)
@@ -482,7 +477,7 @@ func launchCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 		Account string `json:"account"`
 	}
 	_ = c.Bind(&body)
-	account := clip(body.Account)
+	account := shorten.Trim(body.Account, maxField)
 	if account == "" {
 		account = camp.Account
 	}

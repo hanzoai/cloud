@@ -396,15 +396,15 @@ func (o ops) fileTicket(ctx context.Context, in *helpTicketIntake) (*helpTicketF
 	if in.malformed {
 		return nil, zip.ErrBadRequest("invalid request body")
 	}
-	subject := clip(in.Subject, maxSubject)
+	subject := shorten.Trim(in.Subject, maxSubject)
 	if subject == "" {
 		return nil, zip.ErrBadRequest("subject is required")
 	}
-	email := clip(in.Email, maxSender)
+	email := shorten.Trim(in.Email, maxSender)
 	if email == "" {
 		return nil, zip.ErrBadRequest("email is required")
 	}
-	message := clip(in.Description, maxMessage)
+	message := shorten.Trim(in.Description, maxMessage)
 
 	// The customer-facing reference is opaque + random, so returning it to an anonymous
 	// submitter reveals nothing about ticket volume; the monotonic name stays internal.
@@ -530,11 +530,6 @@ func normalizePriority(p string) string {
 	default:
 		return "Medium"
 	}
-}
-
-// clip trims and bounds a text field.
-func clip(s string, max int) string {
-	return shorten.To(strings.TrimSpace(s), max)
 }
 
 // articleLimit bounds the public list size (?limit=, default 50, max 200). A

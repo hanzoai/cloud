@@ -174,11 +174,6 @@ func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
-// clip trims and bounds a text field to maxField.
-func clip(s string) string {
-	return shorten.To(strings.TrimSpace(s), maxField)
-}
-
 func nonNeg(n int64) int64 {
 	if n < 0 {
 		return 0
@@ -190,7 +185,7 @@ func nonNeg(n int64) int64 {
 func clipContent(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, v := range in {
-		v = clip(v)
+		v = shorten.Trim(v, maxField)
 		if v == "" {
 			continue
 		}
@@ -212,8 +207,8 @@ func normChannel(in ChannelSpec) (ChannelSpec, bool) {
 	}
 	return ChannelSpec{
 		Kind:     kind,
-		Platform: strings.ToLower(clip(in.Platform)),
-		Account:  clip(in.Account),
+		Platform: strings.ToLower(shorten.Trim(in.Platform, maxField)),
+		Account:  shorten.Trim(in.Account, maxField),
 		Status:   chanPending,
 	}, true
 }

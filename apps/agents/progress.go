@@ -390,10 +390,10 @@ func brief(x Session, opening, tail []Event, now int64) string {
 
 	fmt.Fprintf(&b, "agent: %s\n", x.Agent)
 	if x.Title != "" {
-		fmt.Fprintf(&b, "goal: %s\n", clip(x.Title, progressCut))
+		fmt.Fprintf(&b, "goal: %s\n", preview(x.Title, progressCut))
 	}
 	if x.Repo != "" {
-		fmt.Fprintf(&b, "repo: %s\n", clip(x.Repo, progressCut))
+		fmt.Fprintf(&b, "repo: %s\n", preview(x.Repo, progressCut))
 	}
 	if x.StartedAt > 0 && now > x.StartedAt {
 		fmt.Fprintf(&b, "elapsed: %s\n", (time.Duration(now-x.StartedAt) * time.Second).Round(time.Second))
@@ -416,7 +416,7 @@ func brief(x Session, opening, tail []Event, now int64) string {
 }
 
 func writeTurn(b *strings.Builder, e Event) {
-	fmt.Fprintf(b, "%d %s %s: %s\n", e.Seq, e.Kind, e.Actor, clip(collapse(e.Payload), progressCut))
+	fmt.Fprintf(b, "%d %s %s: %s\n", e.Seq, e.Kind, e.Actor, preview(collapse(e.Payload), progressCut))
 }
 
 // collapse folds a payload's whitespace onto one line so one turn is one line in
@@ -451,7 +451,7 @@ func parseEstimate(s string) (Progress, bool) {
 	if err := json.Unmarshal([]byte(s[open:shut+1]), &raw); err != nil {
 		return Progress{}, false
 	}
-	p := Progress{Pct: pctUnknown, Activity: clip(collapse(raw.Activity), progressLine), Estimated: true}
+	p := Progress{Pct: pctUnknown, Activity: preview(collapse(raw.Activity), progressLine), Estimated: true}
 	if p.Phase = strings.ToLower(strings.TrimSpace(raw.Phase)); !validPhase(p.Phase) {
 		return Progress{}, false
 	}

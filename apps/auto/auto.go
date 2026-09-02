@@ -48,7 +48,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/account"
@@ -386,14 +385,14 @@ func (o ops) createFlow(ctx context.Context, in *createFlowReq) (*populatedFlow,
 	now := time.Now().UnixMilli()
 	flowID, verID := mint.ID("flow"), mint.ID("ver")
 	f := Flow{
-		ID: flowID, Org: org, ExternalID: clip(in.ExternalID), FolderID: clip(in.FolderID),
+		ID: flowID, Org: org, ExternalID: shorten.Trim(in.ExternalID, maxField), FolderID: shorten.Trim(in.FolderID, maxField),
 		Status: FlowDisabled, Created: now, Updated: now,
 	}
 	if _, err := o.s.State.store.CreateFlow(ctx, f); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "create flow: %v", err)
 	}
 	v := FlowVersion{
-		ID: verID, Org: org, FlowID: flowID, DisplayName: clip(in.DisplayName),
+		ID: verID, Org: org, FlowID: flowID, DisplayName: shorten.Trim(in.DisplayName, maxField),
 		Trigger: in.Trigger, Valid: in.Trigger != nil, State: VersionDraft,
 		SchemaVersion: LatestFlowSchemaVersion, Created: now, Updated: now,
 	}
@@ -435,7 +434,7 @@ func (o ops) getFlow(ctx context.Context, in *flowRef) (*populatedFlow, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := o.s.State.store.GetFlow(ctx, org, clip(in.ID))
+	f, err := o.s.State.store.GetFlow(ctx, org, shorten.Trim(in.ID, maxField))
 	if err != nil {
 		return nil, mapStoreErr(err, "flow not found")
 	}
@@ -476,18 +475,18 @@ func (o ops) updateFlow(ctx context.Context, in *patchFlowIn) (*Flow, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := o.s.State.store.GetFlow(ctx, org, clip(in.ID))
+	f, err := o.s.State.store.GetFlow(ctx, org, shorten.Trim(in.ID, maxField))
 	if err != nil {
 		return nil, mapStoreErr(err, "flow not found")
 	}
 	if in.FolderID != nil {
-		f.FolderID = clip(*in.FolderID)
+		f.FolderID = shorten.Trim(*in.FolderID, maxField)
 	}
 	if in.ExternalID != nil {
-		f.ExternalID = clip(*in.ExternalID)
+		f.ExternalID = shorten.Trim(*in.ExternalID, maxField)
 	}
 	if in.PublishedVersionID != nil {
-		pv := clip(*in.PublishedVersionID)
+		pv := shorten.Trim(*in.PublishedVersionID, maxField)
 		// LOW-3: a published version must be an EXISTING version OF THIS FLOW in THIS
 		// org — never an unvalidated (possibly cross-tenant / dangling) id. Empty clears it.
 		if pv != "" {
@@ -518,7 +517,7 @@ func (o ops) deleteFlow(ctx context.Context, in *flowRef) (*cloud.Unit, error) {
 	if err != nil {
 		return nil, err
 	}
-	deleted, err := o.s.State.store.DeleteFlow(ctx, org, clip(in.ID))
+	deleted, err := o.s.State.store.DeleteFlow(ctx, org, shorten.Trim(in.ID, maxField))
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -548,7 +547,7 @@ func (o ops) listVersions(ctx context.Context, in *versionQuery) (*versionPage, 
 	if err != nil {
 		return nil, err
 	}
-	rows, err := o.s.State.store.ListVersions(ctx, org, clip(in.ID), boundLimit(in.Limit))
+	rows, err := o.s.State.store.ListVersions(ctx, org, shorten.Trim(in.ID, maxField), boundLimit(in.Limit))
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list versions: %v", err)
 	}
@@ -581,7 +580,7 @@ func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersi
 	}
 	now := time.Now().UnixMilli()
 	v := FlowVersion{
-		ID: mint.ID("ver"), Org: org, FlowID: clip(in.ID), DisplayName: clip(in.DisplayName),
+		ID: mint.ID("ver"), Org: org, FlowID: shorten.Trim(in.ID, maxField), DisplayName: shorten.Trim(in.DisplayName, maxField),
 		Trigger: in.Trigger, Valid: in.Trigger != nil, State: VersionDraft,
 		SchemaVersion: LatestFlowSchemaVersion, Created: now, Updated: now,
 	}
@@ -844,7 +843,7 @@ func (o ops) runFlow(ctx context.Context, in *flowRef) (*FlowRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := o.s.State.store.GetFlow(ctx, org, clip(in.ID))
+	f, err := o.s.State.store.GetFlow(ctx, org, shorten.Trim(in.ID, maxField))
 	if err != nil {
 		return nil, mapStoreErr(err, "flow not found")
 	}
@@ -877,7 +876,7 @@ func (o ops) listRuns(ctx context.Context, in *runQuery) (*runPage, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := o.s.State.store.ListRuns(ctx, org, clip(in.FlowID), boundLimit(in.Limit))
+	rows, err := o.s.State.store.ListRuns(ctx, org, shorten.Trim(in.FlowID, maxField), boundLimit(in.Limit))
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
 	}
@@ -901,7 +900,7 @@ func (o ops) getRun(ctx context.Context, in *runRef) (*FlowRun, error) {
 	if err != nil {
 		return nil, err
 	}
-	run, err := o.s.State.store.GetRun(ctx, org, clip(in.ID))
+	run, err := o.s.State.store.GetRun(ctx, org, shorten.Trim(in.ID, maxField))
 	if err != nil {
 		return nil, mapStoreErr(err, "run not found")
 	}
@@ -1025,7 +1024,7 @@ func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	source, event := clip(c.Param("source")), clip(c.Param("event"))
+	source, event := shorten.Trim(c.Param("source"), maxField), shorten.Trim(c.Param("event"), maxField)
 	if source == "" || event == "" {
 		return zip.ErrBadRequest("source and event are required")
 	}
@@ -1041,7 +1040,7 @@ func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// LOW-1: an absent idempotency key content-hashes the body, so a hammer of identical
 	// POSTs collapses to ONE run instead of minting a fresh run per POST.
-	dedupe := clip(c.Header("X-Idempotency-Key"))
+	dedupe := shorten.Trim(c.Header("X-Idempotency-Key"), maxField)
 	if dedupe == "" {
 		dedupe = bodyDedupe(body)
 	}
@@ -1058,7 +1057,7 @@ func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
 // causationDepth reads the X-Causation-Depth header an in-platform producer sets to
 // propagate a firing's depth. Absent/invalid ⇒ 0 (an external origin).
 func causationDepth(c *zip.Ctx) int {
-	if n, err := strconv.Atoi(clip(c.Header("X-Causation-Depth"))); err == nil && n >= 0 {
+	if n, err := strconv.Atoi(shorten.Trim(c.Header("X-Causation-Depth"), maxField)); err == nil && n >= 0 {
 		return n
 	}
 	return 0
@@ -1077,7 +1076,7 @@ func (o ops) enableFlow(ctx context.Context, in *flowRef) (*Flow, error) {
 	if err != nil {
 		return nil, err
 	}
-	return setEnabled(o.s, ctx, org, clip(in.ID), true)
+	return setEnabled(o.s, ctx, org, shorten.Trim(in.ID, maxField), true)
 }
 
 // DisableFlow disarms a flow's trigger and marks it DISABLED. Its schedule and its
@@ -1090,7 +1089,7 @@ func (o ops) disableFlow(ctx context.Context, in *flowRef) (*Flow, error) {
 	if err != nil {
 		return nil, err
 	}
-	return setEnabled(o.s, ctx, org, clip(in.ID), false)
+	return setEnabled(o.s, ctx, org, shorten.Trim(in.ID, maxField), false)
 }
 
 // setEnabled flips a rule's status and (dis)arms its trigger — the ONE reconfigure
@@ -1377,7 +1376,7 @@ func validated(ctx context.Context) error {
 	return nil
 }
 
-func idParam(c *zip.Ctx) string { return clip(c.Param("id")) }
+func idParam(c *zip.Ctx) string { return shorten.Trim(c.Param("id"), maxField) }
 
 // boundLimit clamps a caller's page size: absent or non-positive ⇒ defaultLimit,
 // above the ceiling ⇒ maxLimit. The parse itself is zip's URL binder, which is the
@@ -1390,11 +1389,6 @@ func boundLimit(n int) int {
 		return maxLimit
 	}
 	return n
-}
-
-// clip trims and bounds a text field.
-func clip(s string) string {
-	return strings.TrimSpace(shorten.To(s, maxField))
 }
 
 func terminal(s FlowRunStatus) bool {

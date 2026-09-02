@@ -440,11 +440,6 @@ func validOrg(org string) bool {
 	return true
 }
 
-// clip trims + bounds a non-secret text field.
-func clip(s string) string {
-	return shorten.To(strings.TrimSpace(s), maxField)
-}
-
 // toStr coerces a decoded JSON value to a trimmed string (numbers → their literal;
 // non-scalars → ""). Lets the connect body carry an id as a string or a number.
 func toStr(v any) string {
@@ -613,7 +608,7 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	spec := dest.Spec()
 	cfg := Config{}
 	for _, f := range spec.Fields {
-		v := clip(toStr(body[f.Key]))
+		v := shorten.Trim(toStr(body[f.Key]), maxField)
 		if v == "" {
 			if f.Required {
 				return zip.ErrBadRequest(dest.ID() + ": " + f.Key + " is required")
@@ -642,7 +637,7 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	if v, ok := body["enabled"].(bool); ok {
 		enabled = v
 	}
-	row := Row{Org: org, Platform: dest.ID(), Enabled: enabled, Config: cfg, AccountLabel: clip(toStr(body["account"]))}
+	row := Row{Org: org, Platform: dest.ID(), Enabled: enabled, Config: cfg, AccountLabel: shorten.Trim(toStr(body["account"]), maxField)}
 	if err := s.State.store.Upsert(c.Context(), row); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
@@ -698,7 +693,7 @@ func Connect(ctx context.Context, org, platform string, in map[string]any) (Dest
 		maps.Copy(cfg, existing.Config)
 	}
 	for _, f := range spec.Fields {
-		if v := clip(toStr(in[f.Key])); v != "" {
+		if v := shorten.Trim(toStr(in[f.Key]), maxField); v != "" {
 			cfg[f.Key] = v
 		}
 	}
