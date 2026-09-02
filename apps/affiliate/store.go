@@ -521,11 +521,6 @@ func (s *Store) ListAll(ctx context.Context, limit int) ([]Affiliate, error) {
 	return s.queryAffiliates(ctx, `SELECT `+affiliateCols+` FROM affiliates ORDER BY created_at DESC LIMIT ?`, limit)
 }
 
-// ListApproved returns every approved affiliate (the sweep set), oldest-first.
-func (s *Store) ListApproved(ctx context.Context, limit int) ([]Affiliate, error) {
-	return s.queryAffiliates(ctx, `SELECT `+affiliateCols+` FROM affiliates WHERE status=? ORDER BY created_at ASC LIMIT ?`, StatusApproved, limit)
-}
-
 func (s *Store) queryAffiliates(ctx context.Context, q string, args ...any) ([]Affiliate, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -756,26 +751,6 @@ func (s *Store) referrerUserOf(ctx context.Context, user string) (string, bool, 
 	return r, r != "", nil
 }
 
-// UplineUsers returns a user's ancestors up to `depth` (index 0 = direct referrer).
-func (s *Store) UplineUsers(ctx context.Context, user string, depth int) ([]string, error) {
-	out := make([]string, 0, depth)
-	seen := map[string]bool{user: true}
-	cur := user
-	for len(out) < depth {
-		r, ok, err := s.referrerUserOf(ctx, cur)
-		if err != nil {
-			return nil, err
-		}
-		if !ok || seen[r] {
-			break
-		}
-		out = append(out, r)
-		seen[r] = true
-		cur = r
-	}
-	return out, nil
-}
-
 func (s *Store) wouldCycleUser(ctx context.Context, referred, referrer string) (bool, error) {
 	seen := map[string]bool{}
 	cur := referrer
@@ -809,25 +784,6 @@ func (s *Store) getReferralByReferred(ctx context.Context, referredOrg string) (
 		return AffiliateReferral{}, fmt.Errorf("get referral: %w", err)
 	}
 	return r, nil
-}
-
-// ListReferrals returns an affiliate's attribution edges (the orgs it referred),
-// newest-first, bounded.
-func (s *Store) ListReferrals(ctx context.Context, affiliateID string, limit int) ([]AffiliateReferral, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+referralCols+` FROM affiliate_referrals WHERE affiliate_id=? ORDER BY created_at DESC LIMIT ?`, affiliateID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("list referrals: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	out := make([]AffiliateReferral, 0, 16)
-	for rows.Next() {
-		r, err := scanReferral(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan referral: %w", err)
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
 }
 
 // CountReferrals returns how many orgs an affiliate has referred.
@@ -1070,41 +1026,6 @@ func (s *Store) RecordPayout(ctx context.Context, payoutID, affiliateID string, 
 		return Payout{}, fmt.Errorf("payout commit: %w", err)
 	}
 	return Payout{ID: payoutID, AffiliateID: affiliateID, AmountCents: amountCents, Method: method, Reference: reference, CreatedAt: now}, nil
-}
-
-// VoidPayout reverses a RecordPayout that could not be BACKED by the treasury
-// reserve: it deletes the payout row and restores the reserved amount to pending
-// (paid_cents −= amount), in one transaction. It is the compensating action when the
-// fund cannot cover a payout the pending-guard already reserved — so a blocked payout
-// leaves the affiliate's pending intact, honestly, instead of silently burning it.
-func (s *Store) VoidPayout(ctx context.Context, payoutID, affiliateID string, amountCents int64) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("void tx: %w", err)
-	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM affiliate_payouts WHERE id=?`, payoutID); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("delete payout: %w", err)
-	}
-	if _, err = tx.ExecContext(ctx,
-		`UPDATE affiliates SET paid_cents = paid_cents - ? WHERE id=?`, amountCents, affiliateID); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("restore pending: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("void commit: %w", err)
-	}
-	return nil
-}
-
-// SetPayoutTxn records the commerce ledger transaction id after a credits payout
-// deposit lands (best-effort receipt; the pending reservation is the authority).
-func (s *Store) SetPayoutTxn(ctx context.Context, payoutID, txn string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE affiliate_payouts SET txn=? WHERE id=?`, txn, payoutID)
-	if err != nil {
-		return fmt.Errorf("set payout txn: %w", err)
-	}
-	return nil
 }
 
 const payoutCols = `id,affiliate_id,amount_cents,method,reference,txn,created_at`
