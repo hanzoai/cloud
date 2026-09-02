@@ -723,3 +723,64 @@ func TestCommitRefusesAStaleFence(t *testing.T) {
 		t.Errorf("a reserved directory was blocked by the stale-fence refusal: %v", err)
 	}
 }
+
+// TestUpdateRefusesToRollProductionBack is the rule charts/app/pin.sh holds for
+// every service whose CI calls it, held here because this is the one writer of
+// those files that is not pin.sh.
+//
+// It is deliberately narrow: it applies only where BOTH tags are semver, since
+// this API declares any app with any OCI tag and between two of those there is no
+// ordering to recognise a rollback by. TestUpdateAcceptsAnyOrderWithoutSemver is
+// the other half.
+func TestUpdateRefusesToRollProductionBack(t *testing.T) {
+	remote, bare := gitRemote(t, pinFixture)
+	defer swapUniverseRemote(remote)()
+	reg := fakeRegistryFunc(t, func(string) bool { return true })
+	defer swapRegistryBase(reg.URL)()
+	s := serviceWithKMS(kmsWithPinToken(t))
+
+	spec := testSpec()
+	spec.Tag = "v1.4.0"
+	if _, err := declare(s, context.Background(), spec, modeCommit); err != nil {
+		t.Fatalf("first declare: %v", err)
+	}
+
+	// Both a patch behind and a whole minor behind: the comparison is the version,
+	// not the string, so v1.3.999 must still lose to v1.4.0.
+	for _, older := range []string{"v1.3.9", "v1.3.999"} {
+		back := spec
+		back.Tag = older
+		if _, err := declare(s, context.Background(), back, modeCommit); err == nil {
+			t.Fatalf("%s was accepted over v1.4.0 — a re-run of a stale build rolls production back", older)
+		}
+	}
+	if got := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name)); !strings.Contains(got, "tag: v1.4.0") {
+		t.Errorf("the refused declaration still moved the pin:\n%s", got)
+	}
+}
+
+// TestUpdateAcceptsAnyOrderWithoutSemver is why the rule above reads both tags
+// before it applies. A build id has no order, so nothing here can call one of
+// them a rollback, and refusing on a guess would break every app that does not
+// version this way.
+func TestUpdateAcceptsAnyOrderWithoutSemver(t *testing.T) {
+	remote, bare := gitRemote(t, pinFixture)
+	defer swapUniverseRemote(remote)()
+	reg := fakeRegistryFunc(t, func(string) bool { return true })
+	defer swapRegistryBase(reg.URL)()
+	s := serviceWithKMS(kmsWithPinToken(t))
+
+	spec := testSpec()
+	spec.Tag = "bld_zzz"
+	if _, err := declare(s, context.Background(), spec, modeCommit); err != nil {
+		t.Fatalf("first declare: %v", err)
+	}
+	next := spec
+	next.Tag = "bld_aaa" // lexically earlier, and not a version
+	if _, err := declare(s, context.Background(), next, modeCommit); err != nil {
+		t.Fatalf("a build id was refused as a rollback: %v", err)
+	}
+	if got := mustGit(t, bare, "show", universeBranch+":"+declarePath(spec.Org, spec.Name)); !strings.Contains(got, "tag: bld_aaa") {
+		t.Errorf("the declaration did not move:\n%s", got)
+	}
+}

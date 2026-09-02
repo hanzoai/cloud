@@ -1001,6 +1001,22 @@ func declare(s *cloud.Service[state], ctx context.Context, spec declareSpec, mod
 					changed = false
 					break
 				}
+				// MONOTONIC WHERE THERE IS AN ORDER. A re-run of an old build must
+				// not roll production back by surprise — the rule charts/app/pin.sh
+				// holds for every service whose CI calls it.
+				//
+				// It applies only when BOTH tags are semver, which is what makes it
+				// safe to state here: this API declares any app with any OCI tag
+				// (`latest`, a build id), and between two of those there is no
+				// ordering to compare, so there is no rollback to recognise. A
+				// deliberate rollback is a revert on universe, where it is a commit
+				// somebody signed rather than a POST that looked like a release.
+				if cur, ok := parseSemver(f.current); ok {
+					if next, ok := parseSemver(spec.Tag); ok && next.less(cur) {
+						return fmt.Errorf("%s is pinned at %s and %s is older — refusing to roll production back",
+							rel, f.current, spec.Tag)
+					}
+				}
 				f.setTag(spec.Tag)
 				if err := f.write(spec.Tag); err != nil {
 					return err
