@@ -72,9 +72,9 @@ type roomWork struct {
 // Tenancy is the validated principal's org and nothing else, so a caller cannot
 // read another tenant's channel by naming its room.
 func (o ops) roomWorkOf(ctx context.Context, in *roomRef) (*roomWork, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	room := strings.TrimSpace(in.Room)
 	if room == "" {

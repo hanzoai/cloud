@@ -193,9 +193,9 @@ func tenantOf(ctx context.Context, s *cloud.Service[*state]) (scope, *store, err
 	if !ok {
 		return scope{}, nil, zip.ErrForbidden("no validated principal")
 	}
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return scope{}, nil, zip.ErrForbidden("no validated principal")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return scope{}, nil, err
 	}
 	// ONE MINT, and it is [tenant.Of]. The key this plane writes is the same key
 	// apps/datasets writes and apps/risk reads, so a second spelling of it here

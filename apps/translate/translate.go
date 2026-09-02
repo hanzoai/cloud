@@ -268,7 +268,7 @@ type Response struct {
 func serve(s *cloud.Service[*state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to translate")
+		return principal.Refused(c)
 	}
 	var in Request
 	if err := c.Bind(&in); err != nil {
@@ -411,9 +411,9 @@ type MemoryPage struct {
 // The org is ALWAYS the validated principal's org, never a request field, so one
 // tenant can never read another's memory — the entries hold customer source text.
 func (o ops) list(ctx context.Context, in *MemoryQuery) (*MemoryPage, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrUnauthorized("sign in to read the translation memory")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	target := ""
 	if v := strings.TrimSpace(in.Target); v != "" {
@@ -484,9 +484,9 @@ type ReviewRequest struct {
 //
 // Example: {"source": "Hello", "target": "es", "text": "Hola", "state": "approved"}
 func (o ops) review(ctx context.Context, in *ReviewRequest) (*MemoryEntry, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrUnauthorized("sign in to review translations")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(in.Source) == "" {
 		return nil, zip.ErrBadRequest("source is required")

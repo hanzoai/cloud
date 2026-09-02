@@ -335,9 +335,9 @@ type accountsOut struct {
 // a tenant has ledger postings.
 func (o ops) myAccounts(ctx context.Context, in *accountsIn) (*accountsOut, error) {
 	c, hasReq := cloud.Request(ctx)
-	tenant, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view accounts")
+	tenant, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	prefix := "org:" + tenant + ":"
 	scope := "org"

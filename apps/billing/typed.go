@@ -79,9 +79,9 @@ func payer(ctx context.Context) (org, subject string, err error) {
 // resolved, exactly as the raw handler relied on — and it needs the request
 // because the org alone does not carry it.
 func caller(ctx context.Context) (org, user string, err error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", "", zip.ErrUnauthorized("sign in to view billing")
+	org, err = principal.Acting(ctx)
+	if err != nil {
+		return "", "", err
 	}
 	c, ok := cloud.Request(ctx)
 	if !ok {

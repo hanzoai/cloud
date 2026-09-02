@@ -42,9 +42,9 @@ func (o ops) adminSetAnchorSigner(ctx context.Context, _ *noInput) (*signerOut, 
 	if _, err := admin(ctx); err != nil {
 		return nil, err
 	}
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	chain := "eip155:" + strconv.FormatInt(o.s.State.anchor.chainID, 10)
 	addr, sign, ok := wallet.TreasuryAnchorSigner(ctx, org, chain)

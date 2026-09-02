@@ -73,9 +73,9 @@ func ask[T any](ctx context.Context, org, what string, call func(context.Context
 // to a rule about which account inside that org a request bills from. Two
 // questions, two resolvers.
 func principalOrg(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrUnauthorized("sign in to view billing")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	return org, nil
 }

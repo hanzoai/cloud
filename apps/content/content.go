@@ -377,9 +377,9 @@ func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*Tran
 // traversal validator is 400 raised before the billing gate and before the studio is
 // contacted, so a hostile source never costs the caller anything.
 func (o contentOps) postGenerate(ctx context.Context, in *GenerateInput) (*GenerateResult, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("valid principal required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	body := *in
 	body.DocType = strings.TrimSpace(body.DocType)

@@ -610,18 +610,18 @@ func (o ops) remove(ctx context.Context, in *sectionRef) (*dropped, error) {
 // principal's and is never an In field: an In field is caller-supplied, so a
 // tenant read from one is a cross-tenant read the caller asserted for itself.
 func mine[T any](ctx context.Context, o ops, route string, params map[string]string) (*T, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrUnauthorized("sign in to read your trust centre")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return as[T](ctx, o, org, route, params)
 }
 
 // mineBody is mine with a decoded request body.
 func mineBody[T any](ctx context.Context, o ops, route string, params map[string]string, body any) (*T, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrUnauthorized("sign in to write to your trust centre")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return dispatch[T](ctx, o, org, route, params, body)
 }

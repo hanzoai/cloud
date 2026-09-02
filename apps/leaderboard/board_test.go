@@ -8,13 +8,13 @@ import (
 )
 
 // TestLeaderboard_FailClosedNoPrincipal: an org header without a validated user id
-// is the anonymous-forge path — it must be refused (401), not scoped to the forged org.
+// is the anonymous-forge path — it must be refused (403), not scoped to the forged org.
 func TestLeaderboard_FailClosedNoPrincipal(t *testing.T) {
 	installFakeDS(t, nil)
 	app := mountApp(t)
 	code, _ := doGet(t, app, "/v1/leaderboard", map[string]string{"X-Org-Id": "acme"}) // NO X-User-Id
-	if code != http.StatusUnauthorized {
-		t.Fatalf("forge path must be 401, got %d", code)
+	if code != http.StatusForbidden {
+		t.Fatalf("forge path must be 403, got %d", code)
 	}
 }
 

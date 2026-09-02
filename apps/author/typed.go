@@ -133,9 +133,9 @@ func pendingMsg(pending int64) string {
 // the dashboard is self-updating. That is why the royalty AUDIT lives at its own
 // address: an audit must not move the money it is auditing.
 func (o ops) myAuthors(ctx context.Context, _ *noInput) (*payload, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view your author program")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	a, err := o.s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
@@ -217,9 +217,9 @@ type periodQuery struct {
 //
 // Example: {"period": "2026-07"}
 func (o ops) basis(ctx context.Context, in *periodQuery) (*payload, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view your royalty basis")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	period, err := normPeriod(in.Period)
 	if err != nil {
@@ -293,9 +293,9 @@ type enrolment struct {
 //
 // Example: {"provider": "github", "login": "octocat"}
 func (o ops) connect(ctx context.Context, in *connectRequest) (*enrolment, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to connect GitHub")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	c, ok := caller(ctx)
 	if !ok {
@@ -366,9 +366,9 @@ type claim struct {
 //
 // Example: {"repoUrl": "github.com/octocat/hello-world"}
 func (o ops) verifyRepo(ctx context.Context, in *verifyRequest) (*claim, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to verify a repo")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	c, ok := caller(ctx)
 	if !ok {
@@ -485,9 +485,9 @@ type deployRecord struct {
 //
 // Example: {"repoUrl": "github.com/octocat/hello-world", "project": "prj_1f…"}
 func (o ops) recordDeploy(ctx context.Context, in *deployRequest) (*deployRecord, error) {
-	deployingOrg, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to record a deploy")
+	deployingOrg, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	project := strings.TrimSpace(in.Project)
 	if project == "" {

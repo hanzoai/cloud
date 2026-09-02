@@ -151,9 +151,9 @@ type noInput struct{}
 // cross-tenant read the caller asserted for itself. `why` is the refusal the surface
 // shows, so each op keeps the wording it has always sent.
 func tenantOf(ctx context.Context, why string) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrUnauthorized(why)
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	return org, nil
 }
