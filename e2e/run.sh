@@ -168,11 +168,30 @@ export IAM_SERVICE_TOKEN="$SERVICE_TOKEN"
 # every org-scoped route answers "org scope required" — a 403 that reads exactly
 # like a product bug.
 export CLOUD_JWKS_URL="$BASE/v1/iam/.well-known/jwks"
+# And the ISSUER, because a browser does not take the address it was given — it
+# asks. @hanzo/iam builds its authorize URL from `authorization_endpoint` in
+# /.well-known/openid-configuration, and cloud derives that document's issuer
+# from the BRAND unless this says otherwise. Left to the brand, an instance on
+# loopback publishes `https://hanzo.id` for every endpoint, so a local chat
+# client pointed here with VITE_HANZO_IAM signs in against PRODUCTION and comes
+# back with a token this instance's JWKS cannot verify. Setting it makes the
+# instance its own issuer: what it stamps, what it validates, and what it
+# advertises are then one address.
+
 # The same discovery, for the ai plugin, which is a separate module with its own
 # validator: it reads IAM_ENDPOINT (then IAM_ISSUER) and refuses to guess a trust
 # anchor, so with neither set it skips JWKS entirely and parses an empty
 # certificate — every completion answers 401 "iam: not valid PEM", which reads as
 # a key fault and is a missing address.
+# iam pins its issuer from IAM_ISSUER, which it requires to be https — so on a
+# loopback boot the only way to say "you are your own issuer" is the dev opt-in
+# it publishes for exactly this. Unset, iam falls back to the constant
+# `https://hanzo.id` and every endpoint in its discovery document names
+# production. Host-relative means `iss` echoes the host the request ARRIVED on,
+# so reach this instance as $BASE spells it — 127.0.0.1, not localhost — or the
+# `iss` iam stamps and the one cloud validates against are two strings.
+export IAM_DEV_HOST_RELATIVE=1
+export CLOUD_IAM_ISSUER="${CLOUD_IAM_ISSUER:-$BASE}"
 export IAM_ENDPOINT="$BASE"
 export E2E_CLIENT_SECRET="$CLIENT_SECRET"        # ${VAR} substitution in init_data.json
 export E2E_REDIRECT_URI="$BASE/auth/callback"
