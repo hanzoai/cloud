@@ -26,6 +26,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 
+	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -33,8 +34,24 @@ import (
 )
 
 // state is the mounted handler. The pollers behind it are started by build and
-// stopped with the context it was given.
+// stopped by Shutdown.
 type state struct{ h http.Handler }
+
+// stop ends the pollers. It is package-level because the host calls Shutdown
+// holding the Plugin, not the state — the same shape platform and projects use
+// for a mount whose teardown outlives its handler value.
+var stop context.CancelFunc
+
+// Shutdown stops the pollers. Registered as this app's teardown in
+// plugin/ci/main.go, so the reads against git.hanzo.ai end when the process
+// stops serving rather than at process exit.
+func Shutdown() error {
+	if stop != nil {
+		stop()
+		stop = nil
+	}
+	return nil
+}
 
 // Use mounts the capability. The name is `ci` in every projection — the address
 // /v1/ci, the tag, the plugin binary, the CLI group — as HIP-0139 §1 requires.
@@ -51,11 +68,14 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 // on a machine that holds no secrets. A missing CI_GIT_TOKEN must read as "this
 // surface cannot see the forge", not as "the host has no such surface".
 func build(b cloud.Base) (state, error) {
-	h, err := upstream.ServeFromEnv(context.Background(), slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	h, err := upstream.ServeFromEnv(ctx, slog.Default())
 	if err != nil {
+		cancel() // nothing was started; release the context with the failure
 		b.Log.Warn("ci is not configured; /v1/ci will fail closed", "err", err)
 		return state{h: unconfigured(err)}, nil
 	}
+	stop = cancel
 	return state{h: h}, nil
 }
 
@@ -169,6 +189,10 @@ func call[T any](ctx context.Context, h http.Handler, path string) (*T, error) {
 // SuperAdmin, which is what the surface reads as "sees everything", otherwise
 // the validated principal's own org.
 //
+// The reserved org is authz.AdminOrg, the constant IAM signs and every reader
+// of that claim spells. Written here as a literal it was a second copy of a
+// value hanzo.ai/ci also held, agreeing only while both said the same word.
+//
 // AN ISOLATION KEY, NOT A RESOURCE NAME — which is why this reads principal and
 // does not fold. Two shapes are in use in this binary and they are not
 // interchangeable. deploy, platform, provisioning and fare pass c.Org() through
@@ -182,7 +206,7 @@ func call[T any](ctx context.Context, h http.Handler, path string) (*T, error) {
 // with the runs of a tenant that does not exist.
 func viewer(c *zip.Ctx) (string, bool) {
 	if principal.IsSuperAdmin(c) {
-		return "admin", true
+		return authz.AdminOrg, true
 	}
 	return principal.Org(c)
 }
