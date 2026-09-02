@@ -92,6 +92,8 @@
         "refresh_token"
       ],
       "redirectUris": [
+        "http://127.0.0.1:3090/auth/callback",
+        "http://localhost:3090/auth/callback",
         "http://localhost:3000/auth/callback",
         "http://localhost:3000/callback",
         "http://localhost:3000"
@@ -114,6 +116,8 @@
         "refresh_token"
       ],
       "redirectUris": [
+        "http://127.0.0.1:3090/auth/callback",
+        "http://localhost:3090/auth/callback",
         "http://localhost:5173/auth/callback",
         "http://localhost:5200/auth/callback",
         "http://localhost:5300/auth/callback",
