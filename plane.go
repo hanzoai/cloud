@@ -2,7 +2,6 @@ package cloud
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -126,11 +125,20 @@ func Ask[In, Out any](ctx context.Context, app, op string, in *In) (*Out, error)
 //
 // It is at manifest.MCPPath and not zip's own /mcp because zip already serves the
 // PLANE's ops at /mcp — a different registry, and one route per address.
+//
+// # The body is a FRAME, in both directions
+//
+// Both ends of this hop are our own processes, so the message crosses in the
+// encoding the [zapmcp.Frame] already has — a 16-byte header and a fixed
+// section, carrying no field names — marked [zip.CallContentType]. JSON-RPC is
+// the projection an MCP client reads, and no client is on this socket. The edge
+// MCP server answers external clients and is JSON-RPC there, as the
+// specification defines it.
 func UseMCP(app *zip.App) {
 	Plane().Post(manifest.MCPPath, func(c *zip.Ctx) error {
 		var f zapmcp.Frame
-		if err := json.Unmarshal(c.Body(), &f); err != nil {
-			return c.JSON(http.StatusOK, &zapmcp.Frame{Kind: zapmcp.Response,
+		if err := zapmcp.Unmarshal(c.Body(), &f); err != nil {
+			return reply(c, &zapmcp.Frame{Kind: zapmcp.Response,
 				Err: &zapmcp.Error{Code: zapmcp.CodeParse, Message: "parse error"}})
 		}
 		// c.Forward() binds THIS request to the context the op is handed, which is
@@ -138,10 +146,21 @@ func UseMCP(app *zip.App) {
 		// the handler (zip mcp.go, callerContext).
 		ans := app.MCP(c.Forward(), &f)
 		if ans == nil {
-			return c.Status(http.StatusAccepted).JSON(http.StatusAccepted, map[string]any{})
+			// A notification: nothing to answer, and no frame encodes that.
+			return c.NoContent(http.StatusAccepted)
 		}
-		return c.JSON(http.StatusOK, ans)
+		return reply(c, ans)
 	})
+}
+
+// reply writes one frame back to a plane caller.
+func reply(c *zip.Ctx, f *zapmcp.Frame) error {
+	b, err := zapmcp.Marshal(f)
+	if err != nil {
+		return err
+	}
+	c.SetHeader("Content-Type", zip.CallContentType)
+	return c.Bytes(http.StatusOK, b)
 }
 
 var planeApp struct {
