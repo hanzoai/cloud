@@ -35,12 +35,12 @@
               "schema": {
                 "oneOf": [
                   {
-                    "$ref": "#/components/schemas/Event"
+                    "$ref": "#/components/schemas/CaptureEvent"
                   },
                   {
                     "type": "array",
                     "items": {
-                      "$ref": "#/components/schemas/Event"
+                      "$ref": "#/components/schemas/CaptureEvent"
                     }
                   },
                   {
@@ -739,27 +739,6 @@
           }
         },
         "type": "object"
-      },
-      "Event": {
-        "type": "object",
-        "properties": {
-          "distinctId": {
-            "type": "string"
-          },
-          "event": {
-            "type": "string"
-          },
-          "properties": {
-            "type": "object",
-            "additionalProperties": {}
-          },
-          "time": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        }
       },
       "Exception": {
         "type": "object",
