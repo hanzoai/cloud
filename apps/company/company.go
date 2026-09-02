@@ -1,11 +1,11 @@
 package company
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -268,7 +268,7 @@ type ops struct{ s *cloud.Service[state] }
 
 // feeCents is the formation fee, overridable by ops via CLOUD_COMPANY_FEE_CENTS.
 func feeCents() int64 {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_COMPANY_FEE_CENTS")); v != "" {
+	if v := environ.Or("CLOUD_COMPANY_FEE_CENTS", ""); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
 			return n
 		}

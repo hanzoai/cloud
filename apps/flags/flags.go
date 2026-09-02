@@ -54,7 +54,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -220,7 +219,7 @@ func (c *Client) resolve(def Def) (value string, source string) {
 		}
 	}
 	if def.Env != "" {
-		if ev := strings.TrimSpace(os.Getenv(def.Env)); ev != "" {
+		if ev := environ.Or(def.Env, ""); ev != "" {
 			return ev, "env"
 		}
 	}
@@ -517,7 +516,7 @@ func Shutdown(_ context.Context) error {
 }
 
 func ttlFromEnv() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("FLAGS_TTL_SECONDS")); v != "" {
+	if v := environ.Or("FLAGS_TTL_SECONDS", ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return time.Duration(n) * time.Second
 		}

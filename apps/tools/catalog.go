@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -11,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -435,7 +435,7 @@ func (s *CatalogStore) Sync(ctx context.Context) (added, updated int, err error)
 // registryURL is the upstream to sync from: the public registry, or the override
 // an air-gapped deployment (or a test) points at a mirror with.
 func registryURL() string {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_TOOLS_REGISTRY")); v != "" {
+	if v := environ.Or("CLOUD_TOOLS_REGISTRY", ""); v != "" {
 		return strings.TrimSuffix(v, "/")
 	}
 	return upstream

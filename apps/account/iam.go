@@ -23,13 +23,13 @@
 package account
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -55,9 +55,9 @@ func newIAMClient() *iamClient {
 	base := cloud.IAMBase()
 	return &iamClient{
 		base:         base,
-		clientID:     strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID")),
-		clientSecret: strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET")),
-		serviceToken: strings.TrimSpace(os.Getenv("IAM_SERVICE_TOKEN")),
+		clientID:     environ.Or("IAM_MINT_CLIENT_ID", ""),
+		clientSecret: environ.Or("IAM_MINT_CLIENT_SECRET", ""),
+		serviceToken: environ.Or("IAM_SERVICE_TOKEN", ""),
 		http:         &http.Client{Timeout: 15 * time.Second},
 	}
 }

@@ -1,7 +1,6 @@
 package sites
 
 import (
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud/brand"
@@ -96,7 +95,7 @@ func registrableDomain(host string) string { return brand.Apex(host) }
 // otherwise reserve — or self-claim — the whole zone.
 func list(k string, def ...string) []string {
 	out := make([]string, 0, len(def))
-	for v := range strings.SplitSeq(os.Getenv(k), ",") {
+	for v := range strings.SplitSeq(environ.Or(k, ""), ",") {
 		if v = strings.TrimSpace(v); v != "" {
 			out = append(out, v)
 		}

@@ -25,9 +25,9 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -306,13 +306,13 @@ var fleetProber *prober.Prober
 func mountProbes(deps cloud.Deps, instruments metric.Registerer) error {
 	log := luxlog.Default().New("subsystem", "o11y-probes")
 
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("O11Y_PROBES")), "false") {
+	if strings.EqualFold(environ.Or("O11Y_PROBES", ""), "false") {
 		log.Info("fleet health probes disabled (O11Y_PROBES=false)")
 		return nil
 	}
 
 	interval := 30 * time.Second
-	if v := strings.TrimSpace(os.Getenv("O11Y_PROBE_INTERVAL")); v != "" {
+	if v := environ.Or("O11Y_PROBE_INTERVAL", ""); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			interval = d
 		} else {

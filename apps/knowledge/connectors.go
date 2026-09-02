@@ -33,7 +33,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -76,8 +75,8 @@ type oauthApp struct {
 // and default scopes are the providers' standard endpoints.
 func oauthConfig(provider string) (oauthApp, bool) {
 	up := strings.ToUpper(provider)
-	id := os.Getenv("KB_" + up + "_CLIENT_ID")
-	secret := os.Getenv("KB_" + up + "_CLIENT_SECRET")
+	id := environ.Or("KB_" + up + "_CLIENT_ID", "")
+	secret := environ.Or("KB_" + up + "_CLIENT_SECRET", "")
 	if id == "" || secret == "" {
 		return oauthApp{}, false
 	}
@@ -131,7 +130,7 @@ func kmsRef(org, provider string) string {
 
 // stateSecret is the HMAC key for OAuth state, from env (KMS-injected). Absent, the
 // connector flow is disabled (fail closed) rather than issuing forgeable state.
-func stateSecret() []byte { return []byte(os.Getenv("KB_OAUTH_STATE_SECRET")) }
+func stateSecret() []byte { return []byte(environ.Or("KB_OAUTH_STATE_SECRET", "")) }
 
 // signState mints an opaque state binding (org, provider) with a short expiry,
 // authenticated by HMAC-SHA256. The callback verifies the MAC and expiry and

@@ -44,11 +44,11 @@ package todo
 // caller cannot choose who it acts as.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -129,7 +129,7 @@ func (f *forgeSource) resolve(ctx context.Context, s *cloud.Service[state]) (*fo
 	// production deployment, the host is derived and cannot drift per brand.
 	host := f.host
 	if host == "" {
-		host = strings.TrimSpace(os.Getenv("CLOUD_FORGE_HOST"))
+		host = environ.Or("CLOUD_FORGE_HOST", "")
 	}
 	if host == "" {
 		host = brand.Sibling(s.Domain, forge.Name)

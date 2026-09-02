@@ -3,10 +3,10 @@
 package cron
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -34,7 +34,7 @@ const (
 // kubeNamespace is the k8s namespace holding cron ConfigMaps and receiving
 // Jobs. One namespace — platform cron is cluster-plane, not tenant-plane.
 func kubeNamespace() string {
-	if v := os.Getenv("CRON_NAMESPACE"); v != "" {
+	if v := environ.Or("CRON_NAMESPACE", ""); v != "" {
 		return v
 	}
 	return "hanzo"

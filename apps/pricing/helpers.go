@@ -1,7 +1,7 @@
 package pricing
 
 import (
-	"os"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
 
 	hplans "github.com/hanzoai/plans"
@@ -17,7 +17,7 @@ func loadPlansCatalog() (map[string]any, error) {
 
 // parseFloatEnv reads a float env var with a default (markup knobs).
 func parseFloatEnv(key string, dflt float64) float64 {
-	if v := os.Getenv(key); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
 		}

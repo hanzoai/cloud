@@ -14,11 +14,10 @@
 package standing
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -137,7 +136,7 @@ func stale(asOf string, now time.Time) bool {
 // agentFeeCents is what we charge to be the agent of record, per year. Ours to
 // set, so it has a default; ops may move it.
 func agentFeeCents() int64 {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_STANDING_AGENT_FEE_CENTS")); v != "" {
+	if v := environ.Or("CLOUD_STANDING_AGENT_FEE_CENTS", ""); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
 			return n
 		}

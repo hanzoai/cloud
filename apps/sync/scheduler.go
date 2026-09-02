@@ -1,8 +1,8 @@
 package sync
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -69,7 +69,7 @@ const (
 // disables; an unparseable value disables (fail-safe — never silently pick a surprising
 // cadence, and never poll-storm a provider because of a typo).
 func reconcileInterval(log luxlog.Logger) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(reconcileIntervalEnv))
+	raw := environ.Or(reconcileIntervalEnv, "")
 	switch strings.ToLower(raw) {
 	case "", "0", "off", "false":
 		return 0

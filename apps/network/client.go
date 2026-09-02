@@ -35,6 +35,7 @@
 package network
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -43,7 +44,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -80,7 +80,7 @@ const (
 // request never races the controller's clock.
 const tokenSkew = 30 * time.Second
 
-func envTrim(k string) string { return strings.TrimSpace(os.Getenv(k)) }
+func envTrim(k string) string { return environ.Or(k, "") }
 
 func controllerBase() string {
 	if v := envTrim("ZT_CONTROLLER_URL"); v != "" {

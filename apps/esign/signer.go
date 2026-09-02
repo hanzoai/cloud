@@ -1,6 +1,7 @@
 package esign
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"crypto"
 	"crypto/rand"
@@ -62,7 +63,7 @@ func isProductionEnv(env string) bool {
 }
 
 func newSigner(dataDir, env string) (*signer, error) {
-	if certB64, keyB64 := os.Getenv("CLOUD_SIGN_CERT_PEM"), os.Getenv("CLOUD_SIGN_KEY_PEM"); certB64 != "" && keyB64 != "" {
+	if certB64, keyB64 := environ.Or("CLOUD_SIGN_CERT_PEM", ""), environ.Or("CLOUD_SIGN_KEY_PEM", ""); certB64 != "" && keyB64 != "" {
 		certPEM, err := base64.StdEncoding.DecodeString(strings.TrimSpace(certB64))
 		if err != nil {
 			return nil, fmt.Errorf("sign: decode CLOUD_SIGN_CERT_PEM: %w", err)

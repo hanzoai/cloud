@@ -49,8 +49,8 @@
 package event
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"encoding/json"
-	"os"
 	"strings"
 	"time"
 
@@ -214,7 +214,7 @@ const teamSecretEnv = "SERVER_SECRET"
 // write into a tenant it has no claim to. No secret ⇒ no team credential ⇒ the caller
 // takes the anonymous lane. Fail-closed, and the closed state is still useful.
 func teamSecret() string {
-	s := os.Getenv(teamSecretEnv)
+	s := environ.Or(teamSecretEnv, "")
 	if s == "secret" {
 		return ""
 	}

@@ -1,7 +1,7 @@
 package metering
 
 import (
-	"os"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strings"
 )
 
@@ -52,18 +52,18 @@ func ConfigFromEnv() Config {
 		return Config{} // not configured -> allow + no-op.
 	}
 
-	base := strings.TrimSpace(os.Getenv(EnvBaseURL))
+	base := environ.Or(EnvBaseURL, "")
 	if base == "" {
 		base = DefaultBaseURL
 	}
-	org := strings.TrimSpace(os.Getenv(EnvOrg))
+	org := environ.Or(EnvOrg, "")
 	if org == "" {
 		org = "hanzo"
 	}
 
 	return Config{
 		BaseURL:   base,
-		Token:     strings.TrimSpace(os.Getenv(EnvToken)),
+		Token:     environ.Or(EnvToken, ""),
 		Org:       org,
 		TierAware: envTrue(EnvTierAware),
 		FailOpen:  envTrue(EnvFailOpen),
@@ -81,6 +81,6 @@ func FromEnv() (*Client, error) {
 }
 
 func envTrue(key string) bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	v := strings.ToLower(environ.Or(key, ""))
 	return v == "true" || v == "1" || v == "yes"
 }

@@ -50,6 +50,7 @@
 package treasury
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -164,8 +165,8 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// offline/default, so the reserve fund works today). The Hanzo revenue-share
 	// policy is held in the native store either way (it is config, not accounting).
 	var record ledger.Backend
-	if base := strings.TrimSpace(os.Getenv("FORMANCE_LEDGER_URL")); base != "" {
-		record = formance.New(base, os.Getenv("FORMANCE_LEDGER_NAME"), os.Getenv("FORMANCE_LEDGER_TOKEN"), store)
+	if base := environ.Or("FORMANCE_LEDGER_URL", ""); base != "" {
+		record = formance.New(base, environ.Or("FORMANCE_LEDGER_NAME", ""), environ.Or("FORMANCE_LEDGER_TOKEN", ""), store)
 		log.Info("treasury ledger of record: formance", "url", base)
 	} else {
 		record = ledger.New(store)

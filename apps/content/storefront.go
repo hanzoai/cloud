@@ -1,6 +1,7 @@
 package content
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -133,8 +133,8 @@ type commerceStorefront struct {
 // a deployment sources from KMS) on every call, so it is never held in a manifest.
 func newStorefront() Storefront {
 	return commerceStorefront{
-		base:  transport.BaseURL(strings.TrimSpace(os.Getenv(commerceURLEnv))),
-		token: func() string { return strings.TrimSpace(os.Getenv(commerceTokenEnv)) },
+		base:  transport.BaseURL(environ.Or(commerceURLEnv, "")),
+		token: func() string { return environ.Or(commerceTokenEnv, "") },
 		http:  transport.Client(storefrontTimeout),
 	}
 }
@@ -299,7 +299,7 @@ func publicAssetURL(file string) string {
 	if strings.HasPrefix(file, "https://") || strings.HasPrefix(file, "http://") {
 		return file
 	}
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv(assetBaseEnv)), "/")
+	base := strings.TrimRight(environ.Or(assetBaseEnv, ""), "/")
 	if base == "" {
 		base = defaultAssetBase
 	}

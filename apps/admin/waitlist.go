@@ -14,6 +14,7 @@ package admin
 // client claim — it is injected from KMS into the process env by the deployment.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,7 +22,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -37,8 +37,8 @@ const (
 var waitlistHTTP = &http.Client{Timeout: 15 * time.Second}
 
 func waitlistConfig() (base, secret string, ok bool) {
-	base = strings.TrimRight(strings.TrimSpace(os.Getenv(waitlistURLEnv)), "/")
-	secret = strings.TrimSpace(os.Getenv(waitlistSecretEnv))
+	base = strings.TrimRight(environ.Or(waitlistURLEnv, ""), "/")
+	secret = environ.Or(waitlistSecretEnv, "")
 	return base, secret, base != "" && secret != ""
 }
 

@@ -32,8 +32,8 @@ package platform
 // deployment — the same guarantee the build meter already relies on.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -66,7 +66,7 @@ const (
 // unparseable value disables (fail-safe — never silently pick a surprising cadence).
 // Mirrors the authors scheduler's knob exactly.
 func computeMeterInterval(log luxlog.Logger) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(computeMeterIntervalEnv))
+	raw := environ.Or(computeMeterIntervalEnv, "")
 	switch raw {
 	case "":
 		return defaultComputeMeterInterval

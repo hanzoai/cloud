@@ -18,11 +18,11 @@ package integrations
 // test.salesforce.com. Linking a client's Salesforce org is an org-admin action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -82,8 +82,8 @@ func init() {
 
 func salesforceCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(salesforceClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(salesforceClientSecretEnv)),
+		ClientID:     environ.Or(salesforceClientIDEnv, ""),
+		ClientSecret: environ.Or(salesforceClientSecretEnv, ""),
 	}
 }
 
@@ -171,7 +171,7 @@ func salesforceInstance(raw string) (string, error) {
 	// instance_url is a loopback host:port — allow it there only. In prod, pin the host
 	// to a Salesforce suffix, reject a bare IP literal (IMDS/RFC1918/loopback), and drop
 	// any port, so a spoofed token endpoint cannot make the reader dial an attacker host.
-	if strings.TrimSpace(os.Getenv(salesforceLoginBaseEnv)) == "" {
+	if environ.Or(salesforceLoginBaseEnv, "") == "" {
 		if net.ParseIP(host) != nil {
 			return "", fmt.Errorf("salesforce instance host must not be an IP literal")
 		}

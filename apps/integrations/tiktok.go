@@ -16,10 +16,10 @@ package integrations
 // framework's OAuth-configured gate holds). Linking is an org-admin action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -53,8 +53,8 @@ func init() {
 
 func tiktokCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(tiktokAppIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(tiktokSecretEnv)),
+		ClientID:     environ.Or(tiktokAppIDEnv, ""),
+		ClientSecret: environ.Or(tiktokSecretEnv, ""),
 	}
 }
 

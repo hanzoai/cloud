@@ -36,11 +36,11 @@
 package provisioning
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -90,10 +90,10 @@ func publicEndpoint(kind string) (host string, port int) {
 	default:
 		host, port = "api.hanzo.ai", 443
 	}
-	if h := os.Getenv("PUBLIC_" + strings.ToUpper(kind) + "_HOST"); h != "" {
+	if h := environ.Or("PUBLIC_" + strings.ToUpper(kind) + "_HOST", ""); h != "" {
 		host = h
 	}
-	if p := os.Getenv("PUBLIC_" + strings.ToUpper(kind) + "_PORT"); p != "" {
+	if p := environ.Or("PUBLIC_" + strings.ToUpper(kind) + "_PORT", ""); p != "" {
 		if n, err := strconv.Atoi(p); err == nil {
 			port = n
 		}

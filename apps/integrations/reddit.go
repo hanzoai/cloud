@@ -13,10 +13,10 @@ package integrations
 // a campaign-write path is wired. Linking is an org-admin action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -60,8 +60,8 @@ func init() {
 
 func redditCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(redditClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(redditClientSecretEnv)),
+		ClientID:     environ.Or(redditClientIDEnv, ""),
+		ClientSecret: environ.Or(redditClientSecretEnv, ""),
 	}
 }
 

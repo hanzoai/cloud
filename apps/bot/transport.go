@@ -20,6 +20,7 @@
 package bot
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -27,7 +28,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -275,4 +275,4 @@ func requireSecure(base string) error {
 		u, plaintextEnv)
 }
 
-func getenv(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+func getenv(key string) string { return environ.Or(key, "") }

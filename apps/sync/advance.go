@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"fmt"
@@ -147,7 +148,7 @@ type remote struct {
 // pushTimeout is the ceiling on one push (transfer included).
 // GIT_MIRROR_OUT_TIMEOUT (seconds) overrides; default 300s.
 func pushTimeout() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("GIT_MIRROR_OUT_TIMEOUT")); v != "" {
+	if v := environ.Or("GIT_MIRROR_OUT_TIMEOUT", ""); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs >= 1 {
 			return time.Duration(secs) * time.Second
 		}

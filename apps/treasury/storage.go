@@ -1,8 +1,7 @@
 package treasury
 
 import (
-	"os"
-	"strings"
+	"github.com/hanzoai/cloud/internal/environ"
 )
 
 // Storage-driver selection for the treasury ledger-of-record. Decomplected into ONE
@@ -27,7 +26,7 @@ const (
 //
 // This is the ONE place the driver is decided; Mount branches on it and logs it.
 func StorageDriver() string {
-	if strings.TrimSpace(os.Getenv("FORMANCE_LEDGER_URL")) != "" {
+	if environ.Or("FORMANCE_LEDGER_URL", "") != "" {
 		return DriverPostgres
 	}
 	return DriverSQLite

@@ -19,13 +19,13 @@ package integrations
 // static flavours keep ExpiresAt 0 and degenerate to a plain custody read.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -57,7 +57,7 @@ const (
 // defaulting to the production token origin. NOT anthropicBase(): the token
 // endpoint lives on the console origin, not the API origin.
 func anthropicOAuthBase() string {
-	if v := strings.TrimSpace(os.Getenv("ANTHROPIC_OAUTH_BASE")); v != "" {
+	if v := environ.Or("ANTHROPIC_OAUTH_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://platform.claude.com"
@@ -66,7 +66,7 @@ func anthropicOAuthBase() string {
 // anthropicBase reads ANTHROPIC_API_BASE at call time (httptest client),
 // defaulting to the production API origin.
 func anthropicBase() string {
-	if v := strings.TrimSpace(os.Getenv("ANTHROPIC_API_BASE")); v != "" {
+	if v := environ.Or("ANTHROPIC_API_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://api.anthropic.com"

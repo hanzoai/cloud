@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -72,14 +71,14 @@ var (
 func index() *indexer {
 	idxOnce.Do(func() {
 		dims := 1536
-		if v := os.Getenv("KB_EMBED_DIMS"); v != "" {
+		if v := environ.Or("KB_EMBED_DIMS", ""); v != "" {
 			if n, err := parseInt(v); err == nil && n > 0 && n <= 8192 {
 				dims = n
 			}
 		}
 		idx = &indexer{
 			vectorURL:   strings.TrimRight(environ.Or("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"), "/"),
-			vectorKey:   os.Getenv("vectorApiKey"),
+			vectorKey:   environ.Or("vectorApiKey", ""),
 			ai:          kbAI,
 			embedModel:  environ.Or("CLOUD_EMBED_MODEL", "zen-embedding"), // the served SKU; raw "bge-m3" 400s at the gateway
 			dims:        dims,

@@ -40,13 +40,13 @@
 package auto
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -824,7 +824,7 @@ func checkRunBudget(s *cloud.Service[state], ctx context.Context, org string) er
 
 // runBudgetPerMin resolves the per-org run-start ceiling (env override, else the default).
 func runBudgetPerMin() int {
-	if v := os.Getenv(runBudgetEnv); v != "" {
+	if v := environ.Or(runBudgetEnv, ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}

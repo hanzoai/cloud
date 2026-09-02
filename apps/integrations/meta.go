@@ -21,10 +21,10 @@ package integrations
 // cloudflare.go documents. Linking a client's ad account is an org-admin action.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -80,8 +80,8 @@ func init() {
 
 func metaCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(metaAppIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(metaAppSecretEnv)),
+		ClientID:     environ.Or(metaAppIDEnv, ""),
+		ClientSecret: environ.Or(metaAppSecretEnv, ""),
 	}
 }
 

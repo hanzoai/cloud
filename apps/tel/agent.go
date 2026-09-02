@@ -1,13 +1,13 @@
 package tel
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -36,13 +36,13 @@ type aiDoor struct {
 }
 
 func assistantsFromEnv() Assistants {
-	base := strings.TrimRight(os.Getenv("HANZO_AI_BASE"), "/")
+	base := strings.TrimRight(environ.Or("HANZO_AI_BASE", ""), "/")
 	if base == "" {
 		// The platform's own address. Same host the console and every SDK use, so a
 		// deployment that sets nothing still reaches our stack rather than none.
 		base = "https://api.hanzo.ai"
 	}
-	key := os.Getenv("HANZO_AI_KEY")
+	key := environ.Or("HANZO_AI_KEY", "")
 	if key == "" {
 		return nil
 	}

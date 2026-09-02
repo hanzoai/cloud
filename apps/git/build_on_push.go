@@ -1,6 +1,7 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -135,11 +135,11 @@ type enqueueReq struct {
 // operator's intent, the token is the capability; without either the reactor is a
 // no-op, so the binary is safe to ship with the reactor linked but dormant.
 func nativeCICDEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(nativeCICDEnabledEnv))) {
+	switch strings.ToLower(environ.Or(nativeCICDEnabledEnv, "")) {
 	case "", "0", "off", "false", "no":
 		return false
 	}
-	return strings.TrimSpace(os.Getenv(enqueueTokenEnv)) != ""
+	return environ.Or(enqueueTokenEnv, "") != ""
 }
 
 // buildOnPush is the reactor. On a default-branch push that carries a native
@@ -280,8 +280,8 @@ func blobs(ctx context.Context, repo Repository, rev Revision) contract.Read {
 // (KMS-sourced token); the client carries a hard timeout so a slow platform can
 // never wedge the reactor goroutine.
 func enqueuePipeline(ctx context.Context, s *cloud.Service[state], ev cloud.LifecycleEvent, pl *pipeline) (int, int) {
-	token := strings.TrimSpace(os.Getenv(enqueueTokenEnv))
-	url := strings.TrimSpace(os.Getenv(enqueueURLEnv))
+	token := environ.Or(enqueueTokenEnv, "")
+	url := environ.Or(enqueueURLEnv, "")
 	if url == "" {
 		url = defaultEnqueueURL
 	}

@@ -1,13 +1,13 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -118,8 +118,8 @@ func oauthProvider(sp spec) *Provider {
 
 	creds := func() OAuthConfig {
 		return OAuthConfig{
-			ClientID:     strings.TrimSpace(os.Getenv(sp.clientIDEnv)),
-			ClientSecret: strings.TrimSpace(os.Getenv(sp.clientSecretEnv)),
+			ClientID:     environ.Or(sp.clientIDEnv, ""),
+			ClientSecret: environ.Or(sp.clientSecretEnv, ""),
 		}
 	}
 

@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -9,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -471,9 +471,9 @@ func slackLinkConfigured(s *cloud.Service[state]) bool {
 		slackIAMClientID() != "" && slackIAMClientSecret() != ""
 }
 
-func slackIAMClientID() string { return strings.TrimSpace(os.Getenv("SLACK_LINK_IAM_CLIENT_ID")) }
+func slackIAMClientID() string { return environ.Or("SLACK_LINK_IAM_CLIENT_ID", "") }
 func slackIAMClientSecret() string {
-	return strings.TrimSpace(os.Getenv("SLACK_LINK_IAM_CLIENT_SECRET"))
+	return environ.Or("SLACK_LINK_IAM_CLIENT_SECRET", "")
 }
 
 // slackIAMBase resolves the hanzo.id OIDC surface: {IAM_ENDPOINT}/v1/iam
@@ -481,7 +481,7 @@ func slackIAMClientSecret() string {
 // slackLinkCallbackURI is the hanzo.id OIDC redirect (leg3). One env override, else
 // derived from the deployment domain — mirroring the OAuth provider's redirectURI.
 func slackLinkCallbackURI(s *cloud.Service[state]) string {
-	if v := strings.TrimSpace(os.Getenv("SLACK_LINK_REDIRECT_URI")); v != "" {
+	if v := environ.Or("SLACK_LINK_REDIRECT_URI", ""); v != "" {
 		return v
 	}
 	return "https://" + s.Domain + "/v1/integrations/slack/link/callback"
@@ -489,7 +489,7 @@ func slackLinkCallbackURI(s *cloud.Service[state]) string {
 
 // slackLinkSlackURI is the Slack sign-in redirect (leg2).
 func slackLinkSlackURI(s *cloud.Service[state]) string {
-	if v := strings.TrimSpace(os.Getenv("SLACK_LINK_SLACK_REDIRECT_URI")); v != "" {
+	if v := environ.Or("SLACK_LINK_SLACK_REDIRECT_URI", ""); v != "" {
 		return v
 	}
 	return "https://" + s.Domain + "/v1/integrations/slack/link/slack"

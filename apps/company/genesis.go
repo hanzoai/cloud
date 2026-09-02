@@ -1,15 +1,14 @@
 package company
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/luxfi/crypto"
@@ -90,16 +89,16 @@ type evmAnchor struct {
 
 func newEVMAnchor(log luxlog.Logger) *evmAnchor { return &evmAnchor{log: log} }
 
-func (a *evmAnchor) rpcURL() string { return strings.TrimSpace(os.Getenv("COMPANY_GENESIS_RPC_URL")) }
+func (a *evmAnchor) rpcURL() string { return environ.Or("COMPANY_GENESIS_RPC_URL", "") }
 func (a *evmAnchor) contract() string {
-	return strings.TrimSpace(os.Getenv("COMPANY_GENESIS_CONTRACT"))
+	return environ.Or("COMPANY_GENESIS_CONTRACT", "")
 }
 func (a *evmAnchor) signerKeyHex() string {
-	return strings.TrimSpace(os.Getenv("COMPANY_GENESIS_SIGNER_KEY"))
+	return environ.Or("COMPANY_GENESIS_SIGNER_KEY", "")
 }
 
 func (a *evmAnchor) chainID() int64 {
-	if v := strings.TrimSpace(os.Getenv("COMPANY_GENESIS_CHAIN_ID")); v != "" {
+	if v := environ.Or("COMPANY_GENESIS_CHAIN_ID", ""); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			return n
 		}

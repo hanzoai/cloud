@@ -29,8 +29,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/internal/environ"
@@ -84,7 +82,7 @@ type daemon struct {
 func newDaemon() *daemon {
 	return &daemon{
 		url:  environ.Or(upstreamEnv, upstreamDefault),
-		key:  strings.TrimSpace(os.Getenv(keyEnv)),
+		key:  environ.Or(keyEnv, ""),
 		http: &http.Client{Timeout: prepareWait},
 	}
 }

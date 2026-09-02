@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -207,8 +206,8 @@ func newS3() *s3Provisioner {
 	host, port := splitAddr(endpoint, 9000)
 	return &s3Provisioner{
 		endpoint: endpoint,
-		ak:       os.Getenv("S3_ADMIN_ACCESS_KEY"),
-		sk:       os.Getenv("S3_ADMIN_SECRET_KEY"),
+		ak:       environ.Or("S3_ADMIN_ACCESS_KEY", ""),
+		sk:       environ.Or("S3_ADMIN_SECRET_KEY", ""),
 		secure:   boolEnv("S3_SECURE", false),
 		region:   environ.Or("S3_REGION", "us-east-1"),
 		host:     host,
@@ -325,7 +324,7 @@ func genToken(n int) (string, error) {
 }
 
 func atoiEnv(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
 		}
@@ -334,7 +333,7 @@ func atoiEnv(key string, def int) int {
 }
 
 func boolEnv(key string, def bool) bool {
-	if v := os.Getenv(key); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			return b
 		}

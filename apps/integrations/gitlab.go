@@ -1,13 +1,13 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +57,7 @@ const (
 // from GITLAB_URL (default https://gitlab.com). A package var so a test can point
 // the exchange/revoke/user calls at a mock server; never mutated in production.
 var gitlabBase = func() string {
-	if v := strings.TrimSpace(os.Getenv(gitlabURLEnv)); v != "" {
+	if v := environ.Or(gitlabURLEnv, ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://gitlab.com"
@@ -83,8 +83,8 @@ var gitlabHTTP = &http.Client{Timeout: 20 * time.Second}
 
 func gitlabCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(gitlabClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(gitlabClientSecretEnv)),
+		ClientID:     environ.Or(gitlabClientIDEnv, ""),
+		ClientSecret: environ.Or(gitlabClientSecretEnv, ""),
 	}
 }
 

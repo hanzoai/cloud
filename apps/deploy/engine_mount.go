@@ -13,7 +13,6 @@ package deploy
 import (
 	"context"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -29,8 +28,8 @@ import (
 
 // Engine config — all optional; defaults target the live universe manifest repo
 // (the exact source universe-crs syncs). Configure only what must vary.
-func engineEnabled() bool { return os.Getenv("DEPLOY_ENGINE_ENABLED") == "true" }
-func enginePrune() bool   { return os.Getenv("DEPLOY_ENGINE_PRUNE") == "true" }
+func engineEnabled() bool { return environ.Or("DEPLOY_ENGINE_ENABLED", "") == "true" }
+func enginePrune() bool   { return environ.Or("DEPLOY_ENGINE_PRUNE", "") == "true" }
 
 // pruneFuse bounds a single reconcile's deletions (RED HIGH-1). Conservative
 // defaults: at most 10 objects OR 20% of the managed set, whichever is smaller,
@@ -44,7 +43,7 @@ func pruneFuse() PruneFuse {
 }
 
 func envFloat(k string, d float64) float64 {
-	if v := os.Getenv(k); v != "" {
+	if v := environ.Or(k, ""); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
 		}

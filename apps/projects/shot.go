@@ -1,13 +1,13 @@
 package projects
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -90,7 +90,7 @@ func cacheShot(key string, png []byte) {
 }
 
 func crawlURL() string {
-	if v := strings.TrimSpace(os.Getenv("CRAWL_URL")); v != "" {
+	if v := environ.Or("CRAWL_URL", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "http://crawl.hanzo.svc:11235"
@@ -124,7 +124,7 @@ func capture(ctx context.Context, url string) []byte {
 	req.Header.Set("Content-Type", "application/json")
 	// The same KMS-sourced token every other reader of this service sends — one
 	// service, one credential, read from one env (see apps/websearch/render.go).
-	if tok := strings.TrimSpace(os.Getenv("CRAWL_API_TOKEN")); tok != "" {
+	if tok := environ.Or("CRAWL_API_TOKEN", ""); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 

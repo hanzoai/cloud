@@ -83,8 +83,8 @@ func New() Admin {
 	return Admin{
 		endpoint:       environ.Or("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
 		publicEndpoint: hostOnly(publicHost()),
-		ak:             os.Getenv("S3_ADMIN_ACCESS_KEY"),
-		sk:             os.Getenv("S3_ADMIN_SECRET_KEY"),
+		ak:             environ.Or("S3_ADMIN_ACCESS_KEY", ""),
+		sk:             environ.Or("S3_ADMIN_SECRET_KEY", ""),
 		secure:         boolEnv("S3_SECURE", false),
 		publicSecure:   boolEnv("S3_PUBLIC_SECURE", true),
 		region:         environ.Or("S3_REGION", "us-east-1"),
@@ -143,7 +143,7 @@ func hostOnly(s string) string {
 }
 
 func boolEnv(key string, def bool) bool {
-	if v := os.Getenv(key); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			return b
 		}

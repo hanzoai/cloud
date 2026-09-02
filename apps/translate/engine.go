@@ -14,6 +14,7 @@ package translate
 //     did not request.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -185,7 +185,7 @@ const bulkTimeout = 60 * time.Second
 
 // bulkURL names the MADLAD-400 backend. Unset ⇒ this deployment does not serve the
 // bulk tier, and every bulk request says so.
-func bulkURL() string { return strings.TrimSpace(os.Getenv("TRANSLATE_BULK_URL")) }
+func bulkURL() string { return environ.Or("TRANSLATE_BULK_URL", "") }
 
 func (b bulk) Translate(ctx context.Context, j Job) (Result, error) {
 	if b.url == "" {

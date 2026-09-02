@@ -31,7 +31,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"sort"
 	"time"
 
@@ -51,7 +50,7 @@ type config struct {
 func loadConfig() config {
 	return config{
 		url: environ.Or("searchEndpoint", "http://search.hanzo.svc.cluster.local:7700"),
-		key: os.Getenv("searchApiKey"),
+		key: environ.Or("searchApiKey", ""),
 	}
 }
 

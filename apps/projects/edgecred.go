@@ -1,8 +1,8 @@
 package projects
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"os"
 	"strings"
 
 	luxlog "github.com/luxfi/log"
@@ -46,7 +46,7 @@ const edgeOrg = "hanzo"
 // degrades a publish to stale-until-TTL, which is survivable; a deploy path that
 // refuses to start because a CDN token is unreadable is not.
 func newEdge(ctx context.Context, log luxlog.Logger) sites.Edge {
-	zone := strings.TrimSpace(os.Getenv("CF_ZONE_ID"))
+	zone := environ.Or("CF_ZONE_ID", "")
 
 	if tok, err := integrations.TokenFor(ctx, edgeOrg, "cloudflare", "api_token"); err == nil {
 		if t := strings.TrimSpace(string(tok)); t != "" {
@@ -57,7 +57,7 @@ func newEdge(ctx context.Context, log luxlog.Logger) sites.Edge {
 
 	// The environment, then — and say which it was, because "the purge does
 	// nothing" is the one failure that leaves no other trace.
-	env := strings.TrimSpace(os.Getenv("CF_API_TOKEN"))
+	env := environ.Or("CF_API_TOKEN", "")
 	if env == "" {
 		log.Warn("edge has no credential: the cloudflare integration is not readable and CF_API_TOKEN is unset; publishes are live only after the edge TTL")
 	}

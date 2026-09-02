@@ -11,13 +11,13 @@ package integrations
 // refresh token exists in this flow, so ExpiresAt stays 0.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -32,7 +32,7 @@ const (
 // copilotBase reads COPILOT_GITHUB_BASE at call time (httptest client),
 // defaulting to the login host.
 func copilotBase() string {
-	if v := strings.TrimSpace(os.Getenv("COPILOT_GITHUB_BASE")); v != "" {
+	if v := environ.Or("COPILOT_GITHUB_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://github.com"
@@ -41,7 +41,7 @@ func copilotBase() string {
 // copilotAPI reads COPILOT_API_BASE at call time (httptest client), defaulting
 // to the API host the Copilot verify lives on.
 func copilotAPI() string {
-	if v := strings.TrimSpace(os.Getenv("COPILOT_API_BASE")); v != "" {
+	if v := environ.Or("COPILOT_API_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://api.github.com"

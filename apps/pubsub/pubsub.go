@@ -102,7 +102,7 @@ const (
 // the process is gone — and a caller reached before Mount gets the default rather
 // than an empty string it would have to branch on.
 func URL() string {
-	if u := strings.TrimSpace(os.Getenv(urlEnv)); u != "" {
+	if u := environ.Or(urlEnv, ""); u != "" {
 		return u
 	}
 	port, err := clientPort()
@@ -127,7 +127,7 @@ func URL() string {
 // bare make Error 2 that names no app, because the parallel run swallows which
 // target died.
 func clientPort() (int, error) {
-	v := strings.TrimSpace(os.Getenv(portEnv))
+	v := environ.Or(portEnv, "")
 	if v == "" {
 		return defaultPort, nil
 	}
@@ -170,7 +170,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// every one of them and the failure surfaces on the PRODUCER as
 	// "Message size too large" — unfixable from the consumer side.
 	var maxPayload int32
-	if v := strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_MAX_PAYLOAD")); v != "" {
+	if v := environ.Or("CLOUD_PUBSUB_MAX_PAYLOAD", ""); v != "" {
 		n, err := strconv.ParseInt(v, 10, 32)
 		if err != nil || n <= 0 {
 			return fmt.Errorf("pubsub.Use:  bad CLOUD_PUBSUB_MAX_PAYLOAD %q (want a positive byte count)", v)
@@ -304,7 +304,7 @@ func dial() (*nats.Conn, error) {
 	// The connection's name is what an operator reads in connz, so it is the
 	// binary asking rather than a literal that would say "pubsub" for kv.
 	opts := []nats.Option{nats.Name(filepath.Base(os.Args[0])), nats.MaxReconnects(-1)}
-	if srv != nil && strings.TrimSpace(os.Getenv(urlEnv)) == "" {
+	if srv != nil && environ.Or(urlEnv, "") == "" {
 		return nats.Connect("", append(opts, nats.InProcessServer(srv.NATS()))...)
 	}
 	return nats.Connect(URL(), opts...)

@@ -54,9 +54,9 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
-	"os"
 	"strings"
 	"time"
 
@@ -85,7 +85,7 @@ var spanSinkSem = make(chan struct{}, maxSpanFanout)
 
 // llmLensEnabled reports whether the span projection is on (default ON).
 func llmLensEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(llmLensEnv))) {
+	switch strings.ToLower(environ.Or(llmLensEnv, "")) {
 	case "0", "false", "no", "off":
 		return false
 	default:

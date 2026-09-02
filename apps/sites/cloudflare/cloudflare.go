@@ -9,7 +9,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -82,7 +81,7 @@ const maxPendingTags = 4096
 // it holds a credential. The coalescing window and the process-wide ceiling
 // are operator knobs with honest defaults.
 func New(log luxlog.Logger) *Edge {
-	return With(os.Getenv("CF_API_TOKEN"), os.Getenv("CF_ZONE_ID"), log)
+	return With(environ.Or("CF_API_TOKEN", ""), environ.Or("CF_ZONE_ID", ""), log)
 }
 
 // With builds an edge on credentials the CALLER resolved, which is the
@@ -113,7 +112,7 @@ func With(token, zoneID string, log luxlog.Logger) *Edge {
 }
 
 func envDuration(key string, def time.Duration) time.Duration {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+	if v := environ.Or(key, ""); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			return d
 		}

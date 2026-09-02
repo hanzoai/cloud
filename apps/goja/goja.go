@@ -28,11 +28,11 @@
 package goja
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 
@@ -122,7 +122,7 @@ func New(cfg Config) (*Host, error) {
 	}
 
 	size := defaultPoolSize
-	if v := os.Getenv("CLOUD_GOJAHOST_POOL_SIZE"); v != "" {
+	if v := environ.Or("CLOUD_GOJAHOST_POOL_SIZE", ""); v != "" {
 		if n, e := strconv.Atoi(v); e == nil {
 			size = n
 		}

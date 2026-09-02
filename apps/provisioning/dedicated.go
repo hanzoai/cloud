@@ -34,7 +34,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -342,7 +341,7 @@ func instanceName(kind, org, name string) string {
 // override (CLOUD_DEDICATED_SIZE_DATASTORE), else the global CLOUD_DEDICATED_SIZE,
 // else 10Gi.
 func dedicatedSize(kind string) string {
-	if v := os.Getenv(dedicatedSizeEnvPrefix + "_" + strings.ToUpper(kind)); v != "" {
+	if v := environ.Or(dedicatedSizeEnvPrefix + "_" + strings.ToUpper(kind), ""); v != "" {
 		return v
 	}
 	return environ.Or(dedicatedSizeEnvPrefix, defaultDedicatedSize)
@@ -423,7 +422,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 		return nil, zip.Errorf(http.StatusBadGateway, "project admin secret: %v", err)
 	}
 	size := dedicatedSize(kind)
-	crObj := datastoreCR(ns, org, inst, id, kind, e, size, os.Getenv("CLOUD_DEDICATED_STORAGE_CLASS"), secretName, environ.Or("CLOUD_DEDICATED_PULL_SECRET", "ghcr-pull"))
+	crObj := datastoreCR(ns, org, inst, id, kind, e, size, environ.Or("CLOUD_DEDICATED_STORAGE_CLASS", ""), secretName, environ.Or("CLOUD_DEDICATED_PULL_SECRET", "ghcr-pull"))
 	if err := s.State.orch.ApplyDatastore(ctx, ns, inst, crObj); err != nil {
 		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {

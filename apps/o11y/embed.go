@@ -6,6 +6,7 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"log/slog"
@@ -28,7 +29,7 @@ import (
 // runtime in-process; empty (local dev / tests, no datastore) ⇒ buildEmbeddedHandler
 // no-ops and /v1/o11y/* uses the reverse-proxy fallback. ONE knob, no separate flag.
 func embeddedDSN() string {
-	return cmp.Or(os.Getenv("O11Y_DATASTORE_DSN"), os.Getenv("O11Y_TELEMETRYSTORE_DATASTORE_DSN"))
+	return cmp.Or(environ.Or("O11Y_DATASTORE_DSN", ""), environ.Or("O11Y_TELEMETRYSTORE_DATASTORE_DSN", ""))
 }
 
 // embeddedRuntime is the ONE in-process o11y runtime, held for the life of the
@@ -200,7 +201,7 @@ func applyEmbedEnvDefaults(dataDir string) {
 // setenvDefault sets key=val only if key is currently unset, so an operator-pinned
 // value always wins over the derived default.
 func setenvDefault(key, val string) {
-	if os.Getenv(key) == "" {
+	if environ.Or(key, "") == "" {
 		_ = os.Setenv(key, val)
 	}
 }

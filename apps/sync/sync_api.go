@@ -1,10 +1,10 @@
 package sync
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -203,7 +203,7 @@ func (o syncOps) create(ctx context.Context, in *syncReq) (*syncView, error) {
 	tgt := deriveGitTarget(body.Target, src)
 	actor := strings.TrimSpace(body.Actor)
 	if actor == "" {
-		actor = strings.TrimSpace(os.Getenv("GIT_SYNC_ACTOR"))
+		actor = environ.Or("GIT_SYNC_ACTOR", "")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {

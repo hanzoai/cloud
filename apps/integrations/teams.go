@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/base64"
@@ -9,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -49,13 +49,13 @@ const (
 // teamsAADBase is Microsoft's identity host; a var so tests can repoint it.
 var teamsAADBase = "https://login.microsoftonline.com"
 
-func teamsAppID() string       { return strings.TrimSpace(os.Getenv(teamsAppIDEnv)) }
-func teamsAppPassword() string { return strings.TrimSpace(os.Getenv(teamsAppPasswordEnv)) }
+func teamsAppID() string       { return environ.Or(teamsAppIDEnv, "") }
+func teamsAppPassword() string { return environ.Or(teamsAppPasswordEnv, "") }
 
 // teamsAuthority is the AAD authority segment: the pinned single tenant if set,
 // else "organizations" (any work/school tenant — the multi-tenant bot case).
 func teamsAuthority() string {
-	if t := strings.TrimSpace(os.Getenv(teamsTenantEnv)); t != "" {
+	if t := environ.Or(teamsTenantEnv, ""); t != "" {
 		return t
 	}
 	return "organizations"

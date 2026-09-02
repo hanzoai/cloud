@@ -46,6 +46,7 @@
 package deploy
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"crypto/rand"
@@ -56,7 +57,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -127,12 +127,12 @@ type oauth struct {
 // (deps.IAMIssuer), and the verifier is built from that issuer, so a token this
 // flow accepts is by construction a token cloud accepts.
 func newOAuth(deps cloud.Deps) oauth {
-	issuer := strings.TrimRight(cmp.Or(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"), "/")
+	issuer := strings.TrimRight(cmp.Or(deps.IAMIssuer, environ.Or("IAM_ENDPOINT", ""), "https://hanzo.id"), "/")
 	return oauth{
 		issuer:       issuer,
-		clientID:     cmp.Or(os.Getenv("DEPLOY_IAM_CLIENT_ID"), defaultClientID),
-		clientSecret: os.Getenv("DEPLOY_IAM_CLIENT_SECRET"),
-		publicURL:    strings.TrimRight(cmp.Or(os.Getenv("DEPLOY_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
+		clientID:     environ.Or("DEPLOY_IAM_CLIENT_ID", defaultClientID),
+		clientSecret: environ.Or("DEPLOY_IAM_CLIENT_SECRET", ""),
+		publicURL:    strings.TrimRight(cmp.Or(environ.Or("DEPLOY_PUBLIC_URL", ""), environ.Or("PUBLIC_ORIGIN", "")), "/"),
 		http:         &http.Client{Timeout: 15 * time.Second},
 		verify:       cloud.NewTokenValidator(issuer).Validate,
 	}

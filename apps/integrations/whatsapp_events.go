@@ -1,12 +1,12 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -28,7 +28,7 @@ const (
 // The app secret Meta signs each delivery with, and the string it echoes when a
 // webhook is first subscribed. Both are shared secrets for THIS endpoint, not
 // credentials for anything a tenant owns.
-func whatsappAppSecret() string { return os.Getenv("WHATSAPP_APP_SECRET") }
+func whatsappAppSecret() string { return environ.Or("WHATSAPP_APP_SECRET", "") }
 
 // whatsappVerify answers Meta's subscription challenge.
 //

@@ -15,9 +15,8 @@
 package finance
 
 import (
-	"os"
+	"github.com/hanzoai/cloud/internal/environ"
 	"strconv"
-	"strings"
 )
 
 // cashCeilingEnv names the daily upstream-cash ceiling, in integer CENTS.
@@ -31,7 +30,7 @@ const cashCeilingEnv = "CLOUD_DAILY_CASH_CEILING_CENTS"
 // inference, so every ambiguous input must resolve toward "allow". A typo in a
 // ConfigMap should cost a day of unguarded spend, never a fleet-wide outage.
 func dailyCashCeilingCents() int64 {
-	raw := strings.TrimSpace(os.Getenv(cashCeilingEnv))
+	raw := environ.Or(cashCeilingEnv, "")
 	if raw == "" {
 		return 0
 	}

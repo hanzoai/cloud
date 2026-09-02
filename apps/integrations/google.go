@@ -1,13 +1,13 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -70,8 +70,8 @@ var googleHTTP = &http.Client{Timeout: 20 * time.Second}
 
 func googleCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(googleClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(googleClientSecretEnv)),
+		ClientID:     environ.Or(googleClientIDEnv, ""),
+		ClientSecret: environ.Or(googleClientSecretEnv, ""),
 	}
 }
 

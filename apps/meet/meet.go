@@ -43,6 +43,7 @@
 package meet
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -171,11 +172,11 @@ func (s state) ready() bool { return s.reason == "" }
 // this used to return a bare zero value, which made a misconfigured deploy an
 // indistinguishable permanent 503 with nothing in the log to chase.
 func load() state {
-	path := os.Getenv(keyFileEnv)
+	path := environ.Or(keyFileEnv, "")
 	if path == "" {
 		path = keyFile
 	}
-	ws := strings.TrimSpace(os.Getenv(wsEnv))
+	ws := environ.Or(wsEnv, "")
 	key, apiSecret, err := readKeys(path)
 	if err != nil {
 		// The recording plane is still read on this path. It has its own reason and
@@ -232,7 +233,7 @@ func readKeys(path string) (string, string, error) {
 	// "take the first" would pick differently per process start and produce tokens
 	// that fail at the media edge intermittently.
 	key := ""
-	if want := strings.TrimSpace(os.Getenv(apiKeyEnv)); want != "" {
+	if want := environ.Or(apiKeyEnv, ""); want != "" {
 		if _, found := keys[want]; !found {
 			return "", "", fmt.Errorf("%s names api key %q, which the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) does not declare (it has: %s)", apiKeyEnv, want, path, strings.Join(names, ", "))
 		}

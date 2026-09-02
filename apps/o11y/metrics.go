@@ -6,9 +6,8 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"log/slog"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/o11y/pkg/datastoremetrics"
@@ -61,7 +60,7 @@ func stopNativeMetricsIngest() {
 // here and be retired (verify-then-cutover). Any startup error is logged and
 // swallowed — metrics ingest must never take the query plane down.
 func startNativeMetricsIngest(store telemetrystore.TelemetryStore, log luxlog.Logger) {
-	listen := strings.TrimSpace(os.Getenv("O11Y_METRICS_ZAP_LISTEN"))
+	listen := environ.Or("O11Y_METRICS_ZAP_LISTEN", "")
 	if listen == "" {
 		return // disabled — the standalone collector keeps the metrics path
 	}

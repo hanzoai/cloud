@@ -1,13 +1,13 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -51,7 +51,7 @@ const defaultOwner = "hanzo-community"
 // owner resolves the GitHub org, trimmed of anything path-like so it can
 // only ever name an org.
 func owner() string {
-	if v := strings.Trim(strings.TrimSpace(os.Getenv(envOwner)), "/"); v != "" {
+	if v := strings.Trim(environ.Or(envOwner, ""), "/"); v != "" {
 		return v
 	}
 	return defaultOwner

@@ -1,11 +1,10 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -66,7 +65,7 @@ const repoIdle = 5 * time.Minute
 const cacheEnv = "GIT_CACHE_BYTES"
 
 func cacheBytes() int64 {
-	v := strings.TrimSpace(os.Getenv(cacheEnv))
+	v := environ.Or(cacheEnv, "")
 	if v == "" {
 		return 0
 	}

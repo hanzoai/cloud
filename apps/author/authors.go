@@ -59,11 +59,11 @@
 package author
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
-	"os"
 	"strings"
 	"time"
 
@@ -159,7 +159,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:         store,
 		commerce:      newCommerceClient(),
-		forge:         newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
+		forge:         newGitHubClient(environ.Or("CLOUD_IAM_HTTP_URL", ""), environ.Or("IAM_SERVICE_TOKEN", "")),
 		badgeBase:     badgeBase(deps),
 		maintainerOrg: maintainerOrgFor(deps),
 		auditStore:    deps.Audit,
@@ -396,7 +396,7 @@ func AccrueForOrg(ctx context.Context, deployingOrg string, spend int64, period 
 // else the brand slug (hanzo/lux/zoo). White-label by brand so a Lux/Zoo deployment
 // pays ITS OWN treasury, never Hanzo's.
 func maintainerOrgFor(deps cloud.Deps) string {
-	if v := strings.TrimSpace(os.Getenv("AUTHOR_MAINTAINER_ORG")); v != "" {
+	if v := environ.Or("AUTHOR_MAINTAINER_ORG", ""); v != "" {
 		return strings.ToLower(v)
 	}
 	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {
@@ -813,7 +813,7 @@ func mustJSON(v any) json.RawMessage {
 // else the brand's builder host. White-label by brand so a Lux/Zoo deployment mints
 // its OWN badge, never hanzo.app.
 func badgeBase(deps cloud.Deps) string {
-	if v := strings.TrimSpace(os.Getenv("AUTHOR_BADGE_BASE")); v != "" {
+	if v := environ.Or("AUTHOR_BADGE_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {

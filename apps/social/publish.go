@@ -1,10 +1,10 @@
 package social
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -98,7 +98,7 @@ func missingCreds(provider string) []string {
 	need := providerCreds[provider]
 	miss := make([]string, 0, len(need))
 	for _, k := range need {
-		if strings.TrimSpace(os.Getenv(k)) == "" {
+		if environ.Or(k, "") == "" {
 			miss = append(miss, k)
 		}
 	}

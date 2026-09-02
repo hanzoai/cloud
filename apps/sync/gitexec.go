@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -56,7 +57,7 @@ var packSem = make(chan struct{}, packConcurrency())
 
 func packConcurrency() int {
 	n := 2
-	if v := strings.TrimSpace(os.Getenv("GIT_PACK_MAX_CONCURRENCY")); v != "" {
+	if v := environ.Or("GIT_PACK_MAX_CONCURRENCY", ""); v != "" {
 		if p, err := strconv.Atoi(v); err == nil && p >= 1 {
 			n = p
 		}
@@ -278,7 +279,7 @@ func mirrorCredential(host string) string {
 	if name == "" {
 		return ""
 	}
-	return strings.TrimSpace(os.Getenv(mirrorTokenStem + "_" + envHost(name)))
+	return environ.Or(mirrorTokenStem + "_" + envHost(name), "")
 }
 
 // envHost renders a hostname as the tail of an environment-variable name: upper
@@ -387,7 +388,7 @@ func mirrorInHostAllowed(host string) bool {
 // hostAllowed reports whether host is in the allowlist held in envName, or — for
 // a deployment that set none — in def.
 func hostAllowed(host, envName string, def ...string) bool {
-	if v := strings.TrimSpace(os.Getenv(envName)); v != "" {
+	if v := environ.Or(envName, ""); v != "" {
 		return hostInList(host, envName)
 	}
 	host = strings.ToLower(strings.TrimSpace(host))
@@ -443,7 +444,7 @@ func hostInList(host, envName string) bool {
 	if host == "" {
 		return false
 	}
-	for _, h := range strings.Split(os.Getenv(envName), ",") {
+	for _, h := range strings.Split(environ.Or(envName, ""), ",") {
 		if strings.ToLower(strings.TrimSpace(h)) == host {
 			return true
 		}

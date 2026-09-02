@@ -35,7 +35,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud/internal/environ"
@@ -44,7 +43,7 @@ import (
 // braveKey is the subscription token. KMS-sourced, synced onto the cloud env as
 // WEBSEARCH_BRAVE_KEY like every other secret this process reads — never a
 // literal, and never a value in a manifest.
-func braveKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_BRAVE_KEY")) }
+func braveKey() string { return environ.Or("WEBSEARCH_BRAVE_KEY", "") }
 
 func braveURL() string {
 	return environ.Or("WEBSEARCH_BRAVE_URL", "https://api.search.brave.com/res/v1/web/search")

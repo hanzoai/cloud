@@ -14,10 +14,10 @@
 package zen
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
 	"math/big"
-	"os"
 	"strings"
 
 	luxlog "github.com/luxfi/log"
@@ -252,7 +252,7 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
 		CostCents:        credit(u.Charge).Cents(),
-		RouterEndpoint:   os.Getenv("ROUTER_ENDPOINT"),
+		RouterEndpoint:   environ.Or("ROUTER_ENDPOINT", ""),
 	})
 }
 
@@ -349,7 +349,7 @@ func zenKeyResolver(kms cloud.KMSClient) func(context.Context, string) string {
 				}
 			}
 		}
-		if v := strings.TrimSpace(os.Getenv(envName)); v != "" {
+		if v := environ.Or(envName, ""); v != "" {
 			return v
 		}
 		return ""

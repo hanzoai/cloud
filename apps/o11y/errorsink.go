@@ -29,10 +29,10 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"encoding/json"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -85,7 +85,7 @@ var projectCache sync.Map // string(orgUUID) -> valuer.UUID
 
 // sentryLensEnabled reports whether the error projection is on (default ON).
 func sentryLensEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(sentryLensEnv))) {
+	switch strings.ToLower(environ.Or(sentryLensEnv, "")) {
 	case "0", "false", "no", "off":
 		return false
 	default:

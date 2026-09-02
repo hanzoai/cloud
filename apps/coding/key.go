@@ -25,10 +25,9 @@ package coding
 // policy having exactly one home is why the agent runner works at all.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 
 	"github.com/hanzoai/cloud"
@@ -42,8 +41,8 @@ import (
 // answer for a dev box and reads as "no credential" at the call site rather than
 // as an empty string that looks like one.
 var source = sync.OnceValue(func() oauth2.TokenSource {
-	id := strings.TrimSpace(os.Getenv("IAM_CLIENT_ID"))
-	secret := strings.TrimSpace(os.Getenv("IAM_CLIENT_SECRET"))
+	id := environ.Or("IAM_CLIENT_ID", "")
+	secret := environ.Or("IAM_CLIENT_SECRET", "")
 	base := cloud.IAMBaseURL(cloud.IAMIssuer())
 	if id == "" || secret == "" || base == "" {
 		return nil

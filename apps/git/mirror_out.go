@@ -1,11 +1,11 @@
 package git
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -42,7 +42,7 @@ var mirrorSem = make(chan struct{}, mirrorOutConcurrency())
 
 func mirrorOutConcurrency() int {
 	n := 1
-	if v := strings.TrimSpace(os.Getenv("GIT_MIRROR_OUT_CONCURRENCY")); v != "" {
+	if v := environ.Or("GIT_MIRROR_OUT_CONCURRENCY", ""); v != "" {
 		if p, err := strconv.Atoi(v); err == nil && p >= 1 {
 			n = p
 		}
@@ -58,7 +58,7 @@ const mirrorWaitDelay = 5 * time.Second
 // mirrorPushTimeout is the hard ceiling on one outbound push (slot wait + transfer).
 // GIT_MIRROR_OUT_TIMEOUT (seconds) overrides; default 300s.
 func mirrorPushTimeout() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("GIT_MIRROR_OUT_TIMEOUT")); v != "" {
+	if v := environ.Or("GIT_MIRROR_OUT_TIMEOUT", ""); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs >= 1 {
 			return time.Duration(secs) * time.Second
 		}

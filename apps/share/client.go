@@ -21,6 +21,7 @@
 package share
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"cmp"
 	"context"
@@ -32,7 +33,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -68,7 +68,7 @@ const maxBody = 4 << 20
 // consumes/produces (specs/zrok.yml). application/json returns 415/500.
 const zrokMediaType = "application/zrok.v1+json"
 
-func envTrim(k string) string { return strings.TrimSpace(os.Getenv(k)) }
+func envTrim(k string) string { return environ.Or(k, "") }
 
 func controllerBase() string {
 	if v := envTrim("ZROK_CONTROLLER_URL"); v != "" {

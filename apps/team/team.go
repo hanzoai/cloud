@@ -1,11 +1,11 @@
 package team
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"cmp"
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -131,7 +131,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 	// maybeAgentReply return at the top and NO outbound model call can ever fire.
 	// (This is the containment the writer-crash post-mortem demands: a new binary
 	// must be safe by default and only answer when an operator opts in.)
-	if os.Getenv("TEAM_AGENTS_ENABLED") == "1" {
+	if environ.Or("TEAM_AGENTS_ENABLED", "") == "1" {
 		trans.runAgent = agentReplyRunner
 		trans.sem = make(chan struct{}, teamAgentsMaxConcurrency())
 		log.Info("team: Chunter agent responder ENABLED", "maxConcurrency", cap(trans.sem))
@@ -304,18 +304,18 @@ func Shutdown() error {
 func loadConfig(deps cloud.Deps) config {
 	ctx := context.Background()
 	return config{
-		iamEndpoint:     cmp.Or(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"),
-		iamClientID:     cmp.Or(os.Getenv("TEAM_IAM_CLIENT_ID"), "hanzo-team"),
+		iamEndpoint:     cmp.Or(deps.IAMIssuer, environ.Or("IAM_ENDPOINT", ""), "https://hanzo.id"),
+		iamClientID:     environ.Or("TEAM_IAM_CLIENT_ID", "hanzo-team"),
 		iamClientSecret: string(deps.SecretFromEnv(ctx, "TEAM_IAM_CLIENT_SECRET_REF")),
 		serverSecret:    string(deps.SecretFromEnv(ctx, "SERVER_SECRET_REF")),
-		frontURL:        strings.TrimRight(os.Getenv("FRONT_URL"), "/"),
-		transactor:      strings.TrimRight(os.Getenv("TRANSACTOR_URL"), "/"),
+		frontURL:        strings.TrimRight(environ.Or("FRONT_URL", ""), "/"),
+		transactor:      strings.TrimRight(environ.Or("TRANSACTOR_URL", ""), "/"),
 		provider:        "openid",
 		// Public origin for the OAuth redirect_uri behind the gateway (so cloud can
 		// sit behind the gateway uniformly like api.hanzo.ai and still emit the
 		// correct public callback). TEAM_PUBLIC_URL preferred; PUBLIC_ORIGIN is the
 		// shared fallback name. Unset → derive from the request Host (no regression).
-		publicURL: strings.TrimRight(cmp.Or(os.Getenv("TEAM_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
+		publicURL: strings.TrimRight(cmp.Or(environ.Or("TEAM_PUBLIC_URL", ""), environ.Or("PUBLIC_ORIGIN", "")), "/"),
 	}
 }
 
@@ -326,7 +326,7 @@ func loadConfig(deps cloud.Deps) config {
 // responder can have in flight process-wide.
 func teamAgentsMaxConcurrency() int {
 	n := defaultMaxConcurrent
-	if v := os.Getenv("TEAM_AGENTS_MAX_CONCURRENCY"); v != "" {
+	if v := environ.Or("TEAM_AGENTS_MAX_CONCURRENCY", ""); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
 			n = parsed
 		}

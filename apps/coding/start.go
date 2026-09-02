@@ -38,9 +38,9 @@ package coding
 // /v1/agents/coding — never from a field a client can set.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -373,7 +373,7 @@ func budget(timeoutSeconds int) time.Duration {
 	case timeoutSeconds > 0:
 		d = time.Duration(timeoutSeconds) * time.Second
 	default:
-		if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CODING_TIMEOUT_SEC"))); err == nil && v > 0 {
+		if v, err := strconv.Atoi(environ.Or("CODING_TIMEOUT_SEC", "")); err == nil && v > 0 {
 			d = time.Duration(v) * time.Second
 		}
 	}
@@ -381,14 +381,14 @@ func budget(timeoutSeconds int) time.Duration {
 }
 
 func concurrency() int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CODING_CONCURRENCY"))); err == nil && v > 0 {
+	if v, err := strconv.Atoi(environ.Or("CODING_CONCURRENCY", "")); err == nil && v > 0 {
 		return v
 	}
 	return defaultConcurrency
 }
 
 func orgConcurrency() int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CODING_ORG_CONCURRENCY"))); err == nil && v > 0 {
+	if v, err := strconv.Atoi(environ.Or("CODING_ORG_CONCURRENCY", "")); err == nil && v > 0 {
 		return v
 	}
 	return defaultOrgConcurrency

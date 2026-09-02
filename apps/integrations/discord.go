@@ -1,13 +1,13 @@
 package integrations
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -57,10 +57,10 @@ var (
 	discordAPIBase           = "https://discord.com/api/v10"
 )
 
-func discordClientID() string     { return strings.TrimSpace(os.Getenv(discordClientIDEnv)) }
-func discordClientSecret() string { return strings.TrimSpace(os.Getenv(discordClientSecretEnv)) }
-func discordPublicKey() string    { return strings.TrimSpace(os.Getenv(discordPublicKeyEnv)) }
-func discordBotToken() string     { return strings.TrimSpace(os.Getenv(discordBotTokenEnv)) }
+func discordClientID() string     { return environ.Or(discordClientIDEnv, "") }
+func discordClientSecret() string { return environ.Or(discordClientSecretEnv, "") }
+func discordPublicKey() string    { return environ.Or(discordPublicKeyEnv, "") }
+func discordBotToken() string     { return environ.Or(discordBotTokenEnv, "") }
 
 func discordCreds() OAuthConfig {
 	return OAuthConfig{ClientID: discordClientID(), ClientSecret: discordClientSecret()}

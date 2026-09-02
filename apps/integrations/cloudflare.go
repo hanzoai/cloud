@@ -21,13 +21,13 @@ package integrations
 // credential-acquisition methods. See the connector HIP / hanzo dns wiring.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -100,7 +100,7 @@ func init() {
 // tests (an httptest server) and CF-compatible endpoints; read at call time so a
 // test can set it per-process. The default is the real Cloudflare API.
 func cfAPIBase() string {
-	if v := strings.TrimSpace(os.Getenv("CLOUDFLARE_API_BASE")); v != "" {
+	if v := environ.Or("CLOUDFLARE_API_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://api.cloudflare.com/client/v4"
@@ -246,7 +246,7 @@ var cloudflareOAuthScopes = []string{"dns_records:edit", "zone:read", "pages:edi
 // Overridable via CLOUDFLARE_OAUTH_BASE for tests and CF-compatible endpoints; read
 // at call time. The default is Cloudflare's dashboard OAuth2 endpoint.
 func cfOAuthBase() string {
-	if v := strings.TrimSpace(os.Getenv("CLOUDFLARE_OAUTH_BASE")); v != "" {
+	if v := environ.Or("CLOUDFLARE_OAUTH_BASE", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "https://dash.cloudflare.com/oauth2"
@@ -256,8 +256,8 @@ func cfOAuthBase() string {
 // Empty ClientID => the OAuth leg is not configured (connect answers 503).
 func cloudflareCreds() OAuthConfig {
 	return OAuthConfig{
-		ClientID:     strings.TrimSpace(os.Getenv(cloudflareOAuthClientIDEnv)),
-		ClientSecret: strings.TrimSpace(os.Getenv(cloudflareOAuthClientSecretEnv)),
+		ClientID:     environ.Or(cloudflareOAuthClientIDEnv, ""),
+		ClientSecret: environ.Or(cloudflareOAuthClientSecretEnv, ""),
 	}
 }
 

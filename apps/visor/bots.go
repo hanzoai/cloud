@@ -34,6 +34,7 @@
 package visor
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"bytes"
 	"cmp"
 	"context"
@@ -42,7 +43,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -629,7 +629,7 @@ var selfClient = &http.Client{Timeout: 60 * time.Second}
 // self (CLOUD_LISTEN :8000); CLOUD_AGENTS_URL overrides it (a split deploy, or a
 // test's fake agents server).
 func agentsBase() string {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_AGENTS_URL")); v != "" {
+	if v := environ.Or("CLOUD_AGENTS_URL", ""); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return "http://127.0.0.1:8000"

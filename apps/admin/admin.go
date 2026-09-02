@@ -35,11 +35,11 @@ package admin
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,7 +88,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		Base: b,
 		State: core.State{
 			IAM:        iam.New(iamBase(deps)),
-			Commerce:   commerce.New(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+			Commerce:   commerce.New(transport.BaseURL(environ.Or("CLOUD_COMMERCE_HTTP_URL", "")), environ.Or("COMMERCE_SERVICE_TOKEN", "")),
 			Health:     health.New(o11yHealthURL()),
 			DO:         digitalocean.New(doTokenFromEnv()),
 			AuditStore: deps.Audit,
@@ -782,7 +782,7 @@ func foldUsersByOrg(s *cloud.Service[core.State], ctx context.Context, cr iam.Cr
 // iamBase resolves the IAM management HTTP base. CLOUD_IAM_HTTP_URL wins (the in-cluster
 // Service); otherwise the public issuer (deps.IAMIssuer) which also serves /v1/iam/*.
 func iamBase(deps cloud.Deps) string {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_IAM_HTTP_URL")); v != "" {
+	if v := environ.Or("CLOUD_IAM_HTTP_URL", ""); v != "" {
 		return v
 	}
 	return strings.TrimSpace(deps.IAMIssuer)
@@ -791,7 +791,7 @@ func iamBase(deps cloud.Deps) string {
 // o11yHealthURL resolves the o11y health probe URL for the System Health source.
 // CLOUD_O11Y_HEALTH_URL wins; else the in-cluster o11y Service default.
 func o11yHealthURL() string {
-	if v := strings.TrimSpace(os.Getenv("CLOUD_O11Y_HEALTH_URL")); v != "" {
+	if v := environ.Or("CLOUD_O11Y_HEALTH_URL", ""); v != "" {
 		return v
 	}
 	return "http://o11y.hanzo.svc.cluster.local:80/v1/o11y/health"
@@ -805,7 +805,7 @@ func o11yHealthURL() string {
 // owner), never folded; blank entries are dropped. Onboarding a reseller is a
 // deliberate, KMS-/git-auditable edit to this env, not a runtime self-service flip.
 func wlTenantsFromEnv() map[string]bool {
-	raw := strings.TrimSpace(os.Getenv("ADMIN_WL_TENANT_ORGS"))
+	raw := environ.Or("ADMIN_WL_TENANT_ORGS", "")
 	if raw == "" {
 		return nil
 	}
@@ -824,5 +824,5 @@ func wlTenantsFromEnv() map[string]bool {
 // doTokenFromEnv reads the DigitalOcean token from the environment. Sourced from a
 // KMSSecret on the cloud deployment (DO_API_TOKEN) — never hard-coded.
 func doTokenFromEnv() string {
-	return strings.TrimSpace(os.Getenv("DO_API_TOKEN"))
+	return environ.Or("DO_API_TOKEN", "")
 }

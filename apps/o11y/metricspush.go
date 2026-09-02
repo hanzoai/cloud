@@ -49,9 +49,8 @@
 package o11y
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -102,7 +101,7 @@ func startNativeMetricsPush(store telemetrystore.TelemetryStore, log luxlog.Logg
 		return
 	}
 	interval := defaultMetricsPushInterval
-	if v := strings.TrimSpace(os.Getenv(metricsPushIntervalEnv)); v != "" {
+	if v := environ.Or(metricsPushIntervalEnv, ""); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			interval = d
 		} else {

@@ -62,11 +62,11 @@
 package node
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -618,17 +618,17 @@ func argvOf(command string, params json.RawMessage) []string {
 // nodes stay reachable only from the replica they attached to, and nothing
 // visibly breaks — so that combination logs loudly instead of passing quietly.
 func clusterFromEnv(log luxlog.Logger) (Cluster, bool) {
-	peers := parsePeerAddrs(os.Getenv(envPeers))
-	self := strings.TrimSpace(os.Getenv(envPodName))
+	peers := parsePeerAddrs(environ.Or(envPeers, ""))
+	self := environ.Or(envPodName, "")
 	if self == "" {
-		self = strings.TrimSpace(os.Getenv(envPodAlt))
+		self = environ.Or(envPodAlt, "")
 	}
 	if len(peers) < 2 || self == "" || peers[self] == "" {
 		return Cluster{}, false // one pod, or a pod outside its own ring
 	}
 
-	url := strings.TrimSpace(os.Getenv(envKVURL))
-	token := strings.TrimSpace(os.Getenv(envPeerToken))
+	url := environ.Or(envKVURL, "")
+	token := environ.Or(envPeerToken, "")
 	if url == "" || token == "" {
 		log.Warn("bot: several replicas but no cross-replica routing; each node is reachable ONLY from the replica it attached to",
 			"replicas", len(peers), "missing", missing(url == "", envKVURL, token == "", envPeerToken))
@@ -684,7 +684,7 @@ func missing(aUnset bool, a string, bUnset bool, b string) string {
 	return strings.Join(names, ", ")
 }
 
-func envList(name string) []string { return splitList(os.Getenv(name)) }
+func envList(name string) []string { return splitList(environ.Or(name, "")) }
 
 func splitList(v string) []string {
 	var out []string

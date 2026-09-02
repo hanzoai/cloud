@@ -29,7 +29,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -241,7 +240,7 @@ var defaultEngines = []engine{bingEngine, ddgEngine, mojeekEngine}
 // names none of the known engines falls back to the same default so search is
 // never engine-less.
 func enabledEngines() []engine {
-	spec := strings.TrimSpace(os.Getenv("WEBSEARCH_ENGINES"))
+	spec := environ.Or("WEBSEARCH_ENGINES", "")
 	if spec == "" {
 		return defaultEngines
 	}
