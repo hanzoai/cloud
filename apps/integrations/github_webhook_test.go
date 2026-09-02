@@ -49,16 +49,6 @@ func (f *recordingImporter) InboundSync(_ context.Context, req cloud.GitInboundR
 func (f *recordingImporter) RepoStatus(_ context.Context, _, _ string, _ []string) (map[string]cloud.GitRepoStatus, error) {
 	return nil, nil
 }
-func (f *recordingImporter) inboundN() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.inbound)
-}
-func (f *recordingImporter) lastInbound() cloud.GitInboundReq {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.inbound[len(f.inbound)-1]
-}
 func (f *recordingImporter) importedNames() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -30,9 +30,8 @@ type eventCatalog struct {
 }
 
 var (
-	catalogOnce  sync.Once
-	knownNames   map[string]struct{}
-	catalogCount int
+	catalogOnce sync.Once
+	knownNames  map[string]struct{}
 )
 
 func loadCatalog() {
@@ -49,7 +48,6 @@ func loadCatalog() {
 	for _, n := range c.Reserved {
 		knownNames[n] = struct{}{}
 	}
-	catalogCount = len(c.Names)
 }
 
 // knownEvent reports whether a name is in the published vocabulary.

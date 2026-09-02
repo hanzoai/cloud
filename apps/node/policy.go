@@ -404,9 +404,6 @@ const (
 )
 
 const (
-	defaultMaxAttempts = 10
-	defaultWindow      = time.Minute
-	defaultLockout     = 5 * time.Minute
 )
 
 // ---------------------------------------------------------------------------

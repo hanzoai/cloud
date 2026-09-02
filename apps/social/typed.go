@@ -58,14 +58,6 @@ import (
 // by a helper is a call expression with no doc comment to read.
 type ops struct{ s *cloud.Service[state] }
 
-// scoped is the tenancy sentence every operation here shares. Each op is read ALONE
-// in the document, in a tool list and in an SDK method's docstring, so the boundary
-// has to be stated on each one rather than once in a package comment no consumer of
-// the spec ever sees.
-const scoped = "\n\nA validated principal is required; 403 without one. Every row is keyed by the " +
-	"caller's org taken from that principal and never from the request, so an id belonging " +
-	"to another tenant reads as not found rather than as a refusal."
-
 // ---- the shapes the ops take ----
 
 // noInput is the In of an op that takes nothing off the wire — no body, no query,

@@ -642,6 +642,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 func ShutdownO11y(ctx context.Context) error {
 	stopProbes()
 	stopNativeMetricsPush()
+	stopNativeMetricsIngest()
 	// Detach both analytics fan-outs first so no in-flight ingest dispatches into a
 	// tearing-down runtime or a closing datastore connection. Idempotent and nil-safe.
 	clearErrorSink()

@@ -4,47 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"net/http"
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/flags"
 	"github.com/hanzoai/cloud/money"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
-
-// ── paywall harness ────────────────────────────────────────────────────────────
-
-// setFlag overrides a registered switch for ONE test by re-registering its Def with
-// a new literal default, restoring the original on cleanup. It drives the REAL read
-// path (flags.Bool → the registry; no platform store is mounted in a unit test, so
-// the literal default is what resolves), which is the point: these tests prove the
-// gate reads the ONE flag engine, not a bool handed to it.
-func setFlag(t *testing.T, key, value string) {
-	t.Helper()
-	var orig flags.Def
-	for _, d := range flags.Defs() {
-		if d.Key == key {
-			orig = d
-			break
-		}
-	}
-	if orig.Key == "" {
-		t.Fatalf("flag %q is not registered — the gate must register its switches in init", key)
-	}
-	next := orig
-	next.Default = value
-	flags.Register(next)
-	t.Cleanup(func() { flags.Register(orig) })
-}
-
-// atto builds an exact 18-decimal USD credit from a raw atto magnitude, so a test
-// can sit ON the admit boundary (0 vs 1 atto) with no cents and no float anywhere.
-func atto(n int64) money.Amount { return money.FromAtto(big.NewInt(n)) }
 
 // fakeLedger is an in-memory finance ledger. It answers every address with the same
 // balance (the tables are about the VERDICT), but records the address it was asked
@@ -72,36 +41,6 @@ func (f *fakeLedger) Deposit(context.Context, types.DepositInput) (string, error
 func (f *fakeLedger) RecordUsage(context.Context, types.UsageInput) error         { return nil }
 func (f *fakeLedger) SumUsageSince(context.Context, string, bool, int64) (int64, error) {
 	return 0, nil
-}
-
-// publish installs a fake ledger as the process-wide money client (finance.Current(),
-// the SAME client the ai gate and the edge meter resolve through), restoring the prior
-// one on cleanup. Passing nil models a split deploy: no co-resident money layer.
-func publish(t *testing.T, f *fakeLedger) {
-	t.Helper()
-	prev := finance.Current()
-	if f == nil {
-		finance.Publish(nil)
-	} else {
-		finance.Publish(f)
-	}
-	t.Cleanup(func() { finance.Publish(prev) })
-}
-
-func boolText(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}
-
-func decodeRefusal(t *testing.T, body []byte) cloud.Refusal {
-	t.Helper()
-	var r cloud.Refusal
-	if err := json.Unmarshal(body, &r); err != nil {
-		t.Fatalf("decode Refusal: %v (body=%s)", err, body)
-	}
-	return r
 }
 
 // The gate ships DARK. If this ever fails, a deploy silently starts refusing

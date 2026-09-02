@@ -204,7 +204,3 @@ func TestIngestIsUntouchedByTheScopeDecision(t *testing.T) {
 		}
 	}
 }
-
-func httptestServe(h http.Handler, r *http.Request) {
-	h.ServeHTTP(httptest.NewRecorder(), r)
-}

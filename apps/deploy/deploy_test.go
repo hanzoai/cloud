@@ -76,26 +76,6 @@ func pod(ns, name, image string, labels map[string]any) *unstructured.Unstructur
 	}}
 }
 
-// staticSite builds the two objects that ARE a static-plane site: a staticFiles
-// Middleware (its S3 origin) named `<slug>-static`, and an IngressRoute whose `/`
-// route references it and carries the site host.
-func staticSite(ns, slug, host string) []runtime.Object {
-	mw := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1alpha1", "kind": "Middleware",
-		"metadata": map[string]any{"name": slug + "-static", "namespace": ns},
-		"spec":     map[string]any{"staticFiles": map[string]any{"root": "s3://cdn/" + slug, "spaMode": true}},
-	}}
-	route := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1alpha1", "kind": "IngressRoute",
-		"metadata": map[string]any{"name": slug + "-route", "namespace": ns},
-		"spec": map[string]any{"routes": []any{map[string]any{
-			"match":       "Host(`" + host + "`) && PathPrefix(`/`)",
-			"middlewares": []any{map[string]any{"name": slug + "-static"}},
-		}}},
-	}}
-	return []runtime.Object{mw, route}
-}
-
 // appProjectCR builds a real argoproj.io/v1alpha1 AppProject CR (the "prefer real
 // projects" path). sourceRepos are surfaced; anything else on the CR is not.
 func appProjectCR(name string, sourceRepos ...string) *unstructured.Unstructured {
