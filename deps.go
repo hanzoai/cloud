@@ -12,6 +12,10 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
+
+	luxlog "github.com/luxfi/log"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/ha"
 
@@ -46,6 +50,46 @@ func (d Deps) Secret() func(ctx context.Context, ref string) ([]byte, error) {
 		}
 	}
 	return d.KMS.GetSecret
+}
+
+// SecretFromEnv resolves the KMS reference held in the environment variable
+// `name`. Only the reference travels through the environment; the value stays
+// sealed until this call and never appears in a manifest, a pod spec or a log.
+//
+// This is the layer above Secret, and it had gone the same way: loadMPCKey and
+// loadSafeJWTSecret in apps/wallet are the same eight lines twice, which is what
+// the note above predicts of a helper with no home. Every env-held ref wants the
+// same three decisions and they are worth making once.
+//
+// Empty ref, no KMS, or a KMS error all yield nil rather than an error, and a
+// caller treats nil as "not configured" and fails closed. That is deliberate:
+// these are read at construction, where the choice is between running without a
+// capability and not running at all, and a subsystem that cannot reach its key
+// should refuse the operation rather than the process. The reason is logged
+// once, here, so it does not have to be logged identically at every call site.
+func (d Deps) SecretFromEnv(ctx context.Context, name string) []byte {
+	return secretFromEnv(ctx, d.KMS, name)
+}
+
+// SecretFromEnv is the same on Base, because Base is what a mounted subsystem
+// holds — Use derives one from Deps — and a helper reachable only from the
+// construction side is a helper the handlers cannot call.
+func (b Base) SecretFromEnv(ctx context.Context, name string) []byte {
+	return secretFromEnv(ctx, b.KMS, name)
+}
+
+func secretFromEnv(ctx context.Context, kms KMSClient, name string) []byte {
+	ref := strings.TrimSpace(os.Getenv(name))
+	if ref == "" || kms == nil {
+		return nil
+	}
+	value, err := kms.GetSecret(ctx, ref)
+	if err != nil {
+		luxlog.Default().Warn("secret ref did not resolve from KMS",
+			"env", name, "ref", ref, "err", err)
+		return nil
+	}
+	return value
 }
 
 type Deps struct {

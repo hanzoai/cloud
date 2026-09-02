@@ -22,8 +22,8 @@ import (
 // key — HIP secrets rule):
 //
 //	TREASURY_ANCHOR_RPC_URL         Hanzo L1 C-chain RPC (the in-cluster
-//	                                hanzod-rpc-internal .../v1/chain/<blockchainID>/rpc,
-//	                                or https://api.hanzo.network/v1/chain/C/rpc)
+//	                                hanzod-rpc-internal .../v1/bc/<blockchainID>/rpc,
+//	                                or https://api.hanzo.network/v1/bc/C/rpc)
 //	TREASURY_ANCHOR_CHAIN_ID        EVM chain id (default 36963)
 //	TREASURY_ANCHOR_CONTRACT        deployed TreasuryAnchor address (optional; absent
 //	                                → anchor as a signed 0-value tx carrying the root
@@ -41,6 +41,7 @@ type anchorer struct {
 	chainID   int64
 	contract  string
 	signerRef string
+	kms       cloud.KMSClient
 	dataDir   string
 	log       luxlog.Logger
 
@@ -70,6 +71,7 @@ func newAnchorer(deps cloud.Deps, log luxlog.Logger) *anchorer {
 		chainID:   chainID,
 		contract:  strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_CONTRACT")),
 		signerRef: strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_SIGNER_KMS_REF")),
+		kms:       deps.KMS,
 		dataDir:   deps.DataDir,
 		log:       log,
 	}
@@ -81,14 +83,28 @@ func newAnchorer(deps cloud.Deps, log luxlog.Logger) *anchorer {
 // reach the chain AND a signer key provisioned from KMS). Until both are present the
 // anchor is compute-and-report only.
 func (a *anchorer) configured() bool {
-	return a != nil && a.rpcURL != "" && (boundAnchorSigner != nil || a.signerKeyHex() != "")
+	return a != nil && a.rpcURL != "" && (boundAnchorSigner != nil || a.hasSigner())
 }
 
-// signerKeyHex returns the anchor signer's private key, provisioned from KMS into the
-// pod env by the operator's KMSSecret CRD (sourced from TREASURY_ANCHOR_SIGNER_KMS_REF)
-// — NEVER committed, never in a manifest. Empty when not provisioned.
+// hasSigner reports whether an anchor signer is provisioned, WITHOUT fetching it.
+// Status answers this question; only the submit path needs the key itself, and a
+// status endpoint should never have a reason to hold a private key.
+func (a *anchorer) hasSigner() bool { return a != nil && a.signerRef != "" }
+
+// signerKeyHex fetches the anchor signer's private key from KMS at the moment it
+// is needed to sign. TREASURY_ANCHOR_SIGNER_KMS_REF names its location; the key
+// itself never enters the pod env. Empty when not provisioned or unresolvable —
+// callers treat empty as "cannot anchor", which is the safe direction.
 func (a *anchorer) signerKeyHex() string {
-	return strings.TrimSpace(os.Getenv("TREASURY_ANCHOR_SIGNER_KEY"))
+	if a == nil || a.signerRef == "" || a.kms == nil {
+		return ""
+	}
+	value, err := a.kms.GetSecret(context.Background(), a.signerRef)
+	if err != nil {
+		a.log.Warn("anchor signer key did not resolve from KMS", "ref", a.signerRef, "err", err)
+		return ""
+	}
+	return strings.TrimSpace(string(value))
 }
 
 // anchorStatus is the anchor view embedded in GET /v1/admin/treasury and returned by
@@ -130,7 +146,7 @@ func (a *anchorer) status(ctx context.Context, b rooted) anchorStatus {
 	st := anchorStatus{
 		ChainID:          a.chainID,
 		RPCConfigured:    a.rpcURL != "",
-		SignerConfigured: a.signerKeyHex() != "",
+		SignerConfigured: a.hasSigner(),
 		Contract:         a.contract,
 		EntryCount:       count,
 	}

@@ -271,9 +271,11 @@ func Shutdown() error {
 	return firstErr
 }
 
-// loadConfig resolves the team config from deps + KMS-synced env. Secrets
-// (TEAM_IAM_CLIENT_SECRET, SERVER_SECRET) come from env values the operator syncs
-// from KMS — never plaintext in code, never a git-committed value.
+// loadConfig resolves the team config from deps + env. The two secrets
+// (TEAM_IAM_CLIENT_SECRET, SERVER_SECRET) are read BY REFERENCE: the env carries
+// _REF names and the values are fetched from KMS here. Previously the operator
+// synced the values themselves into the env, which put an HS256 signing secret
+// into etcd, a volume and this process's environment.
 //
 // The IAM OAuth client is TEAM-NAMESPACED (TEAM_IAM_CLIENT_ID / _SECRET, default
 // client id "hanzo-team"), NOT the generic IAM_CLIENT_ID: in the unified cloud
@@ -284,13 +286,15 @@ func Shutdown() error {
 //
 // serverSecret is read RAW here (no default); Mount decides degrade-vs-dev so a
 // missing/default HS256 secret fails closed rather than silently signing tokens
-// with a public literal.
+// with a public literal. A ref that does not resolve yields empty and takes that
+// same path, which is the direction that matters.
 func loadConfig(deps cloud.Deps) config {
+	ctx := context.Background()
 	return config{
 		iamEndpoint:     cmp.Or(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"),
 		iamClientID:     cmp.Or(os.Getenv("TEAM_IAM_CLIENT_ID"), "hanzo-team"),
-		iamClientSecret: os.Getenv("TEAM_IAM_CLIENT_SECRET"),
-		serverSecret:    os.Getenv("SERVER_SECRET"),
+		iamClientSecret: string(deps.SecretFromEnv(ctx, "TEAM_IAM_CLIENT_SECRET_REF")),
+		serverSecret:    string(deps.SecretFromEnv(ctx, "SERVER_SECRET_REF")),
 		frontURL:        strings.TrimRight(os.Getenv("FRONT_URL"), "/"),
 		transactor:      strings.TrimRight(os.Getenv("TRANSACTOR_URL"), "/"),
 		provider:        "openid",
