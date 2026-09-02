@@ -7,6 +7,7 @@ package answer
 // the model chain.
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"os"
 	"strconv"
 	"strings"
@@ -153,25 +154,13 @@ const (
 // value of 0 makes the mode free (and un-gated); a negative/invalid env value is
 // ignored so a typo can never make a paid mode free. Mirrors ResourceFeeCents.
 func feeCents(name string, def int64) int64 {
-	if v, ok := envCents("CLOUD_ASK_FEE_CENTS_" + strings.ToUpper(name)); ok {
+	if v, ok := environ.Cents("CLOUD_ASK_FEE_CENTS_" + strings.ToUpper(name)); ok {
 		return v
 	}
-	if v, ok := envCents("CLOUD_ASK_FEE_CENTS"); ok {
+	if v, ok := environ.Cents("CLOUD_ASK_FEE_CENTS"); ok {
 		return v
 	}
 	return def
-}
-
-func envCents(key string) (int64, bool) {
-	s := strings.TrimSpace(os.Getenv(key))
-	if s == "" {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n < 0 {
-		return 0, false
-	}
-	return n, true
 }
 
 // defaultSynthModel is the resilient synthesis anchor: a capable Hanzo model that

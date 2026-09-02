@@ -27,7 +27,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -79,7 +78,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("validator.Use:  open store: %w", err)
 	}
 
-	slots := uint64(envInt("VALIDATORS_SLOTS", 100))
+	slots := uint64(environ.Int("VALIDATORS_SLOTS", 100))
 	nft, err := newNFTReader(
 		environ.Or("VALIDATORS_ETH_RPC", "https://ethereum-rpc.publicnode.com"),
 		environ.Or("VALIDATORS_NFT_CONTRACT", GenesisNFTContract),
@@ -103,7 +102,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		NodeImage: environ.Or("VALIDATORS_NODE_IMAGE", "ghcr.io/luxfi/node:v1.36.15"),
 		KMSHost:   environ.Or("VALIDATORS_KMS_HOST", "http://cloud."+deps.Brand+".svc.cluster.local:8000"),
 		KMSCreds:  environ.Or("VALIDATORS_KMS_CREDS", "platform-kms-auth"),
-		StorageGi: envInt("VALIDATORS_STORAGE_GI", 200),
+		StorageGi: environ.Int("VALIDATORS_STORAGE_GI", 200),
 	})
 
 	b := cloud.NewBase(deps, "validator")
@@ -113,7 +112,7 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 		prov:    prov,
 		network: network,
 		netID:   netID,
-		ttl:     time.Duration(envInt("VALIDATORS_CHALLENGE_TTL_SECONDS", 600)) * time.Second,
+		ttl:     time.Duration(environ.Int("VALIDATORS_CHALLENGE_TTL_SECONDS", 600)) * time.Second,
 	}}
 	mounted = s
 
@@ -661,15 +660,6 @@ func limitOf(v string) int {
 		return maxListLimit
 	}
 	return n
-}
-
-func envInt(key string, dflt int) int {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return dflt
 }
 
 // Shutdown closes the validators store. Idempotent.

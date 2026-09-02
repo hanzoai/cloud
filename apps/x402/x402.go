@@ -32,7 +32,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -924,19 +923,10 @@ func configFromEnv() Config {
 		Asset:         strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET")),
 		AssetName:     strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_NAME")),
 		AssetVersion:  strings.TrimSpace(os.Getenv("CLOUD_X402_ASSET_VERSION")),
-		AssetDecimals: envInt("CLOUD_X402_ASSET_DECIMALS", DefaultAssetDecimals),
+		AssetDecimals: environ.Int("CLOUD_X402_ASSET_DECIMALS", DefaultAssetDecimals),
 		Network:       environ.Or("CLOUD_X402_NETWORK", DefaultNetwork),
-		MaxTimeout:    int64(envInt("CLOUD_X402_MAX_TIMEOUT_SECONDS", DefaultMaxTimeoutSeconds)),
+		MaxTimeout:    int64(environ.Int("CLOUD_X402_MAX_TIMEOUT_SECONDS", DefaultMaxTimeoutSeconds)),
 	}
-}
-
-func envInt(key string, def int) int {
-	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return def
 }
 
 func errUse(msg string) error { return &useErr{msg} }

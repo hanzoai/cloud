@@ -31,8 +31,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	luxlog "github.com/luxfi/log"
@@ -60,14 +58,9 @@ var broker *protocol.Broker
 func Use(app cloud.Router, deps cloud.Deps) error {
 	log := luxlog.Default().New("subsystem", "kafka")
 
-	port, err := envInt("CLOUD_KAFKA_PORT", 9092)
-	if err != nil {
-		return err
-	}
-	adminPort, err := envInt("CLOUD_KAFKA_ADMIN_PORT", 0) // 0 = admin HTTP disabled
-	if err != nil {
-		return err
-	}
+	port := environ.Int("CLOUD_KAFKA_PORT", 9092)
+	// 0 = admin HTTP disabled, which is also what a value that is not a port gives.
+	adminPort := environ.Int("CLOUD_KAFKA_ADMIN_PORT", 0)
 
 	cfg := &types.Configuration{
 		PubSubUrl:      pubsub.URL(),
@@ -119,16 +112,4 @@ func Shutdown(_ context.Context) error {
 		broker = nil
 	}
 	return nil
-}
-
-func envInt(k string, def int) (int, error) {
-	v := strings.TrimSpace(os.Getenv(k))
-	if v == "" {
-		return def, nil
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return 0, fmt.Errorf("kafka.Use:  bad %s %q: %w", k, v, err)
-	}
-	return n, nil
 }
