@@ -2,16 +2,16 @@ package entitlement
 
 // projection.go serves GET /v1/entitlement — the authoritative, per-caller
 // projection of commerce ENTITLEMENT (the org's plan tier → which console apps it
-// unlocks) that the @hanzogui/shell useEntitlement hook reads. It is the READ twin
-// of RequireProduct (require.go): same ONE authority (commerce.CheckEntitlement),
-// same distinctness from the ENABLEMENT store in entitlements.go.
+// unlocks) that the @hanzogui/shell useEntitlement hook reads. It asks the same ONE
+// authority the paywall does (commerce.CheckEntitlement), and is distinct from the
+// ENABLEMENT store in entitlements.go for the same reason.
 //
-// FAIL DIRECTION (deliberately OPPOSITE to RequireProduct). This is a READ the UI
-// uses to decide what to SHOW, so it fails SAFE-TO-LOCKED, never 500:
+// FAIL DIRECTION, deliberately OPPOSITE to the paywall's. This is a READ the UI uses
+// to decide what to SHOW, so it fails SAFE-TO-LOCKED, never 500:
 //   - unvalidated principal ...... 403 (identity refusal, not infra).
 //   - commerce nil / error ....... that app reports false (locked in the UI), 200.
-//     The ENFORCEMENT path (RequireProduct) still fails OPEN, so functionality is
-//     preserved during an outage even while the UI conservatively shows locked.
+//     Enforcement (cloud.SpendGate) fails OPEN, so functionality is preserved during
+//     an outage even while the UI conservatively shows locked.
 //   - definitive answer .......... the real per-org bool.
 // The response ALWAYS carries all six app keys (never null), so the shell can read
 // them unconditionally.
@@ -97,8 +97,8 @@ type noArgs struct{}
 // licensed reports whether org holds an ACTIVE entitlement for product, plus the
 // plan slug commerce resolved. resolved is false when commerce could not answer
 // (nil client or a machinery error): the READ path then reports the app LOCKED
-// (fail-safe-to-locked for the UI) and returns 200 — distinct from RequireProduct's
-// fail-OPEN on the enforcement path. A DEFINITIVE Active:false is (false, plan, true).
+// (fail-safe-to-locked for the UI) and returns 200 — distinct from the enforcement
+// path's fail-OPEN. A DEFINITIVE Active:false is (false, plan, true).
 func (s *service) licensed(ctx context.Context, org, product string) (active bool, plan string, resolved bool) {
 	if s.commerce == nil {
 		return false, "", false
