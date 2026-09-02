@@ -15742,6 +15742,7 @@ components:
       properties:
         createdAt:
           description: unix seconds
+          format: int64
           type: integer
         name:
           description: friendly name
@@ -15760,6 +15761,7 @@ components:
           description: |-
             Total is how many buckets this org has. It equals len(buckets): the listing
             is not paged, because an org's bucket count is small by construction.
+          format: int64
           type: integer
       type: object
     bucketRecord:
@@ -42074,9 +42076,11 @@ components:
           type: string
         lastModified:
           description: unix seconds (0 for a folder)
+          format: int64
           type: integer
         size:
           description: bytes (0 for a folder)
+          format: int64
           type: integer
       type: object
     objectList:
@@ -42099,6 +42103,7 @@ components:
             Total is how many entries came back. The listing is BOUNDED, so a bucket
             with more keys than the cap answers the cap and this says so — it is not a
             count of what the bucket holds.
+          format: int64
           type: integer
       type: object
     onboardReq:
@@ -43379,6 +43384,7 @@ components:
       properties:
         expiresIn:
           description: seconds until the URL expires
+          format: int64
           type: integer
         key:
           description: |-

@@ -1,6 +1,6 @@
 {
   "paths": 1748,
-  "operations": 2417,
+  "operations": 2418,
   "products": {
     "account": 10,
     "ad": 7,
@@ -76,7 +76,7 @@
     "metrics": 11,
     "ml": 7,
     "mq": 15,
-    "network": 4,
+    "network": 8,
     "node": 4,
     "notify": 4,
     "o11y": 381,
@@ -95,7 +95,7 @@
     "registry": 6,
     "research": 8,
     "risk": 11,
-    "s3": 8,
+    "s3": 10,
     "sandbox": 19,
     "sbom": 3,
     "search": 3,

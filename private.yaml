@@ -20417,6 +20417,7 @@ components:
       properties:
         createdAt:
           description: unix seconds
+          format: int64
           type: integer
         name:
           description: friendly name
@@ -20435,6 +20436,7 @@ components:
           description: |-
             Total is how many buckets this org has. It equals len(buckets): the listing
             is not paged, because an org's bucket count is small by construction.
+          format: int64
           type: integer
       type: object
     bucketRecord:
@@ -47597,9 +47599,11 @@ components:
           type: string
         lastModified:
           description: unix seconds (0 for a folder)
+          format: int64
           type: integer
         size:
           description: bytes (0 for a folder)
+          format: int64
           type: integer
       type: object
     objectList:
@@ -47622,6 +47626,7 @@ components:
             Total is how many entries came back. The listing is BOUNDED, so a bucket
             with more keys than the cap answers the cap and this says so — it is not a
             count of what the bucket holds.
+          format: int64
           type: integer
       type: object
     onboardReq:
@@ -49208,6 +49213,7 @@ components:
       properties:
         expiresIn:
           description: seconds until the URL expires
+          format: int64
           type: integer
         key:
           description: |-
@@ -128252,6 +128258,53 @@ paths:
       x-app: s3
       x-public: true
       x-tool: true
+  /v1/s3/buckets/{bucket}/blob/{wildcard1}:
+    get:
+      description: |-
+        Answers the object's stored bytes.
+
+        Served INERT — application/octet-stream, attachment, nosniff — because the content type would otherwise be one caller's claim about another caller's download, and this store holds whatever an org put in it. A caller that knows what it stored reads the bytes; a browser saves them rather than rendering them.
+
+        The counterpart of the PUT above, and the address GET /v1/s3/buckets/{bucket}/objects/{key} hands back where there is no public store to sign against.
+      operationId: get_s3_buckets_by_bucket_blob_by_wildcard1
+      parameters:
+      - in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Read one object's bytes
+      tags:
+      - s3
+      x-app: s3
+    put:
+      description: |-
+        Stores the request body as the object at this address and answers its key and size. The body IS the object: whatever is sent is what is stored, and the declared Content-Type is kept with it.
+
+        This is the address POST /v1/s3/buckets/{bucket}/objects hands back on a deployment whose object store has no browser-routable host. Where one exists that mint answers a presigned URL against the store instead and the bytes never pass through this API — the caller follows {url, method} either way and does not choose.
+
+        Bounded: a body over the limit is refused 413 rather than held. An empty body is refused — a zero-byte object is almost always a failed read upstream.
+      operationId: put_s3_buckets_by_bucket_blob_by_wildcard1
+      parameters:
+      - in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      summary: Write one object's bytes
+      tags:
+      - s3
+      x-app: s3
   /v1/s3/buckets/{bucket}/objects:
     get:
       description: |-
