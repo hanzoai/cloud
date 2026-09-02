@@ -245,11 +245,11 @@ func VisibleProviders(providers map[string]any, snap map[string]Overlay, org str
 //
 // Aggregate summary counts and non-catalog sections (tools/infrastructure/cloud)
 // carry no catalog identity and are left untouched.
-func GateRootData(data map[string]any, snap map[string]Overlay, org string, isAdmin bool) {
+func GateRootData(data map[string]any, snap map[string]Overlay, org string, isAdmin bool, limit cloud.Grant) {
 	visible := map[string]bool{}
 
 	if arr, ok := modelArray(data["thirdPartyModels"]); ok {
-		g := VisibleCatalog(arr, snap, org, isAdmin)
+		g := Reachable(VisibleCatalog(arr, snap, org, isAdmin), limit)
 		data["thirdPartyModels"] = g
 		for _, m := range g {
 			visible[modelID(m)] = true
@@ -263,7 +263,7 @@ func GateRootData(data map[string]any, snap map[string]Overlay, org string, isAd
 		for i, m := range arr {
 			tagged[i] = withProvider(m, "Hanzo")
 		}
-		g := VisibleCatalog(tagged, snap, org, isAdmin)
+		g := Reachable(VisibleCatalog(tagged, snap, org, isAdmin), limit)
 		data["hanzoModels"] = g
 		for _, m := range g {
 			visible[modelID(m)] = true
@@ -655,11 +655,12 @@ func (c *catalog) OptOut(ctx context.Context, kind, id, org string) (Overlay, er
 }
 
 // Models fetches the live overlay snapshot and gates `full` for org — the ONE
-// call the read path makes.
+// call the read path makes. Both narrowings apply here: what the ORG may see,
+// then how much of that the KEY in the caller's hand carries.
 func (c *catalog) Models(ctx context.Context, full []Model, org string, isAdmin bool) ([]Model, error) {
 	snap, err := c.Snapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return VisibleCatalog(full, snap, org, isAdmin), nil
+	return Reachable(VisibleCatalog(full, snap, org, isAdmin), callerGrant(ctx)), nil
 }

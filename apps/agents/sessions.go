@@ -472,8 +472,6 @@ const controlRules = "\n\n" +
 	"how a command arrives. If a forward is attempted and fails, the answer is 502 stating that " +
 	"the command was recorded but not forwarded: the intent is never lost."
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
-
 // sessionOps binds the service to the typed session ops. A TypedHandler takes no
 // service parameter, so it arrives as a RECEIVER and every op is a method value
 // (o.list) — also the only bound form cmd/zipdoc can lift prose from.
@@ -1114,20 +1112,6 @@ func (o sessionOps) patch(ctx context.Context, in *patchSessionIn) (*sessionView
 }
 
 // ---- append event ----
-
-// eventReq is one appended turn. The session is addressed by the path, so the body
-// carries only what the turn IS.
-type eventReq struct {
-	// Kind is the turn's kind — message, tool-call, spawn, log, status or control.
-	// Outside that closed vocabulary is a 400.
-	Kind string `json:"kind"`
-	// Actor is who produced the turn. Empty defaults to the calling principal.
-	Actor string `json:"actor"`
-	// Payload is the turn's body: any valid JSON up to 64 KiB. Scanned for
-	// credentials before it is stored — a hit refuses the whole write with 422 and
-	// nothing is persisted.
-	Payload json.RawMessage `json:"payload"`
-}
 
 // ---- control (record intent + forward to the tasks engine when task-backed) ----
 

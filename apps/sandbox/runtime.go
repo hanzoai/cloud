@@ -30,20 +30,25 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net/http"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/fleet"
 	"github.com/hanzoai/cloud/apps/k8s"
 	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/internal/iam"
+	"github.com/zap-proto/zip"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -203,6 +208,23 @@ type runtime struct {
 	str          streamer
 	bound        Bound
 	initErr      string
+
+	// attached resolves an org's ATTACHED cluster to the config that reaches
+	// it — the fleet registry in production, a fake in tests. Nil means this
+	// deployment attaches nothing and every named cluster is absent.
+	attached attached
+	// remote holds the runtime built for each attached cluster a lease has
+	// named, by "<org>/<cluster>", so one lease pays the resolve and the probes
+	// and every later call reuses them. mu guards it.
+	mu     sync.Mutex
+	remote map[string]*runtime
+}
+
+// attached is what the runtime needs from the fleet registry, stated as an
+// interface so a test can stand in for KMS: one of the org's clusters, by
+// name, as the REST config that reaches it.
+type attached interface {
+	RESTForOrgCluster(org, project, name string) (*rest.Config, error)
 }
 
 func newRuntime() *runtime {
@@ -271,6 +293,80 @@ func (r *runtime) ready() error {
 		return fmt.Errorf("kubernetes client not configured")
 	}
 	return nil
+}
+
+// at is the runtime a sandbox runs on: this one for the home cluster, or the
+// org's attached cluster of that name — resolved through the fleet registry,
+// probed once, and kept for every later call into every sandbox leased there.
+//
+// The probes are the SAME RuntimeClass rules the home cluster answered at
+// startup. gvisor — the floor every tenant sandbox stands on (runtimeFor) —
+// must be installed, or the lease is refused with the reason instead of a pod
+// that waits Pending; the microVM default and our own bare boundary are
+// offered only where the cluster is seen to install and confine them.
+//
+// A failure is answered, never kept: a cluster mid-provisioning gets asked
+// again by the next lease rather than being remembered broken.
+func (r *runtime) at(ctx context.Context, org, cluster string) (*runtime, error) {
+	if cluster == "" {
+		return r, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := org + "/" + cluster
+	if rt, ok := r.remote[key]; ok {
+		return rt, nil
+	}
+	if r.attached == nil {
+		return nil, zip.ErrNotFound("cluster not found")
+	}
+	// The default project scope: this core reads no principal, and the fleet
+	// keys its default shard exactly there (fleet.Registry).
+	cfg, err := r.attached.RESTForOrgCluster(org, "", cluster)
+	if errors.Is(err, fleet.ErrNoCluster) {
+		return nil, zip.ErrNotFound("cluster not found")
+	}
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "cluster %q: %v", cluster, err)
+	}
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "cluster %q: %v", cluster, err)
+	}
+	rt := &runtime{
+		ns: r.ns, image: r.image, tag: r.tag, brand: r.brand,
+		startTimeout: r.startTimeout, execTimeout: r.execTimeout,
+		bound: r.bound, dyn: dyn, str: &spdy{cfg: cfg},
+	}
+	if !rt.installed(ctx, shared) {
+		return nil, zip.Errorf(http.StatusBadRequest,
+			"cluster %q does not install the %q runtime class, which every sandbox stands on — install it and lease again",
+			cluster, shared)
+	}
+	if n := bare(); rt.confine(ctx, n) {
+		rt.bare = n
+	}
+	if rt.installed(ctx, preferred) {
+		rt.fast = preferred
+	}
+	// The remote runtime knows itself, so a method that resolves again — exec
+	// called from inside start, on the remote receiver — finds this runtime
+	// rather than asking a registry it does not carry.
+	rt.remote = map[string]*runtime{key: rt}
+	if r.remote == nil {
+		r.remote = map[string]*runtime{}
+	}
+	r.remote[key] = rt
+	return rt, nil
+}
+
+// on is at, ready — the form every call that touches a sandbox's cluster takes.
+func (r *runtime) on(ctx context.Context, m Sandbox) (*runtime, error) {
+	rt, err := r.at(ctx, m.Org, m.Cluster)
+	if err != nil {
+		return nil, err
+	}
+	return rt, rt.ready()
 }
 
 // imageFor is the tag chain: one image, four tags. The deployment pins the
@@ -685,7 +781,8 @@ func (r *runtime) pods() dynamic.ResourceInterface {
 // the pod to be running. A create that returns before the sandbox can answer is
 // a create that hands the caller a 502 on its very next call.
 func (r *runtime) start(ctx context.Context, m Sandbox, cr cred) error {
-	if err := r.ready(); err != nil {
+	r, err := r.on(ctx, m)
+	if err != nil {
 		return err
 	}
 	if m.Volume != "" {
@@ -1187,7 +1284,8 @@ func podMessage(obj *unstructured.Unstructured) string {
 // that ran submitted code is not handed to the next tenant, and there is no pool
 // for it to be handed back to.
 func (r *runtime) stop(ctx context.Context, m Sandbox) error {
-	if err := r.ready(); err != nil {
+	r, err := r.on(ctx, m)
+	if err != nil {
 		return err
 	}
 	// READ, CHECK, THEN DELETE — three steps where one used to do, and the two extra
@@ -1218,13 +1316,14 @@ func (r *runtime) stop(ctx context.Context, m Sandbox) error {
 // purge deletes the project VOLUME. Separate from stop, and opt-in, because the
 // volume holds the only copy of the checkout and the caches.
 func (r *runtime) purge(ctx context.Context, m Sandbox) error {
-	if err := r.ready(); err != nil {
+	r, err := r.on(ctx, m)
+	if err != nil {
 		return err
 	}
 	if m.Volume == "" {
 		return nil
 	}
-	err := r.dyn.Resource(k8s.Volumes).Namespace(r.ns).Delete(ctx, m.Volume, metav1.DeleteOptions{})
+	err = r.dyn.Resource(k8s.Volumes).Namespace(r.ns).Delete(ctx, m.Volume, metav1.DeleteOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -1243,7 +1342,8 @@ func (r *runtime) purge(ctx context.Context, m Sandbox) error {
 // written. It is a pass-through and never a second read: a tap that re-ran the
 // command to observe it would be observing a different command.
 func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.Reader, timeoutSec int, say *tell) (ExecResult, error) {
-	if err := r.ready(); err != nil {
+	r, err := r.on(ctx, m)
+	if err != nil {
 		return ExecResult{}, err
 	}
 	if m.Status != "running" || m.Pod == "" {
@@ -1263,7 +1363,7 @@ func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.R
 		// a watcher that only saw stdout would watch the silence.
 		so, se = io.MultiWriter(&out, say), io.MultiWriter(&errb, say)
 	}
-	err := r.str.stream(ctx, r.ns, m.Pod, argv, stdin, so, se)
+	err = r.str.stream(ctx, r.ns, m.Pod, argv, stdin, so, se)
 	res := ExecResult{Stdout: out.String(), Stderr: errb.String()}
 	if err == nil {
 		return res, nil
@@ -1293,7 +1393,8 @@ func (r *runtime) exec(ctx context.Context, m Sandbox, argv []string, stdin io.R
 // merges them onto the same device — and asking the apiserver for a second one on
 // a TTY session is rejected outright.
 func (r *runtime) tty(ctx context.Context, m Sandbox, argv []string, stdin io.Reader, stdout io.Writer, size remotecommand.TerminalSizeQueue) error {
-	if err := r.ready(); err != nil {
+	r, err := r.on(ctx, m)
+	if err != nil {
 		return err
 	}
 	if m.Status != "running" || m.Pod == "" {
@@ -1323,14 +1424,15 @@ func (r *runtime) tty(ctx context.Context, m Sandbox, argv []string, stdin io.Re
 // without this the person watching gets a blank rectangle and a close frame that
 // says the command exited. With it, they get "connection refused".
 func (r *runtime) screen(ctx context.Context, m Sandbox, in io.Reader, out io.Writer) error {
-	if err := r.ready(); err != nil {
+	r, err := r.on(ctx, m)
+	if err != nil {
 		return err
 	}
 	if m.Status != "running" || m.Pod == "" {
 		return fmt.Errorf("sandbox is %s", cmp.Or(m.Status, "unknown"))
 	}
 	var why capped
-	err := r.str.stream(ctx, r.ns, m.Pod,
+	err = r.str.stream(ctx, r.ns, m.Pod,
 		[]string{"socat", "-", "TCP:127.0.0.1:" + strconv.Itoa(rfb)}, in, out, &why)
 	if said := strings.TrimSpace(why.String()); err != nil && said != "" {
 		return fmt.Errorf("%s", said)

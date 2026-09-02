@@ -251,21 +251,6 @@ func (s *store) updateWalletKey(ctx context.Context, org, id, address, keyRef st
 	return nil
 }
 
-// walletForFinanceAccount resolves the wallet bound to a finance ledger account,
-// scoped to org. The client by which a treasury reserve signer later BECOMES an MPC
-// treasury wallet. found=false when unbound.
-func (s *store) walletForFinanceAccount(ctx context.Context, org, financeAccount string) (*Wallet, bool, error) {
-	w, err := scanWallet(s.db.QueryRowContext(ctx,
-		`SELECT `+walletCols+` FROM wallets WHERE org=? AND finance_account=?`, org, financeAccount))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, fmt.Errorf("wallet for finance account: %w", err)
-	}
-	return w, true, nil
-}
-
 // nullable maps "" to a SQL NULL so the finance_account column stays honestly
 // unbound rather than an empty string.
 func nullable(s string) any {

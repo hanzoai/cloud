@@ -64,54 +64,6 @@ func TestXVerifyFollowFailClosed(t *testing.T) {
 	}
 }
 
-func TestDiscordVerifyMember(t *testing.T) {
-	status := http.StatusOK
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bot ") {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(status)
-		_, _ = w.Write([]byte(`{"user":{"id":"u"}}`))
-	}))
-	defer ts.Close()
-	old := discordAPIBase
-	discordAPIBase = ts.URL
-	defer func() { discordAPIBase = old }()
-
-	status = http.StatusOK
-	out, err := runDiscordVerifyMember(context.Background(), RunContext{
-		Token: tokenOK, Input: map[string]any{"guildId": "g1", "userId": "u1"},
-	})
-	if err != nil {
-		t.Fatalf("verify_member: %v", err)
-	}
-	m := out.(map[string]any)
-	if m["verified"] != true || m["source"] != "social:discord:join" {
-		t.Fatalf("expected member verified, got %v", m)
-	}
-
-	status = http.StatusNotFound
-	out2, err := runDiscordVerifyMember(context.Background(), RunContext{
-		Token: tokenOK, Input: map[string]any{"guildId": "g1", "userId": "u2"},
-	})
-	if err != nil {
-		t.Fatalf("verify_member2: %v", err)
-	}
-	if out2.(map[string]any)["verified"] != false {
-		t.Fatalf("expected not member, got %v", out2)
-	}
-}
-
-func TestDiscordVerifyMemberFailClosed(t *testing.T) {
-	_, err := runDiscordVerifyMember(context.Background(), RunContext{
-		Token: tokenFail, Input: map[string]any{"guildId": "g1", "userId": "u1"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "discord not connected") {
-		t.Fatalf("expected 'discord not connected', got %v", err)
-	}
-}
-
 type capturedAward struct {
 	auth string
 	body map[string]any

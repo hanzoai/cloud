@@ -73,17 +73,6 @@ type Generator interface {
 	Draft(ctx context.Context, org string, in GenerateInput) (map[string]any, error)
 }
 
-// notConfiguredGenerator is the fail-closed default when NO generation backend can be
-// built at all. It never fabricates content — it returns an honest error the handler
-// maps to 503, so an un-provisioned deployment degrades cleanly instead of shipping
-// fake copy. (In practice newGenerator always returns the real aiStudioGenerator, which
-// fail-closes per-mode; this remains the type-level zero value for the client.)
-type notConfiguredGenerator struct{}
-
-func (notConfiguredGenerator) Draft(context.Context, string, GenerateInput) (map[string]any, error) {
-	return nil, errNotConfigured
-}
-
 // defaultCopyModel is the platform AI-plane model the copy generator drafts with when a
 // request pins none and no operator override is set. zen5 is the Hanzo AI plane's
 // flagship editorial model (routed by the gateway; content never talks to a provider

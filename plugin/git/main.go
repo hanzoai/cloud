@@ -17,9 +17,10 @@ import (
 // `git openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "git",
-		Price: cloud.Free,
-		Use:   git.Use,
+		Name:     "git",
+		Price:    cloud.Free,
+		Use:      git.Use,
+		Shutdown: cloud.CtxShutdown(git.Shutdown),
 	}}, []string{"git"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

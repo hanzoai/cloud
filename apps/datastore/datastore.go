@@ -68,7 +68,3 @@ func Exec(ctx context.Context, stmt string, args ...any) error {
 // become ready, so a readiness probe fails fast on a misconfiguration instead
 // of timing out.
 func Wait(ctx context.Context) error { return open().Wait(ctx) }
-
-// Close releases the connection. It is idempotent, and Exec and Query return
-// datastore.ErrUnavailable afterwards.
-func Close() error { return open().Close() }

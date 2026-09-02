@@ -46,12 +46,11 @@ BASE="http://127.0.0.1:${HTTP_PORT}"
 # secret and password exist only inside this data dir, which is deleted on exit.
 ORG=hanzo
 OTHER_ORG=acme
-# Minted per run, like the two credentials below, and for the same reason: a
-# password written into a file is a password on every disk that file reaches and
-# in every copy of this repository's history, forever, for an instance whose data
-# directory is deleted on exit. It is printed once at the end instead — that is
-# where a human reads it, and it exists nowhere else.
-PASSWORD="${PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -d '=+/')!aA1}"
+# The estate's seed-superuser credential, so a person and a local chat client sign
+# in to what this booted with the value they already know. The two credentials
+# below stay minted: nothing outside this script presents them. A caller that
+# wants its own sets PASSWORD. The upsert route argon2id-hashes it server-side.
+PASSWORD="${PASSWORD:-REDACTED}"
 CLIENT_ID=hanzo-console
 # Fresh per run, unless the caller already has one. BOOT_ONLY leaves the instance
 # up for somebody else to talk to, and talking to it needs the credential it was
@@ -169,6 +168,12 @@ export IAM_SERVICE_TOKEN="$SERVICE_TOKEN"
 # every org-scoped route answers "org scope required" — a 403 that reads exactly
 # like a product bug.
 export CLOUD_JWKS_URL="$BASE/v1/iam/.well-known/jwks"
+# The same discovery, for the ai plugin, which is a separate module with its own
+# validator: it reads IAM_ENDPOINT (then IAM_ISSUER) and refuses to guess a trust
+# anchor, so with neither set it skips JWKS entirely and parses an empty
+# certificate — every completion answers 401 "iam: not valid PEM", which reads as
+# a key fault and is a missing address.
+export IAM_ENDPOINT="$BASE"
 export E2E_CLIENT_SECRET="$CLIENT_SECRET"        # ${VAR} substitution in init_data.json
 export E2E_REDIRECT_URI="$BASE/auth/callback"
 

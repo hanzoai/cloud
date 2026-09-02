@@ -437,18 +437,6 @@ func (s *Store) CountItems(ctx context.Context, org, dataset string) (int, error
 	return n, nil
 }
 
-func (s *Store) GetItem(ctx context.Context, org, id string) (DatasetItem, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT `+itemCols+` FROM dataset_items WHERE org=? AND id=?`, org, id)
-	it, err := scanItem(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return DatasetItem{}, errNotFound
-	}
-	if err != nil {
-		return DatasetItem{}, fmt.Errorf("get item: %w", err)
-	}
-	return it, nil
-}
-
 // ── evaluators ───────────────────────────────────────────────────────────────
 
 const evaluatorCols = `id,org,name,model,criteria,score_name,created_at,updated_at`
@@ -488,18 +476,6 @@ func (s *Store) UpsertEvaluator(ctx context.Context, e Evaluator) (Evaluator, er
 	}
 	if err := tx.Commit(); err != nil {
 		return Evaluator{}, fmt.Errorf("commit: %w", err)
-	}
-	return e, nil
-}
-
-func (s *Store) GetEvaluator(ctx context.Context, org, name string) (Evaluator, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT `+evaluatorCols+` FROM evaluators WHERE org=? AND name=?`, org, name)
-	e, err := scanEvaluator(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Evaluator{}, errNotFound
-	}
-	if err != nil {
-		return Evaluator{}, fmt.Errorf("get evaluator: %w", err)
 	}
 	return e, nil
 }

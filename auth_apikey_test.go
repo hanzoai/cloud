@@ -6,7 +6,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -187,129 +186,6 @@ func TestResolveOrg_FailsClosed(t *testing.T) {
 			t.Fatalf("body %q resolved to org %q, want \"\"", body, org)
 		}
 		srv.Close()
-	}
-}
-
-// ── why a key was refused ────────────────────────────────────────────────────
-
-// IAM's refusal REASON survives the resolver instead of being discarded.
-//
-// "the entity does not exist" is IAM's generic answer for several distinct causes,
-// and cloud dropped everything but the (nil) principal — so every surface downstream
-// could only repeat that sentence. A holder whose key had been REVOKED was sent
-// looking for a deleted organization instead of minting a new key. Resolution is
-// unchanged: a refused key is still nil, still anonymous. Only the diagnosis is added.
-func TestIAMKeys_RefusalReasonIsCarried(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Query().Get("accessKey") {
-		case "sk-live-GOOD":
-			_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"hanzo","name":"z"}}`))
-		case "sk-live-REVOKED":
-			_, _ = w.Write([]byte(`{"status":"error","msg":"the entity does not exist","code":"key_unknown"}`))
-		case "sk-live-FORGED":
-			_, _ = w.Write([]byte(`{"status":"error","msg":"the entity does not exist","code":"key_foreign_user"}`))
-		default:
-			// An older IAM that gives no reason at all.
-			_, _ = w.Write([]byte(`{"status":"error","msg":"the entity does not exist"}`))
-		}
-	}))
-	defer srv.Close()
-
-	k := &iamKeys{base: srv.URL, auth: "Basic test", http: srv.Client(),
-		cache: newCache[string, *idClaims](time.Minute),
-		why:   newCache[string, KeyRefusal](time.Minute)}
-
-	// A refused key is STILL nil — the reason changes no decision.
-	for _, tc := range []struct {
-		key  string
-		want KeyRefusal
-	}{
-		{"sk-live-REVOKED", "key_unknown"},
-		{"sk-live-FORGED", "key_foreign_user"},
-		{"sk-live-SILENT", ""}, // an IAM that sends no code yields no invented reason
-	} {
-		if c := k.resolve(context.Background(), tc.key); c != nil {
-			t.Fatalf("%s resolved to %+v — a refused key must stay anonymous", tc.key, c)
-		}
-		if got := k.refusal(context.Background(), tc.key); got != tc.want {
-			t.Errorf("%s: refusal = %q, want %q", tc.key, got, tc.want)
-		}
-	}
-
-	// A key that RESOLVES records no refusal.
-	if c := k.resolve(context.Background(), "sk-live-GOOD"); c == nil {
-		t.Fatal("a valid key must still resolve")
-	}
-	if got := k.refusal(context.Background(), "sk-live-GOOD"); got != "" {
-		t.Errorf("a resolved key recorded refusal %q, want none", got)
-	}
-}
-
-// RefusalForKey is the place a user-facing surface asks "why did this fail?", and it
-// answers from the SAME cache the auth path already filled — so diagnosing a failure
-// costs no extra IAM call.
-func TestRefusalForKey(t *testing.T) {
-	var calls int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Query().Get("accessKey") == "sk-live-GOOD" {
-			_, _ = w.Write([]byte(`{"status":"ok","data":{"owner":"hanzo","name":"z"}}`))
-			return
-		}
-		_, _ = w.Write([]byte(`{"status":"error","msg":"the entity does not exist","code":"key_unknown"}`))
-	}))
-	defer srv.Close()
-
-	sharedKeysOnce = sync.Once{}
-	sharedKeysInst = nil
-	t.Setenv("IAM_URL", srv.URL)
-	t.Setenv("IAM_MINT_CLIENT_ID", "hanzo-console")
-	t.Setenv("IAM_MINT_CLIENT_SECRET", "s3cr3t")
-	t.Cleanup(func() { sharedKeysOnce = sync.Once{}; sharedKeysInst = nil })
-
-	if reason, ok := RefusalForKey(context.Background(), "sk-live-REVOKED"); ok || reason != "key_unknown" {
-		t.Fatalf("RefusalForKey(revoked) = (%q,%v), want (key_unknown,false)", reason, ok)
-	}
-	if reason, ok := RefusalForKey(context.Background(), "sk-live-GOOD"); !ok || reason != "" {
-		t.Fatalf("RefusalForKey(valid) = (%q,%v), want (\"\",true)", reason, ok)
-	}
-	// A non-key string never reaches IAM at all.
-	before := calls
-	if reason, ok := RefusalForKey(context.Background(), "not-a-key"); ok || reason != "" {
-		t.Fatalf("RefusalForKey(garbage) = (%q,%v), want (\"\",false)", reason, ok)
-	}
-	if calls != before {
-		t.Errorf("a non-key string cost %d IAM call(s), want 0", calls-before)
-	}
-	// Asking again is free — the reason rides the cache the auth path already filled.
-	before = calls
-	if _, _ = RefusalForKey(context.Background(), "sk-live-REVOKED"); calls != before {
-		t.Errorf("re-asking why cost %d extra IAM call(s), want 0", calls-before)
-	}
-}
-
-// KeyHint names a key without disclosing it — enough for a holder to tell WHICH key
-// failed, useless to anyone who reads the log.
-func TestKeyHint_NeverDisclosesTheKey(t *testing.T) {
-	const key = "sk-902abd8e-dead-beef-cafe-000000000000"
-	hint := KeyHint(key)
-	if hint != "sk-902abd…" {
-		t.Fatalf("KeyHint = %q, want sk-902abd…", hint)
-	}
-	if strings.Contains(key, hint) {
-		t.Fatalf("the hint %q is a literal prefix long enough to be a substring test failure", hint)
-	}
-	// Nothing beyond the first 9 characters ever appears.
-	if strings.Contains(hint, "beef") || strings.Contains(hint, "dead") || len(hint) > 12 {
-		t.Fatalf("KeyHint leaked key material: %q", hint)
-	}
-	// A short/empty value discloses nothing at all rather than the whole string.
-	for _, short := range []string{"", "sk-", "sk-abc"} {
-		if h := KeyHint(short); h != "…" {
-			t.Errorf("KeyHint(%q) = %q, want …", short, h)
-		}
 	}
 }
 

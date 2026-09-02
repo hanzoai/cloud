@@ -227,8 +227,7 @@ func TestSlackDedupeIdempotency(t *testing.T) {
 
 func TestSlackEventsHMAC(t *testing.T) {
 	slackConfiguredEnv(t)
-	t.Setenv("SLACK_SIGNING_SECRET", "sig-secret-1")
-	app := newApp(t, newKMS(t))
+	app := newApp(t, newSigningKMS(t, "sig-secret-1"))
 
 	body := `{"type":"url_verification","challenge":"abc123"}`
 
@@ -276,10 +275,9 @@ func TestSlackEventsHMAC(t *testing.T) {
 // with the org derived ONLY from OrgForExternalID(team_id), never the payload.
 func TestSlackBridgeOrgIsolation(t *testing.T) {
 	slackConfiguredEnv(t)
-	t.Setenv("SLACK_SIGNING_SECRET", "iso-secret")
 	authCh := make(chan string, 4)
 	stubSlackBridge(t, authCh)
-	kc := newKMS(t)
+	kc := newSigningKMS(t, "iso-secret")
 	app := newApp(t, kc)
 	ctx := context.Background()
 
@@ -340,10 +338,9 @@ func TestSlackBridgeOrgIsolation(t *testing.T) {
 // connected produces no reply (no cross-org fallback, no default org).
 func TestSlackBridgeUnconnectedTeamDropped(t *testing.T) {
 	slackConfiguredEnv(t)
-	t.Setenv("SLACK_SIGNING_SECRET", "iso-secret-2")
 	authCh := make(chan string, 2)
 	stubSlackBridge(t, authCh)
-	app := newApp(t, newKMS(t))
+	app := newApp(t, newSigningKMS(t, "iso-secret-2"))
 
 	body := `{"type":"event_callback","team_id":"TNOBODY","event_id":"EvX","event":{"type":"app_mention","user":"U9","text":"<@B> hi","channel":"C1","ts":"1.1"}}`
 	if res := slackPost(t, app, "/v1/integrations/slack/events", "iso-secret-2", "application/json", body); res.Code != http.StatusOK {
@@ -523,8 +520,7 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 // test-only wiring.
 func TestSlackRoutePrecedence(t *testing.T) {
 	slackLinkConfiguredEnv(t)
-	t.Setenv("SLACK_SIGNING_SECRET", "prec-secret")
-	app := newApp(t, newKMS(t))
+	app := newApp(t, newSigningKMS(t, "prec-secret"))
 
 	// GET /v1/integrations/slack/link must hit slackLink (302 to Slack sign-in),
 	// NOT the /:provider GET handler (which would 200 a provider JSON view / 403).
@@ -593,10 +589,9 @@ func TestOrgLimiter(t *testing.T) {
 // never silently lost to a burned dedupe key. Uses a deterministic cap-1 limiter.
 func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	slackConfiguredEnv(t)
-	t.Setenv("SLACK_SIGNING_SECRET", "shed-secret")
 	authCh := make(chan string, 2)
 	stubSlackBridge(t, authCh)
-	app := newApp(t, newKMS(t))
+	app := newApp(t, newSigningKMS(t, "shed-secret"))
 	slackBridgeReady(mounted)
 
 	// Swap in a cap-1 limiter on the SHARED channel pool, then saturate it so the next

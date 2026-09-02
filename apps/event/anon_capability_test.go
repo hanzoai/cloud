@@ -47,18 +47,6 @@ const commerceWire = `{"batch":[{"type":"event","event":"order_completed",` +
 	`"groupId":"victim-team","personId":"victim-person","distinctId":"attacker",` +
 	`"properties":{"injected":"yes"}}]}`
 
-// commercePostHog is the same attack on the PostHog wire. That adapter maps no
-// revenue/groupId/personId columns, but the EVENT NAME is what the commerce lenses
-// count (`countIf(event = 'order_completed') AS orders`), and the whole property bag
-// rides along — so an unattested caller naming the event is already the poisoning.
-const commercePostHog = `{"event":"order_completed","distinct_id":"attacker",` +
-	`"properties":{"$current_url":"https://hanzo.ai/pricing","injected":"yes"}}`
-
-// pageviewWire is what a real logged-out visitor emits — the traffic that must KEEP
-// working on every endpoint, so the fix is a capability drop and not a feature
-// deletion.
-const pageviewWire = `{"batch":[{"type":"pageview","distinctId":"anon-1","path":"/pricing"}]}`
-
 // roomyRate installs anonymous counters big enough that no capability test can be
 // masked by a 429 from a bucket another test in this package already spent. The rate
 // cap itself is pinned by TestPublic_RateLimited / TestPublic_PeerCeiling.

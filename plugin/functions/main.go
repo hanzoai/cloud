@@ -17,9 +17,10 @@ import (
 // `functions openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "functions",
-		Price: cloud.Metered,
-		Use:   functions.Use,
+		Name:     "functions",
+		Price:    cloud.Metered,
+		Use:      functions.Use,
+		Shutdown: cloud.CtxShutdown(functions.Shutdown),
 	}}, []string{"functions"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

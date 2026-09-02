@@ -53,8 +53,8 @@ func opsUnderTest(t *testing.T) (served map[string]bool, typed map[string]string
 // typed op nor named above — so the next route added here is typed by default.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	served, typed, _ := opsUnderTest(t)
-	if len(served) != 4 {
-		t.Errorf("network serves %d operations, expected 4 — update this gate deliberately", len(served))
+	if len(served) != 8 {
+		t.Errorf("network serves %d operations, expected 8 — update this gate deliberately", len(served))
 	}
 
 	var untyped []string

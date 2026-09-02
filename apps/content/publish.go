@@ -46,7 +46,7 @@ const (
 //	     value:[{content,image}], settings:{__type:<provider>}}]}   (Authorization: <org API key>)
 //
 // with the per-brand key custodied in KMS (via clients/integrations), never in a manifest.
-// The scaffold ships the notConfigured Distributor (honest fail-closed), so a transition
+// The Distributor fails closed per call when a brand has no key, so a transition
 // into distribution records "not_configured" and NEVER fails the status change.
 
 // Channel is one connected distribution channel for a brand (a social integration).
@@ -120,18 +120,6 @@ type ChannelResult struct {
 type Distributor interface {
 	Channels(ctx context.Context, org string) ([]Channel, error)
 	Publish(ctx context.Context, org string, req DistributeRequest) (DistributeResult, error)
-}
-
-// notConfiguredDistributor is the fail-closed default until a real Distributor is wired
-// at Mount. It never fakes a post — it returns an honest error the handler maps to 503
-// and a transition records as distribution "not_configured".
-type notConfiguredDistributor struct{}
-
-func (notConfiguredDistributor) Channels(context.Context, string) ([]Channel, error) {
-	return nil, errNotConfigured
-}
-func (notConfiguredDistributor) Publish(context.Context, string, DistributeRequest) (DistributeResult, error) {
-	return DistributeResult{}, errNotConfigured
 }
 
 // PublishInput identifies the CMS item to distribute. The item's channels/caption/media

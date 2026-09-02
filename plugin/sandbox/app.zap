@@ -28,6 +28,7 @@ struct LeaseIn {
     Project text @16
     Runtime text @24
     TTLSec  i64  @32
+    Cluster text @40
 }
 
 struct Leased {
@@ -36,6 +37,7 @@ struct Leased {
     Runtime text @16
     Status  text @24
     Workdir text @32
+    Cluster text @40
 }
 
 struct PathIn {
@@ -71,13 +73,14 @@ struct Sandbox {
     Pod         text @56
     Runtime     text @64
     Volume      text @72
-    Error       text @80
-    CreatedAt   i64  @88
-    LastUsedAt  i64  @96
-    ConnectedAt i64  @104
-    ExpiresAt   i64  @112
-    Payer       text @120
-    MeteredAt   i64  @128
+    Cluster     text @80
+    Error       text @88
+    CreatedAt   i64  @96
+    LastUsedAt  i64  @104
+    ConnectedAt i64  @112
+    ExpiresAt   i64  @120
+    Payer       text @128
+    MeteredAt   i64  @136
 }
 
 struct StopIn {
@@ -119,6 +122,7 @@ struct leaseIn {
     Image   text @16
     Runtime text @24
     TTLSec  i64  @32
+    Cluster text @40
 }
 
 struct sandboxFilter {

@@ -102,10 +102,3 @@ type Service struct {
 func NewService(reg Registrar, bill Biller, zones Zones, store Store, cfg Config) *Service {
 	return &Service{reg: reg, bill: bill, zones: zones, store: store, cfg: cfg}
 }
-
-// Registrar is the wholesale registrar this service resells — the health probe reads
-// its id, environment and credential names from it rather than restating any of them.
-func (s *Service) Registrar() Registrar { return s.reg }
-
-// Configured reports whether the registrar has credentials.
-func (s *Service) Configured() bool { return s.reg.Configured() }

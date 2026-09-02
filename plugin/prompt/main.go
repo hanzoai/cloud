@@ -17,9 +17,10 @@ import (
 // `prompts openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "prompt",
-		Price: cloud.Free,
-		Use:   prompt.Use,
+		Name:     "prompt",
+		Price:    cloud.Free,
+		Use:      prompt.Use,
+		Shutdown: cloud.CtxShutdown(prompt.Shutdown),
 	}}, []string{"prompt"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

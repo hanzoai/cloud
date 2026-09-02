@@ -52,10 +52,6 @@ func NewRegistry(cs ...Contributor) *Registry {
 	return &Registry{contributors: append([]Contributor(nil), cs...)}
 }
 
-// Register appends a contributor — the plug-in point a new domain calls to join the advisor
-// without the router knowing it exists.
-func (r *Registry) Register(c Contributor) { r.contributors = append(r.contributors, c) }
-
 // Match returns the FIRST contributor that can ground the question, or nil when none can. It is
 // the classification hook: deterministic first-match today (books is the sole domain), and the
 // ONE place an LLM-based classifier or a multi-domain fan-out slots in later — the router only

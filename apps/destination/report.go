@@ -284,17 +284,6 @@ func record(ctx context.Context, org, platform string, ms []Metric) error {
 // answers, so it is slower than the ingest endpoints sendTimeout was cut for.
 const reportTimeout = 60 * time.Second
 
-// Pull runs every enabled destination that has a Reporter for org over w, and
-// records what each platform reported. It is the client an on-demand caller and a
-// schedule both drive — one driver, not two paths — and it answers with the rows
-// written per platform.
-func Pull(ctx context.Context, org string, w Window) (map[string]int, error) {
-	if mounted == nil {
-		return nil, fmt.Errorf("destinations: not mounted")
-	}
-	return pull(mounted, ctx, org, w)
-}
-
 // pull is Pull over an explicit service. FAIL-SOFT per platform, exactly as the
 // fan-out is: one platform's stale credential or refused window must not cost an
 // org the platforms that did answer. A platform absent from the result reported

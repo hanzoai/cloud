@@ -33,17 +33,8 @@ import (
 // spelling stays because thirty call sites already say cloud.ClientIP and a rename is
 // not what this change is about.
 
-// TrustedProxiesEnv names the CIDR set this deployment treats as its own hops.
-const TrustedProxiesEnv = clientip.TrustedProxiesEnv
-
-// CountryHeader is the edge's country attestation.
-const CountryHeader = clientip.CountryHeader
-
 // ClientIP is the ONE answer to "which address is calling".
 func ClientIP(c *zip.Ctx) string { return clientip.ClientIP(c) }
 
 // ClientCountry is the edge-attested country, or empty when nothing attested one.
 func ClientCountry(c *zip.Ctx) string { return clientip.ClientCountry(c) }
-
-// TrustedProxy reports whether addr is one of this deployment's own hops.
-func TrustedProxy(addr string) bool { return clientip.TrustedProxy(addr) }

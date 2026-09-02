@@ -39,7 +39,6 @@ package cloud
 
 import (
 	"log/slog"
-	"net/url"
 	"strings"
 	"time"
 
@@ -591,47 +590,6 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	return claims
 }
 
-// sessionAccessToken used to map a first-party session cookie to the JWT the
-// in-process IAM had stored server-side, by reading Beego's global session
-// manager (web.GlobalSessions) that the retired iam-v1 embed wired up.
-//
-// That embed is retired. IAM v2 (github.com/hanzoai/iam) is zip-native on
-// hanzoai/orm + hanzoai/sqlite and registers its surface directly on cloud's
-// app, so nothing in this binary ever populates web.GlobalSessions — the
-// function could only ever return "". It was dead code holding a whole beego
-// module in the graph, along with the process-global config it drags in.
-//
-// Removed rather than kept "just in case": a session bridge to a manager that
-// is never initialised is not a fallback, it is a lie about where sessions come
-// from. If a first-party session ever needs to resolve to a token again, it
-// resolves through IAM v2, not through a global in a retired framework.
-func sessionAccessToken(*zip.Ctx) string { return "" }
-
-// sessionBridgeSameOrigin reports whether the request may use the ambient-cookie
-// session bridge (RED H3). A legitimate embed request is same-origin (the SPA calls
-// its OWN host); a cross-site OR sibling-subdomain (same-site) request that merely
-// rides the victim's session cookie is refused, so the bridge can never be a CSRF
-// vector even on a state-changing GET. Prefers Sec-Fetch-Site (browser-set,
-// JS-unforgeable); falls back to an Origin/Referer host==Host check when it is absent
-// (a modern browser always sends Sec-Fetch-Site, so the fallback is only for exotic
-// clients — which, lacking the httpOnly cookie, can't reach the bridge anyway).
-func sessionBridgeSameOrigin(c *zip.Ctx) bool {
-	if sfs := c.Header("Sec-Fetch-Site"); sfs != "" {
-		return sfs == "same-origin" || sfs == "none"
-	}
-	host := c.Fiber().Hostname()
-	for _, h := range []string{c.Header("Origin"), c.Header("Referer")} {
-		if h == "" {
-			continue
-		}
-		u, err := url.Parse(h)
-		if err != nil || !strings.EqualFold(u.Host, host) {
-			return false
-		}
-	}
-	return true
-}
-
 // callerToken resolves the credential token a request presents, in the SAME
 // precedence SanitizeIdentity trusts, and returns it UNCHANGED (validation is the
 // caller's job). It is the ONE token-resolution both the identity boundary
@@ -640,18 +598,7 @@ func sessionBridgeSameOrigin(c *zip.Ctx) bool {
 //
 //  1. request Bearer (Authorization), then X-Authorization Bearer, then Basic
 //     password (the go/.netrc proxy idiom),
-//  2. a JWT-bearing session cookie (cookieTokenNames),
-//  3. EMBED first-party bridge (last resort). The go:embed console
-//     (console.hanzo.ai -> this binary) authenticates against its OWN in-process
-//     IAM, which sets an OPAQUE, httpOnly session id (never a bearer) and stores the
-//     user's IAM-minted access-token JWT SERVER-SIDE against that session. The
-//     console's Next BFF token-minting routes are stripped by the static export, so
-//     a browser request carries only the session cookie; resolve it to that
-//     server-stored JWT so the embed uses the SAME identity path as every other
-//     client. GATED SAME-ORIGIN (RED H3): the session cookie is ambient, so the
-//     bridge fires ONLY for a same-origin request -- a cross-site / sibling-subdomain
-//     request that merely rides the cookie can never reach it. No-op with no
-//     in-process IAM session manager (web.GlobalSessions == nil).
+//  2. a JWT-bearing session cookie (cookieTokenNames).
 //
 // The returned token is NOT trusted here: validatedPrincipal feeds it through
 // v.validate (sig/iss/aud/exp), and CallerBearer relays it to a target that
@@ -661,9 +608,9 @@ func sessionBridgeSameOrigin(c *zip.Ctx) bool {
 //
 // The split is not cosmetic. A credential a caller presents cannot be supplied by
 // a cross-site page (a browser will not set these headers for one), while an
-// AMBIENT credential — a cookie, a same-origin session bridge — is sent by any page
-// that can reach us. That is the whole anti-CSRF distinction, so apps/account asks
-// this rather than deciding for itself what an explicit credential looks like.
+// AMBIENT credential — a cookie — is sent by any page that can reach us. That is
+// the whole anti-CSRF distinction, so apps/account asks this rather than deciding
+// for itself what an explicit credential looks like.
 //
 // IT IS A CROSS-HEADER PRECEDENCE, and that is why it has to be one function
 // rather than one parse applied twice. Basic is read from Authorization ONLY: a
@@ -692,9 +639,6 @@ func callerToken(c *zip.Ctx) string {
 				break
 			}
 		}
-	}
-	if tok == "" && sessionBridgeSameOrigin(c) {
-		tok = sessionAccessToken(c)
 	}
 	return tok
 }

@@ -61,6 +61,11 @@ type leaseIn struct {
 	// TTLSec is how long the lease runs before the reaper may take it, in
 	// seconds. Zero takes the class's own default.
 	TTLSec int `json:"ttlSec,omitempty" url:"-"`
+	// Cluster names one of the org's attached clusters to run the sandbox on —
+	// the fleet-local name it was registered under. Empty runs on the home
+	// cluster. The named cluster must carry the sandbox namespace and the
+	// gvisor runtime class; a name the org has not attached is 404.
+	Cluster string `json:"cluster,omitempty" url:"-"`
 }
 
 // CreateSandbox leases a sandbox — a real computer — for the caller's org.
@@ -82,7 +87,7 @@ func (o ops) create(ctx context.Context, in *leaseIn) (*Sandbox, error) {
 	c, _ := cloud.Request(ctx)
 	m, err := Lease(o.s, ctx, org, principal.Ledger(c), principal.IsSuperAdmin(c), cloud.CallerBearer(c), Spec{
 		Class: in.Class, Project: in.Project, Image: in.Image,
-		Runtime: in.Runtime, TTLSec: in.TTLSec})
+		Runtime: in.Runtime, TTLSec: in.TTLSec, Cluster: in.Cluster})
 	if err != nil {
 		return nil, err
 	}

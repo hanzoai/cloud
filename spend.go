@@ -3,22 +3,11 @@ package cloud
 // spend.go answers ONE question for the whole binary — MAY THIS PRINCIPAL SPEND? —
 // and it is the only place that answer is computed.
 //
-// WHY IT MOVED HERE. The answer used to live in clients/entitlements, a leaf that
-// imports this package. That is the wrong side of the dependency: the edge filters
-// serve.go mounts live in THIS package, so they could never reach it. The result was
-// three gates that each re-derived a different answer:
-//
-//   - routers.Paywall (mounted app-wide) asked only "does the org hold a paid PLAN?".
-//     It has no credit leg at all, so enabling it would have 402'd every prepaid
-//     customer — the gate was unusable, which is why it stayed dark forever. Deleted;
-//     serve.go now mounts SpendGate.
-//   - middleware_billing.BillingGate (mounted app-wide) asked "is price(path) > 0?"
-//     and DefaultPrice returns 0 for every path, so it never evaluated ANYTHING.
-//   - clients/entitlement.RequireProduct had the RIGHT answer and was mounted on
-//     no route at all.
-//
-// So the binary shipped three paywalls and enforced none. One predicate, in the one
-// package every gate can import, is the fix.
+// WHY IT LIVES HERE. The edge filters serve.go mounts live in THIS package, so an
+// answer computed in a leaf that imports it could never be reached from the edge —
+// which is how a binary comes to ship several paywalls and enforce none. One
+// predicate, in the one package every gate can import, is what makes the mounted
+// gate and the computed answer the same thing.
 //
 // TWO WAYS TO PAY, ONE ANSWER. The rule is "an active subscription OR a positive
 // prepaid balance". Those are two INDEPENDENT facts held by two INDEPENDENT

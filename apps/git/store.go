@@ -549,17 +549,6 @@ func (s *Store) ClearConflict(ctx context.Context, org, project, repo, branch st
 	return nil
 }
 
-// ClearRepoConflicts removes every branch's divergence marker for a repo — a full
-// re-import force-fetches every ref, reconciling the repo wholesale. Idempotent.
-func (s *Store) ClearRepoConflicts(ctx context.Context, org, project, repo string) error {
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM inbound_conflicts WHERE org=? AND project=? AND repo=?`, org, project, repo)
-	if err != nil {
-		return fmt.Errorf("clear repo inbound conflicts: %w", err)
-	}
-	return nil
-}
-
 // ── pull requests (propose a branch, merge it) ───────────────────────────────
 
 // The two states a proposal can be in. There is no third: a pull is the

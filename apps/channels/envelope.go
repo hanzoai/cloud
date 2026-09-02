@@ -48,8 +48,8 @@ const (
 )
 
 // Sender identifies who sent an inbound message. UserID is the bound Hanzo
-// subject (integrations.LinkedSubject) and may be empty when the platform user
-// has not linked. Org is filled on ingress and ignored on egress.
+// subject, resolved over the plane, and may be empty when the platform user has
+// not linked. Org is filled on ingress and ignored on egress.
 type Sender struct {
 	ExternalID string `json:"externalId"`
 	Display    string `json:"display,omitempty"`

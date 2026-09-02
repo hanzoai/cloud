@@ -97,6 +97,36 @@
         "http://localhost:3000"
       ],
       "expireInHours": 24
+    },
+    {
+      "owner": "admin",
+      "name": "hanzo-chat",
+      "displayName": "Hanzo Chat",
+      "organization": "hanzo",
+      "cert": "cert-signing",
+      "isShared": true,
+      "enablePassword": true,
+      "enableSignUp": true,
+      "enableSigninSession": true,
+      "clientId": "hanzo-chat",
+      "grantTypes": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "redirectUris": [
+        "http://localhost:5173/auth/callback",
+        "http://localhost:5200/auth/callback",
+        "http://localhost:5300/auth/callback",
+        "http://localhost:3091/auth/callback",
+        "http://localhost:1420/auth/callback",
+        "http://127.0.0.1:5173/auth/callback",
+        "http://127.0.0.1:5200/auth/callback",
+        "http://127.0.0.1:5300/auth/callback",
+        "http://127.0.0.1:3091/auth/callback",
+        "http://127.0.0.1:1420/auth/callback",
+        "hanzo://oauth/hanzo"
+      ],
+      "expireInHours": 24
     }
   ]
 }

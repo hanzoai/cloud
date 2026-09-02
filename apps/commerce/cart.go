@@ -429,8 +429,3 @@ func cartLine(li lineitem.LineItem) CartItem {
 	}
 	return item
 }
-
-// cartPrefix is the subtree the cart ops own. It is declared in Prefixes
-// (mount.go) and, by hand, in manifest/apps.go — the light host must not import an
-// app package, so the two copies are kept equal deliberately.
-const cartPrefix = "/v1/commerce/cart"

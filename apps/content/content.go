@@ -603,15 +603,9 @@ func dataString(m map[string]any, key string) string {
 	return s
 }
 
-// configured reports whether an edge is a real implementation (not the fail-closed
-// default) — for the mount log line.
-func configured(x any) bool {
-	switch x.(type) {
-	case notConfiguredGenerator, notConfiguredDistributor, notConfiguredStorefront, nil:
-		return false
-	}
-	return true
-}
+// configured reports whether an edge was supplied at all — for the mount log line.
+// Each real edge fail-closes per call, so being present is the whole question.
+func configured(x any) bool { return x != nil }
 
 // limitOf clamps a caller's requested page size to 1..1000, taking def for a
 // non-positive one. It reads a NUMBER rather than a request because zip's URL binder
