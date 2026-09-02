@@ -51,6 +51,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/valyala/fasthttp"
 	zaphttp "github.com/zap-proto/http"
 	zapmcp "github.com/zap-proto/mcp"
@@ -199,6 +200,14 @@ func (localAddr) Network() string { return "unix" }
 func (localAddr) String() string  { return "@here" }
 
 // dial is the hop to a peer this process does not serve.
+//
+// The two endpoints [At] resolves speak different wires, and the path says
+// which. A subsystem's PLANE endpoint (cloud.UseMCP) is a hop between our own
+// processes and carries the message as a ZAP frame; its FRAMEWORK endpoint is
+// zip's own HTTP adapter and carries JSON-RPC, which is what an MCP client
+// sends and what a remotely mounted app is reached with. Either way this
+// package's callers hold JSON, so the plane hop transcodes at both ends — the
+// same pair [here] makes around an in-process call.
 func dial(at At, name string, req *fasthttp.Request) Answer {
 	addr, path, err := at(name)
 	if err != nil {
@@ -214,13 +223,51 @@ func dial(at At, name string, req *fasthttp.Request) Answer {
 	// the socket path.
 	r.SetHost(name)
 	r.URI().SetPath(path)
+	frames := path == manifest.MCPPath
+	if frames {
+		body, err := frame(r.Body())
+		if err != nil {
+			return Answer{App: name, Err: fmt.Errorf("%s: %w", name, err)}
+		}
+		r.SetBody(body)
+		r.Header.SetContentType(zip.CallContentType)
+	}
 	if err := clientFor(addr).Do(r, resp); err != nil {
 		return Answer{App: name, Err: fmt.Errorf("%s at %s: %w", name, addr, err)}
 	}
 	if code := resp.StatusCode(); code < 200 || code > 299 {
 		return Answer{App: name, Err: fmt.Errorf("%s answered %d for %s", name, code, path)}
 	}
+	if frames {
+		body, err := unframe(resp.Body())
+		if err != nil {
+			return Answer{App: name, Err: fmt.Errorf("%s: %w", name, err)}
+		}
+		return Answer{App: name, Body: body}
+	}
 	return Answer{App: name, Body: append([]byte(nil), resp.Body()...)}
+}
+
+// frame renders a JSON-RPC message as the ZAP bytes a plane endpoint reads.
+func frame(b []byte) ([]byte, error) {
+	var f zapmcp.Frame
+	if err := json.Unmarshal(b, &f); err != nil {
+		return nil, err
+	}
+	return zapmcp.Marshal(&f)
+}
+
+// unframe reads a plane endpoint's answer back as the JSON-RPC every caller of
+// this package holds. No bytes is a notification, which has no answer to render.
+func unframe(b []byte) ([]byte, error) {
+	if len(b) == 0 {
+		return nil, nil
+	}
+	var f zapmcp.Frame
+	if err := zapmcp.Unmarshal(b, &f); err != nil {
+		return nil, err
+	}
+	return json.Marshal(&f)
 }
 
 // clients is one pooled transport per ADDRESS, for the same reason zip keeps one
