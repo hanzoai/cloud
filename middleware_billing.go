@@ -134,7 +134,7 @@ func BillingGate(m *metering.Client, price func(method, path string) int64) zip.
 			// (metering.Usage.Seal), one per act, out of the caller's reach.
 			RequestID: c.RequestID(),
 			Status:    "success",
-			ClientIP:  clientIP(c),
+			ClientIP:  ClientIP(c),
 		}
 		// Contained: this fires on EVERY billable request, so it is the highest-
 		// frequency spawn in the binary. It is also fire-and-forget — nothing reads
@@ -311,11 +311,6 @@ func identity(c *zip.Ctx, path string) metering.AuthInput {
 		Service:          canonicalService(path),
 	}
 }
-
-// clientIP extracts the originating IP from X-Forwarded-For (the gateway sets
-// it); the left-most entry is the real client. Delegates to the exported
-// ClientIP so the edge gate and the resource meter share ONE implementation.
-func clientIP(c *zip.Ctx) string { return ClientIP(c) }
 
 // billingEnabled reports whether the gate should enforce. False when the client
 // is nil or has no commerce URL (Enabled()==false), making the gate a no-op.
