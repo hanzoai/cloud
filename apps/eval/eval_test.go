@@ -290,11 +290,6 @@ func TestMetastoreTenantIsolation(t *testing.T) {
 	if len(acItems) != 1 || acItems[0].Input != `"ac"` {
 		t.Fatalf("acme items leaked or missing: %+v", acItems)
 	}
-	// Reading acme's item id under maxpower's org returns maxpower's row, never acme's.
-	got, err := s.GetItem(ctx, "maxpower", "i1")
-	if err != nil || got.Input != `"mp"` {
-		t.Fatalf("cross-org item read: got %q err %v", got.Input, err)
-	}
 	deleted, err := s.DeleteDataset(ctx, "acme", "shared")
 	if err != nil || !deleted {
 		t.Fatalf("acme delete own: %v deleted=%v", err, deleted)

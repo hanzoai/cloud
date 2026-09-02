@@ -265,16 +265,6 @@ func financeTxns(s *cloud.Service[state], ctx context.Context, org, subject stri
 	return nil, zip.Errorf(http.StatusServiceUnavailable, "billing ledger is not available on this deployment")
 }
 
-// classify is the S2S boundary: commerce's own wire words become the ONE vocabulary
-// the projections read, ONCE, on the way in. Nothing downstream of it sees a raw type
-// string, which is what makes a third spelling impossible to introduce quietly.
-func classify(rows []commerceTxn) []commerceTxn {
-	for i := range rows {
-		rows[i].Kind = commerceKind(rows[i].Type)
-	}
-	return rows
-}
-
 // rangeWindow maps a finance range token to a duration; an absent/unknown range
 // defaults to 30 days.
 func rangeWindow(r string) time.Duration {
