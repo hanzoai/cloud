@@ -15,9 +15,10 @@ import (
 // serves standalone.
 func main() {
 	if err := cloud.Listen([]cloud.Plugin{{
-		Name:  "ci",
-		Price: cloud.Free,
-		Use:   ci.Use,
+		Name:     "ci",
+		Price:    cloud.Free,
+		Use:      ci.Use,
+		Shutdown: cloud.CtxShutdown(ci.Shutdown),
 	}}, []string{"ci"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
