@@ -19,9 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -31,11 +29,10 @@ func openTokenIndex(dataDir string) (*tokenIndex, error) {
 	// The SYSTEM namespace, distinct from NewBase's per-tenant tree
 	// ({dataDir}/esign/): this global routing table belongs to no org, and the
 	// platform partition is one no tenant name can render.
-	db, err := cek.Open(namespace.System(), "token_index", dataDir)
+	db, err := sqlpool.Open("token_index", dataDir)
 	if err != nil {
-		return nil, fmt.Errorf("esign: open token index: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS token_index (token TEXT PRIMARY KEY, org TEXT NOT NULL);`); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("esign: init token index: %w", err)

@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"strings"
 
-	// cek is the ONE opener: the database is born encrypted under the key cek
-	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
+	// sqlpool.Open is the ONE opener: it names the database in the system
+	// namespace, opens it encrypted under the key cek derives from the process
+	// master, and applies the single-connection cap the store's atomicity rests on.
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags. Importing modernc
@@ -71,13 +70,10 @@ type Store struct {
 // openStore opens (creating if needed) the SQLite metadata DB under dir and runs
 // the migration.
 func openStore(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "provisioning", dir)
+	db, err := sqlpool.Open("provisioning", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open provisioning store: %w", err)
+		return nil, err
 	}
-	// Single connection: the control-plane table is low-volume and this makes
-	// every write atomic against the file lock without busy-loop retries.
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()

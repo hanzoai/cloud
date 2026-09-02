@@ -12,9 +12,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -24,11 +22,10 @@ func openLinkIndex(dataDir string) (*linkIndex, error) {
 	// The SYSTEM namespace, distinct from NewBase's per-tenant tree
 	// ({dataDir}/dataroom/): this global routing table belongs to no org, and the
 	// platform partition is one no tenant name can render.
-	db, err := cek.Open(namespace.System(), "link_index", dataDir)
+	db, err := sqlpool.Open("link_index", dataDir)
 	if err != nil {
-		return nil, fmt.Errorf("dataroom: open link index: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS link_index (link_id TEXT PRIMARY KEY, org TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS trust_index (slug TEXT PRIMARY KEY, org TEXT NOT NULL UNIQUE);

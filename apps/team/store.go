@@ -10,7 +10,6 @@ import (
 
 	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/internal/environ"
 	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/namespace"
 
@@ -28,8 +27,7 @@ import (
 // An org's data is physically isolated (full multitenancy) and the whole tree can
 // live on one durable mount. The storage LOGIC is ported verbatim from
 // team-go/pkg/transactor/store.go; only the driver binding is adapted to
-// hanzoai/sqlite (the cloud-native ONE driver) and the pragmas are set via Exec
-// instead of DSN query params.
+// hanzoai/sqlite, the cloud-native ONE driver.
 type docStore struct {
 	dir string
 	mu  sync.Mutex
@@ -85,10 +83,12 @@ func seg(s string) string {
 }
 
 // db opens (creating on first use) the (org, space) SQLite file and caches
-// the handle. WAL + busy_timeout make concurrent sessions safe; a single open
-// connection serializes writes (sqlite is single-writer) which is plenty for a
-// per-space store. On a network FS that lacks WAL shared-memory the journal
-// mode falls back via the SQLITE_JOURNAL_MODE env knob.
+// the handle. A single open connection serializes writes (sqlite is
+// single-writer), which is plenty for a per-space store.
+//
+// The pragmas are the driver's, which is the whole point of having one driver:
+// sqlpool_test pins wal, foreign_keys on and synchronous normal, and a store
+// that sets its own reaches a different database from every other store here.
 func (s *docStore) db(org, space string) (*sql.DB, error) {
 	// The namespace is the key AND the name: cached by the value rather than by a
 	// rendering of it, so two spellings that resolve to one file can never become
@@ -103,22 +103,11 @@ func (s *docStore) db(org, space string) (*sql.DB, error) {
 	if db, ok := s.dbs[ns]; ok {
 		return db, nil
 	}
-	journal := environ.Or("SQLITE_JOURNAL_MODE", "WAL") // DELETE/TRUNCATE on FUSE/S3 mounts
 	db, err := cek.Open(ns, "docs", s.dir)
 	if err != nil {
 		return nil, err
 	}
 	sqlpool.Single(db)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=" + journal,
-		"PRAGMA foreign_keys=OFF",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS docs (
 		id    TEXT PRIMARY KEY,
 		class TEXT NOT NULL,

@@ -16,9 +16,9 @@ import (
 	"io"
 	"testing"
 
-	"github.com/hanzoai/cek"
+	"github.com/hanzoai/cloud/sqlpool"
+
 	_ "github.com/hanzoai/cloud/internal/devmaster"
-	"github.com/hanzoai/namespace"
 )
 
 // Case is one store's legacy-schema migration regression.
@@ -51,7 +51,7 @@ func (c Case) Run(t *testing.T) {
 	// Stand up the legacy schema exactly as a pre-migration prod DB has it, in the
 	// SAME database — same namespace, same subsystem, same directory — the store
 	// opens. Naming it any other way would seed a file the store never reads.
-	raw, err := cek.Open(namespace.System(), c.Name, dir)
+	raw, err := sqlpool.Open(c.Name, dir)
 	if err != nil {
 		t.Fatalf("%s: open legacy db: %v", c.Name, err)
 	}

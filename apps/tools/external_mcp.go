@@ -19,10 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -84,11 +82,10 @@ type MCPServerStore struct {
 
 // OpenMCPServerStore opens (and migrates) the external-server store under dir.
 func OpenMCPServerStore(dir string) (*MCPServerStore, error) {
-	db, err := cek.Open(namespace.System(), "tools-mcp", dir)
+	db, err := sqlpool.Open("tools-mcp", dir)
 	if err != nil {
-		return nil, fmt.Errorf("tools: open mcp-server store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &MCPServerStore{db: db}
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS mcp_servers (
