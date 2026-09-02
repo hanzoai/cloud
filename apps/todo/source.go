@@ -588,7 +588,7 @@ func unix(s string) int64 {
 //
 // The forge half is the FORGE's answer for your own account, so two people in
 // one org can legitimately see different boards.
-func (o ops) forgeProjects(ctx context.Context, _ *noInput) (*projectList, error) {
+func (o ops) forgeProjects(ctx context.Context, _ *cloud.Unit) (*projectList, error) {
 	return onForge(o, ctx, reads, func(ctx context.Context, cl *forge.Client, owner string) (*projectList, error) {
 		// The board list is assembled from ISSUES, not from the org's repository
 		// inventory. Both can answer "which boards are there", but on this forge

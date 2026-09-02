@@ -70,16 +70,6 @@ type syncReq struct {
 // form cmd/zipdoc can lift prose from.
 type syncOps struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it takes
-// nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an ALIAS
-// for the unnamed empty struct, not a definition: zip keys the response on 204 only
-// when the Out type has no name, so a defined type here would publish "200 with a
-// body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // syncRef addresses one sync. The id is the path segment: the URL is the addressing
 // authority, so it binds from there whatever a body says.
 type syncRef struct {
@@ -345,7 +335,7 @@ func (o syncOps) patch(ctx context.Context, in *patchSyncIn) (*syncView, error) 
 // List returns every sync link the caller's org has, each with its two endpoints, its
 // direction and trigger policy, and the time it last reconciled. Scoped to the
 // caller's own org — another tenant's links are structurally unreachable.
-func (o syncOps) list(ctx context.Context, _ *noInput) (*syncList, error) {
+func (o syncOps) list(ctx context.Context, _ *cloud.Unit) (*syncList, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return nil, err
@@ -392,7 +382,7 @@ func (o syncOps) get(ctx context.Context, in *syncRef) (*syncView, error) {
 // tenant's id is the same 404 an unknown id gives.
 //
 // Example: {"id": "sync_1"}
-func (o syncOps) delete(ctx context.Context, in *syncRef) (*noContent, error) {
+func (o syncOps) delete(ctx context.Context, in *syncRef) (*cloud.Unit, error) {
 	s := o.s
 	org, err := orgOf(ctx)
 	if err != nil {

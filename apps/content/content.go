@@ -153,16 +153,12 @@ var (
 // also the only bound form cmd/zipdoc can lift prose from.
 type contentOps struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it takes
-// nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
-
 // GetLifecycle returns the ONE marketing-content state machine: the ordered
 // lifecycle states, which state a fresh document starts in, which one is publicly
 // live, and the legal successors of every state. The console builds its board
 // columns and its per-item action buttons from this single answer, so the UI and
 // the write-time enforcement hook can never disagree about what is legal.
-func (o contentOps) getLifecycle(ctx context.Context, _ *noInput) (*stateGraph, error) {
+func (o contentOps) getLifecycle(ctx context.Context, _ *cloud.Unit) (*stateGraph, error) {
 	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}
@@ -259,7 +255,7 @@ type channelList struct {
 // GetChannels lists the distribution channels the caller's org has connected — the
 // social integrations a publish can target. A deployment with no distribution edge
 // wired answers 503 rather than an empty list that would read as "no channels".
-func (o contentOps) getChannels(ctx context.Context, _ *noInput) (*channelList, error) {
+func (o contentOps) getChannels(ctx context.Context, _ *cloud.Unit) (*channelList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -377,9 +373,9 @@ func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*Tran
 // traversal validator is 400 raised before the billing gate and before the studio is
 // contacted, so a hostile source never costs the caller anything.
 func (o contentOps) postGenerate(ctx context.Context, in *GenerateInput) (*GenerateResult, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("valid principal required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	body := *in
 	body.DocType = strings.TrimSpace(body.DocType)

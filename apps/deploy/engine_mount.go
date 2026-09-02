@@ -38,18 +38,9 @@ func enginePrune() bool   { return os.Getenv("DEPLOY_ENGINE_PRUNE") == "true" }
 // of sweeping the fleet.
 func pruneFuse() PruneFuse {
 	return PruneFuse{
-		MaxDeletions: envInt("DEPLOY_ENGINE_PRUNE_MAX", 10),
+		MaxDeletions: environ.Int("DEPLOY_ENGINE_PRUNE_MAX", 10),
 		MaxRatio:     envFloat("DEPLOY_ENGINE_PRUNE_MAX_RATIO", 0.20),
 	}
-}
-
-func envInt(k string, d int) int {
-	if v := os.Getenv(k); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return d
 }
 
 func envFloat(k string, d float64) float64 {
@@ -97,7 +88,7 @@ func registerEngineRoutes(app cloud.Router, s *cloud.Service[state]) {
 // is why the op reads no request body at all. A deployment with the engine
 // switched off, or with no usable cluster config, answers 503; a failure to
 // start, render or sync is a 502.
-func (o ops) reconcile(ctx context.Context, _ *noInput) (*reconcileReport, error) {
+func (o ops) reconcile(ctx context.Context, _ *cloud.Unit) (*reconcileReport, error) {
 	if _, err := superAdminOf(ctx); err != nil {
 		return nil, err
 	}

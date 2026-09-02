@@ -45,17 +45,6 @@ import (
 
 // ----- input + view types ---------------------------------------------------
 
-// noInput is the In of an op addressed entirely by the caller's principal: a
-// listing takes nothing off the wire, because the org it lists is the validated
-// one and never a caller-supplied field.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name, so a defined type here would publish
-// "200 with a body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // resourceRef addresses one provisioned resource by its name. The name is the
 // path segment — the URL is the addressing authority — and these routes carry no
 // request body at all (zip reads none for GET or DELETE), so there is nothing a
@@ -442,7 +431,7 @@ func (o ops) dropOf(ctx context.Context, kind, name string) error {
 // ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED
 // PostgreSQL instance the org alone runs, so the host is that instance's own
 // in-cluster Service and the port is 5432.
-func (o ops) listSQL(ctx context.Context, _ *noInput) (*provisionedList, error) {
+func (o ops) listSQL(ctx context.Context, _ *cloud.Unit) (*provisionedList, error) {
 	return o.listOf(ctx, "sql")
 }
 
@@ -464,7 +453,7 @@ func (o ops) getSQL(ctx context.Context, in *resourceRef) (*provisionedResource,
 // second call is a 404, not a second delete.
 //
 // Example: {"name": "orders"}
-func (o ops) dropSQL(ctx context.Context, in *resourceRef) (*noContent, error) {
+func (o ops) dropSQL(ctx context.Context, in *resourceRef) (*cloud.Unit, error) {
 	return nil, o.dropOf(ctx, "sql", in.Name)
 }
 
@@ -473,7 +462,7 @@ func (o ops) dropSQL(ctx context.Context, in *resourceRef) (*noContent, error) {
 // ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey
 // instance the org alone runs, so the host is that instance's own in-cluster
 // Service and the port is 6379.
-func (o ops) listKV(ctx context.Context, _ *noInput) (*provisionedList, error) {
+func (o ops) listKV(ctx context.Context, _ *cloud.Unit) (*provisionedList, error) {
 	return o.listOf(ctx, "kv")
 }
 
@@ -493,7 +482,7 @@ func (o ops) getKV(ctx context.Context, in *resourceRef) (*provisionedResource, 
 // no body; a second call is a 404.
 //
 // Example: {"name": "sessions"}
-func (o ops) dropKV(ctx context.Context, in *resourceRef) (*noContent, error) {
+func (o ops) dropKV(ctx context.Context, in *resourceRef) (*cloud.Unit, error) {
 	return nil, o.dropOf(ctx, "kv", in.Name)
 }
 
@@ -502,7 +491,7 @@ func (o ops) dropKV(ctx context.Context, in *resourceRef) (*noContent, error) {
 // ListDatastore lists the caller org's Hanzo Datastore warehouses. Each one is
 // a DEDICATED analytical instance the org alone runs, so the host is that
 // instance's own in-cluster Service and the port is its HTTP port, 8123.
-func (o ops) listDatastore(ctx context.Context, _ *noInput) (*provisionedList, error) {
+func (o ops) listDatastore(ctx context.Context, _ *cloud.Unit) (*provisionedList, error) {
 	return o.listOf(ctx, "datastore")
 }
 
@@ -522,7 +511,7 @@ func (o ops) getDatastore(ctx context.Context, in *resourceRef) (*provisionedRes
 // Answers 204 with no body; a second call is a 404.
 //
 // Example: {"name": "warehouse"}
-func (o ops) dropDatastore(ctx context.Context, in *resourceRef) (*noContent, error) {
+func (o ops) dropDatastore(ctx context.Context, in *resourceRef) (*cloud.Unit, error) {
 	return nil, o.dropOf(ctx, "datastore", in.Name)
 }
 
@@ -532,7 +521,7 @@ func (o ops) dropDatastore(ctx context.Context, in *resourceRef) (*noContent, er
 // a DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire
 // protocol, so the host is that instance's own in-cluster Service and the port
 // is 27017.
-func (o ops) listDocDB(ctx context.Context, _ *noInput) (*provisionedList, error) {
+func (o ops) listDocDB(ctx context.Context, _ *cloud.Unit) (*provisionedList, error) {
 	return o.listOf(ctx, "docdb")
 }
 
@@ -552,7 +541,7 @@ func (o ops) getDocDB(ctx context.Context, in *resourceRef) (*provisionedResourc
 // Answers 204 with no body; a second call is a 404.
 //
 // Example: {"name": "sessions"}
-func (o ops) dropDocDB(ctx context.Context, in *resourceRef) (*noContent, error) {
+func (o ops) dropDocDB(ctx context.Context, in *resourceRef) (*cloud.Unit, error) {
 	return nil, o.dropOf(ctx, "docdb", in.Name)
 }
 
@@ -561,7 +550,7 @@ func (o ops) dropDocDB(ctx context.Context, in *resourceRef) (*noContent, error)
 // ListVector lists the caller org's vector collections. A collection is a
 // logical resource inside an already-live shared backend, so every one of them
 // is reached through the public gateway rather than at an instance of its own.
-func (o ops) listVector(ctx context.Context, _ *noInput) (*provisionedList, error) {
+func (o ops) listVector(ctx context.Context, _ *cloud.Unit) (*provisionedList, error) {
 	return o.listOf(ctx, "vector")
 }
 
@@ -579,7 +568,7 @@ func (o ops) getVector(ctx context.Context, in *resourceRef) (*provisionedResour
 // its metadata row. Answers 204 with no body; a second call is a 404.
 //
 // Example: {"name": "embeddings"}
-func (o ops) dropVector(ctx context.Context, in *resourceRef) (*noContent, error) {
+func (o ops) dropVector(ctx context.Context, in *resourceRef) (*cloud.Unit, error) {
 	return nil, o.dropOf(ctx, "vector", in.Name)
 }
 
@@ -588,7 +577,7 @@ func (o ops) dropVector(ctx context.Context, in *resourceRef) (*noContent, error
 // ListSearch lists the caller org's search indexes. An index is a logical
 // resource inside an already-live shared backend, so every one of them is
 // reached through the public gateway rather than at an instance of its own.
-func (o ops) listSearch(ctx context.Context, _ *noInput) (*provisionedList, error) {
+func (o ops) listSearch(ctx context.Context, _ *cloud.Unit) (*provisionedList, error) {
 	return o.listOf(ctx, "search")
 }
 
@@ -606,7 +595,7 @@ func (o ops) getSearch(ctx context.Context, in *resourceRef) (*provisionedResour
 // metadata row. Answers 204 with no body; a second call is a 404.
 //
 // Example: {"name": "products"}
-func (o ops) dropSearch(ctx context.Context, in *resourceRef) (*noContent, error) {
+func (o ops) dropSearch(ctx context.Context, in *resourceRef) (*cloud.Unit, error) {
 	return nil, o.dropOf(ctx, "search", in.Name)
 }
 
@@ -617,7 +606,7 @@ func (o ops) dropSearch(ctx context.Context, in *resourceRef) (*noContent, error
 // The names here are the friendly ones the org provisioned; the physical bucket
 // is org-namespaced underneath, which is what keeps two tenants' buckets
 // distinct.
-func (o ops) listS3(ctx context.Context, _ *noInput) (*provisionedList, error) {
+func (o ops) listS3(ctx context.Context, _ *cloud.Unit) (*provisionedList, error) {
 	return o.listOf(ctx, "s3")
 }
 
@@ -635,7 +624,7 @@ func (o ops) getS3(ctx context.Context, in *resourceRef) (*provisionedResource, 
 // metadata row. Answers 204 with no body; a second call is a 404.
 //
 // Example: {"name": "uploads"}
-func (o ops) dropS3(ctx context.Context, in *resourceRef) (*noContent, error) {
+func (o ops) dropS3(ctx context.Context, in *resourceRef) (*cloud.Unit, error) {
 	return nil, o.dropOf(ctx, "s3", in.Name)
 }
 

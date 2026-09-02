@@ -30041,6 +30041,34 @@ components:
             $ref: '#/components/schemas/providerView'
           type: array
       type: object
+    listed:
+      properties:
+        members:
+          description: Members counts the room, and never names anybody in it.
+          format: int64
+          type: integer
+        name:
+          description: Name is what a person sees, without the sigil a client draws.
+          type: string
+        org:
+          description: Org owns the room. It is also what a caller filters by to browse
+            one org.
+          type: string
+        room:
+          description: Room addresses it in the owning store — what a join is called
+            with.
+          type: string
+        space:
+          description: Space is where the room lives inside that org.
+          type: string
+        topic:
+          description: Topic is the room's one-line subject, empty when it has none.
+          type: string
+        updated:
+          description: Updated is when this row was last written, unix seconds.
+          format: int64
+          type: integer
+      type: object
     listing:
       properties:
         lastModified:
@@ -30800,9 +30828,6 @@ components:
           description: Stream is the stream name, from the path.
           type: string
       type: object
-    noInput:
-      properties: {}
-      type: object
     nodeList:
       properties:
         nodes:
@@ -30901,9 +30926,6 @@ components:
           items:
             $ref: '#/components/schemas/nodeView'
           type: array
-      type: object
-    none:
-      properties: {}
       type: object
     notifyHealth:
       properties:
@@ -46362,6 +46384,15 @@ components:
             Status is "ready", or "provisioning" while a dedicated instance is still
             being materialized by the operator.
           type: string
+      type: object
+    publicRooms:
+      properties:
+        rooms:
+          description: Rooms is every published room the query matched, newest-written
+            first.
+          items:
+            $ref: '#/components/schemas/listed'
+          type: array
       type: object
     publishKitIn:
       properties:
@@ -82565,12 +82596,8 @@ paths:
         schema:
           type: string
       responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/none'
-          description: ok
+        "204":
+          description: no content
       summary: Removes the named dataset of the caller's org AND all of its examples,
         in one transaction.
       tags:
@@ -85178,10 +85205,6 @@ paths:
           type: string
       responses:
         "204":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/none'
           description: no content
       summary: Removes one of the caller org's functions and answers 204.
       tags:
@@ -121589,6 +121612,57 @@ paths:
       - team
       x-app: team
       x-public: true
+  /v1/team/public:
+    get:
+      description: |-
+        Lists the rooms orgs have published, across every org.
+
+        It is NOT part of GET /rooms, and the separation is the point: that address
+        answers the CALLER'S rooms, so folding these in would put strangers' channels
+        in somebody's own sidebar.
+
+        It reads the directory and never a tenant's store. Every field it can answer
+        with is one an org published by making a room public, so there is nothing here
+        to scope by org — a directory only its own org can read is not a directory.
+        An authenticated principal is still required, because an anonymous crawler is
+        not who this is for.
+      operationId: get_team_public
+      parameters:
+      - description: Q matches a room's name or its topic.
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: Org narrows to one org's published rooms.
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the page, 50 when unstated and 200 at most. An unparseable
+          value reads as unstated rather than as zero — zero pages is not an answer
+          anybody asked for.
+        in: query
+        name: limit
+        required: false
+        schema:
+          format: int64
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/publicRooms'
+          description: ok
+      summary: Lists the rooms orgs have published, across every org.
+      tags:
+      - team
+      x-app: team
+      x-public: true
+      x-tool: true
   /v1/team/rooms:
     get:
       description: |-
@@ -121889,12 +121963,8 @@ paths:
         schema:
           type: string
       responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/noInput'
-          description: ok
+        "204":
+          description: no content
       summary: Ends a call this org placed.
       tags:
       - tel
@@ -122012,12 +122082,8 @@ paths:
         schema:
           type: string
       responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/noInput'
-          description: ok
+        "204":
+          description: no content
       summary: Checks the holding is THIS org's before it reaches the carrier.
       tags:
       - tel

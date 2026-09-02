@@ -287,10 +287,6 @@ type fnRef struct {
 	Name string `json:"name"`
 }
 
-// none is the answer of an op that removes something: there is nothing left to
-// describe, so it answers 204 and no body.
-type none struct{}
-
 // fnList is a set of functions.
 type fnList struct {
 	// Functions is one row per published function.
@@ -521,7 +517,7 @@ func (o ops) get(ctx context.Context, in *fnRef) (*functionDetail, error) {
 // A name this org does not hold is 404 — never a silent success — and a name
 // belonging to another tenant is the same 404, because the delete is predicated on
 // the validated org.
-func (o ops) del(ctx context.Context, in *fnRef) (*none, error) {
+func (o ops) del(ctx context.Context, in *fnRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

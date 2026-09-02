@@ -265,8 +265,8 @@ func TestOnlyTwoRoutesAreOpen(t *testing.T) {
 		"/v1/trust/profile", "/v1/trust/subprocessors", "/v1/trust/policies",
 		"/v1/trust/faq", "/v1/trust/updates", "/v1/trust/risk", "/v1/trust/frameworks",
 	} {
-		if code, b := req(t, app, http.MethodGet, p, "", nil); code != http.StatusUnauthorized {
-			t.Fatalf("%s anonymous want 401, got %d — %s", p, code, b)
+		if code, b := req(t, app, http.MethodGet, p, "", nil); code != http.StatusForbidden {
+			t.Fatalf("%s anonymous want 403, got %d — %s", p, code, b)
 		}
 	}
 }

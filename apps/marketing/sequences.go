@@ -864,7 +864,7 @@ func (o ops) listEnrollments(ctx context.Context, in *EnrollmentQuery) (*Enrollm
 // found.
 //
 // Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "eid": "enr_2a8d6f0b4c1e9375a0d2f6b8c4e19f73"}
-func (o ops) cancelEnrollment(ctx context.Context, in *EnrollmentRef) (*struct{}, error) {
+func (o ops) cancelEnrollment(ctx context.Context, in *EnrollmentRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

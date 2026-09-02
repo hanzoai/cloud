@@ -60,9 +60,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // form cmd/zipdoc can lift prose from, so ops are methods and not closures.
 type shareOps struct{ s *cloud.Service[state] }
 
-// noInput is the input of an op the URL fully addresses.
-type noInput struct{}
-
 // gate resolves the org and enforces the fail-closed 503 in ONE place before any
 // handler touches the controller. The org comes from principal.OrgFrom — the
 // typed-op reader of the validated org cloud.Bridge parked — never from an In
@@ -102,7 +99,7 @@ type enableResp struct {
 // account rather than creating a second one, and a caller can only ever provision
 // their OWN org's account. 503 when the deployment has no share controller
 // configured; 502 when that controller is unreachable.
-func (o shareOps) enable(ctx context.Context, _ *noInput) (*enableResp, error) {
+func (o shareOps) enable(ctx context.Context, _ *cloud.Unit) (*enableResp, error) {
 	s := o.s
 	org, err := gate(s, ctx)
 	if err != nil {
@@ -173,7 +170,7 @@ type sharesOut struct {
 // unconfigured deployment, an org that has not provisioned yet, and an unreachable
 // controller all answer an EMPTY list at 200 rather than an error, so the console
 // never error-toasts on load.
-func (o shareOps) listShares(ctx context.Context, _ *noInput) (*sharesOut, error) {
+func (o shareOps) listShares(ctx context.Context, _ *cloud.Unit) (*sharesOut, error) {
 	s := o.s
 	if !s.State.cl.configured() {
 		return &sharesOut{Shares: []shareView{}}, nil

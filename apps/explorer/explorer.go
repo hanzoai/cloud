@@ -98,9 +98,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // bound form cmd/zipdoc can lift prose from, so ops are methods and not closures.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the input of an op the URL fully addresses.
-type noInput struct{}
-
 // gate enforces the ONE tenancy boundary that applies to public chain data: a
 // validated IAM principal MUST be present (principal.Acting, the typed-op reader of
 // the org cloud.Bridge parked), so an unauthenticated caller reads nothing. The org
@@ -139,7 +136,7 @@ type indexersOut struct {
 // reaches the indexer; when the indexer is entirely unreachable the answer degrades
 // to an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer
 // REST, so `lag` is honestly omitted rather than fabricated.
-func (o ops) listIndexers(ctx context.Context, _ *noInput) (*indexersOut, error) {
+func (o ops) listIndexers(ctx context.Context, _ *cloud.Unit) (*indexersOut, error) {
 	if err := gate(ctx); err != nil {
 		return nil, err
 	}
@@ -171,7 +168,7 @@ type oraclesOut struct {
 // PriceFeed registry. A reachable graph with no feeds answers an honest empty list;
 // an unreachable or erroring graph likewise degrades to an empty list at 200 rather
 // than a 502, so the console never error-toasts. No feed is ever fabricated.
-func (o ops) listOracles(ctx context.Context, _ *noInput) (*oraclesOut, error) {
+func (o ops) listOracles(ctx context.Context, _ *cloud.Unit) (*oraclesOut, error) {
 	if err := gate(ctx); err != nil {
 		return nil, err
 	}

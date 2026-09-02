@@ -9,7 +9,7 @@
     "method": "POST",
     "url": "https://api.zoo.ngo/v1/mcp"
   },
-  "skill_count": 7,
+  "skill_count": 8,
   "skills": [
     {
       "description": "Read team account: Start a sign-in at zoolabs.id, Complete a sign-in and hand the browser its session, Returns the identity providers this deployment starts a login with..",
@@ -45,6 +45,13 @@
       "path": "team_files/SKILL.md",
       "service": "team",
       "sha256": "aa3a2cbead4edf8b8171d20a50ba9ca0930f5f406a952e6c656964139175309b"
+    },
+    {
+      "description": "Read team public: Lists the rooms orgs have published, across every org..",
+      "name": "team_public",
+      "path": "team_public/SKILL.md",
+      "service": "team",
+      "sha256": "b9a2ad19af608419e4b118075a0497abab3a301771900fe9285721e5d51aa54c"
     },
     {
       "description": "Read team rooms: Returns every room of the caller's org, across the spaces it owns, with the work facet each carries., Returns the tail of one room's conversation, oldest first..",

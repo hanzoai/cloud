@@ -86,18 +86,6 @@ func tenantOf(ctx context.Context) (tenant, error) {
 	return t, nil
 }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has NO NAME (openapi.go: a named OutType publishes
-// "200 with a body"), so a defined type here would document a status git's four
-// void ops have never sent — every one of them returns a nil *Out, which zip
-// writes as 204 (git_test.go, ssh_test.go, lifecycle_test.go all assert it).
-type noContent = struct{}
-
 // repoRef addresses one repo by the name in the URL.
 type repoRef struct {
 	// Name is the repo's org-unique handle, from the :name path segment. A

@@ -306,7 +306,7 @@ func (o ops) bindDomains(ctx context.Context, in *projectsDomainsBind) (*project
 //
 // Scope: a validated principal is required (403 without one) and the site is
 // resolved within that principal's org, so another tenant's slug is a 404.
-func (o ops) releaseDomain(ctx context.Context, in *projectsDomainRef) (*void, error) {
+func (o ops) releaseDomain(ctx context.Context, in *projectsDomainRef) (*cloud.Unit, error) {
 	_, org, p, err := o.siteOf(ctx, in.Slug)
 	if err != nil {
 		return nil, err

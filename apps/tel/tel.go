@@ -124,8 +124,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 type ops struct{ s *cloud.Service[state] }
 
-type noInput struct{}
-
 type idInput struct {
 	ID string `path:"id"`
 }
@@ -168,7 +166,7 @@ func (o ops) searchNumbers(ctx context.Context, in *searchInput) (*numberList, e
 // (`/numbers/available`), which asks the carrier what could be bought: this
 // answers only from our own store, so it is what an org owns rather than what
 // it could own.
-func (o ops) listNumbers(ctx context.Context, _ *noInput) (*numberList, error) {
+func (o ops) listNumbers(ctx context.Context, _ *cloud.Unit) (*numberList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -217,7 +215,7 @@ func (o ops) buyNumber(ctx context.Context, in *buyInput) (*Number, error) {
 // releaseNumber checks the holding is THIS org's before it reaches the carrier.
 // Without that read, an id belonging to another tenant would be released by
 // whoever guessed it.
-func (o ops) releaseNumber(ctx context.Context, in *idInput) (*noInput, error) {
+func (o ops) releaseNumber(ctx context.Context, in *idInput) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -232,7 +230,7 @@ func (o ops) releaseNumber(ctx context.Context, in *idInput) (*noInput, error) {
 	if err := o.s.State.store.DeleteNumber(ctx, org, in.ID); err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "record: %v", err)
 	}
-	return &noInput{}, nil
+	return nil, nil
 }
 
 type callList struct {
@@ -259,7 +257,7 @@ type callInput struct {
 
 // Lists the calls this org has placed or received, newest first. Like the
 // message list beside it, these are our own records rather than the carrier's.
-func (o ops) listCalls(ctx context.Context, _ *noInput) (*callList, error) {
+func (o ops) listCalls(ctx context.Context, _ *cloud.Unit) (*callList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -314,7 +312,7 @@ func (o ops) placeCall(ctx context.Context, in *callInput) (*Call, error) {
 // Ends a call this org placed. The holding is read for THIS org before the
 // carrier is asked, for the reason releaseNumber gives one surface up: an id
 // belonging to another tenant would otherwise be hung up by whoever guessed it.
-func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
+func (o ops) hangup(ctx context.Context, in *idInput) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -326,7 +324,7 @@ func (o ops) hangup(ctx context.Context, in *idInput) (*noInput, error) {
 	if err := o.s.State.carrier.Hangup(ctx, in.ID); err != nil {
 		return nil, zip.Errorf(http.StatusBadGateway, "hangup: %v", err)
 	}
-	return &noInput{}, nil
+	return nil, nil
 }
 
 type messageList struct {
@@ -351,7 +349,7 @@ type messageInput struct {
 // Lists the messages this org has sent or received, newest first. Records from
 // our own store, not the carrier's — so it is what this platform did on the
 // org's behalf, which is the set an audit or a bill has to agree with.
-func (o ops) listMessages(ctx context.Context, _ *noInput) (*messageList, error) {
+func (o ops) listMessages(ctx context.Context, _ *cloud.Unit) (*messageList, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -417,7 +415,7 @@ type summary struct {
 // Counts what this org holds on the telephony plane: its numbers, its calls and
 // its messages. The one read a dashboard makes before it asks for any list, so
 // it answers three totals and no rows.
-func (o ops) summary(ctx context.Context, _ *noInput) (*summary, error) {
+func (o ops) summary(ctx context.Context, _ *cloud.Unit) (*summary, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

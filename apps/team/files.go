@@ -269,7 +269,7 @@ type blobRef struct {
 // about success.
 //
 // Example: {"space": "6579…", "file": "0d4f…"}
-func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*none, error) {
+func (s *filesService) deleteBlob(ctx context.Context, in *blobRef) (*cloud.Unit, error) {
 	if s.degraded {
 		return nil, unavailable()
 	}

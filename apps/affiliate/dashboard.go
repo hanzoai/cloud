@@ -143,10 +143,10 @@ type affiliateEarnings struct {
 //
 // Scoped server-side to the validated caller's affiliate; a caller that is not
 // one gets `isAffiliate:false`.
-func (o ops) earnings(ctx context.Context, _ *noInput) (*affiliateEarnings, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view your affiliate earnings")
+func (o ops) earnings(ctx context.Context, _ *cloud.Unit) (*affiliateEarnings, error) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	a, err := o.s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
@@ -245,10 +245,10 @@ type affiliateLinks struct {
 // one batch — which is how the counters stay current without a database write
 // per click. Scoped to the validated caller's own affiliate; a non-affiliate
 // gets `isAffiliate:false` and the link cap.
-func (o ops) links(ctx context.Context, _ *noInput) (*affiliateLinks, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view your referral links")
+func (o ops) links(ctx context.Context, _ *cloud.Unit) (*affiliateLinks, error) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// Fold any pending public clicks into the money DB before reading (batched, bounded), so
 	// the counters are current without a per-click money-DB write.
@@ -323,9 +323,9 @@ type linkMint struct {
 //
 // Example: {"label": "twitter"}
 func (o ops) mintLink(ctx context.Context, in *createLinkRequest) (*linkMint, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to create a referral link")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireBody(ctx); err != nil {
 		return nil, err
@@ -473,9 +473,9 @@ type handleSet struct {
 //
 // Example: {"handle": "acme partners"}
 func (o ops) setHandle(ctx context.Context, in *handleRequest) (*handleSet, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to set your leaderboard handle")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireBody(ctx); err != nil {
 		return nil, err
@@ -548,10 +548,10 @@ type affiliateBoard struct {
 // the board. Only an approved affiliate has a rank. Requires a validated
 // principal; a signed-in non-affiliate may read the board but gets no personal
 // row.
-func (o ops) board(ctx context.Context, _ *noInput) (*affiliateBoard, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("sign in to view the leaderboard")
+func (o ops) board(ctx context.Context, _ *cloud.Unit) (*affiliateBoard, error) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	top, err := o.s.State.store.LeaderboardTop(ctx, leaderboardLimit)

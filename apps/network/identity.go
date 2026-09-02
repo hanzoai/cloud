@@ -20,6 +20,7 @@
 package network
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -177,7 +178,7 @@ func (o ops) listIdentities(ctx context.Context, _ *noIn) (*identityList, error)
 // An id belonging to another org — or to nothing — is 404 before any write
 // reaches the controller: whether an identity exists is itself a cross-tenant
 // fact, and a delete may only ever act on what the caller could list.
-func (o ops) deleteIdentity(ctx context.Context, in *identityRef) (*struct{}, error) {
+func (o ops) deleteIdentity(ctx context.Context, in *identityRef) (*cloud.Unit, error) {
 	s := o.s
 	org, err := gate(s, ctx)
 	if err != nil {

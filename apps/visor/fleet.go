@@ -256,7 +256,7 @@ type workerList struct {
 // canonical raw list a fleet view (or the CLI's `status`) reads.
 //
 // Response: {"workers":[{"id":"spark","hostname":"spark","provider":"byo","location":"on-prem","status":"online","gpus":[{"name":"NVIDIA GB10","memoryTotal":"122880 MiB"}],"arch":"arm64","cpus":20}]}
-func (o ops) listFleetWorkers(ctx context.Context, _ *noArgs) (*workerList, error) {
+func (o ops) listFleetWorkers(ctx context.Context, _ *cloud.Unit) (*workerList, error) {
 	_, org, err := scope(ctx)
 	if err != nil {
 		return nil, err

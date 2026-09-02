@@ -59,7 +59,7 @@ func exposeScopeRules() {
 // impossible rather than merely unlikely.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeScopeRules(ctx context.Context, _ *struct{}) (*plane.ScopeRules, error) {
+func planeScopeRules(ctx context.Context, _ *cloud.Unit) (*plane.ScopeRules, error) {
 	org, err := callerOrg(ctx, "scope rules")
 	if err != nil {
 		return nil, err

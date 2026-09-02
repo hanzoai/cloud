@@ -6,6 +6,7 @@ package mq
 // only streams whose broker name carries that org's prefix (mq.go, TENANCY).
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -317,7 +318,7 @@ func (s streams) update(ctx context.Context, in *Config) (*Stream, error) {
 }
 
 // delete removes a stream with all its messages and consumers. Irreversible.
-func (s streams) delete(ctx context.Context, in *nameIn) (*struct{}, error) {
+func (s streams) delete(ctx context.Context, in *nameIn) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -520,7 +521,7 @@ type seqIn struct {
 }
 
 // delete erases one message by sequence; the sequence gap remains.
-func (m messages) delete(ctx context.Context, in *seqIn) (*struct{}, error) {
+func (m messages) delete(ctx context.Context, in *seqIn) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

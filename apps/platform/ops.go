@@ -68,18 +68,6 @@ type ops struct{ s *cloud.Service[state] }
 // own service tier across every platform namespace.
 type board struct{ s *cloud.Service[fleetState] }
 
-// noInput is the In of an op that takes nothing off the wire — no body, no query,
-// no path segment. It is shared rather than redeclared per op because an empty
-// struct carries no contract to document; the ops that DO take input each declare
-// their own named In beside the handler that binds it.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name, so a defined type here would publish
-// "200 with a body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // caller resolves the two things a tenant op needs before it does anything: the
 // VALIDATED org this request acts as, and the request itself.
 //

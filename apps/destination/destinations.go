@@ -230,10 +230,6 @@ func orgAdmin(ctx context.Context) bool {
 	return false
 }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire.
-type noInput struct{}
-
 // destinationRef addresses one destination platform. The slug is the path
 // segment: the URL is the addressing authority, so it binds from there whatever
 // a body says.
@@ -280,7 +276,7 @@ type destinationTest struct {
 // caller org's connection state: whether it is connected, whether it is enabled,
 // whether a credential resolves right now, and the config fields the console
 // renders for it.
-func (o ops) list(ctx context.Context, _ *noInput) (*destinationList, error) {
+func (o ops) list(ctx context.Context, _ *cloud.Unit) (*destinationList, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err

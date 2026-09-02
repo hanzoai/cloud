@@ -88,9 +88,9 @@ type runResp struct {
 //
 // Example: {"id": "notion", "action": "create_page", "auth": "secret-token", "props": {"title": "Hello"}}
 func run(ctx context.Context, in *runIn) (*runResp, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if !Has(in.ID) {
 		return nil, zip.Errorf(http.StatusNotFound, "unknown connector %q", in.ID)

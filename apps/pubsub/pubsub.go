@@ -341,9 +341,9 @@ const TenantPrefix = "t-"
 // that is not (outside [A-Za-z0-9_-], or over 64 bytes) is refused rather than
 // mangled — a mangling could collide two orgs onto one namespace.
 func Org(ctx context.Context) (string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return "", zip.ErrForbidden("valid bearer required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return "", err
 	}
 	if !token(org, true) {
 		return "", zip.ErrForbidden("org id is not addressable on the bus")

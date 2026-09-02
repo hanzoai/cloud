@@ -312,7 +312,7 @@ func (o ops) addSuppression(ctx context.Context, in *Suppression) (*Suppression,
 // address that is not on the list reads as not found.
 //
 // Example: {"channel": "email", "address": "person@example.com"}
-func (o ops) removeSuppression(ctx context.Context, in *Suppression) (*struct{}, error) {
+func (o ops) removeSuppression(ctx context.Context, in *Suppression) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

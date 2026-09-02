@@ -523,7 +523,7 @@ func (o ops) deploySite(ctx context.Context, in *projectsDeploySite) (*projectsS
 //
 // Scope: a validated principal is required (403 without one) and the list is
 // keyed by that principal's org.
-func (o ops) listSites(ctx context.Context, _ *void) (*projectsSites, error) {
+func (o ops) listSites(ctx context.Context, _ *cloud.Unit) (*projectsSites, error) {
 	_, org, err := o.callerOf(ctx)
 	if err != nil {
 		return nil, err

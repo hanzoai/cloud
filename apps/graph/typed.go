@@ -447,7 +447,7 @@ type graphVocabularyOut struct {
 	Bound int `json:"bound"`
 }
 
-func (o ops) vocabulary(ctx context.Context, _ *struct{}) (*graphVocabularyOut, error) {
+func (o ops) vocabulary(ctx context.Context, _ *cloud.Unit) (*graphVocabularyOut, error) {
 	_, st, err := tenantOf(ctx, o.s)
 	if err != nil {
 		return nil, err

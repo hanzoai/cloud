@@ -175,7 +175,7 @@ func (o ops) getOf(ctx context.Context, k resourceKind, in *mlRef) (*mlResource,
 // deleteOf deletes one object by name from the caller's tenant namespace and
 // answers 204. A nil Out is what zip writes 204 for, which is the status this
 // route has always sent.
-func (o ops) deleteOf(ctx context.Context, k resourceKind, in *mlRef) (*struct{}, error) {
+func (o ops) deleteOf(ctx context.Context, k resourceKind, in *mlRef) (*cloud.Unit, error) {
 	if err := ready(o.s); err != nil {
 		return nil, err
 	}
@@ -328,6 +328,6 @@ func (o ops) getModel(ctx context.Context, in *mlRef) (*mlResource, error) {
 // caller's org does not own.
 //
 // Example: {"name": "sentiment"}
-func (o ops) deleteModel(ctx context.Context, in *mlRef) (*struct{}, error) {
+func (o ops) deleteModel(ctx context.Context, in *mlRef) (*cloud.Unit, error) {
 	return o.deleteOf(ctx, modelKind, in)
 }

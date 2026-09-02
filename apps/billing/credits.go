@@ -36,7 +36,7 @@ func mountCredits(app cloud.Router, o ops) {
 // Scoped to the caller's own wallet, resolved server-side.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) credits(ctx context.Context, _ *noInput) (*plane.CreditGrants, error) {
+func (o ops) credits(ctx context.Context, _ *cloud.Unit) (*plane.CreditGrants, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (o ops) credits(ctx context.Context, _ *noInput) (*plane.CreditGrants, erro
 // a reader.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) creditBalance(ctx context.Context, _ *noInput) (*plane.CreditBalance, error) {
+func (o ops) creditBalance(ctx context.Context, _ *cloud.Unit) (*plane.CreditBalance, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (o ops) creditBalance(ctx context.Context, _ *noInput) (*plane.CreditBalanc
 // being offered their trial and being told they have none.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) creditBreakdown(ctx context.Context, _ *noInput) (*plane.CreditBreakdown, error) {
+func (o ops) creditBreakdown(ctx context.Context, _ *cloud.Unit) (*plane.CreditBreakdown, error) {
 	org, subject, err := payer(ctx)
 	if err != nil {
 		return nil, err

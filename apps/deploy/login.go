@@ -295,7 +295,7 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 // any page could sign a SuperAdmin out; a POST is not carried cross-site by that
 // cookie. It reads no request body and takes no argument: the session it ends is
 // the one the request already carries.
-func (o ops) logout(_ context.Context, _ *noInput) (*sessionEnded, error) {
+func (o ops) logout(_ context.Context, _ *cloud.Unit) (*sessionEnded, error) {
 	return &sessionEnded{LoggedIn: false, LoginURL: loginPath}, nil
 }
 

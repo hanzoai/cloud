@@ -537,9 +537,9 @@ const actingOrgHeader = "X-Hanzo-Org"
 // caller-supplied, so a tenant key read from one is a cross-tenant read the caller
 // asserted for itself.
 func (o ops) authClient(ctx context.Context) (*client, string, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, "", zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 	tok, err := tokenFor(ctx, org, providerCloudflare, secretAPIToken)
 	if err != nil || len(bytes.TrimSpace(tok)) == 0 {

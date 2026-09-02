@@ -91,15 +91,6 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/knowledge POST /v1/knowledge/import", zip.Doc{
 		Description: "Reads the uploaded export, dispatches to the format normalizer, and\nfiles the resulting pages. `format` (query) selects the normalizer; `project`\n(query, optional) scopes every imported page to a project.",
 	})
-	zip.Describe("github.com/hanzoai/cloud/apps/knowledge POST /v1/knowledge/reindex", zip.Doc{
-		Description: "Rebuilds the caller org's retrieval from its documents: the vector\ncollection is dropped and created again at the configured embedding size and\nevery page, memory and source is embedded into it; the lexical index is\nreconciled to the same set. It is what an operator runs after the embedding\nmodel or its dimension changes, and what puts an org's retrieval right after\na vector outage. It requires ORG ADMIN and runs inline: an org's knowledge is\na few thousand documents, and the answer is the count.\n\nThe request has no body. Response: {\"vectors\": 412, \"lexical\": 412, \"removed\": 3, \"failed\": 0}",
-		Fields: map[string]string{
-			"reindexOut.failed":  "Failed is how many documents could not be embedded; each is logged with\nits name, and the rest of the rebuild went on without it.",
-			"reindexOut.lexical": "Lexical is how many rows the org's lexical index holds now; 0 in a\ndeployment without the index app.",
-			"reindexOut.removed": "Removed is how many rows the lexical index held for documents that no\nlonger exist; 0 without the index app.",
-			"reindexOut.vectors": "Vectors is how many documents were embedded and written to the org's\ncollection, which was dropped and created again at the configured size.",
-		},
-	})
 	zip.Describe("github.com/hanzoai/cloud/apps/knowledge POST /v1/knowledge/search", zip.Doc{
 		Description: "Runs a semantic search over the caller org's own knowledge —\nits wiki pages, its agent memories and everything its connectors have synced —\nand returns the matching passages. This is the RAG entry point: an agent asks\n\"what does this org know about X\" and the org's OWN vector namespace answers.\nThe org comes from the validated principal, and both the collection and the\npayload filter are pinned to it, so cross-tenant retrieval is impossible. An\nunreachable index returns an honest empty result set with degraded=true, never\na 5xx.",
 		Fields: map[string]string{

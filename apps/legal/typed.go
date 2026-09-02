@@ -57,10 +57,6 @@ import (
 // also the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op that takes nothing off the wire — it is addressed
-// entirely by the caller's validated principal.
-type noInput struct{}
-
 // checkBody replays decode's REQUEST-BODY GATE at the point in the sequence the
 // raw handler reached it: an empty body is fine (these routes have always
 // tolerated one), a body over 1 MiB is 413, and anything c.Bind cannot parse —
@@ -112,7 +108,7 @@ type legalHealth struct {
 // LegalHealth reports that the legal subsystem is serving and how many built-in
 // templates its catalog carries. It reads no tenant, so a liveness prober that
 // sends no principal is answered rather than refused.
-func (o ops) health(ctx context.Context, _ *noInput) (*legalHealth, error) {
+func (o ops) health(ctx context.Context, _ *cloud.Unit) (*legalHealth, error) {
 	return &legalHealth{Status: "ok", Templates: len(Builtins())}, nil
 }
 
@@ -159,7 +155,7 @@ type templateReply struct {
 // template to get its body. Templates in the formation and equity categories are
 // marked counselReview: every document rendered from them carries a counsel notice,
 // and that posture cannot be dropped by an override.
-func (o ops) listTemplates(ctx context.Context, _ *noInput) (*templateCatalog, error) {
+func (o ops) listTemplates(ctx context.Context, _ *cloud.Unit) (*templateCatalog, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

@@ -276,10 +276,6 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 // the only bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op that takes nothing off the wire: it is addressed
-// entirely by the caller's own validated principal.
-type noInput struct{}
-
 // act says what an operation DOES, and that is what decides the controls it must
 // pass. It cannot be read off the HTTP method: over MCP, the call plane and the
 // graph every operation arrives as one POST, so the method describes the
@@ -553,7 +549,7 @@ func revokeClass(in *keyTypeIn, c *zip.Ctx) (string, bool) {
 //
 // A transient IAM read failure reports an empty set rather than a 5xx, so the
 // page shows the honest empty state and never a fabricated key.
-func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
+func (o ops) getKey(ctx context.Context, _ *cloud.Unit) (*apiKeyList, error) {
 	cr, c, err := o.requestCaller(ctx, reads, scoped, "manage API keys")
 	if err != nil {
 		return nil, err

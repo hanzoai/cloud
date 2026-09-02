@@ -4,12 +4,12 @@
 package base
 
 import (
+	"github.com/hanzoai/cloud/internal/environ"
 	"container/list"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -77,8 +77,8 @@ func newPool(root string, deps cloud.Deps, log luxlog.Logger) *pool {
 		dir:     root,
 		jwksURL: jwks,
 		log:     log,
-		maxOpen: envInt("CLOUD_BASE_MAX_APPS", defaultMaxApps),
-		idleTTL: time.Duration(envInt("CLOUD_BASE_IDLE_TTL_SEC", int(defaultIdleTTL/time.Second))) * time.Second,
+		maxOpen: environ.Int("CLOUD_BASE_MAX_APPS", defaultMaxApps),
+		idleTTL: time.Duration(environ.Int("CLOUD_BASE_IDLE_TTL_SEC", int(defaultIdleTTL/time.Second))) * time.Second,
 		m:       make(map[string]*appEntry),
 		lru:     list.New(),
 	}
@@ -264,18 +264,4 @@ func (p *pool) closeAll() error {
 	p.m = make(map[string]*appEntry)
 	p.lru.Init()
 	return firstErr
-}
-
-// envInt reads a positive int env override, falling back to dflt when unset or
-// unparseable (a malformed override can never silently zero a pool bound).
-func envInt(key string, dflt int) int {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return dflt
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 1 {
-		return dflt
-	}
-	return n
 }

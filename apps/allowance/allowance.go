@@ -243,9 +243,6 @@ func routes(app cloud.Router, s *service) {
 	zip.Get(app.Group("/v1"), "/allowance", o.get)
 }
 
-// noArgs is the empty input of a read that takes its whole scope from the caller.
-type noArgs struct{}
-
 // Answers what the CALLER has left of their plan's free-call allowance this period,
 // and the instant the count starts again.
 //
@@ -259,7 +256,7 @@ type noArgs struct{}
 // hold it.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func (o ops) get(ctx context.Context, _ *noArgs) (*plane.Allowance, error) {
+func (o ops) get(ctx context.Context, _ *cloud.Unit) (*plane.Allowance, error) {
 	c, has := cloud.Request(ctx)
 	if !has {
 		return nil, zip.ErrForbidden("allowance: a validated principal is required")

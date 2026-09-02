@@ -285,7 +285,7 @@ func Shutdown(_ context.Context) error {
 // flow step can invoke, carrying its auth descriptor and the input properties of its
 // actions and triggers. The catalogue is the same for every tenant, so the gate is a
 // validated principal rather than a per-org view.
-func (o ops) connectors(ctx context.Context, _ *struct{}) (*Catalog, error) {
+func (o ops) connectors(ctx context.Context, _ *cloud.Unit) (*Catalog, error) {
 	if err := validated(ctx); err != nil {
 		return nil, err
 	}
@@ -513,7 +513,7 @@ func (o ops) updateFlow(ctx context.Context, in *patchFlowIn) (*Flow, error) {
 // no content, and a flow of another org answers not-found.
 //
 // Example: {"id": "flow_1"}
-func (o ops) deleteFlow(ctx context.Context, in *flowRef) (*struct{}, error) {
+func (o ops) deleteFlow(ctx context.Context, in *flowRef) (*cloud.Unit, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err

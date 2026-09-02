@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"net/http"
 
@@ -86,7 +87,7 @@ func (e *edgeState) StatusCode() int {
 // It asks the edge and nothing else. There is no live call to the provider here:
 // Configured is a local fact, it is the fact that was missing, and a health check
 // that spends a third-party API call is one an operator learns not to run.
-func (o ops) edge(_ context.Context, _ *void) (*edgeState, error) {
+func (o ops) edge(_ context.Context, _ *cloud.Unit) (*edgeState, error) {
 	if o.s.State.edge.Configured() {
 		return &edgeState{
 			Provider:   o.s.State.edge.Name(),

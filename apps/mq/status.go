@@ -7,6 +7,7 @@ package mq
 // monitoring (that refusal is pinned in typed_wire_test.go).
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"time"
 
@@ -16,9 +17,6 @@ import (
 
 // status carries the broker client onto the health and info ops.
 type status struct{ b *broker }
-
-// nothing is the In of an op that takes nothing off the wire.
-type nothing struct{}
 
 // Health is the surface's liveness answer.
 type Health struct {
@@ -31,7 +29,7 @@ type Health struct {
 }
 
 // health reports whether the message plane behind this surface answers.
-func (st status) health(context.Context, *nothing) (*Health, error) {
+func (st status) health(context.Context, *cloud.Unit) (*Health, error) {
 	out := &Health{Status: "degraded"}
 	if st.b != nil {
 		out.Uptime = time.Since(st.b.mounted).Round(time.Second).String()
@@ -61,7 +59,7 @@ type infoOut struct {
 }
 
 // info returns the broker's identity and the org's stream count.
-func (st status) info(ctx context.Context, _ *nothing) (*infoOut, error) {
+func (st status) info(ctx context.Context, _ *cloud.Unit) (*infoOut, error) {
 	if _, err := principal.Acting(ctx); err != nil {
 		return nil, err
 	}

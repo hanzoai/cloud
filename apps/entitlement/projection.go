@@ -21,7 +21,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
-	"github.com/zap-proto/zip"
 )
 
 // projectionView is the exact wire contract the @hanzogui/shell useEntitlement hook
@@ -50,10 +49,10 @@ type projectionView struct {
 // commerce outage reports every app locked at 200 rather than breaking the shell.
 // The ENFORCEMENT path still fails open, so functionality survives the same outage
 // even while the UI conservatively shows locked.
-func (o ops) projection(ctx context.Context, _ *noArgs) (*projectionView, error) {
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("no validated principal")
+func (o ops) projection(ctx context.Context, _ *cloud.Unit) (*projectionView, error) {
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// "admin" is the platform-sudo predicate, not a commerce product: resolve it
@@ -90,9 +89,6 @@ func (o ops) projection(ctx context.Context, _ *noArgs) (*projectionView, error)
 
 	return &projectionView{Tier: tier, Apps: apps}, nil
 }
-
-// noArgs is the input of an op that takes none: no body, no query, no path param.
-type noArgs struct{}
 
 // licensed reports whether org holds an ACTIVE entitlement for product, plus the
 // plan slug commerce resolved. resolved is false when commerce could not answer

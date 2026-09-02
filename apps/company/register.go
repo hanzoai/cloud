@@ -117,7 +117,7 @@ type registerCounts struct {
 // shape in one read, so a queue that is growing is visible as a number rather
 // than inferred by paging the list. A Hanzo platform operation: a caller who is
 // not a platform reviewer gets 403.
-func (o ops) registerSummary(ctx context.Context, _ *noInput) (*registerCounts, error) {
+func (o ops) registerSummary(ctx context.Context, _ *cloud.Unit) (*registerCounts, error) {
 	if err := requirePlatform(ctx); err != nil {
 		return nil, err
 	}

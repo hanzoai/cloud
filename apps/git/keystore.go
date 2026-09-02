@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cek"
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 
 	_ "github.com/hanzoai/sqlite" // registers the "sqlite" driver
 )
@@ -65,11 +63,10 @@ type keyStore struct {
 // nobody wanted: a file outside the namespace tree, and the only store in the
 // binary written to disk unencrypted.
 func openKeyStore(dir string) (*keyStore, error) {
-	db, err := cek.Open(namespace.System(), "ssh_keys", dir)
+	db, err := sqlpool.Open("ssh_keys", dir)
 	if err != nil {
-		return nil, fmt.Errorf("open ssh key db: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	ks := &keyStore{db: db}
 	if err := ks.migrate(); err != nil {
 		_ = db.Close()

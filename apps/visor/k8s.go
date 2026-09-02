@@ -117,7 +117,7 @@ type k8sClusterRef struct {
 // outage is logged and skipped so a down optional provider never hides the BYO list.
 //
 // Response: {"clusters":[{"doksClusterId":"cl-1","doClusterId":"cl-1","name":"prod","region":"nyc3","status":"running","nodePools":[],"nodeCount":0,"kind":"managed"}]}
-func (o ops) listK8sClusters(ctx context.Context, _ *noArgs) (*clusterList, error) {
+func (o ops) listK8sClusters(ctx context.Context, _ *cloud.Unit) (*clusterList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -242,7 +242,7 @@ func (o ops) createK8sCluster(ctx context.Context, in *createClusterReq) (*clust
 // deleteK8sCluster destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like
 // create. Visor scopes the delete to the org (refuses a foreign id), so this can
 // only ever remove the caller org's own cluster.
-func (o ops) deleteK8sCluster(ctx context.Context, in *k8sClusterRef) (*struct{}, error) {
+func (o ops) deleteK8sCluster(ctx context.Context, in *k8sClusterRef) (*cloud.Unit, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -272,7 +272,7 @@ type nodeList struct {
 // noun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.
 //
 // Response: {"nodes":[{"id":"node-1","name":"node-1","region":"nyc3","type":"s-4vcpu-8gb","status":"active","vcpu":4}]}
-func (o ops) listK8sNodes(ctx context.Context, _ *noArgs) (*nodeList, error) {
+func (o ops) listK8sNodes(ctx context.Context, _ *cloud.Unit) (*nodeList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err

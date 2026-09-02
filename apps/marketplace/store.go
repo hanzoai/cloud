@@ -9,11 +9,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/money"
-	// cek is the ONE opener: the database is born encrypted under the key cek
-	// derives from the process master and this namespace.
-	"github.com/hanzoai/cek"
+	// sqlpool.Open is the ONE opener: it names the database in the system
+	// namespace, opens it encrypted under the key cek derives from the process
+	// master, and applies the single-connection cap the store's atomicity rests on.
 	"github.com/hanzoai/cloud/sqlpool"
-	"github.com/hanzoai/namespace"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -78,11 +77,10 @@ type Store struct {
 
 // Open opens (and migrates) the listing store under dir.
 func Open(dir string) (*Store, error) {
-	db, err := cek.Open(namespace.System(), "marketplace", dir)
+	db, err := sqlpool.Open("marketplace", dir)
 	if err != nil {
-		return nil, fmt.Errorf("marketplace: open store: %w", err)
+		return nil, err
 	}
-	sqlpool.Single(db)
 	s := &Store{db: db}
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS listings (

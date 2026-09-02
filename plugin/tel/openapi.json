@@ -96,15 +96,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/noInput"
-                }
-              }
-            },
-            "description": "ok"
+          "204": {
+            "description": "no content"
           }
         },
         "x-public": true,
@@ -301,15 +294,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/noInput"
-                }
-              }
-            },
-            "description": "ok"
+          "204": {
+            "description": "no content"
           }
         },
         "x-public": true,
@@ -522,10 +508,6 @@
             "type": "array"
           }
         },
-        "type": "object"
-      },
-      "noInput": {
-        "properties": {},
         "type": "object"
       },
       "numberList": {

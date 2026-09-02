@@ -387,7 +387,7 @@ type providerList []ProviderInfo
 // that answer, and the two drift the moment IAM gains or drops one.
 //
 // Response: [{"name": "openid", "displayName": "Hanzo"}]
-func (g *api) listProviders(ctx context.Context, _ *none) (*providerList, error) {
+func (g *api) listProviders(ctx context.Context, _ *cloud.Unit) (*providerList, error) {
 	if g.degraded {
 		return nil, unavailable()
 	}
@@ -697,7 +697,7 @@ type cookieAck struct {
 // It clears ONLY the team session cookie. The IAM access-token cookie the same
 // callback set is a different credential with a different lifetime and is left
 // alone, so this is a team sign-out, not a platform one.
-func (g *api) clearCookie(ctx context.Context, _ *none) (*cookieAck, error) {
+func (g *api) clearCookie(ctx context.Context, _ *cloud.Unit) (*cookieAck, error) {
 	if g.degraded {
 		return nil, unavailable()
 	}

@@ -51,7 +51,7 @@ func exposeRails() {
 // money and lose it. A rail with nothing configured is 503, not an empty menu.
 //
 // A named handler, not a closure, so zipdoc can lift this prose into the registry.
-func planeCryptoOptions(ctx context.Context, _ *struct{}) (*plane.CryptoOptions, error) {
+func planeCryptoOptions(ctx context.Context, _ *cloud.Unit) (*plane.CryptoOptions, error) {
 	out, err := commercebilling.GetCryptoOptions(ctx)
 	if err != nil {
 		return nil, zip.Errorf(503, "crypto deposits not configured")

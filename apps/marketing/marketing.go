@@ -473,7 +473,7 @@ func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error
 // campaign belonging to another org reads as not found and is left untouched.
 //
 // Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
-func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*struct{}, error) {
+func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -521,7 +521,7 @@ func (o ops) scheduleCampaign(ctx context.Context, in *ScheduleInput) (*Campaign
 // active, and the summed budget and spend in cents.
 //
 // Response: {"campaigns": 12, "active": 3, "budget": 500000, "spend": 128400}
-func (o ops) summary(ctx context.Context, _ *struct{}) (*Summary, error) {
+func (o ops) summary(ctx context.Context, _ *cloud.Unit) (*Summary, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

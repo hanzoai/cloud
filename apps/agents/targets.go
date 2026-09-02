@@ -592,16 +592,6 @@ func targetOwns(ctx context.Context, t Target) bool {
 	return false
 }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it
-// takes nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name, so a defined type here would publish
-// "200 with a body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // targetRef addresses one target. The id is the path segment: the URL is the
 // addressing authority, so it binds from there whatever a body says.
 type targetRef struct {
@@ -825,7 +815,7 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 
 // ListTargets returns every machine registered to the caller's org, newest
 // first, each with its live session load.
-func (o targetOps) listTargets(ctx context.Context, _ *noInput) (*targetList, error) {
+func (o targetOps) listTargets(ctx context.Context, _ *cloud.Unit) (*targetList, error) {
 	sto, org, err := tenantStore(ctx, &o.s.State)
 	if err != nil {
 		return nil, err

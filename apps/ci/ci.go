@@ -91,13 +91,11 @@ type ops struct{ h http.Handler }
 
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
-type void = struct{}
-
 // runs lists recent builds: the repo, the branch, the commit and how each run
 // ended, newest first. A run names a repo, a branch and an actor, so the list is
 // never wider than the caller — a SuperAdmin sees the fleet, an org member sees
 // only its own org.
-func (o ops) runs(ctx context.Context, _ *void) (*upstream.Executions, error) {
+func (o ops) runs(ctx context.Context, _ *cloud.Unit) (*upstream.Executions, error) {
 	return call[upstream.Executions](ctx, o.h, "/v1/ci/runs")
 }
 
@@ -106,7 +104,7 @@ func (o ops) runs(ctx context.Context, _ *void) (*upstream.Executions, error) {
 // that commit produced; declared, the tag pinned in the universe repository;
 // running, what the cluster serves. A service whose four values disagree names
 // the step that broke.
-func (o ops) fleet(ctx context.Context, _ *void) (*upstream.Pipelines, error) {
+func (o ops) fleet(ctx context.Context, _ *cloud.Unit) (*upstream.Pipelines, error) {
 	return call[upstream.Pipelines](ctx, o.h, "/v1/ci/fleet")
 }
 

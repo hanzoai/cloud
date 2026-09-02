@@ -205,13 +205,6 @@
         ],
         "responses": {
           "204": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/none"
-                }
-              }
-            },
             "description": "no content"
           }
         },
@@ -697,10 +690,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "none": {
-        "properties": {},
         "type": "object"
       },
       "pointView": {

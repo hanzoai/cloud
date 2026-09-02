@@ -70,6 +70,23 @@ func init() {
 	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/files/:space/:filename", zip.Doc{
 		Description: "Streams a blob by its client id (?file=). The served Content-Type is\nderived from the STORED BYTES via a strict image allow-list — NEVER from the\nclient :filename (Red F-B: a crafted .svg name would otherwise force\nimage/svg+xml → active XSS). Anything not a recognized raster image is served\ninert: application/octet-stream + attachment + nosniff.",
 	})
+	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/public", zip.Doc{
+		Description: "Lists the rooms orgs have published, across every org.\n\nIt is NOT part of GET /rooms, and the separation is the point: that address\nanswers the CALLER'S rooms, so folding these in would put strangers' channels\nin somebody's own sidebar.\n\nIt reads the directory and never a tenant's store. Every field it can answer\nwith is one an org published by making a room public, so there is nothing here\nto scope by org — a directory only its own org can read is not a directory.\nAn authenticated principal is still required, because an anonymous crawler is\nnot who this is for.",
+		Fields: map[string]string{
+			"listed.members":    "Members counts the room, and never names anybody in it.",
+			"listed.name":       "Name is what a person sees, without the sigil a client draws.",
+			"listed.org":        "Org owns the room. It is also what a caller filters by to browse one org.",
+			"listed.room":       "Room addresses it in the owning store — what a join is called with.",
+			"listed.space":      "Space is where the room lives inside that org.",
+			"listed.topic":      "Topic is the room's one-line subject, empty when it has none.",
+			"listed.updated":    "Updated is when this row was last written, unix seconds.",
+			"publicQuery.limit": "Limit caps the page, 50 when unstated and 200 at most. An unparseable\nvalue reads as unstated rather than as zero — zero pages is not an answer\nanybody asked for.",
+			"publicQuery.org":   "Org narrows to one org's published rooms.",
+			"publicQuery.q":     "Q matches a room's name or its topic.",
+			"publicRooms.rooms": "Rooms is every published room the query matched, newest-written first.",
+		},
+		Example: json.RawMessage(`{"rooms":[{"org":"hanzo","room":"6543","name":"general","members":12}]}`),
+	})
 	zip.Describe("github.com/hanzoai/cloud/apps/team GET /v1/team/rooms", zip.Doc{
 		Description: "Returns every room of the caller's org, across the spaces\nit owns, with the work facet each carries.\n\nIt reads the SAME Chunter documents the transactor serves, so a room opened\nin the Team client appears here with no sync, and a facet written here is read\nby anything holding the document. Direct messages are included: a room between\ntwo people is a room with no name, not a different kind of thing.",
 		Fields: map[string]string{

@@ -1,6 +1,7 @@
 package treasury
 
 import (
+	"github.com/hanzoai/cloud"
 	"context"
 	"net/http"
 	"strconv"
@@ -38,13 +39,13 @@ type signerOut struct {
 // root SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent — a
 // repeat resolves the same wallet, which is why the address is a PUT. SuperAdmin
 // only.
-func (o ops) adminSetAnchorSigner(ctx context.Context, _ *noInput) (*signerOut, error) {
+func (o ops) adminSetAnchorSigner(ctx context.Context, _ *cloud.Unit) (*signerOut, error) {
 	if _, err := admin(ctx); err != nil {
 		return nil, err
 	}
-	org, ok := principal.OrgFrom(ctx)
-	if !ok {
-		return nil, zip.ErrForbidden("a validated principal is required")
+	org, err := principal.Acting(ctx)
+	if err != nil {
+		return nil, err
 	}
 	chain := "eip155:" + strconv.FormatInt(o.s.State.anchor.chainID, 10)
 	addr, sign, ok := wallet.TreasuryAnchorSigner(ctx, org, chain)

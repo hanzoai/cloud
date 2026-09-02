@@ -175,11 +175,6 @@ func init() {
 // bound form cmd/zipdoc can lift prose from.
 type ops struct{ s *cloud.Service[state] }
 
-// noContent is the Out of an op that answers 204 with an empty body. It is an
-// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
-// 204 only when the Out type has no name.
-type noContent = struct{}
-
 // ---- shared helpers (mirror clients/crm) ----
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
@@ -449,7 +444,7 @@ func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampa
 // reads as not found.
 //
 // Example: {"id": "camp_2f9c1d"}
-func (o ops) deleteCampaign(ctx context.Context, in *campaignRef) (*noContent, error) {
+func (o ops) deleteCampaign(ctx context.Context, in *campaignRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -523,15 +518,11 @@ func mapProviderErr(err error) error {
 
 // ---- summary ----
 
-// noInput is the In of an op addressed entirely by the caller's own validated
-// principal: it takes nothing off the wire.
-type noInput struct{}
-
 // summary rolls the caller org's ad campaigns up into four numbers: how many
 // campaigns exist, how many are active, and the summed budget and spend across
 // all of them. Budget and spend are MINOR units (cents), the same units the
 // campaign rows carry. It counts only this org's campaigns.
-func (o ops) summary(ctx context.Context, _ *noInput) (*adSummary, error) {
+func (o ops) summary(ctx context.Context, _ *cloud.Unit) (*adSummary, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

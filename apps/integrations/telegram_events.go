@@ -52,7 +52,7 @@ var telegramAPIBase = "https://api.telegram.org"
 // bind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`
 // payload limit.
 // Response: {"authorizeUrl":"https://t.me/hanzo_bot?start=9f3c1d2e4b5a6c7d8e9f0a1b2c3d4e5f"}
-func (o ops) telegramConnect(ctx context.Context, _ *noArgs) (*authorizeOut, error) {
+func (o ops) telegramConnect(ctx context.Context, _ *cloud.Unit) (*authorizeOut, error) {
 	org, err := authed(ctx, "a validated principal is required to connect an integration")
 	if err != nil {
 		return nil, err

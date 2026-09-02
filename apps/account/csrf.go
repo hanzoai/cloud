@@ -161,7 +161,7 @@ type csrfResp struct {
 // It is answered no-store, so it is never cached by a shared proxy. This is the
 // same-origin endpoint the embedded console reads — the Same-Origin Policy is what
 // stops a cross-site page from reading the response and forging a change.
-func (o ops) issueCSRFToken(ctx context.Context, _ *noInput) (*csrfResp, error) {
+func (o ops) issueCSRFToken(ctx context.Context, _ *cloud.Unit) (*csrfResp, error) {
 	// reads: this is the endpoint that ISSUES the token, so requiring one here
 	// would leave a browser no way to obtain its first. unscoped: a zero-org
 	// (first-run) user still needs one to onboard.

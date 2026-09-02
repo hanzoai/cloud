@@ -483,10 +483,6 @@ type datasetRef struct {
 	Name string `json:"name"`
 }
 
-// none is the answer of an op that removes something: there is nothing left to
-// describe, so it answers 204 and no body.
-type none struct{}
-
 // createDataset writes a dataset — the named set of graded examples a run scores
 // a model against — under the caller's org and answers 201 with it.
 //
@@ -582,7 +578,7 @@ func (s *service) getDataset(ctx context.Context, in *datasetRef) (*datasetView,
 // 404, because the delete is predicated on the validated org. Requires a
 // validated principal; 403 without one. Runs and scores already recorded against
 // the dataset are telemetry events and are NOT deleted with it.
-func (s *service) deleteDataset(ctx context.Context, in *datasetRef) (*none, error) {
+func (s *service) deleteDataset(ctx context.Context, in *datasetRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err

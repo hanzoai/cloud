@@ -146,16 +146,6 @@ func Use(app cloud.Router, deps cloud.Deps) error {
 // form cmd/zipdoc can lift prose from.
 type marketOps struct{ s *cloud.Service[state] }
 
-// noInput is the In of an op addressed entirely by the caller's principal: it takes
-// nothing off the wire. ONE of these for the whole package.
-type noInput struct{}
-
-// noContent is the Out of an op that answers 204 with an empty body. It is an ALIAS
-// for the unnamed empty struct, not a definition: zip keys the response on 204 only
-// when the Out type has no name, so a defined type here would publish "200 with a
-// body" about a route that answers 204 with none.
-type noContent = struct{}
-
 // projectOf is the caller's project sub-scope. It lives in a header rather than in
 // the tenant key, so it needs the request; off the HTTP path there is none, and the
 // caller lands in the org's default project exactly as an absent header does.
@@ -221,7 +211,7 @@ type marketCatalog struct {
 // project, enriched with any public listing's title, category and price, and with
 // installed=true on the ones already activated for that scope. It is the shop
 // window: one read that answers what exists, what it costs and what is already on.
-func (o marketOps) discover(ctx context.Context, _ *noInput) (*marketCatalog, error) {
+func (o marketOps) discover(ctx context.Context, _ *cloud.Unit) (*marketCatalog, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -257,7 +247,7 @@ type listingPage struct {
 
 // ListListings returns the listings the caller's own org has published — what this
 // org is offering, not what it can buy. A publisher only ever sees its own rows.
-func (o marketOps) listListings(ctx context.Context, _ *noInput) (*listingPage, error) {
+func (o marketOps) listListings(ctx context.Context, _ *cloud.Unit) (*listingPage, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
@@ -363,7 +353,7 @@ type listingRef struct {
 // it does not uninstall the tool for anyone who already installed it.
 //
 // Example: {"id": "lst_1"}
-func (o marketOps) unpublish(ctx context.Context, in *listingRef) (*noContent, error) {
+func (o marketOps) unpublish(ctx context.Context, in *listingRef) (*cloud.Unit, error) {
 	org, err := principal.Acting(ctx)
 	if err != nil {
 		return nil, err
