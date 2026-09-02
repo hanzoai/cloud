@@ -43,7 +43,7 @@ func (d loginDoer) Do(r *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
 }
 
-// fixedCred returns a dummy credential for any target (the login doer ignores it).
+// fixedCred returns a dummy credential for any target (the login types.Doer ignores it).
 func fixedCred(t Target) (credRef, error) {
 	return credRef{ns: "hanzo", name: "cred", clientID: "cid", secret: "sec"}, nil
 }
