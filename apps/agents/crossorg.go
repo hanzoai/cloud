@@ -18,11 +18,16 @@ import (
 // derived registry can drift out of step with it, and under horizontal sharding
 // each writer folds exactly the orgs routed to it.
 
-// allLongRunning is every scheduled long-running agent across every org — the
+// allLongRunning is every scheduled long-running agent this replica OWNS — the
 // scheduler's work set, and the reason it may cross tenants: it is an
 // in-process, trusted subsystem, not a tenant request. Each returned Agent
 // carries its own Org, so every downstream action (run, gate, meter) is scoped
 // back to that agent's own tenant.
+//
+// OWNERSHIP IS ASKED HERE because launch runs the agent, and running one is an
+// outbound act. Every pod mounts every subsystem, so a fold with no ownership
+// test hands the same scheduled agent to every replica and each one runs it —
+// the same question meter and reap already ask of the same store.
 //
 // One org's unreadable file is logged by the caller and skipped, never fatal: a
 // scheduler that stops for the whole fleet because a single org's database will
@@ -38,10 +43,13 @@ import (
 func (st *state) allLongRunning(ctx context.Context) ([]Agent, []error) {
 	var out []Agent
 	var errs []error
-	ferr := st.eachStore(func(_ namespace.Namespace, sto *Store, err error) {
+	ferr := st.eachStore(func(ns namespace.Namespace, sto *Store, err error) {
 		if err != nil {
 			errs = append(errs, err)
 			return
+		}
+		if !st.stores.Owned(ns) {
+			return // another replica schedules this org, or nobody can prove who does
 		}
 		rows, lerr := sto.ListLongRunning(ctx)
 		if lerr != nil {

@@ -51,9 +51,15 @@ func schedulerInterval(log luxlog.Logger) time.Duration {
 }
 
 // startScheduler launches the periodic due-post sweep and returns its stop function
-// (never nil, idempotent). Because social is mounted only on the single-writer cloud pod,
-// exactly one scheduler exists per deployment — the same single-writer guarantee the live
-// stack's single Temporal worker gave.
+// (never nil, idempotent).
+//
+// IT HAS NO ELECTION, and unlike its siblings it has nothing to elect on: this
+// subsystem holds ONE system-namespace file (store.go) rather than a store per
+// org, and sweepDue is a single cross-org query, so there is no namespace to ask
+// OrgStore.Owned about. Do not read that as one scheduler per deployment — every
+// pod mounts every subsystem, which is the premise apps/sync/scheduler.go records
+// as false. Whether two replicas can reach one scheduled row turns on whether a
+// system-namespace store is replicated at all, and that question is open.
 func startScheduler(s *cloud.Service[state]) func() {
 	interval := schedulerInterval(s.Log)
 	if interval == 0 {
